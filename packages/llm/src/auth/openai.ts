@@ -76,7 +76,7 @@ export async function exchangeCodeForTokens(
   if (!response.ok) {
     throw new Error(`Token exchange failed: ${response.status}`)
   }
-  return response.json()
+  return response.json() as Promise<TokenResponse>
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
@@ -92,7 +92,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   if (!response.ok) {
     throw new Error(`Token refresh failed: ${response.status}`)
   }
-  return response.json()
+  return response.json() as Promise<TokenResponse>
 }
 
 export function parseJwtClaims(token: string): Record<string, unknown> | undefined {
@@ -245,7 +245,7 @@ export async function initiateDeviceAuth(): Promise<DeviceAuthResponse> {
     throw new Error("Failed to initiate device authorization")
   }
 
-  return response.json()
+  return response.json() as Promise<DeviceAuthResponse>
 }
 
 export async function pollDeviceAuth(
@@ -285,7 +285,7 @@ export async function pollDeviceAuth(
         throw new Error(`Token exchange failed: ${tokenResponse.status}`)
       }
 
-      return tokenResponse.json()
+      return tokenResponse.json() as Promise<TokenResponse>
     }
 
     if (response.status !== 403 && response.status !== 404) {

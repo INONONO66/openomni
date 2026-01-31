@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai"
-import { type Auth } from "@openomni/auth"
-import { CODEX_API_ENDPOINT, refreshAccessToken } from "@openomni/auth"
+import { Auth } from "../auth/storage"
+import { CODEX_API_ENDPOINT, refreshAccessToken } from "../auth/openai"
 
 const OAUTH_DUMMY_KEY = "oauth-dummy-key"
 
@@ -84,7 +84,7 @@ export function createOpenAIProvider(
     await refreshPromise
   }
 
-  const customFetch: any = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const customFetch: any = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     if (init?.headers) {
       if (init.headers instanceof Headers) {
         init.headers.delete("authorization")
