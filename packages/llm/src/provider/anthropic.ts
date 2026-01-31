@@ -113,6 +113,38 @@ export function getAnthropicModels(): AnthropicModel[] {
   return ANTHROPIC_MODELS
 }
 
+export async function getAnthropicModelsAsync(): Promise<AnthropicModel[]> {
+  try {
+    const { ModelsDev } = await import("../models")
+    const providers = await ModelsDev.get()
+    const anthropicProvider = providers["anthropic"]
+    
+    if (anthropicProvider?.models) {
+      const models: AnthropicModel[] = []
+      for (const [id, modelData] of Object.entries(anthropicProvider.models)) {
+        const isValidModel = typeof modelData === "object" && modelData !== null
+        const name = isValidModel && "name" in modelData && typeof modelData.name === "string" ? modelData.name : id
+        const capabilities = isValidModel && "capabilities" in modelData && typeof modelData.capabilities === "object" && modelData.capabilities !== null ? modelData.capabilities : {}
+        
+        models.push({
+          id,
+          name,
+          capabilities: {
+            vision: "vision" in capabilities && typeof capabilities.vision === "boolean" ? capabilities.vision : false,
+            thinking: "thinking" in capabilities && typeof capabilities.thinking === "boolean" ? capabilities.thinking : false,
+            tools: "tools" in capabilities && typeof capabilities.tools === "boolean" ? capabilities.tools : false,
+          },
+        })
+      }
+      if (models.length > 0) return models
+    }
+  } catch {
+    // Fall through to hardcoded fallback
+  }
+  
+  return ANTHROPIC_MODELS
+}
+
 export function createAnthropicProvider(auth: Auth.Info, onTokenRefresh?: TokenRefreshCallback) {
   if (auth.type === "api") {
     return createAnthropic({ apiKey: auth.key })

@@ -51,6 +51,47 @@ export function getOpenAIModels(mode?: "api" | "oauth") {
   return { ...OPENAI_MODELS }
 }
 
+export async function getOpenAIModelsAsync(mode?: "api" | "oauth"): Promise<Record<string, OpenAIModelEntry>> {
+  let models = { ...OPENAI_MODELS }
+  
+  try {
+    const { ModelsDev } = await import("../models")
+    const providers = await ModelsDev.get()
+    const openaiProvider = providers["openai"]
+    
+    if (openaiProvider?.models) {
+      const devModels: Record<string, OpenAIModelEntry> = {}
+      for (const [id, modelData] of Object.entries(openaiProvider.models)) {
+        const isValidModel = typeof modelData === "object" && modelData !== null
+        const name = isValidModel && "name" in modelData && typeof modelData.name === "string" ? modelData.name : id
+        const cost = isValidModel && "cost" in modelData && typeof modelData.cost === "object" && modelData.cost !== null ? modelData.cost : {}
+        
+        devModels[id] = {
+          name,
+          cost: {
+            input: "input" in cost && typeof cost.input === "number" ? cost.input : 0,
+            output: "output" in cost && typeof cost.output === "number" ? cost.output : 0,
+          },
+        }
+      }
+      if (Object.keys(devModels).length > 0) {
+        models = devModels
+      }
+    }
+  } catch {
+    // Fall through to hardcoded fallback
+  }
+  
+  if (mode === "oauth") {
+    const allowed = new Set<string>(CODEX_ALLOWED_MODELS)
+    return Object.fromEntries(
+      Object.entries(models).filter(([id]) => allowed.has(id)),
+    )
+  }
+  
+  return models
+}
+
 type TokenRefreshCallback = (tokens: { access: string; refresh: string; expires: number }) => void
 
 export function createOpenAIProvider(

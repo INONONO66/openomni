@@ -30,8 +30,11 @@ export namespace Provider {
 }
 
 // Re-export provider creation functions (standalone, NOT in namespace)
-export { createAnthropicProvider, getAnthropicModels, ANTHROPIC_MODELS } from "./anthropic"
-export { createOpenAIProvider, getOpenAIModels, OPENAI_MODELS, CODEX_ALLOWED_MODELS } from "./openai"
+export { createAnthropicProvider, getAnthropicModels, getAnthropicModelsAsync, ANTHROPIC_MODELS } from "./anthropic"
+export { createOpenAIProvider, getOpenAIModels, getOpenAIModelsAsync, OPENAI_MODELS, CODEX_ALLOWED_MODELS } from "./openai"
 
 // Re-export registry functions
-export { getProvider, listModels, listProviders, type ProviderID } from "./registry"
+export { getProvider, listModels, listModelsAsync, listProviders, type ProviderID } from "./registry"
+
+// Re-export transform utilities
+export { ProviderTransform } from "../transform"
