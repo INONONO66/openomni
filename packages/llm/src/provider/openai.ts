@@ -1,6 +1,10 @@
+import type { OpenAIProviderSettings } from "@ai-sdk/openai"
 import { createOpenAI } from "@ai-sdk/openai"
+import { z } from "zod"
 import { Auth } from "../auth/storage"
 import { CODEX_API_ENDPOINT, refreshAccessToken } from "../auth/openai"
+
+type ProviderFetch = NonNullable<OpenAIProviderSettings["fetch"]>
 
 const OAUTH_DUMMY_KEY = "oauth-dummy-key"
 
@@ -12,7 +16,16 @@ export const CODEX_ALLOWED_MODELS = [
   "gpt-5.1-codex",
 ] as const
 
-export const OPENAI_MODELS: Record<string, { name: string; cost: { input: number; output: number } }> = {
+export const OpenAIModelEntry = z.object({
+  name: z.string(),
+  cost: z.object({
+    input: z.number(),
+    output: z.number(),
+  }),
+})
+export type OpenAIModelEntry = z.infer<typeof OpenAIModelEntry>
+
+export const OPENAI_MODELS: Record<string, OpenAIModelEntry> = {
   "gpt-4o": { name: "GPT-4o", cost: { input: 2.5, output: 10 } },
   "gpt-4o-mini": { name: "GPT-4o Mini", cost: { input: 0.15, output: 0.6 } },
   "gpt-4.1": { name: "GPT-4.1", cost: { input: 2, output: 8 } },
@@ -43,7 +56,7 @@ type TokenRefreshCallback = (tokens: { access: string; refresh: string; expires:
 export function createOpenAIProvider(
   auth: Auth.Info,
   onTokenRefresh?: TokenRefreshCallback,
-): { provider: ReturnType<typeof createOpenAI>; customFetch?: typeof fetch } {
+): { provider: ReturnType<typeof createOpenAI>; customFetch?: ProviderFetch } {
   if (auth.type === "api") {
     return {
       provider: createOpenAI({ apiKey: auth.key }),
@@ -84,7 +97,7 @@ export function createOpenAIProvider(
     await refreshPromise
   }
 
-  const customFetch: any = async (input: string | URL, init?: RequestInit): Promise<Response> => {
+  const customFetch = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     if (init?.headers) {
       if (init.headers instanceof Headers) {
         init.headers.delete("authorization")
@@ -131,7 +144,7 @@ export function createOpenAIProvider(
         : parsed
 
     return fetch(url, { ...init, headers })
-  }
+  }) as ProviderFetch
 
   return {
     provider: createOpenAI({ apiKey: OAUTH_DUMMY_KEY, fetch: customFetch }),
