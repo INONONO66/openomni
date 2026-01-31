@@ -56,4 +56,7 @@ export {
 } from "./registry";
 
 // Re-export transform utilities
-export { ProviderTransform } from "../transform";
+export { ProviderTransform } from "./transform";
+
+// Re-export models
+export { ModelsDev } from "./models";

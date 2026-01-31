@@ -137,7 +137,7 @@ export async function getOpenAIModelsAsync(
   let models: Provider.Model[] = [...OPENAI_MODELS];
 
   try {
-    const { ModelsDev } = await import("../models");
+    const { ModelsDev } = await import("./models");
     const providers = await ModelsDev.get();
     const openaiProvider = providers["openai"];
 

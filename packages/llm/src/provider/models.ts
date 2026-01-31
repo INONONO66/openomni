@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { join } from "path";
 import { homedir } from "os";
-import { ANTHROPIC_MODELS } from "./provider/anthropic";
-import { OPENAI_MODELS } from "./provider/openai";
-import { lazy } from "./util/lazy";
+import { ANTHROPIC_MODELS } from "./anthropic";
+import { OPENAI_MODELS } from "./openai";
+import { lazy } from "../util/lazy";
 
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");

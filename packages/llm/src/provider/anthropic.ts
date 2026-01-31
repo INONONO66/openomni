@@ -130,7 +130,7 @@ export function getAnthropicModels(): Provider.Model[] {
 
 export async function getAnthropicModelsAsync(): Promise<Provider.Model[]> {
   try {
-    const { ModelsDev } = await import("../models");
+    const { ModelsDev } = await import("./models");
     const providers = await ModelsDev.get();
     const anthropicProvider = providers["anthropic"];
 
