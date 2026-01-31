@@ -3,15 +3,31 @@ import { join } from "path";
 import { homedir } from "os";
 import { ANTHROPIC_MODELS } from "./provider/anthropic";
 import { OPENAI_MODELS } from "./provider/openai";
+import { lazy } from "./util/lazy";
 
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");
-const API_URL = "https://models.dev/api.json";
 
 export namespace ModelsDev {
   export const Model = z.object({
     id: z.string(),
     name: z.string(),
+    family: z.string().optional(),
+    release_date: z.string().optional(),
+    attachment: z.boolean().optional(),
+    reasoning: z.boolean().optional(),
+    temperature: z.boolean().optional(),
+    tool_call: z.boolean().optional(),
+    interleaved: z
+      .union([
+        z.literal(true),
+        z
+          .object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          })
+          .strict(),
+      ])
+      .optional(),
     cost: z
       .object({
         input: z.number(),
@@ -27,39 +43,32 @@ export namespace ModelsDev {
         output: z.number(),
       })
       .optional(),
-    capabilities: z
-      .object({
-        vision: z.boolean().optional(),
-        thinking: z.boolean().optional(),
-        tools: z.boolean().optional(),
-        reasoning: z.boolean().optional(),
-      })
-      .optional(),
     modalities: z
       .object({
-        input: z.array(z.string()),
-        output: z.array(z.string()),
+        input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+        output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
       })
       .optional(),
+    status: z.enum(["alpha", "beta", "deprecated"]).optional(),
+    options: z.record(z.string(), z.any()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    provider: z.object({ npm: z.string() }).optional(),
+    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   });
   export type Model = z.infer<typeof Model>;
 
   export const Provider = z.object({
-    id: z.string(),
+    api: z.string().optional(),
     name: z.string(),
     env: z.array(z.string()),
+    id: z.string(),
     npm: z.string().optional(),
     models: z.record(z.string(), z.any()),
   });
   export type Provider = z.infer<typeof Provider>;
 
-  let _cache: Record<string, Provider> | null = null;
-  let _cachePath = DEFAULT_CACHE_PATH;
-  let _cacheDir = DEFAULT_CACHE_DIR;
-
-  export function _setCachePath(dir: string, path: string) {
-    _cacheDir = dir;
-    _cachePath = path;
+  function modelsUrl() {
+    return process.env.OPENOMNI_MODELS_URL || "https://models.dev";
   }
 
   function buildFallback(): Record<string, Provider> {
@@ -99,76 +108,68 @@ export namespace ModelsDev {
     };
   }
 
-  async function readCache(): Promise<Record<string, Provider> | null> {
-    try {
-      const file = Bun.file(_cachePath);
-      if (await file.exists()) {
-        return (await file.json()) as Record<string, Provider>;
-      }
-    } catch {
-      /* cache miss */
-    }
-    return null;
-  }
-
   async function writeCache(data: Record<string, Provider>): Promise<void> {
     try {
       const { mkdirSync } = await import("fs");
-      mkdirSync(_cacheDir, { recursive: true });
-      await Bun.write(_cachePath, JSON.stringify(data));
+      const cachePath = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
+      const cacheDir = cachePath.substring(0, cachePath.lastIndexOf("/"));
+      mkdirSync(cacheDir, { recursive: true });
+      await Bun.write(cachePath, JSON.stringify(data));
     } catch {
       /* non-fatal */
     }
   }
 
-  async function fetchFromApi(): Promise<Record<string, Provider> | null> {
+  export const Data = lazy(async (): Promise<Record<string, Provider>> => {
+    const cachePath = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
+    const file = Bun.file(cachePath);
+    const cached = await file.json().catch(() => undefined);
+    if (cached) return cached as Record<string, Provider>;
+
+    if (process.env.OPENOMNI_DISABLE_MODELS_FETCH) return buildFallback();
+
     try {
-      const response = await fetch(API_URL, {
+      const response = await fetch(`${modelsUrl()}/api.json`, {
         signal: AbortSignal.timeout(10_000),
       });
-      if (!response.ok) return null;
-      const json = await response.json();
-      return json as Record<string, Provider>;
+      if (response.ok) {
+        const data = (await response.json()) as Record<string, Provider>;
+        await writeCache(data);
+        return data;
+      }
     } catch {
-      return null;
-    }
-  }
-
-  export async function get(): Promise<Record<string, Provider>> {
-    if (_cache) return _cache;
-
-    const cached = await readCache();
-    if (cached) {
-      _cache = cached;
-      return _cache;
+      /* non-fatal */
     }
 
-    const fetched = await fetchFromApi();
-    if (fetched) {
-      _cache = fetched;
-      await writeCache(fetched);
-      return _cache;
-    }
-
-    _cache = buildFallback();
-    return _cache;
-  }
-
-  export const Data = Object.assign(get, {
-    reset() {
-      _cache = null;
-    },
+    return buildFallback();
   });
 
+  export async function get(): Promise<Record<string, Provider>> {
+    return Data() as Promise<Record<string, Provider>>;
+  }
+
   export async function refresh(): Promise<void> {
-    const fetched = await fetchFromApi();
-    if (fetched) {
-      _cache = fetched;
-      await writeCache(fetched);
+    try {
+      const response = await fetch(`${modelsUrl()}/api.json`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as Record<string, Provider>;
+        await writeCache(data);
+        Data.reset();
+      }
+    } catch {
+      /* non-fatal */
     }
   }
 
-  export function _resetCache() {
-    _cache = null;
+  if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
+    ModelsDev.refresh();
+    setInterval(
+      () => {
+        ModelsDev.refresh();
+      },
+      60 * 60 * 1000,
+    ).unref();
   }
 }

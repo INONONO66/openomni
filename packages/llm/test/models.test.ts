@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, mock } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import { tmpdir } from "os";
 import { join } from "path";
 import { ModelsDev } from "../src/models";
@@ -6,8 +6,14 @@ import { ANTHROPIC_MODELS } from "../src/provider/anthropic";
 import { OPENAI_MODELS } from "../src/provider/openai";
 
 describe("ModelsDev", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
-    ModelsDev._resetCache();
+    ModelsDev.Data.reset();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   describe("schemas", () => {
@@ -17,7 +23,6 @@ describe("ModelsDev", () => {
         name: "Claude Sonnet 4",
         cost: { input: 3, output: 15 },
         limit: { context: 200000, output: 8192 },
-        capabilities: { vision: true, thinking: true, tools: true },
         modalities: { input: ["text", "image"], output: ["text"] },
       });
       expect(result.success).toBe(true);
@@ -52,6 +57,67 @@ describe("ModelsDev", () => {
     it("should reject a Provider missing required fields", () => {
       const result = ModelsDev.Provider.safeParse({ id: "test" });
       expect(result.success).toBe(false);
+    });
+
+    it("should validate Model with family and release_date", () => {
+      const result = ModelsDev.Model.safeParse({
+        id: "claude-sonnet-4",
+        name: "Claude Sonnet 4",
+        family: "claude",
+        release_date: "2025-05-22",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should validate Model with interleaved as true", () => {
+      const result = ModelsDev.Model.safeParse({
+        id: "test",
+        name: "Test",
+        interleaved: true,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should validate Model with interleaved as object", () => {
+      const result = ModelsDev.Model.safeParse({
+        id: "test",
+        name: "Test",
+        interleaved: { field: "reasoning_content" },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should validate Model with status field", () => {
+      for (const status of ["alpha", "beta", "deprecated"] as const) {
+        const result = ModelsDev.Model.safeParse({
+          id: "test",
+          name: "Test",
+          status,
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it("should validate Model with variants", () => {
+      const result = ModelsDev.Model.safeParse({
+        id: "test",
+        name: "Test",
+        variants: {
+          "test:thinking": { reasoning: true },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should validate Provider with api field", () => {
+      const result = ModelsDev.Provider.safeParse({
+        id: "anthropic",
+        name: "Anthropic",
+        api: "https://api.anthropic.com",
+        env: ["ANTHROPIC_API_KEY"],
+        models: {},
+      });
+      expect(result.success).toBe(true);
     });
   });
 
@@ -97,6 +163,57 @@ describe("ModelsDev", () => {
     });
   });
 
+  describe("env flags", () => {
+    it("should use OPENOMNI_MODELS_PATH for cache location", async () => {
+      const fakePath = join(
+        tmpdir(),
+        `openomni-test-${Date.now()}`,
+        "models.json",
+      );
+      process.env.OPENOMNI_MODELS_PATH = fakePath;
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock(() =>
+        Promise.reject(new Error("offline")),
+      ) as typeof fetch;
+
+      try {
+        const data = await ModelsDev.get();
+        expect(data.anthropic).toBeDefined();
+        expect(data.openai).toBeDefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+        delete process.env.OPENOMNI_MODELS_PATH;
+      }
+    });
+
+    it("should skip fetch when OPENOMNI_DISABLE_MODELS_FETCH is set", async () => {
+      const fakePath = join(
+        tmpdir(),
+        `openomni-test-${Date.now()}`,
+        "models.json",
+      );
+      process.env.OPENOMNI_MODELS_PATH = fakePath;
+      process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
+
+      const fetchSpy = mock(() =>
+        Promise.resolve(new Response("ok")),
+      ) as typeof fetch;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = fetchSpy;
+
+      try {
+        const data = await ModelsDev.get();
+        expect(data.anthropic).toBeDefined();
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        globalThis.fetch = originalFetch;
+        delete process.env.OPENOMNI_MODELS_PATH;
+        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      }
+    });
+  });
+
   describe("fallback", () => {
     it("should return hardcoded providers with models when fetch and cache fail", async () => {
       const originalFetch = globalThis.fetch;
@@ -104,9 +221,13 @@ describe("ModelsDev", () => {
         Promise.reject(new Error("offline")),
       ) as typeof fetch;
 
-      const fakeCacheDir = join(tmpdir(), `openomni-test-${Date.now()}`);
-      ModelsDev._setCachePath(fakeCacheDir, join(fakeCacheDir, "models.json"));
-      ModelsDev._resetCache();
+      const fakePath = join(
+        tmpdir(),
+        `openomni-test-${Date.now()}`,
+        "models.json",
+      );
+      process.env.OPENOMNI_MODELS_PATH = fakePath;
+      ModelsDev.Data.reset();
       try {
         const data = await ModelsDev.get();
 
@@ -129,6 +250,7 @@ describe("ModelsDev", () => {
         }
       } finally {
         globalThis.fetch = originalFetch;
+        delete process.env.OPENOMNI_MODELS_PATH;
       }
     });
   });
