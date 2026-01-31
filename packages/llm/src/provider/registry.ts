@@ -2,11 +2,7 @@ import { Auth } from "../auth/storage";
 import { ProviderError } from "../error";
 import { createAnthropicProvider, getAnthropicModels } from "./anthropic";
 import { Provider } from "./index";
-import {
-  createOpenAIProvider,
-  getOpenAIModels,
-  type OPENAI_MODELS,
-} from "./openai";
+import { createOpenAIProvider, getOpenAIModels } from "./openai";
 
 export type ProviderID = "anthropic" | "openai";
 
@@ -27,7 +23,7 @@ export function getProvider(providerID: string, auth: Auth.Info) {
 export function listModels(
   providerID: string,
   authType?: "oauth" | "api",
-): Provider.Model[] | typeof OPENAI_MODELS {
+): Provider.Model[] {
   switch (providerID) {
     case "anthropic":
       return getAnthropicModels();
@@ -44,7 +40,7 @@ export function listModels(
 export async function listModelsAsync(
   providerID: string,
   authType?: "oauth" | "api",
-): Promise<Provider.Model[] | Record<string, (typeof OPENAI_MODELS)[string]>> {
+): Promise<Provider.Model[]> {
   const { getAnthropicModelsAsync } = await import("./anthropic");
   const { getOpenAIModelsAsync } = await import("./openai");
 
