@@ -1,62 +1,143 @@
-import type { CoreMessage } from "ai"
+import type { CoreMessage } from "ai";
+import type { Provider } from "./index";
 
 export namespace ProviderTransform {
   export function sdkKey(npm: string): string | undefined {
     switch (npm) {
       case "@ai-sdk/anthropic":
       case "@ai-sdk/google-vertex/anthropic":
-        return "anthropic"
+        return "anthropic";
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
-        return "openai"
+        return "openai";
       case "@ai-sdk/google-vertex":
       case "@ai-sdk/google":
-        return "google"
+        return "google";
       case "@openrouter/ai-sdk-provider":
-        return "openrouter"
+        return "openrouter";
       default:
-        return undefined
+        return undefined;
     }
   }
 
   export interface NormalizeOptions {
-    npm: string
-    modelId: string
+    npm: string;
+    modelId: string;
   }
 
   export function normalizeMessages(
     msgs: CoreMessage[],
-    model: NormalizeOptions,
+    model: Provider.Model | NormalizeOptions,
     _options: Record<string, unknown> = {},
   ): CoreMessage[] {
-    const key = sdkKey(model.npm)
+    let npm: string | undefined;
+    let modelId: string;
 
-    if (key === "anthropic") {
-      return normalizeAnthropic(msgs, model)
+    if ("api" in model && model.api) {
+      npm = model.api.npm;
+      modelId = model.id;
+    } else {
+      npm = (model as NormalizeOptions).npm;
+      modelId = (model as NormalizeOptions).modelId;
     }
 
-    return msgs
+    const key = sdkKey(npm || "");
+
+    if (key === "anthropic") {
+      return normalizeAnthropic(msgs, { npm: npm || "", modelId });
+    }
+
+    return msgs;
   }
 
-  function normalizeAnthropic(msgs: CoreMessage[], model: NormalizeOptions): CoreMessage[] {
+  export function temperature(model: Provider.Model): number | undefined {
+    const id = model.id.toLowerCase();
+    if (id.includes("claude")) return undefined;
+    return undefined;
+  }
+
+  export function topP(model: Provider.Model): number | undefined {
+    const id = model.id.toLowerCase();
+    return undefined;
+  }
+
+  export function variants(
+    model: Provider.Model,
+  ): Record<string, Record<string, any>> {
+    if (!model.capabilities?.reasoning) return {};
+
+    const npm = model.api?.npm;
+    const id = model.id.toLowerCase();
+
+    // For anthropic models
+    if (
+      npm === "@ai-sdk/anthropic" ||
+      npm === "@ai-sdk/google-vertex/anthropic"
+    ) {
+      return {
+        high: {
+          thinking: {
+            type: "enabled",
+            budgetTokens: Math.min(
+              16_000,
+              Math.floor((model.limit?.output ?? 0) / 2 - 1),
+            ),
+          },
+        },
+        max: {
+          thinking: {
+            type: "enabled",
+            budgetTokens: Math.min(31_999, (model.limit?.output ?? 0) - 1),
+          },
+        },
+      };
+    }
+
+    // For OpenAI models
+    if (npm === "@ai-sdk/openai") {
+      return {
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+        },
+      };
+    }
+
+    return {};
+  }
+
+  function normalizeAnthropic(
+    msgs: CoreMessage[],
+    model: NormalizeOptions,
+  ): CoreMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
+          if (msg.content === "") return undefined;
+          return msg;
         }
-        if (!Array.isArray(msg.content)) return msg
+        if (!Array.isArray(msg.content)) return msg;
 
         const filtered = msg.content.filter((part: any) => {
           if (part.type === "text" || part.type === "reasoning") {
-            return (part as { text: string }).text !== ""
+            return (part as { text: string }).text !== "";
           }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
+          return true;
+        });
+        if (filtered.length === 0) return undefined;
+        return { ...msg, content: filtered };
       })
-      .filter((msg): msg is CoreMessage => msg !== undefined && msg.content !== "")
+      .filter(
+        (msg): msg is CoreMessage => msg !== undefined && msg.content !== "",
+      );
 
     if (model.modelId.includes("claude")) {
       result = result.map((msg) => {
@@ -73,20 +154,19 @@ export namespace ProviderTransform {
               ) {
                 return {
                   ...part,
-                  toolCallId: (part as { toolCallId: string }).toolCallId.replace(
-                    /[^a-zA-Z0-9_-]/g,
-                    "_",
-                  ),
-                }
+                  toolCallId: (
+                    part as { toolCallId: string }
+                  ).toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                };
               }
-              return part
+              return part;
             }),
-          }
+          };
         }
-        return msg
-      })
+        return msg;
+      });
     }
 
-    return result
+    return result;
   }
 }
