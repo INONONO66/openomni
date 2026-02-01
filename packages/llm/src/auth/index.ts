@@ -1,8 +1,8 @@
 // Re-export Auth namespace (storage operations)
-export { Auth } from "./storage"
+export { Auth } from "./storage";
 
 // Re-export OAuth flow functions (provider-specific, NOT in namespace)
-export { authorize, exchange, refreshToken, createApiKey } from "./anthropic"
+export { authorize, exchange, refreshToken, createApiKey } from "./anthropic";
 export {
   buildAuthorizeUrl,
   exchangeCodeForTokens,
@@ -14,7 +14,11 @@ export {
   waitForOAuthCallback,
   initiateDeviceAuth,
   pollDeviceAuth,
-} from "./openai"
+} from "./openai";
+
+// Re-export OAuth fetch creators
+export { createOAuthFetch, type TokenRefreshCallback } from "./anthropic-fetch";
+export { createCodexOAuthFetch } from "./openai-fetch";
 
 // Re-export PKCE utilities
-export { generatePKCE, generateState } from "./pkce"
+export { generatePKCE, generateState } from "./pkce";
