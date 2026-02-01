@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { join } from "path";
 import { homedir } from "os";
-import { ANTHROPIC_MODELS } from "./anthropic";
-import { OPENAI_MODELS } from "./openai";
 import { lazy } from "../util/lazy";
 
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
@@ -72,40 +70,7 @@ export namespace ModelsDev {
   }
 
   function buildFallback(): Record<string, Provider> {
-    const anthropicModels: Record<string, unknown> = {};
-    for (const m of ANTHROPIC_MODELS) {
-      anthropicModels[m.id] = {
-        id: m.id,
-        name: m.name,
-        capabilities: m.capabilities,
-      };
-    }
-
-    const openaiModels: Record<string, unknown> = {};
-    for (const m of OPENAI_MODELS) {
-      openaiModels[m.id] = {
-        id: m.id,
-        name: m.name,
-        cost: m.cost,
-      };
-    }
-
-    return {
-      anthropic: {
-        id: "anthropic",
-        name: "Anthropic",
-        env: ["ANTHROPIC_API_KEY"],
-        npm: "@ai-sdk/anthropic",
-        models: anthropicModels,
-      },
-      openai: {
-        id: "openai",
-        name: "OpenAI",
-        env: ["OPENAI_API_KEY"],
-        npm: "@ai-sdk/openai",
-        models: openaiModels,
-      },
-    };
+    return {};
   }
 
   async function writeCache(data: Record<string, Provider>): Promise<void> {
@@ -125,6 +90,12 @@ export namespace ModelsDev {
     const file = Bun.file(cachePath);
     const cached = await file.json().catch(() => undefined);
     if (cached) return cached as Record<string, Provider>;
+
+    const snapshotModule = await import("./models-snapshot.json").catch(
+      () => undefined,
+    );
+    if (snapshotModule?.default)
+      return snapshotModule.default as Record<string, Provider>;
 
     if (process.env.OPENOMNI_DISABLE_MODELS_FETCH) return buildFallback();
 
