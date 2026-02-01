@@ -9,7 +9,7 @@ import {
   stopOAuthServer,
   initiateDeviceAuth,
   pollDeviceAuth,
-} from "../../src/auth"
+} from "../../src/oauth"
 
 const OAUTH_PORT = 1455
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"

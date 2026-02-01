@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Auth } from "../auth/storage";
 import { ProviderError } from "../error";
-import { ModelsDev } from "./models";
+import { ModelsDev } from "../model";
 import {
   getSDK,
   getLanguage,
@@ -162,9 +162,9 @@ export const BUNDLED_PROVIDERS = {
   "@ai-sdk/openai": true,
 } as const;
 
-export { ModelsDev } from "./models";
+export { ModelsDev } from "../model";
 
-export { ProviderTransform } from "./transform";
+export { ProviderTransform } from "../transform";
 
 export type ProviderID = string;
 

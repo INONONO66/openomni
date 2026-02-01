@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test"
-import { authorize, exchange, refreshToken, createApiKey } from "../../src/auth"
+import { authorize, exchange, refreshToken, createApiKey } from "../../src/oauth"
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 

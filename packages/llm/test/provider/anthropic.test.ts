@@ -1,6 +1,6 @@
 import { describe, test, expect, mock, afterEach } from "bun:test";
 import { getSDK, getLanguage, Provider } from "../../src/provider/index";
-import { createOAuthFetch } from "../../src/auth/anthropic-fetch";
+import { createOAuthFetch } from "../../src/fetch/anthropic";
 import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;

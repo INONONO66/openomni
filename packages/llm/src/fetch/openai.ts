@@ -1,6 +1,6 @@
 import type { OpenAIProviderSettings } from "@ai-sdk/openai";
-import { Auth } from "./storage";
-import { CODEX_API_ENDPOINT, refreshAccessToken } from "./openai";
+import { Auth } from "../auth/storage";
+import { CODEX_API_ENDPOINT, refreshAccessToken } from "../oauth/openai";
 
 type ProviderFetch = NonNullable<OpenAIProviderSettings["fetch"]>;
 

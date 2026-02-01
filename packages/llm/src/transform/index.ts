@@ -1,5 +1,5 @@
 import type { CoreMessage } from "ai";
-import type { Provider } from "./index";
+import type { Provider } from "../provider/index";
 
 export namespace ProviderTransform {
   export function sdkKey(npm: string): string | undefined {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { generatePKCE, generateState } from "../../src/auth"
+import { generatePKCE, generateState } from "../../src/oauth"
 
 describe("PKCE", () => {
   it("generatePKCE() returns { verifier, challenge } with correct types", async () => {

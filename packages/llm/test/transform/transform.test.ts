@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CoreMessage } from "ai";
-import { ProviderTransform } from "../src/provider/transform";
-import type { Provider } from "../src/provider/index";
+import { ProviderTransform } from "../../src/transform";
+import type { Provider } from "../../src/provider/index";
 
 describe("ProviderTransform.sdkKey", () => {
   test("maps anthropic packages", () => {

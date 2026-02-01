@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import { tmpdir } from "os";
 import { join } from "path";
-import { ModelsDev } from "../src/provider/models";
+import { ModelsDev } from "../../src/model";
 
 describe("ModelsDev", () => {
   const originalEnv = { ...process.env };

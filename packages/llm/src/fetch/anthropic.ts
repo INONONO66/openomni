@@ -92,5 +92,5 @@ export function createOAuthFetch(
     requestHeaders.delete("x-api-key");
 
     return fetch(input, { ...init, headers: requestHeaders });
-  };
+  } as ProviderFetch;
 }

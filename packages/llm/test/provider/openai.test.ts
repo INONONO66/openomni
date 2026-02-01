@@ -4,7 +4,7 @@ import {
   CODEX_ALLOWED_MODELS,
   Provider,
 } from "../../src/provider/index";
-import { createCodexOAuthFetch } from "../../src/auth/openai-fetch";
+import { createCodexOAuthFetch } from "../../src/fetch/openai";
 import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;

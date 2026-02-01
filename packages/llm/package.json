@@ -8,13 +8,12 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/auth": "workspace:*",
     "ai": "^4.0.0",
     "@ai-sdk/anthropic": "^0.0.50",
-    "@ai-sdk/openai": "^0.0.50"
+    "@ai-sdk/openai": "^0.0.50",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "zod": "^3.22.4",
     "@types/bun": "latest"
   }
 }
