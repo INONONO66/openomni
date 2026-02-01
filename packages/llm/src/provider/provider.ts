@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
 import { Auth } from "../auth/storage";
-import { createOAuthFetch } from "./anthropic";
+import { createOAuthFetch } from "./oauth-fetch";
 import { CODEX_API_ENDPOINT, refreshAccessToken } from "../auth/openai";
 import { Provider } from "./index";
 import { ModelsDev } from "./models";
