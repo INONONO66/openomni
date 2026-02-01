@@ -1,3 +1,5 @@
+import { AuthError, TokenRefreshError } from "../error"
+
 export const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 export const ISSUER = "https://auth.openai.com"
 export const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
@@ -74,7 +76,7 @@ export async function exchangeCodeForTokens(
     }).toString(),
   })
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status}`)
+    throw new TokenRefreshError({ message: `Token exchange failed: ${response.status}`, status: response.status })
   }
   return response.json() as Promise<TokenResponse>
 }
@@ -90,7 +92,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
     }).toString(),
   })
   if (!response.ok) {
-    throw new Error(`Token refresh failed: ${response.status}`)
+    throw new TokenRefreshError({ message: `Token refresh failed: ${response.status}`, status: response.status })
   }
   return response.json() as Promise<TokenResponse>
 }
@@ -242,7 +244,7 @@ export async function initiateDeviceAuth(): Promise<DeviceAuthResponse> {
   })
 
   if (!response.ok) {
-    throw new Error("Failed to initiate device authorization")
+    throw new AuthError({ message: "Failed to initiate device authorization", provider: "openai" })
   }
 
   return response.json() as Promise<DeviceAuthResponse>
@@ -282,14 +284,14 @@ export async function pollDeviceAuth(
       })
 
       if (!tokenResponse.ok) {
-        throw new Error(`Token exchange failed: ${tokenResponse.status}`)
+        throw new TokenRefreshError({ message: `Token exchange failed: ${tokenResponse.status}`, status: tokenResponse.status })
       }
 
       return tokenResponse.json() as Promise<TokenResponse>
     }
 
     if (response.status !== 403 && response.status !== 404) {
-      throw new Error(`Device auth polling failed: ${response.status}`)
+      throw new AuthError({ message: `Device auth polling failed: ${response.status}`, provider: "openai" })
     }
 
     await Bun.sleep(intervalMs)
