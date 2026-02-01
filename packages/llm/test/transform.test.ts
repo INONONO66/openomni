@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CoreMessage } from "ai";
 import { ProviderTransform } from "../src/provider/transform";
+import type { Provider } from "../src/provider/index";
 
 describe("ProviderTransform.sdkKey", () => {
   test("maps anthropic packages", () => {
@@ -171,5 +172,112 @@ describe("ProviderTransform.normalizeMessages", () => {
     expect(result).toHaveLength(1);
     expect((result[0].content as any[]).length).toBe(1);
     expect((result[0].content as any[])[0].type).toBe("tool-call");
+  });
+
+  test("accepts Provider.Model directly", () => {
+    const model: Provider.Model = {
+      id: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4",
+      api: { npm: "@ai-sdk/anthropic" },
+    };
+    const msgs: CoreMessage[] = [
+      { role: "user", content: "" },
+      { role: "user", content: "hello" },
+    ];
+    const result = ProviderTransform.normalizeMessages(msgs, model);
+    expect(result).toEqual([{ role: "user", content: "hello" }]);
+  });
+});
+
+describe("ProviderTransform.variants", () => {
+  test("returns thinking budgets for anthropic reasoning model", () => {
+    const model: Provider.Model = {
+      id: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4",
+      api: { npm: "@ai-sdk/anthropic" },
+      capabilities: { reasoning: true },
+      limit: { context: 200000, output: 32000 },
+    };
+    const v = ProviderTransform.variants(model);
+    expect(v.high).toBeDefined();
+    expect(v.high.thinking.type).toBe("enabled");
+    expect(v.high.thinking.budgetTokens).toBe(15_999);
+    expect(v.max).toBeDefined();
+    expect(v.max.thinking.type).toBe("enabled");
+    expect(v.max.thinking.budgetTokens).toBe(31_999);
+  });
+
+  test("returns reasoning efforts for openai reasoning model", () => {
+    const model: Provider.Model = {
+      id: "o4-mini",
+      providerID: "openai",
+      name: "o4-mini",
+      api: { npm: "@ai-sdk/openai" },
+      capabilities: { reasoning: true },
+    };
+    const v = ProviderTransform.variants(model);
+    expect(v.low).toBeDefined();
+    expect(v.low.reasoningEffort).toBe("low");
+    expect(v.medium.reasoningEffort).toBe("medium");
+    expect(v.high.reasoningEffort).toBe("high");
+  });
+
+  test("returns empty for non-reasoning model", () => {
+    const model: Provider.Model = {
+      id: "gpt-4o",
+      providerID: "openai",
+      name: "GPT-4o",
+      api: { npm: "@ai-sdk/openai" },
+      capabilities: { reasoning: false },
+    };
+    const v = ProviderTransform.variants(model);
+    expect(Object.keys(v)).toHaveLength(0);
+  });
+
+  test("returns empty for model with no capabilities", () => {
+    const model: Provider.Model = {
+      id: "test-model",
+      providerID: "test",
+      name: "Test",
+      api: { npm: "@ai-sdk/openai" },
+    };
+    const v = ProviderTransform.variants(model);
+    expect(Object.keys(v)).toHaveLength(0);
+  });
+});
+
+describe("ProviderTransform.temperature", () => {
+  test("returns undefined for claude models", () => {
+    const model: Provider.Model = {
+      id: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4",
+      api: { npm: "@ai-sdk/anthropic" },
+    };
+    expect(ProviderTransform.temperature(model)).toBeUndefined();
+  });
+
+  test("returns undefined for non-claude models", () => {
+    const model: Provider.Model = {
+      id: "gpt-4o",
+      providerID: "openai",
+      name: "GPT-4o",
+      api: { npm: "@ai-sdk/openai" },
+    };
+    expect(ProviderTransform.temperature(model)).toBeUndefined();
+  });
+});
+
+describe("ProviderTransform.topP", () => {
+  test("returns undefined", () => {
+    const model: Provider.Model = {
+      id: "gpt-4o",
+      providerID: "openai",
+      name: "GPT-4o",
+      api: { npm: "@ai-sdk/openai" },
+    };
+    expect(ProviderTransform.topP(model)).toBeUndefined();
   });
 });

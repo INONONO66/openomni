@@ -1,27 +1,56 @@
 import { describe, test, expect, mock, afterEach } from "bun:test";
-import {
-  createAnthropicProvider,
-  getAnthropicModels,
-  Provider,
-} from "../../src/provider";
+import { getSDK, getLanguage, Provider } from "../../src/provider/index";
+import { createOAuthFetch } from "../../src/auth/anthropic-fetch";
 import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;
 
-describe("createAnthropicProvider", () => {
+function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
+  return {
+    id: "claude-sonnet-4-20250514",
+    providerID: "anthropic",
+    name: "Claude Sonnet 4",
+    api: { npm: "@ai-sdk/anthropic" },
+    capabilities: { reasoning: true },
+    cost: { input: 3, output: 15 },
+    limit: { context: 200000, output: 16384 },
+    ...overrides,
+  };
+}
+
+describe("getSDK (Anthropic)", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
 
-  test("api key auth returns provider with apiKey", () => {
+  test("api key auth returns SDK with languageModel", () => {
     const auth: Auth.Info = { type: "api", key: "sk-xxx" };
-    const provider = createAnthropicProvider(auth);
-    expect(provider).toBeDefined();
-    expect(typeof provider).toBe("function");
+    const sdk = getSDK(makeModel(), auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk).toBe("function");
+    expect(typeof sdk.languageModel).toBe("function");
   });
 
-  test("oauth auth creates provider with custom fetch that injects Bearer token", async () => {
+  test("oauth auth returns SDK with languageModel", () => {
     const auth: Auth.Info = {
+      type: "oauth",
+      access: "tok",
+      refresh: "ref",
+      expires: Date.now() + 60_000,
+    };
+    const sdk = getSDK(makeModel(), auth);
+    expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+  });
+});
+
+describe("createOAuthFetch (Anthropic)", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("injects Bearer token", async () => {
+    const auth: Extract<Auth.Info, { type: "oauth" }> = {
       type: "oauth",
       access: "tok",
       refresh: "ref",
@@ -34,11 +63,8 @@ describe("createAnthropicProvider", () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as any;
 
-    const provider = createAnthropicProvider(auth);
-    const options = (provider as any)._options ?? (provider as any).options;
-    expect(options?.fetch).toBeDefined();
-
-    await options.fetch("https://api.anthropic.com/v1/messages", {
+    const oauthFetch = createOAuthFetch(auth);
+    await oauthFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: [] }),
@@ -47,8 +73,8 @@ describe("createAnthropicProvider", () => {
     expect(capturedHeaders?.get("authorization")).toBe("Bearer tok");
   });
 
-  test("custom fetch adds anthropic-beta header with required values", async () => {
-    const auth: Auth.Info = {
+  test("adds anthropic-beta header with required values", async () => {
+    const auth: Extract<Auth.Info, { type: "oauth" }> = {
       type: "oauth",
       access: "tok",
       refresh: "ref",
@@ -61,9 +87,8 @@ describe("createAnthropicProvider", () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as any;
 
-    const provider = createAnthropicProvider(auth);
-    const options = (provider as any)._options ?? (provider as any).options;
-    await options.fetch("https://api.anthropic.com/v1/messages", {
+    const oauthFetch = createOAuthFetch(auth);
+    await oauthFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "anthropic-beta": "existing-beta-123" },
       body: JSON.stringify({}),
@@ -75,8 +100,8 @@ describe("createAnthropicProvider", () => {
     expect(beta).toContain("existing-beta-123");
   });
 
-  test("custom fetch refreshes token when expired", async () => {
-    const auth: Auth.Info = {
+  test("refreshes token when expired", async () => {
+    const auth: Extract<Auth.Info, { type: "oauth" }> = {
       type: "oauth",
       access: "expired-tok",
       refresh: "ref",
@@ -112,9 +137,8 @@ describe("createAnthropicProvider", () => {
       (_access: string, _refresh: string, _expires: number) => {},
     );
 
-    const provider = createAnthropicProvider(auth, onTokenRefresh);
-    const options = (provider as any)._options ?? (provider as any).options;
-    await options.fetch("https://api.anthropic.com/v1/messages", {
+    const oauthFetch = createOAuthFetch(auth, onTokenRefresh);
+    await oauthFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       body: JSON.stringify({}),
     });
@@ -129,7 +153,7 @@ describe("createAnthropicProvider", () => {
   });
 
   test("concurrent requests share single token refresh (promise dedup)", async () => {
-    const auth: Auth.Info = {
+    const auth: Extract<Auth.Info, { type: "oauth" }> = {
       type: "oauth",
       access: "expired-tok",
       refresh: "ref",
@@ -160,19 +184,18 @@ describe("createAnthropicProvider", () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as any;
 
-    const provider = createAnthropicProvider(auth);
-    const options = (provider as any)._options ?? (provider as any).options;
+    const oauthFetch = createOAuthFetch(auth);
 
     await Promise.all([
-      options.fetch("https://api.anthropic.com/v1/messages", {
+      oauthFetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         body: "{}",
       }),
-      options.fetch("https://api.anthropic.com/v1/messages", {
+      oauthFetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         body: "{}",
       }),
-      options.fetch("https://api.anthropic.com/v1/messages", {
+      oauthFetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         body: "{}",
       }),
@@ -180,32 +203,57 @@ describe("createAnthropicProvider", () => {
 
     expect(refreshCount).toBe(1);
   });
+
+  test("removes x-api-key header", async () => {
+    const auth: Extract<Auth.Info, { type: "oauth" }> = {
+      type: "oauth",
+      access: "tok",
+      refresh: "ref",
+      expires: Date.now() + 60_000,
+    };
+
+    let capturedHeaders: Headers | undefined;
+    globalThis.fetch = mock(async (_input: any, init: any) => {
+      capturedHeaders = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as any;
+
+    const oauthFetch = createOAuthFetch(auth);
+    await oauthFetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": "should-be-removed" },
+    });
+
+    expect(capturedHeaders?.get("x-api-key")).toBeNull();
+  });
 });
 
-describe("getAnthropicModels", () => {
-  test("returns hardcoded model list with capabilities", () => {
-    const models = getAnthropicModels();
-    expect(Array.isArray(models)).toBe(true);
-    expect(models.length).toBeGreaterThanOrEqual(3);
+describe("getLanguage (Anthropic)", () => {
+  test("returns a language model for anthropic model with api auth", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
+    const model = getLanguage(makeModel(), auth);
+    expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
+  });
 
-    const ids = models.map((m) => m.id);
-    expect(ids).toContain("claude-sonnet-4-20250514");
-    expect(ids).toContain("claude-opus-4-20250514");
-    expect(ids).toContain("claude-haiku-3-5-20241022");
+  test("returns a language model for oauth auth", () => {
+    const auth: Auth.Info = {
+      type: "oauth",
+      access: "tok",
+      refresh: "ref",
+      expires: Date.now() + 60_000,
+    };
+    const model = getLanguage(makeModel(), auth);
+    expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
+  });
 
-    const sonnet = models.find((m) => m.id === "claude-sonnet-4-20250514")!;
-    expect(sonnet.name).toBeDefined();
-    expect(sonnet.capabilities).toBeDefined();
-    expect(sonnet.capabilities.vision).toBe(true);
-    expect(sonnet.providerID).toBe("anthropic");
-    expect(sonnet.api).toBeDefined();
-    expect(sonnet.api?.npm).toBe("@ai-sdk/anthropic");
-    expect(sonnet.cost).toBeDefined();
-    expect(sonnet.cost?.input).toBe(3);
-    expect(sonnet.cost?.output).toBe(15);
-
-    const haiku = models.find((m) => m.id === "claude-haiku-3-5-20241022")!;
-    expect(haiku.cost?.input).toBe(0.25);
-    expect(haiku.cost?.output).toBe(1.25);
+  test("uses api.id when provided", () => {
+    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
+    const model = getLanguage(
+      makeModel({ api: { npm: "@ai-sdk/anthropic", id: "claude-3-haiku" } }),
+      auth,
+    );
+    expect(model.modelId).toBe("claude-3-haiku");
   });
 });

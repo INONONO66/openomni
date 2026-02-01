@@ -1,16 +1,35 @@
 import { describe, expect, it } from "bun:test";
-import { getProvider, listModels, listProviders } from "../../src/provider";
+import {
+  getProvider,
+  listModels,
+  listProviders,
+  Provider,
+} from "../../src/provider/index";
 import type { Auth } from "../../src/auth";
+
+function makeModel(
+  providerID: string,
+  npm: string,
+  id?: string,
+): Provider.Model {
+  return {
+    id: id ?? "test-model",
+    providerID,
+    name: "Test Model",
+    api: { npm },
+  };
+}
 
 describe("Provider Registry", () => {
   describe("getProvider", () => {
     it("should return configured Anthropic provider with API auth", () => {
-      const auth: Auth.Info = {
-        type: "api",
-        key: "test-api-key",
-      };
-
-      const provider = getProvider("anthropic", auth);
+      const auth: Auth.Info = { type: "api", key: "test-api-key" };
+      const model = makeModel(
+        "anthropic",
+        "@ai-sdk/anthropic",
+        "claude-sonnet-4-20250514",
+      );
+      const provider = getProvider(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -22,19 +41,20 @@ describe("Provider Registry", () => {
         refresh: "test-refresh-token",
         expires: Date.now() + 3600000,
       };
-
-      const provider = getProvider("anthropic", auth);
+      const model = makeModel(
+        "anthropic",
+        "@ai-sdk/anthropic",
+        "claude-sonnet-4-20250514",
+      );
+      const provider = getProvider(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
 
     it("should return configured OpenAI provider with API auth", () => {
-      const auth: Auth.Info = {
-        type: "api",
-        key: "test-api-key",
-      };
-
-      const provider = getProvider("openai", auth);
+      const auth: Auth.Info = { type: "api", key: "test-api-key" };
+      const model = makeModel("openai", "@ai-sdk/openai", "gpt-4o");
+      const provider = getProvider(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -47,75 +67,69 @@ describe("Provider Registry", () => {
         expires: Date.now() + 3600000,
         accountId: "test-account-id",
       };
-
-      const provider = getProvider("openai", auth);
+      const model = makeModel("openai", "@ai-sdk/openai", "gpt-5.1-codex-max");
+      const provider = getProvider(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
 
-    it("should throw error for unknown provider", () => {
-      const auth: Auth.Info = {
-        type: "api",
-        key: "test-api-key",
-      };
-
-      expect(() => getProvider("unknown", auth)).toThrow(
-        "Unknown provider: unknown",
+    it("should throw error for unknown npm package", () => {
+      const auth: Auth.Info = { type: "api", key: "test-api-key" };
+      const model = makeModel("unknown", "unknown-npm-pkg");
+      expect(() => getProvider(model, auth)).toThrow(
+        "No bundled provider for npm package: unknown-npm-pkg",
       );
     });
   });
 
   describe("listModels", () => {
-    it("should return Anthropic model definitions", () => {
-      const models = listModels("anthropic");
-      expect(models).toBeDefined();
-      expect(Array.isArray(models)).toBe(true);
-      if (Array.isArray(models)) {
-        expect(models.length).toBeGreaterThan(0);
-        expect(models[0]).toHaveProperty("id");
-        expect(models[0]).toHaveProperty("name");
-        expect(models[0]).toHaveProperty("capabilities");
-      }
-    });
-
-    it("should return OpenAI model definitions without auth type filter", () => {
-      const models = listModels("openai");
+    it("should return model definitions from ModelsDev", async () => {
+      const models = await listModels("anthropic");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
-      const gpt4o = models.find((m) => m.id === "gpt-4o");
-      expect(gpt4o).toBeDefined();
-      expect(gpt4o).toHaveProperty("name");
-      expect(gpt4o).toHaveProperty("cost");
+      expect(models[0]).toHaveProperty("id");
+      expect(models[0]).toHaveProperty("name");
     });
 
-    it("should return filtered OpenAI models for OAuth auth type", () => {
-      const models = listModels("openai", "oauth");
+    it("should return OpenAI model definitions", async () => {
+      const models = await listModels("openai");
+      expect(models).toBeDefined();
+      expect(Array.isArray(models)).toBe(true);
+      expect(models.length).toBeGreaterThan(0);
+    });
+
+    it("should return filtered OpenAI models for OAuth auth type", async () => {
+      const models = await listModels("openai", "oauth");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
       expect(models.find((m) => m.id === "gpt-5.1-codex-max")).toBeDefined();
-      expect(models.find((m) => m.id === "gpt-4o")).toBeUndefined();
+      const nonCodexModel = models.find((m) => m.id === "gpt-4o");
+      expect(nonCodexModel).toBeUndefined();
     });
 
-    it("should return all OpenAI models for API auth type", () => {
-      const models = listModels("openai", "api");
+    it("should return all OpenAI models for API auth type", async () => {
+      const models = await listModels("openai", "api");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
-      expect(models.find((m) => m.id === "gpt-4o")).toBeDefined();
-      expect(models.find((m) => m.id === "gpt-5.1-codex-max")).toBeDefined();
     });
 
-    it("should throw error for unknown provider", () => {
-      expect(() => listModels("unknown")).toThrow("Unknown provider: unknown");
+    it("should throw error for unknown provider", async () => {
+      expect(listModels("unknown")).rejects.toThrow(
+        "Unknown provider: unknown",
+      );
     });
   });
 
   describe("listProviders", () => {
-    it("should return supported provider IDs", () => {
-      const providers = listProviders();
-      expect(providers).toEqual(["anthropic", "openai"]);
+    it("should return available provider IDs", async () => {
+      const providers = await listProviders();
+      expect(Array.isArray(providers)).toBe(true);
+      expect(providers.length).toBeGreaterThan(0);
+      expect(providers).toContain("anthropic");
+      expect(providers).toContain("openai");
     });
   });
 });
