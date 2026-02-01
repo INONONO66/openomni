@@ -1,7 +1,15 @@
 import { z } from "zod";
+import { Auth } from "../auth/storage";
+import { ProviderError } from "../error";
 import { ModelsDev } from "./models";
+import {
+  getSDK,
+  getLanguage,
+  fromModelsDevProvider,
+  filterModels,
+  CODEX_ALLOWED_MODELS,
+} from "./provider";
 
-// Provider namespace with types and schemas
 export namespace Provider {
   export const Model = z.object({
     id: z.string(),
@@ -148,32 +156,56 @@ export namespace Provider {
   }
 }
 
-// Re-export provider creation functions (standalone, NOT in namespace)
-export {
-  createAnthropicProvider,
-  getAnthropicModels,
-  getAnthropicModelsAsync,
-  ANTHROPIC_MODELS,
-} from "./anthropic";
-export {
-  createOpenAIProvider,
-  getOpenAIModels,
-  getOpenAIModelsAsync,
-  OPENAI_MODELS,
-  CODEX_ALLOWED_MODELS,
-} from "./openai";
+export { getSDK, getLanguage, CODEX_ALLOWED_MODELS } from "./provider";
+export const BUNDLED_PROVIDERS = {
+  "@ai-sdk/anthropic": true,
+  "@ai-sdk/openai": true,
+} as const;
 
-// Re-export registry functions
-export {
-  getProvider,
-  listModels,
-  listModelsAsync,
-  listProviders,
-  type ProviderID,
-} from "./registry";
+export { ModelsDev } from "./models";
 
-// Re-export transform utilities
 export { ProviderTransform } from "./transform";
 
-// Re-export models
-export { ModelsDev } from "./models";
+export type ProviderID = string;
+
+export async function listModels(
+  providerID: string,
+  authType?: "oauth" | "api",
+): Promise<Provider.Model[]> {
+  const data = await ModelsDev.get();
+  const provider = data[providerID];
+  if (!provider) {
+    throw new ProviderError({
+      message: `Unknown provider: ${providerID}`,
+      provider: providerID,
+    });
+  }
+  const info = fromModelsDevProvider(provider);
+  const models = Object.values(info.models);
+  return filterModels(providerID, authType ?? "api", models);
+}
+
+export async function listModelsAsync(
+  providerID: string,
+  authType?: "oauth" | "api",
+): Promise<Provider.Model[]> {
+  return listModels(providerID, authType);
+}
+
+export async function listProviders(): Promise<string[]> {
+  const data = await ModelsDev.get();
+  return Object.keys(data);
+}
+
+export function getProvider(model: Provider.Model, auth: Auth.Info): any {
+  return getSDK(model, auth);
+}
+
+export async function getProviderInfo(
+  providerID: string,
+): Promise<Provider.Info | undefined> {
+  const data = await ModelsDev.get();
+  const provider = data[providerID];
+  if (!provider) return undefined;
+  return fromModelsDevProvider(provider);
+}
