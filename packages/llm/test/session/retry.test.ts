@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { Retry } from "../../src/retry";
+import { Retry } from "../../src/session/retry";
 import { APIError, RetryError } from "../../src/error";
 
 describe("Retry", () => {

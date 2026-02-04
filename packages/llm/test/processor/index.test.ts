@@ -1,7 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import { Processor } from "../../src/processor";
-import { Message } from "../../src/session";
-import { Retry } from "../../src/retry";
+import { Message, Retry } from "../../src/session";
 import { APIError } from "../../src/error";
 import { Provider } from "../../src/provider";
 
