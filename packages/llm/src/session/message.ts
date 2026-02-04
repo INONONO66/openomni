@@ -73,6 +73,12 @@ export namespace Message {
   });
   export type SnapshotPart = z.infer<typeof SnapshotPart>;
 
+  export const CompactionPart = PartBase.extend({
+    type: z.literal("compaction"),
+    auto: z.boolean(),
+  });
+  export type CompactionPart = z.infer<typeof CompactionPart>;
+
   export const Part = z.discriminatedUnion("type", [
     TextPart,
     ReasoningPart,
@@ -81,6 +87,7 @@ export namespace Message {
     RetryPart,
     ToolPart,
     SnapshotPart,
+    CompactionPart,
   ]);
   export type Part = z.infer<typeof Part>;
 
