@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { APIError } from "../error";
+import { Tool } from "./tool";
 
 export namespace Message {
   const PartBase = z.object({
@@ -58,12 +59,21 @@ export namespace Message {
   });
   export type RetryPart = z.infer<typeof RetryPart>;
 
+  export const ToolPart = PartBase.extend({
+    type: z.literal("tool"),
+    callID: z.string(),
+    tool: z.string(),
+    state: Tool.State,
+  });
+  export type ToolPart = z.infer<typeof ToolPart>;
+
   export const Part = z.discriminatedUnion("type", [
     TextPart,
     ReasoningPart,
     StepStartPart,
     StepFinishPart,
     RetryPart,
+    ToolPart,
   ]);
   export type Part = z.infer<typeof Part>;
 
