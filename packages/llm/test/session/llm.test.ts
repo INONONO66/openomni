@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import { Stream } from "../../src/stream";
+import { Stream } from "../../src/session/llm";
 import { Message } from "../../src/session";
 import { Provider } from "../../src/provider";
 

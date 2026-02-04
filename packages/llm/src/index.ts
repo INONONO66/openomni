@@ -12,6 +12,5 @@ export {
   AbortedError,
   OutputLengthError,
 } from "./error";
-export { Message, Session, Retry, Processor } from "./session";
-export { Stream } from "./stream";
+export { Message, Session, Retry, Processor, Stream } from "./session";
 export { Agent } from "./agent";
