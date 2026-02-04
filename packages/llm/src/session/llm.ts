@@ -3,14 +3,14 @@ import { streamText, generateText } from "ai";
 import { Message } from "./message";
 import { toModelMessages } from "./convert";
 import { Retry } from "./retry";
-import { Provider, ProviderTransform } from "../provider";
+import { Provider } from "../provider";
 import { getProvider } from "../provider";
 import { Auth } from "../auth/storage";
 
 export namespace Stream {
   export interface StreamInput {
     model: Provider.Model;
-    messages: Message.Info[];
+    messages: Message.WithParts[];
     system?: string;
     abort?: AbortSignal;
     options?: {
@@ -21,7 +21,7 @@ export namespace Stream {
 
   export interface GenerateInput {
     model: Provider.Model;
-    messages: Message.Info[];
+    messages: Message.WithParts[];
     system?: string;
     abort?: AbortSignal;
     options?: {
@@ -35,11 +35,7 @@ export namespace Stream {
   ): Promise<StreamTextResult<any, unknown>> {
     return Retry.withRetry(
       async () => {
-        const coreMessages = toModelMessages(input.messages, input.model);
-        const normalizedMessages = ProviderTransform.normalizeMessages(
-          coreMessages,
-          input.model,
-        );
+        const normalizedMessages = toModelMessages(input.messages, input.model);
 
         const systemMessages: CoreMessage[] = input.system
           ? [
@@ -78,11 +74,7 @@ export namespace Stream {
   ): Promise<Message.AssistantMessage> {
     const result = await Retry.withRetry(
       async () => {
-        const coreMessages = toModelMessages(input.messages, input.model);
-        const normalizedMessages = ProviderTransform.normalizeMessages(
-          coreMessages,
-          input.model,
-        );
+        const normalizedMessages = toModelMessages(input.messages, input.model);
 
         const systemMessages: CoreMessage[] = input.system
           ? [
@@ -124,7 +116,7 @@ export namespace Stream {
         created: now,
         completed: now,
       },
-      parentID: input.messages[input.messages.length - 1]?.id || "",
+      parentID: input.messages[input.messages.length - 1]?.info.id || "",
       modelID: input.model.id,
       providerID: input.model.providerID,
       agent: "stream",

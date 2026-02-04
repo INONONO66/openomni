@@ -5,7 +5,7 @@ import { Provider } from "../../src/provider";
 
 describe("Stream", () => {
   let mockModel: Provider.Model;
-  let mockMessages: Message.Info[];
+  let mockMessages: Message.WithParts[];
   let mockAbortController: AbortController;
 
   beforeEach(() => {
@@ -20,16 +20,27 @@ describe("Stream", () => {
 
     mockMessages = [
       {
-        id: "msg-1",
-        sessionID: "session-1",
-        role: "user",
-        time: { created: 1000 },
-        agent: "default",
-        model: {
-          providerID: "anthropic",
-          modelID: "claude-3-5-sonnet",
-        },
-      } as Message.UserMessage,
+        info: {
+          id: "msg-1",
+          sessionID: "session-1",
+          role: "user",
+          time: { created: 1000 },
+          agent: "default",
+          model: {
+            providerID: "anthropic",
+            modelID: "claude-3-5-sonnet",
+          },
+        } as Message.UserMessage,
+        parts: [
+          {
+            id: "part-1",
+            sessionID: "session-1",
+            messageID: "msg-1",
+            type: "text",
+            text: "Hello",
+          } as Message.TextPart,
+        ],
+      },
     ];
 
     mockAbortController = new AbortController();
