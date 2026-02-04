@@ -5,4 +5,15 @@ export {
   AuthError,
   ProviderError,
   TokenRefreshError,
+  SessionError,
+  StreamError,
+  RetryError,
+  APIError,
+  AbortedError,
+  OutputLengthError,
 } from "./error";
+export { Message, Session } from "./session";
+export { Stream } from "./stream";
+export { Retry } from "./retry";
+export { Processor } from "./processor";
+export { Agent } from "./agent";

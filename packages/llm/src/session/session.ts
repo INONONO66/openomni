@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Message } from "../message";
+import { Message } from "./message";
 
 export namespace Session {
   export const Info = z.object({

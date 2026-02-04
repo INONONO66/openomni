@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Session } from "../../src/session/session";
-import { Message } from "../../src/message";
+import { Message } from "../../src/session/message";
 
 describe("Session", () => {
   beforeEach(() => {
