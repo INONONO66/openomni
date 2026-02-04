@@ -121,4 +121,10 @@ export namespace Message {
     AssistantMessage,
   ]);
   export type Info = z.infer<typeof Info>;
+
+  export const WithParts = z.object({
+    info: Info,
+    parts: z.array(Part),
+  });
+  export type WithParts = z.infer<typeof WithParts>;
 }
