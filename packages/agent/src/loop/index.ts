@@ -28,3 +28,11 @@ export namespace Orchestration {
     throw new Error("Not implemented");
   }
 }
+
+export {
+  EventEnvelope,
+  NormalizedEvent,
+  ValidationError,
+  normalize,
+  Envelope,
+} from "./envelope";
