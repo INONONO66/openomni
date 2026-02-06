@@ -1,5 +1,5 @@
 {
-  "name": "@openomni/llm",
+  "name": "@openomni/agent",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,9 +9,8 @@
   },
   "dependencies": {
     "@openomni/protocol": "workspace:*",
-    "ai": "^4.0.0",
-    "@ai-sdk/anthropic": "^0.0.50",
-    "@ai-sdk/openai": "^0.0.50",
+    "@openomni/llm": "workspace:*",
+    "@openomni/session": "workspace:*",
     "zod": "^3.22.4"
   },
   "devDependencies": {
