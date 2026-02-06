@@ -22,7 +22,7 @@ export type FileEvent = {
   timestamp: number;
 };
 
-export class FilesystemWatcher implements Watcher {
+class FilesystemWatcher implements Watcher {
   private watchers: Map<string, FSWatcher>;
   private config: WatcherConfig;
   private debounceTimers: Map<string, NodeJS.Timeout>;
@@ -120,3 +120,5 @@ export class FilesystemWatcher implements Watcher {
     return matchesInclude && !matchesExclude;
   }
 }
+
+export { FilesystemWatcher };
