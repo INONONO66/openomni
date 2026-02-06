@@ -2,47 +2,44 @@ import { TaskManager } from "./manager";
 import { TaskStorage } from "./storage";
 
 export interface Checkpoint {
-  step: number;
-  data: unknown;
-  timestamp: number;
-  runId: string;
+  step: string;
+  data: Record<string, unknown>;
+  savedAt: number;
 }
 
 export namespace CheckpointManager {
-  export function save(runId: string, step: number, data: unknown): void {
+  export function save(
+    runId: string,
+    checkpoint: Omit<Checkpoint, "savedAt">,
+  ): boolean {
     const run = TaskManager.getRun(runId);
     if (!run) {
-      throw new Error(`TaskRun not found: ${runId}`);
+      return false;
     }
 
-    const timestamp = Date.now();
-    const checkpoint: Checkpoint = {
-      step,
-      data,
-      timestamp,
-      runId,
+    const nextCheckpoint: Checkpoint = {
+      step: checkpoint.step,
+      data: checkpoint.data,
+      savedAt: Date.now(),
     };
 
     const updatedRun = {
       ...run,
-      checkpoints: [...(run.checkpoints ?? []), checkpoint],
+      checkpoint: nextCheckpoint,
     };
 
     const store = TaskStorage.getAdapter();
     store.run.set(run.taskId, updatedRun);
+    return true;
   }
 
   export function get(runId: string): Checkpoint | undefined {
     const run = TaskManager.getRun(runId);
-    if (!run?.checkpoints?.length) {
-      return undefined;
-    }
-
-    return run.checkpoints[run.checkpoints.length - 1] as Checkpoint;
+    return run?.checkpoint as Checkpoint | undefined;
   }
 
   export function list(runId: string): Checkpoint[] {
-    const run = TaskManager.getRun(runId);
-    return (run?.checkpoints ?? []) as Checkpoint[];
+    const checkpoint = get(runId);
+    return checkpoint ? [checkpoint] : [];
   }
 }

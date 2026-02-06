@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { PermissionPolicy } from "@openomni/protocol";
 import { RetryPolicy, RunBudget } from "@openomni/protocol";
 
 /**

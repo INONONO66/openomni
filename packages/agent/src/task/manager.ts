@@ -1,5 +1,6 @@
 import { Task, TaskRun, TriggerSignal } from "./types";
 import { TaskStorage, TaskListFilter, InMemoryTaskStore } from "./storage";
+import { TaskManager as TaskStatusManager } from "./state-machine";
 import { Bus } from "@openomni/session";
 import { Task as TaskEvent } from "@openomni/protocol";
 import { randomUUID } from "crypto";
@@ -164,6 +165,28 @@ function checkConcurrency(
 }
 
 type TaskStore = ReturnType<typeof TaskStorage.getAdapter>;
+
+function isActiveRunStatus(status: TaskRun["status"]): boolean {
+  return status === "scheduled" || status === "running" || status === "blocked";
+}
+
+function upsertRunHistory(
+  history: TaskRun[] | undefined,
+  run: TaskRun,
+): TaskRun[] {
+  if (!history || history.length === 0) {
+    return [run];
+  }
+
+  const index = history.findIndex((item) => item.runId === run.runId);
+  if (index === -1) {
+    return [...history, run];
+  }
+
+  const updated = [...history];
+  updated[index] = run;
+  return updated;
+}
 
 export namespace TaskManager {
   export function create(input: Task.CreateInput): Task.Info {
@@ -379,10 +402,13 @@ export namespace TaskManager {
 
       store.run.set(taskId, taskRun);
 
+      const statusUpdated = TaskStatusManager.updateFromRun(
+        task,
+        taskRun,
+        task.lastRun,
+      );
       const updatedTask: Task.Info = {
-        ...task,
-        status: status,
-        pendingRun: taskRun,
+        ...statusUpdated,
         updatedAt: now,
       };
       store.task.set(taskId, updatedTask);
@@ -507,9 +533,28 @@ export namespace TaskManager {
 
     const task = store.task.get(run.taskId);
     if (task) {
+      const pendingRun =
+        task.pendingRun?.runId === runId
+          ? isActiveRunStatus(updatedRun.status)
+            ? updatedRun
+            : undefined
+          : task.pendingRun;
+
+      const lastRun = isActiveRunStatus(updatedRun.status)
+        ? task.lastRun
+        : updatedRun;
+
+      const statusUpdated = TaskStatusManager.updateFromRun(
+        task,
+        pendingRun,
+        lastRun,
+      );
+
       const updatedTask: Task.Info = {
-        ...task,
-        status: newStatus,
+        ...statusUpdated,
+        history: isActiveRunStatus(updatedRun.status)
+          ? task.history
+          : upsertRunHistory(task.history, updatedRun),
         updatedAt: now,
       };
       store.task.set(run.taskId, updatedTask);
@@ -608,5 +653,34 @@ export namespace TaskManager {
     }
 
     return blockedRuns;
+  }
+
+  /**
+   * Save checkpoint progress for a run
+   */
+  export function saveCheckpoint(
+    runId: string,
+    checkpoint: {
+      step: string;
+      data: Record<string, unknown>;
+    },
+  ): boolean {
+    const store = TaskStorage.getAdapter();
+    const run = store.run.get(runId);
+    if (!run) {
+      return false;
+    }
+
+    const updatedRun: TaskRun = {
+      ...run,
+      checkpoint: {
+        step: checkpoint.step,
+        data: checkpoint.data,
+        savedAt: Date.now(),
+      },
+    };
+
+    store.run.set(run.taskId, updatedRun);
+    return true;
   }
 }
