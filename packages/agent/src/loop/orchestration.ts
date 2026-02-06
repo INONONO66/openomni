@@ -307,6 +307,10 @@ function createSessionSink(sessionID: string): Sink {
     },
 
     onToolCall(call) {
+      if (toolRefs.has(call.id)) {
+        return;
+      }
+
       const messageID = ensureMessageID();
       const toolPart: Message.ToolPart = {
         id: crypto.randomUUID(),
@@ -475,8 +479,8 @@ export namespace Orchestrator {
     }
 
     const permission = PermissionGate.evaluate({
-      taskPolicy: task.policy.permission ?? DEFAULT_PERMISSION,
-      agentPolicy: input.permission?.agentPolicy ?? DEFAULT_PERMISSION,
+      taskPolicy: task.policy.permission,
+      agentPolicy: input.permission?.agentPolicy,
       systemDefault: input.permission?.systemDefault ?? DEFAULT_PERMISSION,
     });
 
@@ -568,10 +572,6 @@ export namespace Orchestrator {
 
             if (outcome.toolCalls.length === 0) {
               throw new Error("Tool wait requested with no tool calls");
-            }
-
-            for (const call of outcome.toolCalls) {
-              sink.onToolCall(call);
             }
 
             const toolStart = Date.now();

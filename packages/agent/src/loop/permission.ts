@@ -6,8 +6,8 @@ export interface PermissionDecision {
 }
 
 export interface PermissionContext {
-  taskPolicy: PermissionLevel;
-  agentPolicy: PermissionLevel;
+  taskPolicy?: PermissionLevel;
+  agentPolicy?: PermissionLevel;
   systemDefault: PermissionLevel;
 }
 
@@ -15,35 +15,23 @@ export namespace PermissionGate {
   export function evaluate(context: PermissionContext): PermissionDecision {
     const { taskPolicy, agentPolicy, systemDefault } = context;
 
-    const restrictiveness: Record<PermissionLevel, number> = {
-      deny: 3,
-      ask: 2,
-      notify: 1,
-    };
-
-    const policies: Array<{ level: PermissionLevel; source: string }> = [
-      { level: taskPolicy, source: "task policy" },
-      { level: agentPolicy, source: "agent policy" },
-      { level: systemDefault, source: "system default" },
-    ];
-
-    let mostRestrictive = policies[0];
-    for (const policy of policies) {
-      if (
-        restrictiveness[policy.level] > restrictiveness[mostRestrictive.level]
-      ) {
-        mostRestrictive = policy;
-      }
+    if (taskPolicy !== undefined) {
+      return {
+        level: taskPolicy,
+        reason: "Selected from task policy",
+      };
     }
 
-    const decision: PermissionDecision = {
-      level: mostRestrictive.level,
-    };
-
-    if (mostRestrictive.source !== "system default") {
-      decision.reason = `Restricted by ${mostRestrictive.source}`;
+    if (agentPolicy !== undefined) {
+      return {
+        level: agentPolicy,
+        reason: "Selected from agent policy",
+      };
     }
 
-    return decision;
+    return {
+      level: systemDefault,
+      reason: "Selected from system default",
+    };
   }
 }

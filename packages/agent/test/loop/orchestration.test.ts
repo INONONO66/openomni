@@ -135,7 +135,7 @@ describe("Orchestrator", () => {
       const result = await Orchestrator.run(config, input);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Permission denied");
+      expect(result.error).toContain("Selected from system default");
     });
 
     it("run handles successful completion (outcome type: stop)", async () => {
