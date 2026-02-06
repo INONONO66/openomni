@@ -43,3 +43,12 @@ export namespace Routing {
     throw new Error("Not implemented");
   }
 }
+
+export { RouteResolver, RouteContext, RoutingError } from "./routing";
+
+export {
+  AgentMessenger,
+  MessageEnvelope,
+  DeliveryOptions,
+  MessagingError,
+} from "./communication";
