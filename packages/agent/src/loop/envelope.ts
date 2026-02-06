@@ -1,16 +1,29 @@
 import { randomUUID } from "crypto";
 
-/**
- * Event Envelope interface representing a standardized event structure
- */
-export interface EventEnvelope {
-  id: string;
+export type EventTrust = "trusted" | "untrusted";
+
+export type EventPriority = "low" | "normal" | "high";
+
+export interface EventSource {
+  type: string;
+  id?: string;
+  trust?: EventTrust;
+}
+
+export interface EventEnvelope<TPayload = unknown> {
+  eventId: string;
   name: string;
-  payload: unknown;
-  timestamp: string; // ISO format
+  source: EventSource;
+  occurredAt: string;
+  receivedAt: string;
   traceId: string;
-  source: string;
-  metadata?: Record<string, unknown>;
+  dedupeKey?: string;
+  priority?: EventPriority;
+  workspaceId?: string;
+  userId?: string;
+  schemaRef?: string;
+  payload: TPayload;
+  meta?: Record<string, unknown>;
 }
 
 /**
@@ -34,10 +47,19 @@ export class ValidationError extends Error {
  * @returns Normalized EventEnvelope
  * @throws ValidationError if required fields are missing
  */
-export function normalize(input: Partial<EventEnvelope>): EventEnvelope {
+export function normalize(
+  input: Partial<EventEnvelope> & {
+    id?: string;
+    timestamp?: string | number;
+    source?: EventSource | string;
+    metadata?: Record<string, unknown>;
+  },
+): EventEnvelope {
+  const eventId = input.eventId ?? input.id;
+
   // Validate required fields
-  if (!input.id) {
-    throw new ValidationError("Missing required field: id");
+  if (!eventId) {
+    throw new ValidationError("Missing required field: eventId");
   }
   if (!input.name) {
     throw new ValidationError("Missing required field: name");
@@ -49,24 +71,42 @@ export function normalize(input: Partial<EventEnvelope>): EventEnvelope {
   // Generate traceId if not provided
   const traceId = input.traceId || randomUUID();
 
-  // Convert timestamp to ISO string if number, otherwise use provided or current time
-  let timestamp: string;
-  if (typeof input.timestamp === "number") {
-    timestamp = new Date(input.timestamp).toISOString();
+  const source: EventSource =
+    typeof input.source === "string"
+      ? { type: input.source }
+      : {
+          type: input.source.type,
+          id: input.source.id,
+          trust: input.source.trust,
+        };
+
+  let occurredAt: string;
+  if (typeof input.occurredAt === "string") {
+    occurredAt = input.occurredAt;
+  } else if (typeof input.timestamp === "number") {
+    occurredAt = new Date(input.timestamp).toISOString();
   } else if (typeof input.timestamp === "string") {
-    timestamp = input.timestamp;
+    occurredAt = input.timestamp;
   } else {
-    timestamp = new Date().toISOString();
+    occurredAt = new Date().toISOString();
   }
 
+  const receivedAt = input.receivedAt ?? new Date().toISOString();
+
   return {
-    id: input.id,
+    eventId,
     name: input.name,
-    payload: input.payload ?? null,
-    timestamp,
+    source,
+    occurredAt,
+    receivedAt,
     traceId,
-    source: input.source,
-    metadata: input.metadata,
+    dedupeKey: input.dedupeKey,
+    priority: input.priority,
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    schemaRef: input.schemaRef,
+    payload: input.payload ?? null,
+    meta: input.meta ?? input.metadata,
   };
 }
 
@@ -83,15 +123,18 @@ export namespace Envelope {
    */
   export function create(
     name: string,
-    source: string,
+    source: string | EventSource,
     payload?: unknown,
   ): EventEnvelope {
+    const now = new Date().toISOString();
+
     return {
-      id: randomUUID(),
+      eventId: randomUUID(),
       name,
-      source,
+      source: typeof source === "string" ? { type: source } : source,
       payload: payload ?? null,
-      timestamp: new Date().toISOString(),
+      occurredAt: now,
+      receivedAt: now,
       traceId: randomUUID(),
     };
   }
@@ -103,14 +146,16 @@ export namespace Envelope {
    */
   export function validate(envelope: EventEnvelope): boolean {
     return (
-      typeof envelope.id === "string" &&
-      envelope.id.length > 0 &&
+      typeof envelope.eventId === "string" &&
+      envelope.eventId.length > 0 &&
       typeof envelope.name === "string" &&
       envelope.name.length > 0 &&
-      typeof envelope.source === "string" &&
-      envelope.source.length > 0 &&
-      typeof envelope.timestamp === "string" &&
-      envelope.timestamp.length > 0 &&
+      typeof envelope.source?.type === "string" &&
+      envelope.source.type.length > 0 &&
+      typeof envelope.occurredAt === "string" &&
+      envelope.occurredAt.length > 0 &&
+      typeof envelope.receivedAt === "string" &&
+      envelope.receivedAt.length > 0 &&
       typeof envelope.traceId === "string" &&
       envelope.traceId.length > 0
     );
@@ -126,7 +171,7 @@ export namespace Envelope {
     envelope: EventEnvelope,
     maxAgeMs: number,
   ): boolean {
-    const envelopeTime = new Date(envelope.timestamp).getTime();
+    const envelopeTime = new Date(envelope.receivedAt).getTime();
     const currentTime = new Date().getTime();
     return currentTime - envelopeTime > maxAgeMs;
   }

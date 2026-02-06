@@ -171,7 +171,12 @@ describe("P7-3 E2E integration flows", () => {
       ],
     });
 
-    Router.register({ eventName: "fs.changed", taskId: task.id, priority: 1 });
+    Router.register({
+      id: "rule-fs-changed",
+      match: { name: "fs.changed" },
+      action: "trigger_task",
+      target: { taskId: task.id },
+    });
 
     const dispatchPromises: Promise<void>[] = [];
     const dispatchedRunIds: string[] = [];
@@ -191,8 +196,8 @@ describe("P7-3 E2E integration flows", () => {
         };
         const envelope = Envelope.create("fs.changed", "watcher", payload);
 
-        const taskIds = Router.route(envelope);
-        for (const routedTaskId of taskIds) {
+        const decision = Router.route(envelope);
+        for (const routedTaskId of decision.targets) {
           dispatchPromises.push(
             Dispatcher.dispatch(routedTaskId, {
               triggerId: "event-1",

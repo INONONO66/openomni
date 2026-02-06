@@ -8,20 +8,20 @@ import {
 
 describe("Envelope Functions", () => {
   describe("normalize", () => {
-    it("throws ValidationError for missing id", () => {
+    it("throws ValidationError for missing eventId", () => {
       const input = {
         name: "test-event",
-        source: "test-source",
+        source: { type: "test-source" },
       };
 
       expect(() => normalize(input)).toThrow(ValidationError);
-      expect(() => normalize(input)).toThrow("Missing required field: id");
+      expect(() => normalize(input)).toThrow("Missing required field: eventId");
     });
 
     it("throws ValidationError for missing name", () => {
       const input = {
-        id: "test-id",
-        source: "test-source",
+        eventId: "test-id",
+        source: { type: "test-source" },
       };
 
       expect(() => normalize(input)).toThrow(ValidationError);
@@ -30,7 +30,7 @@ describe("Envelope Functions", () => {
 
     it("throws ValidationError for missing source", () => {
       const input = {
-        id: "test-id",
+        eventId: "test-id",
         name: "test-event",
       };
 
@@ -40,9 +40,9 @@ describe("Envelope Functions", () => {
 
     it("generates traceId when not provided", () => {
       const input = {
-        id: "test-id",
+        eventId: "test-id",
         name: "test-event",
-        source: "test-source",
+        source: { type: "test-source" },
       };
 
       const result = normalize(input);
@@ -52,52 +52,54 @@ describe("Envelope Functions", () => {
       expect(result.traceId.length).toBeGreaterThan(0);
     });
 
-    it("converts numeric timestamp to ISO string", () => {
+    it("converts numeric timestamp to occurredAt ISO string", () => {
       const testTime = 1609459200000;
       const input = {
-        id: "test-id",
+        eventId: "test-id",
         name: "test-event",
-        source: "test-source",
+        source: { type: "test-source" },
         timestamp: testTime,
-      } as any;
+      };
 
       const result = normalize(input);
 
-      expect(result.timestamp).toBe("2021-01-01T00:00:00.000Z");
-      expect(typeof result.timestamp).toBe("string");
+      expect(result.occurredAt).toBe("2021-01-01T00:00:00.000Z");
+      expect(typeof result.occurredAt).toBe("string");
+      expect(typeof result.receivedAt).toBe("string");
     });
   });
 
   describe("Envelope.create", () => {
-    it("returns new envelope with generated id and traceId", () => {
+    it("returns new envelope with generated eventId and traceId", () => {
       const result = Envelope.create("test-event", "test-source", {
         data: "test",
       });
 
-      expect(result.id).toBeDefined();
-      expect(typeof result.id).toBe("string");
-      expect(result.id.length).toBeGreaterThan(0);
+      expect(result.eventId).toBeDefined();
+      expect(typeof result.eventId).toBe("string");
+      expect(result.eventId.length).toBeGreaterThan(0);
 
       expect(result.traceId).toBeDefined();
       expect(typeof result.traceId).toBe("string");
       expect(result.traceId.length).toBeGreaterThan(0);
 
       expect(result.name).toBe("test-event");
-      expect(result.source).toBe("test-source");
+      expect(result.source.type).toBe("test-source");
       expect(result.payload).toEqual({ data: "test" });
-      expect(result.timestamp).toBeDefined();
-      expect(typeof result.timestamp).toBe("string");
+      expect(result.occurredAt).toBeDefined();
+      expect(result.receivedAt).toBeDefined();
     });
   });
 
   describe("Envelope.validate", () => {
     it("returns true for valid envelope", () => {
       const validEnvelope: EventEnvelope = {
-        id: "test-id",
+        eventId: "test-id",
         name: "test-event",
-        source: "test-source",
+        source: { type: "test-source" },
         payload: { data: "test" },
-        timestamp: "2021-01-01T00:00:00.000Z",
+        occurredAt: "2021-01-01T00:00:00.000Z",
+        receivedAt: "2021-01-01T00:00:01.000Z",
         traceId: "test-trace-id",
       };
 
@@ -113,11 +115,12 @@ describe("Envelope Functions", () => {
         Date.now() - 2 * 60 * 60 * 1000,
       ).toISOString();
       const oldEnvelope: EventEnvelope = {
-        id: "test-id",
+        eventId: "test-id",
         name: "test-event",
-        source: "test-source",
+        source: { type: "test-source" },
         payload: null,
-        timestamp: twoHoursAgo,
+        occurredAt: twoHoursAgo,
+        receivedAt: twoHoursAgo,
         traceId: "test-trace-id",
       };
 

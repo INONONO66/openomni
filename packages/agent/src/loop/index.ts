@@ -9,7 +9,7 @@ export {
   Envelope,
 } from "./envelope";
 
-export { Router, RouterRule } from "./router";
+export { Router, RouterRule, RoutingDecision } from "./router";
 
 export { Dispatcher } from "./dispatcher";
 
@@ -35,3 +35,16 @@ export {
   OrchestrationState,
   ToolExecutor,
 } from "./orchestration";
+
+export { DLQEntry, DeadLetterQueue } from "./dlq";
+
+export { SummaryTemplate, SummaryData, SummaryDelivery } from "./summary";
+
+export {
+  EventMetadata,
+  QueueMetrics,
+  RunMetrics,
+  Observability,
+} from "./observability";
+
+export { AuditEntry, AuditLog } from "./audit";

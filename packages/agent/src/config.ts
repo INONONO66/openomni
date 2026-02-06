@@ -1,41 +1,26 @@
 import type { RouterRule } from "./loop";
+import type { QueueConfig } from "./trigger";
+import type { RunBudget } from "@openomni/protocol";
+
+export interface DedupePolicy {
+  windowMs: number;
+  maxEntries: number;
+  onDuplicate: "drop" | "coalesce" | "summarize";
+}
 
 /**
  * Configuration for the autonomous loop system
  */
 export interface AutonomousLoopConfig {
-  triggers: {
-    scheduler: {
-      enabled: boolean;
-    };
-    watcher: {
-      enabled: boolean;
-    };
-  };
+  queue: QueueConfig;
+  dedupe: DedupePolicy;
   router: {
     rules: RouterRule[];
+    fallbackRuleId?: string;
   };
-  gates: {
-    permission: {
-      enabled: boolean;
-      config: Record<string, unknown>;
-    };
-    concurrency: {
-      enabled: boolean;
-      config: Record<string, unknown>;
-    };
-    run: {
-      enabled: boolean;
-      config: Record<string, unknown>;
-    };
-  };
-  recovery: {
-    enabled: boolean;
-    autoStart: boolean;
-  };
-  audit: {
-    enabled: boolean;
-    retentionMs: number;
+  budgets: RunBudget;
+  permissions: {
+    default: "ask" | "notify" | "deny";
   };
 }
 
@@ -43,46 +28,32 @@ export interface AutonomousLoopConfig {
  * Configuration manager for the autonomous loop
  */
 export namespace ConfigManager {
-  const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-
   function getDefaultsInternal(): AutonomousLoopConfig {
     return {
-      triggers: {
-        scheduler: {
-          enabled: true,
-        },
-        watcher: {
-          enabled: true,
-        },
+      queue: {
+        maxDepth: 100,
+        dropPolicy: "new",
+        laneConcurrency: {},
+        waitWarnMs: 5000,
+        defaultConcurrency: 1,
+      },
+      dedupe: {
+        windowMs: 10 * 60 * 1000,
+        maxEntries: 10_000,
+        onDuplicate: "drop",
       },
       router: {
         rules: [],
+        fallbackRuleId: undefined,
       },
-      gates: {
-        permission: {
-          enabled: true,
-          config: {},
-        },
-        concurrency: {
-          enabled: true,
-          config: {
-            maxConcurrent: 10,
-          },
-        },
-        run: {
-          enabled: true,
-          config: {
-            maxRunsPerTask: 5,
-          },
-        },
+      budgets: {
+        maxWallTimeMs: 5 * 60 * 1000,
+        maxTurns: 24,
+        maxToolCalls: 40,
+        maxToolRuntimeMs: 2 * 60 * 1000,
       },
-      recovery: {
-        enabled: true,
-        autoStart: true,
-      },
-      audit: {
-        enabled: true,
-        retentionMs: DEFAULT_RETENTION_MS,
+      permissions: {
+        default: "notify",
       },
     };
   }
@@ -93,33 +64,24 @@ export namespace ConfigManager {
   ): AutonomousLoopConfig {
     const result = JSON.parse(JSON.stringify(target));
 
-    if (source.triggers) {
-      result.triggers = { ...result.triggers, ...source.triggers };
+    if (source.queue) {
+      result.queue = { ...result.queue, ...source.queue };
     }
+
+    if (source.dedupe) {
+      result.dedupe = { ...result.dedupe, ...source.dedupe };
+    }
+
     if (source.router) {
       result.router = { ...result.router, ...source.router };
     }
-    if (source.gates) {
-      result.gates = {
-        permission: {
-          ...result.gates.permission,
-          ...(source.gates.permission || {}),
-        },
-        concurrency: {
-          ...result.gates.concurrency,
-          ...(source.gates.concurrency || {}),
-        },
-        run: {
-          ...result.gates.run,
-          ...(source.gates.run || {}),
-        },
-      };
+
+    if (source.budgets) {
+      result.budgets = { ...result.budgets, ...source.budgets };
     }
-    if (source.recovery) {
-      result.recovery = { ...result.recovery, ...source.recovery };
-    }
-    if (source.audit) {
-      result.audit = { ...result.audit, ...source.audit };
+
+    if (source.permissions) {
+      result.permissions = { ...result.permissions, ...source.permissions };
     }
 
     return result;
@@ -147,8 +109,30 @@ export namespace ConfigManager {
    */
   export function validate(config: AutonomousLoopConfig): boolean {
     if (
-      typeof config.triggers?.scheduler?.enabled !== "boolean" ||
-      typeof config.triggers?.watcher?.enabled !== "boolean"
+      typeof config.queue?.maxDepth !== "number" ||
+      config.queue.maxDepth <= 0
+    ) {
+      return false;
+    }
+
+    if (
+      !["new", "old", "summarize"].includes(config.queue.dropPolicy) ||
+      typeof config.queue.laneConcurrency !== "object"
+    ) {
+      return false;
+    }
+
+    if (
+      typeof config.dedupe?.windowMs !== "number" ||
+      config.dedupe.windowMs <= 0 ||
+      typeof config.dedupe.maxEntries !== "number" ||
+      config.dedupe.maxEntries <= 0
+    ) {
+      return false;
+    }
+
+    if (
+      !["drop", "coalesce", "summarize"].includes(config.dedupe.onDuplicate)
     ) {
       return false;
     }
@@ -158,33 +142,15 @@ export namespace ConfigManager {
     }
 
     if (
-      typeof config.gates?.permission?.enabled !== "boolean" ||
-      typeof config.gates?.concurrency?.enabled !== "boolean" ||
-      typeof config.gates?.run?.enabled !== "boolean"
+      typeof config.budgets?.maxWallTimeMs !== "number" ||
+      typeof config.budgets?.maxTurns !== "number" ||
+      typeof config.budgets?.maxToolCalls !== "number" ||
+      typeof config.budgets?.maxToolRuntimeMs !== "number"
     ) {
       return false;
     }
 
-    if (
-      typeof config.gates?.permission?.config !== "object" ||
-      typeof config.gates?.concurrency?.config !== "object" ||
-      typeof config.gates?.run?.config !== "object"
-    ) {
-      return false;
-    }
-
-    if (
-      typeof config.recovery?.enabled !== "boolean" ||
-      typeof config.recovery?.autoStart !== "boolean"
-    ) {
-      return false;
-    }
-
-    if (
-      typeof config.audit?.enabled !== "boolean" ||
-      typeof config.audit?.retentionMs !== "number" ||
-      config.audit.retentionMs < 0
-    ) {
+    if (!["ask", "notify", "deny"].includes(config.permissions?.default)) {
       return false;
     }
 

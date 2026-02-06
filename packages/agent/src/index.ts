@@ -5,3 +5,4 @@ export * from "./task";
 export * from "./agent";
 export * from "./trigger";
 export * from "./loop";
+export * from "./config";
