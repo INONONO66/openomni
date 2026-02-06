@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { Message } from "./message";
-import { Storage } from "./storage";
-import { BusEvent, Bus } from "./bus";
+import { Storage, BusEvent, Bus } from "@openomni/session";
 
 export namespace Session {
   export const Info = z.object({

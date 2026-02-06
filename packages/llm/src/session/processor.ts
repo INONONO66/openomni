@@ -4,8 +4,8 @@ import { Session } from "./session";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import { Provider } from "../provider";
-import { BusEvent, Bus } from "./bus";
-import { SessionStatus } from "./status";
+import { BusEvent, Bus } from "@openomni/session";
+import { SessionStatus } from "@openomni/session";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -71,7 +71,6 @@ export namespace Processor {
     const {
       assistantMessage,
       sessionID,
-      model,
       abort,
       onToolCall,
       createStream = defaultStream,

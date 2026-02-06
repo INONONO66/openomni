@@ -22,13 +22,13 @@ export namespace Bus {
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const handlers = subscribers.get(event.name);
     if (!handlers) return;
-    for (const handler of handlers) {
+    handlers.forEach((handler) => {
       try {
         handler(data);
       } catch {
         // handler errors must not affect other handlers
       }
-    }
+    });
   }
 
   export function subscribe<T>(

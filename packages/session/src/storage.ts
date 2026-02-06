@@ -1,5 +1,5 @@
+import { Message } from "@openomni/protocol";
 import { Session } from "./session";
-import { Message } from "./message";
 
 export interface StorageAdapter {
   session: {
