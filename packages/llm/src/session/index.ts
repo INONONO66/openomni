@@ -1,4 +1,4 @@
-export { Session } from "./session";
+export { Session } from "@openomni/session";
 export { Message } from "./message";
 export { toModelMessages } from "./convert";
 export { Retry } from "./retry";

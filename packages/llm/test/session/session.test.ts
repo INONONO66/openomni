@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { Session } from "../../src/session/session";
+import { Session } from "@openomni/session";
 import { Message } from "../../src/session/message";
 
 describe("Session", () => {

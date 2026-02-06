@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Message } from "./message";
-import { Session } from "./session";
+import { Session } from "@openomni/session";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import { Provider } from "../provider";
