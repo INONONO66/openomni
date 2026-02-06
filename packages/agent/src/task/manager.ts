@@ -416,4 +416,197 @@ export namespace TaskManager {
       mutex.release();
     }
   }
+
+  // ============================================================
+  // Run Management APIs
+  // ============================================================
+
+  /**
+   * Get a single run by ID
+   */
+  export function getRun(runId: string): TaskRun | undefined {
+    const store = TaskStorage.getAdapter();
+    return store.run.get(runId);
+  }
+
+  /**
+   * List runs for a specific task with pagination and filtering
+   */
+  export function listRuns(
+    taskId: string,
+    opts?: { status?: TaskRun["status"]; limit?: number; offset?: number },
+  ): TaskRun[] {
+    const store = TaskStorage.getAdapter();
+    let runs = store.run.list(taskId, {
+      limit: opts?.limit,
+      offset: opts?.offset,
+    });
+
+    if (opts?.status) {
+      runs = runs.filter((r) => r.status === opts.status);
+    }
+
+    return runs;
+  }
+
+  /**
+   * List runs across all tasks by status (for crash recovery, monitoring)
+   */
+  export function listRunsByStatus(
+    status: TaskRun["status"] | TaskRun["status"][],
+    opts?: { limit?: number; offset?: number },
+  ): TaskRun[] {
+    const store = TaskStorage.getAdapter();
+    const statuses = Array.isArray(status) ? status : [status];
+    let runs = store.run.listByStatus(statuses);
+
+    if (opts?.offset !== undefined || opts?.limit !== undefined) {
+      const offset = opts.offset ?? 0;
+      const limit = opts.limit ?? runs.length;
+      runs = runs.slice(offset, offset + limit);
+    }
+
+    return runs;
+  }
+
+  /**
+   * Update a run's status directly (internal use: crash recovery, orchestration)
+   */
+  export function setRunStatus(
+    runId: string,
+    newStatus: TaskRun["status"],
+    reason?: string,
+  ): boolean {
+    const store = TaskStorage.getAdapter();
+    const run = store.run.get(runId);
+
+    if (!run) {
+      return false;
+    }
+
+    const now = Date.now();
+    const updatedRun: TaskRun = {
+      ...run,
+      status: newStatus,
+    };
+
+    if (newStatus === "running" && !run.startedAt) {
+      updatedRun.startedAt = now;
+    }
+
+    if (
+      (newStatus === "done" ||
+        newStatus === "failed" ||
+        newStatus === "cancelled") &&
+      !run.endedAt
+    ) {
+      updatedRun.endedAt = now;
+    }
+
+    store.run.set(run.taskId, updatedRun);
+
+    const task = store.task.get(run.taskId);
+    if (task) {
+      const updatedTask: Task.Info = {
+        ...task,
+        status: newStatus,
+        updatedAt: now,
+      };
+      store.task.set(run.taskId, updatedTask);
+
+      if (newStatus === "cancelled") {
+        Bus.publish(TaskEvent.RunCancelled, {
+          traceId: randomUUID(),
+          taskId: run.taskId,
+          time: now,
+          payload: {
+            id: runId,
+            taskId: run.taskId,
+            reason: reason ?? "status_update",
+          },
+        });
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Cancel a running/scheduled/blocked run
+   */
+  export function cancelRun(runId: string, reason?: string): boolean {
+    const store = TaskStorage.getAdapter();
+    const run = store.run.get(runId);
+
+    if (!run) {
+      return false;
+    }
+
+    // Can only cancel if in cancellable state
+    const cancellableStatuses: TaskRun["status"][] = [
+      "scheduled",
+      "running",
+      "blocked",
+    ];
+    if (!cancellableStatuses.includes(run.status)) {
+      return false;
+    }
+
+    return setRunStatus(runId, "cancelled", reason);
+  }
+
+  /**
+   * Resume a blocked run after approval
+   */
+  export function resumeRun(
+    runId: string,
+    approvalContext?: {
+      approvedBy: string;
+      approvalType: "once" | "always";
+    },
+  ): boolean {
+    const store = TaskStorage.getAdapter();
+    const run = store.run.get(runId);
+
+    if (!run) {
+      return false;
+    }
+
+    // Can only resume if blocked
+    if (run.status !== "blocked") {
+      return false;
+    }
+
+    // Transition to scheduled (ready to run)
+    return setRunStatus(
+      runId,
+      "scheduled",
+      approvalContext
+        ? `approved_by:${approvalContext.approvedBy}:${approvalContext.approvalType}`
+        : "resumed",
+    );
+  }
+
+  /**
+   * List blocked runs awaiting approval (for crash recovery)
+   */
+  export function listBlockedRuns(filter?: {
+    taskId?: string;
+    userId?: string;
+  }): TaskRun[] {
+    const store = TaskStorage.getAdapter();
+    let blockedRuns = store.run.listByStatus(["blocked"]);
+
+    if (filter?.taskId) {
+      blockedRuns = blockedRuns.filter((r) => r.taskId === filter.taskId);
+    }
+
+    if (filter?.userId) {
+      blockedRuns = blockedRuns.filter(
+        (r) => r.context?.userId === filter.userId,
+      );
+    }
+
+    return blockedRuns;
+  }
 }
