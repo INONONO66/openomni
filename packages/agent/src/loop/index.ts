@@ -14,3 +14,12 @@ export { Router, RouterRule } from "./router";
 export { Dispatcher } from "./dispatcher";
 
 export { ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
+
+export { BudgetStatus } from "./run-supervisor";
+
+export {
+  RunBudget,
+  RunState,
+  BudgetViolation,
+  RunSupervisor,
+} from "./supervisor";
