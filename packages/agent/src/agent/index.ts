@@ -1,6 +1,3 @@
-// Agent module - Phase 2 implementation
-// Placeholder for AgentProfile, AgentGraph, routing
-
 export {
   AgentProfileSchema,
   type AgentProfile,
@@ -21,15 +18,27 @@ export {
   createAgentRuntime,
 } from "./profile";
 
-export namespace AgentGraph {
-  // Placeholder - implementation in Phase 2
-  export function create() {
-    throw new Error("Not implemented");
-  }
-}
+export {
+  NodeKindSchema,
+  type NodeKind,
+  DeliveryModeSchema,
+  type DeliveryMode,
+  RouteConditionSchema,
+  type RouteCondition,
+  AgentNodeSchema,
+  type AgentNode,
+  AgentEdgeSchema,
+  type AgentEdge,
+  AgentGraphSpecSchema,
+  type AgentGraphSpec,
+  GraphValidationError,
+  validateEdgeReferences,
+  validateNodeReachability,
+  validateRouterNodes,
+  validateAgentGraph,
+} from "./graph";
 
 export namespace Routing {
-  // Placeholder - implementation in Phase 2
   export function create() {
     throw new Error("Not implemented");
   }

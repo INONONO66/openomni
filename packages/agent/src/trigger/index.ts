@@ -1,10 +1,13 @@
 export { Scheduler, CronParser } from "./scheduler";
-
-export namespace EventQueue {
-  export function create() {
-    throw new Error("Not implemented");
-  }
-}
+export {
+  EventQueue,
+  type QueueConfig,
+  type QueueItem,
+  type QueueMetrics,
+  type DequeueResult,
+  type DropPolicy,
+  type EventQueueInstance,
+} from "./queue";
 
 export namespace Watchers {
   export function create() {
