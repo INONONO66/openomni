@@ -1,11 +1,10 @@
 import { z } from "zod";
+import type { Sink } from "@openomni/protocol";
 import { Message } from "./message";
-import { Session } from "@openomni/session";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import { Provider } from "../provider";
 import { BusEvent, Bus } from "@openomni/session";
-import { SessionStatus } from "@openomni/session";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -36,6 +35,7 @@ export namespace Processor {
     sessionID: string;
     model: Provider.Model;
     abort: AbortSignal;
+    sink?: Sink;
     onToolCall?: (part: Message.ToolPart) => Promise<ToolResult>;
     createStream?: (input: StreamInput) => Promise<Stream>;
   }
@@ -72,6 +72,7 @@ export namespace Processor {
       assistantMessage,
       sessionID,
       abort,
+      sink = createNoopSink(),
       onToolCall,
       createStream = defaultStream,
     } = options;
@@ -82,13 +83,39 @@ export namespace Processor {
       Bus.publish(Event.PartUpdated, { part, delta });
     }
 
+    const messageParts: Message.Part[] = [];
+
+    function addMessagePart(part: Message.Part): void {
+      messageParts.push(part);
+      sink.onMessage({ info: assistantMessage, parts: [...messageParts] });
+    }
+
+    function updateMessagePart(part: Message.Part): void {
+      const partIndex = messageParts.findIndex((item) => item.id === part.id);
+      if (partIndex >= 0) {
+        messageParts[partIndex] = part;
+      } else {
+        messageParts.push(part);
+      }
+      sink.onMessage({ info: assistantMessage, parts: [...messageParts] });
+    }
+
+    function publishStatus(state: Record<string, unknown>): void {
+      sink.onSnapshot({
+        id: generateId("snapshot"),
+        sessionID,
+        timestamp: Date.now(),
+        state,
+      });
+    }
+
     return {
       get message() {
         return assistantMessage;
       },
 
       async process(streamInput: StreamInput): Promise<ProcessResult> {
-        SessionStatus.set(sessionID, { type: "busy" });
+        publishStatus({ type: "busy" });
         const pendingTools: Message.ToolPart[] = [];
 
         try {
@@ -116,7 +143,7 @@ export namespace Processor {
                         (event.providerMetadata as Record<string, unknown>) ||
                         {},
                     };
-                    Session.addPart(assistantMessage.id, currentText);
+                    addMessagePart(currentText);
                     break;
                   }
 
@@ -129,7 +156,7 @@ export namespace Processor {
                           unknown
                         >;
                       }
-                      Session.updatePart(assistantMessage.id, currentText);
+                      updateMessagePart(currentText);
                       publishPartUpdate(currentText, String(event.text || ""));
                     }
                     break;
@@ -148,7 +175,7 @@ export namespace Processor {
                           unknown
                         >;
                       }
-                      Session.updatePart(assistantMessage.id, currentText);
+                      updateMessagePart(currentText);
                       publishPartUpdate(currentText);
                     }
                     currentText = undefined;
@@ -171,7 +198,7 @@ export namespace Processor {
                           {},
                       };
                       reasoningMap[reasoningId] = part;
-                      Session.addPart(assistantMessage.id, part);
+                      addMessagePart(part);
                     }
                     break;
                   }
@@ -187,7 +214,7 @@ export namespace Processor {
                           unknown
                         >;
                       }
-                      Session.updatePart(assistantMessage.id, part);
+                      updateMessagePart(part);
                       publishPartUpdate(part, String(event.text || ""));
                     }
                     break;
@@ -208,7 +235,7 @@ export namespace Processor {
                           unknown
                         >;
                       }
-                      Session.updatePart(assistantMessage.id, part);
+                      updateMessagePart(part);
                       publishPartUpdate(part);
                       delete reasoningMap[reasoningId];
                     }
@@ -228,9 +255,14 @@ export namespace Processor {
                         input: (event.args as Record<string, unknown>) || {},
                       },
                     };
-                    Session.addPart(assistantMessage.id, toolPart);
+                    addMessagePart(toolPart);
                     pendingTools.push(toolPart);
                     publishPartUpdate(toolPart);
+                    sink.onToolCall({
+                      id: toolPart.callID,
+                      tool: toolPart.tool,
+                      input: toolPart.state.input,
+                    });
 
                     if (onToolCall) {
                       toolPart.state = {
@@ -238,7 +270,7 @@ export namespace Processor {
                         input: toolPart.state.input,
                         time: { start: Date.now() },
                       };
-                      Session.updatePart(assistantMessage.id, toolPart);
+                      updateMessagePart(toolPart);
                       publishPartUpdate(toolPart);
 
                       try {
@@ -255,22 +287,34 @@ export namespace Processor {
                             end: Date.now(),
                           },
                         };
-                        Session.updatePart(assistantMessage.id, toolPart);
+                        updateMessagePart(toolPart);
                         publishPartUpdate(toolPart);
+                        sink.onToolResult({
+                          id: generateId("tool-result"),
+                          toolCallId: toolPart.callID,
+                          output: result.output,
+                        });
                       } catch (err) {
+                        const errorMessage =
+                          err instanceof Error ? err.message : String(err);
                         toolPart.state = {
                           status: "error",
                           input: toolPart.state.input,
-                          error:
-                            err instanceof Error ? err.message : String(err),
+                          error: errorMessage,
                           time: {
                             start:
                               (toolPart.state as any).time?.start ?? Date.now(),
                             end: Date.now(),
                           },
                         };
-                        Session.updatePart(assistantMessage.id, toolPart);
+                        updateMessagePart(toolPart);
                         publishPartUpdate(toolPart);
+                        sink.onToolResult({
+                          id: generateId("tool-result"),
+                          toolCallId: toolPart.callID,
+                          output: errorMessage,
+                          isError: true,
+                        });
                       }
                       const idx = pendingTools.indexOf(toolPart);
                       if (idx >= 0) pendingTools.splice(idx, 1);
@@ -285,7 +329,7 @@ export namespace Processor {
                       messageID: assistantMessage.id,
                       type: "step-start",
                     };
-                    Session.addPart(assistantMessage.id, stepPart);
+                    addMessagePart(stepPart);
                     break;
                   }
 
@@ -312,7 +356,7 @@ export namespace Processor {
                         output: usage?.completionTokens ?? 0,
                       },
                     };
-                    Session.addPart(assistantMessage.id, stepFinishPart);
+                    addMessagePart(stepFinishPart);
 
                     assistantMessage.finish = finishReason;
                     if (usage) {
@@ -338,7 +382,7 @@ export namespace Processor {
               }
 
               assistantMessage.time.completed = Date.now();
-              SessionStatus.set(sessionID, { type: "idle" });
+              publishStatus({ type: "idle" });
               return "stop";
             } catch (e: unknown) {
               const retryReason = Retry.isRetryable(e);
@@ -350,7 +394,7 @@ export namespace Processor {
                   APIError.isInstance(e) ? e : undefined,
                 );
 
-                SessionStatus.set(sessionID, {
+                publishStatus({
                   type: "retry",
                   attempt,
                   message: String(retryReason),
@@ -364,8 +408,8 @@ export namespace Processor {
                     sleepError instanceof DOMException &&
                     sleepError.name === "AbortError"
                   ) {
-                    cleanupPendingTools(pendingTools, assistantMessage.id);
-                    SessionStatus.set(sessionID, { type: "idle" });
+                    cleanupPendingTools(pendingTools, updateMessagePart, sink);
+                    publishStatus({ type: "idle" });
                     throw sleepError;
                   }
                   throw sleepError;
@@ -375,29 +419,39 @@ export namespace Processor {
               }
 
               if (e instanceof DOMException && e.name === "AbortError") {
-                cleanupPendingTools(pendingTools, assistantMessage.id);
-                SessionStatus.set(sessionID, { type: "idle" });
+                cleanupPendingTools(pendingTools, updateMessagePart, sink);
+                publishStatus({ type: "idle" });
                 throw e;
               }
 
-              cleanupPendingTools(pendingTools, assistantMessage.id);
+              cleanupPendingTools(pendingTools, updateMessagePart, sink);
               assistantMessage.time.completed = Date.now();
-              SessionStatus.set(sessionID, { type: "idle" });
+              publishStatus({ type: "idle" });
               return "stop";
             }
           }
         } catch (e) {
-          cleanupPendingTools(pendingTools, assistantMessage.id);
-          SessionStatus.set(sessionID, { type: "idle" });
+          cleanupPendingTools(pendingTools, updateMessagePart, sink);
+          publishStatus({ type: "idle" });
           throw e;
         }
       },
     };
   }
 
+  function createNoopSink(): Sink {
+    return {
+      onMessage: () => {},
+      onToolCall: () => {},
+      onToolResult: () => {},
+      onSnapshot: () => {},
+    };
+  }
+
   function cleanupPendingTools(
     pendingTools: Message.ToolPart[],
-    messageID: string,
+    updateMessagePart: (part: Message.Part) => void,
+    sink: Sink,
   ): void {
     for (const tool of pendingTools) {
       if (tool.state.status === "pending" || tool.state.status === "running") {
@@ -413,7 +467,13 @@ export namespace Processor {
             end: Date.now(),
           },
         };
-        Session.updatePart(messageID, tool);
+        updateMessagePart(tool);
+        sink.onToolResult({
+          id: generateId("tool-result"),
+          toolCallId: tool.callID,
+          output: "Processing was interrupted",
+          isError: true,
+        });
       }
     }
   }
