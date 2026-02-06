@@ -9,8 +9,9 @@ export {
   type EventQueueInstance,
 } from "./queue";
 
-export namespace Watchers {
-  export function create() {
-    throw new Error("Not implemented");
-  }
-}
+export {
+  FilesystemWatcher,
+  type WatcherConfig,
+  type Watcher,
+  type FileEvent,
+} from "./watcher";
