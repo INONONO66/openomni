@@ -15,11 +15,23 @@ export { Dispatcher } from "./dispatcher";
 
 export { ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
 
-export { BudgetStatus } from "./run-supervisor";
+export {
+  PermissionLevel,
+  PermissionDecision,
+  PermissionContext,
+  PermissionGate,
+} from "./permission";
 
 export {
   RunBudget,
   RunState,
-  BudgetViolation,
+  BudgetStatus,
   RunSupervisor,
-} from "./supervisor";
+} from "./run-supervisor";
+
+export {
+  OrchestratorConfig,
+  OrchestrationResult,
+  OrchestrationState,
+  ToolExecutor,
+} from "./orchestration";
