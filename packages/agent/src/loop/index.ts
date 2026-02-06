@@ -36,3 +36,5 @@ export {
   normalize,
   Envelope,
 } from "./envelope";
+
+export { ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
