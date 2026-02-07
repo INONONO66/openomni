@@ -84,6 +84,11 @@ export namespace RouteResolver {
             return false;
         }
       }
+      case "llm_router":
+        console.warn(
+          "llm_router condition evaluation not yet implemented; returning false",
+        );
+        return false;
       default:
         return false;
     }

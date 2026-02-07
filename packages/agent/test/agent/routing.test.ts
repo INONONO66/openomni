@@ -204,4 +204,20 @@ describe("RouteResolver", () => {
       ),
     ).toBe(false);
   });
+
+  it("evaluateCondition returns false for llm_router condition (stub)", () => {
+    const graph = baseGraph({});
+    const context = baseContext(graph);
+
+    expect(
+      RouteResolver.evaluateCondition(
+        {
+          type: "llm_router",
+          allowedEdgeIds: ["edge-1", "edge-2"],
+          outputSchemaRef: "schema-ref",
+        },
+        context,
+      ),
+    ).toBe(false);
+  });
 });

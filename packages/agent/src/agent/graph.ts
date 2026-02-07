@@ -31,6 +31,11 @@ export const RouteConditionSchema = z.discriminatedUnion("type", [
     op: z.enum(["eq", "in", "exists"]),
     value: z.unknown().optional(),
   }),
+  z.object({
+    type: z.literal("llm_router"),
+    allowedEdgeIds: z.array(z.string()),
+    outputSchemaRef: z.string(),
+  }),
 ]);
 export type RouteCondition = z.infer<typeof RouteConditionSchema>;
 
