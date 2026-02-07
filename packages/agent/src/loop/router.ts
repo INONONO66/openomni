@@ -30,6 +30,7 @@ export namespace Router {
   const dedupeCache = new Map<string, number>();
   let dedupeWindowMs = 5 * 60 * 1000;
   let maxDedupeEntries = 10000;
+  let fallbackRuleId: string | undefined;
 
   function matchesRule(rule: RouterRule, envelope: EventEnvelope): boolean {
     const match = rule.match;
@@ -100,6 +101,13 @@ export namespace Router {
   }
 
   /**
+   * Set the fallback rule ID to use when no rule matches
+   */
+  export function setFallbackRuleId(ruleId: string): void {
+    fallbackRuleId = ruleId;
+  }
+
+  /**
    * Route an event to a single routing decision
    */
   export function route(envelope: EventEnvelope): RoutingDecision {
@@ -128,6 +136,17 @@ export namespace Router {
     const matchedRule = rules.find((rule) => matchesRule(rule, envelope));
 
     if (!matchedRule) {
+      if (fallbackRuleId) {
+        const fallbackRule = rules.find((rule) => rule.id === fallbackRuleId);
+        if (fallbackRule) {
+          return {
+            ruleId: fallbackRule.id,
+            action: fallbackRule.action,
+            targets: targetsForRule(fallbackRule),
+            reason: `Matched rule ${fallbackRule.id} (fallback)`,
+          };
+        }
+      }
       return {
         action: "ignore",
         targets: [],
@@ -152,10 +171,11 @@ export namespace Router {
   }
 
   /**
-   * Clear all routing rules
+   * Clear all routing rules and reset fallback rule ID
    */
   export function clear(): void {
     rules.length = 0;
+    fallbackRuleId = undefined;
   }
 
   /**

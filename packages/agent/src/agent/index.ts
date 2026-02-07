@@ -38,12 +38,6 @@ export {
   validateAgentGraph,
 } from "./graph";
 
-export namespace Routing {
-  export function create() {
-    throw new Error("Not implemented");
-  }
-}
-
 export { RouteResolver, RouteContext, RoutingError } from "./routing";
 
 export {

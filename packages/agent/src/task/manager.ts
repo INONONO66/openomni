@@ -13,6 +13,7 @@ import { createHash } from "crypto";
 export type TriggerError =
   | "rate_limited"
   | "deduped"
+  | "filtered"
   | "concurrency_blocked"
   | "denied"
   | "not_found";

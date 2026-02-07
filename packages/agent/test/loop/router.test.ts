@@ -156,4 +156,67 @@ describe("Router", () => {
       expect(decision.reason).toBe("No matching routing rule");
     });
   });
+
+  describe("Fallback Rule", () => {
+    beforeEach(() => {
+      Router.clear();
+    });
+
+    it("uses fallback rule when no rule matches", () => {
+      const fallbackRule: RouterRule = {
+        id: "fallback-rule",
+        match: {},
+        action: "trigger_task",
+        target: { taskId: "fallback-task" },
+      };
+
+      Router.register(fallbackRule);
+      Router.setFallbackRuleId("fallback-rule");
+
+      const decision = Router.route(makeEnvelope("unknown.event"));
+      expect(decision.ruleId).toBe("fallback-rule");
+      expect(decision.action).toBe("trigger_task");
+      expect(decision.targets).toEqual(["fallback-task"]);
+      expect(decision.reason).toContain("fallback");
+    });
+
+    it("prefers explicit rule match over fallback", () => {
+      const explicitRule: RouterRule = {
+        id: "explicit-rule",
+        match: { name: "known.event" },
+        action: "trigger_task",
+        target: { taskId: "explicit-task" },
+      };
+
+      const fallbackRule: RouterRule = {
+        id: "fallback-rule",
+        match: {},
+        action: "trigger_task",
+        target: { taskId: "fallback-task" },
+      };
+
+      Router.register(explicitRule);
+      Router.register(fallbackRule);
+      Router.setFallbackRuleId("fallback-rule");
+
+      const decision = Router.route(makeEnvelope("known.event"));
+      expect(decision.ruleId).toBe("explicit-rule");
+      expect(decision.targets).toEqual(["explicit-task"]);
+    });
+
+    it("ignores when fallback rule ID does not exist", () => {
+      Router.setFallbackRuleId("nonexistent-rule");
+
+      const decision = Router.route(makeEnvelope("unknown.event"));
+      expect(decision.action).toBe("ignore");
+      expect(decision.targets).toEqual([]);
+      expect(decision.reason).toBe("No matching routing rule");
+    });
+
+    it("ignores when no fallback rule is set", () => {
+      const decision = Router.route(makeEnvelope("unknown.event"));
+      expect(decision.action).toBe("ignore");
+      expect(decision.targets).toEqual([]);
+    });
+  });
 });

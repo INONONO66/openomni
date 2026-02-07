@@ -158,7 +158,7 @@ export namespace Dispatcher {
     if (trigger.type === "event" && trigger.filter) {
       const filterPassed = evaluateFilter(trigger.filter, signal.payload ?? {});
       if (!filterPassed) {
-        return { error: "deduped" };
+        return { error: "filtered" };
       }
     }
 
