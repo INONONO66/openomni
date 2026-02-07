@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Storage, BusEvent, Bus } from "@openomni/session";
+import { Storage } from "./storage";
+import { BusEvent, Bus } from "./bus";
 import { Message } from "@openomni/protocol";
 
 export interface SnapshotProvider {
@@ -24,12 +25,14 @@ export class InMemorySnapshotProvider implements SnapshotProvider {
   track(sessionID: string): string {
     const adapter = Storage.getAdapter();
     const snapshotID = `snap-${Math.random().toString(36).substring(2, 11)}`;
-    const messages = adapter.message.list(sessionID).map((m) => ({ ...m }));
+    const messages = adapter.message
+      .list(sessionID)
+      .map((m: Message.Info) => ({ ...m }));
     const parts = new Map<string, Message.Part[]>();
     for (const msg of messages) {
       const msgParts = adapter.part
         .list(msg.id)
-        .map((p) => ({ ...p }) as Message.Part);
+        .map((p: Message.Part) => ({ ...p }) as Message.Part);
       parts.set(msg.id, msgParts);
     }
     this.snapshots.set(snapshotID, { messages, parts });
@@ -69,15 +72,17 @@ export class InMemorySnapshotProvider implements SnapshotProvider {
     const adapter = Storage.getAdapter();
     const currentMsgs = adapter.message.list(sessionID);
 
-    const snapshotIDs = new Set(snapshot.messages.map((m) => m.id));
-    const currentIDs = new Set(currentMsgs.map((m) => m.id));
+    const snapshotIDs = new Set(
+      snapshot.messages.map((m: Message.Info) => m.id),
+    );
+    const currentIDs = new Set(currentMsgs.map((m: Message.Info) => m.id));
 
     const added = currentMsgs
-      .filter((m) => !snapshotIDs.has(m.id))
-      .map((m) => m.id);
+      .filter((m: Message.Info) => !snapshotIDs.has(m.id))
+      .map((m: Message.Info) => m.id);
     const removed = snapshot.messages
-      .filter((m) => !currentIDs.has(m.id))
-      .map((m) => m.id);
+      .filter((m: Message.Info) => !currentIDs.has(m.id))
+      .map((m: Message.Info) => m.id);
     const modified: string[] = [];
 
     for (const msg of currentMsgs) {

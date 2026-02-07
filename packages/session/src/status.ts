@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BusEvent, Bus } from "@openomni/session";
+import { BusEvent, Bus } from "./bus";
 
 export namespace SessionStatus {
   export const Info = z.discriminatedUnion("type", [

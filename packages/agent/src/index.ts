@@ -3,6 +3,55 @@
 
 export * from "./task";
 export * from "./agent";
-export * from "./trigger";
-export * from "./loop";
+export {
+  Scheduler,
+  CronParser,
+  EventQueue,
+  type QueueConfig,
+  type QueueItem,
+  type QueueMetrics as TriggerQueueMetrics,
+  type DequeueResult,
+  type DropPolicy,
+  type EventQueueInstance,
+  FilesystemWatcher,
+  type WatcherConfig,
+  type Watcher,
+  type FileEvent,
+} from "./trigger";
+export {
+  EventEnvelope,
+  NormalizedEvent,
+  ValidationError,
+  normalize,
+  Envelope,
+  Router,
+  RouterRule,
+  RoutingDecision,
+  Dispatcher,
+  ConcurrencyConfig,
+  ConcurrencyGate,
+  PermissionLevel,
+  PermissionDecision,
+  PermissionContext,
+  PermissionGate,
+  RunBudget,
+  RunState,
+  BudgetStatus,
+  RunSupervisor,
+  OrchestratorConfig,
+  OrchestrationResult,
+  OrchestrationState,
+  ToolExecutor,
+  DLQEntry,
+  DeadLetterQueue,
+  SummaryTemplate,
+  SummaryData,
+  SummaryDelivery,
+  type EventMetadata,
+  type QueueMetrics as LoopQueueMetrics,
+  type RunMetrics,
+  Observability,
+  AuditEntry,
+  AuditLog,
+} from "./loop";
 export * from "./config";
