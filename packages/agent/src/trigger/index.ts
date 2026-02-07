@@ -15,3 +15,9 @@ export {
   type Watcher,
   type FileEvent,
 } from "./watcher";
+
+export {
+  WebhookWatcher,
+  SimpleWebhookWatcher,
+  type WebhookConfig,
+} from "./webhook";
