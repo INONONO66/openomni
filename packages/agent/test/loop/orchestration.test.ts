@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import {
   Orchestrator,
   OrchestratorConfig,
@@ -9,6 +9,10 @@ import { Task } from "../../src/task/types";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
 import type { Sink } from "@openomni/protocol";
+import { Observability } from "../../src/loop/observability";
+import { AuditLog } from "../../src/loop/audit";
+import { DeadLetterQueue } from "../../src/loop/dlq";
+import { SummaryDelivery } from "../../src/loop/summary";
 
 describe("Orchestrator", () => {
   beforeEach(() => {
@@ -312,6 +316,216 @@ describe("Orchestrator", () => {
         const session = Session.get(sessionKey);
         expect(session).toBeUndefined();
       }
+    });
+
+    it("emits observability events on successful run", async () => {
+      const task = createTask();
+      const runId = await createRun(task.id);
+
+      const emitSpy = spyOn(Observability, "emitRunEvent");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 0,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async () => ({ type: "stop" as const }),
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(emitSpy).toHaveBeenCalledTimes(2);
+      expect(emitSpy.mock.calls[0][0]).toBe(runId);
+      expect(emitSpy.mock.calls[0][1]).toBe("started");
+      expect(emitSpy.mock.calls[1][0]).toBe(runId);
+      expect(emitSpy.mock.calls[1][1]).toBe("completed");
+    });
+
+    it("logs permission decision", async () => {
+      const task = createTask();
+      const runId = await createRun(task.id);
+
+      const logSpy = spyOn(AuditLog, "logPermission");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 0,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async () => ({ type: "stop" as const }),
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy.mock.calls[0][0]).toBe(runId);
+    });
+
+    it("logs run outcome on success", async () => {
+      const task = createTask();
+      const runId = await createRun(task.id);
+
+      const logSpy = spyOn(AuditLog, "logRunOutcome");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 0,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async () => ({ type: "stop" as const }),
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy.mock.calls[0][0]).toBe(runId);
+      expect(logSpy.mock.calls[0][1]).toHaveProperty("success", true);
+    });
+
+    it("persists summary on successful run", async () => {
+      const task = createTask();
+      const runId = await createRun(task.id);
+
+      const persistSpy = spyOn(SummaryDelivery, "persist");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 0,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async (llmInput, sink: Sink) => {
+            sink.onMessage({
+              info: {
+                id: "msg-1",
+                sessionID: "session-1",
+                role: "assistant",
+                time: {
+                  created: Date.now(),
+                  completed: Date.now(),
+                },
+                parentID: "parent-1",
+                modelID: "test-model",
+                providerID: "test-provider",
+                agent: "test-agent",
+                path: {
+                  cwd: process.cwd(),
+                  root: process.cwd(),
+                },
+                cost: 0,
+                tokens: {
+                  input: 0,
+                  output: 0,
+                  reasoning: 0,
+                  cache: { read: 0, write: 0 },
+                },
+              },
+              parts: [
+                {
+                  id: "part-1",
+                  sessionID: "session-1",
+                  messageID: "msg-1",
+                  type: "text",
+                  text: "Summary text",
+                },
+              ],
+            });
+            return { type: "stop" as const };
+          },
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(persistSpy).toHaveBeenCalledTimes(1);
+      expect(persistSpy.mock.calls[0][0]).toBe(runId);
+      expect(persistSpy.mock.calls[0][1]).toContain("Summary text");
+    });
+
+    it("adds to DLQ when retries exhausted", async () => {
+      const task = createTask({
+        policy: {
+          retry: {
+            maxAttempts: 2,
+            backoffMs: { initial: 10, multiplier: 1, max: 10 },
+            retryOn: ["transient_error"],
+          },
+        },
+      });
+
+      const runId = await createRun(task.id);
+
+      const dlqSpy = spyOn(DeadLetterQueue, "add");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 1,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async () => {
+            throw new Error("Persistent error");
+          },
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(dlqSpy).toHaveBeenCalledTimes(1);
+      expect(dlqSpy.mock.calls[0][0]).toHaveProperty("type", "run");
+      expect(dlqSpy.mock.calls[0][0]).toHaveProperty("reason");
+      expect(dlqSpy.mock.calls[0][0].payload).toHaveProperty("runId", runId);
+      expect(dlqSpy.mock.calls[0][0].payload).toHaveProperty("taskId", task.id);
+    });
+
+    it("emits failed event and logs outcome on failure", async () => {
+      const task = createTask();
+      const runId = await createRun(task.id);
+
+      const emitSpy = spyOn(Observability, "emitRunEvent");
+      const logSpy = spyOn(AuditLog, "logRunOutcome");
+
+      const config: OrchestratorConfig = {
+        taskId: task.id,
+        runId,
+        maxRetries: 0,
+      };
+
+      const input: OrchestratorRunInput = {
+        llm: {
+          run: async () => {
+            throw new Error("Test error");
+          },
+        },
+        input: {},
+      };
+
+      await Orchestrator.run(config, input);
+
+      expect(emitSpy.mock.calls[1][1]).toBe("failed");
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy.mock.calls[0][1]).toHaveProperty("success", false);
     });
   });
 });

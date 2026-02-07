@@ -1,0 +1,113 @@
+import { describe, it, expect, beforeEach, spyOn } from "bun:test";
+import { Orchestrator } from "../../src/loop/orchestration";
+import { TaskManager } from "../../src/task/manager";
+import { TaskStorage } from "../../src/task/storage";
+import { Session } from "@openomni/session";
+import { Observability } from "../../src/loop/observability";
+import { AuditLog } from "../../src/loop/audit";
+import { DeadLetterQueue } from "../../src/loop/dlq";
+import { SummaryDelivery } from "../../src/loop/summary";
+
+describe("Orchestrator Wiring", () => {
+  beforeEach(() => {
+    TaskStorage.reset();
+    Session.storage.clear();
+  });
+
+  it("wires all lifecycle hooks on successful run", async () => {
+    const task = TaskManager.create({
+      title: "Test Task",
+      owner: { type: "user", id: "user-1" },
+      triggers: [{ id: "manual-1", type: "manual" }],
+    });
+
+    const triggerResult = await TaskManager.trigger(task.id, {
+      triggerId: "manual-1",
+      type: "manual",
+      occurredAt: Date.now(),
+    });
+
+    if (!("runId" in triggerResult)) {
+      throw new Error("Failed to create run");
+    }
+
+    const emitSpy = spyOn(Observability, "emitRunEvent");
+    const permissionSpy = spyOn(AuditLog, "logPermission");
+    const outcomeSpy = spyOn(AuditLog, "logRunOutcome");
+    const persistSpy = spyOn(SummaryDelivery, "persist");
+
+    await Orchestrator.run(
+      {
+        taskId: task.id,
+        runId: triggerResult.runId,
+        maxRetries: 0,
+      },
+      {
+        llm: {
+          run: async () => ({ type: "stop" as const }),
+        },
+        input: {},
+      },
+    );
+
+    expect(permissionSpy).toHaveBeenCalledTimes(1);
+    expect(emitSpy).toHaveBeenCalledTimes(2);
+    expect(emitSpy.mock.calls[0][1]).toBe("started");
+    expect(emitSpy.mock.calls[1][1]).toBe("completed");
+    expect(outcomeSpy).toHaveBeenCalledTimes(1);
+    expect(outcomeSpy.mock.calls[0][1]).toHaveProperty("success", true);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("wires DLQ and failure hooks on exhausted retries", async () => {
+    const task = TaskManager.create({
+      title: "Test Task",
+      owner: { type: "user", id: "user-1" },
+      triggers: [{ id: "manual-1", type: "manual" }],
+      policy: {
+        retry: {
+          maxAttempts: 2,
+          backoffMs: { initial: 10, multiplier: 1, max: 10 },
+          retryOn: ["transient_error"],
+        },
+      },
+    });
+
+    const triggerResult = await TaskManager.trigger(task.id, {
+      triggerId: "manual-1",
+      type: "manual",
+      occurredAt: Date.now(),
+    });
+
+    if (!("runId" in triggerResult)) {
+      throw new Error("Failed to create run");
+    }
+
+    const emitSpy = spyOn(Observability, "emitRunEvent");
+    const dlqSpy = spyOn(DeadLetterQueue, "add");
+    const outcomeSpy = spyOn(AuditLog, "logRunOutcome");
+    const persistSpy = spyOn(SummaryDelivery, "persist");
+
+    await Orchestrator.run(
+      {
+        taskId: task.id,
+        runId: triggerResult.runId,
+        maxRetries: 1,
+      },
+      {
+        llm: {
+          run: async () => {
+            throw new Error("Persistent error");
+          },
+        },
+        input: {},
+      },
+    );
+
+    expect(dlqSpy).toHaveBeenCalledTimes(1);
+    expect(emitSpy.mock.calls[1][1]).toBe("failed");
+    expect(outcomeSpy).toHaveBeenCalledTimes(1);
+    expect(outcomeSpy.mock.calls[0][1]).toHaveProperty("success", false);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+  });
+});

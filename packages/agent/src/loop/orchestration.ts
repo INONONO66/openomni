@@ -12,6 +12,10 @@ import { TaskManager } from "../task/manager";
 import { PermissionGate } from "./permission";
 import { RunSupervisor } from "./run-supervisor";
 import { ConcurrencyGate } from "./concurrency";
+import { Observability } from "./observability";
+import { AuditLog } from "./audit";
+import { DeadLetterQueue } from "./dlq";
+import { SummaryDelivery } from "./summary";
 
 type RetryReason =
   | "timeout"
@@ -484,6 +488,9 @@ export namespace Orchestrator {
       systemDefault: input.permission?.systemDefault ?? DEFAULT_PERMISSION,
     });
 
+    // Log permission decision
+    AuditLog.logPermission(config.runId, permission);
+
     if (permission.level === "deny") {
       TaskManager.setRunStatus(
         config.runId,
@@ -525,6 +532,13 @@ export namespace Orchestrator {
     let runState = RunSupervisor.createState();
     let lastError = "";
 
+    // Emit run start event
+    Observability.emitRunEvent(config.runId, "started", {
+      budgetUsage: 0,
+      durationMs: 0,
+      turnCount: 0,
+    });
+
     try {
       let attempt = 1;
 
@@ -554,7 +568,36 @@ export namespace Orchestrator {
 
             if (outcome.type === "stop") {
               const summary = extractSummary(session.id);
+
+              // Persist summary before status update
+              SummaryDelivery.persist(config.runId, summary);
+
               TaskManager.setRunStatus(config.runId, "done");
+
+              // Log successful outcome
+              const durationMs = Date.now() - runState.startTime;
+              const budgetUsage = Math.max(
+                runState.turns / runBudget.maxTurns,
+                runState.toolCalls / runBudget.maxToolCalls,
+                runState.toolRuntimeMs / runBudget.maxToolRuntimeMs,
+                durationMs / runBudget.maxWallTimeMs,
+              );
+
+              AuditLog.logRunOutcome(config.runId, {
+                success: true,
+                summary,
+                durationMs,
+                turnCount: runState.turns,
+                toolCallCount: runState.toolCalls,
+              });
+
+              // Emit run completion event
+              Observability.emitRunEvent(config.runId, "completed", {
+                budgetUsage,
+                durationMs,
+                turnCount: runState.turns,
+              });
+
               return {
                 success: true,
                 summary,
@@ -613,8 +656,51 @@ export namespace Orchestrator {
             continue;
           }
 
+          // Retries exhausted - add to DLQ
+          DeadLetterQueue.add({
+            type: "run",
+            reason: lastError,
+            attempts: attempt,
+            payload: {
+              runId: config.runId,
+              taskId: config.taskId,
+              input: currentInput,
+              lastError,
+              retryReason,
+            },
+          });
+
           const summary = extractSummary(session.id);
+
+          // Persist summary before status update
+          SummaryDelivery.persist(config.runId, summary);
+
           TaskManager.setRunStatus(config.runId, "failed", lastError);
+
+          // Log failed outcome
+          const durationMs = Date.now() - runState.startTime;
+          const budgetUsage = Math.max(
+            runState.turns / runBudget.maxTurns,
+            runState.toolCalls / runBudget.maxToolCalls,
+            runState.toolRuntimeMs / runBudget.maxToolRuntimeMs,
+            durationMs / runBudget.maxWallTimeMs,
+          );
+
+          AuditLog.logRunOutcome(config.runId, {
+            success: false,
+            summary,
+            error: lastError,
+            durationMs,
+            turnCount: runState.turns,
+            toolCallCount: runState.toolCalls,
+          });
+
+          // Emit run failed event
+          Observability.emitRunEvent(config.runId, "failed", {
+            budgetUsage,
+            durationMs,
+            turnCount: runState.turns,
+          });
 
           return {
             success: false,
@@ -624,8 +710,51 @@ export namespace Orchestrator {
         }
       }
 
+      // All retry attempts exhausted
+      DeadLetterQueue.add({
+        type: "run",
+        reason: lastError || "Retry attempts exhausted",
+        attempts: retryPolicy.maxAttempts,
+        payload: {
+          runId: config.runId,
+          taskId: config.taskId,
+          input: currentInput,
+          lastError,
+        },
+      });
+
       const summary = extractSummary(session.id);
+
+      // Persist summary before status update
+      SummaryDelivery.persist(config.runId, summary);
+
       TaskManager.setRunStatus(config.runId, "failed", lastError);
+
+      // Log failed outcome
+      const durationMs = Date.now() - runState.startTime;
+      const budgetUsage = Math.max(
+        runState.turns / runBudget.maxTurns,
+        runState.toolCalls / runBudget.maxToolCalls,
+        runState.toolRuntimeMs / runBudget.maxToolRuntimeMs,
+        durationMs / runBudget.maxWallTimeMs,
+      );
+
+      AuditLog.logRunOutcome(config.runId, {
+        success: false,
+        summary,
+        error: lastError || "Retry attempts exhausted",
+        durationMs,
+        turnCount: runState.turns,
+        toolCallCount: runState.toolCalls,
+      });
+
+      // Emit run failed event
+      Observability.emitRunEvent(config.runId, "failed", {
+        budgetUsage,
+        durationMs,
+        turnCount: runState.turns,
+      });
+
       return {
         success: false,
         summary,
