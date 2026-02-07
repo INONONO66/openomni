@@ -122,14 +122,14 @@ function generateIdempotencyKey(taskId: string, signal: TriggerSignal): string {
 }
 
 function checkDedupe(
-  store: InMemoryTaskStore,
+  store: TaskStore,
   idempotencyKey: string,
   dedupeWindowMs: number | undefined,
   now: number,
 ): TaskRun | undefined {
   if (!dedupeWindowMs) return undefined;
 
-  const existingRun = store.getByIdempotencyKey(idempotencyKey);
+  const existingRun = store.run.getByIdempotencyKey(idempotencyKey);
   if (!existingRun) return undefined;
 
   const isWithinWindow = now - existingRun.scheduledAt < dedupeWindowMs;
@@ -345,20 +345,14 @@ export namespace TaskManager {
 
       const idempotencyKey = generateIdempotencyKey(taskId, signal);
 
-      if (
-        "getByIdempotencyKey" in store &&
-        typeof store.getByIdempotencyKey === "function"
-      ) {
-        const memStore = store as InMemoryTaskStore;
-        const deduped = checkDedupe(
-          memStore,
-          idempotencyKey,
-          policy.dedupe?.windowMs,
-          now,
-        );
-        if (deduped) {
-          return { error: "deduped" };
-        }
+      const deduped = checkDedupe(
+        store,
+        idempotencyKey,
+        policy.dedupe?.windowMs,
+        now,
+      );
+      if (deduped) {
+        return { error: "deduped" };
       }
 
       const concurrencyResult = checkConcurrency(
@@ -620,6 +614,21 @@ export namespace TaskManager {
     // Can only resume if blocked
     if (run.status !== "blocked") {
       return false;
+    }
+
+    // Persist "always approve" to task policy
+    if (approvalContext?.approvalType === "always") {
+      const task = store.task.get(run.taskId);
+      if (task) {
+        const updatedTask: Task.Info = {
+          ...task,
+          policy: {
+            ...task.policy,
+            permission: "notify",
+          },
+        };
+        store.task.set(run.taskId, updatedTask);
+      }
     }
 
     // Transition to scheduled (ready to run)

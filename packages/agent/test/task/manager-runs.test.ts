@@ -378,6 +378,34 @@ describe("TaskManager - Run Management APIs", () => {
       const run = TaskManager.getRun(runId);
       expect(run?.status).toBe("scheduled");
     });
+
+    test("persists 'always' approval to task policy", async () => {
+      const task = createTask({ policy: { permission: "ask" } });
+      const runId = await createRun(task.id);
+
+      const result = TaskManager.resumeRun(runId, {
+        approvedBy: "admin-1",
+        approvalType: "always",
+      });
+      expect(result).toBe(true);
+
+      const updatedTask = TaskManager.get(task.id);
+      expect(updatedTask?.policy.permission).toBe("notify");
+    });
+
+    test("does not change policy for 'once' approval", async () => {
+      const task = createTask({ policy: { permission: "ask" } });
+      const runId = await createRun(task.id);
+
+      const result = TaskManager.resumeRun(runId, {
+        approvedBy: "admin-1",
+        approvalType: "once",
+      });
+      expect(result).toBe(true);
+
+      const updatedTask = TaskManager.get(task.id);
+      expect(updatedTask?.policy.permission).toBe("ask");
+    });
   });
 
   describe("listBlockedRuns", () => {
