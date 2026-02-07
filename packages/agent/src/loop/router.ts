@@ -27,6 +27,10 @@ export interface RoutingDecision {
 export namespace Router {
   const rules: RouterRule[] = [];
 
+  const dedupeCache = new Map<string, number>();
+  let dedupeWindowMs = 5 * 60 * 1000;
+  let maxDedupeEntries = 10000;
+
   function matchesRule(rule: RouterRule, envelope: EventEnvelope): boolean {
     const match = rule.match;
 
@@ -99,6 +103,28 @@ export namespace Router {
    * Route an event to a single routing decision
    */
   export function route(envelope: EventEnvelope): RoutingDecision {
+    if (envelope.dedupeKey) {
+      const now = Date.now();
+      const lastSeen = dedupeCache.get(envelope.dedupeKey);
+
+      if (lastSeen !== undefined && now - lastSeen < dedupeWindowMs) {
+        return {
+          action: "ignore",
+          targets: [],
+          reason: "Event deduplicated",
+        };
+      }
+
+      dedupeCache.set(envelope.dedupeKey, now);
+
+      if (dedupeCache.size > maxDedupeEntries) {
+        const oldestKey = dedupeCache.keys().next().value as string;
+        if (oldestKey) {
+          dedupeCache.delete(oldestKey);
+        }
+      }
+    }
+
     const matchedRule = rules.find((rule) => matchesRule(rule, envelope));
 
     if (!matchedRule) {
@@ -130,5 +156,23 @@ export namespace Router {
    */
   export function clear(): void {
     rules.length = 0;
+  }
+
+  /**
+   * Configure the deduplication window and max entries
+   */
+  export function configureDedupeWindow(
+    windowMs: number,
+    maxEntries: number,
+  ): void {
+    dedupeWindowMs = windowMs;
+    maxDedupeEntries = maxEntries;
+  }
+
+  /**
+   * Clear the deduplication cache (for testing)
+   */
+  export function clearDedupeCache(): void {
+    dedupeCache.clear();
   }
 }

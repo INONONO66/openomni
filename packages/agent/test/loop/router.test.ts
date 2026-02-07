@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Router, RouterRule } from "../../src/loop/router";
 import { EventEnvelope } from "../../src/loop/envelope";
 
-function makeEnvelope(name: string): EventEnvelope {
+function makeEnvelope(name: string, dedupeKey?: string): EventEnvelope {
   return {
     eventId: "event-1",
     name,
@@ -10,6 +10,7 @@ function makeEnvelope(name: string): EventEnvelope {
     occurredAt: new Date().toISOString(),
     receivedAt: new Date().toISOString(),
     traceId: "trace-1",
+    dedupeKey,
     payload: {},
   };
 }
@@ -84,5 +85,75 @@ describe("Router", () => {
 
     const targets = Router.routeTargets(makeEnvelope("compat.event"));
     expect(targets).toEqual(["compat-task"]);
+  });
+
+  describe("Deduplication", () => {
+    beforeEach(() => {
+      Router.clearDedupeCache();
+      Router.configureDedupeWindow(100, 10000);
+    });
+
+    it("deduplicates events with same dedupeKey within window", () => {
+      const decision1 = Router.route(makeEnvelope("test.event", "key-1"));
+      expect(decision1.action).toBe("ignore");
+      expect(decision1.reason).toBe("No matching routing rule");
+
+      const decision2 = Router.route(makeEnvelope("test.event", "key-1"));
+      expect(decision2.action).toBe("ignore");
+      expect(decision2.reason).toBe("Event deduplicated");
+    });
+
+    it("allows events with same dedupeKey after window expires", async () => {
+      Router.configureDedupeWindow(50, 10000);
+
+      const decision1 = Router.route(makeEnvelope("test.event", "key-2"));
+      expect(decision1.reason).toBe("No matching routing rule");
+
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      const decision2 = Router.route(makeEnvelope("test.event", "key-2"));
+      expect(decision2.reason).toBe("No matching routing rule");
+    });
+
+    it("routes events without dedupeKey normally", () => {
+      Router.register({
+        id: "rule-1",
+        match: { name: "test.event" },
+        action: "trigger_task",
+        target: { taskId: "task-1" },
+      });
+
+      const decision1 = Router.route(makeEnvelope("test.event"));
+      expect(decision1.action).toBe("trigger_task");
+      expect(decision1.targets).toEqual(["task-1"]);
+
+      const decision2 = Router.route(makeEnvelope("test.event"));
+      expect(decision2.action).toBe("trigger_task");
+      expect(decision2.targets).toEqual(["task-1"]);
+    });
+
+    it("enforces maxEntries limit by evicting oldest entry", () => {
+      Router.configureDedupeWindow(10000, 3);
+
+      Router.route(makeEnvelope("test.event", "key-a"));
+      Router.route(makeEnvelope("test.event", "key-b"));
+      Router.route(makeEnvelope("test.event", "key-c"));
+      Router.route(makeEnvelope("test.event", "key-d"));
+
+      const decisionA = Router.route(makeEnvelope("test.event", "key-a"));
+      expect(decisionA.reason).toBe("No matching routing rule");
+
+      const decisionD = Router.route(makeEnvelope("test.event", "key-d"));
+      expect(decisionD.reason).toBe("Event deduplicated");
+    });
+
+    it("clears deduplication cache", () => {
+      Router.route(makeEnvelope("test.event", "key-1"));
+
+      Router.clearDedupeCache();
+
+      const decision = Router.route(makeEnvelope("test.event", "key-1"));
+      expect(decision.reason).toBe("No matching routing rule");
+    });
   });
 });
