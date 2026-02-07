@@ -17,6 +17,7 @@ export interface TaskStore {
     list(taskId: string, opts?: RunListOptions): TaskRun[];
     listByStatus(status: TaskRun["status"][]): TaskRun[];
     remove(runId: string): boolean;
+    getByIdempotencyKey(key: string): TaskRun | undefined;
   };
 }
 
@@ -182,6 +183,10 @@ export class InMemoryTaskStore implements TaskStore {
       }
 
       return this.runs.delete(runId);
+    },
+    getByIdempotencyKey: (key: string): TaskRun | undefined => {
+      const runId = this.idempotencyIndex.get(key);
+      return runId ? this.runs.get(runId) : undefined;
     },
   };
 

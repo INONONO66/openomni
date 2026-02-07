@@ -1,6 +1,7 @@
 import { Session } from "@openomni/session";
 import { Message } from "@openomni/protocol";
 import { TaskManager, TaskRun } from "../task";
+import { TaskStorage } from "../task/storage";
 
 export interface SummaryTemplate {
   format: "markdown" | "json" | "text";
@@ -94,7 +95,7 @@ export namespace SummaryDelivery {
       summary,
     };
 
-    const store = require("../task/storage").TaskStorage.getAdapter();
+    const store = TaskStorage.getAdapter();
     store.run.set(run.taskId, updatedRun);
   }
 
