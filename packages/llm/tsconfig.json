@@ -14,11 +14,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "@openomni/protocol": ["../protocol/src/index.ts"],
-      "@openomni/session": ["../session/src/index.ts"]
-    }
+    "noEmit": true
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

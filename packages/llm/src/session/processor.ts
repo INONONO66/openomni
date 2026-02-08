@@ -4,7 +4,6 @@ import { Message } from "./message";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import { Provider } from "../provider";
-import { BusEvent, Bus } from "@openomni/session";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -40,16 +39,6 @@ export namespace Processor {
     createStream?: (input: StreamInput) => Promise<Stream>;
   }
 
-  export const Event = {
-    PartUpdated: BusEvent.define(
-      "processor.part.updated",
-      z.object({
-        part: Message.Part,
-        delta: z.string().optional(),
-      }),
-    ),
-  };
-
   export interface ProcessorInfo {
     message: Message.AssistantMessage;
     process(streamInput: StreamInput): Promise<ProcessResult>;
@@ -80,7 +69,7 @@ export namespace Processor {
     let attempt = 0;
 
     function publishPartUpdate(part: Message.Part, delta?: string): void {
-      Bus.publish(Event.PartUpdated, { part, delta });
+      // Event published via sink.onMessage() - no need for Bus.publish
     }
 
     const messageParts: Message.Part[] = [];

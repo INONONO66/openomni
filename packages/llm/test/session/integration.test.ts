@@ -187,19 +187,13 @@ describe("Integration", () => {
     expect(Session.get(session.id)).toBeUndefined();
   });
 
-  it("should support all re-exports from session index", async () => {
+  it("should export LLM session types from session index", async () => {
     const mod = await import("../../src/session/index");
-    expect(mod.Session).toBeDefined();
     expect(mod.Message).toBeDefined();
     expect(mod.Retry).toBeDefined();
     expect(mod.Processor).toBeDefined();
     expect(mod.Stream).toBeDefined();
-    expect(mod.Storage).toBeDefined();
-    expect(mod.Bus).toBeDefined();
-    expect(mod.BusEvent).toBeDefined();
-    expect(mod.SessionStatus).toBeDefined();
     expect(mod.Tool).toBeDefined();
-    expect(mod.Snapshot).toBeDefined();
-    expect(mod.Compaction).toBeDefined();
+    expect(mod.toModelMessages).toBeDefined();
   });
 });
