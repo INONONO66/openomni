@@ -15,6 +15,7 @@ export namespace Session {
       created: z.number(),
       updated: z.number(),
     }),
+    expiresAt: z.number().optional(),
   });
 
   export type Info = z.infer<typeof Info>;
@@ -81,6 +82,7 @@ export namespace Session {
   export function create(input: {
     title: string;
     model: { providerID: string; modelID: string };
+    ttlMs?: number;
   }): Info {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -93,6 +95,7 @@ export namespace Session {
         created: now,
         updated: now,
       },
+      ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
     };
 
     Storage.getAdapter().session.set(id, session);
@@ -102,11 +105,28 @@ export namespace Session {
   }
 
   export function get(id: string): Info | undefined {
-    return Storage.getAdapter().session.get(id);
+    const session = Storage.getAdapter().session.get(id);
+    if (!session) return undefined;
+
+    if (session.expiresAt !== undefined && Date.now() > session.expiresAt) {
+      remove(id);
+      return undefined;
+    }
+
+    return session;
   }
 
   export function list(): Info[] {
-    return Storage.getAdapter().session.list();
+    const sessions = Storage.getAdapter().session.list();
+    const now = Date.now();
+
+    return sessions.filter((session) => {
+      if (session.expiresAt !== undefined && now > session.expiresAt) {
+        remove(session.id);
+        return false;
+      }
+      return true;
+    });
   }
 
   export function update(
