@@ -6,15 +6,18 @@ import { randomUUID } from "crypto";
 
 /**
  * Represents a message envelope for agent-to-agent communication
+ * Aligned with spec section 2.6
  */
-export interface MessageEnvelope {
-  id: string;
-  from: string;
-  to: string;
-  content: unknown;
-  timestamp: number;
-  correlationId: string;
-  replyTo?: string;
+export interface MessageEnvelope<TPayload = unknown> {
+  traceId: string;
+  sessionId: string;
+  runId: string;
+  fromNodeId: string;
+  toNodeId: string;
+  edgeId: string;
+  sentAt: string; // ISO timestamp
+  schemaRef: string;
+  payload: TPayload;
 }
 
 /**
@@ -43,7 +46,9 @@ export namespace AgentMessenger {
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
     return Boolean(
-      envelope.to && envelope.from && envelope.content !== undefined,
+      envelope.toNodeId &&
+      envelope.fromNodeId &&
+      envelope.payload !== undefined,
     );
   };
 
@@ -52,11 +57,11 @@ export namespace AgentMessenger {
       throw new MessagingError("Invalid message envelope");
     }
 
-    const inbox = inboxes.get(envelope.to) ?? [];
+    const inbox = inboxes.get(envelope.toNodeId) ?? [];
     inbox.push(envelope);
-    inboxes.set(envelope.to, inbox);
+    inboxes.set(envelope.toNodeId, inbox);
 
-    const handlers = subscribers.get(envelope.to) ?? [];
+    const handlers = subscribers.get(envelope.toNodeId) ?? [];
     handlers.forEach((handler) => handler(envelope));
   };
 
@@ -64,18 +69,18 @@ export namespace AgentMessenger {
     envelope: MessageEnvelope,
     options?: Partial<DeliveryOptions>,
   ): Promise<MessageEnvelope> => {
-    const correlationId = randomUUID();
+    const traceId = randomUUID();
     const requestEnvelope: MessageEnvelope = {
       ...envelope,
-      correlationId,
+      traceId,
     };
 
     const timeoutMs = options?.timeoutMs ?? 5000;
 
     return new Promise<MessageEnvelope>((resolve, reject) => {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const unsubscribe = subscribe(envelope.from, (reply) => {
-        if (reply.correlationId !== correlationId) {
+      const unsubscribe = subscribe(envelope.fromNodeId, (reply) => {
+        if (reply.traceId !== traceId) {
           return;
         }
 

@@ -100,7 +100,7 @@ describe("TaskManager - Run Management APIs", () => {
 
     test("supports pagination with limit and offset", async () => {
       const task = createTask();
-      const runIds = [];
+      const runIds: string[] = [];
       for (let i = 0; i < 5; i++) {
         runIds.push(await createRun(task.id));
       }

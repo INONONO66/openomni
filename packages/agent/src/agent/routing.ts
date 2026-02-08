@@ -17,12 +17,39 @@ export class RoutingError extends Error {
   }
 }
 
+/**
+ * Function type for LLM-based routing decisions.
+ * Takes routing context and allowed edge IDs, returns the selected edge ID.
+ */
+export type LLMRouterFn = (
+  context: RouteContext,
+  allowedEdgeIds: string[],
+  outputSchemaRef: string,
+) => Promise<string>;
+
+let llmRouterFn: LLMRouterFn | undefined;
+
+/**
+ * Sets the LLM router function for llm_router condition evaluation.
+ * Must be called before using llm_router conditions.
+ */
+export function setLLMRouter(fn: LLMRouterFn): void {
+  llmRouterFn = fn;
+}
+
+/**
+ * Gets the current LLM router function.
+ */
+export function getLLMRouter(): LLMRouterFn | undefined {
+  return llmRouterFn;
+}
+
 export namespace RouteResolver {
-  export function resolveNextNodes(
+  export async function resolveNextNodes(
     graph: AgentGraphSpec,
     currentNodeId: string,
     context: RouteContext,
-  ): string[] {
+  ): Promise<string[]> {
     const currentNode = graph.nodes[currentNodeId];
     if (!currentNode) {
       throw new RoutingError(`Node ${currentNodeId} not found in graph`);
@@ -32,15 +59,23 @@ export namespace RouteResolver {
       (edge) => edge.from === currentNodeId,
     );
 
-    return outgoingEdges
-      .filter((edge) => evaluateCondition(edge.condition, context))
-      .map((edge) => edge.to);
+    const evaluatedEdges = await Promise.all(
+      outgoingEdges.map(async (edge) => ({
+        edge,
+        matches: await evaluateCondition(edge.condition, context, edge.id),
+      })),
+    );
+
+    return evaluatedEdges
+      .filter(({ matches }) => matches)
+      .map(({ edge }) => edge.to);
   }
 
-  export function evaluateCondition(
+  export async function evaluateCondition(
     condition: RouteCondition,
     context: RouteContext,
-  ): boolean {
+    edgeId?: string,
+  ): Promise<boolean> {
     switch (condition.type) {
       case "always":
         return true;
@@ -84,11 +119,33 @@ export namespace RouteResolver {
             return false;
         }
       }
-      case "llm_router":
-        console.warn(
-          "llm_router condition evaluation not yet implemented; returning false",
+      case "llm_router": {
+        if (!llmRouterFn) {
+          throw new RoutingError(
+            "LLM router function not configured. Call setLLMRouter() before using llm_router conditions.",
+          );
+        }
+
+        if (!edgeId) {
+          throw new RoutingError(
+            "Edge ID is required for llm_router condition evaluation",
+          );
+        }
+
+        const selectedEdgeId = await llmRouterFn(
+          context,
+          condition.allowedEdgeIds,
+          condition.outputSchemaRef,
         );
-        return false;
+
+        if (!condition.allowedEdgeIds.includes(selectedEdgeId)) {
+          throw new RoutingError(
+            `LLM router returned invalid edge ID: ${selectedEdgeId}. Must be one of: ${condition.allowedEdgeIds.join(", ")}`,
+          );
+        }
+
+        return selectedEdgeId === edgeId;
+      }
       default:
         return false;
     }

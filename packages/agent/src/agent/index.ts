@@ -38,7 +38,14 @@ export {
   validateAgentGraph,
 } from "./graph";
 
-export { RouteResolver, RouteContext, RoutingError } from "./routing";
+export {
+  RouteResolver,
+  RouteContext,
+  RoutingError,
+  type LLMRouterFn,
+  setLLMRouter,
+  getLLMRouter,
+} from "./routing";
 
 export {
   AgentMessenger,

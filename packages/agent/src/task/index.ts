@@ -1,6 +1,10 @@
 export { Task, TaskRun, TriggerSignal } from "./types";
-export { TaskManager, TriggerError, TriggerResult } from "./manager";
-export { TaskStorage, TaskStore, InMemoryTaskStore } from "./storage";
+export { TaskManager } from "./manager";
+export type { TriggerError, TriggerResult } from "./manager";
+export { TaskStorage, InMemoryTaskStore } from "./storage";
+export type { TaskStore } from "./storage";
 export { TaskStateMachine } from "./state-machine";
-export { Checkpoint, CheckpointManager } from "./checkpoint";
-export { RecoveryAction, RecoveryResult, CrashRecovery } from "./recovery";
+export type { Checkpoint } from "./checkpoint";
+export { CheckpointManager } from "./checkpoint";
+export type { RecoveryAction, RecoveryResult } from "./recovery";
+export { CrashRecovery } from "./recovery";
