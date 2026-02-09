@@ -228,6 +228,19 @@ export namespace Scheduler {
     const now = Date.now();
     const timeBucket = computeTimeBucket(trigger, now);
 
+    const key = makeKey(taskId, trigger.id);
+    const scheduled = registry.get(key);
+    if (scheduled) {
+      const driftMs = now - scheduled.nextFireTime;
+      const DRIFT_THRESHOLD_MS = 5 * 60 * 1000;
+
+      if (driftMs > DRIFT_THRESHOLD_MS) {
+        console.warn(
+          `[Scheduler] Deadline drift detected: task=${taskId} trigger=${trigger.id} expectedAt=${new Date(scheduled.nextFireTime).toISOString()} actualAt=${new Date(now).toISOString()} driftMs=${driftMs}`,
+        );
+      }
+    }
+
     const inboundEvent: InboundEvent = {
       id: randomUUID(),
       surface: "scheduler",

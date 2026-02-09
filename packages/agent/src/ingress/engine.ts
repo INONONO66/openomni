@@ -47,8 +47,15 @@ function recordDedup(key: string, result: RunResult): void {
 // Default RunPlanner
 // ============================================================
 
+import { classifyLane } from "./event-kinds";
+
 export const DefaultRunPlanner: RunPlanner = {
   plan(envelope: EventEnvelope, session) {
+    // Lane guard: telemetry events never create durable task runs
+    if (classifyLane(envelope.name) === "telemetry") {
+      return [];
+    }
+
     const isScheduled =
       envelope.source.type === "scheduler" ||
       envelope.source.type === "cron" ||

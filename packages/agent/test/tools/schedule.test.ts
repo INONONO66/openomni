@@ -148,7 +148,7 @@ describe("ScheduleTool", () => {
       expect(output.error).toBe("invalid_input");
     });
 
-    it("should reject plannedStartAt in the past", () => {
+    it("should handle plannedStartAt in the past with late-start execution", () => {
       const now = Date.now();
       const dueAtMs = now + 5 * 60 * 1000; // 5 minutes from now
       const estimatedRuntimeMs = 30 * 60 * 1000; // 30 minutes (longer than time to dueAt)
@@ -163,9 +163,11 @@ describe("ScheduleTool", () => {
         userId: "user123",
       });
 
-      expect(result.isError).toBe(true);
+      expect(result.isError).toBe(false);
       const output = JSON.parse(result.output);
-      expect(output.error).toBe("start_time_in_past");
+      expect(output.success).toBe(true);
+      expect(output.lateStart).toBe(true);
+      expect(output.originalPlannedStartAt).toBeDefined();
     });
 
     it("should handle positive estimatedRuntimeMs validation", () => {

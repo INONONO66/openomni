@@ -74,21 +74,18 @@ export namespace ScheduleTool {
       }
 
       // Calculate plannedStartAt = dueAt - estimatedRuntimeMs - safetyBufferMs
-      const plannedStartAtMs =
+      let plannedStartAtMs =
         dueAtMs - validated.estimatedRuntimeMs - SAFETY_BUFFER_MS;
 
-      // Validate plannedStartAt is in the future
+      // Handle late-start: if plannedStartAt is in the past, execute immediately
       const now = Date.now();
+      let isLateStart = false;
+      let originalPlannedStartAt: string | undefined;
+
       if (plannedStartAtMs <= now) {
-        return {
-          id: randomUUID(),
-          toolCallId: "",
-          output: JSON.stringify({
-            error: "start_time_in_past",
-            message: `Calculated plannedStartAt (${new Date(plannedStartAtMs).toISOString()}) is in the past. Increase dueAt or decrease estimatedRuntimeMs.`,
-          }),
-          isError: true,
-        };
+        isLateStart = true;
+        originalPlannedStartAt = new Date(plannedStartAtMs).toISOString();
+        plannedStartAtMs = now; // Execute immediately
       }
 
       // Create task via TaskManager.create()
@@ -205,6 +202,12 @@ export namespace ScheduleTool {
         estimatedRuntimeMs: validated.estimatedRuntimeMs,
         safetyBufferMs: SAFETY_BUFFER_MS,
       };
+
+      // Include late-start flag and original planned start time if applicable
+      if (isLateStart) {
+        response.lateStart = true;
+        response.originalPlannedStartAt = originalPlannedStartAt;
+      }
 
       // Include recurring info if present
       if (Object.keys(recurringInfo).length > 0) {
