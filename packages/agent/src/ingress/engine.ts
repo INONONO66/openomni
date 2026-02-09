@@ -8,8 +8,10 @@ import type {
   RunRequest,
   RunResult,
   DeliveryAdapter,
+  NotificationAdapter,
   RunPlanner,
 } from "./interfaces";
+import { DefaultRunExecutor, type RunExecutor } from "./run-executor";
 
 // ============================================================
 // Dedup Store (in-memory, TTL-based)
@@ -110,12 +112,25 @@ export const NoopDeliveryAdapter: DeliveryAdapter = {
 };
 
 // ============================================================
+// Default NotificationAdapter (noop — no-op)
+// ============================================================
+
+export const NoopNotificationAdapter: NotificationAdapter = {
+  name: "noop",
+  async notify() {
+    return { delivered: true };
+  },
+};
+
+// ============================================================
 // IngressEngine
 // ============================================================
 
 export interface IngressEngineConfig {
   planner?: RunPlanner;
   delivery?: DeliveryAdapter;
+  notification?: NotificationAdapter;
+  executor?: RunExecutor;
   dedupeWindowMs?: number;
   defaultModel?: { providerID: string; modelID: string };
   llm?: {
@@ -168,136 +183,14 @@ export namespace IngressEngine {
     }
   }
 
-  async function executeRunRequest(request: RunRequest): Promise<RunResult> {
-    const sessionId = request.session.id;
-
-    switch (request.kind) {
-      case "trigger_task": {
-        if (!request.taskId || !request.triggerSignal) {
-          return {
-            success: false,
-            summary: "",
-            error: "trigger_task requires taskId and triggerSignal",
-            sessionId,
-            request,
-          };
-        }
-
-        const triggerResult = await TaskManager.trigger(
-          request.taskId,
-          request.triggerSignal,
-        );
-
-        if ("error" in triggerResult) {
-          return {
-            success: false,
-            summary: "",
-            error: `TaskManager.trigger failed: ${triggerResult.error}`,
-            sessionId,
-            request,
-          };
-        }
-
-        return {
-          success: true,
-          summary: `Task ${request.taskId} triggered, runId: ${triggerResult.runId}`,
-          runId: triggerResult.runId,
-          sessionId,
-          request,
-        };
-      }
-
-      case "run_agent": {
-        const taskId = randomUUID();
-        const task = TaskManager.create({
-          title: `Ingress run: ${request.envelope.name}`,
-          owner: {
-            type: request.envelope.userId ? "user" : "agent",
-            id: request.envelope.userId ?? "system",
-          },
-          triggers: [{ id: randomUUID(), type: "manual" }],
-        });
-
-        const signal = {
-          triggerId: task.triggers[0]!.id,
-          type: "manual" as const,
-          context: {
-            conversationSessionId: sessionId,
-            userId: request.envelope.userId,
-            workspaceId: request.envelope.workspaceId,
-            traceId: request.envelope.traceId,
-          },
-          occurredAt: Date.now(),
-        };
-
-        const triggerResult = await TaskManager.trigger(task.id, signal);
-        if ("error" in triggerResult) {
-          return {
-            success: false,
-            summary: "",
-            error: `Failed to create run: ${triggerResult.error}`,
-            sessionId,
-            request,
-          };
-        }
-
-        if (!config.llm) {
-          return {
-            success: true,
-            summary: `Run scheduled: ${triggerResult.runId}`,
-            runId: triggerResult.runId,
-            sessionId,
-            request,
-          };
-        }
-
-        const orchResult = await Orchestrator.run(
-          {
-            taskId: task.id,
-            runId: triggerResult.runId,
-            maxRetries: request.agentConfig?.maxRetries ?? 1,
-            sessionMode: request.agentConfig?.sessionMode ?? "persistent",
-            sessionId,
-          },
-          {
-            llm: config.llm,
-            input: {
-              prompt:
-                typeof request.envelope.payload === "string"
-                  ? request.envelope.payload
-                  : JSON.stringify(request.envelope.payload),
-            },
-          },
-        );
-
-        return {
-          success: orchResult.success,
-          summary: orchResult.summary,
-          error: orchResult.error || undefined,
-          runId: triggerResult.runId,
-          sessionId,
-          request,
-        };
-      }
-
-      case "notify_only": {
-        return {
-          success: true,
-          summary: "Notification delivered",
-          sessionId,
-          request,
-        };
-      }
-
-      default:
-        return {
-          success: false,
-          summary: "",
-          error: `Unknown run request kind: ${(request as RunRequest).kind}`,
-          sessionId,
-          request,
-        };
+  function getExecutor(): RunExecutor {
+    if (config.executor) {
+      return config.executor;
     }
+    return new DefaultRunExecutor({
+      llm: config.llm,
+      notification: config.notification,
+    });
   }
 
   export async function ingest(event: InboundEvent): Promise<RunResult[]> {
@@ -329,10 +222,11 @@ export namespace IngressEngine {
 
     // 6. Execute + 7. Deliver
     const delivery = config.delivery ?? NoopDeliveryAdapter;
+    const executor = getExecutor();
     const results: RunResult[] = [];
 
     for (const request of requests) {
-      const result = await executeRunRequest(request);
+      const result = await executor.execute(request);
       results.push(result);
 
       if (envelope.dedupeKey) {

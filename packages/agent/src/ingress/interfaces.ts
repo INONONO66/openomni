@@ -1,5 +1,9 @@
 import type { EventEnvelope } from "../loop/envelope";
 import type { Session } from "@openomni/session";
+import type {
+  NotificationRequest,
+  NotificationResult,
+} from "@openomni/protocol";
 
 // ============================================================
 // 1. InboundEvent — raw event from any surface (Slack, TUI, Telegram, Scheduler)
@@ -64,6 +68,8 @@ export interface RunRequest {
     maxRetries?: number;
     sessionMode?: "ephemeral" | "persistent" | "reuse";
   };
+  /** Notification request for notify_only kind */
+  notificationRequest?: NotificationRequest;
 }
 
 // ============================================================
@@ -86,7 +92,39 @@ export interface RunResult {
 }
 
 // ============================================================
-// 5. DeliveryAdapter — response routing back to surface
+// 5. EventSourceAdapter — inbound event source (app-layer extension point)
+// ============================================================
+
+/**
+ * @todo Implement in app layer (e.g., TUI adapter, webhook server, Slack listener).
+ * This is an extension point for custom event sources.
+ */
+export interface EventSourceAdapter {
+  /** Unique name for this adapter (e.g., "tui", "slack", "webhook") */
+  name: string;
+  /** Start listening for events and emit them via the callback */
+  start(emit: (event: InboundEvent) => void): Promise<void>;
+  /** Stop listening for events */
+  stop(): Promise<void>;
+}
+
+// ============================================================
+// 6. EventDecoder — raw payload → InboundEvent (app-layer extension point)
+// ============================================================
+
+/**
+ * @todo Implement in app layer to decode surface-specific payloads.
+ * This is an extension point for custom event decoding logic.
+ */
+export interface EventDecoder<TRaw = unknown> {
+  /** Unique name for this decoder (e.g., "slack_decoder", "webhook_decoder") */
+  name: string;
+  /** Decode a raw payload into an InboundEvent, or return null if not applicable */
+  decode(raw: TRaw): InboundEvent | null;
+}
+
+// ============================================================
+// 7. DeliveryAdapter — response routing back to surface
 // ============================================================
 
 export interface DeliveryAdapter {
@@ -94,6 +132,21 @@ export interface DeliveryAdapter {
   name: string;
   /** Deliver a run result back to the originating surface */
   deliver(result: RunResult): Promise<void>;
+}
+
+// ============================================================
+// 8. NotificationAdapter — notification delivery (app-layer extension point)
+// ============================================================
+
+/**
+ * @todo Implement in app layer (e.g., email, SMS, Slack notification, etc.).
+ * This is an extension point for custom notification delivery.
+ */
+export interface NotificationAdapter {
+  /** Unique name for this adapter (e.g., "email", "slack", "sms", "noop") */
+  name: string;
+  /** Send a notification and return delivery result */
+  notify(request: NotificationRequest): Promise<NotificationResult>;
 }
 
 // ============================================================

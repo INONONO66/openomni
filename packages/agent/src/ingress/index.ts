@@ -10,6 +10,8 @@ export type {
   RunRequest,
   RunRequestKind,
   RunResult,
+  EventSourceAdapter,
+  EventDecoder,
   DeliveryAdapter,
   RunPlanner,
 } from "./interfaces";
@@ -22,3 +24,9 @@ export {
   type EventKind,
   type EventLane,
 } from "./event-kinds";
+export {
+  DefaultRunExecutor,
+  type RunExecutor,
+  type DefaultRunExecutorConfig,
+} from "./run-executor";
+export { DefaultEventProjector, type EventProjector } from "./event-projector";

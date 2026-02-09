@@ -165,6 +165,12 @@ describe("IngressEngine", () => {
               kind: "notify_only",
               session,
               envelope: _envelope,
+              notificationRequest: {
+                type: "test",
+                severity: "info",
+                title: "Test Notification",
+                body: "This is a test",
+              },
             },
           ];
         },
@@ -177,7 +183,7 @@ describe("IngressEngine", () => {
       expect(results.length).toBe(1);
       expect(results[0]!.request.kind).toBe("notify_only");
       expect(results[0]!.success).toBe(true);
-      expect(results[0]!.summary).toBe("Notification delivered");
+      expect(results[0]!.summary).toContain("Notification delivered");
     });
 
     it("handles empty plan result", async () => {

@@ -2,6 +2,7 @@ import { Session } from "@openomni/session";
 import { SurfaceKey } from "@openomni/session";
 import { EventEnvelope } from "../loop/envelope";
 import { Message } from "@openomni/protocol";
+import { EventProjector, DefaultEventProjector } from "./event-projector";
 
 export namespace SessionResolver {
   export interface ResolveResult {
@@ -22,6 +23,7 @@ export namespace SessionResolver {
       providerID: "anthropic",
       modelID: "claude-3-5-sonnet-20241022",
     },
+    projector: EventProjector = DefaultEventProjector,
   ): ResolveResult {
     const surfaceKey = extractSurfaceKey(event.source);
     const existingSessionId = SurfaceKey.lookup(surfaceKey);
@@ -51,18 +53,7 @@ export namespace SessionResolver {
       isNew = true;
     }
 
-    const message: Message.UserMessage = {
-      id: event.eventId,
-      sessionID: session.id,
-      role: "user",
-      time: {
-        created: new Date(event.receivedAt).getTime(),
-      },
-      agent: event.source.type,
-      model: defaultModel,
-    };
-
-    Session.addMessage(session.id, message);
+    projector.project(event, session.id, defaultModel);
 
     return { session, isNew };
   }
