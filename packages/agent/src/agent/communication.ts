@@ -12,9 +12,8 @@ export interface MessageEnvelope<TPayload = unknown> {
   traceId: string;
   sessionId: string;
   runId: string;
-  fromNodeId: string;
-  toNodeId: string;
-  edgeId: string;
+  fromAgentId: string;
+  toAgentId: string;
   sentAt: string; // ISO timestamp
   schemaRef: string;
   payload: TPayload;
@@ -46,8 +45,8 @@ export namespace AgentMessenger {
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
     return Boolean(
-      envelope.toNodeId &&
-      envelope.fromNodeId &&
+      envelope.toAgentId &&
+      envelope.fromAgentId &&
       envelope.payload !== undefined,
     );
   };
@@ -57,11 +56,11 @@ export namespace AgentMessenger {
       throw new MessagingError("Invalid message envelope");
     }
 
-    const inbox = inboxes.get(envelope.toNodeId) ?? [];
+    const inbox = inboxes.get(envelope.toAgentId) ?? [];
     inbox.push(envelope);
-    inboxes.set(envelope.toNodeId, inbox);
+    inboxes.set(envelope.toAgentId, inbox);
 
-    const handlers = subscribers.get(envelope.toNodeId) ?? [];
+    const handlers = subscribers.get(envelope.toAgentId) ?? [];
     handlers.forEach((handler) => handler(envelope));
   };
 
@@ -79,7 +78,7 @@ export namespace AgentMessenger {
 
     return new Promise<MessageEnvelope>((resolve, reject) => {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const unsubscribe = subscribe(envelope.fromNodeId, (reply) => {
+      const unsubscribe = subscribe(envelope.fromAgentId, (reply) => {
         if (reply.traceId !== traceId) {
           return;
         }

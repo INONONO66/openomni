@@ -12,9 +12,8 @@ const createEnvelope = (
   traceId: randomUUID(),
   sessionId: randomUUID(),
   runId: randomUUID(),
-  fromNodeId: randomUUID(),
-  toNodeId: randomUUID(),
-  edgeId: randomUUID(),
+  fromAgentId: randomUUID(),
+  toAgentId: randomUUID(),
   sentAt: new Date().toISOString(),
   schemaRef: "test.schema.v1",
   payload: { payload: "ping" },
@@ -30,7 +29,7 @@ describe("AgentMessenger", () => {
 
   it("send delivers message to recipient inbox", async () => {
     const recipient = `agent-${randomUUID()}`;
-    const envelope = createEnvelope({ toNodeId: recipient });
+    const envelope = createEnvelope({ toAgentId: recipient });
     const setCalls: Array<{ key: unknown; value: unknown }> = [];
     const originalSet = Map.prototype.set;
 
@@ -53,7 +52,7 @@ describe("AgentMessenger", () => {
 
   it("send notifies subscribers", async () => {
     const recipient = `agent-${randomUUID()}`;
-    const envelope = createEnvelope({ toNodeId: recipient });
+    const envelope = createEnvelope({ toAgentId: recipient });
     const received: MessageEnvelope[] = [];
     const unsubscribe = AgentMessenger.subscribe(recipient, (message) => {
       received.push(message);
@@ -75,7 +74,7 @@ describe("AgentMessenger", () => {
 
   it("unsubscribe removes handler", async () => {
     const recipient = `agent-${randomUUID()}`;
-    const envelope = createEnvelope({ toNodeId: recipient });
+    const envelope = createEnvelope({ toAgentId: recipient });
     let called = false;
     const unsubscribe = AgentMessenger.subscribe(recipient, () => {
       called = true;
@@ -100,8 +99,8 @@ describe("AgentMessenger", () => {
 
     const requestPromise = AgentMessenger.request(
       createEnvelope({
-        fromNodeId: from,
-        toNodeId: to,
+        fromAgentId: from,
+        toAgentId: to,
         traceId: "preset",
       }),
       { timeoutMs: 250 },
@@ -111,8 +110,8 @@ describe("AgentMessenger", () => {
 
     await AgentMessenger.send(
       createEnvelope({
-        fromNodeId: to,
-        toNodeId: from,
+        fromAgentId: to,
+        toAgentId: from,
         traceId: requestMessage.traceId,
       }),
     );
@@ -136,14 +135,14 @@ describe("AgentMessenger", () => {
     });
 
     const requestPromise = AgentMessenger.request(
-      createEnvelope({ fromNodeId: from, toNodeId: to }),
+      createEnvelope({ fromAgentId: from, toAgentId: to }),
       { timeoutMs: 250 },
     );
 
     const requestMessage = await captured;
     const reply = createEnvelope({
-      fromNodeId: to,
-      toNodeId: from,
+      fromAgentId: to,
+      toAgentId: from,
       traceId: requestMessage.traceId,
     });
 
@@ -154,8 +153,8 @@ describe("AgentMessenger", () => {
 
   it("request rejects on timeout", async () => {
     const envelope = createEnvelope({
-      fromNodeId: `agent-${randomUUID()}`,
-      toNodeId: `agent-${randomUUID()}`,
+      fromAgentId: `agent-${randomUUID()}`,
+      toAgentId: `agent-${randomUUID()}`,
     });
 
     await expect(
@@ -165,7 +164,7 @@ describe("AgentMessenger", () => {
 
   it("request rejects on send error", async () => {
     const invalidEnvelope = createEnvelope({
-      toNodeId: "",
+      toAgentId: "",
     });
 
     await expect(AgentMessenger.request(invalidEnvelope)).rejects.toThrow(
@@ -183,7 +182,7 @@ describe("AgentMessenger", () => {
 
   it("Multiple subscribers all receive message", async () => {
     const recipient = `agent-${randomUUID()}`;
-    const envelope = createEnvelope({ toNodeId: recipient });
+    const envelope = createEnvelope({ toAgentId: recipient });
     const received: MessageEnvelope[] = [];
 
     const unsubscribeOne = AgentMessenger.subscribe(recipient, (message) => {
