@@ -1,6 +1,6 @@
 # packages/agent
 
-Core orchestration package. Multi-agent task system with event-driven loop, graph-based routing, triggers, and conversation handling. Largest package (~35 source files). Depends on protocol, session, and llm.
+Core orchestration package. Multi-agent task system with Dynamic Supervisor architecture, event-driven ingress pipeline, tools, triggers, and conversation handling. Largest package (~40 source files). Depends on protocol, session, and llm.
 
 ## STRUCTURE
 
@@ -8,12 +8,26 @@ Core orchestration package. Multi-agent task system with event-driven loop, grap
 src/
 ├── index.ts           # Public API barrel
 ├── config.ts          # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
-├── agent/             # Agent identity, graph, routing, messaging
-│   ├── profile.ts     # AgentProfile, AgentIdentity, AgentRuntime, AgentRegistry
-│   ├── graph.ts       # AgentGraph — DAG of nodes + edges, validation functions
-│   ├── routing.ts     # RouteResolver — evaluates RouteConditions against context
-│   ├── communication.ts  # AgentMessenger — inter-agent message delivery
-│   └── supervision.ts # Agent supervision patterns
+├── ingress/           # Dynamic Supervisor — event ingestion pipeline
+│   ├── engine.ts      # IngressEngine — 7-step pipeline (validate→convert→dedup→resolve→plan→execute→deliver)
+│   ├── interfaces.ts  # EventSourceAdapter, EventDecoder, NotificationAdapter, RunPlanner, RunExecutor
+│   ├── session-resolver.ts  # SessionResolver — resolve/create sessions from events
+│   ├── event-projector.ts   # EventProjector — extract session data from events
+│   ├── run-executor.ts      # DefaultRunExecutor — execute run requests
+│   ├── event-kinds.ts       # EventKind constants, EventLane classification, isTaskBackable()
+│   └── index.ts       # Re-exports
+├── tools/             # Dynamic Supervisor tools (subagent, dispatch, schedule)
+│   ├── subagent.ts    # SubagentTool — spawn child agents
+│   ├── dispatch.ts    # DispatchTool — send A2A messages
+│   ├── schedule.ts    # ScheduleTool — create/update/delete schedules
+│   ├── schemas.ts     # Shared Zod schemas for tool inputs
+│   └── index.ts       # Re-exports
+├── agent/             # Agent identity, registry, messaging, supervision
+│   ├── profile.ts     # AgentProfile, AgentIdentity, AgentRuntime
+│   ├── registry.ts    # AgentRegistry — register/lookup agents by surfaceKey
+│   ├── communication.ts  # AgentMessenger — A2A message delivery with asker_only persistence
+│   ├── supervision.ts # Agent supervision patterns
+│   └── index.ts       # Re-exports
 ├── task/              # Task lifecycle management
 │   ├── types.ts       # Task, TaskRun, TriggerSignal Zod schemas
 │   ├── manager.ts     # TaskManager — create, trigger, getRun, state transitions
@@ -35,7 +49,7 @@ src/
 │   ├── observability.ts   # Observability — metrics collection
 │   └── supervisor.ts  # Higher-level supervisor (deprecated — use run-supervisor)
 ├── trigger/           # External event sources
-│   ├── scheduler.ts   # Scheduler + CronParser
+│   ├── scheduler.ts   # Scheduler — timeBucket idempotency, recurring schedules, drift detection
 │   ├── queue.ts       # EventQueue — priority queue with drop policies
 │   ├── watcher.ts     # FilesystemWatcher
 │   └── webhook.ts     # WebhookWatcher (abstract) + SimpleWebhookWatcher
@@ -46,25 +60,42 @@ src/
 ## PIPELINE FLOW
 
 ```
-Trigger (cron/webhook/fs/manual)
-  → EventQueue
-    → Envelope (normalize + validate + dedupe)
-      → Router (match rules → RoutingDecision)
-        → ConcurrencyGate
-          → PermissionGate
-            → Dispatcher (execute)
-              → RunSupervisor (budget enforcement)
-                → LLM call → Tool loop → Summary
-                  → AuditLog + DLQ (on failure)
+IngressEngine 7-Step Pipeline:
+  1. Validate (schema validation)
+  2. Convert (EventSourceAdapter → EventEnvelope)
+  3. Dedup (idempotency check)
+  4. Resolve (SessionResolver → session)
+  5. Plan (RunPlanner → RunRequest)
+  6. Execute (RunExecutor → RunOutcome)
+  7. Deliver (NotificationAdapter → NotificationResult)
+
+Legacy Loop (still active):
+  Trigger (cron/webhook/fs/manual)
+    → EventQueue
+      → Envelope (normalize + validate + dedupe)
+        → Router (match rules → RoutingDecision)
+          → ConcurrencyGate
+            → PermissionGate
+              → Dispatcher (execute)
+                → RunSupervisor (budget enforcement)
+                  → LLM call → Tool loop → Summary
+                    → AuditLog + DLQ (on failure)
 ```
 
 ## KEY PATTERNS
 
-- **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`. Manages Task + TaskRun lifecycle.
-- **AgentGraph**: DAG with `AgentNode` (kinds: llm, router, tool, human) and `AgentEdge` (conditions: always, llm_router, output_match, etc.). Validated with `validateAgentGraph()`.
+- **Dynamic Supervisor**: IngressEngine + 3 tools (SubagentTool, DispatchTool, ScheduleTool). Replaces graph-based routing.
+- **surfaceKey**: Unique agent identifier (`{namespace}:{name}:{version}`). Used for registry lookup and A2A addressing.
+- **A2A Persistence**: `asker_only` policy — only asking agent stores messages. Audit log via `AgentMessenger.getAuditLog()`.
+- **Event Lanes**: Control lane (task-backable) vs Telemetry lane (ephemeral). Classified via `classifyLane()`.
+- **Scheduler Idempotency**: Uses `timeBucket` (5-min windows) instead of exact timestamp for dedupeKey.
+- **Recurring Schedules**: `recurring: true` flag wired to TriggerCron/TriggerInterval in ScheduleTool.
+- **Late-Start Execution**: Schedules with `start_time_in_past` execute immediately with `lateStart: true` flag.
+- **Drift Detection**: Scheduler warns if execution is >5min late from planned start time.
+- **Lane Guard**: DefaultRunPlanner blocks telemetry events from creating runs.
+- **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
 - **Orchestrator.run()**: Main entry. Takes `{ taskId, runId, maxRetries }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error? }`.
 - **ConfigManager.create()**: Deep-merge overrides into defaults. Validated with `ConfigManager.validate()`.
-- **Idempotency**: Event-level dedup in Router via idempotency keys.
 - **State machine**: TaskStateMachine enforces valid transitions (e.g., `pending→active→completed`).
 
 ## ANTI-PATTERNS
@@ -72,3 +103,4 @@ Trigger (cron/webhook/fs/manual)
 - `supervisor.ts` in loop/ is older — `run-supervisor.ts` is the current implementation. Do NOT extend supervisor.ts.
 - QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
+- Do NOT reference `graph.ts` or `routing.ts` — these were removed in Phase 1 migration to Dynamic Supervisor.
