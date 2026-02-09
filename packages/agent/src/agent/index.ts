@@ -24,3 +24,9 @@ export {
   DeliveryOptions,
   MessagingError,
 } from "./communication";
+
+export {
+  BuiltinAgentRegistry,
+  AgentDefinitionSchema,
+  type AgentDefinition,
+} from "./registry";

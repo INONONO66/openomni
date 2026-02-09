@@ -42,6 +42,7 @@ export {
   OrchestrationResult,
   OrchestrationState,
   ToolExecutor,
+  SessionMode,
   DLQEntry,
   DeadLetterQueue,
   SummaryTemplate,

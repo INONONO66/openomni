@@ -49,10 +49,18 @@ const DEFAULT_CONCURRENCY = {
   mode: "drop" as const,
 };
 
+const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
+
+export type SessionMode = "ephemeral" | "persistent" | "reuse";
+
 export interface OrchestratorConfig {
   taskId: string;
   runId: string;
   maxRetries: number;
+  sessionMode?: SessionMode;
+  sessionId?: string;
+  maxSubagentDepth?: number;
+  currentDepth?: number;
 }
 
 export interface OrchestrationResult {
@@ -459,6 +467,17 @@ export namespace Orchestrator {
       };
     }
 
+    const maxDepth = config.maxSubagentDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH;
+    const currentDepth = config.currentDepth ?? 0;
+
+    if (currentDepth >= maxDepth) {
+      return {
+        success: false,
+        summary: "",
+        error: `Subagent depth limit reached: ${currentDepth} >= ${maxDepth}`,
+      };
+    }
+
     const activeRuns = TaskManager.listRunsByStatus(["running", "blocked"]);
     const runningCount = activeRuns.filter(
       (run) => run.taskId === config.taskId && run.runId !== config.runId,
@@ -513,11 +532,34 @@ export namespace Orchestrator {
       };
     }
 
-    const session = createEphemeralSession(
-      config.taskId,
-      config.runId,
-      taskRun.sessionKey,
-    );
+    const sessionMode: SessionMode = config.sessionMode ?? "ephemeral";
+    let session: Session.Info;
+
+    if (sessionMode === "reuse") {
+      if (!config.sessionId) {
+        return {
+          success: false,
+          summary: "",
+          error: "sessionId is required when sessionMode is 'reuse'",
+        };
+      }
+      const existing = Session.get(config.sessionId);
+      if (!existing) {
+        return {
+          success: false,
+          summary: "",
+          error: `Session not found for reuse: ${config.sessionId}`,
+        };
+      }
+      session = existing;
+    } else {
+      session = createEphemeralSession(
+        config.taskId,
+        config.runId,
+        taskRun.sessionKey,
+      );
+    }
+
     const sink = createSessionSink(session.id);
 
     const retryPolicy = resolveRetryPolicy(
@@ -761,7 +803,9 @@ export namespace Orchestrator {
         error: lastError || "Retry attempts exhausted",
       };
     } finally {
-      Session.remove(session.id);
+      if (sessionMode === "ephemeral") {
+        Session.remove(session.id);
+      }
     }
   }
 }

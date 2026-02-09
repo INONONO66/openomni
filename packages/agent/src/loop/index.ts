@@ -34,6 +34,7 @@ export {
   OrchestrationResult,
   OrchestrationState,
   ToolExecutor,
+  SessionMode,
 } from "./orchestration";
 
 export { DLQEntry, DeadLetterQueue } from "./dlq";

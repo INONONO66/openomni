@@ -3,6 +3,7 @@ import {
   Orchestrator,
   OrchestratorConfig,
   OrchestratorRunInput,
+  type SessionMode,
 } from "../../src/loop/orchestration";
 import { TaskManager } from "../../src/task/manager";
 import { Task } from "../../src/task/types";
@@ -497,6 +498,344 @@ describe("Orchestrator", () => {
       expect(dlqSpy.mock.calls[0][0]).toHaveProperty("reason");
       expect(dlqSpy.mock.calls[0][0].payload).toHaveProperty("runId", runId);
       expect(dlqSpy.mock.calls[0][0].payload).toHaveProperty("taskId", task.id);
+    });
+
+    describe("session modes", () => {
+      it("ephemeral mode (default) creates and deletes session", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+
+        const run = TaskManager.getRun(runId);
+        const sessionKey = run?.sessionKey;
+        if (sessionKey) {
+          const session = Session.get(sessionKey);
+          expect(session).toBeUndefined();
+        }
+      });
+
+      it("ephemeral mode explicitly set creates and deletes session", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "ephemeral",
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+
+        const run = TaskManager.getRun(runId);
+        const sessionKey = run?.sessionKey;
+        if (sessionKey) {
+          const session = Session.get(sessionKey);
+          expect(session).toBeUndefined();
+        }
+      });
+
+      it("persistent mode creates session but does NOT delete it", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "persistent",
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+
+        const run = TaskManager.getRun(runId);
+        const sessionKey = run?.sessionKey;
+        if (sessionKey) {
+          const session = Session.get(sessionKey);
+          expect(session).toBeDefined();
+        }
+      });
+
+      it("persistent mode preserves session on error", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "persistent",
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => {
+              throw new Error("Test error");
+            },
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+
+        const run = TaskManager.getRun(runId);
+        const sessionKey = run?.sessionKey;
+        if (sessionKey) {
+          const session = Session.get(sessionKey);
+          expect(session).toBeDefined();
+        }
+      });
+
+      it("reuse mode uses provided sessionId", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const existingSessionId = "reuse-session-123";
+        const now = Date.now();
+        Session.storage.set(existingSessionId, {
+          id: existingSessionId,
+          title: "Existing session",
+          model: { providerID: "test", modelID: "test" },
+          time: { created: now, updated: now },
+        });
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "reuse",
+          sessionId: existingSessionId,
+        };
+
+        let capturedSessionID: string | undefined;
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async (llmInput) => {
+              capturedSessionID = llmInput.sessionID as string;
+              return { type: "stop" as const };
+            },
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+        expect(capturedSessionID).toBe(existingSessionId);
+
+        const session = Session.get(existingSessionId);
+        expect(session).toBeDefined();
+      });
+
+      it("reuse mode returns error when sessionId is missing", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "reuse",
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("sessionId is required");
+      });
+
+      it("reuse mode returns error when session not found", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          sessionMode: "reuse",
+          sessionId: "non-existent-session",
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Session not found for reuse");
+      });
+    });
+
+    describe("depth limit", () => {
+      it("refuses when currentDepth >= maxSubagentDepth", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          maxSubagentDepth: 3,
+          currentDepth: 3,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Subagent depth limit reached");
+        expect(result.error).toContain("3 >= 3");
+      });
+
+      it("refuses when currentDepth exceeds maxSubagentDepth", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          maxSubagentDepth: 2,
+          currentDepth: 5,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Subagent depth limit reached");
+      });
+
+      it("allows when currentDepth < maxSubagentDepth", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          maxSubagentDepth: 3,
+          currentDepth: 2,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+      });
+
+      it("uses default maxSubagentDepth of 3 when not specified", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+          currentDepth: 3,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Subagent depth limit reached");
+        expect(result.error).toContain("3 >= 3");
+      });
+
+      it("defaults currentDepth to 0 when not specified (allows execution)", async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
+
+        const config: OrchestratorConfig = {
+          taskId: task.id,
+          runId,
+          maxRetries: 0,
+        };
+
+        const input: OrchestratorRunInput = {
+          llm: {
+            run: async () => ({ type: "stop" as const }),
+          },
+          input: {},
+        };
+
+        const result = await Orchestrator.run(config, input);
+
+        expect(result.success).toBe(true);
+      });
     });
 
     it("emits failed event and logs outcome on failure", async () => {
