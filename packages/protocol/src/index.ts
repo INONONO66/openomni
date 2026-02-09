@@ -468,6 +468,17 @@ export type SessionKey =
   | `task:${string}:run:${string}`;
 
 // ============================================================
+// Notification Types
+// ============================================================
+
+export {
+  NotificationSeverity,
+  DeliveryMode,
+  NotificationRequest,
+  NotificationResult,
+} from "./notification";
+
+// ============================================================
 // Event Types
 // ============================================================
 

@@ -5,6 +5,37 @@
 import { randomUUID } from "crypto";
 
 /**
+ * Persistence policy for A2A message exchanges
+ * - "asker_only": Content persisted only in requester session
+ * - "both": Content persisted in both requester and responder sessions
+ * - "none": No persistence (audit metadata only)
+ */
+export type PersistencePolicy = "asker_only" | "both" | "none";
+
+/**
+ * Audit metadata for A2A message exchanges
+ * Lightweight tracking for operability without full payload storage
+ */
+export interface AuditMetadata {
+  traceId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  direction: "request" | "response";
+  timestamp: string; // ISO 8601
+  status: "sent" | "delivered" | "failed";
+  latencyMs?: number;
+}
+
+/**
+ * Audit entry combining metadata with minimal envelope info
+ * Does NOT include payload to support selective persistence
+ */
+export type AuditEntry = AuditMetadata & {
+  messageId: string;
+  type: string;
+};
+
+/**
  * Represents a message envelope for agent-to-agent communication
  * Aligned with spec section 2.6
  */
@@ -17,6 +48,7 @@ export interface MessageEnvelope<TPayload = unknown> {
   sentAt: string; // ISO timestamp
   schemaRef: string;
   payload: TPayload;
+  persistencePolicy?: PersistencePolicy;
 }
 
 /**

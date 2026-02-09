@@ -26,6 +26,8 @@ export interface InboundEvent {
   occurredAt?: string;
   /** Additional surface-specific metadata */
   meta?: Record<string, unknown>;
+  /** Lane classification: "control" (can create task runs) or "telemetry" (observability only) */
+  lane?: "control" | "telemetry";
 }
 
 // ============================================================
