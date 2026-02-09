@@ -1,5 +1,7 @@
 import { Task, TriggerSignal } from "../task/types";
 import { TaskManager } from "../task/manager";
+import { IngressEngine } from "../ingress/engine";
+import type { InboundEvent } from "../ingress/interfaces";
 import { randomUUID } from "crypto";
 
 interface ScheduledTrigger {
@@ -197,10 +199,23 @@ export namespace Scheduler {
     trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
   ): Promise<void> {
     const now = Date.now();
-    const signal = createSignal(trigger, now);
+
+    const inboundEvent: InboundEvent = {
+      id: randomUUID(),
+      surface: "scheduler",
+      name: `scheduler.${trigger.type}`,
+      payload: { taskId, triggerId: trigger.id },
+      dedupeKey: `scheduler:${taskId}:${trigger.id}:${now}`,
+      occurredAt: new Date(now).toISOString(),
+      meta: {
+        taskId,
+        triggerId: trigger.id,
+        triggerType: trigger.type,
+      },
+    };
 
     try {
-      await TaskManager.trigger(taskId, signal);
+      await IngressEngine.ingest(inboundEvent);
     } catch (error) {
       console.error(
         `[Scheduler] Error firing trigger ${trigger.id} for task ${taskId}:`,
