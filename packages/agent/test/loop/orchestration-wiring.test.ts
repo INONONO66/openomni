@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach, spyOn } from "bun:test";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  afterAll,
+  spyOn,
+} from "bun:test";
 import { Orchestrator } from "../../src/loop/orchestration";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
@@ -9,9 +17,26 @@ import { DeadLetterQueue } from "../../src/loop/dlq";
 import { SummaryDelivery } from "../../src/loop/summary";
 
 describe("Orchestrator Wiring", () => {
+  let spies: Array<{ mockRestore: () => void }> = [];
+
   beforeEach(() => {
     TaskStorage.reset();
     Session.storage.clear();
+    spies = [];
+  });
+
+  afterEach(() => {
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+    spies = [];
+  });
+
+  afterAll(() => {
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+    spies = [];
   });
 
   it("wires all lifecycle hooks on successful run", async () => {
@@ -31,10 +56,25 @@ describe("Orchestrator Wiring", () => {
       throw new Error("Failed to create run");
     }
 
+    // Restore any existing mocks before creating new ones
+    if ((Observability.emitRunEvent as any).mock) {
+      (Observability.emitRunEvent as any).mockRestore();
+    }
+    if ((AuditLog.logPermission as any).mock) {
+      (AuditLog.logPermission as any).mockRestore();
+    }
+    if ((AuditLog.logRunOutcome as any).mock) {
+      (AuditLog.logRunOutcome as any).mockRestore();
+    }
+    if ((SummaryDelivery.persist as any).mock) {
+      (SummaryDelivery.persist as any).mockRestore();
+    }
+
     const emitSpy = spyOn(Observability, "emitRunEvent");
     const permissionSpy = spyOn(AuditLog, "logPermission");
     const outcomeSpy = spyOn(AuditLog, "logRunOutcome");
     const persistSpy = spyOn(SummaryDelivery, "persist");
+    spies.push(emitSpy, permissionSpy, outcomeSpy, persistSpy);
 
     await Orchestrator.run(
       {
@@ -83,10 +123,25 @@ describe("Orchestrator Wiring", () => {
       throw new Error("Failed to create run");
     }
 
+    // Restore any existing mocks before creating new ones
+    if ((Observability.emitRunEvent as any).mock) {
+      (Observability.emitRunEvent as any).mockRestore();
+    }
+    if ((DeadLetterQueue.add as any).mock) {
+      (DeadLetterQueue.add as any).mockRestore();
+    }
+    if ((AuditLog.logRunOutcome as any).mock) {
+      (AuditLog.logRunOutcome as any).mockRestore();
+    }
+    if ((SummaryDelivery.persist as any).mock) {
+      (SummaryDelivery.persist as any).mockRestore();
+    }
+
     const emitSpy = spyOn(Observability, "emitRunEvent");
     const dlqSpy = spyOn(DeadLetterQueue, "add");
     const outcomeSpy = spyOn(AuditLog, "logRunOutcome");
     const persistSpy = spyOn(SummaryDelivery, "persist");
+    spies.push(emitSpy, dlqSpy, outcomeSpy, persistSpy);
 
     await Orchestrator.run(
       {
