@@ -1,0 +1,134 @@
+/**
+ * SurfaceKey index: N:1 mapping from surface-specific keys to session IDs.
+ * Provides bidirectional lookup for routing events to sessions.
+ *
+ * Key format: `<surface-type>:<surface-specific-path>`
+ * Examples:
+ *   - slack:workspaceA:channel:C123:thread:171000
+ *   - tui:/Users/ino/Develop/OpenOmni
+ *   - telegram:botId:chat:chatId
+ */
+
+export namespace SurfaceKey {
+  // Forward index: surfaceKey → sessionId
+  const keyToSession = new Map<string, string>();
+
+  // Reverse index: sessionId → Set<surfaceKey>
+  const sessionToKeys = new Map<string, Set<string>>();
+
+  /**
+   * Validate surfaceKey format.
+   * Must contain at least one colon to separate surface type from path.
+   */
+  function validateFormat(key: string): boolean {
+    return key.includes(":");
+  }
+
+  /**
+   * Create a surfaceKey from parts.
+   * @param parts - Array of strings to join with colons
+   * @returns Formatted surfaceKey
+   * @throws Error if parts is empty or validation fails
+   */
+  export function create(parts: string[]): string {
+    if (parts.length === 0) {
+      throw new Error("SurfaceKey parts cannot be empty");
+    }
+
+    const key = parts.join(":");
+
+    if (!validateFormat(key)) {
+      throw new Error(
+        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
+      );
+    }
+
+    return key;
+  }
+
+  /**
+   * Look up the session ID for a given surfaceKey.
+   * @param key - The surfaceKey to look up
+   * @returns Session ID if found, undefined otherwise
+   */
+  export function lookup(key: string): string | undefined {
+    return keyToSession.get(key);
+  }
+
+  /**
+   * Register a surfaceKey → sessionId mapping.
+   * Supports N:1 mapping (multiple keys can point to same session).
+   * @param key - The surfaceKey
+   * @param sessionId - The session ID
+   */
+  export function register(key: string, sessionId: string): void {
+    if (!validateFormat(key)) {
+      throw new Error(
+        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
+      );
+    }
+
+    // Remove old mapping if key was already registered
+    const oldSessionId = keyToSession.get(key);
+    if (oldSessionId && oldSessionId !== sessionId) {
+      const oldKeys = sessionToKeys.get(oldSessionId);
+      if (oldKeys) {
+        oldKeys.delete(key);
+        if (oldKeys.size === 0) {
+          sessionToKeys.delete(oldSessionId);
+        }
+      }
+    }
+
+    // Add forward mapping
+    keyToSession.set(key, sessionId);
+
+    // Add reverse mapping
+    if (!sessionToKeys.has(sessionId)) {
+      sessionToKeys.set(sessionId, new Set());
+    }
+    sessionToKeys.get(sessionId)!.add(key);
+  }
+
+  /**
+   * Unregister a surfaceKey.
+   * @param key - The surfaceKey to unregister
+   * @returns true if key was found and removed, false otherwise
+   */
+  export function unregister(key: string): boolean {
+    const sessionId = keyToSession.get(key);
+    if (!sessionId) {
+      return false;
+    }
+
+    keyToSession.delete(key);
+
+    const keys = sessionToKeys.get(sessionId);
+    if (keys) {
+      keys.delete(key);
+      if (keys.size === 0) {
+        sessionToKeys.delete(sessionId);
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * List all surfaceKeys registered for a given session.
+   * @param sessionId - The session ID
+   * @returns Array of surfaceKeys for this session
+   */
+  export function listBySession(sessionId: string): string[] {
+    const keys = sessionToKeys.get(sessionId);
+    return keys ? Array.from(keys) : [];
+  }
+
+  /**
+   * Clear all mappings (for testing).
+   */
+  export function clear(): void {
+    keyToSession.clear();
+    sessionToKeys.clear();
+  }
+}
