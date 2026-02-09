@@ -12,7 +12,6 @@ describe("Supervisor", () => {
     policy = {
       maxRetries: 3,
       timeoutMs: 5000,
-      escalationNodeId: "escalation-node-1",
     };
   });
 
@@ -130,7 +129,7 @@ describe("Supervisor", () => {
   });
 
   describe("shouldEscalate", () => {
-    it("should return true when failed, max retries reached, and escalationNodeId set", () => {
+    it("should return true when failed and max retries reached", () => {
       let state = Supervisor.createState();
       for (let i = 0; i < policy.maxRetries; i++) {
         state = Supervisor.recordAttempt(state);
@@ -151,21 +150,6 @@ describe("Supervisor", () => {
       state = Supervisor.recordFailure(state, new Error("Test error"));
 
       expect(Supervisor.shouldEscalate(state, policy)).toBe(false);
-    });
-
-    it("should return false when escalationNodeId is not set", () => {
-      const policyNoEscalation: SupervisionPolicy = {
-        maxRetries: 3,
-        timeoutMs: 5000,
-      };
-
-      let state = Supervisor.createState();
-      for (let i = 0; i < policyNoEscalation.maxRetries; i++) {
-        state = Supervisor.recordAttempt(state);
-      }
-      state = Supervisor.recordFailure(state, new Error("Test error"));
-
-      expect(Supervisor.shouldEscalate(state, policyNoEscalation)).toBe(false);
     });
   });
 

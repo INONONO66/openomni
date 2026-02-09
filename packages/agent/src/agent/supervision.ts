@@ -4,7 +4,6 @@
 export interface SupervisionPolicy {
   maxRetries: number;
   timeoutMs: number;
-  escalationNodeId?: string;
 }
 
 /**
@@ -103,11 +102,7 @@ export namespace Supervisor {
           clearTimeoutIfNeeded();
 
           if (attempt > policy.maxRetries) {
-            if (policy.escalationNodeId) {
-              finalize("escalated");
-            } else {
-              finalize("failed");
-            }
+            finalize("failed");
             return;
           }
 
@@ -176,11 +171,7 @@ export namespace Supervisor {
     state: RunState,
     policy: SupervisionPolicy,
   ): boolean {
-    return (
-      state.status === "failed" &&
-      state.attempt >= policy.maxRetries &&
-      !!policy.escalationNodeId
-    );
+    return state.status === "failed" && state.attempt >= policy.maxRetries;
   }
 
   export function recordAttempt(state: RunState): RunState {

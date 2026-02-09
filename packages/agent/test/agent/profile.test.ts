@@ -133,15 +133,11 @@ describe("AgentProfile", () => {
     it("should validate policy with multiple capabilities", () => {
       const policy: PolicySpec = {
         tools: ["all"],
-        capabilities: ["delegate", "escalate", "override_router"],
+        capabilities: ["delegate", "escalate"],
       };
 
       const result = PolicySpecSchema.parse(policy);
-      expect(result.capabilities).toEqual([
-        "delegate",
-        "escalate",
-        "override_router",
-      ]);
+      expect(result.capabilities).toEqual(["delegate", "escalate"]);
     });
   });
 

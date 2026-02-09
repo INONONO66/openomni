@@ -96,7 +96,7 @@ export const PolicySpecSchema = z.object({
     .optional()
     .describe("Data access scopes"),
   capabilities: z
-    .array(z.enum(["delegate", "escalate", "override_router"]))
+    .array(z.enum(["delegate", "escalate"]))
     .optional()
     .describe("Special capabilities granted"),
 });

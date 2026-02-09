@@ -202,7 +202,6 @@ export namespace TaskManager {
       description: validated.description,
       owner: validated.owner,
       assignedAgentId: validated.assignedAgentId,
-      agentGraphId: validated.agentGraphId,
       status: "idle",
       triggers: validated.triggers ?? [],
       policy: validated.policy ?? {},
