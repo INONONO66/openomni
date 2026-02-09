@@ -70,6 +70,7 @@ export class MessagingError extends Error {
 
 export namespace AgentMessenger {
   const inboxes = new Map<string, MessageEnvelope[]>();
+  const auditLogs = new Map<string, AuditEntry[]>();
   const subscribers = new Map<
     string,
     ((envelope: MessageEnvelope) => void)[]
@@ -83,15 +84,50 @@ export namespace AgentMessenger {
     );
   };
 
+  const createAuditEntry = (envelope: MessageEnvelope): AuditEntry => {
+    return {
+      messageId: envelope.runId,
+      type: envelope.schemaRef,
+      traceId: envelope.traceId,
+      fromAgentId: envelope.fromAgentId,
+      toAgentId: envelope.toAgentId,
+      direction: "request",
+      timestamp: envelope.sentAt,
+      status: "delivered",
+    };
+  };
+
   export const send = async (envelope: MessageEnvelope): Promise<void> => {
     if (!isValidEnvelope(envelope)) {
       throw new MessagingError("Invalid message envelope");
     }
 
-    const inbox = inboxes.get(envelope.toAgentId) ?? [];
-    inbox.push(envelope);
-    inboxes.set(envelope.toAgentId, inbox);
+    const policy = envelope.persistencePolicy ?? "asker_only";
 
+    // Store in sender (fromAgentId) inbox based on policy
+    if (policy === "asker_only" || policy === "both") {
+      const senderInbox = inboxes.get(envelope.fromAgentId) ?? [];
+      senderInbox.push(envelope);
+      inboxes.set(envelope.fromAgentId, senderInbox);
+    } else if (policy === "none") {
+      const senderAudit = auditLogs.get(envelope.fromAgentId) ?? [];
+      senderAudit.push(createAuditEntry(envelope));
+      auditLogs.set(envelope.fromAgentId, senderAudit);
+    }
+
+    // Store in receiver (toAgentId) inbox based on policy
+    if (policy === "both") {
+      const receiverInbox = inboxes.get(envelope.toAgentId) ?? [];
+      receiverInbox.push(envelope);
+      inboxes.set(envelope.toAgentId, receiverInbox);
+    } else {
+      // asker_only or none: store audit entry only
+      const receiverAudit = auditLogs.get(envelope.toAgentId) ?? [];
+      receiverAudit.push(createAuditEntry(envelope));
+      auditLogs.set(envelope.toAgentId, receiverAudit);
+    }
+
+    // Subscribers always get full envelope (notification behavior unchanged)
     const handlers = subscribers.get(envelope.toAgentId) ?? [];
     handlers.forEach((handler) => handler(envelope));
   };
@@ -157,5 +193,9 @@ export namespace AgentMessenger {
       }
       subscribers.set(agentId, nextHandlers);
     };
+  };
+
+  export const getAuditLog = (agentId: string): AuditEntry[] => {
+    return auditLogs.get(agentId) ?? [];
   };
 }

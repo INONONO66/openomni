@@ -18,6 +18,33 @@ type SchedulerKey = `${string}:${string}`;
  * Format: minute hour dayOfMonth month dayOfWeek
  * Supports: numbers, *, step values (n), ranges (n-m), lists (n,m,o)
  */
+/**
+ * Compute deterministic time bucket for idempotency key.
+ * Ensures multiple fires within the same time granularity produce the same dedupeKey.
+ *
+ * @param trigger - The trigger configuration (cron, interval, or once)
+ * @param now - Current timestamp in milliseconds
+ * @returns Time bucket in milliseconds (floored to granularity)
+ */
+export function computeTimeBucket(
+  trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
+  now: number,
+): number {
+  switch (trigger.type) {
+    case "cron":
+      // Cron triggers have minute-level granularity
+      return Math.floor(now / 60000) * 60000;
+
+    case "interval":
+      // Interval triggers bucket to their interval duration
+      return Math.floor(now / trigger.ms) * trigger.ms;
+
+    case "once":
+      // Once triggers use exact timestamp (deterministic)
+      return trigger.at;
+  }
+}
+
 export namespace CronParser {
   export interface CronFields {
     minute: number[];
@@ -194,18 +221,19 @@ export namespace Scheduler {
     };
   }
 
-  async function fire(
+  export async function fire(
     taskId: string,
     trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
   ): Promise<void> {
     const now = Date.now();
+    const timeBucket = computeTimeBucket(trigger, now);
 
     const inboundEvent: InboundEvent = {
       id: randomUUID(),
       surface: "scheduler",
       name: `scheduler.${trigger.type}`,
       payload: { taskId, triggerId: trigger.id },
-      dedupeKey: `scheduler:${taskId}:${trigger.id}:${now}`,
+      dedupeKey: `scheduler:${taskId}:${trigger.id}:${timeBucket}`,
       occurredAt: new Date(now).toISOString(),
       meta: {
         taskId,

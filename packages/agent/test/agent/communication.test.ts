@@ -29,7 +29,10 @@ describe("AgentMessenger", () => {
 
   it("send delivers message to recipient inbox", async () => {
     const recipient = `agent-${randomUUID()}`;
-    const envelope = createEnvelope({ toAgentId: recipient });
+    const envelope = createEnvelope({
+      toAgentId: recipient,
+      persistencePolicy: "both",
+    });
     const setCalls: Array<{ key: unknown; value: unknown }> = [];
     const originalSet = Map.prototype.set;
 

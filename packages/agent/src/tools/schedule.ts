@@ -108,13 +108,79 @@ export namespace ScheduleTool {
 
       const createdTask = TaskManager.create(taskInput);
 
-      // Create trigger for the scheduled time
+      // Create trigger based on recurring configuration
       const triggerId = randomUUID();
-      const trigger: Task.TriggerOnce = {
-        id: triggerId,
-        type: "once",
-        at: plannedStartAtMs,
-      };
+      let trigger: Task.Trigger;
+      let recurringInfo: Record<string, unknown> = {};
+
+      if (validated.recurring) {
+        switch (validated.recurring.type) {
+          case "cron": {
+            if (!validated.recurring.expression) {
+              return {
+                id: randomUUID(),
+                toolCallId: "",
+                output: JSON.stringify({
+                  error: "invalid_cron_config",
+                  message: "Cron recurring type requires expression field",
+                }),
+                isError: true,
+              };
+            }
+            trigger = {
+              id: triggerId,
+              type: "cron",
+              expr: validated.recurring.expression,
+            };
+            recurringInfo = {
+              type: "cron",
+              expression: validated.recurring.expression,
+            };
+            break;
+          }
+
+          case "interval": {
+            if (!validated.recurring.intervalMs) {
+              return {
+                id: randomUUID(),
+                toolCallId: "",
+                output: JSON.stringify({
+                  error: "invalid_interval_config",
+                  message: "Interval recurring type requires intervalMs field",
+                }),
+                isError: true,
+              };
+            }
+            trigger = {
+              id: triggerId,
+              type: "interval",
+              ms: validated.recurring.intervalMs,
+            };
+            recurringInfo = {
+              type: "interval",
+              intervalMs: validated.recurring.intervalMs,
+            };
+            break;
+          }
+
+          case "once":
+          default: {
+            trigger = {
+              id: triggerId,
+              type: "once",
+              at: plannedStartAtMs,
+            };
+            break;
+          }
+        }
+      } else {
+        // No recurring specified, use once trigger
+        trigger = {
+          id: triggerId,
+          type: "once",
+          at: plannedStartAtMs,
+        };
+      }
 
       // Register trigger with Scheduler
       const registered = Scheduler.registerTrigger(createdTask.id, trigger);
@@ -131,17 +197,24 @@ export namespace ScheduleTool {
       }
 
       // Return confirmation
+      const response: Record<string, unknown> = {
+        success: true,
+        taskId: createdTask.id,
+        plannedStartAt: new Date(plannedStartAtMs).toISOString(),
+        dueAt: validated.dueAt,
+        estimatedRuntimeMs: validated.estimatedRuntimeMs,
+        safetyBufferMs: SAFETY_BUFFER_MS,
+      };
+
+      // Include recurring info if present
+      if (Object.keys(recurringInfo).length > 0) {
+        response.recurring = recurringInfo;
+      }
+
       return {
         id: randomUUID(),
         toolCallId: "",
-        output: JSON.stringify({
-          success: true,
-          taskId: createdTask.id,
-          plannedStartAt: new Date(plannedStartAtMs).toISOString(),
-          dueAt: validated.dueAt,
-          estimatedRuntimeMs: validated.estimatedRuntimeMs,
-          safetyBufferMs: SAFETY_BUFFER_MS,
-        }),
+        output: JSON.stringify(response),
         isError: false,
       };
     } catch (error) {
