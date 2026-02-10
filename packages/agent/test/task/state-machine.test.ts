@@ -508,9 +508,10 @@ describe("TaskStateMachine", () => {
     };
 
     test("applies valid transition", () => {
+      const beforeTime = Date.now();
       const updated = TaskStateMachine.applyTransition(baseTask, "scheduled");
       expect(updated.status).toBe("scheduled");
-      expect(updated.updatedAt).toBeGreaterThan(baseTask.updatedAt);
+      expect(updated.updatedAt).toBeGreaterThanOrEqual(beforeTime);
     });
 
     test("throws error on invalid transition", () => {
