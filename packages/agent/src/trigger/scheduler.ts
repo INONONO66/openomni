@@ -1,5 +1,4 @@
-import { Task, TriggerSignal } from "../task/types";
-import { TaskManager } from "../task/manager";
+import { Task } from "../task/types";
 import { IngressEngine } from "../ingress/engine";
 import type { InboundEvent } from "../ingress/interfaces";
 import { randomUUID } from "crypto";
@@ -207,20 +206,6 @@ export namespace Scheduler {
     return `${taskId}:${triggerId}`;
   }
 
-  function createSignal(
-    trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
-    occurredAt: number,
-  ): TriggerSignal {
-    return {
-      triggerId: trigger.id,
-      type: trigger.type,
-      occurredAt,
-      context: {
-        traceId: randomUUID(),
-      },
-    };
-  }
-
   export async function fire(
     taskId: string,
     trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
@@ -244,7 +229,7 @@ export namespace Scheduler {
     const inboundEvent: InboundEvent = {
       id: randomUUID(),
       surface: "scheduler",
-      name: `scheduler.${trigger.type}`,
+      name: "schedule.fire",
       payload: { taskId, triggerId: trigger.id },
       dedupeKey: `scheduler:${taskId}:${trigger.id}:${timeBucket}`,
       occurredAt: new Date(now).toISOString(),

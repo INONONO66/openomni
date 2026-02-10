@@ -89,7 +89,7 @@ describe("AgentMessenger", () => {
     expect(called).toBe(false);
   });
 
-  it("request sends message with traceId", async () => {
+  it("request sends message with correlationId", async () => {
     const from = `agent-${randomUUID()}`;
     const to = `agent-${randomUUID()}`;
     let captureUnsubscribe: (() => void) | null = null;
@@ -151,16 +151,17 @@ describe("AgentMessenger", () => {
 
     await AgentMessenger.send(reply);
 
-    await expect(requestPromise).resolves.toEqual(reply);
+    return expect(requestPromise).resolves.toEqual(reply);
   });
 
   it("request rejects on timeout", async () => {
-    const envelope = createEnvelope({
+    const envelope = {
+      ...baseEnvelope,
       fromAgentId: `agent-${randomUUID()}`,
       toAgentId: `agent-${randomUUID()}`,
-    });
+    };
 
-    await expect(
+    return expect(
       AgentMessenger.request(envelope, { timeoutMs: 10 }),
     ).rejects.toThrow(MessagingError);
   });
@@ -170,15 +171,18 @@ describe("AgentMessenger", () => {
       toAgentId: "",
     });
 
-    await expect(AgentMessenger.request(invalidEnvelope)).rejects.toThrow(
+    return expect(AgentMessenger.request(invalidEnvelope)).rejects.toThrow(
       MessagingError,
     );
   });
 
   it("Invalid envelope throws MessagingError", async () => {
-    const invalidEnvelope = createEnvelope({ payload: undefined });
+    const invalidEnvelope = {
+      ...baseEnvelope,
+      payload: undefined,
+    };
 
-    await expect(AgentMessenger.send(invalidEnvelope)).rejects.toThrow(
+    return expect(AgentMessenger.send(invalidEnvelope)).rejects.toThrow(
       MessagingError,
     );
   });

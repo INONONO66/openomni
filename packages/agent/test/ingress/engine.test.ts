@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { IngressEngine } from "../../src/ingress/engine";
 import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
@@ -10,6 +10,8 @@ import type {
   RunPlanner,
 } from "../../src/ingress/interfaces";
 import { randomUUID } from "crypto";
+
+const originalIngest = IngressEngine.ingest;
 
 function makeEvent(overrides: Partial<InboundEvent> = {}): InboundEvent {
   return {
@@ -28,7 +30,22 @@ function makeEvent(overrides: Partial<InboundEvent> = {}): InboundEvent {
 
 describe("IngressEngine", () => {
   beforeEach(() => {
+    IngressEngine.ingest = originalIngest;
+    if ((IngressEngine.ingest as unknown as { mock?: unknown }).mock) {
+      (
+        IngressEngine.ingest as unknown as { mockRestore: () => void }
+      ).mockRestore();
+    }
     IngressEngine.reset();
+    IngressEngine.configure({});
+    Session.storage.clear();
+    SurfaceKey.clear();
+    TaskStorage.reset();
+  });
+
+  afterEach(() => {
+    IngressEngine.reset();
+    IngressEngine.configure({});
     Session.storage.clear();
     SurfaceKey.clear();
     const store = TaskStorage.getAdapter();
@@ -38,23 +55,32 @@ describe("IngressEngine", () => {
   describe("validation", () => {
     it("rejects event with missing id", async () => {
       const event = makeEvent({ id: "" });
-      await expect(IngressEngine.ingest(event)).rejects.toThrow(
-        "non-empty string id",
-      );
+      try {
+        await IngressEngine.ingest(event);
+        throw new Error("Expected ingest to throw");
+      } catch (error) {
+        expect(String(error)).toContain("non-empty string id");
+      }
     });
 
     it("rejects event with missing surface", async () => {
       const event = makeEvent({ surface: "" });
-      await expect(IngressEngine.ingest(event)).rejects.toThrow(
-        "non-empty string surface",
-      );
+      try {
+        await IngressEngine.ingest(event);
+        throw new Error("Expected ingest to throw");
+      } catch (error) {
+        expect(String(error)).toContain("non-empty string surface");
+      }
     });
 
     it("rejects event with missing name", async () => {
       const event = makeEvent({ name: "" });
-      await expect(IngressEngine.ingest(event)).rejects.toThrow(
-        "non-empty string name",
-      );
+      try {
+        await IngressEngine.ingest(event);
+        throw new Error("Expected ingest to throw");
+      } catch (error) {
+        expect(String(error)).toContain("non-empty string name");
+      }
     });
   });
 

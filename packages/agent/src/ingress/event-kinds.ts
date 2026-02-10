@@ -16,10 +16,16 @@
 export const CONTROL_EVENT_KINDS = {
   /** User message from Slack, Telegram, TUI, or command */
   INPUT_MESSAGE: "input.message",
+  /** Legacy interactive message */
+  LEGACY_MESSAGE: "message",
   /** External webhook payload */
   INPUT_WEBHOOK: "input.webhook",
   /** Scheduled trigger fire (cron, interval, once) */
   SCHEDULE_FIRE: "schedule.fire",
+  /** Legacy scheduler events */
+  LEGACY_SCHEDULER_CRON: "scheduler.cron",
+  LEGACY_SCHEDULER_INTERVAL: "scheduler.interval",
+  LEGACY_SCHEDULER_ONCE: "scheduler.once",
   /** Subagent spawned */
   SUBAGENT_SPAWNED: "subagent.spawned",
   /** Subagent completed successfully */

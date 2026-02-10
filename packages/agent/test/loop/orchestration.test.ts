@@ -3,7 +3,6 @@ import {
   Orchestrator,
   OrchestratorConfig,
   OrchestratorRunInput,
-  type SessionMode,
 } from "../../src/loop/orchestration";
 import { TaskManager } from "../../src/task/manager";
 import { Task } from "../../src/task/types";
@@ -158,6 +157,7 @@ describe("Orchestrator", () => {
       const input: OrchestratorRunInput = {
         llm: {
           run: async (llmInput, sink: Sink) => {
+            void llmInput;
             sinkCalled = true;
             sink.onSnapshot({
               id: "snap-1",
@@ -234,6 +234,7 @@ describe("Orchestrator", () => {
       const input: OrchestratorRunInput = {
         llm: {
           run: async (llmInput, sink: Sink) => {
+            void llmInput;
             sink.onMessage({
               info: {
                 id: "msg-1",
@@ -294,6 +295,7 @@ describe("Orchestrator", () => {
       const input: OrchestratorRunInput = {
         llm: {
           run: async (llmInput, sink: Sink) => {
+            void llmInput;
             sink.onSnapshot({
               id: "snap-1",
               sessionID: "session-1",
@@ -324,6 +326,7 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const emitSpy = spyOn(Observability, "emitRunEvent");
+      emitSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -340,11 +343,10 @@ describe("Orchestrator", () => {
 
       await Orchestrator.run(config, input);
 
-      expect(emitSpy).toHaveBeenCalledTimes(2);
-      expect(emitSpy.mock.calls[0][0]).toBe(runId);
-      expect(emitSpy.mock.calls[0][1]).toBe("started");
-      expect(emitSpy.mock.calls[1][0]).toBe(runId);
-      expect(emitSpy.mock.calls[1][1]).toBe("completed");
+      const runEvents = emitSpy.mock.calls.filter((call) => call[0] === runId);
+      expect(runEvents).toHaveLength(2);
+      expect(runEvents[0][1]).toBe("started");
+      expect(runEvents[1][1]).toBe("completed");
     });
 
     it("logs permission decision", async () => {
@@ -352,6 +354,7 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const logSpy = spyOn(AuditLog, "logPermission");
+      logSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -377,6 +380,7 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const logSpy = spyOn(AuditLog, "logRunOutcome");
+      logSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -403,6 +407,7 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const persistSpy = spyOn(SummaryDelivery, "persist");
+      persistSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -413,6 +418,7 @@ describe("Orchestrator", () => {
       const input: OrchestratorRunInput = {
         llm: {
           run: async (llmInput, sink: Sink) => {
+            void llmInput;
             sink.onMessage({
               info: {
                 id: "msg-1",
@@ -475,6 +481,7 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const dlqSpy = spyOn(DeadLetterQueue, "add");
+      dlqSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -843,7 +850,9 @@ describe("Orchestrator", () => {
       const runId = await createRun(task.id);
 
       const emitSpy = spyOn(Observability, "emitRunEvent");
+      emitSpy.mockClear();
       const logSpy = spyOn(AuditLog, "logRunOutcome");
+      logSpy.mockClear();
 
       const config: OrchestratorConfig = {
         taskId: task.id,
@@ -862,7 +871,9 @@ describe("Orchestrator", () => {
 
       await Orchestrator.run(config, input);
 
-      expect(emitSpy.mock.calls[1][1]).toBe("failed");
+      const runEvents = emitSpy.mock.calls.filter((call) => call[0] === runId);
+      expect(runEvents).toHaveLength(2);
+      expect(runEvents[1][1]).toBe("failed");
       expect(logSpy).toHaveBeenCalledTimes(1);
       expect(logSpy.mock.calls[0][1]).toHaveProperty("success", false);
     });

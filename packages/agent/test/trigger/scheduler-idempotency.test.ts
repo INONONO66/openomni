@@ -173,12 +173,13 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
   describe("fire() dedupeKey generation", () => {
     let ingestedEvents: any[] = [];
     let originalDateNow: typeof Date.now;
+    let originalIngest: typeof IngressEngine.ingest;
 
     beforeEach(() => {
       ingestedEvents = [];
       originalDateNow = Date.now;
       // Mock IngressEngine.ingest to capture events
-      const originalIngest = IngressEngine.ingest;
+      originalIngest = IngressEngine.ingest;
       (IngressEngine as any).ingest = async (event: any) => {
         ingestedEvents.push(event);
       };
@@ -186,6 +187,7 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
 
     afterEach(() => {
       // Restore original ingest and Date.now
+      IngressEngine.ingest = originalIngest;
       Date.now = originalDateNow;
       ingestedEvents = [];
     });

@@ -11,12 +11,16 @@ import {
 
 describe("event-kinds", () => {
   describe("EventKind constants", () => {
-    it("should export CONTROL_EVENT_KINDS with 6 kinds", () => {
+    it("should export CONTROL_EVENT_KINDS with 10 kinds", () => {
       const kinds = Object.values(CONTROL_EVENT_KINDS);
-      expect(kinds).toHaveLength(6);
+      expect(kinds).toHaveLength(10);
       expect(kinds).toContain("input.message");
+      expect(kinds).toContain("message");
       expect(kinds).toContain("input.webhook");
       expect(kinds).toContain("schedule.fire");
+      expect(kinds).toContain("scheduler.cron");
+      expect(kinds).toContain("scheduler.interval");
+      expect(kinds).toContain("scheduler.once");
       expect(kinds).toContain("subagent.spawned");
       expect(kinds).toContain("subagent.completed");
       expect(kinds).toContain("subagent.failed");
@@ -32,7 +36,7 @@ describe("event-kinds", () => {
 
     it("should export EVENT_KINDS combining both control and telemetry", () => {
       const kinds = Object.values(EVENT_KINDS);
-      expect(kinds).toHaveLength(9);
+      expect(kinds).toHaveLength(13);
       expect(kinds).toContain("input.message");
       expect(kinds).toContain("run.metric");
       expect(kinds).toContain("heartbeat");
