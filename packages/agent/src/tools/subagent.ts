@@ -202,6 +202,12 @@ export namespace Subagent {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
+      announceCompletion(context, input, config, {
+        success: false,
+        summary: "",
+        error: message,
+      });
+
       return {
         id: crypto.randomUUID(),
         toolCallId,
