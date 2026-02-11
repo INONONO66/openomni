@@ -231,7 +231,6 @@ export namespace Scheduler {
     trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
   ): Promise<void> {
     const now = Date.now();
-    const timeBucket = computeTimeBucket(trigger, now);
 
     const key = makeKey(taskId, trigger.id);
     const scheduled = registry.get(key);
