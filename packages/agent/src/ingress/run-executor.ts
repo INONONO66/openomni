@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { TaskManager } from "../task/manager";
 import { ConversationSupervisor } from "../loop/conversation-supervisor";
 import { ExecutionSupervisor } from "../loop/execution-supervisor";
+import { classifyLane } from "./event-kinds";
 import type { RunRequest, RunResult } from "./interfaces";
 
 // ============================================================
@@ -62,6 +63,17 @@ export class DefaultRunExecutor implements RunExecutor {
             success: false,
             summary: "",
             error: "[D6_task_from_task] trigger_task blocked in task context",
+            sessionId,
+            request,
+          };
+        }
+
+        // Anti-loop: Block telemetry events from creating trigger_task
+        if (classifyLane(request.envelope.name) === "telemetry") {
+          return {
+            success: false,
+            summary: "",
+            error: "[anti_loop] telemetry events cannot create trigger_task",
             sessionId,
             request,
           };
