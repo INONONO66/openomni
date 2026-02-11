@@ -268,6 +268,7 @@ export const TriggerSignal = z.object({
       userId: z.string().optional(),
       workspaceId: z.string().optional(),
       traceId: z.string().optional(),
+      originTaskId: z.string().optional(),
     })
     .optional(),
   occurredAt: z.number().int(),

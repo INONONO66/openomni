@@ -9,6 +9,7 @@ import type {
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 import { DispatchInput } from "./schemas";
+import { IngressEngine } from "../ingress/engine";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
@@ -97,6 +98,7 @@ interface DispatchOutput {
   completedTaskIds: string[];
   results: Array<{
     id: string;
+    childTaskId: string;
     status: TaskStatus;
     attempts: number;
     rejections: number;
@@ -169,6 +171,36 @@ export namespace Dispatch {
 
     try {
       const output = await executeDispatch(input, context);
+
+      for (const result of output.results) {
+        const eventName =
+          result.status === "completed"
+            ? "subagent.completed"
+            : "subagent.failed";
+
+        IngressEngine.ingest({
+          id: crypto.randomUUID(),
+          surface: "internal",
+          name: eventName,
+          payload: {
+            taskId: result.id,
+            summary: result.summary,
+            error: result.error,
+          },
+          meta: {
+            originTaskId: result.childTaskId,
+            executionContext: "task",
+            resultSummary: result.summary,
+          },
+          occurredAt: new Date().toISOString(),
+        }).catch((error) => {
+          console.error(
+            `[Dispatch] Failed to emit completion event for task ${result.id} (${eventName}):`,
+            error,
+          );
+        });
+      }
+
       return {
         id: crypto.randomUUID(),
         toolCallId,
@@ -554,12 +586,15 @@ function ensurePersistentSession(
 }
 
 function createChildTask(task: DispatchTask, agentInstanceId: string): string {
-  const childTask = TaskManager.create({
-    title: `Dispatch: ${task.id}`,
-    description: task.description,
-    owner: { type: "agent", id: agentInstanceId },
-    triggers: [{ id: "dispatch-trigger", type: "manual" }],
-  });
+  const childTask = TaskManager.create(
+    {
+      title: `Dispatch: ${task.id}`,
+      description: task.description,
+      owner: { type: "agent", id: agentInstanceId },
+      triggers: [{ id: "dispatch-trigger", type: "manual" }],
+    },
+    { intent: "run_tracking" },
+  );
 
   return childTask.id;
 }
@@ -1103,6 +1138,7 @@ function buildOutput(
 ): DispatchOutput {
   const results = Array.from(graph.states.values()).map((state) => ({
     id: state.task.id,
+    childTaskId: state.childTaskId,
     status: state.status,
     attempts: state.attempts,
     rejections: state.totalRejections,

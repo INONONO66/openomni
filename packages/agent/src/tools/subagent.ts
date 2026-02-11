@@ -11,6 +11,7 @@ import type {
 } from "../loop/orchestration";
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
+import { IngressEngine } from "../ingress/engine";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 
@@ -97,12 +98,15 @@ export namespace Subagent {
 
     const sessionMode: SessionMode = input.sessionId ? "reuse" : "ephemeral";
 
-    const childTask = TaskManager.create({
-      title: `Subagent: ${input.agentType}`,
-      description: input.prompt,
-      owner: { type: "agent", id: input.agentType },
-      triggers: [{ id: "subagent-trigger", type: "manual" }],
-    });
+    const childTask = TaskManager.create(
+      {
+        title: `Subagent: ${input.agentType}`,
+        description: input.prompt,
+        owner: { type: "agent", id: input.agentType },
+        triggers: [{ id: "subagent-trigger", type: "manual" }],
+      },
+      { intent: "run_tracking" },
+    );
 
     const spawnedBy =
       context.parentTaskId && context.parentRunId && context.parentSessionId
@@ -185,6 +189,24 @@ export namespace Subagent {
       announceCompletion(context, input, config, result);
 
       if (result.success) {
+        IngressEngine.ingest({
+          id: crypto.randomUUID(),
+          surface: "internal",
+          name: "subagent.completed",
+          payload: { taskId: childTask.id, summary: result.summary },
+          meta: {
+            originTaskId: childTask.id,
+            executionContext: "task",
+            resultSummary: result.summary,
+          },
+          occurredAt: new Date().toISOString(),
+        }).catch((error) => {
+          console.error(
+            `[Subagent] Failed to emit completion event for task ${childTask.id}:`,
+            error,
+          );
+        });
+
         return {
           id: crypto.randomUUID(),
           toolCallId,
@@ -192,6 +214,24 @@ export namespace Subagent {
           isError: false,
         };
       }
+
+      IngressEngine.ingest({
+        id: crypto.randomUUID(),
+        surface: "internal",
+        name: "subagent.failed",
+        payload: { taskId: childTask.id, error: result.error },
+        meta: {
+          originTaskId: childTask.id,
+          executionContext: "task",
+          error: result.error,
+        },
+        occurredAt: new Date().toISOString(),
+      }).catch((error) => {
+        console.error(
+          `[Subagent] Failed to emit failure event for task ${childTask.id}:`,
+          error,
+        );
+      });
 
       return {
         id: crypto.randomUUID(),

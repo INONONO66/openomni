@@ -59,6 +59,7 @@ export interface RunRequest {
       userId?: string;
       workspaceId?: string;
       traceId?: string;
+      originTaskId?: string;
     };
     occurredAt: number;
   };

@@ -44,6 +44,26 @@ export function computeTimeBucket(
   }
 }
 
+/**
+ * Build standardized deduplication key for scheduler events.
+ * Format: sched:{taskId}:{triggerId}:{timeBucket}
+ *
+ * @param taskId - Task identifier
+ * @param triggerId - Trigger identifier
+ * @param trigger - Trigger configuration
+ * @param now - Current timestamp in milliseconds
+ * @returns Dedupe key string
+ */
+export function buildSchedulerDedupeKey(
+  taskId: string,
+  triggerId: string,
+  trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
+  now: number,
+): string {
+  const timeBucket = computeTimeBucket(trigger, now);
+  return `sched:${taskId}:${triggerId}:${timeBucket}`;
+}
+
 export namespace CronParser {
   export interface CronFields {
     minute: number[];
@@ -211,7 +231,6 @@ export namespace Scheduler {
     trigger: Task.TriggerCron | Task.TriggerInterval | Task.TriggerOnce,
   ): Promise<void> {
     const now = Date.now();
-    const timeBucket = computeTimeBucket(trigger, now);
 
     const key = makeKey(taskId, trigger.id);
     const scheduled = registry.get(key);
@@ -231,7 +250,7 @@ export namespace Scheduler {
       surface: "scheduler",
       name: "schedule.fire",
       payload: { taskId, triggerId: trigger.id },
-      dedupeKey: `scheduler:${taskId}:${trigger.id}:${timeBucket}`,
+      dedupeKey: buildSchedulerDedupeKey(taskId, trigger.id, trigger, now),
       occurredAt: new Date(now).toISOString(),
       meta: {
         taskId,
