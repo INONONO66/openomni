@@ -39,6 +39,8 @@ export {
 
 export { RunWorker } from "./run-worker";
 
+export { FileLock } from "./file-lock";
+
 export { DLQEntry, DeadLetterQueue } from "./dlq";
 
 export { SummaryTemplate, SummaryData, SummaryDelivery } from "./summary";
