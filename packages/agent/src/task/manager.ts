@@ -708,7 +708,7 @@ export namespace TaskManager {
 
     while (currentRunId) {
       if (visited.has(currentRunId)) {
-        break; // Cycle protection
+        break;
       }
       visited.add(currentRunId);
 
@@ -717,13 +717,18 @@ export namespace TaskManager {
         break;
       }
 
-      const parentRun = store.run.get(run.spawnedBy.runId);
+      const parentRunId = run.spawnedBy.runId;
+      if (visited.has(parentRunId)) {
+        break;
+      }
+
+      const parentRun = store.run.get(parentRunId);
       if (!parentRun) {
         break;
       }
 
       lineage.push(parentRun);
-      currentRunId = parentRun.runId;
+      currentRunId = parentRunId;
     }
 
     return lineage;
