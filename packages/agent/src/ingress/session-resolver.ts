@@ -10,7 +10,22 @@ export namespace SessionResolver {
     isNew: boolean;
   }
 
-  function extractSurfaceKey(source: EventEnvelope["source"]): string {
+  export function extractSurfaceKey(
+    source: EventEnvelope["source"],
+    meta?: Record<string, unknown>,
+  ): string {
+    const channelKind = meta?.channelKind as string | undefined;
+    const channelId = meta?.channelId as string | undefined;
+    const threadId = meta?.threadId as string | undefined;
+
+    if (source.id && channelKind && channelId) {
+      const parts = [source.type, source.id, channelKind, channelId];
+      if (threadId) {
+        parts.push("thread", threadId);
+      }
+      return parts.join(":");
+    }
+
     if (source.id) {
       return `${source.type}:${source.id}`;
     }
@@ -25,7 +40,7 @@ export namespace SessionResolver {
     },
     projector: EventProjector = DefaultEventProjector,
   ): ResolveResult {
-    const surfaceKey = extractSurfaceKey(event.source);
+    const surfaceKey = extractSurfaceKey(event.source, event.meta);
     const existingSessionId = SurfaceKey.lookup(surfaceKey);
 
     let session: Session.Info;

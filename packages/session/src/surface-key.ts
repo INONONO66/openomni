@@ -3,13 +3,42 @@
  * Provides bidirectional lookup for routing events to sessions.
  *
  * Key format: `<surface-type>:<surface-specific-path>`
- * Examples:
- *   - slack:workspaceA:channel:C123:thread:171000
- *   - tui:/Users/ino/Develop/OpenOmni
- *   - telegram:botId:chat:chatId
+ *
+ * Channel/peer kind encoding:
+ *   - DM:      slack:workspaceA:dm:U123
+ *   - Group:   slack:workspaceA:group:C123
+ *   - Thread:  slack:workspaceA:group:C123:thread:171000
+ *   - Channel: slack:workspaceA:channel:C123
+ *   - TUI:     tui:/Users/ino/Develop/OpenOmni
+ *   - Chat:    telegram:botId:chat:chatId
+ *
+ * The `ChannelKind` type defines recognized channel/peer kinds.
+ * Use `SurfaceKey.fromChannel()` for structured creation with explicit kind.
  */
 
 export namespace SurfaceKey {
+  /**
+   * Recognized channel/peer kinds for explicit key encoding.
+   * - dm: Direct message (1:1 peer conversation)
+   * - group: Group/multi-party channel
+   * - channel: Generic named channel (backward compat)
+   * - thread: Thread within a channel/group
+   * - chat: Generic chat (e.g., telegram)
+   */
+  export type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
+
+  export interface ChannelDescriptor {
+    /** Surface type (e.g., "slack", "telegram", "tui") */
+    surface: string;
+    /** Namespace/workspace/bot identifier */
+    namespace: string;
+    /** Channel/peer kind */
+    kind: ChannelKind;
+    /** Channel/peer identifier */
+    id: string;
+    /** Optional thread identifier (creates a sub-key under the channel) */
+    threadId?: string;
+  }
   // Forward index: surfaceKey → sessionId
   const keyToSession = new Map<string, string>();
 
@@ -46,11 +75,60 @@ export namespace SurfaceKey {
     return key;
   }
 
-  /**
-   * Look up the session ID for a given surfaceKey.
-   * @param key - The surfaceKey to look up
-   * @returns Session ID if found, undefined otherwise
-   */
+  const KNOWN_KINDS: ReadonlySet<string> = new Set<ChannelKind>([
+    "dm",
+    "group",
+    "channel",
+    "thread",
+    "chat",
+  ]);
+
+  export function fromChannel(descriptor: ChannelDescriptor): string {
+    const parts = [
+      descriptor.surface,
+      descriptor.namespace,
+      descriptor.kind,
+      descriptor.id,
+    ];
+    if (descriptor.threadId) {
+      parts.push("thread", descriptor.threadId);
+    }
+    return create(parts);
+  }
+
+  export interface ParsedKey {
+    surface: string;
+    namespace: string;
+    kind: ChannelKind | undefined;
+    id: string | undefined;
+    threadId: string | undefined;
+  }
+
+  export function parse(key: string): ParsedKey {
+    const segments = key.split(":");
+    const surface = segments[0] ?? "";
+    const namespace = segments[1] ?? "";
+
+    let kind: ChannelKind | undefined;
+    let id: string | undefined;
+    let threadId: string | undefined;
+
+    for (let i = 2; i < segments.length; i++) {
+      const seg = segments[i];
+      if (KNOWN_KINDS.has(seg)) {
+        if (seg === "thread") {
+          threadId = segments[i + 1];
+          i++;
+        } else {
+          kind = seg as ChannelKind;
+          id = segments[i + 1];
+          i++;
+        }
+      }
+    }
+
+    return { surface, namespace, kind, id, threadId };
+  }
   export function lookup(key: string): string | undefined {
     return keyToSession.get(key);
   }
