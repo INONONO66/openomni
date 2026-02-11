@@ -112,16 +112,31 @@ describe("DefaultRunExecutor", () => {
   });
 
   describe("run_agent", () => {
-    it("creates task and returns success without llm", async () => {
+    it("routes through ConversationSupervisor and returns result", async () => {
       const executor = new DefaultRunExecutor();
       const request = makeRunRequest({ kind: "run_agent" });
 
       const result = await executor.execute(request);
 
-      expect(result.success).toBe(true);
+      // ConversationSupervisor.run() is a stub — returns error type
+      expect(result.success).toBe(false);
       expect(result.runId).toBeDefined();
-      expect(result.summary).toContain("Run scheduled");
+      expect(result.error).toContain("ConversationSupervisor");
       expect(result.sessionId).toBe(request.session.id);
+    });
+
+    it("rejects direct ExecutionSupervisor bypass attempts", async () => {
+      const executor = new DefaultRunExecutor();
+      const request = makeRunRequest({
+        kind: "run_agent",
+        agentConfig: { agentType: "execution_direct" },
+      });
+
+      const result = await executor.execute(request);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("ConversationSupervisor");
+      expect(result.error).toContain("D9");
     });
 
     it("uses envelope.name in task title", async () => {

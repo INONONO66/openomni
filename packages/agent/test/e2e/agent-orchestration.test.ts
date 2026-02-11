@@ -6,16 +6,99 @@ import { IngressEngine } from "../../src/ingress/engine";
 import type {
   DeliveryAdapter,
   InboundEvent,
+  RunRequest,
   RunResult,
 } from "../../src/ingress/interfaces";
+import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
   Orchestrator,
   type OrchestratorRunInput,
 } from "../../src/loop/orchestration";
+import { RunWorker } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import type { Task, TaskRun } from "../../src/task/types";
 import { Subagent, type SubagentContext } from "../../src/tools/subagent";
+import { randomUUID } from "crypto";
+
+class TestRunExecutor implements RunExecutor {
+  private llm?: OrchestratorRunInput["llm"];
+
+  constructor(llm?: OrchestratorRunInput["llm"]) {
+    this.llm = llm;
+  }
+
+  async execute(request: RunRequest): Promise<RunResult> {
+    const sessionId = request.session.id;
+
+    if (request.kind === "run_agent") {
+      const task = TaskManager.create({
+        title: `Ingress run: ${request.envelope.name}`,
+        owner: {
+          type: request.envelope.userId ? "user" : "agent",
+          id: request.envelope.userId ?? "system",
+        },
+        triggers: [{ id: randomUUID(), type: "manual" }],
+      });
+
+      const signal = {
+        triggerId: task.triggers[0]!.id,
+        type: "manual" as const,
+        context: { conversationSessionId: sessionId },
+        occurredAt: Date.now(),
+      };
+
+      const triggerResult = await TaskManager.trigger(task.id, signal);
+      if ("error" in triggerResult) {
+        return {
+          success: false,
+          summary: "",
+          error: `Failed to create run: ${triggerResult.error}`,
+          sessionId,
+          request,
+        };
+      }
+
+      if (this.llm) {
+        const result = await RunWorker.run(
+          {
+            taskId: task.id,
+            runId: triggerResult.runId,
+            maxRetries: 0,
+            sessionMode: "persistent",
+          },
+          { llm: this.llm, input: {} },
+        );
+
+        return {
+          success: result.success,
+          summary: result.summary,
+          error: result.error,
+          runId: triggerResult.runId,
+          sessionId,
+          request,
+        };
+      }
+
+      TaskManager.setRunStatus(triggerResult.runId, "done");
+      return {
+        success: true,
+        summary: `Agent run completed for ${request.envelope.name}`,
+        runId: triggerResult.runId,
+        sessionId,
+        request,
+      };
+    }
+
+    return {
+      success: false,
+      summary: "",
+      error: `Unsupported kind: ${request.kind}`,
+      sessionId,
+      request,
+    };
+  }
+}
 
 const RUN_STATUSES: TaskRun["status"][] = [
   "scheduled",
@@ -132,8 +215,8 @@ describe("Agent orchestration e2e", () => {
     IngressEngine.reset();
   });
 
-  it("spawns a child task+run through Subagent.execute and runs Orchestrator.run", async () => {
-    const runSpy = spyOn(Orchestrator, "run");
+  it("spawns a child task+run through Subagent.execute and runs RunWorker.run", async () => {
+    const runSpy = spyOn(RunWorker, "run");
     runSpy.mockClear();
 
     try {
@@ -255,7 +338,7 @@ describe("Agent orchestration e2e", () => {
   });
 
   it("executes multi-level subagent chain depth 0 -> 1 -> 2", async () => {
-    const runSpy = spyOn(Orchestrator, "run");
+    const runSpy = spyOn(RunWorker, "run");
     runSpy.mockClear();
 
     const seenPrompts: string[] = [];
@@ -376,7 +459,7 @@ describe("Agent orchestration e2e", () => {
       },
     };
 
-    IngressEngine.configure({ llm, delivery });
+    IngressEngine.configure({ executor: new TestRunExecutor(llm), delivery });
 
     const event: InboundEvent = {
       id: "ingress-event-1",
