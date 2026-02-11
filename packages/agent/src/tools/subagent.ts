@@ -9,6 +9,7 @@ import type {
 } from "../loop/orchestration";
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
+import { IngressEngine } from "../ingress/engine";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 
@@ -157,6 +158,19 @@ export namespace Subagent {
       );
 
       if (result.success) {
+        IngressEngine.ingest({
+          id: crypto.randomUUID(),
+          surface: "internal",
+          name: "subagent.completed",
+          payload: { taskId: childTask.id, summary: result.summary },
+          meta: {
+            originTaskId: childTask.id,
+            executionContext: "task",
+            resultSummary: result.summary,
+          },
+          occurredAt: new Date().toISOString(),
+        }).catch(() => {});
+
         return {
           id: crypto.randomUUID(),
           toolCallId,
@@ -164,6 +178,19 @@ export namespace Subagent {
           isError: false,
         };
       }
+
+      IngressEngine.ingest({
+        id: crypto.randomUUID(),
+        surface: "internal",
+        name: "subagent.failed",
+        payload: { taskId: childTask.id, error: result.error },
+        meta: {
+          originTaskId: childTask.id,
+          executionContext: "task",
+          error: result.error,
+        },
+        occurredAt: new Date().toISOString(),
+      }).catch(() => {});
 
       return {
         id: crypto.randomUUID(),

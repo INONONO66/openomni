@@ -351,6 +351,16 @@ export namespace TaskManager {
         return { error: "not_found" };
       }
 
+      if (
+        signal.context?.originTaskId &&
+        signal.context.originTaskId === taskId
+      ) {
+        console.warn(
+          `[anti-loop] self-retrigger blocked in TaskManager.trigger: originTaskId=${signal.context.originTaskId}, taskId=${taskId}`,
+        );
+        return { error: "denied" };
+      }
+
       const now = Date.now();
       const policy = task.policy;
 
