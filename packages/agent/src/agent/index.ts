@@ -34,3 +34,10 @@ export {
   AgentDefinitionSchema,
   type AgentDefinition,
 } from "./registry";
+
+export {
+  AgentDiscovery,
+  parseFrontmatter,
+  type AgentLoadResult,
+  type AgentDiscoveryOptions,
+} from "./discovery";
