@@ -9,3 +9,4 @@ export type { Checkpoint } from "./checkpoint";
 export { CheckpointManager } from "./checkpoint";
 export type { RecoveryAction, RecoveryResult } from "./recovery";
 export { CrashRecovery } from "./recovery";
+export { PolicyError } from "./errors";
