@@ -46,6 +46,9 @@ export interface DispatchContext {
   review?: (
     input: DispatchReviewInput,
   ) => DispatchReviewDecision | Promise<DispatchReviewDecision>;
+  parentTaskId?: string;
+  parentRunId?: string;
+  parentSessionId?: string;
 }
 
 interface DispatchTaskState {
@@ -611,10 +614,20 @@ async function startTaskRun(
 
   state.attempts += 1;
 
+  const spawnedBy =
+    context.parentTaskId && context.parentRunId && context.parentSessionId
+      ? {
+          taskId: context.parentTaskId,
+          runId: context.parentRunId,
+          sessionId: context.parentSessionId,
+        }
+      : undefined;
+
   const triggerResult = await TaskManager.trigger(state.childTaskId, {
     triggerId: "dispatch-trigger",
     type: "manual",
     occurredAt: Date.now(),
+    spawnedBy,
   });
 
   if ("error" in triggerResult) {
@@ -924,10 +937,20 @@ async function requestHandoffDocument(
     return `Handoff unavailable: unknown agent type ${state.task.agentType}`;
   }
 
+  const handoffSpawnedBy =
+    context.parentTaskId && context.parentRunId && context.parentSessionId
+      ? {
+          taskId: context.parentTaskId,
+          runId: context.parentRunId,
+          sessionId: context.parentSessionId,
+        }
+      : undefined;
+
   const triggerResult = await TaskManager.trigger(state.childTaskId, {
     triggerId: "dispatch-trigger",
     type: "manual",
     occurredAt: Date.now(),
+    spawnedBy: handoffSpawnedBy,
   });
 
   if ("error" in triggerResult) {
