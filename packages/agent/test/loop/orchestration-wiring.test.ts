@@ -7,7 +7,7 @@ import {
   afterAll,
   spyOn,
 } from "bun:test";
-import { Orchestrator } from "../../src/loop/orchestration";
+import { RunWorker as Orchestrator } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";

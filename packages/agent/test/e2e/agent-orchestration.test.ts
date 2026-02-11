@@ -11,9 +11,9 @@ import type {
 } from "../../src/ingress/interfaces";
 import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
-  Orchestrator,
+  RunWorker as Orchestrator,
   type OrchestratorRunInput,
-} from "../../src/loop/orchestration";
+} from "../../src/loop/run-worker";
 import { RunWorker } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";

@@ -9,7 +9,7 @@ import { FilesystemWatcher } from "../../src/trigger/watcher";
 import { Router } from "../../src/loop/router";
 import { Dispatcher } from "../../src/loop/dispatcher";
 import { Envelope } from "../../src/loop/envelope";
-import { Orchestrator } from "../../src/loop/orchestration";
+import { RunWorker as Orchestrator } from "../../src/loop/run-worker";
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));

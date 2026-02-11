@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import {
-  Orchestrator,
+  RunWorker as Orchestrator,
   OrchestratorConfig,
   OrchestratorRunInput,
-} from "../../src/loop/orchestration";
+} from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { Task } from "../../src/task/types";
 import { TaskStorage } from "../../src/task/storage";
