@@ -18,20 +18,22 @@ function makeRunRequest(overrides: Partial<RunRequest> = {}): RunRequest {
       model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
     });
 
+  const envelope = overrides.envelope ?? {
+    eventId: randomUUID(),
+    name: "input.message",
+    source: { type: "test", id: "test:source" },
+    receivedAt: now,
+    occurredAt: now,
+    payload: "test payload",
+    userId: "user1",
+    workspaceId: "workspace1",
+    traceId: randomUUID(),
+  };
+
   return {
     kind: overrides.kind ?? "run_agent",
     session,
-    envelope: overrides.envelope ?? {
-      eventId: randomUUID(),
-      name: "test.event",
-      source: { type: "test", id: "test:source" },
-      receivedAt: now,
-      occurredAt: now,
-      payload: "test payload",
-      userId: "user1",
-      workspaceId: "workspace1",
-      traceId: randomUUID(),
-    },
+    envelope,
     taskId: overrides.taskId,
     triggerSignal: overrides.triggerSignal,
     agentConfig: overrides.agentConfig,
