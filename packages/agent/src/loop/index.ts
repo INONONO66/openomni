@@ -76,3 +76,11 @@ export {
   StepOutcome,
   ExecutionSupervisor,
 } from "./execution-supervisor";
+
+export {
+  resolveAgentDefinition,
+  resolveLLM,
+  resolveToolExecutor,
+  resolveAgentForWorker,
+  fallbackToolExecutor,
+} from "./agent-resolution";
