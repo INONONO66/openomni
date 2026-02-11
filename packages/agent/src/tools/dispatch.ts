@@ -49,6 +49,7 @@ export interface DispatchContext {
   parentTaskId?: string;
   parentRunId?: string;
   parentSessionId?: string;
+  insideDelegation?: boolean;
 }
 
 interface DispatchTaskState {
@@ -155,6 +156,16 @@ export namespace Dispatch {
     }
 
     const input = parseResult.data;
+
+    if (context.insideDelegation) {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId,
+        output:
+          "Nested delegation not allowed: dispatch child cannot call subagent/dispatch",
+        isError: true,
+      };
+    }
 
     try {
       const output = await executeDispatch(input, context);
@@ -672,6 +683,7 @@ async function startTaskRun(
     sessionId: state.sessionId,
     maxSubagentDepth: context.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH,
     currentDepth: (context.parentDepth ?? 0) + 1,
+    insideDelegation: true,
   };
 
   const orchestratorInput: OrchestratorRunInput = {
@@ -975,6 +987,7 @@ async function requestHandoffDocument(
     sessionId: state.sessionId,
     maxSubagentDepth: context.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH,
     currentDepth: (context.parentDepth ?? 0) + 1,
+    insideDelegation: true,
   };
 
   const orchestratorInput: OrchestratorRunInput = {

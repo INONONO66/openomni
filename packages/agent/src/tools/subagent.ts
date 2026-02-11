@@ -21,6 +21,8 @@ export interface SubagentContext {
   parentTaskId?: string;
   parentRunId?: string;
   parentSessionId?: string;
+  /** When true, this tool is executing inside a delegated worker and nested delegation is blocked. */
+  insideDelegation?: boolean;
 }
 
 export interface SubagentResult {
@@ -47,6 +49,17 @@ export namespace Subagent {
     }
 
     const input = parseResult.data;
+
+    if (context.insideDelegation) {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId,
+        output:
+          "Nested delegation not allowed: subagent cannot call subagent/dispatch",
+        isError: true,
+      };
+    }
+
     const maxDepth = context.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH;
     const childDepth = context.parentDepth + 1;
 
@@ -144,6 +157,7 @@ export namespace Subagent {
       sessionId: input.sessionId,
       maxSubagentDepth: maxDepth,
       currentDepth: childDepth,
+      insideDelegation: true,
     };
 
     const orchestratorInput: OrchestratorRunInput = {
