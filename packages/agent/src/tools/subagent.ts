@@ -2,12 +2,12 @@ import { Session } from "@openomni/session";
 import type { ToolResult } from "@openomni/protocol";
 import { SubagentInput } from "./schemas";
 import { BuiltinAgentRegistry } from "../agent/registry";
-import {
-  Orchestrator,
-  type OrchestratorConfig,
-  type OrchestratorRunInput,
-  type SessionMode,
+import type {
+  OrchestratorConfig,
+  OrchestratorRunInput,
+  SessionMode,
 } from "../loop/orchestration";
+import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
@@ -186,7 +186,7 @@ export namespace Subagent {
     abortSignal?: AbortSignal,
   ) {
     if (!abortSignal) {
-      return Orchestrator.run(config, input);
+      return RunWorker.run(config, input);
     }
 
     if (abortSignal.aborted) {
@@ -212,7 +212,7 @@ export namespace Subagent {
 
       abortSignal.addEventListener("abort", onAbort, { once: true });
 
-      Orchestrator.run(config, input)
+      RunWorker.run(config, input)
         .then((result) => {
           abortSignal.removeEventListener("abort", onAbort);
           resolve(result);
