@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { normalize, Envelope, type EventEnvelope } from "../loop/envelope";
 import { SessionResolver } from "./session-resolver";
 import { TaskManager } from "../task/manager";
-import { Orchestrator } from "../loop/orchestration";
+import { RunWorker } from "../loop/run-worker";
 import type {
   InboundEvent,
   RunRequest,

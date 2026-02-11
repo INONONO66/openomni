@@ -3,7 +3,7 @@ import { Session } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
-import { FileLock } from "../../src/tools/dispatch";
+import { FileLock } from "../../src/loop/file-lock";
 import { RunWorker } from "../../src/loop/run-worker";
 import type { OrchestratorRunInput } from "../../src/loop/orchestration";
 import type { Sink, ToolCall, ToolResult } from "@openomni/protocol";

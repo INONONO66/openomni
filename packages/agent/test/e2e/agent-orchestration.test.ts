@@ -11,9 +11,9 @@ import type {
 } from "../../src/ingress/interfaces";
 import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
-  Orchestrator,
+  RunWorker,
   type OrchestratorRunInput,
-} from "../../src/loop/orchestration";
+} from "../../src/loop/run-worker";
 import { RunWorker } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
@@ -308,7 +308,7 @@ describe("Agent orchestration e2e", () => {
       },
     };
 
-    const result = await Orchestrator.run(
+    const result = await RunWorker.run(
       {
         taskId: task.id,
         runId,
@@ -559,7 +559,7 @@ describe("Agent orchestration e2e", () => {
       },
     };
 
-    const result = await Orchestrator.run(
+    const result = await RunWorker.run(
       {
         taskId: mainTask.id,
         runId: mainRunId,

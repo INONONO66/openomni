@@ -4,11 +4,8 @@ import { Session } from "@openomni/session";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
 import { AgentMessenger } from "../../src/agent/communication";
 import { TaskStorage } from "../../src/task/storage";
-import {
-  Dispatch,
-  FileLock,
-  type DispatchReviewInput,
-} from "../../src/tools/dispatch";
+import { Dispatch, type DispatchReviewInput } from "../../src/tools/dispatch";
+import { FileLock } from "../../src/loop/file-lock";
 import { TaskManager } from "../../src/task/manager";
 
 interface MockCall {

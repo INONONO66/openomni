@@ -8,7 +8,7 @@ import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   SessionMode,
-} from "../loop/orchestration";
+} from "../loop/run-worker";
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 import { IngressEngine } from "../ingress/engine";

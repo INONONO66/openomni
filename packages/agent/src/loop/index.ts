@@ -35,9 +35,12 @@ export {
   OrchestrationState,
   ToolExecutor,
   SessionMode,
-} from "./orchestration";
+  OrchestratorRunInput,
+} from "./run-worker";
 
 export { RunWorker } from "./run-worker";
+
+export { FileLock } from "./file-lock";
 
 export { DLQEntry, DeadLetterQueue } from "./dlq";
 
@@ -74,3 +77,11 @@ export {
   StepOutcome,
   ExecutionSupervisor,
 } from "./execution-supervisor";
+
+export {
+  resolveAgentDefinition,
+  resolveLLM,
+  resolveToolExecutor,
+  resolveAgentForWorker,
+  fallbackToolExecutor,
+} from "./agent-resolution";
