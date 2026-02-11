@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { TaskManager } from "../task/manager";
-import { Orchestrator } from "../loop/orchestration";
+import { ConversationSupervisor } from "../loop/conversation-supervisor";
+import { ExecutionSupervisor } from "../loop/execution-supervisor";
 import type { RunRequest, RunResult } from "./interfaces";
 
 // ============================================================
@@ -123,43 +124,114 @@ export class DefaultRunExecutor implements RunExecutor {
           };
         }
 
-        if (!this.config.llm) {
+        // Guard: reject direct ExecutionSupervisor bypass (D9)
+        if (request.agentConfig?.agentType === "execution_direct") {
           return {
-            success: true,
-            summary: `Run scheduled: ${triggerResult.runId}`,
-            runId: triggerResult.runId,
+            success: false,
+            summary: "",
+            error:
+              "External events must route through ConversationSupervisor (D9). " +
+              "Direct ExecutionSupervisor entry is rejected.",
             sessionId,
             request,
           };
         }
 
-        const orchResult = await Orchestrator.run(
+        // External run_agent → ConversationSupervisor first (D9)
+        const conversationResult = await ConversationSupervisor.run(
           {
-            taskId: task.id,
-            runId: triggerResult.runId,
-            maxRetries: request.agentConfig?.maxRetries ?? 1,
-            sessionMode: request.agentConfig?.sessionMode ?? "persistent",
-            sessionId,
+            conversationSessionId: sessionId,
+            sessionMode:
+              request.agentConfig?.sessionMode === "reuse" ||
+              request.agentConfig?.sessionMode === "persistent"
+                ? request.agentConfig.sessionMode
+                : "persistent",
+            agentId: request.agentConfig?.agentType,
+            traceId: request.envelope.traceId,
           },
           {
-            llm: this.config.llm,
-            input: {
-              prompt:
-                typeof request.envelope.payload === "string"
-                  ? request.envelope.payload
-                  : JSON.stringify(request.envelope.payload),
+            content:
+              typeof request.envelope.payload === "string"
+                ? request.envelope.payload
+                : JSON.stringify(request.envelope.payload),
+            metadata: {
+              taskId: task.id,
+              runId: triggerResult.runId,
+              userId: request.envelope.userId,
+              workspaceId: request.envelope.workspaceId,
             },
           },
         );
 
-        return {
-          success: orchResult.success,
-          summary: orchResult.summary,
-          error: orchResult.error || undefined,
-          runId: triggerResult.runId,
-          sessionId,
-          request,
-        };
+        switch (conversationResult.type) {
+          case "immediate":
+            return {
+              success: true,
+              summary: conversationResult.response,
+              runId: triggerResult.runId,
+              sessionId,
+              request,
+            };
+
+          case "plan_pending":
+            return {
+              success: true,
+              summary: `Plan pending approval: ${conversationResult.plan.title}`,
+              runId: triggerResult.runId,
+              sessionId,
+              request,
+            };
+
+          case "execution_forked": {
+            const fork = conversationResult.fork;
+            const execResult = await ExecutionSupervisor.run({
+              history: {
+                summary: fork.summarizedHistory.contextSummary,
+                constraints: fork.summarizedHistory.constraints,
+              },
+              plan: {
+                planId: fork.approvedPlan.planId,
+                objective: fork.approvedPlan.description,
+                steps: fork.approvedPlan.workItems.map((item, i) => ({
+                  stepId: `step-${i}`,
+                  description: item.description,
+                  dependsOn: (item.dependsOn ?? []).map((d) => `step-${d}`),
+                })),
+              },
+              sessionMode: "persistent",
+              sessionId: fork.conversationSessionId,
+              traceId: fork.traceId,
+            });
+
+            return {
+              success: execResult.success,
+              summary: execResult.summary,
+              error: execResult.error,
+              runId: triggerResult.runId,
+              sessionId,
+              request,
+            };
+          }
+
+          case "ended":
+            return {
+              success: true,
+              summary: conversationResult.reason,
+              runId: triggerResult.runId,
+              sessionId,
+              request,
+            };
+
+          case "error":
+            return {
+              success: false,
+              summary: "",
+              error: conversationResult.error,
+              runId: triggerResult.runId,
+              sessionId,
+              request,
+            };
+        }
       }
 
       case "notify_only": {
