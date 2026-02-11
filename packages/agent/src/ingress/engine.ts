@@ -56,6 +56,14 @@ export const DefaultRunPlanner: RunPlanner = {
       return [];
     }
 
+    // D6: Block trigger_task from task execution context
+    if (envelope.meta?.executionContext === "task") {
+      console.warn(
+        `[D6] trigger_task blocked: executionContext=task, event=${envelope.name}`,
+      );
+      return []; // task context cannot create trigger_task
+    }
+
     const isScheduled =
       envelope.source.type === "scheduler" ||
       envelope.source.type === "cron" ||

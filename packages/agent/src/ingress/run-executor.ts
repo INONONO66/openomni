@@ -56,6 +56,17 @@ export class DefaultRunExecutor implements RunExecutor {
 
     switch (request.kind) {
       case "trigger_task": {
+        // D6: Block trigger_task execution in task context
+        if (request.envelope.meta?.executionContext === "task") {
+          return {
+            success: false,
+            summary: "",
+            error: "[D6_task_from_task] trigger_task blocked in task context",
+            sessionId,
+            request,
+          };
+        }
+
         if (!request.taskId || !request.triggerSignal) {
           return {
             success: false,
