@@ -94,6 +94,7 @@ interface DispatchOutput {
   completedTaskIds: string[];
   results: Array<{
     id: string;
+    childTaskId: string;
     status: TaskStatus;
     attempts: number;
     rejections: number;
@@ -173,7 +174,7 @@ export namespace Dispatch {
             error: result.error,
           },
           meta: {
-            originTaskId: result.id,
+            originTaskId: result.childTaskId,
             executionContext: "task",
             resultSummary: result.summary,
           },
@@ -1096,6 +1097,7 @@ function buildOutput(
 ): DispatchOutput {
   const results = Array.from(graph.states.values()).map((state) => ({
     id: state.task.id,
+    childTaskId: state.childTaskId,
     status: state.status,
     attempts: state.attempts,
     rejections: state.totalRejections,
