@@ -39,7 +39,6 @@ src/
 │   ├── conversation-supervisor.ts  # ConversationSupervisor — user-facing orchestration (requirement gathering, plan authoring, approval gate)
 │   ├── execution-supervisor.ts     # ExecutionSupervisor — execution orchestration (task decomposition, accept/reject, re-dispatch)
 │   ├── run-worker.ts               # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
-│   ├── orchestration.ts            # Orchestrator.run() — compatibility facade (delegates to RunWorker.run)
 │   ├── envelope.ts    # EventEnvelope — normalize + validate incoming events
 │   ├── router.ts      # Router — match events to rules, produce RoutingDecision
 │   ├── dispatcher.ts  # Dispatcher — execute routed events
@@ -111,7 +110,6 @@ Legacy Loop (still active):
 
 ## ANTI-PATTERNS
 
-- `orchestration.ts` is now a compatibility facade — use `RunWorker.run()` for new code. `Orchestrator.run()` delegates to `RunWorker.run()` internally.
 - `supervisor.ts` in loop/ is older — `run-supervisor.ts` is the current implementation. Do NOT extend supervisor.ts.
 - QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
