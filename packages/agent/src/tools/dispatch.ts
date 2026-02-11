@@ -2,11 +2,11 @@ import type { ToolResult } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { AgentMessenger } from "../agent/communication";
 import { BuiltinAgentRegistry } from "../agent/registry";
-import {
-  Orchestrator,
-  type OrchestratorConfig,
-  type OrchestratorRunInput,
+import type {
+  OrchestratorConfig,
+  OrchestratorRunInput,
 } from "../loop/orchestration";
+import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 import { DispatchInput } from "./schemas";
 
@@ -769,7 +769,7 @@ async function executeChildRunWithAbort(
 
     abortSignal.addEventListener("abort", onAbort, { once: true });
 
-    Orchestrator.run(config, input)
+    RunWorker.run(config, input)
       .then((result) => {
         finalize(result);
       })
