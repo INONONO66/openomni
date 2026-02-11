@@ -14,9 +14,13 @@ export {
   AgentRuntimeSchema,
   type AgentRuntime,
   AgentRegistry,
+  InMemoryAgentRegistryStore,
+  type AgentRegistryStore,
   createAgentIdentity,
   createAgentRuntime,
 } from "./profile";
+
+export { FileAgentRegistryStore } from "./file-registry-storage";
 
 export {
   AgentMessenger,
