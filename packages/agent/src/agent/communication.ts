@@ -52,6 +52,15 @@ export interface MessageEnvelope<TPayload = unknown> {
 }
 
 /**
+ * Allow pattern for A2A communication authorization.
+ * Supports exact agent IDs or "*" wildcard for any agent.
+ */
+export interface AllowPattern {
+  from: string;
+  to: string;
+}
+
+/**
  * Configuration options for message delivery
  */
 export interface DeliveryOptions {
@@ -75,6 +84,8 @@ export namespace AgentMessenger {
     string,
     ((envelope: MessageEnvelope) => void)[]
   >();
+  let allowPatterns: AllowPattern[] | null = null;
+  let bothPolicyEnabled = false;
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
     return Boolean(
@@ -82,6 +93,30 @@ export namespace AgentMessenger {
       envelope.fromAgentId &&
       envelope.payload !== undefined,
     );
+  };
+
+  const isAllowed = (from: string, to: string): boolean => {
+    if (allowPatterns === null) return true;
+    return allowPatterns.some(
+      (p) =>
+        (p.from === "*" || p.from === from) && (p.to === "*" || p.to === to),
+    );
+  };
+
+  export const configureAllowPatterns = (patterns: AllowPattern[]): void => {
+    allowPatterns = [...patterns];
+  };
+
+  export const resetAllowPatterns = (): void => {
+    allowPatterns = null;
+  };
+
+  export const enableBothPolicy = (): void => {
+    bothPolicyEnabled = true;
+  };
+
+  export const resetBothPolicy = (): void => {
+    bothPolicyEnabled = false;
   };
 
   const createAuditEntry = (envelope: MessageEnvelope): AuditEntry => {
@@ -102,7 +137,41 @@ export namespace AgentMessenger {
       throw new MessagingError("Invalid message envelope");
     }
 
+    if (!isAllowed(envelope.fromAgentId, envelope.toAgentId)) {
+      const failedEntry = createAuditEntry(envelope);
+      failedEntry.status = "failed";
+
+      const fromAudit = auditLogs.get(envelope.fromAgentId) ?? [];
+      fromAudit.push(failedEntry);
+      auditLogs.set(envelope.fromAgentId, fromAudit);
+
+      const toAudit = auditLogs.get(envelope.toAgentId) ?? [];
+      toAudit.push(failedEntry);
+      auditLogs.set(envelope.toAgentId, toAudit);
+
+      throw new MessagingError(
+        `Unauthorized: ${envelope.fromAgentId} -> ${envelope.toAgentId} not allowed`,
+      );
+    }
+
     const policy = envelope.persistencePolicy ?? "asker_only";
+
+    if (policy === "both" && !bothPolicyEnabled) {
+      const failedEntry = createAuditEntry(envelope);
+      failedEntry.status = "failed";
+
+      const fromAudit = auditLogs.get(envelope.fromAgentId) ?? [];
+      fromAudit.push(failedEntry);
+      auditLogs.set(envelope.fromAgentId, fromAudit);
+
+      const toAudit = auditLogs.get(envelope.toAgentId) ?? [];
+      toAudit.push({ ...failedEntry });
+      auditLogs.set(envelope.toAgentId, toAudit);
+
+      throw new MessagingError(
+        'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
+      );
+    }
 
     // Store in sender (fromAgentId) inbox based on policy
     if (policy === "asker_only" || policy === "both") {

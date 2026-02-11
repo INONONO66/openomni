@@ -2,6 +2,8 @@ import { Session } from "@openomni/session";
 import type { ToolResult } from "@openomni/protocol";
 import { SubagentInput } from "./schemas";
 import { BuiltinAgentRegistry } from "../agent/registry";
+import { AgentMessenger } from "../agent/communication";
+import type { MessageEnvelope } from "../agent/communication";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
@@ -18,6 +20,11 @@ export interface SubagentContext {
   abortSignal?: AbortSignal;
   llm: OrchestratorRunInput["llm"];
   toolExecutor?: OrchestratorRunInput["toolExecutor"];
+  parentTaskId?: string;
+  parentRunId?: string;
+  parentSessionId?: string;
+  /** When true, this tool is executing inside a delegated worker and nested delegation is blocked. */
+  insideDelegation?: boolean;
 }
 
 export interface SubagentResult {
@@ -44,6 +51,17 @@ export namespace Subagent {
     }
 
     const input = parseResult.data;
+
+    if (context.insideDelegation) {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId,
+        output:
+          "Nested delegation not allowed: subagent cannot call subagent/dispatch",
+        isError: true,
+      };
+    }
+
     const maxDepth = context.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH;
     const childDepth = context.parentDepth + 1;
 
@@ -86,10 +104,20 @@ export namespace Subagent {
       triggers: [{ id: "subagent-trigger", type: "manual" }],
     });
 
+    const spawnedBy =
+      context.parentTaskId && context.parentRunId && context.parentSessionId
+        ? {
+            taskId: context.parentTaskId,
+            runId: context.parentRunId,
+            sessionId: context.parentSessionId,
+          }
+        : undefined;
+
     const triggerResult = await TaskManager.trigger(childTask.id, {
       triggerId: "subagent-trigger",
       type: "manual",
       occurredAt: Date.now(),
+      spawnedBy,
     });
 
     if ("error" in triggerResult) {
@@ -131,6 +159,7 @@ export namespace Subagent {
       sessionId: input.sessionId,
       maxSubagentDepth: maxDepth,
       currentDepth: childDepth,
+      insideDelegation: true,
     };
 
     const orchestratorInput: OrchestratorRunInput = {
@@ -153,6 +182,8 @@ export namespace Subagent {
         context.abortSignal,
       );
 
+      announceCompletion(context, input, config, result);
+
       if (result.success) {
         return {
           id: crypto.randomUUID(),
@@ -171,6 +202,12 @@ export namespace Subagent {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
+      announceCompletion(context, input, config, {
+        success: false,
+        summary: "",
+        error: message,
+      });
+
       return {
         id: crypto.randomUUID(),
         toolCallId,
@@ -178,6 +215,37 @@ export namespace Subagent {
         isError: true,
       };
     }
+  }
+
+  function announceCompletion(
+    context: SubagentContext,
+    input: SubagentInput,
+    childConfig: OrchestratorConfig,
+    result: { success: boolean; summary: string; error?: string },
+  ): void {
+    if (!context.parentSessionId) return;
+
+    const envelope: MessageEnvelope = {
+      traceId: crypto.randomUUID(),
+      sessionId: context.parentSessionId,
+      runId: crypto.randomUUID(),
+      fromAgentId: "subagent-worker",
+      toAgentId: "surface-agent",
+      sentAt: new Date().toISOString(),
+      schemaRef: "subagent.completion.announce.v1",
+      payload: {
+        childSessionId: childConfig.sessionId ?? childConfig.runId,
+        agentType: input.agentType,
+        summary: result.summary,
+        success: result.success,
+        error: result.error,
+      },
+      persistencePolicy: "asker_only",
+    };
+
+    AgentMessenger.send(envelope).catch((err) => {
+      console.error("Announce failed (non-fatal):", err);
+    });
   }
 
   async function executeWithAbort(

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { randomUUID } from "crypto";
 import {
   AgentMessenger,
+  MessagingError,
   type MessageEnvelope,
   type AuditEntry,
 } from "../../src/agent/communication";
@@ -27,6 +28,7 @@ describe("AgentMessenger A2A Persistence", () => {
   beforeEach(() => {
     sender = `agent-${randomUUID()}`;
     receiver = `agent-${randomUUID()}`;
+    AgentMessenger.resetBothPolicy();
   });
 
   describe("asker_only policy (default)", () => {
@@ -136,6 +138,7 @@ describe("AgentMessenger A2A Persistence", () => {
 
   describe("both policy", () => {
     it("stores full envelope in both sender and receiver inboxes", async () => {
+      AgentMessenger.enableBothPolicy();
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
@@ -170,6 +173,7 @@ describe("AgentMessenger A2A Persistence", () => {
     });
 
     it("both inboxes contain full payload", async () => {
+      AgentMessenger.enableBothPolicy();
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
@@ -337,6 +341,441 @@ describe("AgentMessenger A2A Persistence", () => {
       expect(received.length).toBe(1);
       expect(received[0]).toEqual(envelope);
       expect(received[0]?.payload).toEqual({ important: "notification" });
+    });
+  });
+});
+
+describe("AgentMessenger Allow Pattern Gate", () => {
+  let sender: string;
+  let receiver: string;
+
+  beforeEach(() => {
+    sender = `agent-${randomUUID()}`;
+    receiver = `agent-${randomUUID()}`;
+    AgentMessenger.resetAllowPatterns();
+  });
+
+  describe("default behavior (no patterns configured)", () => {
+    it("allows all communication when no patterns are set", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("allows all communication after resetAllowPatterns()", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: "nobody", to: "nobody" }]);
+      AgentMessenger.resetAllowPatterns();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("allowed communication", () => {
+    it("passes through with exact from/to match", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: sender, to: receiver }]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("passes through with wildcard source", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: "*", to: receiver }]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("passes through with wildcard target", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: sender, to: "*" }]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("passes through with wildcard both", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: "*", to: "*" }]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("matches any pattern in the list", async () => {
+      const otherAgent = `agent-${randomUUID()}`;
+      AgentMessenger.configureAllowPatterns([
+        { from: otherAgent, to: receiver },
+        { from: sender, to: receiver },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("blocked communication", () => {
+    it("throws MessagingError when no pattern matches", async () => {
+      AgentMessenger.configureAllowPatterns([
+        { from: "other-agent", to: "other-target" },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+
+    it("includes source and target in error message", async () => {
+      AgentMessenger.configureAllowPatterns([]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        `Unauthorized: ${sender} -> ${receiver} not allowed`,
+      );
+    });
+
+    it("blocks when empty patterns array is configured", async () => {
+      AgentMessenger.configureAllowPatterns([]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+
+    it("blocks when source matches but target does not", async () => {
+      AgentMessenger.configureAllowPatterns([
+        { from: sender, to: "wrong-target" },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+
+    it("blocks when target matches but source does not", async () => {
+      AgentMessenger.configureAllowPatterns([
+        { from: "wrong-source", to: receiver },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+  });
+
+  describe("audit logging for blocked attempts", () => {
+    it("records failed audit entry for sender", async () => {
+      AgentMessenger.configureAllowPatterns([]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      try {
+        await AgentMessenger.send(envelope);
+      } catch {
+        // expected
+      }
+
+      const senderAudit = AgentMessenger.getAuditLog(sender);
+      expect(senderAudit.length).toBe(1);
+      expect(senderAudit[0]?.status).toBe("failed");
+      expect(senderAudit[0]?.fromAgentId).toBe(sender);
+      expect(senderAudit[0]?.toAgentId).toBe(receiver);
+      expect(senderAudit[0]?.messageId).toBe(envelope.runId);
+    });
+
+    it("records failed audit entry for receiver", async () => {
+      AgentMessenger.configureAllowPatterns([]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      try {
+        await AgentMessenger.send(envelope);
+      } catch {
+        // expected
+      }
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0]?.status).toBe("failed");
+      expect(receiverAudit[0]?.fromAgentId).toBe(sender);
+      expect(receiverAudit[0]?.toAgentId).toBe(receiver);
+    });
+
+    it("does not deliver message or notify subscribers on block", async () => {
+      AgentMessenger.configureAllowPatterns([]);
+      const received: MessageEnvelope[] = [];
+      const unsubscribe = AgentMessenger.subscribe(receiver, (msg) => {
+        received.push(msg);
+      });
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      try {
+        await AgentMessenger.send(envelope);
+      } catch {
+        // expected
+      }
+
+      unsubscribe();
+      expect(received.length).toBe(0);
+    });
+  });
+
+  describe("pattern precedence", () => {
+    it("specific pattern allows even when other patterns would not match", async () => {
+      AgentMessenger.configureAllowPatterns([
+        { from: "other", to: "other" },
+        { from: sender, to: receiver },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("wildcard pattern allows agents not explicitly listed", async () => {
+      AgentMessenger.configureAllowPatterns([
+        { from: "specific-agent", to: "specific-target" },
+        { from: "*", to: "*" },
+      ]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("reconfiguring patterns replaces previous configuration", async () => {
+      AgentMessenger.configureAllowPatterns([{ from: sender, to: receiver }]);
+      AgentMessenger.configureAllowPatterns([{ from: "other", to: "other" }]);
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+  });
+});
+
+describe("AgentMessenger Both Policy Enforcement", () => {
+  let sender: string;
+  let receiver: string;
+
+  beforeEach(() => {
+    sender = `agent-${randomUUID()}`;
+    receiver = `agent-${randomUUID()}`;
+    AgentMessenger.resetBothPolicy();
+    AgentMessenger.resetAllowPatterns();
+  });
+
+  describe("default enforcement (both policy disabled)", () => {
+    it("throws MessagingError when using 'both' without enableBothPolicy()", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
+      );
+    });
+
+    it("asker_only works without any opt-in", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "asker_only",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("none policy works without any opt-in", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "none",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("undefined persistencePolicy defaults to asker_only and succeeds", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: undefined,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("explicit opt-in for both policy", () => {
+    it("enableBothPolicy() allows 'both' to succeed", async () => {
+      AgentMessenger.enableBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("resetBothPolicy() re-blocks 'both' after enabling", async () => {
+      AgentMessenger.enableBothPolicy();
+      AgentMessenger.resetBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+
+    it("enableBothPolicy() is idempotent", async () => {
+      AgentMessenger.enableBothPolicy();
+      AgentMessenger.enableBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("responder audit log verification", () => {
+    it("responder audit log contains no payload field under asker_only", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "asker_only",
+        payload: { sensitive: "data", token: "abc123" },
+      });
+
+      await AgentMessenger.send(envelope);
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
+      expect(receiverAudit[0]?.fromAgentId).toBe(sender);
+      expect(receiverAudit[0]?.toAgentId).toBe(receiver);
+      expect(receiverAudit[0]?.status).toBe("delivered");
+    });
+
+    it("responder audit log contains no payload field under none policy", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "none",
+        payload: { sensitive: "data" },
+      });
+
+      await AgentMessenger.send(envelope);
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
+    });
+
+    it("blocked 'both' attempt does not store payload in responder timeline", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+        payload: { should_not_persist: true },
+      });
+
+      try {
+        await AgentMessenger.send(envelope);
+      } catch {
+        // expected
+      }
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0].status).toBe("failed");
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
     });
   });
 });

@@ -392,6 +392,7 @@ export namespace TaskManager {
         attempt: 1,
         agentId: task.assignedAgentId,
         scheduledAt: now,
+        spawnedBy: signal.spawnedBy,
       };
 
       store.run.set(taskId, taskRun);
@@ -691,5 +692,45 @@ export namespace TaskManager {
 
     store.run.set(run.taskId, updatedRun);
     return true;
+  }
+
+  /**
+   * Get the lineage (parent chain) for a run.
+   * Returns an array of ancestor TaskRun objects from immediate parent to root.
+   * Empty array if the run has no spawnedBy (root task).
+   */
+  export function getLineage(runId: string): TaskRun[] {
+    const store = TaskStorage.getAdapter();
+    const lineage: TaskRun[] = [];
+    const visited = new Set<string>();
+
+    let currentRunId: string | undefined = runId;
+
+    while (currentRunId) {
+      if (visited.has(currentRunId)) {
+        break;
+      }
+      visited.add(currentRunId);
+
+      const run = store.run.get(currentRunId);
+      if (!run || !run.spawnedBy) {
+        break;
+      }
+
+      const parentRunId = run.spawnedBy.runId;
+      if (visited.has(parentRunId)) {
+        break;
+      }
+
+      const parentRun = store.run.get(parentRunId);
+      if (!parentRun) {
+        break;
+      }
+
+      lineage.push(parentRun);
+      currentRunId = parentRunId;
+    }
+
+    return lineage;
   }
 }
