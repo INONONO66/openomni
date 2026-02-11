@@ -179,7 +179,12 @@ export namespace Dispatch {
             resultSummary: result.summary,
           },
           occurredAt: new Date().toISOString(),
-        }).catch(() => {});
+        }).catch((error) => {
+          console.error(
+            `[Dispatch] Failed to emit completion event for task ${result.id} (${eventName}):`,
+            error,
+          );
+        });
       }
 
       return {

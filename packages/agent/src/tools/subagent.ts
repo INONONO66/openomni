@@ -169,7 +169,12 @@ export namespace Subagent {
             resultSummary: result.summary,
           },
           occurredAt: new Date().toISOString(),
-        }).catch(() => {});
+        }).catch((error) => {
+          console.error(
+            `[Subagent] Failed to emit completion event for task ${childTask.id}:`,
+            error,
+          );
+        });
 
         return {
           id: crypto.randomUUID(),
@@ -190,7 +195,12 @@ export namespace Subagent {
           error: result.error,
         },
         occurredAt: new Date().toISOString(),
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error(
+          `[Subagent] Failed to emit failure event for task ${childTask.id}:`,
+          error,
+        );
+      });
 
       return {
         id: crypto.randomUUID(),
