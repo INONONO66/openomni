@@ -775,6 +775,7 @@ describe("AgentMessenger Both Policy Enforcement", () => {
       const receiverAudit = AgentMessenger.getAuditLog(receiver);
       expect(receiverAudit.length).toBe(1);
       expect(receiverAudit[0].status).toBe("failed");
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
     });
   });
 });
