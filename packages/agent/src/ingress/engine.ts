@@ -56,12 +56,53 @@ export const DefaultRunPlanner: RunPlanner = {
       return [];
     }
 
+    const isCompletion =
+      envelope.name === "subagent.completed" ||
+      envelope.name === "subagent.failed";
+
+    if (isCompletion && envelope.meta?.taskId) {
+      const targetTaskId = envelope.meta.taskId as string;
+      const originTaskId = envelope.meta.originTaskId as string | undefined;
+
+      if (originTaskId && originTaskId === targetTaskId) {
+        console.warn(
+          `[anti-loop] self-retrigger blocked: originTaskId=${originTaskId}, taskId=${targetTaskId}`,
+        );
+        return [];
+      }
+
+      return [
+        {
+          kind: "trigger_task",
+          session,
+          envelope,
+          taskId: targetTaskId,
+          triggerSignal: {
+            triggerId: (envelope.meta.triggerId as string) ?? envelope.eventId,
+            type: "event",
+            payload:
+              typeof envelope.payload === "object" && envelope.payload !== null
+                ? (envelope.payload as Record<string, unknown>)
+                : undefined,
+            context: {
+              conversationSessionId: session.id,
+              userId: envelope.userId,
+              workspaceId: envelope.workspaceId,
+              traceId: envelope.traceId,
+              originTaskId,
+            },
+            occurredAt: new Date(envelope.occurredAt).getTime(),
+          },
+        },
+      ];
+    }
+
     // D6: Block trigger_task from task execution context
     if (envelope.meta?.executionContext === "task") {
       console.warn(
         `[D6] trigger_task blocked: executionContext=task, event=${envelope.name}`,
       );
-      return []; // task context cannot create trigger_task
+      return [];
     }
 
     const isScheduled =

@@ -9,6 +9,7 @@ import type {
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 import { DispatchInput } from "./schemas";
+import { IngressEngine } from "../ingress/engine";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
@@ -155,6 +156,31 @@ export namespace Dispatch {
 
     try {
       const output = await executeDispatch(input, context);
+
+      for (const result of output.results) {
+        const eventName =
+          result.status === "completed"
+            ? "subagent.completed"
+            : "subagent.failed";
+
+        IngressEngine.ingest({
+          id: crypto.randomUUID(),
+          surface: "internal",
+          name: eventName,
+          payload: {
+            taskId: result.id,
+            summary: result.summary,
+            error: result.error,
+          },
+          meta: {
+            originTaskId: result.id,
+            executionContext: "task",
+            resultSummary: result.summary,
+          },
+          occurredAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+
       return {
         id: crypto.randomUUID(),
         toolCallId,
