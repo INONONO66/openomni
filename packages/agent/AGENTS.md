@@ -108,7 +108,6 @@ Legacy Loop (still active):
 - **FileLock Independence**: File locking logic extracted to `loop/file-lock.ts` for reuse across dispatch and other coordinators.
 - **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
 - **RunWorker.run()**: Main execution entry. Takes `{ taskId, runId, maxRetries, sessionMode, sessionId, maxSubagentDepth, currentDepth }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error }`.
-- **Orchestrator.run()**: Compatibility facade. Delegates to `RunWorker.run()`. Use `RunWorker.run()` directly for new code.
 - **ConfigManager.create()**: Deep-merge overrides into defaults. Validated with `ConfigManager.validate()`.
 - **State machine**: TaskStateMachine enforces valid transitions (e.g., `pending→active→completed`).
 

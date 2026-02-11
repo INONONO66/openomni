@@ -766,7 +766,7 @@ async function dispatchReadyTasks(
     }
 
     const state = graph.states.get(taskId);
-    if (!state || state.status === "completed") {
+    if (!state || state.status === "completed" || state.status === "failed") {
       ready.delete(taskId);
       continue;
     }

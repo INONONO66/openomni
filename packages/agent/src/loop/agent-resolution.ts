@@ -43,6 +43,12 @@ export async function resolveLLM(model?: {
     return createLLMRunner(providerModel);
   } catch (error) {
     if (model !== undefined) {
+      console.warn(
+        "[AgentResolution] Model resolution failed for",
+        model,
+        "- falling back to default. Error:",
+        error,
+      );
       return resolveLLM(undefined);
     }
     throw error;

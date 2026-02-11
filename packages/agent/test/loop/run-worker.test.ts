@@ -14,7 +14,7 @@ import { AuditLog } from "../../src/loop/audit";
 import { DeadLetterQueue } from "../../src/loop/dlq";
 import { SummaryDelivery } from "../../src/loop/summary";
 
-describe("Orchestrator", () => {
+describe("RunWorker", () => {
   beforeEach(() => {
     TaskStorage.reset();
     Session.storage.clear();
