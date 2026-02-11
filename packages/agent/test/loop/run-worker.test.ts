@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import {
-  RunWorker as Orchestrator,
+  RunWorker,
   OrchestratorConfig,
   OrchestratorRunInput,
 } from "../../src/loop/run-worker";
@@ -56,7 +56,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Task not found");
@@ -78,7 +78,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("TaskRun not found");
@@ -109,7 +109,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("dropped by concurrency policy");
@@ -136,7 +136,7 @@ describe("Orchestrator", () => {
         },
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Selected from system default");
@@ -171,7 +171,7 @@ describe("Orchestrator", () => {
         input: { test: "data" },
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(true);
       expect(sinkCalled).toBe(true);
@@ -215,7 +215,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(callCount).toBe(2);
       expect(result.success).toBe(true);
@@ -276,7 +276,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(true);
       expect(result.summary).toContain("Task completed successfully");
@@ -308,7 +308,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      const result = await Orchestrator.run(config, input);
+      const result = await RunWorker.run(config, input);
 
       expect(result.success).toBe(true);
 
@@ -341,7 +341,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       const runEvents = emitSpy.mock.calls.filter((call) => call[0] === runId);
       expect(runEvents).toHaveLength(2);
@@ -369,7 +369,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       expect(logSpy).toHaveBeenCalledTimes(1);
       expect(logSpy.mock.calls[0][0]).toBe(runId);
@@ -395,7 +395,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       expect(logSpy).toHaveBeenCalledTimes(1);
       expect(logSpy.mock.calls[0][0]).toBe(runId);
@@ -460,7 +460,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       expect(persistSpy).toHaveBeenCalledTimes(1);
       expect(persistSpy.mock.calls[0][0]).toBe(runId);
@@ -498,7 +498,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       expect(dlqSpy).toHaveBeenCalledTimes(1);
       expect(dlqSpy.mock.calls[0][0]).toHaveProperty("type", "run");
@@ -525,7 +525,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
 
@@ -555,7 +555,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
 
@@ -585,7 +585,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
 
@@ -617,7 +617,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
 
@@ -662,7 +662,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
         expect(capturedSessionID).toBe(existingSessionId);
@@ -689,7 +689,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain("sessionId is required");
@@ -714,7 +714,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain("Session not found for reuse");
@@ -741,7 +741,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain("Subagent depth limit reached");
@@ -767,7 +767,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain("Subagent depth limit reached");
@@ -792,7 +792,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
       });
@@ -815,7 +815,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain("Subagent depth limit reached");
@@ -839,7 +839,7 @@ describe("Orchestrator", () => {
           input: {},
         };
 
-        const result = await Orchestrator.run(config, input);
+        const result = await RunWorker.run(config, input);
 
         expect(result.success).toBe(true);
       });
@@ -869,7 +869,7 @@ describe("Orchestrator", () => {
         input: {},
       };
 
-      await Orchestrator.run(config, input);
+      await RunWorker.run(config, input);
 
       const runEvents = emitSpy.mock.calls.filter((call) => call[0] === runId);
       expect(runEvents).toHaveLength(2);

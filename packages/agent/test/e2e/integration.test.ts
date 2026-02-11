@@ -9,7 +9,7 @@ import { FilesystemWatcher } from "../../src/trigger/watcher";
 import { Router } from "../../src/loop/router";
 import { Dispatcher } from "../../src/loop/dispatcher";
 import { Envelope } from "../../src/loop/envelope";
-import { RunWorker as Orchestrator } from "../../src/loop/run-worker";
+import { RunWorker } from "../../src/loop/run-worker";
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -90,7 +90,7 @@ describe("P7-3 E2E integration flows", () => {
     expect("runId" in triggerResult).toBe(true);
     if (!("runId" in triggerResult)) return;
 
-    const orchestration = await Orchestrator.run(
+    const orchestration = await RunWorker.run(
       {
         taskId: task.id,
         runId: triggerResult.runId,
@@ -139,7 +139,7 @@ describe("P7-3 E2E integration flows", () => {
     expect(run.trigger.type).toBe("cron");
     expect(run.status).toBe("scheduled");
 
-    const orchestration = await Orchestrator.run(
+    const orchestration = await RunWorker.run(
       {
         taskId: task.id,
         runId: run.runId,
@@ -227,7 +227,7 @@ describe("P7-3 E2E integration flows", () => {
     expect(dispatchedRunIds).toHaveLength(1);
 
     const runId = dispatchedRunIds[0]!;
-    const orchestration = await Orchestrator.run(
+    const orchestration = await RunWorker.run(
       {
         taskId: task.id,
         runId,
@@ -267,7 +267,7 @@ describe("P7-3 E2E integration flows", () => {
 
     expect(TaskManager.getRun(triggerResult.runId)?.status).toBe("blocked");
 
-    const blockedAttempt = await Orchestrator.run(
+    const blockedAttempt = await RunWorker.run(
       {
         taskId: task.id,
         runId: triggerResult.runId,
@@ -291,7 +291,7 @@ describe("P7-3 E2E integration flows", () => {
     expect(resumed).toBe(true);
     expect(TaskManager.getRun(triggerResult.runId)?.status).toBe("scheduled");
 
-    const resumedAttempt = await Orchestrator.run(
+    const resumedAttempt = await RunWorker.run(
       {
         taskId: task.id,
         runId: triggerResult.runId,
@@ -355,7 +355,7 @@ describe("P7-3 E2E integration flows", () => {
       },
     };
 
-    const firstRun = await Orchestrator.run(
+    const firstRun = await RunWorker.run(
       {
         taskId: task.id,
         runId: first.runId,
@@ -365,7 +365,7 @@ describe("P7-3 E2E integration flows", () => {
     );
     expect(firstRun.success).toBe(true);
 
-    const secondRun = await Orchestrator.run(
+    const secondRun = await RunWorker.run(
       {
         taskId: task.id,
         runId: second.runId,

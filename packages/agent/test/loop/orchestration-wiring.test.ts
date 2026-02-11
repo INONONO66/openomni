@@ -7,7 +7,7 @@ import {
   afterAll,
   spyOn,
 } from "bun:test";
-import { RunWorker as Orchestrator } from "../../src/loop/run-worker";
+import { RunWorker } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
@@ -76,7 +76,7 @@ describe("Orchestrator Wiring", () => {
     const persistSpy = spyOn(SummaryDelivery, "persist");
     spies.push(emitSpy, permissionSpy, outcomeSpy, persistSpy);
 
-    await Orchestrator.run(
+    await RunWorker.run(
       {
         taskId: task.id,
         runId: triggerResult.runId,
@@ -143,7 +143,7 @@ describe("Orchestrator Wiring", () => {
     const persistSpy = spyOn(SummaryDelivery, "persist");
     spies.push(emitSpy, dlqSpy, outcomeSpy, persistSpy);
 
-    await Orchestrator.run(
+    await RunWorker.run(
       {
         taskId: task.id,
         runId: triggerResult.runId,
