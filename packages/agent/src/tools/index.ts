@@ -1,5 +1,5 @@
 export { SubagentInput, DispatchInput, ScheduleInput } from "./schemas";
-export { Dispatch, FileLock } from "./dispatch";
+export { Dispatch } from "./dispatch";
 export type {
   DispatchContext,
   DispatchReviewDecision,
