@@ -2,6 +2,8 @@ import { Session } from "@openomni/session";
 import type { ToolResult } from "@openomni/protocol";
 import { SubagentInput } from "./schemas";
 import { BuiltinAgentRegistry } from "../agent/registry";
+import { AgentMessenger } from "../agent/communication";
+import type { MessageEnvelope } from "../agent/communication";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
@@ -180,6 +182,8 @@ export namespace Subagent {
         context.abortSignal,
       );
 
+      announceCompletion(context, input, config, result);
+
       if (result.success) {
         return {
           id: crypto.randomUUID(),
@@ -205,6 +209,37 @@ export namespace Subagent {
         isError: true,
       };
     }
+  }
+
+  function announceCompletion(
+    context: SubagentContext,
+    input: SubagentInput,
+    childConfig: OrchestratorConfig,
+    result: { success: boolean; summary: string; error?: string },
+  ): void {
+    if (!context.parentSessionId) return;
+
+    const envelope: MessageEnvelope = {
+      traceId: crypto.randomUUID(),
+      sessionId: context.parentSessionId,
+      runId: crypto.randomUUID(),
+      fromAgentId: "subagent-worker",
+      toAgentId: "surface-agent",
+      sentAt: new Date().toISOString(),
+      schemaRef: "subagent.completion.announce.v1",
+      payload: {
+        childSessionId: childConfig.sessionId ?? childConfig.runId,
+        agentType: input.agentType,
+        summary: result.summary,
+        success: result.success,
+        error: result.error,
+      },
+      persistencePolicy: "asker_only",
+    };
+
+    AgentMessenger.send(envelope).catch((err) => {
+      console.error("Announce failed (non-fatal):", err);
+    });
   }
 
   async function executeWithAbort(
