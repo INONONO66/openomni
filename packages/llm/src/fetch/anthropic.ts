@@ -12,7 +12,7 @@ export type TokenRefreshCallback = (
   access: string,
   refresh: string,
   expires: number,
-) => void;
+) => void | Promise<void>;
 
 export function createOAuthFetch(
   auth: Extract<Auth.Info, { type: "oauth" }>,
@@ -46,7 +46,7 @@ export function createOAuthFetch(
     currentAccess = json.access_token;
     currentRefresh = json.refresh_token;
     currentExpires = Date.now() + json.expires_in * 1000;
-    onTokenRefresh?.(currentAccess, currentRefresh, currentExpires);
+    await onTokenRefresh?.(currentAccess, currentRefresh, currentExpires);
   }
 
   async function ensureValidToken() {
