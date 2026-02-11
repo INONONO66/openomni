@@ -37,8 +37,10 @@ src/
 │   └── recovery.ts    # CrashRecovery — detect and recover failed runs
 ├── loop/              # Supervisor/Worker execution architecture
 │   ├── conversation-supervisor.ts  # ConversationSupervisor — user-facing orchestration (requirement gathering, plan authoring, approval gate)
-│   ├── execution-supervisor.ts     # ExecutionSupervisor — execution orchestration (task decomposition, accept/reject, re-dispatch)
+│   ├── execution-supervisor.ts     # ExecutionSupervisor — DAG execution engine (dependency graph, review gate, handoff)
 │   ├── run-worker.ts               # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
+│   ├── file-lock.ts   # FileLock — in-process file locking for dispatch coordination
+│   ├── agent-resolution.ts  # Agent resolution — AgentDefinition → LLM/tools/prompt
 │   ├── envelope.ts    # EventEnvelope — normalize + validate incoming events
 │   ├── router.ts      # Router — match events to rules, produce RoutingDecision
 │   ├── dispatcher.ts  # Dispatcher — execute routed events
@@ -102,6 +104,8 @@ Legacy Loop (still active):
 - **Late-Start Execution**: Schedules with `start_time_in_past` execute immediately with `lateStart: true` flag.
 - **Drift Detection**: Scheduler warns if execution is >5min late from planned start time.
 - **Lane Guard**: DefaultRunPlanner blocks telemetry events from creating runs.
+- **Dispatch Consolidation**: `dispatch.ts` is now a thin wrapper (118 lines) that delegates to `ExecutionSupervisor.executeDispatch()`. Core DAG execution, review gate, and handoff logic lives in ExecutionSupervisor (1322 lines).
+- **FileLock Independence**: File locking logic extracted to `loop/file-lock.ts` for reuse across dispatch and other coordinators.
 - **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
 - **RunWorker.run()**: Main execution entry. Takes `{ taskId, runId, maxRetries, sessionMode, sessionId, maxSubagentDepth, currentDepth }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error }`.
 - **Orchestrator.run()**: Compatibility facade. Delegates to `RunWorker.run()`. Use `RunWorker.run()` directly for new code.
@@ -110,6 +114,7 @@ Legacy Loop (still active):
 
 ## ANTI-PATTERNS
 
+- **Orchestrator.run() REMOVED** — `orchestration.ts` has been deleted. Use `RunWorker.run()` directly for all execution. The compatibility facade no longer exists.
 - `supervisor.ts` in loop/ is older — `run-supervisor.ts` is the current implementation. Do NOT extend supervisor.ts.
 - QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
