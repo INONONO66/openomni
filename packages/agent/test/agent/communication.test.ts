@@ -25,9 +25,11 @@ describe("AgentMessenger", () => {
 
   beforeEach(() => {
     baseEnvelope = createEnvelope();
+    AgentMessenger.resetBothPolicy();
   });
 
   it("send delivers message to recipient inbox", async () => {
+    AgentMessenger.enableBothPolicy();
     const recipient = `agent-${randomUUID()}`;
     const envelope = createEnvelope({
       toAgentId: recipient,
