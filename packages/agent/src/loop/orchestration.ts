@@ -18,6 +18,7 @@ export interface OrchestratorConfig {
   sessionId?: string;
   maxSubagentDepth?: number;
   currentDepth?: number;
+  insideDelegation?: boolean;
 }
 
 export interface OrchestrationResult {
