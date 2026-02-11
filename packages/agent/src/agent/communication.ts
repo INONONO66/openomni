@@ -52,6 +52,15 @@ export interface MessageEnvelope<TPayload = unknown> {
 }
 
 /**
+ * Allow pattern for A2A communication authorization.
+ * Supports exact agent IDs or "*" wildcard for any agent.
+ */
+export interface AllowPattern {
+  from: string;
+  to: string;
+}
+
+/**
  * Configuration options for message delivery
  */
 export interface DeliveryOptions {
@@ -75,6 +84,7 @@ export namespace AgentMessenger {
     string,
     ((envelope: MessageEnvelope) => void)[]
   >();
+  let allowPatterns: AllowPattern[] | null = null;
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
     return Boolean(
@@ -82,6 +92,22 @@ export namespace AgentMessenger {
       envelope.fromAgentId &&
       envelope.payload !== undefined,
     );
+  };
+
+  const isAllowed = (from: string, to: string): boolean => {
+    if (allowPatterns === null) return true;
+    return allowPatterns.some(
+      (p) =>
+        (p.from === "*" || p.from === from) && (p.to === "*" || p.to === to),
+    );
+  };
+
+  export const configureAllowPatterns = (patterns: AllowPattern[]): void => {
+    allowPatterns = [...patterns];
+  };
+
+  export const resetAllowPatterns = (): void => {
+    allowPatterns = null;
   };
 
   const createAuditEntry = (envelope: MessageEnvelope): AuditEntry => {
@@ -100,6 +126,23 @@ export namespace AgentMessenger {
   export const send = async (envelope: MessageEnvelope): Promise<void> => {
     if (!isValidEnvelope(envelope)) {
       throw new MessagingError("Invalid message envelope");
+    }
+
+    if (!isAllowed(envelope.fromAgentId, envelope.toAgentId)) {
+      const failedEntry = createAuditEntry(envelope);
+      failedEntry.status = "failed";
+
+      const fromAudit = auditLogs.get(envelope.fromAgentId) ?? [];
+      fromAudit.push(failedEntry);
+      auditLogs.set(envelope.fromAgentId, fromAudit);
+
+      const toAudit = auditLogs.get(envelope.toAgentId) ?? [];
+      toAudit.push(failedEntry);
+      auditLogs.set(envelope.toAgentId, toAudit);
+
+      throw new MessagingError(
+        `Unauthorized: ${envelope.fromAgentId} -> ${envelope.toAgentId} not allowed`,
+      );
     }
 
     const policy = envelope.persistencePolicy ?? "asker_only";
