@@ -103,7 +103,10 @@ export namespace ScheduleTool {
         },
       };
 
-      const createdTask = TaskManager.create(taskInput);
+      const createdTask = TaskManager.create(taskInput, {
+        executionContext: undefined,
+        intent: "durable",
+      });
 
       // Create trigger based on recurring configuration
       const triggerId = randomUUID();

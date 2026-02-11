@@ -103,14 +103,17 @@ export class DefaultRunExecutor implements RunExecutor {
 
       case "run_agent": {
         const taskId = randomUUID();
-        const task = TaskManager.create({
-          title: `Ingress run: ${request.envelope.name}`,
-          owner: {
-            type: request.envelope.userId ? "user" : "agent",
-            id: request.envelope.userId ?? "system",
+        const task = TaskManager.create(
+          {
+            title: `Ingress run: ${request.envelope.name}`,
+            owner: {
+              type: request.envelope.userId ? "user" : "agent",
+              id: request.envelope.userId ?? "system",
+            },
+            triggers: [{ id: randomUUID(), type: "manual" }],
           },
-          triggers: [{ id: randomUUID(), type: "manual" }],
-        });
+          { intent: "run_tracking" },
+        );
 
         const signal = {
           triggerId: task.triggers[0]!.id,

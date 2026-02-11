@@ -79,12 +79,15 @@ export namespace Subagent {
 
     const sessionMode: SessionMode = input.sessionId ? "reuse" : "ephemeral";
 
-    const childTask = TaskManager.create({
-      title: `Subagent: ${input.agentType}`,
-      description: input.prompt,
-      owner: { type: "agent", id: input.agentType },
-      triggers: [{ id: "subagent-trigger", type: "manual" }],
-    });
+    const childTask = TaskManager.create(
+      {
+        title: `Subagent: ${input.agentType}`,
+        description: input.prompt,
+        owner: { type: "agent", id: input.agentType },
+        triggers: [{ id: "subagent-trigger", type: "manual" }],
+      },
+      { intent: "run_tracking" },
+    );
 
     const triggerResult = await TaskManager.trigger(childTask.id, {
       triggerId: "subagent-trigger",

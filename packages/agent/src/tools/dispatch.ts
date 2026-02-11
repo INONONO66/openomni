@@ -540,12 +540,15 @@ function ensurePersistentSession(
 }
 
 function createChildTask(task: DispatchTask, agentInstanceId: string): string {
-  const childTask = TaskManager.create({
-    title: `Dispatch: ${task.id}`,
-    description: task.description,
-    owner: { type: "agent", id: agentInstanceId },
-    triggers: [{ id: "dispatch-trigger", type: "manual" }],
-  });
+  const childTask = TaskManager.create(
+    {
+      title: `Dispatch: ${task.id}`,
+      description: task.description,
+      owner: { type: "agent", id: agentInstanceId },
+      triggers: [{ id: "dispatch-trigger", type: "manual" }],
+    },
+    { intent: "run_tracking" },
+  );
 
   return childTask.id;
 }

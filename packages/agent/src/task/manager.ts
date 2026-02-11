@@ -5,6 +5,7 @@ import { Bus } from "@openomni/session";
 import { Task as TaskEvent } from "@openomni/protocol";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
+import { PolicyError } from "./errors";
 
 // ============================================================
 // Types
@@ -190,8 +191,22 @@ function upsertRunHistory(
 }
 
 export namespace TaskManager {
-  export function create(input: Task.CreateInput): Task.Info {
+  export function create(
+    input: Task.CreateInput,
+    context?: {
+      executionContext?: "top_level" | "task";
+      intent?: "durable" | "run_tracking";
+    },
+  ): Task.Info {
     const validated = Task.CreateInput.parse(input);
+
+    // D6: Block durable task creation in task context
+    if (context?.executionContext === "task" && context?.intent === "durable") {
+      throw new PolicyError(
+        "D6_task_creation",
+        "Cannot create durable task from task execution context",
+      );
+    }
 
     const id = randomUUID();
     const now = Date.now();
