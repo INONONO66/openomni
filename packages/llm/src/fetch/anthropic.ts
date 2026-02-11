@@ -5,7 +5,7 @@ import { TokenRefreshError } from "../error";
 type ProviderFetch = NonNullable<AnthropicProviderSettings["fetch"]>;
 
 const REFRESH_URL = "https://console.anthropic.com/v1/oauth/token";
-const CLIENT_ID = "9d1c250a-e61b-44e8-ab96-aa70e6e435cb";
+const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const REQUIRED_BETAS = ["oauth-2025-04-20", "interleaved-thinking-2025-05-14"];
 
 export type TokenRefreshCallback = (

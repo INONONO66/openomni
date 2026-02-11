@@ -57,12 +57,27 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
   if (auth.type === "api") {
     sdkOptions.apiKey = auth.key;
   } else if (providerID === "anthropic") {
-    const oauthFetch = createOAuthFetch(auth);
+    const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
+    const oauthFetch = createOAuthFetch(
+      oauthAuth,
+      async (access, refresh, expires) => {
+        await Auth.set(providerID, {
+          type: "oauth",
+          access,
+          refresh,
+          expires,
+          ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
+        });
+      },
+    );
     sdkOptions.apiKey = "";
     sdkOptions.fetch = oauthFetch;
   } else if (providerID === "openai") {
     sdkOptions.apiKey = "oauth-dummy-key";
-    sdkOptions.fetch = createOpenAIOAuthFetch(auth);
+    sdkOptions.fetch = createOpenAIOAuthFetch(
+      auth as Extract<Auth.Info, { type: "oauth" }>,
+      providerID,
+    );
   }
 
   return factory(sdkOptions);
@@ -70,6 +85,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
 
 function createOpenAIOAuthFetch(
   auth: Extract<Auth.Info, { type: "oauth" }>,
+  providerID: string,
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
   let currentAccess = auth.access;
   let currentRefresh = auth.refresh;
@@ -89,6 +105,13 @@ function createOpenAIOAuthFetch(
         currentAccess = tokens.access_token;
         currentRefresh = tokens.refresh_token;
         currentExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000;
+        await Auth.set(providerID, {
+          type: "oauth",
+          access: currentAccess,
+          refresh: currentRefresh,
+          expires: currentExpires,
+          ...(accountId && { accountId }),
+        });
       } finally {
         refreshPromise = null;
       }
