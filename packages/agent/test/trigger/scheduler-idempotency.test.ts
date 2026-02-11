@@ -211,7 +211,7 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
       const event2 = ingestedEvents[ingestedEvents.length - 1];
 
       expect(event1.dedupeKey).toBe(event2.dedupeKey);
-      expect(event1.dedupeKey).toMatch(/^scheduler:task-1:cron-1:\d+$/);
+      expect(event1.dedupeKey).toMatch(/^sched:task-1:cron-1:\d+$/);
     });
 
     it("should generate different dedupeKeys for cron fires in different minutes", async () => {
@@ -294,7 +294,7 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
       const event2 = ingestedEvents[ingestedEvents.length - 1];
 
       expect(event1.dedupeKey).toBe(event2.dedupeKey);
-      expect(event1.dedupeKey).toMatch(/^scheduler:task-1:once-1:1000000$/);
+      expect(event1.dedupeKey).toMatch(/^sched:task-1:once-1:1000000$/);
     });
 
     it("should include taskId and triggerId in dedupeKey", async () => {
@@ -313,7 +313,7 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
       expect(event.dedupeKey).toContain("my-trigger");
     });
 
-    it("should have format: scheduler:taskId:triggerId:timeBucket", async () => {
+    it("should have format: sched:taskId:triggerId:timeBucket", async () => {
       const taskId = "task-1";
       const cronTrigger: Task.TriggerCron = {
         id: "cron-1",
@@ -327,7 +327,7 @@ describe("Scheduler Idempotency — timeBucket-based dedupeKey", () => {
 
       const parts = event.dedupeKey.split(":");
       expect(parts.length).toBe(4);
-      expect(parts[0]).toBe("scheduler");
+      expect(parts[0]).toBe("sched");
       expect(parts[1]).toBe("task-1");
       expect(parts[2]).toBe("cron-1");
       expect(parts[3]).toMatch(/^\d+$/);
