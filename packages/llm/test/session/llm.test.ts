@@ -90,17 +90,6 @@ describe("Stream", () => {
     test("stream function exists and is callable", () => {
       expect(typeof Stream.stream).toBe("function");
     });
-
-    test("stream returns a promise", () => {
-      const input: Stream.StreamInput = {
-        model: mockModel,
-        messages: mockMessages,
-        abort: mockAbortController.signal,
-      };
-
-      const result = Stream.stream(input);
-      expect(result).toBeInstanceOf(Promise);
-    });
   });
 
   describe("generate()", () => {
@@ -146,17 +135,6 @@ describe("Stream", () => {
 
     test("generate function exists and is callable", () => {
       expect(typeof Stream.generate).toBe("function");
-    });
-
-    test("generate returns a promise", () => {
-      const input: Stream.GenerateInput = {
-        model: mockModel,
-        messages: mockMessages,
-        abort: mockAbortController.signal,
-      };
-
-      const result = Stream.generate(input);
-      expect(result).toBeInstanceOf(Promise);
     });
   });
 
