@@ -691,8 +691,12 @@ describe("TaskManager", () => {
     });
 
     test("updates timestamp", () => {
-      const updated = TaskManager.updateFromRun(baseTask);
-      expect(updated.updatedAt).toBeGreaterThan(baseTask.updatedAt);
+      const pastTask: Task.Info = {
+        ...baseTask,
+        updatedAt: baseTask.updatedAt - 1,
+      };
+      const updated = TaskManager.updateFromRun(pastTask);
+      expect(updated.updatedAt).toBeGreaterThanOrEqual(pastTask.updatedAt + 1);
     });
   });
 });

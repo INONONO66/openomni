@@ -37,6 +37,8 @@ export {
   SessionMode,
 } from "./orchestration";
 
+export { RunWorker } from "./run-worker";
+
 export { DLQEntry, DeadLetterQueue } from "./dlq";
 
 export { SummaryTemplate, SummaryData, SummaryDelivery } from "./summary";
@@ -49,3 +51,26 @@ export {
 } from "./observability";
 
 export { AuditEntry, AuditLog } from "./audit";
+
+export {
+  ConversationSupervisor,
+  type ConversationSupervisorConfig,
+  type ConversationInput,
+  type ConversationPlan,
+  type WorkItemOutline,
+  type ApprovalDecision,
+  type ExecutionContextFork,
+  type ConversationHistory,
+  type ConversationSupervisorResult,
+} from "./conversation-supervisor";
+
+export {
+  SupervisorDecision,
+  SummarizedHistory,
+  ExecutionPlan,
+  ExecutionPlanStep,
+  ExecutionSupervisorConfig,
+  ExecutionSupervisorResult,
+  StepOutcome,
+  ExecutionSupervisor,
+} from "./execution-supervisor";

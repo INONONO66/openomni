@@ -35,14 +35,17 @@ src/
 │   ├── state-machine.ts  # TaskStateMachine — valid status transitions
 │   ├── checkpoint.ts  # CheckpointManager — save/restore run state
 │   └── recovery.ts    # CrashRecovery — detect and recover failed runs
-├── loop/              # Autonomous execution loop
+├── loop/              # Supervisor/Worker execution architecture
+│   ├── conversation-supervisor.ts  # ConversationSupervisor — user-facing orchestration (requirement gathering, plan authoring, approval gate)
+│   ├── execution-supervisor.ts     # ExecutionSupervisor — execution orchestration (task decomposition, accept/reject, re-dispatch)
+│   ├── run-worker.ts               # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
+│   ├── orchestration.ts            # Orchestrator.run() — compatibility facade (delegates to RunWorker.run)
 │   ├── envelope.ts    # EventEnvelope — normalize + validate incoming events
 │   ├── router.ts      # Router — match events to rules, produce RoutingDecision
 │   ├── dispatcher.ts  # Dispatcher — execute routed events
 │   ├── concurrency.ts # ConcurrencyGate — lane-based concurrency control
 │   ├── permission.ts  # PermissionGate — ask/notify/deny policy enforcement
 │   ├── run-supervisor.ts  # RunSupervisor — budget enforcement (time, turns, tool calls)
-│   ├── orchestration.ts   # Orchestrator.run() — full pipeline: route→dispatch→tool loop
 │   ├── dlq.ts         # DeadLetterQueue — failed event storage
 │   ├── summary.ts     # SummaryDelivery — post-run summary generation
 │   ├── audit.ts       # AuditLog — event audit trail
@@ -84,6 +87,13 @@ Legacy Loop (still active):
 
 ## KEY PATTERNS
 
+- **Supervisor/Worker Split**: Separates orchestration decisions (ConversationSupervisor, ExecutionSupervisor) from execution (RunWorker).
+  - **ConversationSupervisor**: User-facing orchestration. Handles requirement gathering, clarification, plan authoring, and approval gate. Session mode: `reuse` (if exists) or `persistent`.
+  - **ExecutionSupervisor**: Execution orchestration. Handles task decomposition, assignment, accept/reject, re-dispatch loop. Session mode: `persistent`. Internal-only (no direct external entry).
+  - **RunWorker**: Shared execution primitive. Handles LLM/tool loop, retry, budget, session lifecycle, state transitions. Used by both supervisors and tools (SubagentWorker, DispatchCoordinator).
+  - **Execution flow**: External events → ConversationSupervisor → (after approval) → ExecutionSupervisor → RunWorker
+- **SubagentWorker**: Single-task worker unit. Session mode: `ephemeral` (one-shot delegated work).
+- **DispatchCoordinator**: Multi-task coordinator for DAG execution. Child worker session mode: `persistent + reuse` (for review/retry/handoff continuity).
 - **Dynamic Supervisor**: IngressEngine + 3 tools (SubagentTool, DispatchTool, ScheduleTool). Replaces graph-based routing.
 - **surfaceKey**: Unique agent identifier (`{namespace}:{name}:{version}`). Used for registry lookup and A2A addressing.
 - **A2A Persistence**: `asker_only` policy — only asking agent stores messages. Audit log via `AgentMessenger.getAuditLog()`.
@@ -94,12 +104,14 @@ Legacy Loop (still active):
 - **Drift Detection**: Scheduler warns if execution is >5min late from planned start time.
 - **Lane Guard**: DefaultRunPlanner blocks telemetry events from creating runs.
 - **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
-- **Orchestrator.run()**: Main entry. Takes `{ taskId, runId, maxRetries }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error? }`.
+- **RunWorker.run()**: Main execution entry. Takes `{ taskId, runId, maxRetries, sessionMode, sessionId, maxSubagentDepth, currentDepth }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error }`.
+- **Orchestrator.run()**: Compatibility facade. Delegates to `RunWorker.run()`. Use `RunWorker.run()` directly for new code.
 - **ConfigManager.create()**: Deep-merge overrides into defaults. Validated with `ConfigManager.validate()`.
 - **State machine**: TaskStateMachine enforces valid transitions (e.g., `pending→active→completed`).
 
 ## ANTI-PATTERNS
 
+- `orchestration.ts` is now a compatibility facade — use `RunWorker.run()` for new code. `Orchestrator.run()` delegates to `RunWorker.run()` internally.
 - `supervisor.ts` in loop/ is older — `run-supervisor.ts` is the current implementation. Do NOT extend supervisor.ts.
 - QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
