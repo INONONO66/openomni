@@ -165,7 +165,7 @@ export namespace AgentMessenger {
       auditLogs.set(envelope.fromAgentId, fromAudit);
 
       const toAudit = auditLogs.get(envelope.toAgentId) ?? [];
-      toAudit.push(failedEntry);
+      toAudit.push({ ...failedEntry });
       auditLogs.set(envelope.toAgentId, toAudit);
 
       throw new MessagingError(
