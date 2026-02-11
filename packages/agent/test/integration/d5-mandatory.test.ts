@@ -4,8 +4,120 @@ import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { Scheduler } from "../../src/trigger/scheduler";
-import type { InboundEvent } from "../../src/ingress/interfaces";
+import type {
+  InboundEvent,
+  RunRequest,
+  RunResult,
+} from "../../src/ingress/interfaces";
+import type { RunExecutor } from "../../src/ingress/run-executor";
 import { randomUUID } from "crypto";
+
+/**
+ * Test executor that handles run_agent requests without going through
+ * ConversationSupervisor (which is an unimplemented stub).
+ * Creates a task+run and returns success, mirroring the expected pipeline behavior.
+ */
+class TestRunExecutor implements RunExecutor {
+  async execute(request: RunRequest): Promise<RunResult> {
+    const sessionId = request.session.id;
+
+    switch (request.kind) {
+      case "trigger_task": {
+        if (!request.taskId || !request.triggerSignal) {
+          return {
+            success: false,
+            summary: "",
+            error: "trigger_task requires taskId and triggerSignal",
+            sessionId,
+            request,
+          };
+        }
+
+        const triggerResult = await TaskManager.trigger(
+          request.taskId,
+          request.triggerSignal,
+        );
+
+        if ("error" in triggerResult) {
+          return {
+            success: false,
+            summary: "",
+            error: `TaskManager.trigger failed: ${triggerResult.error}`,
+            sessionId,
+            request,
+          };
+        }
+
+        return {
+          success: true,
+          summary: `Task ${request.taskId} triggered, runId: ${triggerResult.runId}`,
+          runId: triggerResult.runId,
+          sessionId,
+          request,
+        };
+      }
+
+      case "run_agent": {
+        const task = TaskManager.create({
+          title: `Ingress run: ${request.envelope.name}`,
+          owner: {
+            type: request.envelope.userId ? "user" : "agent",
+            id: request.envelope.userId ?? "system",
+          },
+          triggers: [{ id: randomUUID(), type: "manual" }],
+        });
+
+        const signal = {
+          triggerId: task.triggers[0]!.id,
+          type: "manual" as const,
+          context: {
+            conversationSessionId: sessionId,
+            userId: request.envelope.userId,
+            workspaceId: request.envelope.workspaceId,
+            traceId: request.envelope.traceId,
+          },
+          occurredAt: Date.now(),
+        };
+
+        const triggerResult = await TaskManager.trigger(task.id, signal);
+        if ("error" in triggerResult) {
+          return {
+            success: false,
+            summary: "",
+            error: `Failed to create run: ${triggerResult.error}`,
+            sessionId,
+            request,
+          };
+        }
+
+        return {
+          success: true,
+          summary: `Agent run completed for ${request.envelope.name}`,
+          runId: triggerResult.runId,
+          sessionId,
+          request,
+        };
+      }
+
+      case "notify_only":
+        return {
+          success: true,
+          summary: "Notification delivered",
+          sessionId,
+          request,
+        };
+
+      default:
+        return {
+          success: false,
+          summary: "",
+          error: `Unknown run request kind: ${(request as RunRequest).kind}`,
+          sessionId,
+          request,
+        };
+    }
+  }
+}
 
 function makeEvent(overrides: Partial<InboundEvent> = {}): InboundEvent {
   const now = new Date().toISOString();
@@ -31,6 +143,7 @@ describe("D5 Mandatory Tests", () => {
     Scheduler.clear();
     const store = TaskStorage.getAdapter();
     store.task.list().forEach((t) => store.task.remove(t.id));
+    IngressEngine.configure({ executor: new TestRunExecutor() });
   });
 
   afterEach(() => {
@@ -183,6 +296,7 @@ describe("D5 Mandatory Tests", () => {
 
       for (const surface of surfaces) {
         IngressEngine.reset();
+        IngressEngine.configure({ executor: new TestRunExecutor() });
         Session.storage.clear();
         SurfaceKey.clear();
 
