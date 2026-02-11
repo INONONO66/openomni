@@ -244,6 +244,13 @@ export const TaskRun = z.object({
       savedAt: z.number().int(),
     })
     .optional(),
+  spawnedBy: z
+    .object({
+      taskId: z.string(),
+      runId: z.string(),
+      sessionId: z.string(),
+    })
+    .optional(),
 });
 export type TaskRun = z.infer<typeof TaskRun>;
 
@@ -264,5 +271,12 @@ export const TriggerSignal = z.object({
     })
     .optional(),
   occurredAt: z.number().int(),
+  spawnedBy: z
+    .object({
+      taskId: z.string(),
+      runId: z.string(),
+      sessionId: z.string(),
+    })
+    .optional(),
 });
 export type TriggerSignal = z.infer<typeof TriggerSignal>;

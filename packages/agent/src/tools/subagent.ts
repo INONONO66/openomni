@@ -18,6 +18,9 @@ export interface SubagentContext {
   abortSignal?: AbortSignal;
   llm: OrchestratorRunInput["llm"];
   toolExecutor?: OrchestratorRunInput["toolExecutor"];
+  parentTaskId?: string;
+  parentRunId?: string;
+  parentSessionId?: string;
 }
 
 export interface SubagentResult {
@@ -86,10 +89,20 @@ export namespace Subagent {
       triggers: [{ id: "subagent-trigger", type: "manual" }],
     });
 
+    const spawnedBy =
+      context.parentTaskId && context.parentRunId && context.parentSessionId
+        ? {
+            taskId: context.parentTaskId,
+            runId: context.parentRunId,
+            sessionId: context.parentSessionId,
+          }
+        : undefined;
+
     const triggerResult = await TaskManager.trigger(childTask.id, {
       triggerId: "subagent-trigger",
       type: "manual",
       occurredAt: Date.now(),
+      spawnedBy,
     });
 
     if ("error" in triggerResult) {
