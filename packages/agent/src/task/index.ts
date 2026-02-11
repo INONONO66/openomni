@@ -3,6 +3,7 @@ export { TaskManager } from "./manager";
 export type { TriggerError, TriggerResult } from "./manager";
 export { TaskStorage, InMemoryTaskStore } from "./storage";
 export type { TaskStore } from "./storage";
+export { FileTaskStore } from "./file-task-storage";
 export { TaskStateMachine } from "./state-machine";
 export type { Checkpoint } from "./checkpoint";
 export { CheckpointManager } from "./checkpoint";
