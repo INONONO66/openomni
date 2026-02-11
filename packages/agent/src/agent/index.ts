@@ -27,6 +27,7 @@ export {
   MessageEnvelope,
   DeliveryOptions,
   MessagingError,
+  type AllowPattern,
 } from "./communication";
 
 export {
