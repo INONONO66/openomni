@@ -23,7 +23,7 @@
  * @see docs/migration-notes/dynamic-supervisor-plan.md — D8, D9, D10, D11
  */
 
-import type { SessionMode } from "./orchestration";
+import type { SessionMode } from "./run-worker";
 
 export interface ConversationSupervisorConfig {
   /** Surface-specific readable session key (per D2) */

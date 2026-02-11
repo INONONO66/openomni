@@ -7,7 +7,7 @@ import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   SessionMode,
-} from "./orchestration";
+} from "./run-worker";
 import { RunWorker } from "./run-worker";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;

@@ -35,7 +35,8 @@ export {
   OrchestrationState,
   ToolExecutor,
   SessionMode,
-} from "./orchestration";
+  OrchestratorRunInput,
+} from "./run-worker";
 
 export { RunWorker } from "./run-worker";
 

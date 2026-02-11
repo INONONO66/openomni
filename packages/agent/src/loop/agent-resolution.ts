@@ -6,7 +6,7 @@ import type {
 } from "@openomni/protocol";
 import { ModelsDev, Provider } from "@openomni/llm/src/provider";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent/registry";
-import type { ToolExecutor, OrchestratorRunInput } from "./orchestration";
+import type { ToolExecutor, OrchestratorRunInput } from "./run-worker";
 import { run as llmRun, type RunInput } from "@openomni/llm/src/run";
 
 const DEFAULT_MODEL_CONFIG = {
