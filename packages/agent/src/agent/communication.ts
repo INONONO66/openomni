@@ -85,6 +85,7 @@ export namespace AgentMessenger {
     ((envelope: MessageEnvelope) => void)[]
   >();
   let allowPatterns: AllowPattern[] | null = null;
+  let bothPolicyEnabled = false;
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
     return Boolean(
@@ -108,6 +109,14 @@ export namespace AgentMessenger {
 
   export const resetAllowPatterns = (): void => {
     allowPatterns = null;
+  };
+
+  export const enableBothPolicy = (): void => {
+    bothPolicyEnabled = true;
+  };
+
+  export const resetBothPolicy = (): void => {
+    bothPolicyEnabled = false;
   };
 
   const createAuditEntry = (envelope: MessageEnvelope): AuditEntry => {
@@ -146,6 +155,12 @@ export namespace AgentMessenger {
     }
 
     const policy = envelope.persistencePolicy ?? "asker_only";
+
+    if (policy === "both" && !bothPolicyEnabled) {
+      throw new MessagingError(
+        'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
+      );
+    }
 
     // Store in sender (fromAgentId) inbox based on policy
     if (policy === "asker_only" || policy === "both") {

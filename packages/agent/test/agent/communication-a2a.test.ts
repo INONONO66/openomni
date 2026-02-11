@@ -28,6 +28,7 @@ describe("AgentMessenger A2A Persistence", () => {
   beforeEach(() => {
     sender = `agent-${randomUUID()}`;
     receiver = `agent-${randomUUID()}`;
+    AgentMessenger.resetBothPolicy();
   });
 
   describe("asker_only policy (default)", () => {
@@ -137,6 +138,7 @@ describe("AgentMessenger A2A Persistence", () => {
 
   describe("both policy", () => {
     it("stores full envelope in both sender and receiver inboxes", async () => {
+      AgentMessenger.enableBothPolicy();
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
@@ -171,6 +173,7 @@ describe("AgentMessenger A2A Persistence", () => {
     });
 
     it("both inboxes contain full payload", async () => {
+      AgentMessenger.enableBothPolicy();
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
@@ -617,6 +620,160 @@ describe("AgentMessenger Allow Pattern Gate", () => {
       await expect(AgentMessenger.send(envelope)).rejects.toThrow(
         MessagingError,
       );
+    });
+  });
+});
+
+describe("AgentMessenger Both Policy Enforcement", () => {
+  let sender: string;
+  let receiver: string;
+
+  beforeEach(() => {
+    sender = `agent-${randomUUID()}`;
+    receiver = `agent-${randomUUID()}`;
+    AgentMessenger.resetBothPolicy();
+    AgentMessenger.resetAllowPatterns();
+  });
+
+  describe("default enforcement (both policy disabled)", () => {
+    it("throws MessagingError when using 'both' without enableBothPolicy()", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
+      );
+    });
+
+    it("asker_only works without any opt-in", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "asker_only",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("none policy works without any opt-in", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "none",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("undefined persistencePolicy defaults to asker_only and succeeds", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: undefined,
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("explicit opt-in for both policy", () => {
+    it("enableBothPolicy() allows 'both' to succeed", async () => {
+      AgentMessenger.enableBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+
+    it("resetBothPolicy() re-blocks 'both' after enabling", async () => {
+      AgentMessenger.enableBothPolicy();
+      AgentMessenger.resetBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
+        MessagingError,
+      );
+    });
+
+    it("enableBothPolicy() is idempotent", async () => {
+      AgentMessenger.enableBothPolicy();
+      AgentMessenger.enableBothPolicy();
+
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+      });
+
+      await expect(AgentMessenger.send(envelope)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("responder audit log verification", () => {
+    it("responder audit log contains no payload field under asker_only", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "asker_only",
+        payload: { sensitive: "data", token: "abc123" },
+      });
+
+      await AgentMessenger.send(envelope);
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
+      expect(receiverAudit[0]?.fromAgentId).toBe(sender);
+      expect(receiverAudit[0]?.toAgentId).toBe(receiver);
+      expect(receiverAudit[0]?.status).toBe("delivered");
+    });
+
+    it("responder audit log contains no payload field under none policy", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "none",
+        payload: { sensitive: "data" },
+      });
+
+      await AgentMessenger.send(envelope);
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(1);
+      expect(receiverAudit[0]).not.toHaveProperty("payload");
+    });
+
+    it("blocked 'both' attempt does not store payload in responder timeline", async () => {
+      const envelope = createEnvelope({
+        fromAgentId: sender,
+        toAgentId: receiver,
+        persistencePolicy: "both",
+        payload: { should_not_persist: true },
+      });
+
+      try {
+        await AgentMessenger.send(envelope);
+      } catch {
+        // expected
+      }
+
+      const receiverAudit = AgentMessenger.getAuditLog(receiver);
+      expect(receiverAudit.length).toBe(0);
     });
   });
 });
