@@ -60,7 +60,14 @@ export const DefaultRunPlanner: RunPlanner = {
       envelope.name === "subagent.completed" ||
       envelope.name === "subagent.failed";
 
-    if (isCompletion && envelope.meta?.taskId) {
+    if (isCompletion) {
+      if (!envelope.meta?.taskId) {
+        console.warn(
+          `[IngressEngine] Completion event without taskId dropped: ${envelope.name}`,
+        );
+        return [];
+      }
+
       const targetTaskId = envelope.meta.taskId as string;
       const originTaskId = envelope.meta.originTaskId as string | undefined;
 
