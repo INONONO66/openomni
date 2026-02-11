@@ -157,6 +157,17 @@ export namespace AgentMessenger {
     const policy = envelope.persistencePolicy ?? "asker_only";
 
     if (policy === "both" && !bothPolicyEnabled) {
+      const failedEntry = createAuditEntry(envelope);
+      failedEntry.status = "failed";
+
+      const fromAudit = auditLogs.get(envelope.fromAgentId) ?? [];
+      fromAudit.push(failedEntry);
+      auditLogs.set(envelope.fromAgentId, fromAudit);
+
+      const toAudit = auditLogs.get(envelope.toAgentId) ?? [];
+      toAudit.push(failedEntry);
+      auditLogs.set(envelope.toAgentId, toAudit);
+
       throw new MessagingError(
         'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
       );
