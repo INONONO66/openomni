@@ -692,7 +692,14 @@ async function resolveDispatchHybridRuntime(
           supervisorSystemPrompt = systemPrompt;
         }
       }
-    } catch {}
+    } catch (error) {
+      console.warn(
+        "[ExecutionSupervisor] Supervisor agent resolution failed for",
+        context.agentId,
+        "- falling back to context.llm. Error:",
+        error,
+      );
+    }
   }
 
   return {
@@ -1210,7 +1217,13 @@ async function resolveWorkerRuntimeForTaskInternal(
       toolExecutor: upstreamExecutor ?? resolved.toolExecutor,
       systemPrompt,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[ExecutionSupervisor] Worker agent resolution failed for",
+      agentId,
+      "- falling back to context.llm. Error:",
+      error,
+    );
     return {
       agent,
       llm: context.llm,

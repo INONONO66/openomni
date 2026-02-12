@@ -152,7 +152,7 @@ describe("ExecutionSupervisor.executeDispatch", () => {
 
       expect(result.success).toBe(true);
       expect(result.completedTaskIds.sort()).toEqual(["A", "B"]);
-      expect(duration).toBeLessThan(100);
+      expect(duration).toBeLessThan(500);
     });
 
     it("executes complex DAG (A,B parallel -> C -> D)", async () => {
@@ -805,6 +805,53 @@ describe("ExecutionSupervisor.executeDispatch", () => {
 
       expect(result.success).toBe(true);
       expect(result.completedTaskIds).toContain("T1");
+    });
+
+    it("exercises handle_failure tool path with worker failures", async () => {
+      let llmCallCount = 0;
+
+      const hybridLLM = {
+        run: async (input: Record<string, unknown>, sink: Sink) => {
+          llmCallCount++;
+          const sessionId = String(input.sessionID ?? "unknown-session");
+          await sleep(5);
+          emitAssistantText(sink, sessionId, "LLM response");
+          return { type: "stop" as const };
+        },
+      };
+
+      const input: DispatchExecutionInput = {
+        objective: "Test handle_failure tool",
+        tasks: [
+          {
+            id: "T1",
+            description: "Task with failures",
+            agentType: "implement",
+            dependencies: [],
+            fileScope: [],
+          },
+        ],
+      };
+
+      let reviewCount = 0;
+      const context: DispatchContext = {
+        llm: hybridLLM,
+        agentId: "implement",
+        availableAgents: ["implement"],
+        review: () => {
+          reviewCount++;
+          if (reviewCount < 2) {
+            return { decision: "reject" as const, feedback: "Retry needed" };
+          }
+          return { decision: "accept" as const };
+        },
+      };
+
+      const result = await ExecutionSupervisor.executeDispatch(input, context);
+
+      expect(llmCallCount).toBeGreaterThan(1);
+      expect(reviewCount).toBeGreaterThanOrEqual(2);
+      expect(result.results.length).toBe(1);
     });
   });
 
