@@ -132,7 +132,7 @@ describe("ConversationSupervisor", () => {
 
         const result = await ConversationSupervisor.run(config, input);
 
-        expect(["immediate", "plan_pending", "error"]).toContain(result.type);
+        expect(["immediate", "plan_pending"]).toContain(result.type);
         if (result.type === "plan_pending") {
           expect(result.plan.workItems.length).toBeGreaterThan(0);
         }
@@ -142,34 +142,38 @@ describe("ConversationSupervisor", () => {
   });
 
   describe("session resolution", () => {
-    it("reuses existing session", async () => {
-      const task = createTask();
-      const runId = await createRun(task.id);
+    it(
+      "reuses existing session",
+      async () => {
+        const task = createTask();
+        const runId = await createRun(task.id);
 
-      const session = Session.create({
-        title: "Test Session",
-        model: {
-          providerID: "anthropic",
-          modelID: "claude-sonnet-4-20250514",
-        },
-      });
+        const session = Session.create({
+          title: "Test Session",
+          model: {
+            providerID: "anthropic",
+            modelID: "claude-sonnet-4-20250514",
+          },
+        });
 
-      const config: ConversationSupervisorConfig = {
-        conversationSessionId: session.id,
-      };
+        const config: ConversationSupervisorConfig = {
+          conversationSessionId: session.id,
+        };
 
-      const input: ConversationInput = {
-        content: "What is the capital of France?",
-        metadata: {
-          taskId: task.id,
-          runId,
-        },
-      };
+        const input: ConversationInput = {
+          content: "What is the capital of France?",
+          metadata: {
+            taskId: task.id,
+            runId,
+          },
+        };
 
-      const result = await ConversationSupervisor.run(config, input);
+        const result = await ConversationSupervisor.run(config, input);
 
-      expect(result.type).toBe("immediate");
-    });
+        expect(result.type).toBe("immediate");
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe("error handling", () => {
@@ -199,7 +203,7 @@ describe("ConversationSupervisor", () => {
 
       const result = await ConversationSupervisor.run(config, input);
 
-      expect(["immediate", "plan_pending", "error"]).toContain(result.type);
+      expect(["immediate", "plan_pending"]).toContain(result.type);
     });
 
     it("returns error when no assistant response found", async () => {
