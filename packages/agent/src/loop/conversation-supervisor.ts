@@ -23,6 +23,8 @@
  * @see docs/migration-notes/dynamic-supervisor-plan.md — D8, D9, D10, D11
  */
 
+import { Session } from "@openomni/session";
+import { resolveAgentDefinition } from "./agent-resolution";
 import type { SessionMode } from "./run-worker";
 
 export interface ConversationSupervisorConfig {
@@ -131,9 +133,37 @@ export namespace ConversationSupervisor {
     config: ConversationSupervisorConfig,
     _input: ConversationInput,
   ): Promise<ConversationSupervisorResult> {
-    const _traceId = config.traceId ?? crypto.randomUUID();
+    // Step 1: Session resolution + agent resolution
+    const traceId = config.traceId ?? crypto.randomUUID();
 
-    // TODO(step 1): Session resolution — resolveSessionMode(config, sessionExists)
+    // config.conversationSessionId is session.id (UUID) from SessionResolver
+    let session = Session.get(config.conversationSessionId);
+    let sessionMode: Extract<SessionMode, "reuse" | "persistent">;
+
+    if (session) {
+      // Session exists — reuse
+      sessionMode = resolveSessionMode(config, true);
+    } else {
+      // Session doesn't exist — create new (should rarely happen in practice)
+      session = Session.create({
+        title: "Conversation Session",
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-sonnet-4-20250514",
+        },
+      });
+      sessionMode = resolveSessionMode(config, false);
+    }
+
+    // Resolve agent definition
+    const agentId = config.agentId ?? "conversation-supervisor";
+    const agentDef = resolveAgentDefinition(agentId);
+
+    const systemPrompt =
+      agentDef?.systemPrompt ??
+      "You are a conversation supervisor helping users plan and execute tasks.";
+    const tools = agentDef?.tools ?? [];
+
     // TODO(step 2): LLM conversation turn — gather requirements, clarify intent
     // TODO(step 3): Intent classification — immediate vs plan-sized
     // TODO(step 4): Plan generation — generatePlan(session, requirements)
@@ -148,6 +178,13 @@ export namespace ConversationSupervisor {
 
     // TODO(step 7): Delegate to ExecutionSupervisor.run(fork)
     // ExecutionSupervisor creates its own execution timeline session
+
+    // Suppress unused variable warnings (will be used in later steps)
+    void session;
+    void sessionMode;
+    void traceId;
+    void systemPrompt;
+    void tools;
 
     return {
       type: "error",
