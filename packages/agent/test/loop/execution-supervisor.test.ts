@@ -849,6 +849,7 @@ describe("ExecutionSupervisor.executeDispatch", () => {
 
       const result = await ExecutionSupervisor.executeDispatch(input, context);
 
+      expect(result.success).toBe(true);
       expect(llmCallCount).toBeGreaterThan(1);
       expect(reviewCount).toBeGreaterThanOrEqual(2);
       expect(result.results.length).toBe(1);
