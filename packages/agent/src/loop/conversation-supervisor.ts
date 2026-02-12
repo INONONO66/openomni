@@ -430,9 +430,17 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
       }
     }
 
-    // TODO(step 5): Approval gate (D11)
-    // Plan-sized execution MUST NOT be auto-approved.
-    // Present plan → await explicit user approval → reject/revise/approve
+    // Step 5: Approval gate (D11)
+    // Plan is returned to caller for user approval.
+    // External system (e.g., CLI, UI) presents plan to user and waits for decision:
+    // - approved → caller proceeds to Step 6 (fork + ExecutionSupervisor delegation)
+    // - rejected → caller handles rejection (no further action)
+    // - revised → caller re-invokes ConversationSupervisor with feedback
+    //
+    // ConversationSupervisor does NOT implement approval logic itself —
+    // it returns plan_pending and delegates approval to the caller.
+    //
+    // This ensures plan-sized work NEVER auto-approves (D11 compliance).
 
     // TODO(step 6): Fork execution context (D10)
     // summarizedHistory = summarizeHistory(session)  // NOT raw transcript
