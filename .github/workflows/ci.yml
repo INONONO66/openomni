@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-types:
-    name: Type Check
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -26,22 +26,14 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@openomni/protocol
       - run: bun run check-types
-
-  build-and-test:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.6"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: bun run test
+      - name: Test (session)
+        run: bun test
+        working-directory: packages/session
+      - name: Test (llm)
+        run: bun test
+        working-directory: packages/llm
+      - name: Test (agent)
+        run: bun test
+        working-directory: packages/agent
