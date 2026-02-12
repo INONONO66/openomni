@@ -90,9 +90,7 @@ describe("IngressEngine", () => {
       const results = await IngressEngine.ingest(event);
 
       expect(results.length).toBe(1);
-      // ConversationSupervisor stub returns error — pipeline completes but run reports error
-      expect(results[0]!.success).toBe(false);
-      expect(results[0]!.error).toContain("ConversationSupervisor");
+      expect(results[0]!.success).toBe(true);
       expect(results[0]!.sessionId).toBeDefined();
     });
 
