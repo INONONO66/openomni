@@ -219,7 +219,7 @@ describe("Subagent", () => {
 
       const hangingLLM = {
         run: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 200));
           return { type: "stop" as const };
         },
       };
