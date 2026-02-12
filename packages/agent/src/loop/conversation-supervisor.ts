@@ -23,6 +23,7 @@
  * @see docs/migration-notes/dynamic-supervisor-plan.md — D8, D9, D10, D11
  */
 
+import { z } from "zod";
 import { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import {
@@ -96,6 +97,28 @@ export interface ConversationHistory {
   clarifications: string[];
   contextSummary: string;
 }
+
+// ============================================================
+// Tool Schemas
+// ============================================================
+
+/**
+ * classify_intent tool schema — LLM uses this to classify user intent.
+ * This is a schema-only tool (no executor) — LLM generates the tool call,
+ * ConversationSupervisor detects it and branches accordingly.
+ */
+export const ClassifyIntentInput = z.object({
+  intent: z
+    .enum(["immediate", "plan_needed"])
+    .describe(
+      "User intent classification: 'immediate' for simple queries/tasks that can be answered directly, 'plan_needed' for complex work requiring decomposition and approval",
+    ),
+  reasoning: z
+    .string()
+    .optional()
+    .describe("Brief reasoning for the classification"),
+});
+export type ClassifyIntentInput = z.infer<typeof ClassifyIntentInput>;
 
 export type ConversationSupervisorResult =
   | { type: "immediate"; response: string }
@@ -241,7 +264,53 @@ export namespace ConversationSupervisor {
       };
     }
 
-    // TODO(step 3): Intent classification — immediate vs plan-sized
+    const messages = Session.getMessages(session.id);
+    const lastMessage = messages[messages.length - 1];
+
+    if (!lastMessage || lastMessage.role !== "assistant") {
+      return {
+        type: "error",
+        error: "No assistant response found after LLM turn",
+      };
+    }
+
+    const parts = Session.getParts(lastMessage.id);
+    const toolParts = parts.filter(
+      (part): part is Message.ToolPart => part.type === "tool",
+    );
+
+    const classifyIntentCall = toolParts.find(
+      (part) => part.tool === "classify_intent",
+    );
+
+    if (classifyIntentCall) {
+      const input = classifyIntentCall.state.input as ClassifyIntentInput;
+
+      if (input.intent === "immediate") {
+        const textParts = parts.filter(
+          (part): part is Message.TextPart => part.type === "text",
+        );
+        const response = textParts.map((p) => p.text).join("");
+
+        return {
+          type: "immediate",
+          response,
+        };
+      }
+    } else {
+      const textParts = parts.filter(
+        (part): part is Message.TextPart => part.type === "text",
+      );
+      const response = textParts.map((p) => p.text).join("");
+
+      if (response) {
+        return {
+          type: "immediate",
+          response,
+        };
+      }
+    }
+
     // TODO(step 4): Plan generation — generatePlan(session, requirements)
 
     // TODO(step 5): Approval gate (D11)
