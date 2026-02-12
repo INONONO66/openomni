@@ -1,4 +1,4 @@
-// Force exit after 20s if bun test hangs (Linux inotify/event loop issue)
+// Force exit after 10s if bun test hangs (bun 1.3.6 Linux event loop bug)
 const forceExitTimer = setTimeout(() => {
   const handles = (process as any)._getActiveHandles?.() ?? [];
   console.log(
@@ -6,5 +6,5 @@ const forceExitTimer = setTimeout(() => {
     handles.map((h: any) => `${h?.constructor?.name ?? typeof h}`),
   );
   process.exit(0);
-}, 20_000);
+}, 10_000);
 forceExitTimer.unref();
