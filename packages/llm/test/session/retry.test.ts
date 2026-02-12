@@ -456,7 +456,7 @@ describe("Retry", () => {
       };
 
       try {
-        await Retry.withRetry(fn, { maxAttempts: 2 });
+        await Retry.withRetry(fn, { maxAttempts: 2, initialDelay: 10 });
         expect.unreachable("Should have thrown RetryError");
       } catch (e) {
         expect(RetryError.isInstance(e)).toBe(true);
@@ -528,7 +528,10 @@ describe("Retry", () => {
         return "success";
       };
 
-      const result = await Retry.withRetry(fn, { maxAttempts: 3 });
+      const result = await Retry.withRetry(fn, {
+        maxAttempts: 3,
+        initialDelay: 10,
+      });
       expect(result).toBe("success");
       expect(callCount).toBe(2);
     });
