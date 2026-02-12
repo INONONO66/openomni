@@ -23,9 +23,20 @@
  * @see docs/migration-notes/dynamic-supervisor-plan.md — D8, D9, D10, D11
  */
 
+import { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { resolveAgentDefinition } from "./agent-resolution";
-import type { SessionMode } from "./run-worker";
+import {
+  resolveAgentDefinition,
+  resolveLLM,
+  resolveToolExecutor,
+} from "./agent-resolution";
+import { RunWorker } from "./run-worker";
+import type {
+  SessionMode,
+  OrchestratorConfig,
+  OrchestratorRunInput,
+  OrchestrationResult,
+} from "./run-worker";
 
 export interface ConversationSupervisorConfig {
   /** Surface-specific readable session key (per D2) */
@@ -164,7 +175,72 @@ export namespace ConversationSupervisor {
       "You are a conversation supervisor helping users plan and execute tasks.";
     const tools = agentDef?.tools ?? [];
 
-    // TODO(step 2): LLM conversation turn — gather requirements, clarify intent
+    const taskId = _input.metadata?.taskId as string | undefined;
+    const runId = _input.metadata?.runId as string | undefined;
+
+    if (!taskId || !runId) {
+      return {
+        type: "error",
+        error: "Missing taskId or runId in input.metadata",
+      };
+    }
+
+    const orchestratorConfig: OrchestratorConfig = {
+      taskId,
+      runId,
+      maxRetries: 0,
+      sessionMode,
+      sessionId: session.id,
+    };
+
+    const userMessage: Message.UserMessage = {
+      id: crypto.randomUUID(),
+      sessionID: session.id,
+      role: "user",
+      time: { created: Date.now() },
+      agent: agentId,
+      model: session.model,
+    };
+    Session.addMessage(session.id, userMessage);
+
+    const textPart: Message.TextPart = {
+      id: crypto.randomUUID(),
+      sessionID: session.id,
+      messageID: userMessage.id,
+      type: "text",
+      text: _input.content,
+    };
+    Session.addPart(userMessage.id, textPart);
+
+    const llm = await resolveLLM(agentDef?.model);
+
+    const messageInfos = Session.getMessages(session.id);
+    const messagesWithParts: Message.WithParts[] = messageInfos.map((info) => ({
+      info,
+      parts: Session.getParts(info.id),
+    }));
+
+    const runWorkerInput: OrchestratorRunInput = {
+      llm,
+      input: {
+        system: systemPrompt,
+        messages: messagesWithParts,
+      },
+      toolExecutor: resolveToolExecutor(tools),
+    };
+
+    const orchestrationResult: OrchestrationResult = await RunWorker.run(
+      orchestratorConfig,
+      runWorkerInput,
+    );
+
+    if (!orchestrationResult.success) {
+      return {
+        type: "error",
+        error: `LLM conversation turn failed: ${orchestrationResult.error}`,
+      };
+    }
+
     // TODO(step 3): Intent classification — immediate vs plan-sized
     // TODO(step 4): Plan generation — generatePlan(session, requirements)
 
@@ -180,11 +256,7 @@ export namespace ConversationSupervisor {
     // ExecutionSupervisor creates its own execution timeline session
 
     // Suppress unused variable warnings (will be used in later steps)
-    void session;
-    void sessionMode;
     void traceId;
-    void systemPrompt;
-    void tools;
 
     return {
       type: "error",
