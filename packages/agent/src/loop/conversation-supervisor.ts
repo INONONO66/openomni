@@ -31,6 +31,7 @@ import {
   resolveLLM,
   resolveToolExecutor,
 } from "./agent-resolution";
+import { BuiltinAgentRegistry } from "../agent/registry";
 import { RunWorker } from "./run-worker";
 import type {
   SessionMode,
@@ -71,6 +72,7 @@ export interface WorkItemOutline {
   description: string;
   effort: "trivial" | "small" | "medium" | "large";
   dependsOn?: number[];
+  suggestedAgent?: string;
 }
 
 export type ApprovalDecision =
@@ -119,6 +121,39 @@ export const ClassifyIntentInput = z.object({
     .describe("Brief reasoning for the classification"),
 });
 export type ClassifyIntentInput = z.infer<typeof ClassifyIntentInput>;
+
+/**
+ * generate_plan tool schema — LLM uses this to produce a structured plan.
+ * Schema-only tool (no executor) — LLM generates the tool call,
+ * ConversationSupervisor extracts and validates the plan.
+ */
+export const GeneratePlanInput = z.object({
+  title: z.string().describe("Plan title"),
+  description: z.string().describe("Plan description"),
+  workItems: z
+    .array(
+      z.object({
+        description: z.string().describe("Work item description"),
+        effort: z
+          .enum(["trivial", "small", "medium", "large"])
+          .describe("Effort estimate"),
+        dependsOn: z
+          .array(z.number())
+          .optional()
+          .describe("Indices of dependent work items"),
+        suggestedAgent: z
+          .string()
+          .optional()
+          .describe("Recommended agent for this work item"),
+      }),
+    )
+    .describe("Array of work items"),
+  estimatedRuntimeMs: z
+    .number()
+    .optional()
+    .describe("Estimated total runtime in milliseconds"),
+});
+export type GeneratePlanInput = z.infer<typeof GeneratePlanInput>;
 
 export type ConversationSupervisorResult =
   | { type: "immediate"; response: string }
@@ -311,7 +346,89 @@ export namespace ConversationSupervisor {
       }
     }
 
-    // TODO(step 4): Plan generation — generatePlan(session, requirements)
+    const availableAgents = BuiltinAgentRegistry.list();
+    const agentSummary = availableAgents
+      .map((agent) => `- ${agent.name}: ${agent.description}`)
+      .join("\n");
+
+    const planningSystemPrompt = `${systemPrompt}
+
+Available agents for task execution:
+${agentSummary}
+
+When generating a plan, assign a suggestedAgent to each work item based on the agent's capabilities.`;
+
+    const planningMessages = Session.getMessages(session.id).map((info) => ({
+      info,
+      parts: Session.getParts(info.id),
+    }));
+
+    const planningInput: OrchestratorRunInput = {
+      llm,
+      input: {
+        system: planningSystemPrompt,
+        messages: planningMessages,
+      },
+      toolExecutor: resolveToolExecutor(tools),
+    };
+
+    const planningResult: OrchestrationResult = await RunWorker.run(
+      orchestratorConfig,
+      planningInput,
+    );
+
+    if (!planningResult.success) {
+      return {
+        type: "error",
+        error: `Plan generation failed: ${planningResult.error}`,
+      };
+    }
+
+    const planMessages = Session.getMessages(session.id);
+    const lastPlanMessage = planMessages[planMessages.length - 1];
+
+    if (!lastPlanMessage || lastPlanMessage.role !== "assistant") {
+      return {
+        type: "error",
+        error: "No assistant response found after plan generation turn",
+      };
+    }
+
+    const planParts = Session.getParts(lastPlanMessage.id);
+    const planToolParts = planParts.filter(
+      (part): part is Message.ToolPart => part.type === "tool",
+    );
+
+    const generatePlanCall = planToolParts.find(
+      (part) => part.tool === "generate_plan",
+    );
+
+    if (!generatePlanCall) {
+      return {
+        type: "error",
+        error: "LLM did not generate a plan (no generate_plan tool call found)",
+      };
+    }
+
+    const planInput = generatePlanCall.state.input as GeneratePlanInput;
+
+    const plan: ConversationPlan = {
+      planId: crypto.randomUUID(),
+      title: planInput.title,
+      description: planInput.description,
+      workItems: planInput.workItems,
+      estimatedRuntimeMs: planInput.estimatedRuntimeMs,
+      createdAt: Date.now(),
+    };
+
+    const agentNames = new Set(availableAgents.map((a) => a.name));
+    for (const item of plan.workItems) {
+      if (item.suggestedAgent && !agentNames.has(item.suggestedAgent)) {
+        console.warn(
+          `[ConversationSupervisor] Invalid suggestedAgent: ${item.suggestedAgent}`,
+        );
+      }
+    }
 
     // TODO(step 5): Approval gate (D11)
     // Plan-sized execution MUST NOT be auto-approved.
@@ -324,12 +441,11 @@ export namespace ConversationSupervisor {
     // TODO(step 7): Delegate to ExecutionSupervisor.run(fork)
     // ExecutionSupervisor creates its own execution timeline session
 
-    // Suppress unused variable warnings (will be used in later steps)
     void traceId;
 
     return {
-      type: "error",
-      error: "ConversationSupervisor.run() is not yet implemented",
+      type: "plan_pending",
+      plan,
     };
   }
 }
