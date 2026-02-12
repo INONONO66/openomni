@@ -14,6 +14,7 @@ const baseConfig: WatcherConfig = {
   recursive: false,
   includePatterns: [],
   excludePatterns: [],
+  persistent: false,
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
