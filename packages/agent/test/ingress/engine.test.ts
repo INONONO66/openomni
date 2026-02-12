@@ -282,7 +282,7 @@ describe("IngressEngine", () => {
     it(
       "accepts custom dedup window",
       async () => {
-        IngressEngine.configure({ dedupWindowMs: 1000 });
+        IngressEngine.configure({ dedupeWindowMs: 1000 });
         const event = makeEvent({ dedupeKey: "same-key" });
 
         const results1 = await IngressEngine.ingest(event);
