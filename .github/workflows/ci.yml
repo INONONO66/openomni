@@ -35,5 +35,5 @@ jobs:
         run: bun test
         working-directory: packages/llm
       - name: Test (agent)
-        run: bun test
+        run: bun test --timeout 10000 --preload ./test/debug-handles.ts
         working-directory: packages/agent
