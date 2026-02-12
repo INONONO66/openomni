@@ -442,12 +442,22 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
     //
     // This ensures plan-sized work NEVER auto-approves (D11 compliance).
 
-    // TODO(step 6): Fork execution context (D10)
-    // summarizedHistory = summarizeHistory(session)  // NOT raw transcript
-    // fork = createFork(conversationSessionId, summarizedHistory, approvedPlan, traceId)
-
-    // TODO(step 7): Delegate to ExecutionSupervisor.run(fork)
-    // ExecutionSupervisor creates its own execution timeline session
+    // Step 6-7: Fork + ExecutionSupervisor delegation
+    // These steps are handled by the CALLER (e.g., DefaultRunExecutor), not ConversationSupervisor.
+    //
+    // Architecture flow:
+    // 1. ConversationSupervisor returns { type: "plan_pending", plan }
+    // 2. External system (CLI/UI) presents plan to user and waits for approval
+    // 3. On approval, external system creates ExecutionContextFork:
+    //    - summarizedHistory = summarizeHistory(session)  // NOT raw transcript (D10)
+    //    - fork = createFork(conversationSessionId, summarizedHistory, approvedPlan, traceId)
+    // 4. External system returns { type: "execution_forked", fork }
+    // 5. Caller (e.g., DefaultRunExecutor) delegates to ExecutionSupervisor.run(fork)
+    //
+    // ConversationSupervisor does NOT implement fork/delegation itself —
+    // it provides helper functions (createFork, requiresApproval) for callers to use.
+    //
+    // See: packages/agent/src/ingress/run-executor.ts:211-240 for reference implementation.
 
     void traceId;
 
