@@ -6,6 +6,8 @@ export interface WatcherConfig {
   recursive: boolean;
   includePatterns: string[];
   excludePatterns: string[];
+  /** Keep the process alive while watching. Defaults to true. Set false in tests. */
+  persistent?: boolean;
 }
 
 export interface Watcher {
@@ -42,7 +44,10 @@ class FilesystemWatcher implements Watcher {
 
     const watcher = watch(
       path,
-      { recursive: this.config.recursive },
+      {
+        recursive: this.config.recursive,
+        persistent: this.config.persistent ?? true,
+      },
       (eventType, filename) => {
         const resolvedPath = filename ? join(path, filename.toString()) : path;
         this.handleEvent(resolvedPath, eventType);
