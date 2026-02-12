@@ -93,6 +93,16 @@ Legacy Loop (still active):
   - **ExecutionSupervisor**: Execution orchestration. Handles task decomposition, assignment, accept/reject, re-dispatch loop. Session mode: `persistent`. Internal-only (no direct external entry).
   - **RunWorker**: Shared execution primitive. Handles LLM/tool loop, retry, budget, session lifecycle, state transitions. Used by both supervisors and tools (SubagentWorker, DispatchCoordinator).
   - **Execution flow**: External events → ConversationSupervisor → (after approval) → ExecutionSupervisor → RunWorker
+- **ConversationSupervisor Lifecycle**: 7-step framework for user-facing orchestration.
+  1. **Session Resolution**: Reuse existing session or create new (`persistent` mode)
+  2. **Agent Resolution**: Load AgentDefinition (prompt/model/tools) via `config.agentId` or use default
+  3. **LLM Turn**: Call RunWorker with injected AgentDefinition
+  4. **Intent Classification**: LLM calls `classify_intent` tool → `immediate` or `plan_needed`
+  5. **Plan Generation** (if plan_needed): LLM calls `generate_plan` tool → includes `suggestedAgent` per work item (from `BuiltinAgentRegistry.list()`)
+  6. **Approval Gate**: Returns `plan_pending` → external system presents to user (D11: no auto-approval)
+  7. **Fork + Delegation** (after approval): External system creates fork (summarized history only, D10) → calls ExecutionSupervisor
+  - **Framework Layer**: Lifecycle is fixed, behavior is injectable via AgentDefinition
+  - **External Customization**: Define custom supervisor via `BuiltinAgentRegistry.define({ name: "conversation-supervisor", systemPrompt: "...", tools: [...], model: {...} })`
 - **SubagentWorker**: Single-task worker unit. Session mode: `ephemeral` (one-shot delegated work).
 - **DispatchCoordinator**: Multi-task coordinator for DAG execution. Child worker session mode: `persistent + reuse` (for review/retry/handoff continuity).
 - **Dynamic Supervisor**: IngressEngine + 3 tools (SubagentTool, DispatchTool, ScheduleTool). Replaces graph-based routing.

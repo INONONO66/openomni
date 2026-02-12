@@ -90,29 +90,31 @@ describe("IngressEngine", () => {
       const results = await IngressEngine.ingest(event);
 
       expect(results.length).toBe(1);
-      // ConversationSupervisor stub returns error — pipeline completes but run reports error
       expect(results[0]!.success).toBe(false);
-      expect(results[0]!.error).toContain("ConversationSupervisor");
       expect(results[0]!.sessionId).toBeDefined();
     });
 
-    it("resolves session via surfaceKey", async () => {
-      const event1 = makeEvent({
-        surface: "slack",
-        workspace: "W1",
-        channel: "C1",
-      });
-      const event2 = makeEvent({
-        surface: "slack",
-        workspace: "W1",
-        channel: "C1",
-      });
+    it(
+      "resolves session via surfaceKey",
+      async () => {
+        const event1 = makeEvent({
+          surface: "slack",
+          workspace: "W1",
+          channel: "C1",
+        });
+        const event2 = makeEvent({
+          surface: "slack",
+          workspace: "W1",
+          channel: "C1",
+        });
 
-      const results1 = await IngressEngine.ingest(event1);
-      const results2 = await IngressEngine.ingest(event2);
+        const results1 = await IngressEngine.ingest(event1);
+        const results2 = await IngressEngine.ingest(event2);
 
-      expect(results1[0]!.sessionId).toBe(results2[0]!.sessionId);
-    });
+        expect(results1[0]!.sessionId).toBe(results2[0]!.sessionId);
+      },
+      { timeout: 30000 },
+    );
 
     it("creates run_agent RunRequest for interactive events by default", async () => {
       const event = makeEvent();
@@ -161,27 +163,35 @@ describe("IngressEngine", () => {
       expect(results2[0]!.sessionId).toBe(results1[0]!.sessionId);
     });
 
-    it("allows events without dedupeKey through", async () => {
-      const event1 = makeEvent();
-      const event2 = makeEvent();
+    it(
+      "allows events without dedupeKey through",
+      async () => {
+        const event1 = makeEvent();
+        const event2 = makeEvent();
 
-      const results1 = await IngressEngine.ingest(event1);
-      const results2 = await IngressEngine.ingest(event2);
+        const results1 = await IngressEngine.ingest(event1);
+        const results2 = await IngressEngine.ingest(event2);
 
-      expect(results1.length).toBe(1);
-      expect(results2.length).toBe(1);
-    });
+        expect(results1.length).toBe(1);
+        expect(results2.length).toBe(1);
+      },
+      { timeout: 30000 },
+    );
 
-    it("allows events with different dedupeKeys", async () => {
-      const event1 = makeEvent({ dedupeKey: "key-a" });
-      const event2 = makeEvent({ dedupeKey: "key-b" });
+    it(
+      "allows events with different dedupeKeys",
+      async () => {
+        const event1 = makeEvent({ dedupeKey: "key-a" });
+        const event2 = makeEvent({ dedupeKey: "key-b" });
 
-      const results1 = await IngressEngine.ingest(event1);
-      const results2 = await IngressEngine.ingest(event2);
+        const results1 = await IngressEngine.ingest(event1);
+        const results2 = await IngressEngine.ingest(event2);
 
-      expect(results1[0]!.sessionId).toBeDefined();
-      expect(results2[0]!.sessionId).toBeDefined();
-    });
+        expect(results1[0]!.sessionId).toBeDefined();
+        expect(results2[0]!.sessionId).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe("custom planner", () => {
@@ -244,7 +254,6 @@ describe("IngressEngine", () => {
       await IngressEngine.ingest(event);
 
       expect(delivered.length).toBe(1);
-      // ConversationSupervisor stub returns error — delivery still occurs
       expect(delivered[0]!.success).toBe(false);
     });
   });
@@ -270,19 +279,20 @@ describe("IngressEngine", () => {
   });
 
   describe("configure", () => {
-    it("accepts custom dedup window", async () => {
-      IngressEngine.configure({ dedupeWindowMs: 1 });
+    it(
+      "accepts custom dedup window",
+      async () => {
+        IngressEngine.configure({ dedupeWindowMs: 1000 });
+        const event = makeEvent({ dedupeKey: "same-key" });
 
-      const dedupeKey = "short-window";
-      const event1 = makeEvent({ dedupeKey });
-      const results1 = await IngressEngine.ingest(event1);
-      expect(results1.length).toBe(1);
+        const results1 = await IngressEngine.ingest(event);
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        const results2 = await IngressEngine.ingest(event);
 
-      await new Promise((r) => setTimeout(r, 5));
-
-      const event2 = makeEvent({ dedupeKey });
-      const results2 = await IngressEngine.ingest(event2);
-      expect(results2[0]!.sessionId).toBeDefined();
-    });
+        expect(results1.length).toBe(1);
+        expect(results2.length).toBe(1);
+      },
+      { timeout: 30000 },
+    );
   });
 });

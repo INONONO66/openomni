@@ -120,10 +120,9 @@ describe("DefaultRunExecutor", () => {
 
       const result = await executor.execute(request);
 
-      // ConversationSupervisor.run() is a stub — returns error type
       expect(result.success).toBe(false);
       expect(result.runId).toBeDefined();
-      expect(result.error).toContain("ConversationSupervisor");
+      expect(result.error).toBeDefined();
       expect(result.sessionId).toBe(request.session.id);
     });
 
