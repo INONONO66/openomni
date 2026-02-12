@@ -98,7 +98,7 @@ describe("Subagent Completion Announce", () => {
 
       expect(result.isError).toBe(false);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(1);
       const announce = capturedEnvelopes[0];
@@ -128,7 +128,7 @@ describe("Subagent Completion Announce", () => {
 
       expect(result.isError).toBe(false);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(1);
       const payload = capturedEnvelopes[0].payload as Record<string, unknown>;
@@ -149,7 +149,7 @@ describe("Subagent Completion Announce", () => {
 
       expect(result.isError).toBe(true);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(1);
       const payload = capturedEnvelopes[0].payload as Record<string, unknown>;
@@ -168,7 +168,7 @@ describe("Subagent Completion Announce", () => {
 
       expect(result.isError).toBe(false);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(0);
     });
@@ -204,7 +204,7 @@ describe("Subagent Completion Announce", () => {
       expect(result.isError).toBe(false);
       expect(result.output).toContain("Subagent completed the task");
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(0);
     });
@@ -222,7 +222,7 @@ describe("Subagent Completion Announce", () => {
         baseContext({ parentSessionId: "parent-session-6" }),
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(consoleSpy).toHaveBeenCalledWith(
         "Announce failed (non-fatal):",
@@ -241,7 +241,7 @@ describe("Subagent Completion Announce", () => {
         baseContext({ parentSessionId: "parent-session-7" }),
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 5));
 
       expect(capturedEnvelopes.length).toBe(1);
       const envelope = capturedEnvelopes[0];

@@ -456,7 +456,7 @@ describe("Retry", () => {
       };
 
       try {
-        await Retry.withRetry(fn, { maxAttempts: 2 });
+        await Retry.withRetry(fn, { maxAttempts: 2, initialDelay: 10 });
         expect.unreachable("Should have thrown RetryError");
       } catch (e) {
         expect(RetryError.isInstance(e)).toBe(true);
@@ -485,14 +485,13 @@ describe("Retry", () => {
 
       const result = await Retry.withRetry(fn, {
         maxAttempts: 3,
-        initialDelay: 10,
+        initialDelay: 50,
       });
       const elapsed = Date.now() - start;
 
       expect(result).toBe("success");
       expect(callCount).toBe(2);
-      // Should have waited at least 10ms (first retry delay)
-      expect(elapsed).toBeGreaterThanOrEqual(10);
+      expect(elapsed).toBeGreaterThanOrEqual(40);
     });
 
     test("throws non-APIError immediately", async () => {
@@ -528,7 +527,10 @@ describe("Retry", () => {
         return "success";
       };
 
-      const result = await Retry.withRetry(fn, { maxAttempts: 3 });
+      const result = await Retry.withRetry(fn, {
+        maxAttempts: 3,
+        initialDelay: 10,
+      });
       expect(result).toBe("success");
       expect(callCount).toBe(2);
     });
