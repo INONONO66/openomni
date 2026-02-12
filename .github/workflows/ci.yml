@@ -34,13 +34,6 @@ jobs:
       - name: Test (llm)
         run: bun test
         working-directory: packages/llm
-      - name: Test (agent) - non-e2e
-        run: |
-          timeout 30 bun test --preload ./test/debug-handles.ts $(find test -name '*.test.ts' ! -path '*/e2e/*' | sort)
-          code=$?; [ $code -eq 124 ] && echo "::warning::hung after 30s" && exit 0; exit $code
-        working-directory: packages/agent
-      - name: Test (agent) - e2e
-        run: |
-          timeout 30 bun test --preload ./test/debug-handles.ts $(find test/e2e -name '*.test.ts' | sort)
-          code=$?; [ $code -eq 124 ] && echo "::warning::hung after 30s" && exit 0; exit $code
+      - name: Test (agent)
+        run: bun test --preload ./test/debug-handles.ts
         working-directory: packages/agent
