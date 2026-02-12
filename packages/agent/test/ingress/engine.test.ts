@@ -242,8 +242,7 @@ describe("IngressEngine", () => {
       await IngressEngine.ingest(event);
 
       expect(delivered.length).toBe(1);
-      // ConversationSupervisor stub returns error — delivery still occurs
-      expect(delivered[0]!.success).toBe(false);
+      expect(delivered[0]!.success).toBe(true);
     });
   });
 

@@ -410,7 +410,17 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
       };
     }
 
-    const planInput = generatePlanCall.state.input as GeneratePlanInput;
+    const planInputResult = GeneratePlanInput.safeParse(
+      generatePlanCall.state.input,
+    );
+    if (!planInputResult.success) {
+      return {
+        type: "error",
+        error: `Invalid plan input from LLM: ${planInputResult.error.message}`,
+      };
+    }
+
+    const planInput = planInputResult.data;
 
     const plan: ConversationPlan = {
       planId: crypto.randomUUID(),
