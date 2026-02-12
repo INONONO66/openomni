@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { Scheduler } from "../../src/trigger/scheduler";
 import { Task } from "../../src/task/types";
-import { TaskManager } from "../../src/task/manager";
 import { IngressEngine } from "../../src/ingress/engine";
 
 describe("Scheduler - Deadline Drift Warning", () => {
@@ -9,11 +8,13 @@ describe("Scheduler - Deadline Drift Warning", () => {
   let consoleWarnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    Scheduler.clear();
     originalDateNow = Date.now;
     consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    Scheduler.clear();
     Date.now = originalDateNow;
     consoleWarnSpy.mockRestore();
   });
@@ -29,9 +30,7 @@ describe("Scheduler - Deadline Drift Warning", () => {
     const baseTime = 1000000000000;
     Date.now = () => baseTime;
 
-    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue(
-      undefined,
-    );
+    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue([]);
 
     Scheduler.registerTrigger(taskId, trigger);
 
@@ -63,9 +62,7 @@ describe("Scheduler - Deadline Drift Warning", () => {
     const baseTime = 1000000000000;
     Date.now = () => baseTime;
 
-    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue(
-      undefined,
-    );
+    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue([]);
 
     Scheduler.registerTrigger(taskId, trigger);
 
@@ -92,9 +89,7 @@ describe("Scheduler - Deadline Drift Warning", () => {
     const baseTime = 1000000000000;
     Date.now = () => baseTime;
 
-    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue(
-      undefined,
-    );
+    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue([]);
 
     Scheduler.registerTrigger(taskId, trigger);
 
@@ -123,9 +118,7 @@ describe("Scheduler - Deadline Drift Warning", () => {
       at: Date.now() + 10000,
     };
 
-    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue(
-      undefined,
-    );
+    const ingestSpy = spyOn(IngressEngine, "ingest").mockResolvedValue([]);
 
     await Scheduler.fire(taskId, trigger);
 
