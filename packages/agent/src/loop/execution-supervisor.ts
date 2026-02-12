@@ -1,12 +1,18 @@
+import type { ToolCall, ToolResult } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { AgentMessenger } from "../agent/communication";
-import { BuiltinAgentRegistry } from "../agent/registry";
+import { BuiltinAgentRegistry, type AgentDefinition } from "../agent/registry";
 import { TaskManager } from "../task/manager";
+import {
+  resolveAgentDefinition,
+  resolveAgentForWorker,
+} from "./agent-resolution";
 import { FileLock } from "./file-lock";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   SessionMode,
+  ToolExecutor,
 } from "./run-worker";
 import { RunWorker } from "./run-worker";
 
@@ -14,6 +20,9 @@ const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 const MAX_REJECTIONS_BEFORE_HANDOFF = 3;
 const DISPATCH_AGENT_ID = "dispatch-supervisor";
+const ASSIGN_AGENTS_TOOL = "assign_agents";
+const HANDLE_FAILURE_TOOL = "handle_failure";
+const SUPERVISOR_DECISION_TRIGGER_ID = "dispatch-supervisor-trigger";
 
 export type SupervisorDecision = "local" | "spawn" | "join" | "finish";
 
@@ -40,6 +49,7 @@ export interface ExecutionPlanStep {
   stepId: string;
   description: string;
   dependsOn: string[];
+  suggestedAgent?: string;
 }
 
 /**
@@ -53,6 +63,8 @@ export interface ExecutionSupervisorConfig {
   sessionMode: SessionMode;
   sessionId: string;
   traceId: string;
+  agentId?: string;
+  availableAgents?: string[];
 }
 
 export interface ExecutionSupervisorResult {
@@ -95,6 +107,8 @@ export interface DispatchContext {
   abortSignal?: AbortSignal;
   llm: OrchestratorRunInput["llm"];
   toolExecutor?: OrchestratorRunInput["toolExecutor"];
+  agentId?: string;
+  availableAgents?: string[];
   timeoutMs?: number;
   review?: (
     input: DispatchReviewInput,
@@ -109,6 +123,7 @@ export interface DispatchTask {
   id: string;
   description: string;
   agentType: string;
+  suggestedAgent?: string;
   dependencies: string[];
   fileScope: string[];
 }
@@ -183,6 +198,39 @@ interface ExecutionSupervisorRuntime {
 
 interface ExecutionSupervisorConfigInternal extends ExecutionSupervisorConfig {
   __dispatchRuntime?: ExecutionSupervisorRuntime;
+}
+
+type FailureAction = "retry" | "skip" | "replan";
+
+interface ReadyStepDescriptor {
+  stepId: string;
+  description: string;
+  suggestedAgent?: string;
+}
+
+interface AgentAssignment {
+  stepId: string;
+  agentId: string;
+}
+
+interface FailureDecision {
+  action: FailureAction;
+  reasoning: string;
+}
+
+interface DispatchHybridRuntime {
+  supervisorAgentId: string;
+  supervisorAgent: AgentDefinition;
+  supervisorLLM: OrchestratorRunInput["llm"];
+  supervisorSystemPrompt: string;
+  availableAgents: string[];
+}
+
+interface WorkerRuntimeConfig {
+  agent: AgentDefinition;
+  llm: OrchestratorRunInput["llm"];
+  toolExecutor?: OrchestratorRunInput["toolExecutor"];
+  systemPrompt: string;
 }
 
 /**
@@ -304,7 +352,15 @@ export namespace ExecutionSupervisor {
       runtime.dispatchTasksByStepId,
     );
 
-    const output = await executeDispatchGraph(input, runtime.dispatchContext);
+    const dispatchContext: DispatchContext = {
+      ...runtime.dispatchContext,
+      ...(config.agentId ? { agentId: config.agentId } : {}),
+      ...(config.availableAgents
+        ? { availableAgents: [...config.availableAgents] }
+        : {}),
+    };
+
+    const output = await executeDispatchGraph(input, dispatchContext);
     const resultById = new Map(
       output.results.map((result) => [result.id, result]),
     );
@@ -336,6 +392,11 @@ async function executeDispatchGraph(
 ): Promise<DispatchOutput> {
   const startedAt = Date.now();
   const graph = buildDependencyGraph(input.tasks);
+  const hybridRuntime = await resolveDispatchHybridRuntime(context);
+  const workerRuntimeCache = new Map<
+    string,
+    Promise<WorkerRuntimeConfig | undefined>
+  >();
 
   initializeTaskStates(graph, input.objective);
 
@@ -374,6 +435,15 @@ async function executeDispatchGraph(
   }
 
   try {
+    await assignAgentsToReadyTasks(
+      input.objective,
+      graph,
+      ready,
+      hybridRuntime,
+      context,
+      dispatchAbortController.signal,
+    );
+
     await dispatchReadyTasks(
       input.objective,
       graph,
@@ -381,6 +451,8 @@ async function executeDispatchGraph(
       running,
       context,
       dispatchAbortController.signal,
+      hybridRuntime,
+      workerRuntimeCache,
     );
 
     while (completed.size < graph.states.size) {
@@ -408,6 +480,15 @@ async function executeDispatchGraph(
         );
       }
 
+      await assignAgentsToReadyTasks(
+        input.objective,
+        graph,
+        ready,
+        hybridRuntime,
+        context,
+        dispatchAbortController.signal,
+      );
+
       await dispatchReadyTasks(
         input.objective,
         graph,
@@ -415,6 +496,8 @@ async function executeDispatchGraph(
         running,
         context,
         dispatchAbortController.signal,
+        hybridRuntime,
+        workerRuntimeCache,
       );
 
       if (running.size === 0) {
@@ -477,27 +560,70 @@ async function executeDispatchGraph(
         state.errors.push(next.result.error);
       }
 
-      const reviewDecision = await reviewTaskResult(
-        input.objective,
-        state,
-        next.result,
-        context,
-      );
+      let failureDecision: FailureDecision | undefined;
+      if (!next.result.success) {
+        failureDecision = await decideFailedStepAction(
+          input.objective,
+          state,
+          next.result,
+          hybridRuntime,
+          context,
+          dispatchAbortController.signal,
+        );
+
+        if (failureDecision?.action === "skip") {
+          if (failureDecision.reasoning.trim().length > 0) {
+            state.summaries.push(`Skipped: ${failureDecision.reasoning}`);
+          }
+          completeTaskAndUnblockDependents(
+            graph,
+            state.task.id,
+            completed,
+            ready,
+          );
+          continue;
+        }
+
+        if (failureDecision?.action === "replan") {
+          const reason =
+            failureDecision.reasoning.trim() ||
+            "Supervisor requested replan for failed step";
+          state.status = "failed";
+          state.errors.push(`Replan requested: ${reason}`);
+          markPendingAsFailed(graph, "Dispatch requires replan");
+          return buildOutput(
+            input.objective,
+            graph,
+            startedAt,
+            false,
+            `Dispatch requires replan: ${reason}`,
+          );
+        }
+      }
+
+      const reviewDecision: DispatchReviewDecision =
+        !next.result.success && failureDecision
+          ? {
+              decision: "reject",
+              feedback:
+                failureDecision.reasoning ||
+                next.result.error ||
+                "Task execution failed",
+            }
+          : await reviewTaskResult(
+              input.objective,
+              state,
+              next.result,
+              context,
+            );
 
       if (reviewDecision.decision === "accept") {
-        state.status = "completed";
-        state.rejectionStreak = 0;
-        completed.add(state.task.id);
-
-        const dependents =
-          graph.dependents.get(state.task.id) ?? new Set<string>();
-        for (const dependentTaskId of dependents) {
-          const remaining = graph.pendingDependencies.get(dependentTaskId);
-          remaining?.delete(state.task.id);
-          if (remaining && remaining.size === 0) {
-            ready.add(dependentTaskId);
-          }
-        }
+        completeTaskAndUnblockDependents(
+          graph,
+          state.task.id,
+          completed,
+          ready,
+        );
 
         continue;
       }
@@ -536,6 +662,654 @@ async function executeDispatchGraph(
   }
 }
 
+async function resolveDispatchHybridRuntime(
+  context: DispatchContext,
+): Promise<DispatchHybridRuntime | undefined> {
+  if (!context.agentId) {
+    return undefined;
+  }
+
+  const supervisorAgent = resolveAgentDefinition(context.agentId);
+  if (!supervisorAgent) {
+    return undefined;
+  }
+
+  const availableAgents = resolveAvailableAgentIds(context.availableAgents);
+  if (availableAgents.length === 0) {
+    return undefined;
+  }
+
+  let supervisorLLM = context.llm;
+  let supervisorSystemPrompt = supervisorAgent.systemPrompt;
+
+  if (supervisorAgent.model) {
+    try {
+      const resolved = await resolveAgentForWorker(context.agentId);
+      supervisorLLM = resolved.llm;
+      if (typeof resolved.input.system === "string") {
+        const systemPrompt = resolved.input.system.trim();
+        if (systemPrompt.length > 0) {
+          supervisorSystemPrompt = systemPrompt;
+        }
+      }
+    } catch (error) {
+      console.warn(
+        "[ExecutionSupervisor] Supervisor agent resolution failed for",
+        context.agentId,
+        "- falling back to context.llm. Error:",
+        error,
+      );
+    }
+  }
+
+  return {
+    supervisorAgentId: context.agentId,
+    supervisorAgent,
+    supervisorLLM,
+    supervisorSystemPrompt,
+    availableAgents,
+  };
+}
+
+function resolveAvailableAgentIds(availableAgents?: string[]): string[] {
+  const registeredAgentIds = new Set(
+    BuiltinAgentRegistry.list().map((agent) => agent.name),
+  );
+
+  if (availableAgents && availableAgents.length > 0) {
+    return Array.from(
+      new Set(
+        availableAgents.filter((agentId) => registeredAgentIds.has(agentId)),
+      ),
+    );
+  }
+
+  return Array.from(registeredAgentIds);
+}
+
+async function assignAgentsToReadyTasks(
+  objective: string,
+  graph: DependencyGraph,
+  ready: Set<string>,
+  hybridRuntime: DispatchHybridRuntime | undefined,
+  context: DispatchContext,
+  abortSignal: AbortSignal,
+): Promise<void> {
+  if (!hybridRuntime || abortSignal.aborted) {
+    return;
+  }
+
+  const readyStates = Array.from(ready)
+    .map((taskId) => graph.states.get(taskId))
+    .filter((state): state is DispatchTaskState => {
+      if (!state) {
+        return false;
+      }
+      return state.status !== "completed" && state.status !== "failed";
+    });
+
+  if (readyStates.length === 0) {
+    return;
+  }
+
+  const readySteps: ReadyStepDescriptor[] = readyStates.map((state) => ({
+    stepId: state.task.id,
+    description: state.task.description,
+    suggestedAgent: state.task.suggestedAgent,
+  }));
+
+  const assignments = await requestAgentAssignments(
+    objective,
+    readySteps,
+    hybridRuntime,
+    context,
+    abortSignal,
+  );
+
+  const assignmentByStep = new Map(
+    assignments.map((assignment) => [assignment.stepId, assignment.agentId]),
+  );
+
+  for (const state of readyStates) {
+    const fallbackAgent = resolveFallbackAgentAssignment(
+      state.task,
+      hybridRuntime.availableAgents,
+    );
+    const assignedAgent = assignmentByStep.get(state.task.id) ?? fallbackAgent;
+    if (!assignedAgent) {
+      continue;
+    }
+
+    if (!BuiltinAgentRegistry.has(assignedAgent)) {
+      continue;
+    }
+
+    state.task.agentType = assignedAgent;
+  }
+}
+
+function resolveFallbackAgentAssignment(
+  task: DispatchTask,
+  availableAgents: string[],
+): string | undefined {
+  if (
+    task.suggestedAgent &&
+    availableAgents.includes(task.suggestedAgent) &&
+    BuiltinAgentRegistry.has(task.suggestedAgent)
+  ) {
+    return task.suggestedAgent;
+  }
+
+  if (
+    availableAgents.includes(task.agentType) &&
+    BuiltinAgentRegistry.has(task.agentType)
+  ) {
+    return task.agentType;
+  }
+
+  return availableAgents.find((agentId) => BuiltinAgentRegistry.has(agentId));
+}
+
+async function decideFailedStepAction(
+  objective: string,
+  state: DispatchTaskState,
+  result: ChildRunResult,
+  hybridRuntime: DispatchHybridRuntime | undefined,
+  context: DispatchContext,
+  abortSignal: AbortSignal,
+): Promise<FailureDecision | undefined> {
+  if (!hybridRuntime || abortSignal.aborted) {
+    return undefined;
+  }
+
+  return requestFailureDecision(
+    objective,
+    {
+      stepId: state.task.id,
+      error: result.error,
+      attempts: state.attempts,
+    },
+    hybridRuntime,
+    context,
+    abortSignal,
+  );
+}
+
+async function requestAgentAssignments(
+  objective: string,
+  readySteps: ReadyStepDescriptor[],
+  hybridRuntime: DispatchHybridRuntime,
+  context: DispatchContext,
+  abortSignal: AbortSignal,
+): Promise<AgentAssignment[]> {
+  const fallbackAssignments = readySteps
+    .map((step) => {
+      const fallbackAgent = resolveFallbackAgentAssignment(
+        {
+          id: step.stepId,
+          description: step.description,
+          agentType: "implement",
+          suggestedAgent: step.suggestedAgent,
+          dependencies: [],
+          fileScope: [],
+        },
+        hybridRuntime.availableAgents,
+      );
+
+      if (!fallbackAgent) {
+        return undefined;
+      }
+
+      return {
+        stepId: step.stepId,
+        agentId: fallbackAgent,
+      };
+    })
+    .filter((assignment): assignment is AgentAssignment => Boolean(assignment));
+
+  let selectedAssignments = fallbackAssignments;
+  const stepIds = new Set(readySteps.map((step) => step.stepId));
+  const availableAgentIds = new Set(hybridRuntime.availableAgents);
+
+  const decisionToolExecutor: ToolExecutor = {
+    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+      return calls.map((call) => {
+        if (call.tool !== ASSIGN_AGENTS_TOOL) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: `Unsupported supervisor tool: ${call.tool}`,
+            isError: true,
+          };
+        }
+
+        const parsed = parseAgentAssignments(
+          call.input,
+          stepIds,
+          availableAgentIds,
+        );
+        if (parsed.length > 0) {
+          selectedAssignments = parsed;
+        }
+
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: JSON.stringify({ assignments: selectedAssignments }),
+          isError: false,
+        };
+      });
+    },
+  };
+
+  const prompt = [
+    "Assign agents for the ready dispatch steps.",
+    "Call assign_agents with the selected { stepId, agentId } pairs.",
+    `Objective: ${objective}`,
+    `Ready Steps: ${JSON.stringify(readySteps)}`,
+    `Available Agents: ${JSON.stringify(hybridRuntime.availableAgents)}`,
+    "Prefer suggestedAgent when it matches capabilities.",
+  ].join("\n\n");
+
+  await runSupervisorToolDecision(
+    prompt,
+    [ASSIGN_AGENTS_TOOL],
+    decisionToolExecutor,
+    hybridRuntime,
+    context,
+    abortSignal,
+  );
+
+  const assignmentByStep = new Map(
+    fallbackAssignments.map((assignment) => [
+      assignment.stepId,
+      assignment.agentId,
+    ]),
+  );
+  for (const assignment of selectedAssignments) {
+    assignmentByStep.set(assignment.stepId, assignment.agentId);
+  }
+
+  return readySteps
+    .map((step) => {
+      const agentId = assignmentByStep.get(step.stepId);
+      if (!agentId) {
+        return undefined;
+      }
+      return {
+        stepId: step.stepId,
+        agentId,
+      };
+    })
+    .filter((assignment): assignment is AgentAssignment => Boolean(assignment));
+}
+
+function parseAgentAssignments(
+  input: Record<string, unknown>,
+  stepIds: Set<string>,
+  availableAgentIds: Set<string>,
+): AgentAssignment[] {
+  const rawAssignments = input.assignments;
+  if (!Array.isArray(rawAssignments)) {
+    return [];
+  }
+
+  const parsed: AgentAssignment[] = [];
+
+  for (const item of rawAssignments) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const stepId =
+      typeof (item as { stepId?: unknown }).stepId === "string"
+        ? (item as { stepId: string }).stepId
+        : undefined;
+    const agentId =
+      typeof (item as { agentId?: unknown }).agentId === "string"
+        ? (item as { agentId: string }).agentId
+        : undefined;
+
+    if (!stepId || !agentId) {
+      continue;
+    }
+
+    if (!stepIds.has(stepId)) {
+      continue;
+    }
+
+    if (!availableAgentIds.has(agentId)) {
+      continue;
+    }
+
+    if (!BuiltinAgentRegistry.has(agentId)) {
+      continue;
+    }
+
+    parsed.push({ stepId, agentId });
+  }
+
+  return parsed;
+}
+
+async function requestFailureDecision(
+  objective: string,
+  failedStep: {
+    stepId: string;
+    error: string;
+    attempts: number;
+  },
+  hybridRuntime: DispatchHybridRuntime,
+  context: DispatchContext,
+  abortSignal: AbortSignal,
+): Promise<FailureDecision> {
+  const fallbackDecision: FailureDecision = {
+    action: failedStep.attempts <= 1 ? "retry" : "skip",
+    reasoning:
+      failedStep.attempts <= 1
+        ? "Retry once before skipping"
+        : "Skip after repeated failure",
+  };
+
+  let selectedDecision = fallbackDecision;
+
+  const decisionToolExecutor: ToolExecutor = {
+    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+      return calls.map((call) => {
+        if (call.tool !== HANDLE_FAILURE_TOOL) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: `Unsupported supervisor tool: ${call.tool}`,
+            isError: true,
+          };
+        }
+
+        selectedDecision = parseFailureDecision(call.input, fallbackDecision);
+
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: JSON.stringify({ decision: selectedDecision }),
+          isError: false,
+        };
+      });
+    },
+  };
+
+  const prompt = [
+    "Handle failed dispatch step execution.",
+    "Call handle_failure with { action, reasoning }.",
+    `Objective: ${objective}`,
+    `Failed Step: ${JSON.stringify(failedStep)}`,
+    `Options: ${JSON.stringify(["retry", "skip", "replan"])}`,
+  ].join("\n\n");
+
+  await runSupervisorToolDecision(
+    prompt,
+    [HANDLE_FAILURE_TOOL],
+    decisionToolExecutor,
+    hybridRuntime,
+    context,
+    abortSignal,
+  );
+
+  return selectedDecision;
+}
+
+function parseFailureDecision(
+  input: Record<string, unknown>,
+  fallbackDecision: FailureDecision,
+): FailureDecision {
+  const actionRaw = input.action;
+  const reasoningRaw = input.reasoning;
+
+  const action: FailureAction =
+    actionRaw === "retry" || actionRaw === "skip" || actionRaw === "replan"
+      ? actionRaw
+      : fallbackDecision.action;
+
+  const reasoning =
+    typeof reasoningRaw === "string" && reasoningRaw.trim().length > 0
+      ? reasoningRaw.trim()
+      : fallbackDecision.reasoning;
+
+  return {
+    action,
+    reasoning,
+  };
+}
+
+async function runSupervisorToolDecision(
+  prompt: string,
+  tools: string[],
+  toolExecutor: ToolExecutor,
+  hybridRuntime: DispatchHybridRuntime,
+  context: DispatchContext,
+  abortSignal: AbortSignal,
+): Promise<void> {
+  if (abortSignal.aborted) {
+    return;
+  }
+
+  const decisionTask = TaskManager.create(
+    {
+      title: "Dispatch supervisor decision",
+      description: prompt,
+      owner: { type: "agent", id: hybridRuntime.supervisorAgentId },
+      triggers: [{ id: SUPERVISOR_DECISION_TRIGGER_ID, type: "manual" }],
+    },
+    { intent: "run_tracking" },
+  );
+
+  const spawnedBy =
+    context.parentTaskId && context.parentRunId && context.parentSessionId
+      ? {
+          taskId: context.parentTaskId,
+          runId: context.parentRunId,
+          sessionId: context.parentSessionId,
+        }
+      : undefined;
+
+  const triggerResult = await TaskManager.trigger(decisionTask.id, {
+    triggerId: SUPERVISOR_DECISION_TRIGGER_ID,
+    type: "manual",
+    occurredAt: Date.now(),
+    spawnedBy,
+  });
+
+  if ("error" in triggerResult) {
+    return;
+  }
+
+  const config: OrchestratorConfig = {
+    taskId: decisionTask.id,
+    runId: triggerResult.runId,
+    maxRetries: 0,
+    sessionMode: "ephemeral",
+    maxSubagentDepth: context.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH,
+    currentDepth: context.parentDepth ?? 0,
+    insideDelegation: true,
+  };
+
+  const orchestratorInput: OrchestratorRunInput = {
+    llm: hybridRuntime.supervisorLLM,
+    input: {
+      system: hybridRuntime.supervisorSystemPrompt,
+      systemPrompt: hybridRuntime.supervisorSystemPrompt,
+      prompt,
+      agentType: hybridRuntime.supervisorAgent.name,
+      tools,
+      permissions: hybridRuntime.supervisorAgent.permissions,
+      maxTurns: hybridRuntime.supervisorAgent.maxTurns,
+    },
+    toolExecutor,
+  };
+
+  await executeChildRunWithAbort(config, orchestratorInput, abortSignal);
+}
+
+async function resolveWorkerRuntimeForTask(
+  agentId: string,
+  context: DispatchContext,
+  hybridRuntime?: DispatchHybridRuntime,
+  workerRuntimeCache?: Map<string, Promise<WorkerRuntimeConfig | undefined>>,
+): Promise<WorkerRuntimeConfig | undefined> {
+  const cached = workerRuntimeCache?.get(agentId);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = resolveWorkerRuntimeForTaskInternal(
+    agentId,
+    context,
+    hybridRuntime,
+  );
+  workerRuntimeCache?.set(agentId, pending);
+  return pending;
+}
+
+async function resolveWorkerRuntimeForTaskInternal(
+  agentId: string,
+  context: DispatchContext,
+  hybridRuntime?: DispatchHybridRuntime,
+): Promise<WorkerRuntimeConfig | undefined> {
+  const agent = BuiltinAgentRegistry.get(agentId);
+  if (!agent) {
+    return undefined;
+  }
+
+  const fallbackToolExecutor = context.toolExecutor;
+
+  if (!hybridRuntime) {
+    return {
+      agent,
+      llm: context.llm,
+      toolExecutor: fallbackToolExecutor,
+      systemPrompt: agent.systemPrompt,
+    };
+  }
+
+  const upstreamExecutor = context.toolExecutor
+    ? createFilteredToolExecutor(agent.tools, context.toolExecutor)
+    : undefined;
+
+  if (!agent.model) {
+    return {
+      agent,
+      llm: context.llm,
+      toolExecutor: upstreamExecutor,
+      systemPrompt: agent.systemPrompt,
+    };
+  }
+
+  try {
+    const resolved = await resolveAgentForWorker(agentId);
+    const systemPrompt =
+      typeof resolved.input.system === "string" &&
+      resolved.input.system.trim().length > 0
+        ? resolved.input.system
+        : agent.systemPrompt;
+
+    return {
+      agent,
+      llm: resolved.llm,
+      toolExecutor: upstreamExecutor ?? resolved.toolExecutor,
+      systemPrompt,
+    };
+  } catch (error) {
+    console.warn(
+      "[ExecutionSupervisor] Worker agent resolution failed for",
+      agentId,
+      "- falling back to context.llm. Error:",
+      error,
+    );
+    return {
+      agent,
+      llm: context.llm,
+      toolExecutor: fallbackToolExecutor,
+      systemPrompt: agent.systemPrompt,
+    };
+  }
+}
+
+function createFilteredToolExecutor(
+  allowedTools: string[],
+  upstream: ToolExecutor,
+): ToolExecutor {
+  const allowed = new Set(allowedTools);
+
+  return {
+    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+      const allowedCalls: ToolCall[] = [];
+      const blockedResultByCallId = new Map<string, ToolResult>();
+
+      for (const call of calls) {
+        if (!allowed.has(call.tool)) {
+          blockedResultByCallId.set(call.id, {
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: `Tool '${call.tool}' is not allowed for this agent`,
+            isError: true,
+          });
+          continue;
+        }
+        allowedCalls.push(call);
+      }
+
+      const upstreamResults =
+        allowedCalls.length > 0 ? await upstream.execute(allowedCalls) : [];
+      const upstreamByCallId = new Map(
+        upstreamResults.map((result) => [result.toolCallId, result]),
+      );
+
+      return calls.map((call) => {
+        const blocked = blockedResultByCallId.get(call.id);
+        if (blocked) {
+          return blocked;
+        }
+
+        const upstreamResult = upstreamByCallId.get(call.id);
+        if (upstreamResult) {
+          return upstreamResult;
+        }
+
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: `No tool result returned for '${call.tool}'`,
+          isError: true,
+        };
+      });
+    },
+  };
+}
+
+function completeTaskAndUnblockDependents(
+  graph: DependencyGraph,
+  taskId: string,
+  completed: Set<string>,
+  ready: Set<string>,
+): void {
+  const state = graph.states.get(taskId);
+  if (!state) {
+    return;
+  }
+
+  state.status = "completed";
+  state.rejectionStreak = 0;
+  completed.add(taskId);
+
+  const dependents = graph.dependents.get(taskId) ?? new Set<string>();
+  for (const dependentTaskId of dependents) {
+    const remaining = graph.pendingDependencies.get(dependentTaskId);
+    remaining?.delete(taskId);
+    if (remaining && remaining.size === 0) {
+      ready.add(dependentTaskId);
+    }
+  }
+}
+
 function getDispatchRuntime(
   config: ExecutionSupervisorConfig,
 ): ExecutionSupervisorRuntime | undefined {
@@ -554,6 +1328,7 @@ function buildDispatchInputFromSteps(
     if (mappedTask) {
       return {
         ...mappedTask,
+        suggestedAgent: step.suggestedAgent ?? mappedTask.suggestedAgent,
         dependencies: mappedTask.dependencies.filter((dependencyId) =>
           selectedStepIds.has(dependencyId),
         ),
@@ -564,6 +1339,7 @@ function buildDispatchInputFromSteps(
       id: step.stepId,
       description: step.description,
       agentType: "implement",
+      suggestedAgent: step.suggestedAgent,
       dependencies: step.dependsOn.filter((dependencyId) =>
         selectedStepIds.has(dependencyId),
       ),
@@ -759,6 +1535,8 @@ async function dispatchReadyTasks(
   running: Map<string, RunningTask>,
   context: DispatchContext,
   abortSignal: AbortSignal,
+  hybridRuntime?: DispatchHybridRuntime,
+  workerRuntimeCache?: Map<string, Promise<WorkerRuntimeConfig | undefined>>,
 ): Promise<void> {
   for (const taskId of Array.from(ready)) {
     if (running.has(taskId)) {
@@ -782,6 +1560,8 @@ async function dispatchReadyTasks(
       state,
       context,
       abortSignal,
+      hybridRuntime,
+      workerRuntimeCache,
     );
 
     if (!runningTask) {
@@ -799,6 +1579,8 @@ async function startTaskRun(
   state: DispatchTaskState,
   context: DispatchContext,
   abortSignal: AbortSignal,
+  hybridRuntime?: DispatchHybridRuntime,
+  workerRuntimeCache?: Map<string, Promise<WorkerRuntimeConfig | undefined>>,
 ): Promise<RunningTask | undefined> {
   if (abortSignal.aborted) {
     return undefined;
@@ -846,8 +1628,13 @@ async function startTaskRun(
 
   const runId = triggerResult.runId;
 
-  const agent = BuiltinAgentRegistry.get(state.task.agentType);
-  if (!agent) {
+  const workerRuntime = await resolveWorkerRuntimeForTask(
+    state.task.agentType,
+    context,
+    hybridRuntime,
+    workerRuntimeCache,
+  );
+  if (!workerRuntime) {
     return {
       taskId: state.task.id,
       runId,
@@ -875,16 +1662,17 @@ async function startTaskRun(
   };
 
   const orchestratorInput: OrchestratorRunInput = {
-    llm: context.llm,
+    llm: workerRuntime.llm,
     input: {
-      systemPrompt: agent.systemPrompt,
+      system: workerRuntime.systemPrompt,
+      systemPrompt: workerRuntime.systemPrompt,
       prompt,
-      agentType: agent.name,
-      tools: agent.tools,
-      permissions: agent.permissions,
-      maxTurns: agent.maxTurns,
+      agentType: workerRuntime.agent.name,
+      tools: workerRuntime.agent.tools,
+      permissions: workerRuntime.agent.permissions,
+      maxTurns: workerRuntime.agent.maxTurns,
     },
-    toolExecutor: context.toolExecutor,
+    toolExecutor: workerRuntime.toolExecutor,
   };
 
   const promise = executeChildRunWithAbort(
