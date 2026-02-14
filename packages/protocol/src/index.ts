@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export abstract class NamedError extends Error {
   abstract schema(): z.ZodType;
-  abstract toObject(): { name: string; data: any };
+  abstract toObject(): { name: string; data: unknown };
 
   static create<Name extends string, Data extends z.ZodType>(
     name: Name,
@@ -39,7 +39,7 @@ export abstract class NamedError extends Error {
         this.name = name;
       }
 
-      static isInstance(input: any): input is InstanceType<typeof result> {
+      static isInstance(input: unknown): input is InstanceType<typeof result> {
         return (
           typeof input === "object" &&
           input !== null &&
@@ -90,13 +90,13 @@ export const APIError = NamedError.create(
 export namespace Tool {
   export const StatePending = z.object({
     status: z.literal("pending"),
-    input: z.record(z.string(), z.any()),
+    input: z.record(z.string(), z.unknown()),
   });
   export type StatePending = z.infer<typeof StatePending>;
 
   export const StateRunning = z.object({
     status: z.literal("running"),
-    input: z.record(z.string(), z.any()),
+    input: z.record(z.string(), z.unknown()),
     time: z.object({
       start: z.number(),
     }),
@@ -105,10 +105,10 @@ export namespace Tool {
 
   export const StateCompleted = z.object({
     status: z.literal("completed"),
-    input: z.record(z.string(), z.any()),
+    input: z.record(z.string(), z.unknown()),
     output: z.string(),
     title: z.string(),
-    metadata: z.record(z.string(), z.any()),
+    metadata: z.record(z.string(), z.unknown()),
     time: z.object({
       start: z.number(),
       end: z.number(),
@@ -118,7 +118,7 @@ export namespace Tool {
 
   export const StateError = z.object({
     status: z.literal("error"),
-    input: z.record(z.string(), z.any()),
+    input: z.record(z.string(), z.unknown()),
     error: z.string(),
     time: z.object({
       start: z.number(),
@@ -156,7 +156,7 @@ export namespace Message {
         end: z.number().optional(),
       })
       .optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   });
   export type TextPart = z.infer<typeof TextPart>;
 
@@ -167,7 +167,7 @@ export namespace Message {
       start: z.number(),
       end: z.number().optional(),
     }),
-    metadata: z.record(z.string(), z.any()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   });
   export type ReasoningPart = z.infer<typeof ReasoningPart>;
 
@@ -298,7 +298,7 @@ export namespace Message {
 export const ToolCall = z.object({
   id: z.string(),
   tool: z.string(),
-  input: z.record(z.string(), z.any()),
+  input: z.record(z.string(), z.unknown()),
 });
 export type ToolCall = z.infer<typeof ToolCall>;
 
@@ -313,7 +313,7 @@ export type ToolResult = z.infer<typeof ToolResult>;
 export const ToolSpec = z.object({
   name: z.string(),
   description: z.string().optional(),
-  inputSchema: z.record(z.string(), z.any()),
+  inputSchema: z.record(z.string(), z.unknown()),
 });
 export type ToolSpec = z.infer<typeof ToolSpec>;
 
@@ -325,7 +325,7 @@ export const RunSnapshot = z.object({
   id: z.string(),
   sessionID: z.string(),
   timestamp: z.number(),
-  state: z.record(z.string(), z.any()),
+  state: z.record(z.string(), z.unknown()),
 });
 export type RunSnapshot = z.infer<typeof RunSnapshot>;
 
