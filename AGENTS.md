@@ -34,20 +34,20 @@ protocol  ←  session  ←  llm  ←  agent  ←  cli
 
 ## WHERE TO LOOK
 
-| Task                         | Location                                              | Notes                                        |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------- |
-| Add Zod schema / shared type | `packages/protocol/src/`                              | All cross-package types live here            |
-| Add/modify events            | `packages/protocol/src/events.ts`                     | BusEvent.define() pattern                    |
-| Session CRUD                 | `packages/session/src/session/`                       | Namespace-based API                          |
-| Storage backend              | `packages/session/src/storage/`                       | Implement `StorageAdapter` interface         |
-| Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                        |
-| Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                          |
-| Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                      |
-| Agent profile/graph          | `packages/agent/src/agent/`                           | Graph validation, routing, messaging         |
-| Task lifecycle               | `packages/agent/src/task/`                            | State machine, manager, checkpoint, recovery |
-| Orchestration loop           | `packages/agent/src/loop/`                            | Envelope → Router → Dispatcher → Supervisor  |
-| Triggers (cron/fs/webhook)   | `packages/agent/src/trigger/`                         | EventQueue + schedulers                      |
-| CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                   |
+| Task                         | Location                                              | Notes                                                                |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts`             | 8 domains: error, tool, message, run, sink, bus, event, notification |
+| Add/modify events            | `packages/protocol/src/event/index.ts`                | BusEvent.define() pattern                                            |
+| Session CRUD                 | `packages/session/src/session/`                       | Namespace-based API                                                  |
+| Storage backend              | `packages/session/src/storage/`                       | Implement `StorageAdapter` interface                                 |
+| Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                                                |
+| Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                                                  |
+| Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                                              |
+| Agent profile/graph          | `packages/agent/src/agent/`                           | Graph validation, routing, messaging                                 |
+| Task lifecycle               | `packages/agent/src/task/`                            | State machine, manager, checkpoint, recovery                         |
+| Orchestration loop           | `packages/agent/src/loop/`                            | Envelope → Router → Dispatcher → Supervisor                          |
+| Triggers (cron/fs/webhook)   | `packages/agent/src/trigger/`                         | EventQueue + schedulers                                              |
+| CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                                           |
 
 ## CONVENTIONS
 
