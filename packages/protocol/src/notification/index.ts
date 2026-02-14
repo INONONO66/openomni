@@ -1,15 +1,7 @@
 import { z } from "zod";
 
-// ============================================================
-// Notification Severity
-// ============================================================
-
 export const NotificationSeverity = z.enum(["info", "warning", "error"]);
 export type NotificationSeverity = z.infer<typeof NotificationSeverity>;
-
-// ============================================================
-// Delivery Mode
-// ============================================================
 
 export const DeliveryMode = z.enum([
   "reply_current_session",
@@ -18,10 +10,6 @@ export const DeliveryMode = z.enum([
   "new_thread",
 ]);
 export type DeliveryMode = z.infer<typeof DeliveryMode>;
-
-// ============================================================
-// Notification Request
-// ============================================================
 
 export const NotificationRequest = z.object({
   type: z.string(),
@@ -37,10 +25,6 @@ export const NotificationRequest = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 export type NotificationRequest = z.infer<typeof NotificationRequest>;
-
-// ============================================================
-// Notification Result
-// ============================================================
 
 export const NotificationResult = z.object({
   delivered: z.boolean(),

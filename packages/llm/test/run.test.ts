@@ -1,19 +1,13 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { run, type RunInput } from "../src/run";
-import type {
-  Sink,
-  Message,
-  ToolCall,
-  ToolResult,
-  RunSnapshot,
-} from "@openomni/protocol";
+import type { Sink, Message, Tool, Run } from "@openomni/protocol";
 
 describe("run", () => {
   let mockSink: Sink;
   let capturedMessages: Message.WithParts[];
-  let capturedToolCalls: ToolCall[];
-  let capturedToolResults: ToolResult[];
-  let capturedSnapshots: RunSnapshot[];
+  let capturedToolCalls: Tool.Call[];
+  let capturedToolResults: Tool.Result[];
+  let capturedSnapshots: Run.Snapshot[];
 
   beforeEach(() => {
     capturedMessages = [];
@@ -25,13 +19,13 @@ describe("run", () => {
       onMessage: (message: Message.WithParts) => {
         capturedMessages.push(message);
       },
-      onToolCall: (call: ToolCall) => {
+      onToolCall: (call: Tool.Call) => {
         capturedToolCalls.push(call);
       },
-      onToolResult: (result: ToolResult) => {
+      onToolResult: (result: Tool.Result) => {
         capturedToolResults.push(result);
       },
-      onSnapshot: (snapshot: RunSnapshot) => {
+      onSnapshot: (snapshot: Run.Snapshot) => {
         capturedSnapshots.push(snapshot);
       },
     };

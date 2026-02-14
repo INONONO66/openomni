@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResult } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { AgentMessenger } from "../agent/communication";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent/registry";
@@ -872,7 +872,7 @@ async function requestAgentAssignments(
   const availableAgentIds = new Set(hybridRuntime.availableAgents);
 
   const decisionToolExecutor: ToolExecutor = {
-    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+    async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
       return calls.map((call) => {
         if (call.tool !== ASSIGN_AGENTS_TOOL) {
           return {
@@ -1014,7 +1014,7 @@ async function requestFailureDecision(
   let selectedDecision = fallbackDecision;
 
   const decisionToolExecutor: ToolExecutor = {
-    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+    async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
       return calls.map((call) => {
         if (call.tool !== HANDLE_FAILURE_TOOL) {
           return {
@@ -1240,9 +1240,9 @@ function createFilteredToolExecutor(
   const allowed = new Set(allowedTools);
 
   return {
-    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
-      const allowedCalls: ToolCall[] = [];
-      const blockedResultByCallId = new Map<string, ToolResult>();
+    async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
+      const allowedCalls: Tool.Call[] = [];
+      const blockedResultByCallId = new Map<string, Tool.Result>();
 
       for (const call of calls) {
         if (!allowed.has(call.tool)) {

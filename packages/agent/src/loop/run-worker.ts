@@ -1,10 +1,4 @@
-import type {
-  RetryPolicy,
-  RunOutcome,
-  Sink,
-  ToolCall,
-  ToolResult,
-} from "@openomni/protocol";
+import type { Run, Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import type { Task } from "../task/types";
 import { TaskManager } from "../task/manager";
@@ -45,12 +39,12 @@ export interface OrchestrationState {
 }
 
 export interface ToolExecutor {
-  execute(calls: ToolCall[]): Promise<ToolResult[]>;
+  execute(calls: Tool.Call[]): Promise<Tool.Result[]>;
 }
 
 export interface OrchestratorRunInput {
   llm: {
-    run(input: Record<string, unknown>, sink: Sink): Promise<RunOutcome>;
+    run(input: Record<string, unknown>, sink: Sink): Promise<Run.Outcome>;
   };
   input: Record<string, unknown>;
   toolExecutor?: ToolExecutor;
@@ -75,7 +69,7 @@ const DEFAULT_BUDGET = {
   maxToolRuntimeMs: 2 * 60 * 1000,
 };
 
-const DEFAULT_RETRY_POLICY: RetryPolicy = {
+const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
   maxAttempts: 1,
   backoffMs: {
     initial: 1000,
@@ -93,7 +87,7 @@ const DEFAULT_CONCURRENCY = {
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 
 const fallbackToolExecutor: ToolExecutor = {
-  async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+  async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
     return calls.map((call) => ({
       id: crypto.randomUUID(),
       toolCallId: call.id,
@@ -111,9 +105,9 @@ function toErrorMessage(error: unknown): string {
 }
 
 function resolveRetryPolicy(
-  configured: RetryPolicy | undefined,
+  configured: Run.RetryPolicy | undefined,
   maxRetries: number,
-): RetryPolicy {
+): Run.RetryPolicy {
   const cappedRetries = Math.max(0, Math.floor(maxRetries));
   const cappedAttempts = cappedRetries + 1;
 
@@ -140,7 +134,7 @@ function resolveBudget(task: Task.Info) {
   return task.policy.budget ?? DEFAULT_BUDGET;
 }
 
-function calculateBackoffMs(policy: RetryPolicy, attempt: number): number {
+function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
   const rawDelay =
     policy.backoffMs.initial *
     Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
@@ -170,7 +164,7 @@ function classifyRetryReason(errorMessage: string): RetryReason {
 }
 
 function shouldRetry(
-  policy: RetryPolicy,
+  policy: Run.RetryPolicy,
   reason: RetryReason,
   attempt: number,
 ): boolean {
@@ -572,7 +566,7 @@ export namespace RunWorker {
     const toolExecutor = input.toolExecutor ?? fallbackToolExecutor;
 
     let currentInput: Record<string, unknown> = { ...input.input };
-    let accumulatedToolResults: ToolResult[] = [];
+    let accumulatedToolResults: Tool.Result[] = [];
     let runState = RunSupervisor.createState();
     let lastError = "";
 

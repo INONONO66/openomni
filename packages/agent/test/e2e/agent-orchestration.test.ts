@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
-import type { Sink, ToolCall, ToolResult } from "@openomni/protocol";
+import type { Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
 import { IngressEngine } from "../../src/ingress/engine";
@@ -184,7 +184,7 @@ function emitAssistantText(
   });
 }
 
-function isToolResultArray(value: unknown): value is ToolResult[] {
+function isToolResultArray(value: unknown): value is Tool.Result[] {
   if (!Array.isArray(value)) {
     return false;
   }
@@ -267,7 +267,7 @@ describe("Agent orchestration e2e", () => {
     const runId = await createRun(task.id);
 
     const llmInputs: Record<string, unknown>[] = [];
-    const executedCalls: ToolCall[] = [];
+    const executedCalls: Tool.Call[] = [];
 
     const llm: OrchestratorRunInput["llm"] = {
       run: async (input, sink) => {
@@ -277,7 +277,7 @@ describe("Agent orchestration e2e", () => {
           : [];
 
         if (toolResults.length === 0) {
-          const call: ToolCall = {
+          const call: Tool.Call = {
             id: "lookup-call-1",
             tool: "lookup_status",
             input: { query: "pipeline" },
@@ -352,7 +352,7 @@ describe("Agent orchestration e2e", () => {
           : [];
 
         if (prompt === "spawn-depth-2" && toolResults.length === 0) {
-          const subCall: ToolCall = {
+          const subCall: Tool.Call = {
             id: "depth-call-1",
             tool: "subagent",
             input: {
@@ -377,7 +377,7 @@ describe("Agent orchestration e2e", () => {
 
     const toolExecutor: NonNullable<OrchestratorRunInput["toolExecutor"]> = {
       execute: async (calls) => {
-        const results: ToolResult[] = [];
+        const results: Tool.Result[] = [];
 
         for (const call of calls) {
           if (call.tool !== "subagent") {
@@ -519,7 +519,7 @@ describe("Agent orchestration e2e", () => {
           : [];
 
         if (toolResults.length === 0) {
-          const subagentCall: ToolCall = {
+          const subagentCall: Tool.Call = {
             id: "main-subagent-call",
             tool: "subagent",
             input: {
@@ -545,7 +545,7 @@ describe("Agent orchestration e2e", () => {
       execute: async (calls) => {
         toolExecutorCalls += 1;
 
-        const results: ToolResult[] = [];
+        const results: Tool.Result[] = [];
         for (const call of calls) {
           const subagentResult = await Subagent.execute(call.id, call.input, {
             parentDepth: 0,

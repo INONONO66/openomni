@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RetryPolicy, RunBudget } from "@openomni/protocol";
+import { Run } from "@openomni/protocol";
 
 /**
  * Task namespace - types for task automation system
@@ -141,11 +141,11 @@ export namespace Task {
 
   export const ExecutionPolicy = z.object({
     permission: z.enum(["ask", "notify", "deny"]).optional(),
-    retry: RetryPolicy.optional(),
+    retry: Run.RetryPolicy.optional(),
     concurrency: Concurrency.optional(),
     dedupe: Dedupe.optional(),
     rateLimit: RateLimit.optional(),
-    budget: RunBudget.optional(),
+    budget: Run.Budget.optional(),
     toolAllowlist: z.array(z.string()).optional(),
     toolDenylist: z.array(z.string()).optional(),
   });

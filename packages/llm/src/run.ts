@@ -1,10 +1,4 @@
-import type {
-  Sink,
-  Message,
-  ToolSpec,
-  RunOutcome,
-  ToolCall,
-} from "@openomni/protocol";
+import type { Sink, Message, Tool, Run } from "@openomni/protocol";
 import type { CoreMessage } from "ai";
 import { streamText, jsonSchema } from "ai";
 import { Processor } from "./session/processor";
@@ -21,14 +15,14 @@ import { Auth } from "./auth/storage";
  */
 export interface RunInput {
   messages: Message.WithParts[];
-  tools: ToolSpec[];
+  tools: Tool.Spec[];
   system?: string;
   signal?: AbortSignal;
   model?: Provider.Model;
   providerOptions?: Record<string, unknown>;
 }
 
-export async function run(input: RunInput, sink: Sink): Promise<RunOutcome> {
+export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
   const abortController = signal ? undefined : new AbortController();
@@ -59,11 +53,11 @@ export async function run(input: RunInput, sink: Sink): Promise<RunOutcome> {
     },
   };
 
-  const pendingToolCalls: ToolCall[] = [];
+  const pendingToolCalls: Tool.Call[] = [];
 
   const wrappedSink: Sink = {
     onMessage: sink.onMessage,
-    onToolCall: (call: ToolCall) => {
+    onToolCall: (call: Tool.Call) => {
       pendingToolCalls.push(call);
       sink.onToolCall(call);
     },
@@ -187,9 +181,14 @@ export async function run(input: RunInput, sink: Sink): Promise<RunOutcome> {
       return { type: "aborted" };
     }
 
+    const err = error instanceof Error ? error : new Error(String(error));
     return {
       type: "error",
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+      },
     };
   }
 }

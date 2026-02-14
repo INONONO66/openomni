@@ -1,5 +1,5 @@
 import { Session } from "@openomni/session";
-import type { ToolResult } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { SubagentInput } from "./schemas";
 import { BuiltinAgentRegistry } from "../agent/registry";
 import { AgentMessenger } from "../agent/communication";
@@ -40,7 +40,7 @@ export namespace Subagent {
     toolCallId: string,
     rawInput: unknown,
     context: SubagentContext,
-  ): Promise<ToolResult> {
+  ): Promise<Tool.Result> {
     const parseResult = SubagentInput.safeParse(rawInput);
     if (!parseResult.success) {
       return {
