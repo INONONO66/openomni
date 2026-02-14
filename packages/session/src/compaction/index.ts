@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { Storage } from "./storage";
-import { BusEvent, Bus } from "./bus";
+import { Storage } from "../storage/storage";
+import { BusEvent, Bus } from "../bus";
 import { Message } from "@openomni/protocol";
 
 export namespace Compaction {

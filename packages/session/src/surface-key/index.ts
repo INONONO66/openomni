@@ -32,9 +32,7 @@ export namespace SurfaceKey {
     surface: string;
     /** Namespace/workspace/bot identifier */
     namespace: string;
-    /** Channel/peer kind */
     kind: ChannelKind;
-    /** Channel/peer identifier */
     id: string;
     /** Optional thread identifier (creates a sub-key under the channel) */
     threadId?: string;
@@ -45,10 +43,6 @@ export namespace SurfaceKey {
   // Reverse index: sessionId → Set<surfaceKey>
   const sessionToKeys = new Map<string, Set<string>>();
 
-  /**
-   * Validate surfaceKey format.
-   * Must contain at least one colon to separate surface type from path.
-   */
   function validateFormat(key: string): boolean {
     return key.includes(":");
   }
@@ -158,10 +152,8 @@ export namespace SurfaceKey {
       }
     }
 
-    // Add forward mapping
     keyToSession.set(key, sessionId);
 
-    // Add reverse mapping
     if (!sessionToKeys.has(sessionId)) {
       sessionToKeys.set(sessionId, new Set());
     }

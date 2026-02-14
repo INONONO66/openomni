@@ -1,40 +1,42 @@
 import { Message } from "@openomni/protocol";
-import { Session } from "./session";
+import { SessionInfo } from "../session/info";
 
-export interface StorageAdapter {
-  session: {
-    get(id: string): Session.Info | undefined;
-    set(id: string, info: Session.Info): void;
-    list(): Session.Info[];
-    remove(id: string): boolean;
-  };
-  message: {
-    get(sessionID: string, messageID: string): Message.Info | undefined;
-    set(sessionID: string, message: Message.Info): void;
-    list(sessionID: string): Message.Info[];
-    remove(sessionID: string, messageID: string): boolean;
-  };
-  part: {
-    get(messageID: string, partID: string): Message.Part | undefined;
-    set(messageID: string, part: Message.Part): void;
-    list(messageID: string): Message.Part[];
-    remove(messageID: string, partID: string): boolean;
-  };
+export namespace Storage {
+  export interface Adapter {
+    session: {
+      get(id: string): SessionInfo | undefined;
+      set(id: string, info: SessionInfo): void;
+      list(): SessionInfo[];
+      remove(id: string): boolean;
+    };
+    message: {
+      get(sessionID: string, messageID: string): Message.Info | undefined;
+      set(sessionID: string, message: Message.Info): void;
+      list(sessionID: string): Message.Info[];
+      remove(sessionID: string, messageID: string): boolean;
+    };
+    part: {
+      get(messageID: string, partID: string): Message.Part | undefined;
+      set(messageID: string, part: Message.Part): void;
+      list(messageID: string): Message.Part[];
+      remove(messageID: string, partID: string): boolean;
+    };
+  }
 }
 
-export class InMemoryStorage implements StorageAdapter {
-  private sessions = new Map<string, Session.Info>();
+export class InMemoryStorage implements Storage.Adapter {
+  private sessions = new Map<string, SessionInfo>();
   private messages = new Map<string, Message.Info[]>();
   private parts = new Map<string, Message.Part[]>();
 
   session = {
-    get: (id: string): Session.Info | undefined => {
+    get: (id: string): SessionInfo | undefined => {
       return this.sessions.get(id);
     },
-    set: (id: string, info: Session.Info): void => {
+    set: (id: string, info: SessionInfo): void => {
       this.sessions.set(id, info);
     },
-    list: (): Session.Info[] => {
+    list: (): SessionInfo[] => {
       return Array.from(this.sessions.values());
     },
     remove: (id: string): boolean => {
@@ -106,13 +108,13 @@ export class InMemoryStorage implements StorageAdapter {
 }
 
 export namespace Storage {
-  let adapter: StorageAdapter = new InMemoryStorage();
+  let adapter: Adapter = new InMemoryStorage();
 
-  export function configure(newAdapter: StorageAdapter): void {
+  export function configure(newAdapter: Adapter): void {
     adapter = newAdapter;
   }
 
-  export function getAdapter(): StorageAdapter {
+  export function getAdapter(): Adapter {
     return adapter;
   }
 

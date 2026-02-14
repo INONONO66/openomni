@@ -396,7 +396,7 @@ function createSessionSink(sessionID: string): Sink {
           };
 
       if (ref) {
-        Session.updatePart(messageID, toolPart);
+        Session.addPart(messageID, toolPart);
       } else {
         Session.addPart(messageID, toolPart);
       }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import { SurfaceKey } from "../src/surface-key";
 
 describe("SurfaceKey", () => {
@@ -7,29 +7,29 @@ describe("SurfaceKey", () => {
   });
 
   describe("create", () => {
-    it("creates a valid surfaceKey from parts", () => {
+    test("creates a valid surfaceKey from parts", () => {
       const key = SurfaceKey.create(["slack", "workspaceA", "channel", "C123"]);
       expect(key).toBe("slack:workspaceA:channel:C123");
     });
 
-    it("creates a surfaceKey with single part and colon", () => {
+    test("creates a surfaceKey with single part and colon", () => {
       const key = SurfaceKey.create(["tui", "/Users/ino/Develop/OpenOmni"]);
       expect(key).toBe("tui:/Users/ino/Develop/OpenOmni");
     });
 
-    it("throws error on empty parts", () => {
+    test("throws error on empty parts", () => {
       expect(() => SurfaceKey.create([])).toThrow(
         "SurfaceKey parts cannot be empty",
       );
     });
 
-    it("throws error if format validation fails (no colon)", () => {
+    test("throws error if format validation fails (no colon)", () => {
       expect(() => SurfaceKey.create(["singlepart"])).toThrow(
         /Invalid surfaceKey format/,
       );
     });
 
-    it("creates complex keys with multiple colons", () => {
+    test("creates complex keys with multiple colons", () => {
       const key = SurfaceKey.create([
         "slack",
         "workspaceA",
@@ -43,7 +43,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("register and lookup", () => {
-    it("registers and looks up a surfaceKey", () => {
+    test("registers and looks up a surfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId = "session-123";
 
@@ -51,17 +51,17 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup(key)).toBe(sessionId);
     });
 
-    it("returns undefined for unregistered key", () => {
+    test("returns undefined for unregistered key", () => {
       expect(SurfaceKey.lookup("slack:unknown")).toBeUndefined();
     });
 
-    it("throws error on invalid format during register", () => {
+    test("throws error on invalid format during register", () => {
       expect(() => SurfaceKey.register("invalid", "session-123")).toThrow(
         /Invalid surfaceKey format/,
       );
     });
 
-    it("overwrites previous mapping for same key", () => {
+    test("overwrites previous mapping for same key", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId1 = "session-1";
       const sessionId2 = "session-2";
@@ -75,7 +75,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("N:1 mapping (multiple keys → same session)", () => {
-    it("allows multiple keys to map to same session", () => {
+    test("allows multiple keys to map to same session", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -87,7 +87,7 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup(key2)).toBe(sessionId);
     });
 
-    it("lists all keys for a session", () => {
+    test("lists all keys for a session", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -104,13 +104,13 @@ describe("SurfaceKey", () => {
       expect(keys).toContain(key3);
     });
 
-    it("returns empty array for session with no keys", () => {
+    test("returns empty array for session with no keys", () => {
       expect(SurfaceKey.listBySession("unknown-session")).toEqual([]);
     });
   });
 
   describe("unregister", () => {
-    it("unregisters a surfaceKey", () => {
+    test("unregisters a surfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId = "session-123";
 
@@ -122,12 +122,12 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup(key)).toBeUndefined();
     });
 
-    it("returns false when unregistering non-existent key", () => {
+    test("returns false when unregistering non-existent key", () => {
       const removed = SurfaceKey.unregister("slack:unknown");
       expect(removed).toBe(false);
     });
 
-    it("removes key from session's key list", () => {
+    test("removes key from session's key list", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -143,7 +143,7 @@ describe("SurfaceKey", () => {
       expect(keys).not.toContain(key1);
     });
 
-    it("cleans up session entry when last key is removed", () => {
+    test("cleans up session entry when last key is removed", () => {
       const sessionId = "session-123";
       const key = "slack:workspaceA:channel:C123";
 
@@ -156,7 +156,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("collision handling", () => {
-    it("handles key reassignment from one session to another", () => {
+    test("handles key reassignment from one session to another", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId1 = "session-1";
       const sessionId2 = "session-2";
@@ -171,7 +171,7 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.listBySession(sessionId2)).toContain(key);
     });
 
-    it("maintains bidirectional consistency", () => {
+    test("maintains bidirectional consistency", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
@@ -190,7 +190,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("fromChannel", () => {
-    it("creates a DM key", () => {
+    test("creates a DM key", () => {
       const key = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "workspaceA",
@@ -200,7 +200,7 @@ describe("SurfaceKey", () => {
       expect(key).toBe("slack:workspaceA:dm:U123");
     });
 
-    it("creates a group key", () => {
+    test("creates a group key", () => {
       const key = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "workspaceA",
@@ -210,7 +210,7 @@ describe("SurfaceKey", () => {
       expect(key).toBe("slack:workspaceA:group:C456");
     });
 
-    it("creates a thread key under a group", () => {
+    test("creates a thread key under a group", () => {
       const key = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "workspaceA",
@@ -221,7 +221,7 @@ describe("SurfaceKey", () => {
       expect(key).toBe("slack:workspaceA:group:C456:thread:171000");
     });
 
-    it("creates a channel key (backward compat kind)", () => {
+    test("creates a channel key (backward compat kind)", () => {
       const key = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "workspaceA",
@@ -231,7 +231,7 @@ describe("SurfaceKey", () => {
       expect(key).toBe("slack:workspaceA:channel:C789");
     });
 
-    it("creates a telegram chat key", () => {
+    test("creates a telegram chat key", () => {
       const key = SurfaceKey.fromChannel({
         surface: "telegram",
         namespace: "bot123",
@@ -243,7 +243,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("parse", () => {
-    it("parses a DM key", () => {
+    test("parses a DM key", () => {
       const parsed = SurfaceKey.parse("slack:workspaceA:dm:U123");
       expect(parsed.surface).toBe("slack");
       expect(parsed.namespace).toBe("workspaceA");
@@ -252,13 +252,13 @@ describe("SurfaceKey", () => {
       expect(parsed.threadId).toBeUndefined();
     });
 
-    it("parses a group key", () => {
+    test("parses a group key", () => {
       const parsed = SurfaceKey.parse("slack:workspaceA:group:C456");
       expect(parsed.kind).toBe("group");
       expect(parsed.id).toBe("C456");
     });
 
-    it("parses a thread key", () => {
+    test("parses a thread key", () => {
       const parsed = SurfaceKey.parse(
         "slack:workspaceA:group:C456:thread:171000",
       );
@@ -267,13 +267,13 @@ describe("SurfaceKey", () => {
       expect(parsed.threadId).toBe("171000");
     });
 
-    it("parses a chat key", () => {
+    test("parses a chat key", () => {
       const parsed = SurfaceKey.parse("telegram:bot123:chat:chat456");
       expect(parsed.kind).toBe("chat");
       expect(parsed.id).toBe("chat456");
     });
 
-    it("parses a legacy key without known kind", () => {
+    test("parses a legacy key without known kind", () => {
       const parsed = SurfaceKey.parse("tui:/Users/ino/Develop/OpenOmni");
       expect(parsed.surface).toBe("tui");
       expect(parsed.namespace).toBe("/Users/ino/Develop/OpenOmni");
@@ -283,7 +283,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("DM vs group vs thread distinction", () => {
-    it("produces distinct keys for DM and group in same workspace", () => {
+    test("produces distinct keys for DM and group in same workspace", () => {
       const dmKey = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
@@ -301,7 +301,7 @@ describe("SurfaceKey", () => {
       expect(groupKey).toContain(":group:");
     });
 
-    it("produces distinct keys for group and thread in same channel", () => {
+    test("produces distinct keys for group and thread in same channel", () => {
       const groupKey = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
@@ -320,7 +320,7 @@ describe("SurfaceKey", () => {
       expect(groupKey).not.toContain(":thread:");
     });
 
-    it("routes DM and group to different sessions", () => {
+    test("routes DM and group to different sessions", () => {
       const dmKey = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
@@ -341,7 +341,7 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup(groupKey)).toBe("session-group");
     });
 
-    it("routes thread separately from parent channel", () => {
+    test("routes thread separately from parent channel", () => {
       const channelKey = SurfaceKey.fromChannel({
         surface: "slack",
         namespace: "ws1",
@@ -363,7 +363,7 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.lookup(threadKey)).toBe("session-thread");
     });
 
-    it("roundtrips fromChannel → parse correctly", () => {
+    test("roundtrips fromChannel → parse correctly", () => {
       const descriptor: SurfaceKey.ChannelDescriptor = {
         surface: "slack",
         namespace: "ws1",
@@ -383,18 +383,18 @@ describe("SurfaceKey", () => {
   });
 
   describe("backward compatibility", () => {
-    it("existing create() API still works unchanged", () => {
+    test("existing create() API still works unchanged", () => {
       const key = SurfaceKey.create(["slack", "workspaceA", "channel", "C123"]);
       expect(key).toBe("slack:workspaceA:channel:C123");
     });
 
-    it("existing keys without explicit kind still register/lookup", () => {
+    test("existing keys without explicit kind still register/lookup", () => {
       const legacyKey = "tui:/Users/ino/Develop/OpenOmni";
       SurfaceKey.register(legacyKey, "session-tui");
       expect(SurfaceKey.lookup(legacyKey)).toBe("session-tui");
     });
 
-    it("parse handles legacy keys gracefully", () => {
+    test("parse handles legacy keys gracefully", () => {
       const parsed = SurfaceKey.parse("myservice:some-id");
       expect(parsed.surface).toBe("myservice");
       expect(parsed.namespace).toBe("some-id");
@@ -403,7 +403,7 @@ describe("SurfaceKey", () => {
   });
 
   describe("clear", () => {
-    it("clears all mappings", () => {
+    test("clears all mappings", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";

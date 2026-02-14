@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, test, beforeEach } from "bun:test";
 import { Session } from "../src/session";
 
 describe("Session TTL", () => {
@@ -7,7 +7,7 @@ describe("Session TTL", () => {
   });
 
   describe("create with ttlMs", () => {
-    it("should create session without expiresAt when ttlMs not provided", () => {
+    test("should create session without expiresAt when ttlMs not provided", () => {
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -16,7 +16,7 @@ describe("Session TTL", () => {
       expect(session.expiresAt).toBeUndefined();
     });
 
-    it("should create session with expiresAt when ttlMs provided", () => {
+    test("should create session with expiresAt when ttlMs provided", () => {
       const ttlMs = 5000;
       const beforeCreate = Date.now();
 
@@ -33,7 +33,7 @@ describe("Session TTL", () => {
   });
 
   describe("get with expiry", () => {
-    it("should return session when not expired", () => {
+    test("should return session when not expired", () => {
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -45,7 +45,7 @@ describe("Session TTL", () => {
       expect(retrieved?.id).toBe(session.id);
     });
 
-    it("should return undefined and remove session when expired", () => {
+    test("should return undefined and remove session when expired", () => {
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -59,7 +59,7 @@ describe("Session TTL", () => {
       expect(checkAgain).toBeUndefined();
     });
 
-    it("should return session without expiresAt normally", () => {
+    test("should return session without expiresAt normally", () => {
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -72,7 +72,7 @@ describe("Session TTL", () => {
   });
 
   describe("list with expiry", () => {
-    it("should include non-expired sessions", () => {
+    test("should include non-expired sessions", () => {
       const session1 = Session.create({
         title: "Session 1",
         model: { providerID: "test", modelID: "test-model" },
@@ -90,7 +90,7 @@ describe("Session TTL", () => {
       expect(sessions.find((s) => s.id === session2.id)).toBeDefined();
     });
 
-    it("should exclude expired sessions and remove them", () => {
+    test("should exclude expired sessions and remove them", () => {
       const expiredSession = Session.create({
         title: "Expired Session",
         model: { providerID: "test", modelID: "test-model" },
@@ -111,7 +111,7 @@ describe("Session TTL", () => {
       expect(checkExpired).toBeUndefined();
     });
 
-    it("should handle mixed sessions correctly", () => {
+    test("should handle mixed sessions correctly", () => {
       const expired1 = Session.create({
         title: "Expired 1",
         model: { providerID: "test", modelID: "test-model" },
@@ -145,7 +145,7 @@ describe("Session TTL", () => {
   });
 
   describe("lazy deletion", () => {
-    it("should not auto-delete expired sessions until accessed", () => {
+    test("should not auto-delete expired sessions until accessed", () => {
       const session = Session.create({
         title: "Test Session",
         model: { providerID: "test", modelID: "test-model" },

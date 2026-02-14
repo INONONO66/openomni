@@ -1,24 +1,12 @@
 import { z } from "zod";
 import { Message } from "@openomni/protocol";
-import { Storage } from "./storage";
-import { Bus, BusEvent } from "./bus";
+import { SessionInfo } from "./info";
+import { Storage } from "../storage/storage";
+import { Bus, BusEvent } from "../bus";
 
 export namespace Session {
-  export const Info = z.object({
-    id: z.string(),
-    title: z.string(),
-    model: z.object({
-      providerID: z.string(),
-      modelID: z.string(),
-    }),
-    time: z.object({
-      created: z.number(),
-      updated: z.number(),
-    }),
-    expiresAt: z.number().optional(),
-  });
-
-  export type Info = z.infer<typeof Info>;
+  export const Info = SessionInfo;
+  export type Info = SessionInfo;
 
   export const Event = {
     Created: BusEvent.define("session.created", z.object({ info: Info })),
@@ -185,9 +173,5 @@ export namespace Session {
 
   export function getParts(messageID: string): Message.Part[] {
     return Storage.getAdapter().part.list(messageID);
-  }
-
-  export function updatePart(messageID: string, part: Message.Part): void {
-    Storage.getAdapter().part.set(messageID, part);
   }
 }
