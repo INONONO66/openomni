@@ -26,75 +26,56 @@ export type AuthProvider = {
   methods: OAuthMethod[];
 };
 
+function createAnthropicOAuthMethod(
+  id: "max" | "console",
+  label: string,
+  hint: string,
+): OAuthMethod {
+  return {
+    id,
+    label,
+    hint,
+    async run(cb) {
+      const { url, verifier } = await anthropicOAuth.authorize(id);
+      cb.showUrl(url);
+      const code = await cb.getInput("Paste the authorization code");
+      cb.showProgress("Exchanging code for tokens...");
+      const tokenResult = await anthropicOAuth.exchange(code, verifier);
+      if (tokenResult.type === "failed") {
+        cb.stopProgress("Token exchange failed");
+        return;
+      }
+      cb.updateProgress("Creating API key...");
+      const apiKeyResult = await anthropicOAuth.createApiKey(
+        tokenResult.access,
+      );
+      if (apiKeyResult.type === "failed") {
+        await Auth.set("anthropic", {
+          type: "oauth",
+          access: tokenResult.access,
+          refresh: tokenResult.refresh,
+          expires: tokenResult.expires,
+        });
+        cb.stopProgress("Saved OAuth tokens (API key creation unavailable)");
+        return;
+      }
+      await Auth.set("anthropic", { type: "api", key: apiKeyResult.key });
+      cb.stopProgress("Login successful");
+    },
+  };
+}
+
 const anthropicProvider: AuthProvider = {
   id: "anthropic",
   name: "Anthropic",
   hint: "Claude Max or Console",
   methods: [
-    {
-      id: "max",
-      label: "Max",
-      hint: "claude.ai Pro/Max subscription",
-      async run(cb) {
-        const { url, verifier } = await anthropicOAuth.authorize("max");
-        cb.showUrl(url);
-        const code = await cb.getInput("Paste the authorization code");
-        cb.showProgress("Exchanging code for tokens...");
-        const tokenResult = await anthropicOAuth.exchange(code, verifier);
-        if (tokenResult.type === "failed") {
-          cb.stopProgress("Token exchange failed");
-          return;
-        }
-        cb.updateProgress("Creating API key...");
-        const apiKeyResult = await anthropicOAuth.createApiKey(
-          tokenResult.access,
-        );
-        if (apiKeyResult.type === "failed") {
-          await Auth.set("anthropic", {
-            type: "oauth",
-            access: tokenResult.access,
-            refresh: tokenResult.refresh,
-            expires: tokenResult.expires,
-          });
-          cb.stopProgress("Saved OAuth tokens (API key creation unavailable)");
-          return;
-        }
-        await Auth.set("anthropic", { type: "api", key: apiKeyResult.key });
-        cb.stopProgress("Login successful");
-      },
-    },
-    {
-      id: "console",
-      label: "Console",
-      hint: "console.anthropic.com API",
-      async run(cb) {
-        const { url, verifier } = await anthropicOAuth.authorize("console");
-        cb.showUrl(url);
-        const code = await cb.getInput("Paste the authorization code");
-        cb.showProgress("Exchanging code for tokens...");
-        const tokenResult = await anthropicOAuth.exchange(code, verifier);
-        if (tokenResult.type === "failed") {
-          cb.stopProgress("Token exchange failed");
-          return;
-        }
-        cb.updateProgress("Creating API key...");
-        const apiKeyResult = await anthropicOAuth.createApiKey(
-          tokenResult.access,
-        );
-        if (apiKeyResult.type === "failed") {
-          await Auth.set("anthropic", {
-            type: "oauth",
-            access: tokenResult.access,
-            refresh: tokenResult.refresh,
-            expires: tokenResult.expires,
-          });
-          cb.stopProgress("Saved OAuth tokens (API key creation unavailable)");
-          return;
-        }
-        await Auth.set("anthropic", { type: "api", key: apiKeyResult.key });
-        cb.stopProgress("Login successful");
-      },
-    },
+    createAnthropicOAuthMethod("max", "Max", "claude.ai Pro/Max subscription"),
+    createAnthropicOAuthMethod(
+      "console",
+      "Console",
+      "console.anthropic.com API",
+    ),
   ],
 };
 

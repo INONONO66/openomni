@@ -185,20 +185,9 @@ export async function listModels(
   return filterModels(providerID, authType ?? "api", models);
 }
 
-export async function listModelsAsync(
-  providerID: string,
-  authType?: "oauth" | "api",
-): Promise<Provider.Model[]> {
-  return listModels(providerID, authType);
-}
-
 export async function listProviders(): Promise<string[]> {
   const data = await ModelsDev.get();
   return Object.keys(data);
-}
-
-export function getProvider(model: Provider.Model, auth: Auth.Info): any {
-  return getSDK(model, auth);
 }
 
 export async function getProviderInfo(

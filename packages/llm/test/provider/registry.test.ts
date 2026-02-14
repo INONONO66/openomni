@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
-  getProvider,
+  getSDK,
   listModels,
   listProviders,
   Provider,
@@ -21,7 +21,7 @@ function makeModel(
 }
 
 describe("Provider Registry", () => {
-  describe("getProvider", () => {
+  describe("getSDK", () => {
     it("should return configured Anthropic provider with API auth", () => {
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
       const model = makeModel(
@@ -29,7 +29,7 @@ describe("Provider Registry", () => {
         "@ai-sdk/anthropic",
         "claude-sonnet-4-20250514",
       );
-      const provider = getProvider(model, auth);
+      const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -46,7 +46,7 @@ describe("Provider Registry", () => {
         "@ai-sdk/anthropic",
         "claude-sonnet-4-20250514",
       );
-      const provider = getProvider(model, auth);
+      const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -54,7 +54,7 @@ describe("Provider Registry", () => {
     it("should return configured OpenAI provider with API auth", () => {
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
       const model = makeModel("openai", "@ai-sdk/openai", "gpt-4o");
-      const provider = getProvider(model, auth);
+      const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -68,7 +68,7 @@ describe("Provider Registry", () => {
         accountId: "test-account-id",
       };
       const model = makeModel("openai", "@ai-sdk/openai", "gpt-5.1-codex-max");
-      const provider = getProvider(model, auth);
+      const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
@@ -76,7 +76,7 @@ describe("Provider Registry", () => {
     it("should throw error for unknown npm package", () => {
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
       const model = makeModel("unknown", "unknown-npm-pkg");
-      expect(() => getProvider(model, auth)).toThrow(
+      expect(() => getSDK(model, auth)).toThrow(
         "No bundled provider for npm package: unknown-npm-pkg",
       );
     });
