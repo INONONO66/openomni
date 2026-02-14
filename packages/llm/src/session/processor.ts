@@ -68,10 +68,6 @@ export namespace Processor {
 
     let attempt = 0;
 
-    function publishPartUpdate(part: Message.Part, delta?: string): void {
-      // Event published via sink.onMessage() - no need for Bus.publish
-    }
-
     const messageParts: Message.Part[] = [];
 
     function addMessagePart(part: Message.Part): void {
@@ -146,7 +142,6 @@ export namespace Processor {
                         >;
                       }
                       updateMessagePart(currentText);
-                      publishPartUpdate(currentText, String(event.text || ""));
                     }
                     break;
                   }
@@ -165,7 +160,6 @@ export namespace Processor {
                         >;
                       }
                       updateMessagePart(currentText);
-                      publishPartUpdate(currentText);
                     }
                     currentText = undefined;
                     break;
@@ -204,7 +198,6 @@ export namespace Processor {
                         >;
                       }
                       updateMessagePart(part);
-                      publishPartUpdate(part, String(event.text || ""));
                     }
                     break;
                   }
@@ -225,7 +218,6 @@ export namespace Processor {
                         >;
                       }
                       updateMessagePart(part);
-                      publishPartUpdate(part);
                       delete reasoningMap[reasoningId];
                     }
                     break;
@@ -246,7 +238,6 @@ export namespace Processor {
                     };
                     addMessagePart(toolPart);
                     pendingTools.push(toolPart);
-                    publishPartUpdate(toolPart);
                     sink.onToolCall({
                       id: toolPart.callID,
                       tool: toolPart.tool,
@@ -260,7 +251,6 @@ export namespace Processor {
                         time: { start: Date.now() },
                       };
                       updateMessagePart(toolPart);
-                      publishPartUpdate(toolPart);
 
                       try {
                         const result = await onToolCall(toolPart);
@@ -277,7 +267,6 @@ export namespace Processor {
                           },
                         };
                         updateMessagePart(toolPart);
-                        publishPartUpdate(toolPart);
                         sink.onToolResult({
                           id: generateId("tool-result"),
                           toolCallId: toolPart.callID,
@@ -297,7 +286,6 @@ export namespace Processor {
                           },
                         };
                         updateMessagePart(toolPart);
-                        publishPartUpdate(toolPart);
                         sink.onToolResult({
                           id: generateId("tool-result"),
                           toolCallId: toolPart.callID,
