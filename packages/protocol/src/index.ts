@@ -355,23 +355,6 @@ export interface Sink {
 }
 
 // ============================================================
-// Summary and Permission Types
-// ============================================================
-
-export const Summary = z.object({
-  id: z.string(),
-  sessionID: z.string(),
-  title: z.string(),
-  content: z.string(),
-  createdAt: z.number(),
-});
-export type Summary = z.infer<typeof Summary>;
-
-export type PermissionDecision = "allow" | "ask" | "deny";
-
-export type PermissionPolicy = "ask" | "notify" | "deny";
-
-// ============================================================
 // Retry and Budget Types
 // ============================================================
 
@@ -397,15 +380,6 @@ export const RunBudget = z.object({
   maxToolRuntimeMs: z.number(),
 });
 export type RunBudget = z.infer<typeof RunBudget>;
-
-// ============================================================
-// Session Key Type
-// ============================================================
-
-export type SessionKey =
-  | `agent:${string}:main`
-  | `agent:${string}:subagent:${string}`
-  | `task:${string}:run:${string}`;
 
 // ============================================================
 // Notification Types
