@@ -47,7 +47,6 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
 
     const adapter = Storage.getAdapter();
 
-    // Clear current messages and parts
     const currentMsgs = adapter.message.list(sessionID);
     for (const msg of currentMsgs) {
       const currentParts = adapter.part.list(msg.id);
@@ -57,7 +56,6 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
       adapter.message.remove(sessionID, msg.id);
     }
 
-    // Restore from snapshot
     for (const msg of snapshot.messages) {
       adapter.message.set(sessionID, msg);
       const snapshotParts = snapshot.parts.get(msg.id) ?? [];
