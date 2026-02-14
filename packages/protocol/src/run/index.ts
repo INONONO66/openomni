@@ -19,7 +19,11 @@ export namespace Run {
     z.object({ type: z.literal("aborted") }),
     z.object({
       type: z.literal("error"),
-      error: z.instanceof(Error),
+      error: z.object({
+        message: z.string(),
+        name: z.string().optional(),
+        stack: z.string().optional(),
+      }),
     }),
   ]);
   export type Outcome = z.infer<typeof Outcome>;

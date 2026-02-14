@@ -181,9 +181,14 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       return { type: "aborted" };
     }
 
+    const err = error instanceof Error ? error : new Error(String(error));
     return {
       type: "error",
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+      },
     };
   }
 }
