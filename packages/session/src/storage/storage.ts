@@ -1,5 +1,5 @@
 import { Message } from "@openomni/protocol";
-import { SessionInfo } from "./session-info";
+import { SessionInfo } from "../session/info";
 
 export namespace Storage {
   export interface Adapter {

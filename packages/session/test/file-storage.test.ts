@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Message } from "@openomni/protocol";
-import { FileStorageAdapter } from "../src/file-storage";
-import { Storage, InMemoryStorage } from "../src/storage";
+import { FileStorageAdapter } from "../src/storage/file-storage";
+import { Storage, InMemoryStorage } from "../src/storage/storage";
 import { Session } from "../src/session";
 
 function makeSession(id: string): Session.Info {

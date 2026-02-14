@@ -11,7 +11,7 @@ import {
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Message } from "@openomni/protocol";
-import { SessionInfo } from "./session-info";
+import { SessionInfo } from "../session/info";
 import { Storage } from "./storage";
 
 export class FileStorageAdapter implements Storage.Adapter {

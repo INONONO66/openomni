@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { Message } from "@openomni/protocol";
-import { SessionInfo } from "./session-info";
-import { Storage } from "./storage";
-import { Bus, BusEvent } from "./bus";
+import { SessionInfo } from "./info";
+import { Storage } from "../storage/storage";
+import { Bus, BusEvent } from "../bus";
 
 export namespace Session {
   export const Info = SessionInfo;
