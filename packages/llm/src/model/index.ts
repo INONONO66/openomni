@@ -133,13 +133,20 @@ export namespace ModelsDev {
     }
   }
 
-  if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
-    ModelsDev.refresh();
-    setInterval(
-      () => {
-        ModelsDev.refresh();
-      },
-      60 * 60 * 1000,
-    ).unref();
+  let initialized = false;
+
+  export function init(): void {
+    if (initialized) return;
+    initialized = true;
+
+    if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
+      ModelsDev.refresh();
+      setInterval(
+        () => {
+          ModelsDev.refresh();
+        },
+        60 * 60 * 1000,
+      ).unref();
+    }
   }
 }

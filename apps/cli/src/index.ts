@@ -3,6 +3,9 @@ import { hideBin } from "yargs/helpers";
 import pkg from "../package.json";
 import { AuthCommand } from "./cmd/auth";
 import { AgentCommand } from "./cmd/agent";
+import { ModelsDev } from "@openomni/llm";
+
+ModelsDev.init();
 
 await yargs(hideBin(process.argv))
   .scriptName("openomni")

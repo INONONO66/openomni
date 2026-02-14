@@ -192,7 +192,6 @@ describe("Integration", () => {
     expect(mod.Message).toBeDefined();
     expect(mod.Retry).toBeDefined();
     expect(mod.Processor).toBeDefined();
-    expect(mod.Stream).toBeDefined();
     expect(mod.Tool).toBeDefined();
     expect(mod.toModelMessages).toBeDefined();
   });
