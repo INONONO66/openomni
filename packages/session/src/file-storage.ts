@@ -11,7 +11,7 @@ import {
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Message } from "@openomni/protocol";
-import { Session } from "./session";
+import { SessionInfo } from "./session-info";
 import type { StorageAdapter } from "./storage";
 
 export class FileStorageAdapter implements StorageAdapter {
@@ -84,20 +84,20 @@ export class FileStorageAdapter implements StorageAdapter {
   }
 
   session = {
-    get: (id: string): Session.Info | undefined => {
-      return this.readJSON<Session.Info>(join(this.sessionsDir, `${id}.json`));
+    get: (id: string): SessionInfo | undefined => {
+      return this.readJSON<SessionInfo>(join(this.sessionsDir, `${id}.json`));
     },
 
-    set: (id: string, info: Session.Info): void => {
+    set: (id: string, info: SessionInfo): void => {
       this.atomicWrite(join(this.sessionsDir, `${id}.json`), info);
     },
 
-    list: (): Session.Info[] => {
+    list: (): SessionInfo[] => {
       const files = this.listDir(this.sessionsDir);
-      const results: Session.Info[] = [];
+      const results: SessionInfo[] = [];
       for (const file of files) {
         if (!file.endsWith(".json")) continue;
-        const info = this.readJSON<Session.Info>(join(this.sessionsDir, file));
+        const info = this.readJSON<SessionInfo>(join(this.sessionsDir, file));
         if (info) results.push(info);
       }
       return results;

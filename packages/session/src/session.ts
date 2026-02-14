@@ -1,24 +1,12 @@
 import { z } from "zod";
 import { Message } from "@openomni/protocol";
+import { SessionInfo } from "./session-info";
 import { Storage } from "./storage";
 import { Bus, BusEvent } from "./bus";
 
 export namespace Session {
-  export const Info = z.object({
-    id: z.string(),
-    title: z.string(),
-    model: z.object({
-      providerID: z.string(),
-      modelID: z.string(),
-    }),
-    time: z.object({
-      created: z.number(),
-      updated: z.number(),
-    }),
-    expiresAt: z.number().optional(),
-  });
-
-  export type Info = z.infer<typeof Info>;
+  export const Info = SessionInfo;
+  export type Info = SessionInfo;
 
   export const Event = {
     Created: BusEvent.define("session.created", z.object({ info: Info })),

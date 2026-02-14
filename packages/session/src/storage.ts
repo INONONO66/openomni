@@ -1,11 +1,11 @@
 import { Message } from "@openomni/protocol";
-import { Session } from "./session";
+import { SessionInfo } from "./session-info";
 
 export interface StorageAdapter {
   session: {
-    get(id: string): Session.Info | undefined;
-    set(id: string, info: Session.Info): void;
-    list(): Session.Info[];
+    get(id: string): SessionInfo | undefined;
+    set(id: string, info: SessionInfo): void;
+    list(): SessionInfo[];
     remove(id: string): boolean;
   };
   message: {
@@ -23,18 +23,18 @@ export interface StorageAdapter {
 }
 
 export class InMemoryStorage implements StorageAdapter {
-  private sessions = new Map<string, Session.Info>();
+  private sessions = new Map<string, SessionInfo>();
   private messages = new Map<string, Message.Info[]>();
   private parts = new Map<string, Message.Part[]>();
 
   session = {
-    get: (id: string): Session.Info | undefined => {
+    get: (id: string): SessionInfo | undefined => {
       return this.sessions.get(id);
     },
-    set: (id: string, info: Session.Info): void => {
+    set: (id: string, info: SessionInfo): void => {
       this.sessions.set(id, info);
     },
-    list: (): Session.Info[] => {
+    list: (): SessionInfo[] => {
       return Array.from(this.sessions.values());
     },
     remove: (id: string): boolean => {
