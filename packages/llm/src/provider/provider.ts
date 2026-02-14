@@ -75,8 +75,8 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
   } else if (providerID === "openai") {
     const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
     sdkOptions.apiKey = "oauth-dummy-key";
-    sdkOptions.fetch = createCodexOAuthFetch(oauthAuth, (tokens) => {
-      Auth.set(providerID, {
+    sdkOptions.fetch = createCodexOAuthFetch(oauthAuth, async (tokens) => {
+      await Auth.set(providerID, {
         type: "oauth",
         access: tokens.access,
         refresh: tokens.refresh,

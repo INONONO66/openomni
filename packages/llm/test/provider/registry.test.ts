@@ -112,7 +112,7 @@ describe("Provider Registry", () => {
     });
 
     it("should throw error for unknown provider", async () => {
-      expect(Provider.listModels("unknown")).rejects.toThrow(
+      await expect(Provider.listModels("unknown")).rejects.toThrow(
         "Unknown provider: unknown",
       );
     });
