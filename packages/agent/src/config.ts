@@ -1,6 +1,6 @@
 import type { RouterRule } from "./loop";
 import type { QueueConfig } from "./trigger";
-import type { RunBudget } from "@openomni/protocol";
+import type { Run } from "@openomni/protocol";
 
 export interface DedupePolicy {
   windowMs: number;
@@ -18,7 +18,7 @@ export interface AutonomousLoopConfig {
     rules: RouterRule[];
     fallbackRuleId?: string;
   };
-  budgets: RunBudget;
+  budgets: Run.Budget;
   permissions: {
     default: "ask" | "notify" | "deny";
   };

@@ -126,6 +126,28 @@ export namespace Tool {
     StateError,
   ]);
   export type State = z.infer<typeof State>;
+
+  export const Call = z.object({
+    id: z.string(),
+    tool: z.string(),
+    input: z.record(z.string(), z.unknown()),
+  });
+  export type Call = z.infer<typeof Call>;
+
+  export const Result = z.object({
+    id: z.string(),
+    toolCallId: z.string(),
+    output: z.string(),
+    isError: z.boolean().optional(),
+  });
+  export type Result = z.infer<typeof Result>;
+
+  export const Spec = z.object({
+    name: z.string(),
+    description: z.string().optional(),
+    inputSchema: z.record(z.string(), z.unknown()),
+  });
+  export type Spec = z.infer<typeof Spec>;
 }
 
 export namespace Message {
@@ -279,79 +301,64 @@ export namespace Message {
   export type WithParts = z.infer<typeof WithParts>;
 }
 
-export const ToolCall = z.object({
-  id: z.string(),
-  tool: z.string(),
-  input: z.record(z.string(), z.unknown()),
-});
-export type ToolCall = z.infer<typeof ToolCall>;
+export namespace Run {
+  export const Snapshot = z.object({
+    id: z.string(),
+    sessionID: z.string(),
+    timestamp: z.number(),
+    state: z.record(z.string(), z.unknown()),
+  });
+  export type Snapshot = z.infer<typeof Snapshot>;
 
-export const ToolResult = z.object({
-  id: z.string(),
-  toolCallId: z.string(),
-  output: z.string(),
-  isError: z.boolean().optional(),
-});
-export type ToolResult = z.infer<typeof ToolResult>;
+  export const Outcome = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("stop") }),
+    z.object({
+      type: z.literal("await_tool"),
+      toolCalls: z.array(Tool.Call),
+    }),
+    z.object({ type: z.literal("aborted") }),
+    z.object({
+      type: z.literal("error"),
+      error: z.instanceof(Error),
+    }),
+  ]);
+  export type Outcome = z.infer<typeof Outcome>;
 
-export const ToolSpec = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  inputSchema: z.record(z.string(), z.unknown()),
-});
-export type ToolSpec = z.infer<typeof ToolSpec>;
+  export const RetryPolicy = z.object({
+    maxAttempts: z.number(),
+    backoffMs: z.object({
+      initial: z.number(),
+      multiplier: z.number(),
+      max: z.number(),
+    }),
+    retryOn: z
+      .array(
+        z.enum([
+          "timeout",
+          "tool_error",
+          "transient_error",
+          "validation_error",
+        ]),
+      )
+      .optional(),
+  });
+  export type RetryPolicy = z.infer<typeof RetryPolicy>;
 
-export const RunSnapshot = z.object({
-  id: z.string(),
-  sessionID: z.string(),
-  timestamp: z.number(),
-  state: z.record(z.string(), z.unknown()),
-});
-export type RunSnapshot = z.infer<typeof RunSnapshot>;
-
-export const RunOutcome = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("stop") }),
-  z.object({
-    type: z.literal("await_tool"),
-    toolCalls: z.array(ToolCall),
-  }),
-  z.object({ type: z.literal("aborted") }),
-  z.object({
-    type: z.literal("error"),
-    error: z.instanceof(Error),
-  }),
-]);
-export type RunOutcome = z.infer<typeof RunOutcome>;
+  export const Budget = z.object({
+    maxWallTimeMs: z.number(),
+    maxTurns: z.number(),
+    maxToolCalls: z.number(),
+    maxToolRuntimeMs: z.number(),
+  });
+  export type Budget = z.infer<typeof Budget>;
+}
 
 export interface Sink {
   onMessage: (message: Message.WithParts) => void;
-  onToolCall: (call: ToolCall) => void;
-  onToolResult: (result: ToolResult) => void;
-  onSnapshot: (snapshot: RunSnapshot) => void;
+  onToolCall: (call: Tool.Call) => void;
+  onToolResult: (result: Tool.Result) => void;
+  onSnapshot: (snapshot: Run.Snapshot) => void;
 }
-
-export const RetryPolicy = z.object({
-  maxAttempts: z.number(),
-  backoffMs: z.object({
-    initial: z.number(),
-    multiplier: z.number(),
-    max: z.number(),
-  }),
-  retryOn: z
-    .array(
-      z.enum(["timeout", "tool_error", "transient_error", "validation_error"]),
-    )
-    .optional(),
-});
-export type RetryPolicy = z.infer<typeof RetryPolicy>;
-
-export const RunBudget = z.object({
-  maxWallTimeMs: z.number(),
-  maxTurns: z.number(),
-  maxToolCalls: z.number(),
-  maxToolRuntimeMs: z.number(),
-});
-export type RunBudget = z.infer<typeof RunBudget>;
 
 export {
   NotificationSeverity,

@@ -2,7 +2,7 @@ import { ScheduleInput } from "./schemas";
 import { TaskManager } from "../task/manager";
 import { Scheduler } from "../trigger/scheduler";
 import { Task } from "../task/types";
-import { ToolResult } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { randomUUID } from "crypto";
 
 /**
@@ -27,7 +27,7 @@ export namespace ScheduleTool {
       userId?: string;
       workspaceId?: string;
     },
-  ): ToolResult {
+  ): Tool.Result {
     // Validate input against ScheduleInput schema
     let validated: ScheduleInput;
     try {

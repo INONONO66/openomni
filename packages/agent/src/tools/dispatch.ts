@@ -1,4 +1,4 @@
-import type { ToolResult } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { IngressEngine } from "../ingress/engine";
 import {
   ExecutionSupervisor,
@@ -18,7 +18,7 @@ export namespace Dispatch {
     toolCallId: string,
     rawInput: unknown,
     context: DispatchContext,
-  ): Promise<ToolResult> {
+  ): Promise<Tool.Result> {
     const parseResult = DispatchInput.safeParse(rawInput);
     if (!parseResult.success) {
       return {

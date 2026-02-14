@@ -1,9 +1,4 @@
-import type {
-  RunOutcome,
-  Sink,
-  ToolCall,
-  ToolResult,
-} from "@openomni/protocol";
+import type { Run, Sink, Tool } from "@openomni/protocol";
 import { ModelsDev, Provider } from "@openomni/llm/src/provider";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent/registry";
 import type { ToolExecutor, OrchestratorRunInput } from "./run-worker";
@@ -15,7 +10,7 @@ const DEFAULT_MODEL_CONFIG = {
 } as const;
 
 const fallbackToolExecutor: ToolExecutor = {
-  async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+  async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
     return calls.map((call) => ({
       id: crypto.randomUUID(),
       toolCallId: call.id,
@@ -82,7 +77,10 @@ function createLLMRunner(
   providerModel: Provider.Model,
 ): OrchestratorRunInput["llm"] {
   return {
-    async run(input: Record<string, unknown>, sink: Sink): Promise<RunOutcome> {
+    async run(
+      input: Record<string, unknown>,
+      sink: Sink,
+    ): Promise<Run.Outcome> {
       const runInput: RunInput = {
         messages: (input.messages ?? []) as RunInput["messages"],
         tools: (input.tools ?? []) as RunInput["tools"],
@@ -106,7 +104,7 @@ export function resolveToolExecutor(tools: string[]): ToolExecutor {
   // also return error here because actual execution is delegated upstream
   // by the calling context (e.g., SubagentTool, DispatchCoordinator).
   return {
-    async execute(calls: ToolCall[]): Promise<ToolResult[]> {
+    async execute(calls: Tool.Call[]): Promise<Tool.Result[]> {
       return calls.map((call) => {
         if (!allowedTools.has(call.tool)) {
           return {
