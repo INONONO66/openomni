@@ -39,8 +39,8 @@ export class FileStorageAdapter implements Storage.Adapter {
     } catch (err) {
       try {
         unlinkSync(tmpPath);
-      } catch {
-        /* noop */
+      } catch (_cleanupErr: unknown) {
+        // tmp file cleanup is best-effort; original write error is rethrown below
       }
       throw new Error(
         `FileStorageAdapter: failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
