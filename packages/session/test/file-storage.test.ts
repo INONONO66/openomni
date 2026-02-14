@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -55,7 +55,7 @@ describe("FileStorageAdapter", () => {
   });
 
   describe("session", () => {
-    it("should set and get a session", () => {
+    test("should set and get a session", () => {
       const session = makeSession("s1");
       adapter.session.set("s1", session);
 
@@ -63,11 +63,11 @@ describe("FileStorageAdapter", () => {
       expect(retrieved).toEqual(session);
     });
 
-    it("should return undefined for non-existent session", () => {
+    test("should return undefined for non-existent session", () => {
       expect(adapter.session.get("nonexistent")).toBeUndefined();
     });
 
-    it("should list all sessions", () => {
+    test("should list all sessions", () => {
       adapter.session.set("s1", makeSession("s1"));
       adapter.session.set("s2", makeSession("s2"));
 
@@ -76,17 +76,17 @@ describe("FileStorageAdapter", () => {
       expect(sessions.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
     });
 
-    it("should remove a session", () => {
+    test("should remove a session", () => {
       adapter.session.set("s1", makeSession("s1"));
       expect(adapter.session.remove("s1")).toBe(true);
       expect(adapter.session.get("s1")).toBeUndefined();
     });
 
-    it("should return false when removing non-existent session", () => {
+    test("should return false when removing non-existent session", () => {
       expect(adapter.session.remove("nonexistent")).toBe(false);
     });
 
-    it("should overwrite existing session on set", () => {
+    test("should overwrite existing session on set", () => {
       const session = makeSession("s1");
       adapter.session.set("s1", session);
 
@@ -98,7 +98,7 @@ describe("FileStorageAdapter", () => {
   });
 
   describe("message", () => {
-    it("should set and get a message", () => {
+    test("should set and get a message", () => {
       const msg = makeUserMessage("s1", "m1");
       adapter.message.set("s1", msg);
 
@@ -106,11 +106,11 @@ describe("FileStorageAdapter", () => {
       expect(retrieved).toEqual(msg);
     });
 
-    it("should return undefined for non-existent message", () => {
+    test("should return undefined for non-existent message", () => {
       expect(adapter.message.get("s1", "nonexistent")).toBeUndefined();
     });
 
-    it("should list messages for a session", () => {
+    test("should list messages for a session", () => {
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
       adapter.message.set("s1", makeUserMessage("s1", "m2"));
       adapter.message.set("s2", makeUserMessage("s2", "m3"));
@@ -123,23 +123,23 @@ describe("FileStorageAdapter", () => {
       expect(s2Messages).toHaveLength(1);
     });
 
-    it("should return empty array for session with no messages", () => {
+    test("should return empty array for session with no messages", () => {
       expect(adapter.message.list("empty")).toEqual([]);
     });
 
-    it("should remove a message", () => {
+    test("should remove a message", () => {
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
       expect(adapter.message.remove("s1", "m1")).toBe(true);
       expect(adapter.message.get("s1", "m1")).toBeUndefined();
     });
 
-    it("should return false when removing non-existent message", () => {
+    test("should return false when removing non-existent message", () => {
       expect(adapter.message.remove("s1", "nonexistent")).toBe(false);
     });
   });
 
   describe("part", () => {
-    it("should set and get a part", () => {
+    test("should set and get a part", () => {
       const part = makeTextPart("s1", "m1", "p1");
       adapter.part.set("m1", part);
 
@@ -147,11 +147,11 @@ describe("FileStorageAdapter", () => {
       expect(retrieved).toEqual(part);
     });
 
-    it("should return undefined for non-existent part", () => {
+    test("should return undefined for non-existent part", () => {
       expect(adapter.part.get("m1", "nonexistent")).toBeUndefined();
     });
 
-    it("should list parts for a message", () => {
+    test("should list parts for a message", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p2"));
 
@@ -160,23 +160,23 @@ describe("FileStorageAdapter", () => {
       expect(parts.map((p) => p.id).sort()).toEqual(["p1", "p2"]);
     });
 
-    it("should return empty array for message with no parts", () => {
+    test("should return empty array for message with no parts", () => {
       expect(adapter.part.list("empty")).toEqual([]);
     });
 
-    it("should remove a part", () => {
+    test("should remove a part", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1"));
       expect(adapter.part.remove("m1", "p1")).toBe(true);
       expect(adapter.part.get("m1", "p1")).toBeUndefined();
     });
 
-    it("should return false when removing non-existent part", () => {
+    test("should return false when removing non-existent part", () => {
       expect(adapter.part.remove("m1", "nonexistent")).toBe(false);
     });
   });
 
   describe("persistence across adapter instances", () => {
-    it("should recover session after creating new adapter", () => {
+    test("should recover session after creating new adapter", () => {
       const session = makeSession("s1");
       adapter.session.set("s1", session);
 
@@ -184,7 +184,7 @@ describe("FileStorageAdapter", () => {
       expect(newAdapter.session.get("s1")).toEqual(session);
     });
 
-    it("should recover messages after creating new adapter", () => {
+    test("should recover messages after creating new adapter", () => {
       const msg = makeUserMessage("s1", "m1");
       adapter.message.set("s1", msg);
 
@@ -193,7 +193,7 @@ describe("FileStorageAdapter", () => {
       expect(newAdapter.message.list("s1")).toHaveLength(1);
     });
 
-    it("should recover parts after creating new adapter", () => {
+    test("should recover parts after creating new adapter", () => {
       const part = makeTextPart("s1", "m1", "p1");
       adapter.part.set("m1", part);
 
@@ -202,7 +202,7 @@ describe("FileStorageAdapter", () => {
       expect(newAdapter.part.list("m1")).toHaveLength(1);
     });
 
-    it("should recover full session graph after restart", () => {
+    test("should recover full session graph after restart", () => {
       const session = makeSession("s1");
       const msg = makeUserMessage("s1", "m1");
       const part = makeTextPart("s1", "m1", "p1");
@@ -219,7 +219,7 @@ describe("FileStorageAdapter", () => {
   });
 
   describe("clear", () => {
-    it("should remove all data and recreate directory structure", () => {
+    test("should remove all data and recreate directory structure", () => {
       adapter.session.set("s1", makeSession("s1"));
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1"));
@@ -246,18 +246,18 @@ describe("Storage.configure with FileStorageAdapter", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("should use InMemoryStorage by default", () => {
+  test("should use InMemoryStorage by default", () => {
     expect(Storage.getAdapter()).toBeInstanceOf(InMemoryStorage);
   });
 
-  it("should accept FileStorageAdapter via Storage.configure", () => {
+  test("should accept FileStorageAdapter via Storage.configure", () => {
     const fileAdapter = new FileStorageAdapter(dir);
     Storage.configure(fileAdapter);
 
     expect(Storage.getAdapter()).toBe(fileAdapter);
   });
 
-  it("should persist via Session API with FileStorageAdapter", () => {
+  test("should persist via Session API with FileStorageAdapter", () => {
     Storage.configure(new FileStorageAdapter(dir));
 
     const session = Session.create({
@@ -272,7 +272,7 @@ describe("Storage.configure with FileStorageAdapter", () => {
     expect(recovered?.title).toBe("Persisted Session");
   });
 
-  it("should restore to InMemoryStorage on Storage.reset", () => {
+  test("should restore to InMemoryStorage on Storage.reset", () => {
     Storage.configure(new FileStorageAdapter(dir));
     Storage.reset();
 
