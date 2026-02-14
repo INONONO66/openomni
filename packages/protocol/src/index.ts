@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-// ============================================================
-// Error Classes (Base)
-// ============================================================
-
 export abstract class NamedError extends Error {
   abstract schema(): z.ZodType;
   abstract toObject(): { name: string; data: unknown };
@@ -83,10 +79,6 @@ export const APIError = NamedError.create(
   }),
 );
 
-// ============================================================
-// Tool Types
-// ============================================================
-
 export namespace Tool {
   export const StatePending = z.object({
     status: z.literal("pending"),
@@ -135,10 +127,6 @@ export namespace Tool {
   ]);
   export type State = z.infer<typeof State>;
 }
-
-// ============================================================
-// Message Types
-// ============================================================
 
 export namespace Message {
   const PartBase = z.object({
@@ -291,10 +279,6 @@ export namespace Message {
   export type WithParts = z.infer<typeof WithParts>;
 }
 
-// ============================================================
-// Tool Call and Result Types
-// ============================================================
-
 export const ToolCall = z.object({
   id: z.string(),
   tool: z.string(),
@@ -316,10 +300,6 @@ export const ToolSpec = z.object({
   inputSchema: z.record(z.string(), z.unknown()),
 });
 export type ToolSpec = z.infer<typeof ToolSpec>;
-
-// ============================================================
-// Run Types
-// ============================================================
 
 export const RunSnapshot = z.object({
   id: z.string(),
@@ -343,20 +323,12 @@ export const RunOutcome = z.discriminatedUnion("type", [
 ]);
 export type RunOutcome = z.infer<typeof RunOutcome>;
 
-// ============================================================
-// Sink Interface (TypeScript only, not Zod)
-// ============================================================
-
 export interface Sink {
   onMessage: (message: Message.WithParts) => void;
   onToolCall: (call: ToolCall) => void;
   onToolResult: (result: ToolResult) => void;
   onSnapshot: (snapshot: RunSnapshot) => void;
 }
-
-// ============================================================
-// Retry and Budget Types
-// ============================================================
 
 export const RetryPolicy = z.object({
   maxAttempts: z.number(),
@@ -381,20 +353,12 @@ export const RunBudget = z.object({
 });
 export type RunBudget = z.infer<typeof RunBudget>;
 
-// ============================================================
-// Notification Types
-// ============================================================
-
 export {
   NotificationSeverity,
   DeliveryMode,
   NotificationRequest,
   NotificationResult,
 } from "./notification";
-
-// ============================================================
-// Event Types
-// ============================================================
 
 export { BusEvent } from "./bus";
 export { Task, Agent } from "./events";
