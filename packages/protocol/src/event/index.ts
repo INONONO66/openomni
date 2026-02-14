@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BusEvent } from "./bus";
+import { BusEvent } from "../bus/index.js";
 
 /**
  * Base event schema with correlation fields
