@@ -3,20 +3,22 @@ import { Storage } from "./storage";
 import { BusEvent, Bus } from "./bus";
 import { Message } from "@openomni/protocol";
 
-export interface SnapshotProvider {
-  track(sessionID: string): string;
-  restore(sessionID: string, snapshotID: string): void;
-  diff(sessionID: string, snapshotID: string): SnapshotDiff;
-  remove(snapshotID: string): void;
+export namespace Snapshot {
+  export interface Provider {
+    track(sessionID: string): string;
+    restore(sessionID: string, snapshotID: string): void;
+    diff(sessionID: string, snapshotID: string): Diff;
+    remove(snapshotID: string): void;
+  }
+
+  export interface Diff {
+    added: string[];
+    removed: string[];
+    modified: string[];
+  }
 }
 
-export interface SnapshotDiff {
-  added: string[];
-  removed: string[];
-  modified: string[];
-}
-
-export class InMemorySnapshotProvider implements SnapshotProvider {
+export class InMemorySnapshotProvider implements Snapshot.Provider {
   private snapshots = new Map<
     string,
     { messages: Message.Info[]; parts: Map<string, Message.Part[]> }
@@ -65,7 +67,7 @@ export class InMemorySnapshotProvider implements SnapshotProvider {
     }
   }
 
-  diff(sessionID: string, snapshotID: string): SnapshotDiff {
+  diff(sessionID: string, snapshotID: string): Snapshot.Diff {
     const snapshot = this.snapshots.get(snapshotID);
     if (!snapshot) throw new Error(`Snapshot not found: ${snapshotID}`);
 
@@ -108,7 +110,7 @@ export class InMemorySnapshotProvider implements SnapshotProvider {
 }
 
 export namespace Snapshot {
-  let provider: SnapshotProvider = new InMemorySnapshotProvider();
+  let provider: Provider = new InMemorySnapshotProvider();
 
   export const Event = {
     Tracked: BusEvent.define(
@@ -121,11 +123,11 @@ export namespace Snapshot {
     ),
   };
 
-  export function configure(newProvider: SnapshotProvider): void {
+  export function configure(newProvider: Provider): void {
     provider = newProvider;
   }
 
-  export function getProvider(): SnapshotProvider {
+  export function getProvider(): Provider {
     return provider;
   }
 
@@ -140,7 +142,7 @@ export namespace Snapshot {
     Bus.publish(Event.Restored, { sessionID, snapshotID });
   }
 
-  export function diff(sessionID: string, snapshotID: string): SnapshotDiff {
+  export function diff(sessionID: string, snapshotID: string): Diff {
     return provider.diff(sessionID, snapshotID);
   }
 

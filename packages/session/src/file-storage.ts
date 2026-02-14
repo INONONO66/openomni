@@ -12,9 +12,9 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Message } from "@openomni/protocol";
 import { SessionInfo } from "./session-info";
-import type { StorageAdapter } from "./storage";
+import { Storage } from "./storage";
 
-export class FileStorageAdapter implements StorageAdapter {
+export class FileStorageAdapter implements Storage.Adapter {
   private readonly sessionsDir: string;
   private readonly messagesDir: string;
   private readonly partsDir: string;
