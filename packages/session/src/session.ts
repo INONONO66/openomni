@@ -174,8 +174,4 @@ export namespace Session {
   export function getParts(messageID: string): Message.Part[] {
     return Storage.getAdapter().part.list(messageID);
   }
-
-  export function updatePart(messageID: string, part: Message.Part): void {
-    Storage.getAdapter().part.set(messageID, part);
-  }
 }
