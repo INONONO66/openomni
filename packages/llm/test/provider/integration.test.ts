@@ -1,12 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
-import {
-  getSDK,
-  getLanguage,
-  listProviders,
-  listModels,
-  Provider,
-} from "../../src/provider/index";
+import { getSDK, getLanguage, Provider } from "../../src/provider/index";
 
 function makeAnthropicModel(id?: string): Provider.Model {
   return {
@@ -92,35 +86,35 @@ describe("Provider Integration", () => {
   });
 
   it("should list all available providers", async () => {
-    const providers = await listProviders();
+    const providers = await Provider.listProviders();
     expect(Array.isArray(providers)).toBe(true);
     expect(providers).toContain("anthropic");
     expect(providers).toContain("openai");
   });
 
   it("should list models for each provider", async () => {
-    const anthropicModels = await listModels("anthropic");
+    const anthropicModels = await Provider.listModels("anthropic");
     expect(Array.isArray(anthropicModels)).toBe(true);
     expect(anthropicModels.length).toBeGreaterThan(0);
 
-    const openaiModels = await listModels("openai");
+    const openaiModels = await Provider.listModels("openai");
     expect(Array.isArray(openaiModels)).toBe(true);
     expect(openaiModels.length).toBeGreaterThan(0);
   });
 
   it("should filter OpenAI models by auth type", async () => {
-    const oauthModels = await listModels("openai", "oauth");
+    const oauthModels = await Provider.listModels("openai", "oauth");
     expect(Array.isArray(oauthModels)).toBe(true);
     expect(oauthModels.find((m) => m.id === "gpt-5.1-codex-max")).toBeDefined();
     expect(oauthModels.find((m) => m.id === "gpt-4o")).toBeUndefined();
 
-    const apiModels = await listModels("openai", "api");
+    const apiModels = await Provider.listModels("openai", "api");
     expect(Array.isArray(apiModels)).toBe(true);
     expect(apiModels.length).toBeGreaterThan(0);
   });
 
   it("snapshot fallback provides data when ModelsDev is loaded", async () => {
-    const providers = await listProviders();
+    const providers = await Provider.listProviders();
     expect(providers.length).toBeGreaterThan(0);
   });
 });

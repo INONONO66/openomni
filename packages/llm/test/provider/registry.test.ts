@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  getSDK,
-  listModels,
-  listProviders,
-  Provider,
-} from "../../src/provider/index";
+import { getSDK, Provider } from "../../src/provider/index";
 import type { Auth } from "../../src/auth";
 
 function makeModel(
@@ -84,7 +79,7 @@ describe("Provider Registry", () => {
 
   describe("listModels", () => {
     it("should return model definitions from ModelsDev", async () => {
-      const models = await listModels("anthropic");
+      const models = await Provider.listModels("anthropic");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
@@ -93,14 +88,14 @@ describe("Provider Registry", () => {
     });
 
     it("should return OpenAI model definitions", async () => {
-      const models = await listModels("openai");
+      const models = await Provider.listModels("openai");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
     });
 
     it("should return filtered OpenAI models for OAuth auth type", async () => {
-      const models = await listModels("openai", "oauth");
+      const models = await Provider.listModels("openai", "oauth");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
@@ -110,14 +105,14 @@ describe("Provider Registry", () => {
     });
 
     it("should return all OpenAI models for API auth type", async () => {
-      const models = await listModels("openai", "api");
+      const models = await Provider.listModels("openai", "api");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
     });
 
     it("should throw error for unknown provider", async () => {
-      expect(listModels("unknown")).rejects.toThrow(
+      expect(Provider.listModels("unknown")).rejects.toThrow(
         "Unknown provider: unknown",
       );
     });
@@ -125,7 +120,7 @@ describe("Provider Registry", () => {
 
   describe("listProviders", () => {
     it("should return available provider IDs", async () => {
-      const providers = await listProviders();
+      const providers = await Provider.listProviders();
       expect(Array.isArray(providers)).toBe(true);
       expect(providers.length).toBeGreaterThan(0);
       expect(providers).toContain("anthropic");

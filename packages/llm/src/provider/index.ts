@@ -154,47 +154,48 @@ export namespace Provider {
       variants: model.variants ?? {},
     };
   }
+
+  export const BUNDLED_PROVIDERS = {
+    "@ai-sdk/anthropic": true,
+    "@ai-sdk/openai": true,
+  } as const;
+
+  export type ProviderID = string;
+
+  export async function listModels(
+    providerID: string,
+    authType?: "oauth" | "api",
+  ): Promise<Model[]> {
+    const data = await ModelsDev.get();
+    const provider = data[providerID];
+    if (!provider) {
+      throw new ProviderError({
+        message: `Unknown provider: ${providerID}`,
+        provider: providerID,
+      });
+    }
+    const info = fromModelsDevProvider(provider);
+    const models = Object.values(info.models);
+    return filterModels(providerID, authType ?? "api", models);
+  }
+
+  export async function listProviders(): Promise<string[]> {
+    const data = await ModelsDev.get();
+    return Object.keys(data);
+  }
+
+  export async function getProviderInfo(
+    providerID: string,
+  ): Promise<Info | undefined> {
+    const data = await ModelsDev.get();
+    const provider = data[providerID];
+    if (!provider) return undefined;
+    return fromModelsDevProvider(provider);
+  }
 }
 
 export { getSDK, getLanguage, CODEX_ALLOWED_MODELS } from "./provider";
-export const BUNDLED_PROVIDERS = {
-  "@ai-sdk/anthropic": true,
-  "@ai-sdk/openai": true,
-} as const;
 
 export { ModelsDev } from "../model";
 
 export { ProviderTransform } from "../transform";
-
-export type ProviderID = string;
-
-export async function listModels(
-  providerID: string,
-  authType?: "oauth" | "api",
-): Promise<Provider.Model[]> {
-  const data = await ModelsDev.get();
-  const provider = data[providerID];
-  if (!provider) {
-    throw new ProviderError({
-      message: `Unknown provider: ${providerID}`,
-      provider: providerID,
-    });
-  }
-  const info = fromModelsDevProvider(provider);
-  const models = Object.values(info.models);
-  return filterModels(providerID, authType ?? "api", models);
-}
-
-export async function listProviders(): Promise<string[]> {
-  const data = await ModelsDev.get();
-  return Object.keys(data);
-}
-
-export async function getProviderInfo(
-  providerID: string,
-): Promise<Provider.Info | undefined> {
-  const data = await ModelsDev.get();
-  const provider = data[providerID];
-  if (!provider) return undefined;
-  return fromModelsDevProvider(provider);
-}
