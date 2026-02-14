@@ -3,7 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
 import { Auth } from "../auth/storage";
 import { createOAuthFetch } from "../fetch/anthropic";
-import { CODEX_API_ENDPOINT, refreshAccessToken } from "../oauth/openai";
+import { createCodexOAuthFetch } from "../fetch/openai";
 import { Provider } from "./index";
 import { ModelsDev } from "../model";
 
@@ -73,107 +73,20 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
     sdkOptions.apiKey = "";
     sdkOptions.fetch = oauthFetch;
   } else if (providerID === "openai") {
+    const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
     sdkOptions.apiKey = "oauth-dummy-key";
-    sdkOptions.fetch = createOpenAIOAuthFetch(
-      auth as Extract<Auth.Info, { type: "oauth" }>,
-      providerID,
-    );
+    sdkOptions.fetch = createCodexOAuthFetch(oauthAuth, (tokens) => {
+      Auth.set(providerID, {
+        type: "oauth",
+        access: tokens.access,
+        refresh: tokens.refresh,
+        expires: tokens.expires,
+        ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
+      });
+    });
   }
 
   return factory(sdkOptions);
-}
-
-function createOpenAIOAuthFetch(
-  auth: Extract<Auth.Info, { type: "oauth" }>,
-  providerID: string,
-): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
-  let currentAccess = auth.access;
-  let currentRefresh = auth.refresh;
-  let currentExpires = auth.expires;
-  const accountId = auth.accountId;
-  let refreshPromise: Promise<void> | null = null;
-
-  async function ensureValidToken() {
-    if (currentAccess && currentExpires > Date.now()) return;
-    if (refreshPromise) {
-      await refreshPromise;
-      return;
-    }
-    refreshPromise = (async () => {
-      try {
-        const tokens = await refreshAccessToken(currentRefresh);
-        currentAccess = tokens.access_token;
-        currentRefresh = tokens.refresh_token;
-        currentExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000;
-        await Auth.set(providerID, {
-          type: "oauth",
-          access: currentAccess,
-          refresh: currentRefresh,
-          expires: currentExpires,
-          ...(accountId && { accountId }),
-        });
-      } finally {
-        refreshPromise = null;
-      }
-    })();
-    await refreshPromise;
-  }
-
-  return async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    if (init?.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.delete("authorization");
-        init.headers.delete("Authorization");
-      } else if (Array.isArray(init.headers)) {
-        init.headers = init.headers.filter(
-          ([key]) => key.toLowerCase() !== "authorization",
-        );
-      } else {
-        delete (init.headers as Record<string, string>)["authorization"];
-        delete (init.headers as Record<string, string>)["Authorization"];
-      }
-    }
-
-    await ensureValidToken();
-
-    const headers = new Headers();
-    if (init?.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.forEach((value, key) => headers.set(key, value));
-      } else if (Array.isArray(init.headers)) {
-        for (const [key, value] of init.headers) {
-          if (value !== undefined) headers.set(key, String(value));
-        }
-      } else {
-        for (const [key, value] of Object.entries(
-          init.headers as Record<string, string>,
-        )) {
-          if (value !== undefined) headers.set(key, String(value));
-        }
-      }
-    }
-
-    headers.set("authorization", `Bearer ${currentAccess}`);
-    if (accountId) {
-      headers.set("ChatGPT-Account-Id", accountId);
-    }
-
-    const parsed =
-      input instanceof URL
-        ? input
-        : new URL(typeof input === "string" ? input : (input as Request).url);
-
-    const url =
-      parsed.pathname.includes("/v1/responses") ||
-      parsed.pathname.includes("/chat/completions")
-        ? new URL(CODEX_API_ENDPOINT)
-        : parsed;
-
-    return fetch(url, { ...init, headers });
-  };
 }
 
 export function getLanguage(
