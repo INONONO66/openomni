@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import {
   NotificationSeverity,
   DeliveryMode,
@@ -7,26 +7,26 @@ import {
 } from "../src/notification";
 
 describe("NotificationSeverity", () => {
-  it("should parse valid severity values", () => {
+  test("should parse valid severity values", () => {
     expect(NotificationSeverity.parse("info")).toBe("info");
     expect(NotificationSeverity.parse("warning")).toBe("warning");
     expect(NotificationSeverity.parse("error")).toBe("error");
   });
 
-  it("should reject invalid severity values", () => {
+  test("should reject invalid severity values", () => {
     expect(() => NotificationSeverity.parse("critical")).toThrow();
     expect(() => NotificationSeverity.parse("debug")).toThrow();
     expect(() => NotificationSeverity.parse("")).toThrow();
   });
 
-  it("should infer correct type from schema", () => {
+  test("should infer correct type from schema", () => {
     const severity: NotificationSeverity = "warning";
     expect(severity).toBe("warning");
   });
 });
 
 describe("DeliveryMode", () => {
-  it("should parse valid delivery modes", () => {
+  test("should parse valid delivery modes", () => {
     expect(DeliveryMode.parse("reply_current_session")).toBe(
       "reply_current_session",
     );
@@ -35,20 +35,20 @@ describe("DeliveryMode", () => {
     expect(DeliveryMode.parse("new_thread")).toBe("new_thread");
   });
 
-  it("should reject invalid delivery modes", () => {
+  test("should reject invalid delivery modes", () => {
     expect(() => DeliveryMode.parse("email")).toThrow();
     expect(() => DeliveryMode.parse("sms")).toThrow();
     expect(() => DeliveryMode.parse("")).toThrow();
   });
 
-  it("should infer correct type from schema", () => {
+  test("should infer correct type from schema", () => {
     const mode: DeliveryMode = "dm";
     expect(mode).toBe("dm");
   });
 });
 
 describe("NotificationRequest", () => {
-  it("should parse valid minimal request", () => {
+  test("should parse valid minimal request", () => {
     const request = NotificationRequest.parse({
       type: "task_alert",
       severity: "info",
@@ -61,7 +61,7 @@ describe("NotificationRequest", () => {
     expect(request.body).toBe("This is a test");
   });
 
-  it("should parse valid request with all optional fields", () => {
+  test("should parse valid request with all optional fields", () => {
     const request = NotificationRequest.parse({
       type: "task_error",
       taskId: "task-123",
@@ -84,7 +84,7 @@ describe("NotificationRequest", () => {
     expect(request.metadata).toEqual({ custom: "value", count: 42 });
   });
 
-  it("should reject request missing required fields", () => {
+  test("should reject request missing required fields", () => {
     expect(() =>
       NotificationRequest.parse({
         type: "task_alert",
@@ -101,7 +101,7 @@ describe("NotificationRequest", () => {
     ).toThrow();
   });
 
-  it("should reject request with invalid severity", () => {
+  test("should reject request with invalid severity", () => {
     expect(() =>
       NotificationRequest.parse({
         type: "task_alert",
@@ -112,7 +112,7 @@ describe("NotificationRequest", () => {
     ).toThrow();
   });
 
-  it("should reject request with invalid deliveryHint", () => {
+  test("should reject request with invalid deliveryHint", () => {
     expect(() =>
       NotificationRequest.parse({
         type: "task_alert",
@@ -124,7 +124,7 @@ describe("NotificationRequest", () => {
     ).toThrow();
   });
 
-  it("should allow empty artifactRefs array", () => {
+  test("should allow empty artifactRefs array", () => {
     const request = NotificationRequest.parse({
       type: "task_alert",
       severity: "info",
@@ -135,7 +135,7 @@ describe("NotificationRequest", () => {
     expect(request.artifactRefs).toEqual([]);
   });
 
-  it("should infer correct type from schema", () => {
+  test("should infer correct type from schema", () => {
     const request: NotificationRequest = {
       type: "task_warning",
       severity: "warning",
@@ -147,14 +147,14 @@ describe("NotificationRequest", () => {
 });
 
 describe("NotificationResult", () => {
-  it("should parse valid minimal result", () => {
+  test("should parse valid minimal result", () => {
     const result = NotificationResult.parse({
       delivered: true,
     });
     expect(result.delivered).toBe(true);
   });
 
-  it("should parse valid result with all optional fields", () => {
+  test("should parse valid result with all optional fields", () => {
     const result = NotificationResult.parse({
       delivered: true,
       destination: "slack-channel-123",
@@ -165,7 +165,7 @@ describe("NotificationResult", () => {
     expect(result.externalMessageId).toBe("msg-xyz");
   });
 
-  it("should parse failed delivery result", () => {
+  test("should parse failed delivery result", () => {
     const result = NotificationResult.parse({
       delivered: false,
       error: "Failed to connect to Slack",
@@ -174,7 +174,7 @@ describe("NotificationResult", () => {
     expect(result.error).toBe("Failed to connect to Slack");
   });
 
-  it("should reject result missing delivered field", () => {
+  test("should reject result missing delivered field", () => {
     expect(() =>
       NotificationResult.parse({
         destination: "slack",
@@ -182,7 +182,7 @@ describe("NotificationResult", () => {
     ).toThrow();
   });
 
-  it("should infer correct type from schema", () => {
+  test("should infer correct type from schema", () => {
     const result: NotificationResult = {
       delivered: true,
       destination: "discord",
@@ -192,7 +192,7 @@ describe("NotificationResult", () => {
 });
 
 describe("Round-trip serialization", () => {
-  it("should round-trip NotificationRequest through JSON", () => {
+  test("should round-trip NotificationRequest through JSON", () => {
     const original: NotificationRequest = {
       type: "task_result",
       taskId: "task-1",
@@ -206,7 +206,7 @@ describe("Round-trip serialization", () => {
     expect(parsed).toEqual(original);
   });
 
-  it("should round-trip NotificationResult through JSON", () => {
+  test("should round-trip NotificationResult through JSON", () => {
     const original: NotificationResult = {
       delivered: true,
       destination: "webhook",
