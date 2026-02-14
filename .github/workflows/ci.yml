@@ -35,5 +35,5 @@ jobs:
         run: bun test
         working-directory: packages/llm
       - name: Test (agent)
-        run: bun test --preload ./test/force-exit.ts
+        run: bun run test:ci
         working-directory: packages/agent

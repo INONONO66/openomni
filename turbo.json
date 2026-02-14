@@ -11,6 +11,7 @@
     },
     "check-types": {},
     "test": {},
+    "test:ci": {},
     "dev": {
       "cache": false,
       "persistent": true
