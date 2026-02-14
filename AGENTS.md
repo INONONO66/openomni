@@ -38,8 +38,8 @@ protocol  ←  session  ←  llm  ←  agent  ←  cli
 | ---------------------------- | ----------------------------------------------------- | -------------------------------------------- |
 | Add Zod schema / shared type | `packages/protocol/src/`                              | All cross-package types live here            |
 | Add/modify events            | `packages/protocol/src/events.ts`                     | BusEvent.define() pattern                    |
-| Session CRUD                 | `packages/session/src/session.ts`                     | Namespace-based API                          |
-| Storage backend              | `packages/session/src/storage.ts`                     | Implement `StorageAdapter` interface         |
+| Session CRUD                 | `packages/session/src/session/`                       | Namespace-based API                          |
+| Storage backend              | `packages/session/src/storage/`                       | Implement `StorageAdapter` interface         |
 | Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                        |
 | Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                          |
 | Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                      |
