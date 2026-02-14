@@ -15,7 +15,7 @@ export namespace BusEvent {
 }
 
 export namespace Bus {
-  type Handler = (data: any) => void;
+  type Handler = (data: unknown) => void;
 
   const subscribers = new Map<string, Set<Handler>>();
 
@@ -25,7 +25,7 @@ export namespace Bus {
     handlers.forEach((handler) => {
       try {
         handler(data);
-      } catch {
+      } catch (_handlerErr: unknown) {
         // handler errors must not affect other handlers
       }
     });
