@@ -168,7 +168,7 @@ export class TaskStateMachine {
 /**
  * TaskManager - High-level task status management
  */
-export class TaskManager {
+export class TaskStatusManager {
   /**
    * Manually sets task status with validation
    * Used for manual overrides (e.g., admin actions, manual reset)

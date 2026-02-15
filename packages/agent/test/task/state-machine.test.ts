@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { TaskStateMachine, TaskManager } from "../../src/task/state-machine";
+import {
+  TaskStateMachine,
+  TaskStatusManager,
+} from "../../src/task/state-machine";
 import type { Task, TaskRun } from "../../src/task/types";
 
 describe("TaskStateMachine", () => {
@@ -590,7 +593,7 @@ describe("TaskStateMachine", () => {
   });
 });
 
-describe("TaskManager", () => {
+describe("TaskStatusManager", () => {
   const baseTask: Task.Info = {
     id: "task-1",
     title: "Test task",
@@ -604,19 +607,19 @@ describe("TaskManager", () => {
 
   describe("setStatus", () => {
     test("sets valid status", () => {
-      const updated = TaskManager.setStatus(baseTask, "scheduled");
+      const updated = TaskStatusManager.setStatus(baseTask, "scheduled");
       expect(updated.status).toBe("scheduled");
     });
 
     test("throws error on invalid status transition", () => {
       expect(() => {
-        TaskManager.setStatus(baseTask, "running");
+        TaskStatusManager.setStatus(baseTask, "running");
       }).toThrow("Invalid state transition: idle -> running");
     });
 
     test("auto-resets recurring task to idle", () => {
       const runningTask: Task.Info = { ...baseTask, status: "running" };
-      const updated = TaskManager.setStatus(runningTask, "done");
+      const updated = TaskStatusManager.setStatus(runningTask, "done");
       expect(updated.status).toBe("idle");
     });
   });
@@ -635,7 +638,7 @@ describe("TaskManager", () => {
         startedAt: Date.now(),
       };
 
-      const updated = TaskManager.updateFromRun(baseTask, pendingRun);
+      const updated = TaskStatusManager.updateFromRun(baseTask, pendingRun);
       expect(updated.status).toBe("running");
       expect(updated.pendingRun).toEqual(pendingRun);
     });
@@ -654,7 +657,11 @@ describe("TaskManager", () => {
         endedAt: Date.now(),
       };
 
-      const updated = TaskManager.updateFromRun(baseTask, undefined, lastRun);
+      const updated = TaskStatusManager.updateFromRun(
+        baseTask,
+        undefined,
+        lastRun,
+      );
       expect(updated.status).toBe("idle");
       expect(updated.lastRun).toEqual(lastRun);
     });
@@ -684,7 +691,11 @@ describe("TaskManager", () => {
         endedAt: Date.now() - 500,
       };
 
-      const updated = TaskManager.updateFromRun(baseTask, pendingRun, lastRun);
+      const updated = TaskStatusManager.updateFromRun(
+        baseTask,
+        pendingRun,
+        lastRun,
+      );
       expect(updated.status).toBe("scheduled");
       expect(updated.pendingRun).toEqual(pendingRun);
       expect(updated.lastRun).toEqual(lastRun);
@@ -695,7 +706,7 @@ describe("TaskManager", () => {
         ...baseTask,
         updatedAt: baseTask.updatedAt - 1,
       };
-      const updated = TaskManager.updateFromRun(pastTask);
+      const updated = TaskStatusManager.updateFromRun(pastTask);
       expect(updated.updatedAt).toBeGreaterThanOrEqual(pastTask.updatedAt + 1);
     });
   });

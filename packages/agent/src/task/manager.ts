@@ -1,6 +1,6 @@
 import { Task, TaskRun, TriggerSignal } from "./types";
 import { TaskStorage, TaskListFilter, InMemoryTaskStore } from "./storage";
-import { TaskManager as TaskStatusManager } from "./state-machine";
+import { TaskStatusManager } from "./state-machine";
 import { Bus } from "@openomni/session";
 import { Task as TaskEvent } from "@openomni/protocol";
 import { randomUUID } from "crypto";
