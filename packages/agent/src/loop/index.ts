@@ -85,6 +85,13 @@ export {
 } from "./execution-graph";
 
 export {
+  resolveDispatchHybridRuntime,
+  assignAgentsToReadyTasks,
+  resolveFallbackAgentAssignment,
+  resolveWorkerRuntimeForTask,
+} from "./execution-assignment";
+
+export {
   resolveAgentDefinition,
   resolveLLM,
   resolveToolExecutor,
