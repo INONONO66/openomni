@@ -92,6 +92,14 @@ export {
 } from "./execution-assignment";
 
 export {
+  decideFailedStepAction,
+  reviewTaskResult,
+  sendReviewFeedback,
+  requestHandoffDocument,
+  rotateAgent,
+} from "./execution-review";
+
+export {
   resolveAgentDefinition,
   resolveLLM,
   resolveToolExecutor,
