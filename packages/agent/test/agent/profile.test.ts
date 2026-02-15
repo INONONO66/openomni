@@ -3,17 +3,21 @@ import {
   AgentRegistry,
   AgentProfileSchema,
   AgentIdentitySchema,
-  AgentCapabilitiesSchema,
-  PolicySpecSchema,
-  AgentRuntimeSchema,
   createAgentIdentity,
-  createAgentRuntime,
   type AgentProfile,
   type AgentIdentity,
+} from "../../src/agent/profile";
+import {
+  AgentCapabilitiesSchema,
+  PolicySpecSchema,
   type AgentCapabilities,
   type PolicySpec,
+} from "../../src/agent/capabilities";
+import {
+  AgentRuntimeSchema,
+  createAgentRuntime,
   type AgentRuntime,
-} from "../../src/agent/profile";
+} from "../../src/agent/runtime";
 
 describe("AgentProfile", () => {
   describe("AgentProfileSchema", () => {

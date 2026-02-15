@@ -3,22 +3,28 @@ export {
   type AgentProfile,
   AgentIdentitySchema,
   type AgentIdentity,
+  AgentStatusSchema,
+  type AgentStatus,
+  AgentRegistry,
+  InMemoryAgentRegistryStore,
+  type AgentRegistryStore,
+  createAgentIdentity,
+} from "./profile";
+
+export {
   AgentCapabilitiesSchema,
   type AgentCapabilities,
   DataScopeSchema,
   type DataScope,
   PolicySpecSchema,
   type PolicySpec,
-  AgentStatusSchema,
-  type AgentStatus,
+} from "./capabilities";
+
+export {
   AgentRuntimeSchema,
   type AgentRuntime,
-  AgentRegistry,
-  InMemoryAgentRegistryStore,
-  type AgentRegistryStore,
-  createAgentIdentity,
   createAgentRuntime,
-} from "./profile";
+} from "./runtime";
 
 export { FileAgentRegistryStore } from "./file-registry-storage";
 

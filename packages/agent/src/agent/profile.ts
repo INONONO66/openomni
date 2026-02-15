@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { PolicySpecSchema, AgentCapabilitiesSchema } from "./capabilities";
 
 /**
  * Agent Profile - Durable configuration for an agent
@@ -45,68 +46,6 @@ export const AgentIdentitySchema = z.object({
 
 export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 
-/**
- * Agent Capabilities - Explicit capabilities available to an agent
- * Used by the router when matching tasks to agents
- */
-export const AgentCapabilitiesSchema = z.object({
-  skills: z
-    .array(z.string())
-    .optional()
-    .describe("Skills available to this agent"),
-  tools: z
-    .array(z.string())
-    .optional()
-    .describe("Tools available to this agent"),
-  toolAllowlist: z
-    .array(z.string())
-    .optional()
-    .describe("Explicit allowlist of tools"),
-  toolDenylist: z
-    .array(z.string())
-    .optional()
-    .describe("Explicit denylist of tools"),
-});
-
-export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
-
-/**
- * Policy Specification - Permission and capability constraints
- * Attaches to agents and can be tightened per edge
- */
-export const DataScopeSchema = z.union([
-  z.object({
-    type: z.literal("files"),
-    allow: z.enum(["read", "write", "none"]),
-    roots: z.array(z.string()).optional(),
-  }),
-  z.object({
-    type: z.literal("network"),
-    allow: z.enum(["none", "egress"]),
-    domains: z.array(z.string()).optional(),
-  }),
-]);
-
-export type DataScope = z.infer<typeof DataScopeSchema>;
-
-export const PolicySpecSchema = z.object({
-  tools: z.array(z.string()).describe("Tools allowed by this policy"),
-  dataScopes: z
-    .array(DataScopeSchema)
-    .optional()
-    .describe("Data access scopes"),
-  capabilities: z
-    .array(z.enum(["delegate", "escalate"]))
-    .optional()
-    .describe("Special capabilities granted"),
-});
-
-export type PolicySpec = z.infer<typeof PolicySpecSchema>;
-
-/**
- * Agent Runtime State - Ephemeral status information
- * Changes frequently and is separate from identity
- */
 export const AgentStatusSchema = z.enum([
   "idle",
   "busy",
@@ -115,17 +54,6 @@ export const AgentStatusSchema = z.enum([
 ]);
 
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
-
-export const AgentRuntimeSchema = z.object({
-  instanceId: z.string().describe("Instance identifier"),
-  agentId: z.string().describe("Agent profile identifier"),
-  status: AgentStatusSchema.describe("Current runtime status"),
-  currentTaskId: z.string().optional().describe("Currently executing task"),
-  lastHeartbeatAt: z.number().optional().describe("Last heartbeat timestamp"),
-  lastError: z.string().optional().describe("Last error message"),
-});
-
-export type AgentRuntime = z.infer<typeof AgentRuntimeSchema>;
 
 export interface AgentRegistryStore {
   get(id: string): AgentProfile | undefined;
@@ -272,19 +200,5 @@ export function createAgentIdentity(
       skills: profile.skills,
       tools: profile.tools,
     },
-  });
-}
-
-/**
- * Create a new agent runtime state
- * @param identity The agent identity
- * @returns A new agent runtime with idle status
- */
-export function createAgentRuntime(identity: AgentIdentity): AgentRuntime {
-  return AgentRuntimeSchema.parse({
-    instanceId: identity.instanceId,
-    agentId: identity.agentId,
-    status: "idle",
-    lastHeartbeatAt: Date.now(),
   });
 }
