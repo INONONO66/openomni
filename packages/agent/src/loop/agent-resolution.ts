@@ -1,8 +1,12 @@
 import type { Run, Sink, Tool } from "@openomni/protocol";
-import { ModelsDev, Provider } from "@openomni/llm/src/provider";
+import {
+  ModelsDev,
+  Provider,
+  run as llmRun,
+  type RunInput,
+} from "@openomni/llm";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent/registry";
 import type { ToolExecutor, OrchestratorRunInput } from "./run-worker";
-import { run as llmRun, type RunInput } from "@openomni/llm/src/run";
 
 const DEFAULT_MODEL_CONFIG = {
   providerID: "anthropic",
