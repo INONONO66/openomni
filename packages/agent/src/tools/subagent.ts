@@ -1,6 +1,6 @@
+import { z } from "zod";
 import { Session } from "@openomni/session";
 import type { Tool } from "@openomni/protocol";
-import { SubagentInput } from "./schemas";
 import { BuiltinAgentRegistry } from "../agent/registry";
 import { AgentMessenger } from "../agent/communication";
 import type { MessageEnvelope } from "../agent/communication";
@@ -12,6 +12,16 @@ import type {
 import { RunWorker } from "../loop/run-worker";
 import { TaskManager } from "../task/manager";
 import { IngressEngine } from "../ingress/engine";
+
+export const SubagentInput = z.object({
+  agentType: z.string().describe("Agent type: 'explore', 'implement', etc."),
+  prompt: z.string().describe("Instruction for the subagent"),
+  sessionId: z
+    .string()
+    .optional()
+    .describe("Resume existing session (optional)"),
+});
+export type SubagentInput = z.infer<typeof SubagentInput>;
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 

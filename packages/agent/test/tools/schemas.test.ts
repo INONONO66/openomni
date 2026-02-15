@@ -1,9 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import {
-  SubagentInput,
-  DispatchInput,
-  ScheduleInput,
-} from "../../src/tools/schemas";
+import { SubagentInput } from "../../src/tools/subagent";
+import { DispatchInput } from "../../src/tools/dispatch";
+import { ScheduleInput } from "../../src/tools/schedule";
 
 describe("Tool Schemas", () => {
   describe("SubagentInput", () => {
