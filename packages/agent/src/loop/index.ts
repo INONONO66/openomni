@@ -75,8 +75,9 @@ export {
   ExecutionSupervisorConfig,
   ExecutionSupervisorResult,
   StepOutcome,
-  ExecutionSupervisor,
-} from "./execution-supervisor";
+} from "./execution-types";
+
+export { ExecutionSupervisor } from "./execution-supervisor";
 
 export {
   resolveAgentDefinition,
