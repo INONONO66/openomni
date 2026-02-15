@@ -1,8 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-  ConversationHandler,
-  RequestContext,
-} from "../../src/conversation/handler";
+import { ConversationHandler, RequestContext } from "../../src/conversation";
 
 describe("ConversationHandler", () => {
   describe("decide", () => {
