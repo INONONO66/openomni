@@ -3,7 +3,7 @@ import {
   TaskStateMachine,
   TaskStatusManager,
 } from "../../src/task/state-machine";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 describe("TaskStateMachine", () => {
   describe("validateTransition", () => {
@@ -283,7 +283,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("derives scheduled from pending run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -300,7 +300,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("derives running from pending run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -318,7 +318,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("derives blocked from pending run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -336,7 +336,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("auto-resets to idle for recurring task after done", () => {
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -355,7 +355,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("auto-resets to idle for recurring task after failed", () => {
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -375,7 +375,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("auto-resets to idle for recurring task after cancelled", () => {
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -399,7 +399,7 @@ describe("TaskStateMachine", () => {
         triggers: [{ id: "trigger-1", type: "once", at: Date.now() }],
       };
 
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -423,7 +423,7 @@ describe("TaskStateMachine", () => {
         triggers: [{ id: "trigger-1", type: "once", at: Date.now() }],
       };
 
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -448,7 +448,7 @@ describe("TaskStateMachine", () => {
         triggers: [],
       };
 
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -467,7 +467,7 @@ describe("TaskStateMachine", () => {
     });
 
     test("prefers pending run status over last run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-2",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-2",
@@ -479,7 +479,7 @@ describe("TaskStateMachine", () => {
         startedAt: Date.now(),
       };
 
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -626,7 +626,7 @@ describe("TaskStatusManager", () => {
 
   describe("updateFromRun", () => {
     test("updates status from pending run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -644,7 +644,7 @@ describe("TaskStatusManager", () => {
     });
 
     test("updates status from last run", () => {
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -667,7 +667,7 @@ describe("TaskStatusManager", () => {
     });
 
     test("updates both pending and last run", () => {
-      const pendingRun: TaskRun = {
+      const pendingRun: Task.Run = {
         runId: "run-2",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-2",
@@ -678,7 +678,7 @@ describe("TaskStatusManager", () => {
         scheduledAt: Date.now(),
       };
 
-      const lastRun: TaskRun = {
+      const lastRun: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",

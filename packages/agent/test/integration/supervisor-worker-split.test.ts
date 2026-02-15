@@ -7,9 +7,9 @@ import { FileLock } from "../../src/loop/file-lock";
 import { RunWorker } from "../../src/loop/run-worker";
 import type { OrchestratorRunInput } from "../../src/loop/run-worker";
 import type { Sink, Tool } from "@openomni/protocol";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
-const RUN_STATUSES: TaskRun["status"][] = [
+const RUN_STATUSES: Task.Run["status"][] = [
   "scheduled",
   "running",
   "blocked",

@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { TaskManager, TriggerResult } from "../../src/task/manager";
 import { TaskStorage, InMemoryTaskStore } from "../../src/task/storage";
-import type { Task, TriggerSignal } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 describe("TaskManager.trigger", () => {
   beforeEach(() => {
@@ -17,7 +17,9 @@ describe("TaskManager.trigger", () => {
     });
   }
 
-  function createSignal(overrides: Partial<TriggerSignal> = {}): TriggerSignal {
+  function createSignal(
+    overrides: Partial<Task.TriggerSignal> = {},
+  ): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",

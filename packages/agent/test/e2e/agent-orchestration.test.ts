@@ -17,7 +17,7 @@ import {
 import { RunWorker } from "../../src/loop/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 import { Subagent, type SubagentContext } from "../../src/tools/subagent";
 import { randomUUID } from "crypto";
 
@@ -100,7 +100,7 @@ class TestRunExecutor implements RunExecutor {
   }
 }
 
-const RUN_STATUSES: TaskRun["status"][] = [
+const RUN_STATUSES: Task.Run["status"][] = [
   "scheduled",
   "running",
   "blocked",
@@ -109,7 +109,7 @@ const RUN_STATUSES: TaskRun["status"][] = [
   "cancelled",
 ];
 
-function listAllRuns(): TaskRun[] {
+function listAllRuns(): Task.Run[] {
   return TaskStorage.getAdapter().run.listByStatus(RUN_STATUSES);
 }
 

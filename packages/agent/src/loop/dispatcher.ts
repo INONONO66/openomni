@@ -1,4 +1,4 @@
-import { Task, TriggerSignal } from "../task/types";
+import { Task } from "../task/types";
 import { TaskManager, TriggerResult } from "../task/manager";
 
 /**
@@ -141,7 +141,7 @@ export namespace Dispatcher {
    */
   export async function dispatch(
     taskId: string,
-    signal: TriggerSignal,
+    signal: Task.TriggerSignal,
   ): Promise<TriggerResult> {
     const task = TaskManager.get(taskId);
 

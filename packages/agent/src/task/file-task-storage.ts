@@ -8,14 +8,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { TaskStore, TaskListFilter, RunListOptions } from "./storage";
-import type { Task, TaskRun } from "./types";
+import type { Task } from "./types";
 
 export class FileTaskStore implements TaskStore {
   private tasks = new Map<string, Task.Info>();
-  private runs = new Map<string, TaskRun>();
+  private runs = new Map<string, Task.Run>();
   private taskRuns = new Map<string, string[]>(); // taskId -> runId[]
   private idempotencyIndex = new Map<string, string>(); // idempotencyKey -> runId
-  private statusIndex = new Map<TaskRun["status"], Set<string>>(); // status -> Set<runId>
+  private statusIndex = new Map<Task.Run["status"], Set<string>>(); // status -> Set<runId>
 
   private readonly dir: string;
 
@@ -92,10 +92,10 @@ export class FileTaskStore implements TaskStore {
   // ===========================================================
 
   run = {
-    get: (runId: string): TaskRun | undefined => {
+    get: (runId: string): Task.Run | undefined => {
       return this.runs.get(runId);
     },
-    set: (taskId: string, run: TaskRun): void => {
+    set: (taskId: string, run: Task.Run): void => {
       const existingRun = this.runs.get(run.runId);
 
       if (existingRun && existingRun.status !== run.status) {
@@ -121,11 +121,11 @@ export class FileTaskStore implements TaskStore {
       this.flushIdempotencyIndex();
       this.flushStatusIndex();
     },
-    list: (taskId: string, opts?: RunListOptions): TaskRun[] => {
+    list: (taskId: string, opts?: RunListOptions): Task.Run[] => {
       const runIds = this.taskRuns.get(taskId) ?? [];
       let runs = runIds
         .map((id) => this.runs.get(id))
-        .filter((r): r is TaskRun => r !== undefined);
+        .filter((r): r is Task.Run => r !== undefined);
 
       if (opts?.sortBy) {
         const sortBy = opts.sortBy;
@@ -145,7 +145,7 @@ export class FileTaskStore implements TaskStore {
 
       return runs;
     },
-    listByStatus: (status: TaskRun["status"][]): TaskRun[] => {
+    listByStatus: (status: Task.Run["status"][]): Task.Run[] => {
       const runIds = new Set<string>();
       for (const s of status) {
         const ids = this.statusIndex.get(s);
@@ -157,7 +157,7 @@ export class FileTaskStore implements TaskStore {
       }
       return Array.from(runIds)
         .map((id) => this.runs.get(id))
-        .filter((r): r is TaskRun => r !== undefined);
+        .filter((r): r is Task.Run => r !== undefined);
     },
     remove: (runId: string): boolean => {
       const run = this.runs.get(runId);
@@ -181,7 +181,7 @@ export class FileTaskStore implements TaskStore {
       this.flushStatusIndex();
       return deleted;
     },
-    getByIdempotencyKey: (key: string): TaskRun | undefined => {
+    getByIdempotencyKey: (key: string): Task.Run | undefined => {
       const runId = this.idempotencyIndex.get(key);
       return runId ? this.runs.get(runId) : undefined;
     },
@@ -193,7 +193,7 @@ export class FileTaskStore implements TaskStore {
 
   private loadFromDisk(): void {
     this.tasks = this.readMapFile<Task.Info>("tasks.json");
-    this.runs = this.readMapFile<TaskRun>("runs.json");
+    this.runs = this.readMapFile<Task.Run>("runs.json");
     this.taskRuns = this.readMapFile<string[]>("taskRuns.json");
     this.idempotencyIndex = this.readMapFile<string>("idempotencyIndex.json");
     this.loadStatusIndex();
@@ -209,7 +209,7 @@ export class FileTaskStore implements TaskStore {
       >;
       this.statusIndex = new Map();
       for (const [status, ids] of Object.entries(raw)) {
-        this.statusIndex.set(status as TaskRun["status"], new Set(ids));
+        this.statusIndex.set(status as Task.Run["status"], new Set(ids));
       }
     } catch {
       this.rebuildStatusIndex();

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { FileTaskStore } from "../../src/task/file-task-storage";
 import { TaskStorage, InMemoryTaskStore } from "../../src/task/storage";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 function makeTask(id: string, overrides?: Partial<Task.Info>): Task.Info {
   return {
@@ -23,8 +23,8 @@ function makeTask(id: string, overrides?: Partial<Task.Info>): Task.Info {
 function makeRun(
   runId: string,
   taskId: string,
-  overrides?: Partial<TaskRun>,
-): TaskRun {
+  overrides?: Partial<Task.Run>,
+): Task.Run {
   return {
     runId,
     taskId,

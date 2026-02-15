@@ -1,4 +1,4 @@
-import type { Task, TaskRun } from "./types";
+import type { Task } from "./types";
 
 /**
  * Task State Machine
@@ -75,7 +75,7 @@ export class TaskStateMachine {
   }
 
   /**
-   * Derives task status from current/last TaskRun state
+   * Derives task status from current/last Task.Run state
    *
    * @param task - Task info
    * @param pendingRun - Current pending/active run (if any)
@@ -84,13 +84,13 @@ export class TaskStateMachine {
    */
   static deriveStatus(
     task: Task.Info,
-    pendingRun?: TaskRun,
-    lastRun?: TaskRun,
+    pendingRun?: Task.Run,
+    lastRun?: Task.Run,
   ): Task.Status {
     // If there's a pending/active run, use its status
     if (pendingRun) {
       const runStatus = pendingRun.status;
-      // Map TaskRun status to Task status
+      // Map Task.Run status to Task status
       if (
         runStatus === "scheduled" ||
         runStatus === "running" ||
@@ -183,7 +183,7 @@ export class TaskStatusManager {
   }
 
   /**
-   * Updates task status based on TaskRun state changes
+   * Updates task status based on Task.Run state changes
    *
    * @param task - Task to update
    * @param pendingRun - Current pending/active run
@@ -192,8 +192,8 @@ export class TaskStatusManager {
    */
   static updateFromRun(
     task: Task.Info,
-    pendingRun?: TaskRun,
-    lastRun?: TaskRun,
+    pendingRun?: Task.Run,
+    lastRun?: Task.Run,
   ): Task.Info {
     const derivedStatus = TaskStateMachine.deriveStatus(
       task,

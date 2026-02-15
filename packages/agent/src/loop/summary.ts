@@ -1,6 +1,6 @@
 import { Session } from "@openomni/session";
 import { Message } from "@openomni/protocol";
-import { TaskManager, TaskRun } from "../task";
+import { TaskManager, Task } from "../task";
 import { TaskStorage } from "../task/storage";
 
 export interface SummaryTemplate {
@@ -90,7 +90,7 @@ export namespace SummaryDelivery {
       return;
     }
 
-    const updatedRun: TaskRun = {
+    const updatedRun: Task.Run = {
       ...run,
       summary,
     };

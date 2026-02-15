@@ -1,4 +1,4 @@
-import { TriggerSignal } from "../task/types";
+import { Task } from "../task/types";
 
 /**
  * EventQueue - Bounded queue with drop policies and lane-based concurrency
@@ -24,7 +24,7 @@ export interface QueueConfig {
   defaultConcurrency?: number;
 }
 
-export interface QueueItem<T = TriggerSignal> {
+export interface QueueItem<T = Task.TriggerSignal> {
   id: string;
   laneKey: string;
   data: T;
@@ -48,7 +48,7 @@ export interface QueueMetrics {
   activeByLane: Map<string, number>;
 }
 
-export interface DequeueResult<T = TriggerSignal> {
+export interface DequeueResult<T = Task.TriggerSignal> {
   item: QueueItem<T>;
   waitTimeMs: number;
 }
@@ -64,7 +64,7 @@ type DrainCallback<T> = (item: QueueItem<T>) => Promise<void>;
 // Lane - Per-source bounded queue
 // ============================================================
 
-class Lane<T = TriggerSignal> {
+class Lane<T = Task.TriggerSignal> {
   private readonly items: QueueItem<T>[] = [];
   private readonly config: QueueConfig;
   private readonly laneKey: string;
@@ -214,7 +214,7 @@ class Lane<T = TriggerSignal> {
 // EventQueue - Lane-based concurrent queue
 // ============================================================
 
-export interface EventQueueInstance<T = TriggerSignal> {
+export interface EventQueueInstance<T = Task.TriggerSignal> {
   /**
    * Enqueue an item to a specific lane
    * @returns true if item was accepted, false if dropped
@@ -266,7 +266,7 @@ export namespace EventQueue {
   /**
    * Create a new EventQueue instance
    */
-  export function create<T = TriggerSignal>(
+  export function create<T = Task.TriggerSignal>(
     config: QueueConfig,
   ): EventQueueInstance<T> {
     const lanes = new Map<string, Lane<T>>();

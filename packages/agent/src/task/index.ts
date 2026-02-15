@@ -1,4 +1,13 @@
-export { Task, TaskRun, TriggerSignal } from "./types";
+import { Task } from "./types";
+export { Task };
+/** @deprecated Use Task.Run */
+export const TaskRun = Task.Run;
+/** @deprecated Use Task.Run */
+export type TaskRun = Task.Run;
+/** @deprecated Use Task.TriggerSignal */
+export const TriggerSignal = Task.TriggerSignal;
+/** @deprecated Use Task.TriggerSignal */
+export type TriggerSignal = Task.TriggerSignal;
 export { TaskManager } from "./manager";
 export type { TriggerError, TriggerResult } from "./manager";
 export { TaskStorage, InMemoryTaskStore } from "./storage";

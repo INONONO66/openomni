@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Run } from "@openomni/protocol";
+import { Run as ProtocolRun } from "@openomni/protocol";
 
 /**
  * Task namespace - types for task automation system
@@ -141,11 +141,11 @@ export namespace Task {
 
   export const ExecutionPolicy = z.object({
     permission: z.enum(["ask", "notify", "deny"]).optional(),
-    retry: Run.RetryPolicy.optional(),
+    retry: ProtocolRun.RetryPolicy.optional(),
     concurrency: Concurrency.optional(),
     dedupe: Dedupe.optional(),
     rateLimit: RateLimit.optional(),
-    budget: Run.Budget.optional(),
+    budget: ProtocolRun.Budget.optional(),
     toolAllowlist: z.array(z.string()).optional(),
     toolDenylist: z.array(z.string()).optional(),
   });
@@ -166,9 +166,9 @@ export namespace Task {
     policy: ExecutionPolicy,
     createdAt: z.number().int(),
     updatedAt: z.number().int(),
-    lastRun: z.lazy(() => TaskRun).optional(),
-    history: z.array(z.lazy(() => TaskRun)).optional(),
-    pendingRun: z.lazy(() => TaskRun).optional(),
+    lastRun: z.lazy(() => Run).optional(),
+    history: z.array(z.lazy(() => Run)).optional(),
+    pendingRun: z.lazy(() => Run).optional(),
     tags: z.array(z.string()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   });
@@ -198,86 +198,86 @@ export namespace Task {
     status: Status.optional(),
   });
   export type UpdateInput = z.infer<typeof UpdateInput>;
-}
 
-// ============================================================
-// TaskRun (execution instance)
-// ============================================================
+  // ============================================================
+  // Run (execution instance)
+  // ============================================================
 
-export const TaskRun = z.object({
-  runId: z.string(),
-  taskId: z.string(),
-  sessionKey: z.string(), // SessionKey pattern: task:${string}:run:${string}
-  status: z.enum([
-    "scheduled",
-    "running",
-    "blocked",
-    "done",
-    "failed",
-    "cancelled",
-  ]),
-  trigger: z.object({
-    id: z.string(),
+  export const Run = z.object({
+    runId: z.string(),
+    taskId: z.string(),
+    sessionKey: z.string(), // SessionKey pattern: task:${string}:run:${string}
+    status: z.enum([
+      "scheduled",
+      "running",
+      "blocked",
+      "done",
+      "failed",
+      "cancelled",
+    ]),
+    trigger: z.object({
+      id: z.string(),
+      type: z.enum(["cron", "interval", "once", "event", "manual"]),
+    }),
+    idempotencyKey: z.string(),
+    payload: z.record(z.string(), z.unknown()).optional(),
+    context: z
+      .object({
+        conversationSessionId: z.string().optional(),
+        userId: z.string().optional(),
+        workspaceId: z.string().optional(),
+        traceId: z.string().optional(),
+      })
+      .optional(),
+    attempt: z.number().int().positive(),
+    agentId: z.string().optional(),
+    scheduledAt: z.number().int(),
+    startedAt: z.number().int().optional(),
+    endedAt: z.number().int().optional(),
+    summary: z.string().optional(),
+    error: z.string().optional(),
+    checkpoint: z
+      .object({
+        step: z.string(),
+        data: z.record(z.string(), z.unknown()),
+        savedAt: z.number().int(),
+      })
+      .optional(),
+    spawnedBy: z
+      .object({
+        taskId: z.string(),
+        runId: z.string(),
+        sessionId: z.string(),
+      })
+      .optional(),
+  });
+  export type Run = z.infer<typeof Run>;
+
+  // ============================================================
+  // TriggerSignal (runtime trigger event)
+  // ============================================================
+
+  export const TriggerSignal = z.object({
+    triggerId: z.string(),
     type: z.enum(["cron", "interval", "once", "event", "manual"]),
-  }),
-  idempotencyKey: z.string(),
-  payload: z.record(z.string(), z.unknown()).optional(),
-  context: z
-    .object({
-      conversationSessionId: z.string().optional(),
-      userId: z.string().optional(),
-      workspaceId: z.string().optional(),
-      traceId: z.string().optional(),
-    })
-    .optional(),
-  attempt: z.number().int().positive(),
-  agentId: z.string().optional(),
-  scheduledAt: z.number().int(),
-  startedAt: z.number().int().optional(),
-  endedAt: z.number().int().optional(),
-  summary: z.string().optional(),
-  error: z.string().optional(),
-  checkpoint: z
-    .object({
-      step: z.string(),
-      data: z.record(z.string(), z.unknown()),
-      savedAt: z.number().int(),
-    })
-    .optional(),
-  spawnedBy: z
-    .object({
-      taskId: z.string(),
-      runId: z.string(),
-      sessionId: z.string(),
-    })
-    .optional(),
-});
-export type TaskRun = z.infer<typeof TaskRun>;
-
-// ============================================================
-// TriggerSignal (runtime trigger event)
-// ============================================================
-
-export const TriggerSignal = z.object({
-  triggerId: z.string(),
-  type: z.enum(["cron", "interval", "once", "event", "manual"]),
-  payload: z.record(z.string(), z.unknown()).optional(),
-  context: z
-    .object({
-      conversationSessionId: z.string().optional(),
-      userId: z.string().optional(),
-      workspaceId: z.string().optional(),
-      traceId: z.string().optional(),
-      originTaskId: z.string().optional(),
-    })
-    .optional(),
-  occurredAt: z.number().int(),
-  spawnedBy: z
-    .object({
-      taskId: z.string(),
-      runId: z.string(),
-      sessionId: z.string(),
-    })
-    .optional(),
-});
-export type TriggerSignal = z.infer<typeof TriggerSignal>;
+    payload: z.record(z.string(), z.unknown()).optional(),
+    context: z
+      .object({
+        conversationSessionId: z.string().optional(),
+        userId: z.string().optional(),
+        workspaceId: z.string().optional(),
+        traceId: z.string().optional(),
+        originTaskId: z.string().optional(),
+      })
+      .optional(),
+    occurredAt: z.number().int(),
+    spawnedBy: z
+      .object({
+        taskId: z.string(),
+        runId: z.string(),
+        sessionId: z.string(),
+      })
+      .optional(),
+  });
+  export type TriggerSignal = z.infer<typeof TriggerSignal>;
+}

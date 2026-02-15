@@ -1,4 +1,4 @@
-import { Task, TaskRun, TriggerSignal } from "./types";
+import { Task } from "./types";
 import { TaskStorage, TaskListFilter, InMemoryTaskStore } from "./storage";
 import { TaskStatusManager } from "./state-machine";
 import { Bus } from "@openomni/session";
@@ -93,7 +93,10 @@ function recordRateLimitHit(taskId: string, now: number): void {
   rateLimitTracking.set(taskId, entry);
 }
 
-function generateIdempotencyKey(taskId: string, signal: TriggerSignal): string {
+function generateIdempotencyKey(
+  taskId: string,
+  signal: Task.TriggerSignal,
+): string {
   const { triggerId, type, payload, occurredAt } = signal;
 
   switch (type) {
@@ -128,7 +131,7 @@ function checkDedupe(
   idempotencyKey: string,
   dedupeWindowMs: number | undefined,
   now: number,
-): TaskRun | undefined {
+): Task.Run | undefined {
   if (!dedupeWindowMs) return undefined;
 
   const existingRun = store.run.getByIdempotencyKey(idempotencyKey);
@@ -143,7 +146,7 @@ function checkConcurrency(
   taskId: string,
   _task: Task.Info,
   concurrency: Task.Concurrency | undefined,
-): { allowed: boolean; pendingRun?: TaskRun } {
+): { allowed: boolean; pendingRun?: Task.Run } {
   const maxRunning = concurrency?.maxRunning ?? 1;
   const mode = concurrency?.mode ?? "drop";
 
@@ -168,14 +171,14 @@ function checkConcurrency(
 
 type TaskStore = ReturnType<typeof TaskStorage.getAdapter>;
 
-function isActiveRunStatus(status: TaskRun["status"]): boolean {
+function isActiveRunStatus(status: Task.Run["status"]): boolean {
   return status === "scheduled" || status === "running" || status === "blocked";
 }
 
 function upsertRunHistory(
-  history: TaskRun[] | undefined,
-  run: TaskRun,
-): TaskRun[] {
+  history: Task.Run[] | undefined,
+  run: Task.Run,
+): Task.Run[] {
   if (!history || history.length === 0) {
     return [run];
   }
@@ -338,7 +341,7 @@ export namespace TaskManager {
 
   export async function trigger(
     taskId: string,
-    signal: TriggerSignal,
+    signal: Task.TriggerSignal,
   ): Promise<TriggerResult> {
     const mutex = getTaskMutex(taskId);
     await mutex.acquire();
@@ -399,10 +402,10 @@ export namespace TaskManager {
 
       const runId = randomUUID();
       const sessionKey = `task:${taskId}:run:${runId}`;
-      const status: TaskRun["status"] =
+      const status: Task.Run["status"] =
         permission === "ask" ? "blocked" : "scheduled";
 
-      const taskRun: TaskRun = {
+      const taskRun: Task.Run = {
         runId,
         taskId,
         sessionKey,
@@ -470,7 +473,7 @@ export namespace TaskManager {
   /**
    * Get a single run by ID
    */
-  export function getRun(runId: string): TaskRun | undefined {
+  export function getRun(runId: string): Task.Run | undefined {
     const store = TaskStorage.getAdapter();
     return store.run.get(runId);
   }
@@ -480,8 +483,8 @@ export namespace TaskManager {
    */
   export function listRuns(
     taskId: string,
-    opts?: { status?: TaskRun["status"]; limit?: number; offset?: number },
-  ): TaskRun[] {
+    opts?: { status?: Task.Run["status"]; limit?: number; offset?: number },
+  ): Task.Run[] {
     const store = TaskStorage.getAdapter();
     let runs = store.run.list(taskId, {
       limit: opts?.limit,
@@ -499,9 +502,9 @@ export namespace TaskManager {
    * List runs across all tasks by status (for crash recovery, monitoring)
    */
   export function listRunsByStatus(
-    status: TaskRun["status"] | TaskRun["status"][],
+    status: Task.Run["status"] | Task.Run["status"][],
     opts?: { limit?: number; offset?: number },
-  ): TaskRun[] {
+  ): Task.Run[] {
     const store = TaskStorage.getAdapter();
     const statuses = Array.isArray(status) ? status : [status];
     let runs = store.run.listByStatus(statuses);
@@ -520,7 +523,7 @@ export namespace TaskManager {
    */
   export function setRunStatus(
     runId: string,
-    newStatus: TaskRun["status"],
+    newStatus: Task.Run["status"],
     reason?: string,
   ): boolean {
     const store = TaskStorage.getAdapter();
@@ -531,7 +534,7 @@ export namespace TaskManager {
     }
 
     const now = Date.now();
-    const updatedRun: TaskRun = {
+    const updatedRun: Task.Run = {
       ...run,
       status: newStatus,
     };
@@ -608,7 +611,7 @@ export namespace TaskManager {
     }
 
     // Can only cancel if in cancellable state
-    const cancellableStatuses: TaskRun["status"][] = [
+    const cancellableStatuses: Task.Run["status"][] = [
       "scheduled",
       "running",
       "blocked",
@@ -673,7 +676,7 @@ export namespace TaskManager {
   export function listBlockedRuns(filter?: {
     taskId?: string;
     userId?: string;
-  }): TaskRun[] {
+  }): Task.Run[] {
     const store = TaskStorage.getAdapter();
     let blockedRuns = store.run.listByStatus(["blocked"]);
 
@@ -706,7 +709,7 @@ export namespace TaskManager {
       return false;
     }
 
-    const updatedRun: TaskRun = {
+    const updatedRun: Task.Run = {
       ...run,
       checkpoint: {
         step: checkpoint.step,
@@ -721,12 +724,12 @@ export namespace TaskManager {
 
   /**
    * Get the lineage (parent chain) for a run.
-   * Returns an array of ancestor TaskRun objects from immediate parent to root.
+   * Returns an array of ancestor Task.Run objects from immediate parent to root.
    * Empty array if the run has no spawnedBy (root task).
    */
-  export function getLineage(runId: string): TaskRun[] {
+  export function getLineage(runId: string): Task.Run[] {
     const store = TaskStorage.getAdapter();
-    const lineage: TaskRun[] = [];
+    const lineage: Task.Run[] = [];
     const visited = new Set<string>();
 
     let currentRunId: string | undefined = runId;

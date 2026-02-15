@@ -1,4 +1,4 @@
-import { Task, TaskRun } from "./types";
+import { Task } from "./types";
 
 /**
  * TaskStore interface - storage adapter for task automation system
@@ -12,12 +12,12 @@ export interface TaskStore {
     remove(id: string): boolean;
   };
   run: {
-    get(runId: string): TaskRun | undefined;
-    set(taskId: string, run: TaskRun): void;
-    list(taskId: string, opts?: RunListOptions): TaskRun[];
-    listByStatus(status: TaskRun["status"][]): TaskRun[];
+    get(runId: string): Task.Run | undefined;
+    set(taskId: string, run: Task.Run): void;
+    list(taskId: string, opts?: RunListOptions): Task.Run[];
+    listByStatus(status: Task.Run["status"][]): Task.Run[];
     remove(runId: string): boolean;
-    getByIdempotencyKey(key: string): TaskRun | undefined;
+    getByIdempotencyKey(key: string): Task.Run | undefined;
   };
 }
 
@@ -44,10 +44,10 @@ export interface RunListOptions {
  */
 export class InMemoryTaskStore implements TaskStore {
   private tasks = new Map<string, Task.Info>();
-  private runs = new Map<string, TaskRun>();
+  private runs = new Map<string, Task.Run>();
   private taskRuns = new Map<string, string[]>(); // taskId -> runId[]
   private idempotencyIndex = new Map<string, string>(); // idempotencyKey -> runId
-  private statusIndex = new Map<TaskRun["status"], Set<string>>(); // status -> Set<runId>
+  private statusIndex = new Map<Task.Run["status"], Set<string>>(); // status -> Set<runId>
 
   task = {
     get: (id: string): Task.Info | undefined => {
@@ -105,10 +105,10 @@ export class InMemoryTaskStore implements TaskStore {
   };
 
   run = {
-    get: (runId: string): TaskRun | undefined => {
+    get: (runId: string): Task.Run | undefined => {
       return this.runs.get(runId);
     },
-    set: (taskId: string, run: TaskRun): void => {
+    set: (taskId: string, run: Task.Run): void => {
       const existingRun = this.runs.get(run.runId);
 
       if (existingRun && existingRun.status !== run.status) {
@@ -129,11 +129,11 @@ export class InMemoryTaskStore implements TaskStore {
         this.taskRuns.set(taskId, runIds);
       }
     },
-    list: (taskId: string, opts?: RunListOptions): TaskRun[] => {
+    list: (taskId: string, opts?: RunListOptions): Task.Run[] => {
       const runIds = this.taskRuns.get(taskId) ?? [];
       let runs = runIds
         .map((id) => this.runs.get(id))
-        .filter((r): r is TaskRun => r !== undefined);
+        .filter((r): r is Task.Run => r !== undefined);
 
       if (opts?.sortBy) {
         const sortBy = opts.sortBy;
@@ -153,7 +153,7 @@ export class InMemoryTaskStore implements TaskStore {
 
       return runs;
     },
-    listByStatus: (status: TaskRun["status"][]): TaskRun[] => {
+    listByStatus: (status: Task.Run["status"][]): Task.Run[] => {
       const runIds = new Set<string>();
       for (const s of status) {
         const ids = this.statusIndex.get(s);
@@ -165,7 +165,7 @@ export class InMemoryTaskStore implements TaskStore {
       }
       return Array.from(runIds)
         .map((id) => this.runs.get(id))
-        .filter((r): r is TaskRun => r !== undefined);
+        .filter((r): r is Task.Run => r !== undefined);
     },
     remove: (runId: string): boolean => {
       const run = this.runs.get(runId);
@@ -184,7 +184,7 @@ export class InMemoryTaskStore implements TaskStore {
 
       return this.runs.delete(runId);
     },
-    getByIdempotencyKey: (key: string): TaskRun | undefined => {
+    getByIdempotencyKey: (key: string): Task.Run | undefined => {
       const runId = this.idempotencyIndex.get(key);
       return runId ? this.runs.get(runId) : undefined;
     },
@@ -200,7 +200,7 @@ export class InMemoryTaskStore implements TaskStore {
   /**
    * Get run by idempotency key (O(1) lookup)
    */
-  getByIdempotencyKey(key: string): TaskRun | undefined {
+  getByIdempotencyKey(key: string): Task.Run | undefined {
     const runId = this.idempotencyIndex.get(key);
     return runId ? this.runs.get(runId) : undefined;
   }

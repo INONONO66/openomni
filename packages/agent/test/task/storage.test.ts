@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { InMemoryTaskStore } from "../../src/task/storage";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 describe("InMemoryTaskStore", () => {
   let store: InMemoryTaskStore;
@@ -209,7 +209,7 @@ describe("InMemoryTaskStore", () => {
         updatedAt: Date.now(),
       };
 
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -239,7 +239,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("set and get run", () => {
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -255,7 +255,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("set updates status index when status changes", () => {
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -283,7 +283,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("list returns runs for task", () => {
-      const run1: TaskRun = {
+      const run1: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -294,7 +294,7 @@ describe("InMemoryTaskStore", () => {
         scheduledAt: Date.now(),
       };
 
-      const run2: TaskRun = {
+      const run2: Task.Run = {
         runId: "run-2",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-2",
@@ -314,7 +314,7 @@ describe("InMemoryTaskStore", () => {
 
     test("list sorts runs by scheduledAt", () => {
       const now = Date.now();
-      const run1: TaskRun = {
+      const run1: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -325,7 +325,7 @@ describe("InMemoryTaskStore", () => {
         scheduledAt: now - 1000,
       };
 
-      const run2: TaskRun = {
+      const run2: Task.Run = {
         runId: "run-2",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-2",
@@ -356,7 +356,7 @@ describe("InMemoryTaskStore", () => {
 
     test("list paginates runs", () => {
       for (let i = 0; i < 5; i++) {
-        const run: TaskRun = {
+        const run: Task.Run = {
           runId: `run-${i}`,
           taskId: "task-1",
           sessionKey: `task:task-1:run:run-${i}`,
@@ -380,7 +380,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("listByStatus returns runs with matching status", () => {
-      const run1: TaskRun = {
+      const run1: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -391,7 +391,7 @@ describe("InMemoryTaskStore", () => {
         scheduledAt: Date.now(),
       };
 
-      const run2: TaskRun = {
+      const run2: Task.Run = {
         runId: "run-2",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-2",
@@ -402,7 +402,7 @@ describe("InMemoryTaskStore", () => {
         scheduledAt: Date.now(),
       };
 
-      const run3: TaskRun = {
+      const run3: Task.Run = {
         runId: "run-3",
         taskId: "task-2",
         sessionKey: "task:task-2:run:run-3",
@@ -429,7 +429,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("remove deletes run and updates indexes", () => {
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -459,7 +459,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("hasIdempotencyKey returns true after run is set", () => {
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -475,7 +475,7 @@ describe("InMemoryTaskStore", () => {
     });
 
     test("getByIdempotencyKey returns run", () => {
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
@@ -508,7 +508,7 @@ describe("InMemoryTaskStore", () => {
         updatedAt: Date.now(),
       };
 
-      const run: TaskRun = {
+      const run: Task.Run = {
         runId: "run-1",
         taskId: "task-1",
         sessionKey: "task:task-1:run:run-1",
