@@ -80,6 +80,11 @@ export {
 export { ExecutionSupervisor } from "./execution-supervisor";
 
 export {
+  buildDependencyGraph,
+  completeTaskAndUnblockDependents,
+} from "./execution-graph";
+
+export {
   resolveAgentDefinition,
   resolveLLM,
   resolveToolExecutor,
