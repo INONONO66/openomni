@@ -42,78 +42,77 @@ export class ValidationError extends Error {
 }
 
 /**
- * Normalizes a partial event envelope into a complete EventEnvelope
- * @param input - Partial event envelope to normalize
- * @returns Normalized EventEnvelope
- * @throws ValidationError if required fields are missing
- */
-export function normalize(
-  input: Partial<EventEnvelope> & {
-    id?: string;
-    timestamp?: string | number;
-    source?: EventSource | string;
-    metadata?: Record<string, unknown>;
-  },
-): EventEnvelope {
-  const eventId = input.eventId ?? input.id;
-
-  // Validate required fields
-  if (!eventId) {
-    throw new ValidationError("Missing required field: eventId");
-  }
-  if (!input.name) {
-    throw new ValidationError("Missing required field: name");
-  }
-  if (!input.source) {
-    throw new ValidationError("Missing required field: source");
-  }
-
-  // Generate traceId if not provided
-  const traceId = input.traceId || randomUUID();
-
-  const source: EventSource =
-    typeof input.source === "string"
-      ? { type: input.source }
-      : {
-          type: input.source.type,
-          id: input.source.id,
-          trust: input.source.trust,
-        };
-
-  let occurredAt: string;
-  if (typeof input.occurredAt === "string") {
-    occurredAt = input.occurredAt;
-  } else if (typeof input.timestamp === "number") {
-    occurredAt = new Date(input.timestamp).toISOString();
-  } else if (typeof input.timestamp === "string") {
-    occurredAt = input.timestamp;
-  } else {
-    occurredAt = new Date().toISOString();
-  }
-
-  const receivedAt = input.receivedAt ?? new Date().toISOString();
-
-  return {
-    eventId,
-    name: input.name,
-    source,
-    occurredAt,
-    receivedAt,
-    traceId,
-    dedupeKey: input.dedupeKey,
-    priority: input.priority,
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-    schemaRef: input.schemaRef,
-    payload: input.payload ?? null,
-    meta: input.meta ?? input.metadata,
-  };
-}
-
-/**
  * Envelope namespace providing utility functions for creating and validating event envelopes
  */
 export namespace Envelope {
+  /**
+   * Normalizes a partial event envelope into a complete EventEnvelope
+   * @param input - Partial event envelope to normalize
+   * @returns Normalized EventEnvelope
+   * @throws ValidationError if required fields are missing
+   */
+  export function normalize(
+    input: Partial<EventEnvelope> & {
+      id?: string;
+      timestamp?: string | number;
+      source?: EventSource | string;
+      metadata?: Record<string, unknown>;
+    },
+  ): EventEnvelope {
+    const eventId = input.eventId ?? input.id;
+
+    // Validate required fields
+    if (!eventId) {
+      throw new ValidationError("Missing required field: eventId");
+    }
+    if (!input.name) {
+      throw new ValidationError("Missing required field: name");
+    }
+    if (!input.source) {
+      throw new ValidationError("Missing required field: source");
+    }
+
+    // Generate traceId if not provided
+    const traceId = input.traceId || randomUUID();
+
+    const source: EventSource =
+      typeof input.source === "string"
+        ? { type: input.source }
+        : {
+            type: input.source.type,
+            id: input.source.id,
+            trust: input.source.trust,
+          };
+
+    let occurredAt: string;
+    if (typeof input.occurredAt === "string") {
+      occurredAt = input.occurredAt;
+    } else if (typeof input.timestamp === "number") {
+      occurredAt = new Date(input.timestamp).toISOString();
+    } else if (typeof input.timestamp === "string") {
+      occurredAt = input.timestamp;
+    } else {
+      occurredAt = new Date().toISOString();
+    }
+
+    const receivedAt = input.receivedAt ?? new Date().toISOString();
+
+    return {
+      eventId,
+      name: input.name,
+      source,
+      occurredAt,
+      receivedAt,
+      traceId,
+      dedupeKey: input.dedupeKey,
+      priority: input.priority,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      schemaRef: input.schemaRef,
+      payload: input.payload ?? null,
+      meta: input.meta ?? input.metadata,
+    };
+  }
   /**
    * Creates a new EventEnvelope with generated id, traceId, and current timestamp
    * @param name - The name of the event
@@ -176,3 +175,6 @@ export namespace Envelope {
     return currentTime - envelopeTime > maxAgeMs;
   }
 }
+
+/** @deprecated Use Envelope.normalize() directly */
+export const normalize = Envelope.normalize;

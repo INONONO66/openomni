@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { normalize, Envelope, type EventEnvelope } from "../loop/envelope";
+import { Envelope, type EventEnvelope } from "../loop/envelope";
 import { SessionResolver } from "./session-resolver";
 import { TaskManager } from "../task/manager";
 import { RunWorker } from "../loop/run-worker";
@@ -372,7 +372,7 @@ export namespace IngressEngine {
       .filter(Boolean)
       .join(":");
 
-    return normalize({
+    return Envelope.normalize({
       id: event.id,
       name: event.name,
       source: {
