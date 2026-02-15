@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { AgentProfile } from "./profile";
-import type { AgentRegistryStore } from "./profile";
+import type { AgentRegistryStore } from "./profile-store";
 import { AgentProfileSchema } from "./profile";
 
 export class FileAgentRegistryStore implements AgentRegistryStore {

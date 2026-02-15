@@ -5,11 +5,14 @@ export {
   type AgentIdentity,
   AgentStatusSchema,
   type AgentStatus,
+  createAgentIdentity,
+} from "./profile";
+
+export {
   AgentRegistry,
   InMemoryAgentRegistryStore,
   type AgentRegistryStore,
-  createAgentIdentity,
-} from "./profile";
+} from "./profile-store";
 
 export {
   AgentCapabilitiesSchema,
