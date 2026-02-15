@@ -3,7 +3,7 @@ import { TaskManager } from "../task/manager";
 import { ConversationSupervisor } from "../loop/conversation-supervisor";
 import { ExecutionSupervisor } from "../loop/execution-supervisor";
 import { classifyLane } from "./event-kinds";
-import type { RunRequest, RunResult } from "./interfaces";
+import type { RunRequest, RunResult } from "./engine";
 
 // ============================================================
 // RunExecutor Interface

@@ -3,18 +3,18 @@ export {
   IngressEngine,
   DefaultRunPlanner,
   NoopDeliveryAdapter,
+  NoopNotificationAdapter,
   type IngressEngineConfig,
+  type InboundEvent,
+  type RunRequest,
+  type RunRequestKind,
+  type RunResult,
+  type EventSourceAdapter,
+  type EventDecoder,
+  type DeliveryAdapter,
+  type NotificationAdapter,
+  type RunPlanner,
 } from "./engine";
-export type {
-  InboundEvent,
-  RunRequest,
-  RunRequestKind,
-  RunResult,
-  EventSourceAdapter,
-  EventDecoder,
-  DeliveryAdapter,
-  RunPlanner,
-} from "./interfaces";
 export {
   CONTROL_EVENT_KINDS,
   TELEMETRY_EVENT_KINDS,
