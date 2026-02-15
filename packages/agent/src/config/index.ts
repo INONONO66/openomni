@@ -1,5 +1,5 @@
-import type { RouterRule } from "./loop";
-import type { QueueConfig } from "./trigger";
+import type { RouterRule } from "../loop";
+import type { QueueConfig } from "../trigger";
 import type { Run } from "@openomni/protocol";
 
 export interface DedupePolicy {
