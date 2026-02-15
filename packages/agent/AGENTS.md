@@ -7,38 +7,47 @@ Core orchestration package. Multi-agent task system with Dynamic Supervisor arch
 ```
 src/
 ├── index.ts           # Public API barrel
-├── config.ts          # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
+├── config/
+│   └── index.ts       # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
 ├── ingress/           # Dynamic Supervisor — event ingestion pipeline
 │   ├── engine.ts      # IngressEngine — 7-step pipeline (validate→convert→dedup→resolve→plan→execute→deliver)
-│   ├── interfaces.ts  # EventSourceAdapter, EventDecoder, NotificationAdapter, RunPlanner, RunExecutor
 │   ├── session-resolver.ts  # SessionResolver — resolve/create sessions from events
 │   ├── event-projector.ts   # EventProjector — extract session data from events
 │   ├── run-executor.ts      # DefaultRunExecutor — execute run requests
 │   ├── event-kinds.ts       # EventKind constants, EventLane classification, isTaskBackable()
 │   └── index.ts       # Re-exports
 ├── tools/             # Dynamic Supervisor tools (subagent, dispatch, schedule)
-│   ├── subagent.ts    # SubagentTool — spawn child agents
-│   ├── dispatch.ts    # DispatchTool — send A2A messages
-│   ├── schedule.ts    # ScheduleTool — create/update/delete schedules
-│   ├── schemas.ts     # Shared Zod schemas for tool inputs
+│   ├── subagent.ts    # SubagentTool — spawn child agents (includes SubagentInput schema)
+│   ├── dispatch.ts    # DispatchTool — send A2A messages (includes DispatchInput schema)
+│   ├── schedule.ts    # ScheduleTool — create/update/delete schedules (includes ScheduleInput schema)
 │   └── index.ts       # Re-exports
 ├── agent/             # Agent identity, registry, messaging, supervision
-│   ├── profile.ts     # AgentProfile, AgentIdentity, AgentRuntime
-│   ├── registry.ts    # AgentRegistry — register/lookup agents by surfaceKey
+│   ├── profile.ts     # AgentProfile, AgentIdentity schemas
+│   ├── capabilities.ts # AgentCapabilities, DataScope, PolicySpec schemas
+│   ├── runtime.ts     # AgentRuntime schema
+│   ├── registry.ts    # BuiltinAgentRegistry — register/lookup agents (lazy initialization)
 │   ├── communication.ts  # AgentMessenger — A2A message delivery with asker_only persistence
-│   ├── supervision.ts # Agent supervision patterns
+│   ├── frontmatter.ts # parseFrontmatter — YAML frontmatter extraction
+│   ├── discovery.ts   # AgentDiscovery — load agents from filesystem
 │   └── index.ts       # Re-exports
 ├── task/              # Task lifecycle management
-│   ├── types.ts       # Task, TaskRun, TriggerSignal Zod schemas
+│   ├── types.ts       # Task namespace — Task, TaskRun, TriggerSignal Zod schemas
 │   ├── manager.ts     # TaskManager — create, trigger, getRun, state transitions
+│   ├── trigger-engine.ts  # Trigger orchestration — schedule/webhook/fs event handling
 │   ├── storage.ts     # TaskStorage + InMemoryTaskStore
-│   ├── state-machine.ts  # TaskStateMachine — valid status transitions
+│   ├── state-machine.ts  # TaskStatusManager — valid status transitions
 │   ├── checkpoint.ts  # CheckpointManager — save/restore run state
-│   └── recovery.ts    # CrashRecovery — detect and recover failed runs
+│   ├── recovery.ts    # CrashRecovery — detect and recover failed runs
+│   └── index.ts       # Re-exports
 ├── loop/              # Supervisor/Worker execution architecture
 │   ├── conversation-supervisor.ts  # ConversationSupervisor — user-facing orchestration (requirement gathering, plan authoring, approval gate)
-│   ├── execution-supervisor.ts     # ExecutionSupervisor — DAG execution engine (dependency graph, review gate, handoff)
+│   ├── execution-supervisor.ts     # ExecutionSupervisor — DAG execution engine (1073 lines)
+│   ├── execution-types.ts          # Execution domain types — SupervisorDecision, ExecutionPlan, StepOutcome
+│   ├── execution-graph.ts          # DAG graph building and dependency management
+│   ├── execution-assignment.ts     # Agent assignment and runtime resolution
+│   ├── execution-review.ts         # Review gate, handoff, and agent rotation
 │   ├── run-worker.ts               # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
+│   ├── run-worker-sink.ts          # Session sink setup for RunWorker
 │   ├── file-lock.ts   # FileLock — in-process file locking for dispatch coordination
 │   ├── agent-resolution.ts  # Agent resolution — AgentDefinition → LLM/tools/prompt
 │   ├── envelope.ts    # EventEnvelope — normalize + validate incoming events
@@ -58,7 +67,7 @@ src/
 │   ├── watcher.ts     # FilesystemWatcher
 │   └── webhook.ts     # WebhookWatcher (abstract) + SimpleWebhookWatcher
 └── conversation/
-    └── handler.ts     # ConversationRequestHandler — inline-vs-task heuristics
+    └── index.ts       # ConversationHandler namespace — inline-vs-task heuristics
 ```
 
 ## PIPELINE FLOW
@@ -114,12 +123,14 @@ Legacy Loop (still active):
 - **Late-Start Execution**: Schedules with `start_time_in_past` execute immediately with `lateStart: true` flag.
 - **Drift Detection**: Scheduler warns if execution is >5min late from planned start time.
 - **Lane Guard**: DefaultRunPlanner blocks telemetry events from creating runs.
-- **Dispatch Consolidation**: `dispatch.ts` is now a thin wrapper (118 lines) that delegates to `ExecutionSupervisor.executeDispatch()`. Core DAG execution, review gate, and handoff logic lives in ExecutionSupervisor (1322 lines).
+- **Dispatch Consolidation**: `dispatch.ts` is now a thin wrapper (118 lines) that delegates to `ExecutionSupervisor.executeDispatch()`. Core DAG execution, review gate, and handoff logic lives in ExecutionSupervisor (1073 lines) with extracted modules (execution-types.ts, execution-graph.ts, execution-assignment.ts, execution-review.ts).
 - **FileLock Independence**: File locking logic extracted to `loop/file-lock.ts` for reuse across dispatch and other coordinators.
 - **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
 - **RunWorker.run()**: Main execution entry. Takes `{ taskId, runId, maxRetries, sessionMode, sessionId, maxSubagentDepth, currentDepth }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error }`.
 - **ConfigManager.create()**: Deep-merge overrides into defaults. Validated with `ConfigManager.validate()`.
-- **State machine**: TaskStateMachine enforces valid transitions (e.g., `pending→active→completed`).
+- **State machine**: TaskStatusManager enforces valid transitions (e.g., `pending→active→completed`).
+- **Lazy Initialization**: BuiltinAgentRegistry uses lazy initialization — builtins are registered on first access to `get()`, `list()`, `has()`, or `size()`. Explicit `initializeBuiltins()` call is supported for testing.
+- **Modular Execution**: ExecutionSupervisor split into focused modules — types (SupervisorDecision, ExecutionPlan), graph (DAG building), assignment (agent resolution), review (handoff/rotation). Main supervisor orchestrates these components.
 
 ## ANTI-PATTERNS
 
@@ -128,3 +139,5 @@ Legacy Loop (still active):
 - QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
 - Do NOT reference `graph.ts` or `routing.ts` — these were removed in Phase 1 migration to Dynamic Supervisor.
+- **Deleted files** — Do NOT import from: `config.ts` (use `config/index.ts`), `conversation/handler.ts` (use `conversation/index.ts`), `tools/schemas.ts` (schemas co-located with tools), `ingress/interfaces.ts` (interfaces co-located with implementations).
+- **Renamed exports** — `TaskStateMachine` is now `TaskStatusManager` (state-machine.ts). Old name exists as deprecated alias in task/index.ts.
