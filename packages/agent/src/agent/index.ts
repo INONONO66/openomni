@@ -42,9 +42,10 @@ export {
   type AgentDefinition,
 } from "./registry";
 
+export { parseFrontmatter } from "./frontmatter";
+
 export {
   AgentDiscovery,
-  parseFrontmatter,
   type AgentLoadResult,
   type AgentDiscoveryOptions,
 } from "./discovery";
