@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { Envelope, type EventEnvelope } from "../loop/envelope";
+import { Envelope, type EventEnvelope, RunWorker } from "../loop";
 import { SessionResolver } from "./session-resolver";
-import { TaskManager } from "../task/manager";
-import { RunWorker } from "../loop/run-worker";
+import { TaskManager } from "../task";
 import type { Session } from "@openomni/session";
 import type {
   NotificationRequest,

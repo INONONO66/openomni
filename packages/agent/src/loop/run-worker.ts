@@ -1,7 +1,6 @@
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import type { Task } from "../task/types";
-import { TaskManager } from "../task/manager";
+import { type Task, TaskManager } from "../task";
 import { createSessionSink } from "./run-worker-sink";
 import { PermissionGate } from "./permission";
 import { RunSupervisor } from "./run-supervisor";

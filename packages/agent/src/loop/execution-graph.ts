@@ -1,4 +1,4 @@
-import { BuiltinAgentRegistry } from "../agent/registry";
+import { BuiltinAgentRegistry } from "../agent";
 import type {
   DependencyGraph,
   DispatchTask,

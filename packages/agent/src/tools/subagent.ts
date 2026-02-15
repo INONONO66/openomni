@@ -1,17 +1,19 @@
 import { z } from "zod";
 import { Session } from "@openomni/session";
 import type { Tool } from "@openomni/protocol";
-import { BuiltinAgentRegistry } from "../agent/registry";
-import { AgentMessenger } from "../agent/communication";
-import type { MessageEnvelope } from "../agent/communication";
+import {
+  BuiltinAgentRegistry,
+  AgentMessenger,
+  type MessageEnvelope,
+} from "../agent";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   SessionMode,
-} from "../loop/run-worker";
-import { RunWorker } from "../loop/run-worker";
-import { TaskManager } from "../task/manager";
-import { IngressEngine } from "../ingress/engine";
+} from "../loop";
+import { RunWorker } from "../loop";
+import { TaskManager } from "../task";
+import { IngressEngine } from "../ingress";
 
 export const SubagentInput = z.object({
   agentType: z.string().describe("Agent type: 'explore', 'implement', etc."),

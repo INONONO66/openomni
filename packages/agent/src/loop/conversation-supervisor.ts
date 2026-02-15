@@ -31,7 +31,7 @@ import {
   resolveLLM,
   resolveToolExecutor,
 } from "./agent-resolution";
-import { BuiltinAgentRegistry } from "../agent/registry";
+import { BuiltinAgentRegistry } from "../agent";
 import { RunWorker } from "./run-worker";
 import type {
   SessionMode,

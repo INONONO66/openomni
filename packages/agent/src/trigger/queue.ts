@@ -1,4 +1,4 @@
-import { Task } from "../task/types";
+import { Task } from "../task";
 
 /**
  * EventQueue - Bounded queue with drop policies and lane-based concurrency

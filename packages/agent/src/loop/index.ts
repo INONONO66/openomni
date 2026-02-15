@@ -2,34 +2,34 @@
 // Event routing, dispatching, and concurrency control
 
 export {
-  EventEnvelope,
-  NormalizedEvent,
+  type EventEnvelope,
+  type NormalizedEvent,
   ValidationError,
   normalize,
   Envelope,
 } from "./envelope";
 
-export { Router, RouterRule, RoutingDecision } from "./router";
+export { Router, type RouterRule, type RoutingDecision } from "./router";
 
 export { Dispatcher } from "./dispatcher";
 
-export { ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
+export { type ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
 
 export {
-  PermissionLevel,
-  PermissionDecision,
-  PermissionContext,
+  type PermissionLevel,
+  type PermissionDecision,
+  type PermissionContext,
   PermissionGate,
 } from "./permission";
 
 export {
-  RunBudget,
-  RunState,
-  BudgetStatus,
+  type RunBudget,
+  type RunState,
+  type BudgetStatus,
   RunSupervisor,
 } from "./run-supervisor";
 
-export {
+export type {
   OrchestratorConfig,
   OrchestrationResult,
   OrchestrationState,
@@ -42,18 +42,22 @@ export { RunWorker } from "./run-worker";
 
 export { FileLock } from "./file-lock";
 
-export { DLQEntry, DeadLetterQueue } from "./dlq";
-
-export { SummaryTemplate, SummaryData, SummaryDelivery } from "./summary";
+export { type DLQEntry, DeadLetterQueue } from "./dlq";
 
 export {
-  EventMetadata,
-  QueueMetrics,
-  RunMetrics,
+  type SummaryTemplate,
+  type SummaryData,
+  SummaryDelivery,
+} from "./summary";
+
+export {
+  type EventMetadata,
+  type QueueMetrics,
+  type RunMetrics,
   Observability,
 } from "./observability";
 
-export { AuditEntry, AuditLog } from "./audit";
+export { type AuditEntry, AuditLog } from "./audit";
 
 export {
   ConversationSupervisor,
@@ -67,7 +71,7 @@ export {
   type ConversationSupervisorResult,
 } from "./conversation-supervisor";
 
-export {
+export type {
   SupervisorDecision,
   SummarizedHistory,
   ExecutionPlan,
@@ -75,6 +79,12 @@ export {
   ExecutionSupervisorConfig,
   ExecutionSupervisorResult,
   StepOutcome,
+  DispatchContext,
+  DispatchExecutionInput,
+  DispatchOutput,
+  DispatchReviewDecision,
+  DispatchReviewInput,
+  DispatchTask,
 } from "./execution-types";
 
 export { ExecutionSupervisor } from "./execution-supervisor";

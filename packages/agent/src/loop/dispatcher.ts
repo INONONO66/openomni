@@ -1,5 +1,4 @@
-import { Task } from "../task/types";
-import { TaskManager, TriggerResult } from "../task/manager";
+import { Task, TaskManager, type TriggerResult } from "../task";
 
 /**
  * Resolves a nested value from an object using dot-notation path.

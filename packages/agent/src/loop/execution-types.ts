@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "../agent/registry";
+import type { AgentDefinition } from "../agent";
 import type { OrchestratorRunInput, SessionMode } from "./run-worker";
 
 export type SupervisorDecision = "local" | "spawn" | "join" | "finish";

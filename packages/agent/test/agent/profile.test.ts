@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
-  AgentRegistry,
   AgentProfileSchema,
   AgentIdentitySchema,
   createAgentIdentity,
   type AgentProfile,
   type AgentIdentity,
 } from "../../src/agent/profile";
+import { AgentRegistry } from "../../src/agent/profile-store";
 import {
   AgentCapabilitiesSchema,
   PolicySpecSchema,

@@ -1,4 +1,4 @@
-import { EventEnvelope, Envelope } from "../loop/envelope";
+import { EventEnvelope, Envelope } from "../loop";
 
 /**
  * Configuration for webhook watchers

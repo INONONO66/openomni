@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { TaskManager } from "../task/manager";
-import { Scheduler } from "../trigger/scheduler";
-import { Task } from "../task/types";
+import { TaskManager, Task } from "../task";
+import { Scheduler } from "../trigger";
 import type { Tool } from "@openomni/protocol";
 import { randomUUID } from "crypto";
 

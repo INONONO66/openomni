@@ -1,6 +1,6 @@
 import { Session } from "@openomni/session";
-import { BuiltinAgentRegistry } from "../agent/registry";
-import { TaskManager } from "../task/manager";
+import { BuiltinAgentRegistry } from "../agent";
+import { TaskManager } from "../task";
 import {
   assignAgentsToReadyTasks,
   resolveDispatchHybridRuntime,

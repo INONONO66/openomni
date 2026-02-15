@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Tool } from "@openomni/protocol";
-import { IngressEngine } from "../ingress/engine";
+import { IngressEngine } from "../ingress";
 import {
   ExecutionSupervisor,
   type DispatchContext,
@@ -9,7 +9,7 @@ import {
   type DispatchReviewDecision,
   type DispatchReviewInput,
   type DispatchTask,
-} from "../loop/execution-supervisor";
+} from "../loop";
 
 export const DispatchInput = z.object({
   objective: z.string().describe("Overall goal for task dispatch"),

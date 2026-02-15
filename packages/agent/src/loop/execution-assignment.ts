@@ -1,5 +1,5 @@
 import type { Tool } from "@openomni/protocol";
-import { BuiltinAgentRegistry } from "../agent/registry";
+import { BuiltinAgentRegistry } from "../agent";
 import {
   resolveAgentDefinition,
   resolveAgentForWorker,

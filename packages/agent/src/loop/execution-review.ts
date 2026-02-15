@@ -1,8 +1,7 @@
 import type { Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { AgentMessenger } from "../agent/communication";
-import { BuiltinAgentRegistry } from "../agent/registry";
-import { TaskManager } from "../task/manager";
+import { AgentMessenger, BuiltinAgentRegistry } from "../agent";
+import { TaskManager } from "../task";
 import type { RunSupervisorToolDecision } from "./execution-assignment";
 import type {
   ChildRunResult,

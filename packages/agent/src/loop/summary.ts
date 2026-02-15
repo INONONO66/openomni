@@ -1,7 +1,6 @@
 import { Session } from "@openomni/session";
 import { Message } from "@openomni/protocol";
-import { TaskManager, Task } from "../task";
-import { TaskStorage } from "../task/storage";
+import { TaskManager, Task, TaskStorage } from "../task";
 
 export interface SummaryTemplate {
   format: "markdown" | "json" | "text";
