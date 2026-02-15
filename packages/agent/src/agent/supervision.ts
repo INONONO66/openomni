@@ -140,12 +140,7 @@ export namespace Supervisor {
       },
     };
   }
-}
 
-/**
- * Supervisor namespace for managing child run lifecycle with retry and escalation
- */
-export namespace Supervisor {
   export interface RunState {
     status: ChildRunStatus;
     attempt: number;
