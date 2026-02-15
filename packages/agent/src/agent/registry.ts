@@ -42,6 +42,7 @@ export type AgentDefinition = z.infer<typeof AgentDefinitionSchema>;
  */
 export namespace BuiltinAgentRegistry {
   const registry = new Map<string, AgentDefinition>();
+  let initialized = false;
 
   /**
    * Define and register a new agent
@@ -68,6 +69,9 @@ export namespace BuiltinAgentRegistry {
    * @returns The agent definition or undefined if not found
    */
   export function get(name: string): AgentDefinition | undefined {
+    if (!initialized) {
+      initializeBuiltins();
+    }
     return registry.get(name);
   }
 
@@ -76,6 +80,9 @@ export namespace BuiltinAgentRegistry {
    * @returns Array of all registered agent definitions
    */
   export function list(): AgentDefinition[] {
+    if (!initialized) {
+      initializeBuiltins();
+    }
     return Array.from(registry.values());
   }
 
@@ -85,28 +92,41 @@ export namespace BuiltinAgentRegistry {
    * @returns true if agent exists
    */
   export function has(name: string): boolean {
+    if (!initialized) {
+      initializeBuiltins();
+    }
     return registry.has(name);
   }
 
   /**
-   * Clear all registered agents
+   * Clear all registered agents and prevent re-initialization
    */
   export function clear(): void {
     registry.clear();
+    initialized = true;
   }
 
   /**
    * Get the count of registered agents
    */
   export function size(): number {
+    if (!initialized) {
+      initializeBuiltins();
+    }
     return registry.size;
   }
 
   /**
    * Initialize built-in agents
-   * Called once at startup to register default agents
+   * Can be called explicitly for testing or called lazily on first access
+   * Calling this after clear() will re-populate the registry
    */
   export function initializeBuiltins(): void {
+    initializeBuiltinsInternal();
+    initialized = true;
+  }
+
+  function initializeBuiltinsInternal(): void {
     // explore: read-only agent for research and analysis
     define({
       name: "explore",
@@ -207,6 +227,3 @@ export namespace BuiltinAgentRegistry {
     });
   }
 }
-
-// Initialize built-in agents on module load
-BuiltinAgentRegistry.initializeBuiltins();
