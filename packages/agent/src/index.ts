@@ -1,5 +1,61 @@
-export * from "./task";
-export * from "./agent";
+// Task domain
+export {
+  Task,
+  TaskRun,
+  TriggerSignal,
+  TaskManager,
+  type TriggerError,
+  type TriggerResult,
+  TaskStorage,
+  InMemoryTaskStore,
+  type TaskStore,
+  FileTaskStore,
+  TaskStateMachine,
+  type Checkpoint,
+  CheckpointManager,
+  type RecoveryAction,
+  type RecoveryResult,
+  CrashRecovery,
+  PolicyError,
+} from "./task";
+
+// Agent domain
+export {
+  AgentProfileSchema,
+  type AgentProfile,
+  AgentIdentitySchema,
+  type AgentIdentity,
+  AgentStatusSchema,
+  type AgentStatus,
+  AgentRegistry,
+  InMemoryAgentRegistryStore,
+  type AgentRegistryStore,
+  createAgentIdentity,
+  AgentCapabilitiesSchema,
+  type AgentCapabilities,
+  DataScopeSchema,
+  type DataScope,
+  PolicySpecSchema,
+  type PolicySpec,
+  AgentRuntimeSchema,
+  type AgentRuntime,
+  createAgentRuntime,
+  FileAgentRegistryStore,
+  AgentMessenger,
+  MessageEnvelope,
+  DeliveryOptions,
+  MessagingError,
+  type AllowPattern,
+  BuiltinAgentRegistry,
+  AgentDefinitionSchema,
+  type AgentDefinition,
+  parseFrontmatter,
+  AgentDiscovery,
+  type AgentLoadResult,
+  type AgentDiscoveryOptions,
+} from "./agent";
+
+// Trigger domain
 export {
   Scheduler,
   CronParser,
@@ -14,7 +70,12 @@ export {
   type WatcherConfig,
   type Watcher,
   type FileEvent,
+  WebhookWatcher,
+  SimpleWebhookWatcher,
+  type WebhookConfig,
 } from "./trigger";
+
+// Loop domain
 export {
   EventEnvelope,
   NormalizedEvent,
@@ -40,6 +101,9 @@ export {
   OrchestrationState,
   ToolExecutor,
   SessionMode,
+  OrchestratorRunInput,
+  RunWorker,
+  FileLock,
   DLQEntry,
   DeadLetterQueue,
   SummaryTemplate,
@@ -51,19 +115,98 @@ export {
   Observability,
   AuditEntry,
   AuditLog,
+  ConversationSupervisor,
+  type ConversationSupervisorConfig,
+  type ConversationInput,
+  type ConversationPlan,
+  type WorkItemOutline,
+  type ApprovalDecision,
+  type ExecutionContextFork,
+  type ConversationHistory,
+  type ConversationSupervisorResult,
+  SupervisorDecision,
+  SummarizedHistory,
+  ExecutionPlan,
+  ExecutionPlanStep,
+  ExecutionSupervisorConfig,
+  ExecutionSupervisorResult,
+  StepOutcome,
+  ExecutionSupervisor,
+  buildDependencyGraph,
+  completeTaskAndUnblockDependents,
+  resolveDispatchHybridRuntime,
+  assignAgentsToReadyTasks,
+  resolveFallbackAgentAssignment,
+  resolveWorkerRuntimeForTask,
+  decideFailedStepAction,
+  reviewTaskResult,
+  sendReviewFeedback,
+  requestHandoffDocument,
+  rotateAgent,
+  resolveAgentDefinition,
+  resolveLLM,
+  resolveToolExecutor,
+  resolveAgentForWorker,
+  fallbackToolExecutor,
 } from "./loop";
-export * from "./config";
-export * from "./conversation";
+
+// Config domain
+export {
+  type DedupePolicy,
+  type AutonomousLoopConfig,
+  ConfigManager,
+} from "./config";
+
+// Conversation domain
+export {
+  type Complexity,
+  type RequestContext,
+  type Decision,
+  ConversationHandler,
+} from "./conversation";
+
+// Ingress domain
 export {
   SessionResolver,
   IngressEngine,
   DefaultRunPlanner,
   NoopDeliveryAdapter,
+  NoopNotificationAdapter,
   type IngressEngineConfig,
   type InboundEvent,
   type RunRequest,
   type RunRequestKind,
   type RunResult,
+  type EventSourceAdapter,
+  type EventDecoder,
   type DeliveryAdapter,
+  type NotificationAdapter,
   type RunPlanner,
+  CONTROL_EVENT_KINDS,
+  TELEMETRY_EVENT_KINDS,
+  EVENT_KINDS,
+  classifyLane,
+  isTaskBackable,
+  type EventKind,
+  type EventLane,
+  DefaultRunExecutor,
+  type RunExecutor,
+  type DefaultRunExecutorConfig,
+  DefaultEventProjector,
+  type EventProjector,
 } from "./ingress";
+
+// Tools domain
+export {
+  SubagentInput,
+  Subagent,
+  type SubagentContext,
+  type SubagentResult,
+  DispatchInput,
+  Dispatch,
+  type DispatchContext,
+  type DispatchReviewDecision,
+  type DispatchReviewInput,
+  ScheduleInput,
+  ScheduleTool,
+} from "./tools";
