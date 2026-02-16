@@ -1,13 +1,10 @@
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { type Task, TaskManager } from "../task";
+import { type Task, TaskManager } from "../../task";
 import { createSessionSink } from "./run-worker-sink";
-import { PermissionGate } from "./permission";
-import { RunSupervisor } from "./run-supervisor";
-import { ConcurrencyGate } from "./concurrency";
-import { Observability } from "./observability";
-import { AuditLog } from "./audit";
-import { DeadLetterQueue } from "./dlq";
+import { PermissionGate, RunSupervisor, ConcurrencyGate } from "../policy";
+import { Observability, AuditLog } from "../telemetry";
+import { DeadLetterQueue } from "../dlq";
 import { SummaryDelivery } from "./summary";
 
 type PermissionLevel = "ask" | "notify" | "deny";

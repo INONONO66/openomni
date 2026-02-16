@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import {
   ConcurrencyGate,
   ConcurrencyConfig,
-} from "../../src/worker/concurrency";
+} from "../../src/worker/policy/concurrency";
 
 describe("ConcurrencyGate", () => {
   beforeEach(() => {

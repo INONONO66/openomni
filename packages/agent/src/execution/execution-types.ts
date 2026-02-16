@@ -1,5 +1,8 @@
 import type { AgentDefinition } from "../agent";
-import type { OrchestratorRunInput, SessionMode } from "../worker/run-worker";
+import type {
+  OrchestratorRunInput,
+  SessionMode,
+} from "../worker/run/run-worker";
 
 export type SupervisorDecision = "local" | "spawn" | "join" | "finish";
 

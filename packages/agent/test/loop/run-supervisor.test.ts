@@ -3,7 +3,7 @@ import {
   RunSupervisor,
   RunBudget,
   RunState,
-} from "../../src/worker/run-supervisor";
+} from "../../src/worker/policy/run-supervisor";
 
 describe("RunSupervisor", () => {
   describe("createState", () => {
