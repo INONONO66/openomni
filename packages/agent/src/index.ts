@@ -106,7 +106,7 @@ export {
   SummaryData,
   SummaryDelivery,
   type EventMetadata,
-  type QueueMetrics as LoopQueueMetrics,
+  type QueueMetrics,
   type RunMetrics,
   Observability,
   AuditEntry,
@@ -118,19 +118,6 @@ export {
   fallbackToolExecutor,
 } from "./worker";
 
-// Conversation domain
-export {
-  ConversationSupervisor,
-  type ConversationSupervisorConfig,
-  type ConversationInput,
-  type ConversationPlan,
-  type WorkItemOutline,
-  type ApprovalDecision,
-  type ExecutionContextFork,
-  type ConversationHistory,
-  type ConversationSupervisorResult,
-} from "./conversation";
-
 // Execution domain
 export {
   FileLock,
@@ -141,6 +128,9 @@ export {
   type ExecutionSupervisorConfig,
   type ExecutionSupervisorResult,
   type StepOutcome,
+  type DispatchExecutionInput,
+  type DispatchOutput,
+  type DispatchTask,
   ExecutionSupervisor,
   buildDependencyGraph,
   completeTaskAndUnblockDependents,
@@ -164,10 +154,19 @@ export {
 
 // Conversation domain
 export {
-  type Complexity,
-  type RequestContext,
-  type Decision,
+  Complexity,
+  RequestContext,
+  Decision,
   ConversationHandler,
+  ConversationSupervisor,
+  type ConversationSupervisorConfig,
+  type ConversationInput,
+  type ConversationPlan,
+  type WorkItemOutline,
+  type ApprovalDecision,
+  type ExecutionContextFork,
+  type ConversationHistory,
+  type ConversationSupervisorResult,
 } from "./conversation";
 
 // Ingress domain
