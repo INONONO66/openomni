@@ -1,9 +1,9 @@
-import { BuiltinAgentRegistry } from "../agent";
+import { BuiltinAgentRegistry } from "../../agent";
 import type {
   DependencyGraph,
   DispatchTask,
   DispatchTaskState,
-} from "./execution-types";
+} from "../execution-types";
 
 export function buildDependencyGraph(tasks: DispatchTask[]): DependencyGraph {
   const states = new Map<string, DispatchTaskState>();

@@ -1,8 +1,8 @@
 import type { Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { AgentMessenger, BuiltinAgentRegistry } from "../agent";
-import { TaskManager } from "../task";
-import type { RunSupervisorToolDecision } from "./execution-assignment";
+import { AgentMessenger, BuiltinAgentRegistry } from "../../agent";
+import { TaskManager } from "../../task";
+import type { RunSupervisorToolDecision } from "../graph";
 import type {
   ChildRunResult,
   DispatchContext,
@@ -11,12 +11,12 @@ import type {
   DispatchTaskState,
   FailureAction,
   FailureDecision,
-} from "./execution-types";
+} from "../execution-types";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   ToolExecutor,
-} from "../worker/run-worker";
+} from "../../worker/run/run-worker";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 const DISPATCH_AGENT_ID = "dispatch-supervisor";

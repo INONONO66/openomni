@@ -5,18 +5,17 @@ import {
   assignAgentsToReadyTasks,
   resolveDispatchHybridRuntime,
   resolveWorkerRuntimeForTask,
-} from "./execution-assignment";
-import {
   buildDependencyGraph,
   completeTaskAndUnblockDependents,
-} from "./execution-graph";
+  FileLock,
+} from "./graph";
 import {
   decideFailedStepAction,
   requestHandoffDocument,
   reviewTaskResult,
   rotateAgent,
   sendReviewFeedback,
-} from "./execution-review";
+} from "./review";
 import type {
   ChildRunResult,
   DependencyGraph,
@@ -39,34 +38,17 @@ import type {
   SupervisorDecision,
   WorkerRuntimeConfig,
 } from "./execution-types";
-import { FileLock } from "./file-lock";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   ToolExecutor,
-} from "../worker/run-worker";
-import { RunWorker } from "../worker/run-worker";
+} from "../worker/run/run-worker";
+import { RunWorker } from "../worker/run/run-worker";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 const MAX_REJECTIONS_BEFORE_HANDOFF = 3;
 const SUPERVISOR_DECISION_TRIGGER_ID = "dispatch-supervisor-trigger";
-
-export type {
-  DispatchContext,
-  DispatchExecutionInput,
-  DispatchOutput,
-  DispatchReviewDecision,
-  DispatchReviewInput,
-  DispatchTask,
-  ExecutionPlan,
-  ExecutionPlanStep,
-  ExecutionSupervisorConfig,
-  ExecutionSupervisorResult,
-  StepOutcome,
-  SummarizedHistory,
-  SupervisorDecision,
-} from "./execution-types";
 
 /**
  * Orchestration decision layer for a run (D8).

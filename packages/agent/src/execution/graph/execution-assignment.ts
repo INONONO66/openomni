@@ -1,9 +1,9 @@
 import type { Tool } from "@openomni/protocol";
-import { BuiltinAgentRegistry } from "../agent";
+import { BuiltinAgentRegistry } from "../../agent";
 import {
   resolveAgentDefinition,
   resolveAgentForWorker,
-} from "../worker/agent-resolution";
+} from "../../worker/agent-resolution";
 import type {
   AgentAssignment,
   DependencyGraph,
@@ -13,8 +13,8 @@ import type {
   DispatchTaskState,
   ReadyStepDescriptor,
   WorkerRuntimeConfig,
-} from "./execution-types";
-import type { ToolExecutor } from "../worker/run-worker";
+} from "../execution-types";
+import type { ToolExecutor } from "../../worker/run/run-worker";
 
 const ASSIGN_AGENTS_TOOL = "assign_agents";
 
