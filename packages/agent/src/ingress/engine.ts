@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Envelope, type EventEnvelope } from "../dispatch";
-import { RunWorker } from "../loop";
+import { RunWorker } from "../worker";
 import { SessionResolver } from "./session-resolver";
 import { TaskManager } from "../task";
 import type { Session } from "@openomni/session";

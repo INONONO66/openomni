@@ -4,8 +4,8 @@ import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
 import { FileLock } from "../../src/loop/file-lock";
-import { RunWorker } from "../../src/loop/run-worker";
-import type { OrchestratorRunInput } from "../../src/loop/run-worker";
+import { RunWorker } from "../../src/worker/run-worker";
+import type { OrchestratorRunInput } from "../../src/worker/run-worker";
 import type { Sink, Tool } from "@openomni/protocol";
 import type { Task } from "../../src/task/types";
 

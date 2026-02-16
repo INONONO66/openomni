@@ -7,7 +7,7 @@ import {
   resolveToolExecutor,
   resolveAgentForWorker,
   fallbackToolExecutor,
-} from "../../src/loop/agent-resolution";
+} from "../../src/worker/agent-resolution";
 
 const FAKE_ANTHROPIC_PROVIDER: ModelsDev.Provider = {
   id: "anthropic",

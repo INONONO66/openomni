@@ -7,14 +7,14 @@ import {
   afterAll,
   spyOn,
 } from "bun:test";
-import { RunWorker } from "../../src/loop/run-worker";
+import { RunWorker } from "../../src/worker/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
-import { Observability } from "../../src/loop/observability";
-import { AuditLog } from "../../src/loop/audit";
-import { DeadLetterQueue } from "../../src/loop/dlq";
-import { SummaryDelivery } from "../../src/loop/summary";
+import { Observability } from "../../src/worker/observability";
+import { AuditLog } from "../../src/worker/audit";
+import { DeadLetterQueue } from "../../src/worker/dlq";
+import { SummaryDelivery } from "../../src/worker/summary";
 
 describe("Orchestrator Wiring", () => {
   let spies: Array<{ mockRestore: () => void }> = [];

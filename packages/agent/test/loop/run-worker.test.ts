@@ -3,16 +3,16 @@ import {
   RunWorker,
   OrchestratorConfig,
   OrchestratorRunInput,
-} from "../../src/loop/run-worker";
+} from "../../src/worker/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { Task } from "../../src/task/types";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
 import type { Sink } from "@openomni/protocol";
-import { Observability } from "../../src/loop/observability";
-import { AuditLog } from "../../src/loop/audit";
-import { DeadLetterQueue } from "../../src/loop/dlq";
-import { SummaryDelivery } from "../../src/loop/summary";
+import { Observability } from "../../src/worker/observability";
+import { AuditLog } from "../../src/worker/audit";
+import { DeadLetterQueue } from "../../src/worker/dlq";
+import { SummaryDelivery } from "../../src/worker/summary";
 
 describe("RunWorker", () => {
   beforeEach(() => {

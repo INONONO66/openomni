@@ -3,7 +3,7 @@ import { BuiltinAgentRegistry } from "../agent";
 import {
   resolveAgentDefinition,
   resolveAgentForWorker,
-} from "./agent-resolution";
+} from "../worker/agent-resolution";
 import type {
   AgentAssignment,
   DependencyGraph,
@@ -14,7 +14,7 @@ import type {
   ReadyStepDescriptor,
   WorkerRuntimeConfig,
 } from "./execution-types";
-import type { ToolExecutor } from "./run-worker";
+import type { ToolExecutor } from "../worker/run-worker";
 
 const ASSIGN_AGENTS_TOOL = "assign_agents";
 

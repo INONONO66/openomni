@@ -13,8 +13,8 @@ import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
   RunWorker,
   type OrchestratorRunInput,
-} from "../../src/loop/run-worker";
-import { RunWorker } from "../../src/loop/run-worker";
+} from "../../src/worker/run-worker";
+import { RunWorker } from "../../src/worker/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import type { Task } from "../../src/task/types";

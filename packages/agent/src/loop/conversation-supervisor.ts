@@ -30,15 +30,15 @@ import {
   resolveAgentDefinition,
   resolveLLM,
   resolveToolExecutor,
-} from "./agent-resolution";
+} from "../worker/agent-resolution";
 import { BuiltinAgentRegistry } from "../agent";
-import { RunWorker } from "./run-worker";
+import { RunWorker } from "../worker/run-worker";
 import type {
   SessionMode,
   OrchestratorConfig,
   OrchestratorRunInput,
   OrchestrationResult,
-} from "./run-worker";
+} from "../worker/run-worker";
 
 export interface ConversationSupervisorConfig {
   /** Surface-specific readable session key (per D2) */

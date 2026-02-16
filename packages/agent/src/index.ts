@@ -81,7 +81,7 @@ export {
   Dispatcher,
 } from "./dispatch";
 
-// Loop domain
+// Worker domain
 export {
   ConcurrencyConfig,
   ConcurrencyGate,
@@ -100,7 +100,6 @@ export {
   SessionMode,
   OrchestratorRunInput,
   RunWorker,
-  FileLock,
   DLQEntry,
   DeadLetterQueue,
   SummaryTemplate,
@@ -112,6 +111,16 @@ export {
   Observability,
   AuditEntry,
   AuditLog,
+  resolveAgentDefinition,
+  resolveLLM,
+  resolveToolExecutor,
+  resolveAgentForWorker,
+  fallbackToolExecutor,
+} from "./worker";
+
+// Loop domain
+export {
+  FileLock,
   ConversationSupervisor,
   type ConversationSupervisorConfig,
   type ConversationInput,
@@ -140,11 +149,6 @@ export {
   sendReviewFeedback,
   requestHandoffDocument,
   rotateAgent,
-  resolveAgentDefinition,
-  resolveLLM,
-  resolveToolExecutor,
-  resolveAgentForWorker,
-  fallbackToolExecutor,
 } from "./loop";
 
 // Config domain

@@ -16,7 +16,7 @@ import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   ToolExecutor,
-} from "./run-worker";
+} from "../worker/run-worker";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 const DISPATCH_AGENT_ID = "dispatch-supervisor";
