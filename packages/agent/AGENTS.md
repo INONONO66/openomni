@@ -4,114 +4,202 @@ Core orchestration package. Multi-agent task system with Dynamic Supervisor arch
 
 ## STRUCTURE
 
+**10 top-level domains** with sub-domains for finer-grained SRP:
+
 ```
 src/
-├── index.ts           # Public API barrel
+├── index.ts                    # Public API barrel
+├── agent/                      # Agent identity, registry, messaging
+│   ├── definition/             # Agent definition loading and parsing
+│   │   ├── loader.ts           # AgentDefinitionLoader — load from filesystem/registry
+│   │   └── index.ts            # Re-exports
+│   ├── registry/               # Agent registry and lookup
+│   │   ├── builtin.ts          # BuiltinAgentRegistry — register/lookup agents (lazy initialization)
+│   │   └── index.ts            # Re-exports
+│   ├── discovery/              # Agent discovery and introspection
+│   │   ├── discovery.ts        # AgentDiscovery — load agents from filesystem
+│   │   └── index.ts            # Re-exports
+│   ├── communication.ts        # AgentMessenger — A2A message delivery with asker_only persistence
+│   ├── profile.ts              # AgentProfile, AgentIdentity schemas
+│   ├── capabilities.ts         # AgentCapabilities, DataScope, PolicySpec schemas
+│   ├── runtime.ts              # AgentRuntime schema
+│   ├── frontmatter.ts          # parseFrontmatter — YAML frontmatter extraction
+│   └── index.ts                # Re-exports (domain barrel)
 ├── config/
-│   └── index.ts       # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
-├── ingress/           # Dynamic Supervisor — event ingestion pipeline
-│   ├── engine.ts      # IngressEngine — 7-step pipeline (validate→convert→dedup→resolve→plan→execute→deliver)
-│   ├── session-resolver.ts  # SessionResolver — resolve/create sessions from events
-│   ├── event-projector.ts   # EventProjector — extract session data from events
-│   ├── run-executor.ts      # DefaultRunExecutor — execute run requests
-│   ├── event-kinds.ts       # EventKind constants, EventLane classification, isTaskBackable()
-│   └── index.ts       # Re-exports
-├── tools/             # Dynamic Supervisor tools (subagent, dispatch, schedule)
-│   ├── subagent.ts    # SubagentTool — spawn child agents (includes SubagentInput schema)
-│   ├── dispatch.ts    # DispatchTool — send A2A messages (includes DispatchInput schema)
-│   ├── schedule.ts    # ScheduleTool — create/update/delete schedules (includes ScheduleInput schema)
-│   └── index.ts       # Re-exports
-├── agent/             # Agent identity, registry, messaging, supervision
-│   ├── profile.ts     # AgentProfile, AgentIdentity schemas
-│   ├── capabilities.ts # AgentCapabilities, DataScope, PolicySpec schemas
-│   ├── runtime.ts     # AgentRuntime schema
-│   ├── registry.ts    # BuiltinAgentRegistry — register/lookup agents (lazy initialization)
-│   ├── communication.ts  # AgentMessenger — A2A message delivery with asker_only persistence
-│   ├── frontmatter.ts # parseFrontmatter — YAML frontmatter extraction
-│   ├── discovery.ts   # AgentDiscovery — load agents from filesystem
-│   └── index.ts       # Re-exports
-├── task/              # Task lifecycle management
-│   ├── types.ts       # Task namespace — Task, TaskRun, TriggerSignal Zod schemas
-│   ├── manager.ts     # TaskManager — create, trigger, getRun, state transitions
-│   ├── trigger-engine.ts  # Trigger orchestration — schedule/webhook/fs event handling
-│   ├── storage.ts     # TaskStorage + InMemoryTaskStore
-│   ├── state-machine.ts  # TaskStatusManager — valid status transitions
-│   ├── checkpoint.ts  # CheckpointManager — save/restore run state
-│   ├── recovery.ts    # CrashRecovery — detect and recover failed runs
-│   └── index.ts       # Re-exports
-├── loop/              # Supervisor/Worker execution architecture
-│   ├── conversation-supervisor.ts  # ConversationSupervisor — user-facing orchestration (requirement gathering, plan authoring, approval gate)
-│   ├── execution-supervisor.ts     # ExecutionSupervisor — DAG execution engine (1073 lines)
-│   ├── execution-types.ts          # Execution domain types — SupervisorDecision, ExecutionPlan, StepOutcome
-│   ├── execution-graph.ts          # DAG graph building and dependency management
-│   ├── execution-assignment.ts     # Agent assignment and runtime resolution
-│   ├── execution-review.ts         # Review gate, handoff, and agent rotation
-│   ├── run-worker.ts               # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
-│   ├── run-worker-sink.ts          # Session sink setup for RunWorker
-│   ├── file-lock.ts   # FileLock — in-process file locking for dispatch coordination
-│   ├── agent-resolution.ts  # Agent resolution — AgentDefinition → LLM/tools/prompt
-│   ├── envelope.ts    # EventEnvelope — normalize + validate incoming events
-│   ├── router.ts      # Router — match events to rules, produce RoutingDecision
-│   ├── dispatcher.ts  # Dispatcher — execute routed events
-│   ├── concurrency.ts # ConcurrencyGate — lane-based concurrency control
-│   ├── permission.ts  # PermissionGate — ask/notify/deny policy enforcement
-│   ├── run-supervisor.ts  # RunSupervisor — budget enforcement (time, turns, tool calls)
-│   ├── dlq.ts         # DeadLetterQueue — failed event storage
-│   ├── summary.ts     # SummaryDelivery — post-run summary generation
-│   ├── audit.ts       # AuditLog — event audit trail
-│   ├── observability.ts   # Observability — metrics collection
-│   └── supervisor.ts  # Higher-level supervisor (deprecated — use run-supervisor)
-├── trigger/           # External event sources
-│   ├── scheduler.ts   # Scheduler — timeBucket idempotency, recurring schedules, drift detection
-│   ├── queue.ts       # EventQueue — priority queue with drop policies
-│   ├── watcher.ts     # FilesystemWatcher
-│   └── webhook.ts     # WebhookWatcher (abstract) + SimpleWebhookWatcher
-└── conversation/
-    └── index.ts       # ConversationHandler namespace — inline-vs-task heuristics
+│   └── index.ts                # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
+├── conversation/               # User-facing orchestration
+│   ├── conversation-supervisor.ts  # ConversationSupervisor — requirement gathering, plan authoring, approval gate
+│   └── index.ts                # Re-exports (domain barrel)
+├── dispatch/                   # Event pipeline (envelope → router → dispatcher)
+│   ├── envelope.ts             # EventEnvelope — normalize + validate incoming events
+│   ├── router.ts               # Router — match events to rules, produce RoutingDecision
+│   ├── dispatcher.ts           # Dispatcher — execute routed events
+│   └── index.ts                # Re-exports (domain barrel)
+├── execution/                  # DAG execution engine
+│   ├── graph/                  # DAG graph building and dependency management
+│   │   ├── graph.ts            # DAG construction and traversal
+│   │   └── index.ts            # Re-exports
+│   ├── review/                 # Review gate, handoff, and agent rotation
+│   │   ├── review.ts           # ExecutionReview — review gate and handoff logic
+│   │   └── index.ts            # Re-exports
+│   ├── execution-supervisor.ts # ExecutionSupervisor — DAG execution engine (1073 lines)
+│   ├── execution-types.ts      # Execution domain types — SupervisorDecision, ExecutionPlan, StepOutcome
+│   └── index.ts                # Re-exports (domain barrel)
+├── ingress/                    # Dynamic Supervisor — event ingestion pipeline
+│   ├── engine.ts               # IngressEngine — 7-step pipeline (validate→convert→dedup→resolve→plan→execute→deliver)
+│   ├── session-resolver.ts     # SessionResolver — resolve/create sessions from events
+│   ├── event-projector.ts      # EventProjector — extract session data from events
+│   ├── run-executor.ts         # DefaultRunExecutor — execute run requests
+│   ├── event-kinds.ts          # EventKind constants, EventLane classification, isTaskBackable()
+│   └── index.ts                # Re-exports (domain barrel)
+├── task/                       # Task lifecycle management
+│   ├── lifecycle/              # Task state machine and transitions
+│   │   ├── state-machine.ts    # TaskStatusManager — valid status transitions
+│   │   └── index.ts            # Re-exports
+│   ├── storage/                # Task persistence
+│   │   ├── storage.ts          # TaskStorage + InMemoryTaskStore
+│   │   ├── checkpoint.ts       # CheckpointManager — save/restore run state
+│   │   ├── recovery.ts         # CrashRecovery — detect and recover failed runs
+│   │   └── index.ts            # Re-exports
+│   ├── types.ts                # Task namespace — Task, TaskRun, TriggerSignal Zod schemas
+│   ├── manager.ts              # TaskManager — create, trigger, getRun, state transitions
+│   ├── trigger-engine.ts       # Trigger orchestration — schedule/webhook/fs event handling
+│   ├── errors.ts               # Task-specific error types
+│   └── index.ts                # Re-exports (domain barrel)
+├── tools/                      # Dynamic Supervisor tools (subagent, dispatch, schedule)
+│   ├── subagent.ts             # SubagentTool — spawn child agents (includes SubagentInput schema)
+│   ├── dispatch.ts             # DispatchTool — send A2A messages (includes DispatchInput schema)
+│   ├── schedule.ts             # ScheduleTool — create/update/delete schedules (includes ScheduleInput schema)
+│   └── index.ts                # Re-exports (domain barrel)
+├── trigger/                    # External event sources
+│   ├── scheduler.ts            # Scheduler — timeBucket idempotency, recurring schedules, drift detection
+│   ├── watcher.ts              # FilesystemWatcher
+│   ├── webhook.ts              # WebhookWatcher (abstract) + SimpleWebhookWatcher
+│   └── index.ts                # Re-exports (domain barrel)
+└── worker/                     # Execution runtime primitives
+    ├── run/                    # RunWorker execution
+    │   ├── worker.ts           # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
+    │   ├── sink.ts             # Session sink setup for RunWorker
+    │   └── index.ts            # Re-exports
+    ├── policy/                 # Execution policies and gates
+    │   ├── concurrency.ts      # ConcurrencyGate — lane-based concurrency control
+    │   ├── permission.ts       # PermissionGate — ask/notify/deny policy enforcement
+    │   ├── run-supervisor.ts   # RunSupervisor — budget enforcement (time, turns, tool calls)
+    │   └── index.ts            # Re-exports
+    ├── telemetry/              # Observability and audit
+    │   ├── audit.ts            # AuditLog — event audit trail
+    │   ├── observability.ts    # Observability — metrics collection
+    │   ├── summary.ts          # SummaryDelivery — post-run summary generation
+    │   └── index.ts            # Re-exports
+    ├── agent-resolution.ts     # Agent resolution — AgentDefinition → LLM/tools/prompt
+    ├── dlq.ts                  # DeadLetterQueue — failed event storage
+    └── index.ts                # Re-exports (domain barrel)
 ```
+
+**Key architectural changes**:
+
+- **dispatch/** replaces loop/'s event pipeline (envelope → router → dispatcher)
+- **worker/** replaces loop/'s runtime primitives (RunWorker + policies + telemetry)
+- **execution/** replaces loop/'s DAG execution (ExecutionSupervisor + graph + review)
+- **conversation/** now contains conversation-supervisor.ts (merged from loop/)
+- **Sub-domains** provide finer-grained SRP within agent/, worker/, task/, execution/
+- **loop/ directory removed** — all functionality redistributed to domain-specific modules
 
 ## PIPELINE FLOW
 
-```
-IngressEngine 7-Step Pipeline:
-  1. Validate (schema validation)
-  2. Convert (EventSourceAdapter → EventEnvelope)
-  3. Dedup (idempotency check)
-  4. Resolve (SessionResolver → session)
-  5. Plan (RunPlanner → RunRequest)
-  6. Execute (RunExecutor → RunOutcome)
-  7. Deliver (NotificationAdapter → NotificationResult)
+### IngressEngine 7-Step Pipeline
 
-Legacy Loop (still active):
-  Trigger (cron/webhook/fs/manual)
-    → EventQueue
-      → Envelope (normalize + validate + dedupe)
-        → Router (match rules → RoutingDecision)
-          → ConcurrencyGate
-            → PermissionGate
-              → Dispatcher (execute)
-                → RunSupervisor (budget enforcement)
-                  → LLM call → Tool loop → Summary
-                    → AuditLog + DLQ (on failure)
 ```
+1. Validate (schema validation)
+2. Convert (EventSourceAdapter → EventEnvelope)
+3. Dedup (idempotency check)
+4. Resolve (SessionResolver → session)
+5. Plan (RunPlanner → RunRequest)
+6. Execute (RunExecutor → RunOutcome)
+7. Deliver (NotificationAdapter → NotificationResult)
+```
+
+### Event Processing Pipeline (dispatch/ + worker/)
+
+```
+Trigger (cron/webhook/fs/manual)
+  → Envelope (normalize + validate + dedupe)
+    → Router (match rules → RoutingDecision)
+      → Dispatcher (execute)
+        → ConcurrencyGate (lane-based control)
+          → PermissionGate (ask/notify/deny policy)
+            → RunWorker (LLM/tool loop)
+              → RunSupervisor (budget enforcement)
+                → Summary + AuditLog
+                  → DLQ (on failure)
+```
+
+**Key components**:
+
+- **dispatch/envelope.ts**: Normalize + validate incoming events
+- **dispatch/router.ts**: Match events to rules, produce RoutingDecision
+- **dispatch/dispatcher.ts**: Execute routed events
+- **worker/policy/**: ConcurrencyGate, PermissionGate, RunSupervisor
+- **worker/run/**: RunWorker execution primitive
+- **worker/telemetry/**: AuditLog, Summary, Observability
 
 ## KEY PATTERNS
 
-- **Supervisor/Worker Split**: Separates orchestration decisions (ConversationSupervisor, ExecutionSupervisor) from execution (RunWorker).
-  - **ConversationSupervisor**: User-facing orchestration. Handles requirement gathering, clarification, plan authoring, and approval gate. Session mode: `reuse` (if exists) or `persistent`.
-  - **ExecutionSupervisor**: Execution orchestration. Handles task decomposition, assignment, accept/reject, re-dispatch loop. Session mode: `persistent`. Internal-only (no direct external entry).
-  - **RunWorker**: Shared execution primitive. Handles LLM/tool loop, retry, budget, session lifecycle, state transitions. Used by both supervisors and tools (SubagentWorker, DispatchCoordinator).
-  - **Execution flow**: External events → ConversationSupervisor → (after approval) → ExecutionSupervisor → RunWorker
-- **ConversationSupervisor Lifecycle**: 7-step framework for user-facing orchestration.
-  1. **Session Resolution**: Reuse existing session or create new (`persistent` mode)
-  2. **Agent Resolution**: Load AgentDefinition (prompt/model/tools) via `config.agentId` or use default
-  3. **LLM Turn**: Call RunWorker with injected AgentDefinition
-  4. **Intent Classification**: LLM calls `classify_intent` tool → `immediate` or `plan_needed`
-  5. **Plan Generation** (if plan_needed): LLM calls `generate_plan` tool → includes `suggestedAgent` per work item (from `BuiltinAgentRegistry.list()`)
-  6. **Approval Gate**: Returns `plan_pending` → external system presents to user (D11: no auto-approval)
-  7. **Fork + Delegation** (after approval): External system creates fork (summarized history only, D10) → calls ExecutionSupervisor
-  - **Framework Layer**: Lifecycle is fixed, behavior is injectable via AgentDefinition
-  - **External Customization**: Define custom supervisor via `BuiltinAgentRegistry.define({ name: "conversation-supervisor", systemPrompt: "...", tools: [...], model: {...} })`
+### Supervisor/Worker Split
+
+Separates orchestration decisions from execution:
+
+- **ConversationSupervisor** (conversation/): User-facing orchestration. Handles requirement gathering, clarification, plan authoring, and approval gate. Session mode: `reuse` (if exists) or `persistent`.
+- **ExecutionSupervisor** (execution/): Execution orchestration. Handles task decomposition, assignment, accept/reject, re-dispatch loop. Session mode: `persistent`. Internal-only (no direct external entry).
+- **RunWorker** (worker/run/): Shared execution primitive. Handles LLM/tool loop, retry, budget, session lifecycle, state transitions. Used by both supervisors and tools (SubagentWorker, DispatchCoordinator).
+- **Execution flow**: External events → ConversationSupervisor → (after approval) → ExecutionSupervisor → RunWorker
+
+### ConversationSupervisor Lifecycle
+
+7-step framework for user-facing orchestration:
+
+1. **Session Resolution**: Reuse existing session or create new (`persistent` mode)
+2. **Agent Resolution**: Load AgentDefinition (prompt/model/tools) via `config.agentId` or use default
+3. **LLM Turn**: Call RunWorker with injected AgentDefinition
+4. **Intent Classification**: LLM calls `classify_intent` tool → `immediate` or `plan_needed`
+5. **Plan Generation** (if plan_needed): LLM calls `generate_plan` tool → includes `suggestedAgent` per work item (from `BuiltinAgentRegistry.list()`)
+6. **Approval Gate**: Returns `plan_pending` → external system presents to user (D11: no auto-approval)
+7. **Fork + Delegation** (after approval): External system creates fork (summarized history only, D10) → calls ExecutionSupervisor
+
+**Framework Layer**: Lifecycle is fixed, behavior is injectable via AgentDefinition. Define custom supervisor via `BuiltinAgentRegistry.define({ name: "conversation-supervisor", systemPrompt: "...", tools: [...], model: {...} })`.
+
+### Event Processing Pipeline
+
+**dispatch/** domain handles event normalization and routing:
+
+- **envelope.ts**: Normalize + validate incoming events (EventEnvelope)
+- **router.ts**: Match events to rules, produce RoutingDecision
+- **dispatcher.ts**: Execute routed events
+
+**worker/** domain handles execution and policies:
+
+- **worker/run/**: RunWorker execution primitive (LLM/tool loop, retry, budget, session lifecycle)
+- **worker/policy/**: ConcurrencyGate (lane-based control), PermissionGate (ask/notify/deny), RunSupervisor (budget enforcement)
+- **worker/telemetry/**: AuditLog (event audit trail), Summary (post-run summary), Observability (metrics)
+
+### Domain Barrel Pattern
+
+**Cross-domain imports MUST go through domain-level barrel**:
+
+```typescript
+// ✅ CORRECT: Import from domain barrel
+import { RunWorker } from "../worker";
+import { ExecutionSupervisor } from "../execution";
+
+// ❌ WRONG: Never import from sub-domain directly
+import { RunWorker } from "../worker/run";
+import { ExecutionSupervisor } from "../execution/graph";
+```
+
+**Sub-domain imports are internal only** — external consumers never import `from "../worker/run"` or `from "../execution/graph"`. Barrel pattern ensures stable public API and single source of truth.
+
+### Other Key Patterns
+
 - **SubagentWorker**: Single-task worker unit. Session mode: `ephemeral` (one-shot delegated work).
 - **DispatchCoordinator**: Multi-task coordinator for DAG execution. Child worker session mode: `persistent + reuse` (for review/retry/handoff continuity).
 - **Dynamic Supervisor**: IngressEngine + 3 tools (SubagentTool, DispatchTool, ScheduleTool). Replaces graph-based routing.
@@ -123,20 +211,19 @@ Legacy Loop (still active):
 - **Late-Start Execution**: Schedules with `start_time_in_past` execute immediately with `lateStart: true` flag.
 - **Drift Detection**: Scheduler warns if execution is >5min late from planned start time.
 - **Lane Guard**: DefaultRunPlanner blocks telemetry events from creating runs.
-- **Dispatch Consolidation**: `dispatch.ts` is now a thin wrapper (118 lines) that delegates to `ExecutionSupervisor.executeDispatch()`. Core DAG execution, review gate, and handoff logic lives in ExecutionSupervisor (1073 lines) with extracted modules (execution-types.ts, execution-graph.ts, execution-assignment.ts, execution-review.ts).
-- **FileLock Independence**: File locking logic extracted to `loop/file-lock.ts` for reuse across dispatch and other coordinators.
+- **Modular Execution**: ExecutionSupervisor split into focused modules — types (SupervisorDecision, ExecutionPlan), graph (DAG building), review (handoff/rotation). Main supervisor orchestrates these components.
 - **TaskManager**: `TaskManager.create()` → `TaskManager.trigger(taskId, signal)` → returns `{ runId }` or `{ error }`.
 - **RunWorker.run()**: Main execution entry. Takes `{ taskId, runId, maxRetries, sessionMode, sessionId, maxSubagentDepth, currentDepth }` + `{ llm, input, toolExecutor }`. Returns `{ success, summary, error }`.
 - **ConfigManager.create()**: Deep-merge overrides into defaults. Validated with `ConfigManager.validate()`.
 - **State machine**: TaskStatusManager enforces valid transitions (e.g., `pending→active→completed`).
 - **Lazy Initialization**: BuiltinAgentRegistry uses lazy initialization — builtins are registered on first access to `get()`, `list()`, `has()`, or `size()`. Explicit `initializeBuiltins()` call is supported for testing.
-- **Modular Execution**: ExecutionSupervisor split into focused modules — types (SupervisorDecision, ExecutionPlan), graph (DAG building), assignment (agent resolution), review (handoff/rotation). Main supervisor orchestrates these components.
 
 ## ANTI-PATTERNS
 
+- **loop/ directory removed** — All functionality redistributed to domain-specific modules (dispatch/, worker/, execution/, conversation/). Do NOT import from `loop/` — it no longer exists.
+- **Sub-domain imports forbidden** — Never import directly from sub-domains like `worker/run`, `worker/policy`, `execution/graph`, `execution/review`, `agent/definition`, `agent/registry`, `agent/discovery`, `task/lifecycle`, `task/storage`. Always import through domain barrel (e.g., `from "../worker"`, `from "../execution"`).
 - **Orchestrator.run() REMOVED** — `orchestration.ts` has been deleted. Use `RunWorker.run()` directly for all execution. The compatibility facade no longer exists.
-- `supervisor.ts` in loop/ is older — `run-supervisor.ts` is the current implementation. Do NOT extend supervisor.ts.
-- QueueMetrics name conflict between `trigger/queue.ts` and `loop/observability.ts` — re-exported with aliases (`TriggerQueueMetrics`, `LoopQueueMetrics`) in index.ts.
+- QueueMetrics name conflict between `trigger/` and `worker/telemetry/` — re-exported with aliases (`TriggerQueueMetrics`, `WorkerQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
 - Do NOT reference `graph.ts` or `routing.ts` — these were removed in Phase 1 migration to Dynamic Supervisor.
 - **Deleted files** — Do NOT import from: `config.ts` (use `config/index.ts`), `conversation/handler.ts` (use `conversation/index.ts`), `tools/schemas.ts` (schemas co-located with tools), `ingress/interfaces.ts` (interfaces co-located with implementations).
