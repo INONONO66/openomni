@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { TaskManager } from "../task";
-import { ConversationSupervisor, ExecutionSupervisor } from "../loop";
+import { ConversationSupervisor } from "../loop";
+import { ExecutionSupervisor } from "../execution";
 import { classifyLane } from "./event-kinds";
 import type { RunRequest, RunResult } from "./engine";
 

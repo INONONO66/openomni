@@ -120,7 +120,6 @@ export {
 
 // Loop domain
 export {
-  FileLock,
   ConversationSupervisor,
   type ConversationSupervisorConfig,
   type ConversationInput,
@@ -130,13 +129,18 @@ export {
   type ExecutionContextFork,
   type ConversationHistory,
   type ConversationSupervisorResult,
-  SupervisorDecision,
-  SummarizedHistory,
-  ExecutionPlan,
-  ExecutionPlanStep,
-  ExecutionSupervisorConfig,
-  ExecutionSupervisorResult,
-  StepOutcome,
+} from "./loop";
+
+// Execution domain
+export {
+  FileLock,
+  type SupervisorDecision,
+  type SummarizedHistory,
+  type ExecutionPlan,
+  type ExecutionPlanStep,
+  type ExecutionSupervisorConfig,
+  type ExecutionSupervisorResult,
+  type StepOutcome,
   ExecutionSupervisor,
   buildDependencyGraph,
   completeTaskAndUnblockDependents,
@@ -149,7 +153,7 @@ export {
   sendReviewFeedback,
   requestHandoffDocument,
   rotateAgent,
-} from "./loop";
+} from "./execution";
 
 // Config domain
 export {

@@ -3,7 +3,7 @@ import { Session } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
-import { FileLock } from "../../src/loop/file-lock";
+import { FileLock } from "../../src/execution/file-lock";
 import { RunWorker } from "../../src/worker/run-worker";
 import type { OrchestratorRunInput } from "../../src/worker/run-worker";
 import type { Sink, Tool } from "@openomni/protocol";
@@ -265,7 +265,7 @@ describe("Supervisor/Worker split boundary", () => {
 
     it("ExecutionSupervisor result has required fields", async () => {
       const { ExecutionSupervisor } =
-        await import("../../src/loop/execution-supervisor");
+        await import("../../src/execution/execution-supervisor");
 
       const result = await ExecutionSupervisor.run({
         history: { summary: "test", constraints: [] },

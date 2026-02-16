@@ -3,13 +3,13 @@ import type { Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { BuiltinAgentRegistry } from "../../src/agent/registry";
 import { TaskStorage } from "../../src/task/storage";
-import { FileLock } from "../../src/loop/file-lock";
+import { FileLock } from "../../src/execution/file-lock";
 import {
   ExecutionSupervisor,
   type DispatchExecutionInput,
   type DispatchContext,
   type DispatchTask,
-} from "../../src/loop/execution-supervisor";
+} from "../../src/execution/execution-supervisor";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

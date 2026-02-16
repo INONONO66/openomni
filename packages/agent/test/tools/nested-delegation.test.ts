@@ -5,7 +5,7 @@ import { BuiltinAgentRegistry } from "../../src/agent/registry";
 import { TaskStorage } from "../../src/task/storage";
 import { Subagent, type SubagentContext } from "../../src/tools/subagent";
 import { Dispatch, type DispatchContext } from "../../src/tools/dispatch";
-import { FileLock } from "../../src/loop/file-lock";
+import { FileLock } from "../../src/execution/file-lock";
 
 function createMockLLM() {
   return {

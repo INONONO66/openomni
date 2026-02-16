@@ -9,7 +9,7 @@ import {
   type DispatchReviewDecision,
   type DispatchReviewInput,
   type DispatchTask,
-} from "../loop";
+} from "../execution";
 
 export const DispatchInput = z.object({
   objective: z.string().describe("Overall goal for task dispatch"),
