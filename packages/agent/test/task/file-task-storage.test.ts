@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { FileTaskStore } from "../../src/task/file-task-storage";
+import { FileTaskStore } from "../../src/task/storage/file-task-storage";
 import { TaskStorage, InMemoryTaskStore } from "../../src/task/storage";
 import type { Task } from "../../src/task/types";
 

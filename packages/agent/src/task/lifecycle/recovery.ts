@@ -1,4 +1,4 @@
-import { TaskManager } from "./manager";
+import { TaskManager } from "../manager";
 import { CheckpointManager } from "./checkpoint";
 import { Session } from "@openomni/session";
 

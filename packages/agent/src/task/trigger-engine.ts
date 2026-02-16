@@ -3,7 +3,7 @@ import { Bus } from "@openomni/session";
 import { Task as TaskEvent } from "@openomni/protocol";
 import { Task } from "./types";
 import { TaskStorage } from "./storage";
-import { TaskStatusManager } from "./state-machine";
+import { TaskStatusManager } from "./lifecycle";
 
 export type TriggerError =
   | "rate_limited"

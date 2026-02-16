@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   TaskStateMachine,
   TaskStatusManager,
-} from "../../src/task/state-machine";
+} from "../../src/task/lifecycle/state-machine";
 import type { Task } from "../../src/task/types";
 
 describe("TaskStateMachine", () => {

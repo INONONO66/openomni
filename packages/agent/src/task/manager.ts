@@ -1,6 +1,6 @@
 import { Task } from "./types";
 import { TaskStorage, TaskListFilter } from "./storage";
-import { TaskStatusManager } from "./state-machine";
+import { TaskStatusManager } from "./lifecycle";
 import { triggerTask } from "./trigger-engine";
 import type { TriggerResult } from "./trigger-engine";
 export type { TriggerError, TriggerResult } from "./trigger-engine";

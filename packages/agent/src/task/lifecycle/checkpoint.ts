@@ -1,5 +1,5 @@
-import { TaskManager } from "./manager";
-import { TaskStorage } from "./storage";
+import { TaskManager } from "../manager";
+import { TaskStorage } from "../storage";
 
 export interface Checkpoint {
   step: string;

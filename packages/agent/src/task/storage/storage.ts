@@ -1,33 +1,53 @@
-import {
-  mkdirSync,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-} from "node:fs";
-import { join } from "node:path";
-import type { TaskStore, TaskListFilter, RunListOptions } from "./storage";
-import type { Task } from "./types";
+import { Task } from "../types";
 
-export class FileTaskStore implements TaskStore {
+/**
+ * TaskStore interface - storage adapter for task automation system
+ * Follows StorageAdapter pattern from @openomni/session
+ */
+export interface TaskStore {
+  task: {
+    get(id: string): Task.Info | undefined;
+    set(id: string, info: Task.Info): void;
+    list(filter?: TaskListFilter): Task.Info[];
+    remove(id: string): boolean;
+  };
+  run: {
+    get(runId: string): Task.Run | undefined;
+    set(taskId: string, run: Task.Run): void;
+    list(taskId: string, opts?: RunListOptions): Task.Run[];
+    listByStatus(status: Task.Run["status"][]): Task.Run[];
+    remove(runId: string): boolean;
+    getByIdempotencyKey(key: string): Task.Run | undefined;
+  };
+}
+
+export interface TaskListFilter {
+  status?: Task.Status | Task.Status[];
+  ownerId?: string;
+  assignedAgentId?: string;
+  tags?: string[];
+}
+
+export interface RunListOptions {
+  limit?: number;
+  offset?: number;
+  sortBy?: "scheduledAt" | "startedAt" | "endedAt";
+  sortOrder?: "asc" | "desc";
+}
+
+/**
+ * InMemoryTaskStore - in-memory implementation of TaskStore
+ * Features:
+ * - O(1) task and run lookups by ID
+ * - O(1) idempotency key deduplication
+ * - O(1) status-based run queries via index
+ */
+export class InMemoryTaskStore implements TaskStore {
   private tasks = new Map<string, Task.Info>();
   private runs = new Map<string, Task.Run>();
   private taskRuns = new Map<string, string[]>(); // taskId -> runId[]
   private idempotencyIndex = new Map<string, string>(); // idempotencyKey -> runId
   private statusIndex = new Map<Task.Run["status"], Set<string>>(); // status -> Set<runId>
-
-  private readonly dir: string;
-
-  constructor(dir: string) {
-    this.dir = dir;
-    mkdirSync(dir, { recursive: true });
-    this.loadFromDisk();
-  }
-
-  // ===========================================================
-  // task sub-object
-  // ===========================================================
 
   task = {
     get: (id: string): Task.Info | undefined => {
@@ -35,7 +55,6 @@ export class FileTaskStore implements TaskStore {
     },
     set: (id: string, info: Task.Info): void => {
       this.tasks.set(id, info);
-      this.flushTasks();
     },
     list: (filter?: TaskListFilter): Task.Info[] => {
       let tasks = Array.from(this.tasks.values());
@@ -81,15 +100,9 @@ export class FileTaskStore implements TaskStore {
         this.taskRuns.delete(id);
       }
 
-      const deleted = this.tasks.delete(id);
-      this.flushAll();
-      return deleted;
+      return this.tasks.delete(id);
     },
   };
-
-  // ===========================================================
-  // run sub-object
-  // ===========================================================
 
   run = {
     get: (runId: string): Task.Run | undefined => {
@@ -115,11 +128,6 @@ export class FileTaskStore implements TaskStore {
         runIds.push(run.runId);
         this.taskRuns.set(taskId, runIds);
       }
-
-      this.flushRuns();
-      this.flushTaskRuns();
-      this.flushIdempotencyIndex();
-      this.flushStatusIndex();
     },
     list: (taskId: string, opts?: RunListOptions): Task.Run[] => {
       const runIds = this.taskRuns.get(taskId) ?? [];
@@ -174,12 +182,7 @@ export class FileTaskStore implements TaskStore {
         }
       }
 
-      const deleted = this.runs.delete(runId);
-      this.flushRuns();
-      this.flushTaskRuns();
-      this.flushIdempotencyIndex();
-      this.flushStatusIndex();
-      return deleted;
+      return this.runs.delete(runId);
     },
     getByIdempotencyKey: (key: string): Task.Run | undefined => {
       const runId = this.idempotencyIndex.get(key);
@@ -187,121 +190,48 @@ export class FileTaskStore implements TaskStore {
     },
   };
 
-  // ===========================================================
-  // Disk I/O — load
-  // ===========================================================
-
-  private loadFromDisk(): void {
-    this.tasks = this.readMapFile<Task.Info>("tasks.json");
-    this.runs = this.readMapFile<Task.Run>("runs.json");
-    this.taskRuns = this.readMapFile<string[]>("taskRuns.json");
-    this.idempotencyIndex = this.readMapFile<string>("idempotencyIndex.json");
-    this.loadStatusIndex();
+  /**
+   * Check if a run with the given idempotency key already exists
+   */
+  hasIdempotencyKey(key: string): boolean {
+    return this.idempotencyIndex.has(key);
   }
 
-  private loadStatusIndex(): void {
-    const path = join(this.dir, "statusIndex.json");
-    if (!existsSync(path)) return;
-    try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<
-        string,
-        string[]
-      >;
-      this.statusIndex = new Map();
-      for (const [status, ids] of Object.entries(raw)) {
-        this.statusIndex.set(status as Task.Run["status"], new Set(ids));
-      }
-    } catch {
-      this.rebuildStatusIndex();
-    }
+  /**
+   * Get run by idempotency key (O(1) lookup)
+   */
+  getByIdempotencyKey(key: string): Task.Run | undefined {
+    const runId = this.idempotencyIndex.get(key);
+    return runId ? this.runs.get(runId) : undefined;
   }
 
-  private rebuildStatusIndex(): void {
-    this.statusIndex = new Map();
-    for (const run of this.runs.values()) {
-      if (!this.statusIndex.has(run.status)) {
-        this.statusIndex.set(run.status, new Set());
-      }
-      this.statusIndex.get(run.status)!.add(run.runId);
-    }
-  }
-
-  private readMapFile<V>(filename: string): Map<string, V> {
-    const path = join(this.dir, filename);
-    if (!existsSync(path)) return new Map();
-    try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, V>;
-      return new Map(Object.entries(raw));
-    } catch {
-      return new Map();
-    }
-  }
-
-  // ===========================================================
-  // Disk I/O — flush (atomic write: tmp → rename)
-  // ===========================================================
-
-  private atomicWrite(filename: string, data: string): void {
-    const target = join(this.dir, filename);
-    const tmp = target + ".tmp";
-    try {
-      writeFileSync(tmp, data, "utf-8");
-      renameSync(tmp, target);
-    } catch (err) {
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* noop */
-      }
-      throw err;
-    }
-  }
-
-  private flushMap<V>(filename: string, map: Map<string, V>): void {
-    this.atomicWrite(
-      filename,
-      JSON.stringify(Object.fromEntries(map), null, 2),
-    );
-  }
-
-  private flushTasks(): void {
-    this.flushMap("tasks.json", this.tasks);
-  }
-
-  private flushRuns(): void {
-    this.flushMap("runs.json", this.runs);
-  }
-
-  private flushTaskRuns(): void {
-    this.flushMap("taskRuns.json", this.taskRuns);
-  }
-
-  private flushIdempotencyIndex(): void {
-    this.flushMap("idempotencyIndex.json", this.idempotencyIndex);
-  }
-
-  private flushStatusIndex(): void {
-    const obj: Record<string, string[]> = {};
-    for (const [status, ids] of this.statusIndex) {
-      obj[status] = Array.from(ids);
-    }
-    this.atomicWrite("statusIndex.json", JSON.stringify(obj, null, 2));
-  }
-
-  private flushAll(): void {
-    this.flushTasks();
-    this.flushRuns();
-    this.flushTaskRuns();
-    this.flushIdempotencyIndex();
-    this.flushStatusIndex();
-  }
-
+  /**
+   * Clear all data (useful for testing)
+   */
   clear(): void {
     this.tasks.clear();
     this.runs.clear();
     this.taskRuns.clear();
     this.idempotencyIndex.clear();
     this.statusIndex.clear();
-    this.flushAll();
+  }
+}
+
+/**
+ * Storage namespace - global storage configuration
+ */
+export namespace TaskStorage {
+  let adapter: TaskStore = new InMemoryTaskStore();
+
+  export function configure(newAdapter: TaskStore): void {
+    adapter = newAdapter;
+  }
+
+  export function getAdapter(): TaskStore {
+    return adapter;
+  }
+
+  export function reset(): void {
+    adapter = new InMemoryTaskStore();
   }
 }
