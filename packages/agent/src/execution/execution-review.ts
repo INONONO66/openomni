@@ -1,8 +1,8 @@
 import type { Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { AgentMessenger, BuiltinAgentRegistry } from "../../agent";
-import { TaskManager } from "../../task";
-import type { RunSupervisorToolDecision } from "../graph";
+import { AgentMessenger, BuiltinAgentRegistry } from "../agent";
+import { TaskManager } from "../task";
+import type { RunSupervisorToolDecision } from "./graph";
 import type {
   ChildRunResult,
   DispatchContext,
@@ -11,7 +11,7 @@ import type {
   DispatchTaskState,
   FailureAction,
   FailureDecision,
-} from "../execution-types";
+} from "./execution-types";
 import type {
   OrchestratorConfig,
   OrchestratorRunInput,
