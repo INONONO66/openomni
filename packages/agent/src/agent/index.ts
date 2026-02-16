@@ -48,8 +48,8 @@ export {
 // From communication.ts
 export {
   AgentMessenger,
-  MessageEnvelope,
-  DeliveryOptions,
+  type MessageEnvelope,
+  type DeliveryOptions,
   MessagingError,
   type AllowPattern,
 } from "./communication";
