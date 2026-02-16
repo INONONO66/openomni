@@ -42,8 +42,8 @@ import type {
   OrchestratorConfig,
   OrchestratorRunInput,
   ToolExecutor,
-} from "../worker/run/run-worker";
-import { RunWorker } from "../worker/run/run-worker";
+} from "../worker";
+import { RunWorker } from "../worker";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
