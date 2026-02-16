@@ -10,20 +10,12 @@ Core orchestration package. Multi-agent task system with Dynamic Supervisor arch
 src/
 ├── index.ts                    # Public API barrel
 ├── agent/                      # Agent identity, registry, messaging
-│   ├── definition/             # Agent definition loading and parsing
-│   │   ├── loader.ts           # AgentDefinitionLoader — load from filesystem/registry
-│   │   └── index.ts            # Re-exports
+│   ├── definitions.ts          # AgentDefinitionLoader, AgentProfile, AgentCapabilities, AgentRuntime (merged from definition/)
+│   ├── discovery.ts            # AgentDiscovery, parseFrontmatter (merged from discovery/)
 │   ├── registry/               # Agent registry and lookup
 │   │   ├── builtin.ts          # BuiltinAgentRegistry — register/lookup agents (lazy initialization)
 │   │   └── index.ts            # Re-exports
-│   ├── discovery/              # Agent discovery and introspection
-│   │   ├── discovery.ts        # AgentDiscovery — load agents from filesystem
-│   │   └── index.ts            # Re-exports
 │   ├── communication.ts        # AgentMessenger — A2A message delivery with asker_only persistence
-│   ├── profile.ts              # AgentProfile, AgentIdentity schemas
-│   ├── capabilities.ts         # AgentCapabilities, DataScope, PolicySpec schemas
-│   ├── runtime.ts              # AgentRuntime schema
-│   ├── frontmatter.ts          # parseFrontmatter — YAML frontmatter extraction
 │   └── index.ts                # Re-exports (domain barrel)
 ├── config/
 │   └── index.ts                # AutonomousLoopConfig + ConfigManager (defaults, merge, validate)
@@ -37,11 +29,9 @@ src/
 │   └── index.ts                # Re-exports (domain barrel)
 ├── execution/                  # DAG execution engine
 │   ├── graph/                  # DAG graph building and dependency management
-│   │   ├── graph.ts            # DAG construction and traversal
+│   │   ├── execution-graph.ts  # DAG construction and traversal (includes FileLock)
 │   │   └── index.ts            # Re-exports
-│   ├── review/                 # Review gate, handoff, and agent rotation
-│   │   ├── review.ts           # ExecutionReview — review gate and handoff logic
-│   │   └── index.ts            # Re-exports
+│   ├── execution-review.ts     # ExecutionReview, review gate, handoff, agent rotation (merged from review/)
 │   ├── execution-supervisor.ts # ExecutionSupervisor — DAG execution engine (1073 lines)
 │   ├── execution-types.ts      # Execution domain types — SupervisorDecision, ExecutionPlan, StepOutcome
 │   └── index.ts                # Re-exports (domain barrel)
@@ -55,16 +45,14 @@ src/
 ├── task/                       # Task lifecycle management
 │   ├── lifecycle/              # Task state machine and transitions
 │   │   ├── state-machine.ts    # TaskStatusManager — valid status transitions
+│   │   ├── recovery.ts         # CrashRecovery, CheckpointManager (merged from storage/checkpoint.ts)
 │   │   └── index.ts            # Re-exports
 │   ├── storage/                # Task persistence
 │   │   ├── storage.ts          # TaskStorage + InMemoryTaskStore
-│   │   ├── checkpoint.ts       # CheckpointManager — save/restore run state
-│   │   ├── recovery.ts         # CrashRecovery — detect and recover failed runs
 │   │   └── index.ts            # Re-exports
 │   ├── types.ts                # Task namespace — Task, TaskRun, TriggerSignal Zod schemas
-│   ├── manager.ts              # TaskManager — create, trigger, getRun, state transitions
+│   ├── manager.ts              # TaskManager, PolicyError (merged from errors.ts)
 │   ├── trigger-engine.ts       # Trigger orchestration — schedule/webhook/fs event handling
-│   ├── errors.ts               # Task-specific error types
 │   └── index.ts                # Re-exports (domain barrel)
 ├── tools/                      # Dynamic Supervisor tools (subagent, dispatch, schedule)
 │   ├── subagent.ts             # SubagentTool — spawn child agents (includes SubagentInput schema)
@@ -81,16 +69,8 @@ src/
     │   ├── worker.ts           # RunWorker — shared execution primitive (LLM/tool loop, retry, budget, session lifecycle)
     │   ├── sink.ts             # Session sink setup for RunWorker
     │   └── index.ts            # Re-exports
-    ├── policy/                 # Execution policies and gates
-    │   ├── concurrency.ts      # ConcurrencyGate — lane-based concurrency control
-    │   ├── permission.ts       # PermissionGate — ask/notify/deny policy enforcement
-    │   ├── run-supervisor.ts   # RunSupervisor — budget enforcement (time, turns, tool calls)
-    │   └── index.ts            # Re-exports
-    ├── telemetry/              # Observability and audit
-    │   ├── audit.ts            # AuditLog — event audit trail
-    │   ├── observability.ts    # Observability — metrics collection
-    │   ├── summary.ts          # SummaryDelivery — post-run summary generation
-    │   └── index.ts            # Re-exports
+    ├── policy.ts               # ConcurrencyGate, PermissionGate, RunSupervisor (merged from policy/)
+    ├── telemetry.ts            # AuditLog, Observability, SummaryDelivery (merged from telemetry/)
     ├── agent-resolution.ts     # Agent resolution — AgentDefinition → LLM/tools/prompt
     ├── dlq.ts                  # DeadLetterQueue — failed event storage
     └── index.ts                # Re-exports (domain barrel)
@@ -139,9 +119,9 @@ Trigger (cron/webhook/fs/manual)
 - **dispatch/envelope.ts**: Normalize + validate incoming events
 - **dispatch/router.ts**: Match events to rules, produce RoutingDecision
 - **dispatch/dispatcher.ts**: Execute routed events
-- **worker/policy/**: ConcurrencyGate, PermissionGate, RunSupervisor
+- **worker/policy.ts**: ConcurrencyGate, PermissionGate, RunSupervisor
 - **worker/run/**: RunWorker execution primitive
-- **worker/telemetry/**: AuditLog, Summary, Observability
+- **worker/telemetry.ts**: AuditLog, Summary, Observability
 
 ## KEY PATTERNS
 
@@ -179,8 +159,8 @@ Separates orchestration decisions from execution:
 **worker/** domain handles execution and policies:
 
 - **worker/run/**: RunWorker execution primitive (LLM/tool loop, retry, budget, session lifecycle)
-- **worker/policy/**: ConcurrencyGate (lane-based control), PermissionGate (ask/notify/deny), RunSupervisor (budget enforcement)
-- **worker/telemetry/**: AuditLog (event audit trail), Summary (post-run summary), Observability (metrics)
+- **worker/policy.ts**: ConcurrencyGate (lane-based control), PermissionGate (ask/notify/deny), RunSupervisor (budget enforcement)
+- **worker/telemetry.ts**: AuditLog (event audit trail), Summary (post-run summary), Observability (metrics)
 
 ### Domain Barrel Pattern
 
@@ -221,9 +201,9 @@ import { ExecutionSupervisor } from "../execution/graph";
 ## ANTI-PATTERNS
 
 - **loop/ directory removed** — All functionality redistributed to domain-specific modules (dispatch/, worker/, execution/, conversation/). Do NOT import from `loop/` — it no longer exists.
-- **Sub-domain imports forbidden** — Never import directly from sub-domains like `worker/run`, `worker/policy`, `execution/graph`, `execution/review`, `agent/definition`, `agent/registry`, `agent/discovery`, `task/lifecycle`, `task/storage`. Always import through domain barrel (e.g., `from "../worker"`, `from "../execution"`).
+- **Sub-domain imports forbidden** — Never import directly from sub-domains like `worker/run`, `execution/graph`, `agent/registry`, `task/lifecycle`, `task/storage`. Always import through domain barrel (e.g., `from "../worker"`, `from "../execution"`). Merged files (definitions.ts, discovery.ts, policy.ts, telemetry.ts, execution-review.ts) are internal to their domains.
 - **Orchestrator.run() REMOVED** — `orchestration.ts` has been deleted. Use `RunWorker.run()` directly for all execution. The compatibility facade no longer exists.
-- QueueMetrics name conflict between `trigger/` and `worker/telemetry/` — re-exported with aliases (`TriggerQueueMetrics`, `WorkerQueueMetrics`) in index.ts.
+- QueueMetrics name conflict between `trigger/` and `worker/telemetry.ts` — re-exported with aliases (`TriggerQueueMetrics`, `WorkerQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
 - Do NOT reference `graph.ts` or `routing.ts` — these were removed in Phase 1 migration to Dynamic Supervisor.
 - **Deleted files** — Do NOT import from: `config.ts` (use `config/index.ts`), `conversation/handler.ts` (use `conversation/index.ts`), `tools/schemas.ts` (schemas co-located with tools), `ingress/interfaces.ts` (interfaces co-located with implementations).
