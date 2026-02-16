@@ -3,4 +3,11 @@
 export * from "./execution-types";
 export * from "./execution-supervisor";
 export * from "./graph";
-export * from "./review";
+export {
+  decideFailedStepAction,
+  reviewTaskResult,
+  sendReviewFeedback,
+  requestHandoffDocument,
+  rotateAgent,
+  type ExecuteChildRunWithAbort,
+} from "./execution-review";

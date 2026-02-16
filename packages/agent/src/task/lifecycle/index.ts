@@ -1,6 +1,6 @@
 export { TaskStatusManager, TaskStateMachine } from "./state-machine";
 
-export { CheckpointManager, type Checkpoint } from "./checkpoint";
+export { CheckpointManager, type Checkpoint } from "./recovery";
 
 export {
   CrashRecovery,

@@ -1,6 +1,7 @@
 export {
   buildDependencyGraph,
   completeTaskAndUnblockDependents,
+  FileLock,
 } from "./execution-graph";
 
 export {
@@ -11,5 +12,3 @@ export {
 } from "./execution-assignment";
 
 export type { RunSupervisorToolDecision } from "./execution-assignment";
-
-export { FileLock } from "./file-lock";

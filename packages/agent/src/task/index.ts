@@ -14,4 +14,4 @@ export * from "./lifecycle";
 export * from "./storage";
 export { TaskManager } from "./manager";
 export type { TriggerError, TriggerResult } from "./trigger-engine";
-export { PolicyError } from "./errors";
+export { PolicyError } from "./manager";
