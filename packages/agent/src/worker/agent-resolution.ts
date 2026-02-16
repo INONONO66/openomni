@@ -6,7 +6,7 @@ import {
   type RunInput,
 } from "@openomni/llm";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent";
-import type { ToolExecutor, OrchestratorRunInput } from "./run/run-worker";
+import type { ToolExecutor, OrchestratorRunInput } from "./run";
 
 const DEFAULT_MODEL_CONFIG = {
   providerID: "anthropic",
