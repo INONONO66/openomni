@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { IngressEngine } from "../../src/ingress/engine";
 import type {
   DeliveryAdapter,
@@ -13,8 +13,7 @@ import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
   RunWorker,
   type OrchestratorRunInput,
-} from "../../src/worker/run-worker";
-import { RunWorker } from "../../src/worker/run-worker";
+} from "../../src/worker/run/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import type { Task } from "../../src/task/types";

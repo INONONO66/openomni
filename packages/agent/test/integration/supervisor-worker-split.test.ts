@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Session } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { FileLock } from "../../src/execution/file-lock";
-import { RunWorker } from "../../src/worker/run-worker";
-import type { OrchestratorRunInput } from "../../src/worker/run-worker";
+import { RunWorker } from "../../src/worker/run/run-worker";
+import type { OrchestratorRunInput } from "../../src/worker/run/run-worker";
 import type { Sink, Tool } from "@openomni/protocol";
 import type { Task } from "../../src/task/types";
 

@@ -8,9 +8,9 @@ import {
   readdirSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { AgentProfile } from "./profile";
+import type { AgentProfile } from "../definition/profile";
 import type { AgentRegistryStore } from "./profile-store";
-import { AgentProfileSchema } from "./profile";
+import { AgentProfileSchema } from "../definition/profile";
 
 export class FileAgentRegistryStore implements AgentRegistryStore {
   private profiles = new Map<string, AgentProfile>();

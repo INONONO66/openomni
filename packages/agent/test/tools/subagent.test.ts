@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Subagent, type SubagentContext } from "../../src/tools/subagent";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
 import type { Sink } from "@openomni/protocol";

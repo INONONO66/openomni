@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { AgentMessenger } from "../../src/agent/communication";
 import { TaskStorage } from "../../src/task/storage";
 import { Dispatch, type DispatchReviewInput } from "../../src/tools/dispatch";

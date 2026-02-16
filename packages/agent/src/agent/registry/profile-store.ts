@@ -1,4 +1,4 @@
-import { AgentProfileSchema, type AgentProfile } from "./profile";
+import { AgentProfileSchema, type AgentProfile } from "../definition/profile";
 
 export interface AgentRegistryStore {
   get(id: string): AgentProfile | undefined;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { ModelsDev } from "@openomni/llm/src/provider";
 import {
   resolveAgentDefinition,

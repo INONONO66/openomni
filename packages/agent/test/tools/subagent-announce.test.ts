@@ -9,7 +9,7 @@ import {
 } from "bun:test";
 import type { Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import {
   AgentMessenger,
   type MessageEnvelope,

@@ -4,7 +4,7 @@ import {
   AgentDefinitionSchema,
   BuiltinAgentRegistry,
   type AgentDefinition,
-} from "./registry";
+} from "../registry/registry";
 import { parseFrontmatter } from "./frontmatter";
 
 export interface AgentLoadResult {

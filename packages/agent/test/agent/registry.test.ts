@@ -3,7 +3,7 @@ import {
   BuiltinAgentRegistry,
   AgentDefinitionSchema,
   type AgentDefinition,
-} from "../../src/agent/registry";
+} from "../../src/agent/registry/registry";
 
 describe("AgentRegistry", () => {
   beforeEach(() => {
