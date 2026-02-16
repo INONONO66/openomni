@@ -118,7 +118,7 @@ export {
   fallbackToolExecutor,
 } from "./worker";
 
-// Loop domain
+// Conversation domain
 export {
   ConversationSupervisor,
   type ConversationSupervisorConfig,
@@ -129,7 +129,7 @@ export {
   type ExecutionContextFork,
   type ConversationHistory,
   type ConversationSupervisorResult,
-} from "./loop";
+} from "./conversation";
 
 // Execution domain
 export {

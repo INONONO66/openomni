@@ -235,8 +235,7 @@ describe("Supervisor/Worker split boundary", () => {
 
   describe("EvidenceBundle required fields validation", () => {
     it("ConversationSupervisor result types have required fields", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const config = {
         conversationSessionId: "session-1",
@@ -295,8 +294,7 @@ describe("Supervisor/Worker split boundary", () => {
     });
 
     it("ConversationSupervisor.createFork produces valid fork structure", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const fork = ConversationSupervisor.createFork(
         "session-1",
@@ -326,8 +324,7 @@ describe("Supervisor/Worker split boundary", () => {
     });
 
     it("ConversationSupervisor.requiresApproval returns true for plans with work items", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const plan = {
         planId: "plan-1",

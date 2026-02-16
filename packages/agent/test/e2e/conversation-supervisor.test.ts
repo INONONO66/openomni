@@ -3,7 +3,7 @@ import {
   ConversationSupervisor,
   ConversationSupervisorConfig,
   ConversationInput,
-} from "../../src/loop/conversation-supervisor";
+} from "../../src/conversation";
 import { Session } from "@openomni/session";
 import { TaskStorage } from "../../src/task/storage";
 import { TaskManager } from "../../src/task/manager";
