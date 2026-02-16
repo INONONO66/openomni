@@ -1,5 +1,4 @@
 import type { RouterRule } from "../loop";
-import type { QueueConfig } from "../trigger";
 import type { Run } from "@openomni/protocol";
 
 export interface DedupePolicy {
@@ -12,7 +11,6 @@ export interface DedupePolicy {
  * Configuration for the autonomous loop system
  */
 export interface AutonomousLoopConfig {
-  queue: QueueConfig;
   dedupe: DedupePolicy;
   router: {
     rules: RouterRule[];
@@ -30,13 +28,6 @@ export interface AutonomousLoopConfig {
 export namespace ConfigManager {
   function getDefaultsInternal(): AutonomousLoopConfig {
     return {
-      queue: {
-        maxDepth: 100,
-        dropPolicy: "new",
-        laneConcurrency: {},
-        waitWarnMs: 5000,
-        defaultConcurrency: 1,
-      },
       dedupe: {
         windowMs: 10 * 60 * 1000,
         maxEntries: 10_000,
@@ -63,10 +54,6 @@ export namespace ConfigManager {
     source: Partial<AutonomousLoopConfig>,
   ): AutonomousLoopConfig {
     const result = JSON.parse(JSON.stringify(target));
-
-    if (source.queue) {
-      result.queue = { ...result.queue, ...source.queue };
-    }
 
     if (source.dedupe) {
       result.dedupe = { ...result.dedupe, ...source.dedupe };
@@ -108,20 +95,6 @@ export namespace ConfigManager {
    * Validate a configuration
    */
   export function validate(config: AutonomousLoopConfig): boolean {
-    if (
-      typeof config.queue?.maxDepth !== "number" ||
-      config.queue.maxDepth <= 0
-    ) {
-      return false;
-    }
-
-    if (
-      !["new", "old", "summarize"].includes(config.queue.dropPolicy) ||
-      typeof config.queue.laneConcurrency !== "object"
-    ) {
-      return false;
-    }
-
     if (
       typeof config.dedupe?.windowMs !== "number" ||
       config.dedupe.windowMs <= 0 ||

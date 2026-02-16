@@ -59,13 +59,6 @@ export {
 export {
   Scheduler,
   CronParser,
-  EventQueue,
-  type QueueConfig,
-  type QueueItem,
-  type QueueMetrics as TriggerQueueMetrics,
-  type DequeueResult,
-  type DropPolicy,
-  type EventQueueInstance,
   FilesystemWatcher,
   type WatcherConfig,
   type Watcher,
