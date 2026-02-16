@@ -1,9 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-  RunSupervisor,
-  RunBudget,
-  RunState,
-} from "../../src/worker/policy/run-supervisor";
+import { RunSupervisor, RunBudget, RunState } from "../../src/worker/policy";
 
 describe("RunSupervisor", () => {
   describe("createState", () => {

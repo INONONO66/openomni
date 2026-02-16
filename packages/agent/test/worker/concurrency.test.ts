@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  ConcurrencyGate,
-  ConcurrencyConfig,
-} from "../../src/worker/policy/concurrency";
+import { ConcurrencyGate, ConcurrencyConfig } from "../../src/worker/policy";
 
 describe("ConcurrencyGate", () => {
   beforeEach(() => {

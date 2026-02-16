@@ -5,19 +5,19 @@ import {
   createAgentIdentity,
   type AgentProfile,
   type AgentIdentity,
-} from "../../src/agent/definition/profile";
+} from "../../src/agent/definitions";
 import { AgentRegistry } from "../../src/agent/registry/profile-store";
 import {
   AgentCapabilitiesSchema,
   PolicySpecSchema,
   type AgentCapabilities,
   type PolicySpec,
-} from "../../src/agent/definition/capabilities";
+} from "../../src/agent/definitions";
 import {
   AgentRuntimeSchema,
   createAgentRuntime,
   type AgentRuntime,
-} from "../../src/agent/definition/runtime";
+} from "../../src/agent/definitions";
 
 describe("AgentProfile", () => {
   describe("AgentProfileSchema", () => {

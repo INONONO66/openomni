@@ -1,8 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-  PermissionGate,
-  PermissionContext,
-} from "../../src/worker/policy/permission";
+import { PermissionGate, PermissionContext } from "../../src/worker/policy";
 
 describe("PermissionGate", () => {
   describe("evaluate", () => {

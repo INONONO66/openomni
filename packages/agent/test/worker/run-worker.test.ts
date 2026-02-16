@@ -9,8 +9,7 @@ import { Task } from "../../src/task/types";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
 import type { Sink } from "@openomni/protocol";
-import { Observability } from "../../src/worker/telemetry/observability";
-import { AuditLog } from "../../src/worker/telemetry/audit";
+import { Observability, AuditLog } from "../../src/worker/telemetry";
 import { DeadLetterQueue } from "../../src/worker/dlq";
 import { SummaryDelivery } from "../../src/worker/run/summary";
 

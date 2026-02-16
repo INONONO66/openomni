@@ -3,7 +3,7 @@ import type { Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { TaskStorage } from "../../src/task/storage";
-import { FileLock } from "../../src/execution/graph/file-lock";
+import { FileLock } from "../../src/execution/graph";
 import { ExecutionSupervisor } from "../../src/execution/execution-supervisor";
 import type {
   DispatchExecutionInput,

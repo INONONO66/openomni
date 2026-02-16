@@ -11,8 +11,7 @@ import { RunWorker } from "../../src/worker/run/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
 import { Session } from "@openomni/session";
-import { Observability } from "../../src/worker/telemetry/observability";
-import { AuditLog } from "../../src/worker/telemetry/audit";
+import { Observability, AuditLog } from "../../src/worker/telemetry";
 import { DeadLetterQueue } from "../../src/worker/dlq";
 import { SummaryDelivery } from "../../src/worker/run/summary";
 
