@@ -68,7 +68,7 @@ export {
   type WebhookConfig,
 } from "./trigger";
 
-// Loop domain
+// Dispatch domain
 export {
   EventEnvelope,
   NormalizedEvent,
@@ -79,6 +79,10 @@ export {
   RouterRule,
   RoutingDecision,
   Dispatcher,
+} from "./dispatch";
+
+// Loop domain
+export {
   ConcurrencyConfig,
   ConcurrencyGate,
   PermissionLevel,

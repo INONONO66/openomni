@@ -1,6 +1,6 @@
 import { Session } from "@openomni/session";
 import { SurfaceKey } from "@openomni/session";
-import { EventEnvelope } from "../loop";
+import { EventEnvelope } from "../dispatch";
 import { Message } from "@openomni/protocol";
 import { EventProjector, DefaultEventProjector } from "./event-projector";
 

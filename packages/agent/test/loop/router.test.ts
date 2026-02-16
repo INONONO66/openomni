@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { Router, RouterRule } from "../../src/loop/router";
-import { EventEnvelope } from "../../src/loop/envelope";
+import { Router, RouterRule, EventEnvelope } from "../../src/dispatch";
 
 function makeEnvelope(name: string, dedupeKey?: string): EventEnvelope {
   return {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { Dispatcher } from "../../src/loop/dispatcher";
+import { Dispatcher } from "../../src/dispatch/dispatcher";
 import { Task } from "../../src/task/types";
 
 describe("Dispatcher.evaluateCondition", () => {

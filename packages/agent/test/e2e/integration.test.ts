@@ -6,9 +6,7 @@ import { TaskStorage } from "../../src/task/storage";
 import { type Task } from "../../src/task/types";
 import { Scheduler } from "../../src/trigger/scheduler";
 import { FilesystemWatcher } from "../../src/trigger/watcher";
-import { Router } from "../../src/loop/router";
-import { Dispatcher } from "../../src/loop/dispatcher";
-import { Envelope } from "../../src/loop/envelope";
+import { Router, Dispatcher, Envelope } from "../../src/dispatch";
 import { RunWorker } from "../../src/loop/run-worker";
 
 const sleep = (ms: number) =>

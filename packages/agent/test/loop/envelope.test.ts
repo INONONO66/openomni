@@ -4,7 +4,7 @@ import {
   Envelope,
   ValidationError,
   EventEnvelope,
-} from "../../src/loop/envelope";
+} from "../../src/dispatch/envelope";
 
 describe("Envelope Functions", () => {
   describe("normalize", () => {

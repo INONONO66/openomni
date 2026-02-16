@@ -1,18 +1,6 @@
 // Loop module - Phase 2 implementation
 // Event routing, dispatching, and concurrency control
 
-export {
-  type EventEnvelope,
-  type NormalizedEvent,
-  ValidationError,
-  normalize,
-  Envelope,
-} from "./envelope";
-
-export { Router, type RouterRule, type RoutingDecision } from "./router";
-
-export { Dispatcher } from "./dispatcher";
-
 export { type ConcurrencyConfig, ConcurrencyGate } from "./concurrency";
 
 export {

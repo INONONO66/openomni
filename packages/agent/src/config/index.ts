@@ -1,4 +1,4 @@
-import type { RouterRule } from "../loop";
+import type { RouterRule } from "../dispatch";
 import type { Run } from "@openomni/protocol";
 
 export interface DedupePolicy {

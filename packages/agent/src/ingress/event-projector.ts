@@ -1,5 +1,5 @@
 import { Session } from "@openomni/session";
-import { EventEnvelope } from "../loop";
+import { EventEnvelope } from "../dispatch";
 import { Message } from "@openomni/protocol";
 
 // ============================================================
