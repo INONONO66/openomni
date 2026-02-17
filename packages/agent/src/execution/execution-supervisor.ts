@@ -76,6 +76,10 @@ export namespace ExecutionSupervisor {
 
       const selectedSteps = select(config.plan, stepOutcomes, decision);
 
+      if (selectedSteps.length === 0) {
+        break;
+      }
+
       // ┌─────────────────────────────────────────────────────────┐
       // │ WORKER INVOCATION BOUNDARY                              │
       // │ Everything below this point is RunWorker's              │
