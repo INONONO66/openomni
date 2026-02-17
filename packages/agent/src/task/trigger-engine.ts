@@ -80,6 +80,19 @@ function recordRateLimitHit(taskId: string, now: number): void {
   rateLimitTracking.set(taskId, entry);
 }
 
+function stableStringify(obj: unknown): string {
+  return JSON.stringify(obj, (_, value) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.keys(value)
+          .sort()
+          .reduce((sorted: Record<string, unknown>, key) => {
+            sorted[key] = (value as Record<string, unknown>)[key];
+            return sorted;
+          }, {})
+      : value,
+  );
+}
+
 function generateIdempotencyKey(
   taskId: string,
   signal: Task.TriggerSignal,
@@ -100,23 +113,7 @@ function generateIdempotencyKey(
     case "event": {
       const naturalKey = payload
         ? createHash("sha256")
-            .update(
-              JSON.stringify(
-                typeof payload === "object" &&
-                  payload !== null &&
-                  !Array.isArray(payload)
-                  ? Object.keys(payload)
-                      .sort()
-                      .reduce(
-                        (acc, key) => {
-                          acc[key] = (payload as Record<string, unknown>)[key];
-                          return acc;
-                        },
-                        {} as Record<string, unknown>,
-                      )
-                  : payload,
-              ),
-            )
+            .update(stableStringify(payload))
             .digest("hex")
             .slice(0, 16)
         : "no-payload";
