@@ -2,9 +2,8 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { FileAgentRegistryStore } from "../../src/agent/registry/file-registry-storage";
-import type { AgentProfile } from "../../src/agent/definitions";
-import { AgentRegistry } from "../../src/agent/registry/profile-store";
+import { FileAgentRegistryStore, AgentRegistry } from "../../src/agent";
+import type { AgentProfile } from "../../src/agent";
 
 function makeProfile(id: string, name?: string): AgentProfile {
   return { id, name: name ?? `Agent ${id}` };

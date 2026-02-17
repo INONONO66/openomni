@@ -10,6 +10,7 @@ export type TaskRun = Task.Run;
 export const TriggerSignal = Task.TriggerSignal;
 /** @deprecated Use Task.TriggerSignal */
 export type TriggerSignal = Task.TriggerSignal;
+/** @deprecated Use TaskStatusManager */
 export { TaskStatusManager, TaskStateMachine } from "./lifecycle";
 export { CheckpointManager, type Checkpoint } from "./lifecycle";
 export {
