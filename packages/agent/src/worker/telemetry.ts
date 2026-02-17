@@ -175,6 +175,7 @@ export namespace Observability {
       processedCount: 0,
     };
     metricsStore.runs.clear();
+    AuditLog.clear();
   }
 }
 
@@ -226,6 +227,13 @@ export namespace AuditLog {
    */
   export function getEntries(runId: string): AuditEntry[] {
     return entries.filter((entry) => entry.runId === runId);
+  }
+
+  /**
+   * Clears all audit log entries (useful for testing)
+   */
+  export function clear(): void {
+    entries.length = 0;
   }
 
   /**
