@@ -203,7 +203,6 @@ import { ExecutionSupervisor } from "../execution/graph";
 - **loop/ directory removed** — All functionality redistributed to domain-specific modules (dispatch/, worker/, execution/, conversation/). Do NOT import from `loop/` — it no longer exists.
 - **Sub-domain imports forbidden** — Never import directly from sub-domains like `worker/run`, `execution/graph`, `agent/registry`, `task/lifecycle`, `task/storage`. Always import through domain barrel (e.g., `from "../worker"`, `from "../execution"`). Merged files (definitions.ts, discovery.ts, policy.ts, telemetry.ts, execution-review.ts) are internal to their domains.
 - **Orchestrator.run() REMOVED** — `orchestration.ts` has been deleted. Use `RunWorker.run()` directly for all execution. The compatibility facade no longer exists.
-- QueueMetrics name conflict between `trigger/` and `worker/telemetry.ts` — re-exported with aliases (`TriggerQueueMetrics`, `WorkerQueueMetrics`) in index.ts.
 - `require()` was used in `summary.ts` at one point — fixed. Keep ESM imports only.
 - Do NOT reference `graph.ts` or `routing.ts` — these were removed in Phase 1 migration to Dynamic Supervisor.
 - **Deleted files** — Do NOT import from: `config.ts` (use `config/index.ts`), `conversation/handler.ts` (use `conversation/index.ts`), `tools/schemas.ts` (schemas co-located with tools), `ingress/interfaces.ts` (interfaces co-located with implementations).
