@@ -4,6 +4,7 @@ import { Session } from "@openomni/session";
 interface ToolPartRef {
   messageID: string;
   partID: string;
+  tool: string;
   input: Record<string, unknown>;
   startedAt: number;
 }
@@ -93,6 +94,7 @@ export function createSessionSink(sessionID: string): Sink {
           toolRefs.set(normalizedPart.callID, {
             messageID: normalizedInfo.id,
             partID: normalizedPart.id,
+            tool: normalizedPart.tool,
             input: normalizedPart.state.input,
             startedAt,
           });
@@ -124,6 +126,7 @@ export function createSessionSink(sessionID: string): Sink {
       toolRefs.set(call.id, {
         messageID,
         partID: toolPart.id,
+        tool: call.tool,
         input: call.input,
         startedAt: Date.now(),
       });
@@ -137,6 +140,7 @@ export function createSessionSink(sessionID: string): Sink {
       const startedAt = ref?.startedAt ?? Date.now();
       const completedAt = Date.now();
 
+      const tool = ref?.tool ?? "unknown";
       const toolPart: Message.ToolPart = result.isError
         ? {
             id: partID,
@@ -144,7 +148,7 @@ export function createSessionSink(sessionID: string): Sink {
             messageID,
             type: "tool",
             callID: result.toolCallId,
-            tool: "unknown",
+            tool,
             state: {
               status: "error",
               input,
@@ -161,7 +165,7 @@ export function createSessionSink(sessionID: string): Sink {
             messageID,
             type: "tool",
             callID: result.toolCallId,
-            tool: "unknown",
+            tool,
             state: {
               status: "completed",
               input,
@@ -175,11 +179,7 @@ export function createSessionSink(sessionID: string): Sink {
             },
           };
 
-      if (ref) {
-        Session.addPart(messageID, toolPart);
-      } else {
-        Session.addPart(messageID, toolPart);
-      }
+      Session.addPart(messageID, toolPart);
 
       toolRefs.delete(result.toolCallId);
     },
