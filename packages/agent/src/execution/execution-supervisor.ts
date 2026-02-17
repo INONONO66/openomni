@@ -90,18 +90,30 @@ export namespace ExecutionSupervisor {
       stepOutcomes.push(...outcomes);
     }
 
-    const allSucceeded = stepOutcomes.every((o) => o.success);
+    const completedStepIds = new Set(stepOutcomes.map((o) => o.stepId));
+    const unexecutedSteps = config.plan.steps.filter(
+      (s) => !completedStepIds.has(s.stepId),
+    );
+    const allStepsExecuted = unexecutedSteps.length === 0;
+    const allSucceeded =
+      allStepsExecuted && stepOutcomes.every((o) => o.success);
+
+    const errors: string[] = stepOutcomes
+      .filter((o) => !o.success)
+      .map((o) => o.error)
+      .filter((e): e is string => !!e);
+
+    if (!allStepsExecuted) {
+      errors.push(
+        `Unexecuted steps (unsatisfiable dependencies): ${unexecutedSteps.map((s) => s.stepId).join(", ")}`,
+      );
+    }
 
     return {
       success: allSucceeded,
       summary:
         stepOutcomes.map((o) => o.summary).join("\n") || "No work executed.",
-      error: allSucceeded
-        ? undefined
-        : stepOutcomes
-            .filter((o) => !o.success)
-            .map((o) => o.error)
-            .join("; "),
+      error: errors.length > 0 ? errors.join("; ") : undefined,
       terminalDecision: "finish",
       stepOutcomes,
     };
