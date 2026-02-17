@@ -51,6 +51,10 @@ export namespace BuiltinAgentRegistry {
    * @throws Error if agent with same name already exists
    */
   export function define(definition: AgentDefinition): AgentDefinition {
+    if (!initialized) {
+      initializeBuiltins();
+    }
+
     const validated = AgentDefinitionSchema.parse(definition);
 
     if (registry.has(validated.name)) {
