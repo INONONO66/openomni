@@ -108,7 +108,13 @@ export namespace ConversationHandler {
       "lookup",
       "check",
     ];
-    if (questionKeywords.some((keyword) => intentLower.includes(keyword))) {
+    if (
+      questionKeywords.some((keyword) =>
+        keyword === "?"
+          ? intentLower.includes(keyword)
+          : new RegExp(`\\b${keyword}\\b`).test(intentLower),
+      )
+    ) {
       return {
         path: "inline",
         reason: "Question or lookup",

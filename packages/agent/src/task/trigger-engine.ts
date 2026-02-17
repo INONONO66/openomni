@@ -100,7 +100,23 @@ function generateIdempotencyKey(
     case "event": {
       const naturalKey = payload
         ? createHash("sha256")
-            .update(JSON.stringify(payload))
+            .update(
+              JSON.stringify(
+                typeof payload === "object" &&
+                  payload !== null &&
+                  !Array.isArray(payload)
+                  ? Object.keys(payload)
+                      .sort()
+                      .reduce(
+                        (acc, key) => {
+                          acc[key] = (payload as Record<string, unknown>)[key];
+                          return acc;
+                        },
+                        {} as Record<string, unknown>,
+                      )
+                  : payload,
+              ),
+            )
             .digest("hex")
             .slice(0, 16)
         : "no-payload";
