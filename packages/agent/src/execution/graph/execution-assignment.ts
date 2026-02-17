@@ -391,7 +391,7 @@ async function resolveWorkerRuntimeForTaskInternal(
     const systemPrompt =
       typeof resolved.input.system === "string" &&
       resolved.input.system.trim().length > 0
-        ? resolved.input.system
+        ? resolved.input.system.trim()
         : agent.systemPrompt;
 
     return {
