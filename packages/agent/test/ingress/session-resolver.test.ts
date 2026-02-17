@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { SessionResolver } from "../../src/ingress/session-resolver";
 import { Session } from "@openomni/session";
 import { SurfaceKey } from "@openomni/session";
-import { Envelope } from "../../src/loop/envelope";
+import { Envelope } from "../../src/dispatch/envelope";
 
 describe("SessionResolver", () => {
   beforeEach(() => {

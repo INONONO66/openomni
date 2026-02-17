@@ -3,7 +3,7 @@ import {
   EventProjector,
   DefaultEventProjector,
 } from "../../src/ingress/event-projector";
-import { Envelope } from "../../src/loop/envelope";
+import { Envelope } from "../../src/dispatch/envelope";
 import { Session } from "@openomni/session";
 import { Message } from "@openomni/protocol";
 

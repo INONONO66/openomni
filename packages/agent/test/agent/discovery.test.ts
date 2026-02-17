@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { join } from "node:path";
 import { AgentDiscovery, parseFrontmatter } from "../../src/agent/discovery";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 
 const FIXTURES_DIR = join(import.meta.dir, "../fixtures/agents");
 

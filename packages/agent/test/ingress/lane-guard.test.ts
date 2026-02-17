@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { DefaultRunPlanner } from "../../src/ingress/engine";
-import type { EventEnvelope } from "../../src/loop/envelope";
+import type { EventEnvelope } from "../../src/dispatch/envelope";
 import { Session } from "@openomni/session";
 import {
   CONTROL_EVENT_KINDS,

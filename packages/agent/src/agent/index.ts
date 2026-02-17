@@ -1,44 +1,55 @@
+// Agent domain — identity, registry, discovery, messaging
+
+// From definitions.ts
 export {
   AgentProfileSchema,
   type AgentProfile,
   AgentIdentitySchema,
   type AgentIdentity,
+  AgentStatusSchema,
+  type AgentStatus,
   AgentCapabilitiesSchema,
   type AgentCapabilities,
   DataScopeSchema,
   type DataScope,
   PolicySpecSchema,
   type PolicySpec,
-  AgentStatusSchema,
-  type AgentStatus,
   AgentRuntimeSchema,
   type AgentRuntime,
+  createAgentIdentity,
+  createAgentRuntime,
+} from "./definitions";
+
+// From registry/profile-store.ts
+export {
   AgentRegistry,
   InMemoryAgentRegistryStore,
   type AgentRegistryStore,
-  createAgentIdentity,
-  createAgentRuntime,
-} from "./profile";
+} from "./registry/profile-store";
 
-export { FileAgentRegistryStore } from "./file-registry-storage";
-
-export {
-  AgentMessenger,
-  MessageEnvelope,
-  DeliveryOptions,
-  MessagingError,
-  type AllowPattern,
-} from "./communication";
-
+// From registry/registry.ts
 export {
   BuiltinAgentRegistry,
   AgentDefinitionSchema,
   type AgentDefinition,
-} from "./registry";
+} from "./registry/registry";
 
+// From registry/file-registry-storage.ts
+export { FileAgentRegistryStore } from "./registry/file-registry-storage";
+
+// From discovery.ts
 export {
-  AgentDiscovery,
   parseFrontmatter,
+  AgentDiscovery,
   type AgentLoadResult,
   type AgentDiscoveryOptions,
 } from "./discovery";
+
+// From communication.ts
+export {
+  AgentMessenger,
+  type MessageEnvelope,
+  type DeliveryOptions,
+  MessagingError,
+  type AllowPattern,
+} from "./communication";

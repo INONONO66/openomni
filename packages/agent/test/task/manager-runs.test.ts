@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import type { Task, TaskRun, TriggerSignal } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 describe("TaskManager - Run Management APIs", () => {
   beforeEach(() => {
@@ -17,7 +17,9 @@ describe("TaskManager - Run Management APIs", () => {
     });
   }
 
-  function createSignal(overrides: Partial<TriggerSignal> = {}): TriggerSignal {
+  function createSignal(
+    overrides: Partial<Task.TriggerSignal> = {},
+  ): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",
@@ -28,7 +30,7 @@ describe("TaskManager - Run Management APIs", () => {
 
   async function createRun(
     taskId: string,
-    overrides: Partial<TriggerSignal> = {},
+    overrides: Partial<Task.TriggerSignal> = {},
   ): Promise<string> {
     const result = await TaskManager.trigger(taskId, createSignal(overrides));
     if ("runId" in result) {
@@ -155,7 +157,7 @@ describe("TaskManager - Run Management APIs", () => {
       TaskManager.setRunStatus(run1, "running");
       TaskManager.setRunStatus(run2, "done");
 
-      const statusArray: Array<TaskRun["status"]> = ["running", "done"];
+      const statusArray: Array<Task.Run["status"]> = ["running", "done"];
       const runs = TaskManager.listRunsByStatus(statusArray);
       expect(runs.length).toBe(2);
       expect(runs.map((r) => r.runId)).toContain(run1);

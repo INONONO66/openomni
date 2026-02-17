@@ -1,5 +1,5 @@
-import { Task } from "../task/types";
-import { IngressEngine, type InboundEvent } from "../ingress/engine";
+import { Task } from "../task";
+import { IngressEngine, type InboundEvent } from "../ingress";
 import { randomUUID } from "crypto";
 
 interface ScheduledTrigger {

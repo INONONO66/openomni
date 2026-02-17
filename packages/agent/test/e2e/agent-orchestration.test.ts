@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
 import { IngressEngine } from "../../src/ingress/engine";
 import type {
   DeliveryAdapter,
@@ -13,11 +13,10 @@ import type { RunExecutor } from "../../src/ingress/run-executor";
 import {
   RunWorker,
   type OrchestratorRunInput,
-} from "../../src/loop/run-worker";
-import { RunWorker } from "../../src/loop/run-worker";
+} from "../../src/worker/run/run-worker";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 import { Subagent, type SubagentContext } from "../../src/tools/subagent";
 import { randomUUID } from "crypto";
 
@@ -100,7 +99,7 @@ class TestRunExecutor implements RunExecutor {
   }
 }
 
-const RUN_STATUSES: TaskRun["status"][] = [
+const RUN_STATUSES: Task.Run["status"][] = [
   "scheduled",
   "running",
   "blocked",
@@ -109,7 +108,7 @@ const RUN_STATUSES: TaskRun["status"][] = [
   "cancelled",
 ];
 
-function listAllRuns(): TaskRun[] {
+function listAllRuns(): Task.Run[] {
   return TaskStorage.getAdapter().run.listByStatus(RUN_STATUSES);
 }
 

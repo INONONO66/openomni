@@ -1,23 +1,3 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, extname } from "node:path";
-import {
-  AgentDefinitionSchema,
-  BuiltinAgentRegistry,
-  type AgentDefinition,
-} from "./registry";
-
-export interface AgentLoadResult {
-  file: string;
-  success: boolean;
-  agent?: AgentDefinition;
-  error?: string;
-}
-
-export interface AgentDiscoveryOptions {
-  allowOverride?: boolean;
-  strict?: boolean;
-}
-
 /**
  * Extracts YAML frontmatter (between `---` delimiters) and markdown body.
  * Supports: scalars, booleans, numbers, inline arrays `[a, b]`,
@@ -155,6 +135,26 @@ function parseScalar(raw: string): unknown {
   if (raw !== "" && !isNaN(num)) return num;
 
   return raw;
+}
+
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, extname } from "node:path";
+import {
+  AgentDefinitionSchema,
+  BuiltinAgentRegistry,
+  type AgentDefinition,
+} from "./registry/registry";
+
+export interface AgentLoadResult {
+  file: string;
+  success: boolean;
+  agent?: AgentDefinition;
+  error?: string;
+}
+
+export interface AgentDiscoveryOptions {
+  allowOverride?: boolean;
+  strict?: boolean;
 }
 
 /**

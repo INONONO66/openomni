@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Session } from "@openomni/session";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import { BuiltinAgentRegistry } from "../../src/agent/registry";
-import { FileLock } from "../../src/loop/file-lock";
-import { RunWorker } from "../../src/loop/run-worker";
-import type { OrchestratorRunInput } from "../../src/loop/run-worker";
+import { BuiltinAgentRegistry } from "../../src/agent/registry/registry";
+import { FileLock } from "../../src/execution/graph";
+import { RunWorker } from "../../src/worker/run/run-worker";
+import type { OrchestratorRunInput } from "../../src/worker/run/run-worker";
 import type { Sink, Tool } from "@openomni/protocol";
-import type { Task, TaskRun } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
-const RUN_STATUSES: TaskRun["status"][] = [
+const RUN_STATUSES: Task.Run["status"][] = [
   "scheduled",
   "running",
   "blocked",
@@ -235,8 +235,7 @@ describe("Supervisor/Worker split boundary", () => {
 
   describe("EvidenceBundle required fields validation", () => {
     it("ConversationSupervisor result types have required fields", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const config = {
         conversationSessionId: "session-1",
@@ -265,7 +264,7 @@ describe("Supervisor/Worker split boundary", () => {
 
     it("ExecutionSupervisor result has required fields", async () => {
       const { ExecutionSupervisor } =
-        await import("../../src/loop/execution-supervisor");
+        await import("../../src/execution/execution-supervisor");
 
       const result = await ExecutionSupervisor.run({
         history: { summary: "test", constraints: [] },
@@ -295,8 +294,7 @@ describe("Supervisor/Worker split boundary", () => {
     });
 
     it("ConversationSupervisor.createFork produces valid fork structure", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const fork = ConversationSupervisor.createFork(
         "session-1",
@@ -326,8 +324,7 @@ describe("Supervisor/Worker split boundary", () => {
     });
 
     it("ConversationSupervisor.requiresApproval returns true for plans with work items", async () => {
-      const { ConversationSupervisor } =
-        await import("../../src/loop/conversation-supervisor");
+      const { ConversationSupervisor } = await import("../../src/conversation");
 
       const plan = {
         planId: "plan-1",

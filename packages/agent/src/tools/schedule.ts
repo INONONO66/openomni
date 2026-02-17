@@ -1,9 +1,32 @@
-import { ScheduleInput } from "./schemas";
-import { TaskManager } from "../task/manager";
-import { Scheduler } from "../trigger/scheduler";
-import { Task } from "../task/types";
+import { z } from "zod";
+import { TaskManager, Task } from "../task";
+import { Scheduler } from "../trigger";
 import type { Tool } from "@openomni/protocol";
 import { randomUUID } from "crypto";
+
+export const ScheduleInput = z.object({
+  description: z.string().describe("Task description"),
+  dueAt: z.string().datetime().describe("ISO 8601 datetime for execution"),
+  estimatedRuntimeMs: z
+    .number()
+    .positive()
+    .describe("Estimated runtime in milliseconds"),
+  recurring: z
+    .object({
+      type: z.enum(["cron", "interval", "once"]).describe("Recurrence type"),
+      expression: z
+        .string()
+        .optional()
+        .describe("Cron expression (for cron type)"),
+      intervalMs: z
+        .number()
+        .optional()
+        .describe("Interval in milliseconds (for interval type)"),
+    })
+    .optional()
+    .describe("Recurrence configuration (optional)"),
+});
+export type ScheduleInput = z.infer<typeof ScheduleInput>;
 
 /**
  * Schedule tool — creates a task scheduled for future execution

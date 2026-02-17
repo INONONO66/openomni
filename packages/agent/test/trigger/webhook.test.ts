@@ -5,7 +5,7 @@ import {
   SimpleWebhookWatcher,
   type WebhookConfig,
 } from "../../src/trigger/webhook";
-import { EventEnvelope } from "../../src/loop/envelope";
+import { EventEnvelope } from "../../src/dispatch/envelope";
 
 describe("WebhookWatcher", () => {
   describe("SimpleWebhookWatcher", () => {

@@ -1,5 +1,6 @@
+import { z } from "zod";
 import type { Tool } from "@openomni/protocol";
-import { IngressEngine } from "../ingress/engine";
+import { IngressEngine } from "../ingress";
 import {
   ExecutionSupervisor,
   type DispatchContext,
@@ -8,10 +9,29 @@ import {
   type DispatchReviewDecision,
   type DispatchReviewInput,
   type DispatchTask,
-} from "../loop/execution-supervisor";
-import { DispatchInput } from "./schemas";
+} from "../execution";
 
-export type { DispatchContext, DispatchReviewDecision, DispatchReviewInput };
+export const DispatchInput = z.object({
+  objective: z.string().describe("Overall goal for task dispatch"),
+  tasks: z
+    .array(
+      z.object({
+        id: z.string().describe("Unique task identifier"),
+        description: z.string().describe("Task description"),
+        agentType: z.string().describe("Agent type to execute task"),
+        dependencies: z
+          .array(z.string())
+          .default([])
+          .describe("Task IDs this task depends on"),
+        fileScope: z
+          .array(z.string())
+          .default([])
+          .describe("Files this task operates on"),
+      }),
+    )
+    .describe("Array of tasks to dispatch"),
+});
+export type DispatchInput = z.infer<typeof DispatchInput>;
 
 export namespace Dispatch {
   export async function execute(

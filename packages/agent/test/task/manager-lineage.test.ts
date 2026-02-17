@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { TaskManager } from "../../src/task/manager";
 import { TaskStorage } from "../../src/task/storage";
-import type { Task, TriggerSignal } from "../../src/task/types";
+import type { Task } from "../../src/task/types";
 
 describe("TaskManager - Spawn Lineage Tracking", () => {
   beforeEach(() => {
@@ -17,7 +17,9 @@ describe("TaskManager - Spawn Lineage Tracking", () => {
     });
   }
 
-  function createSignal(overrides: Partial<TriggerSignal> = {}): TriggerSignal {
+  function createSignal(
+    overrides: Partial<Task.TriggerSignal> = {},
+  ): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",
@@ -28,7 +30,7 @@ describe("TaskManager - Spawn Lineage Tracking", () => {
 
   async function createRun(
     taskId: string,
-    overrides: Partial<TriggerSignal> = {},
+    overrides: Partial<Task.TriggerSignal> = {},
   ): Promise<string> {
     const result = await TaskManager.trigger(taskId, createSignal(overrides));
     if ("runId" in result) {
