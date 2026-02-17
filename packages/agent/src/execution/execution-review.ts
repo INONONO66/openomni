@@ -344,7 +344,8 @@ function defaultReviewDecision(summary: string): DispatchReviewDecision {
   if (normalized.startsWith("reject:")) {
     return {
       decision: "reject",
-      feedback: normalized.slice("reject:".length).trim() || "Result rejected",
+      feedback:
+        summary.trim().slice("reject:".length).trim() || "Result rejected",
     };
   }
 

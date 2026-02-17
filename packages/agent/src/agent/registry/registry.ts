@@ -126,8 +126,8 @@ export namespace BuiltinAgentRegistry {
    * Calling this after clear() will re-populate the registry
    */
   export function initializeBuiltins(): void {
-    initializeBuiltinsInternal();
     initialized = true;
+    initializeBuiltinsInternal();
   }
 
   function initializeBuiltinsInternal(): void {
