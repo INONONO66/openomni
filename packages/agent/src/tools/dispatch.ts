@@ -33,8 +33,6 @@ export const DispatchInput = z.object({
 });
 export type DispatchInput = z.infer<typeof DispatchInput>;
 
-export type { DispatchContext, DispatchReviewDecision, DispatchReviewInput };
-
 export namespace Dispatch {
   export async function execute(
     toolCallId: string,
