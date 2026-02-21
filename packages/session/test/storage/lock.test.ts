@@ -46,10 +46,10 @@ describe("FileLock.acquire", () => {
     FileLock.release(lockPath);
   });
 
-  test("treats lock with missing info.json as active (not stale)", () => {
+  test("treats fresh lock with missing info.json as active (mtime is recent)", () => {
     mkdirSync(lockPath);
     // No info.json — could be a freshly acquired lock between mkdirSync and writeLockInfo.
-    // Must NOT treat as stale to avoid race condition.
+    // Directory mtime is recent, so it should NOT be considered stale.
     expect(() =>
       FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
     ).toThrow(/timeout/i);
@@ -57,15 +57,25 @@ describe("FileLock.acquire", () => {
     rmSync(lockPath, { recursive: true, force: true });
   });
 
-  test("treats lock with invalid info.json as active (not stale)", () => {
+  test("treats lock with invalid info.json as active when mtime is recent", () => {
     mkdirSync(lockPath);
     writeFileSync(join(lockPath, "info.json"), "NOT_JSON");
-    // Unreadable info.json — safer to assume lock is active.
+    // Unreadable info.json, but directory mtime is recent → not stale.
     expect(() =>
       FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
     ).toThrow(/timeout/i);
 
     rmSync(lockPath, { recursive: true, force: true });
+  });
+
+  test("reclaims crash-orphaned lock with missing info.json after staleMs", () => {
+    mkdirSync(lockPath);
+    // Simulate a crash-orphaned lock: no info.json, staleMs=0 so any age is stale.
+    // The directory mtime is "now", but with staleMs=0 even that is considered stale.
+    FileLock.acquire(lockPath, { staleMs: 0 });
+    const info = JSON.parse(readFileSync(join(lockPath, "info.json"), "utf-8"));
+    expect(info.pid).toBe(process.pid);
+    FileLock.release(lockPath);
   });
 
   test("throws on timeout when lock is held by active process", () => {

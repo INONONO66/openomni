@@ -2,6 +2,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  statSync,
   existsSync,
   rmSync,
 } from "node:fs";
@@ -44,11 +45,18 @@ function readLockInfo(lockPath: string): LockInfo | null {
 
 function isStale(lockPath: string, staleMs: number): boolean {
   const info = readLockInfo(lockPath);
-  // If info.json is missing or unreadable, treat the lock as active (not stale).
-  // Returning true here would cause a race: between mkdirSync and writeLockInfo,
-  // a concurrent process could see the lock as stale and force-remove it.
-  if (!info) return false;
-  return info.timestamp + staleMs < Date.now();
+  if (info) {
+    return info.timestamp + staleMs < Date.now();
+  }
+  // info.json missing or unreadable — fall back to directory mtime.
+  // A freshly-created lock dir has a recent mtime (not stale → no race).
+  // A crash-orphaned lock dir will age past staleMs (stale → self-healing).
+  try {
+    const mtime = statSync(lockPath).mtimeMs;
+    return mtime + staleMs < Date.now();
+  } catch {
+    return false;
+  }
 }
 
 function forceRemoveLock(lockPath: string): void {
