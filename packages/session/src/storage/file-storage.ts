@@ -12,17 +12,23 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Message } from "@openomni/protocol";
 import { SessionInfo } from "../session/info";
+import { FileLock } from "./lock";
 import { Storage } from "./storage";
 
 export class FileStorageAdapter implements Storage.Adapter {
   private readonly sessionsDir: string;
   private readonly messagesDir: string;
   private readonly partsDir: string;
+  private readonly lockPath?: string;
 
-  constructor(private readonly baseDir: string) {
+  constructor(
+    private readonly baseDir: string,
+    lockDir?: string,
+  ) {
     this.sessionsDir = join(baseDir, "sessions");
     this.messagesDir = join(baseDir, "messages");
     this.partsDir = join(baseDir, "parts");
+    this.lockPath = lockDir ? join(lockDir, "write.lock") : undefined;
 
     mkdirSync(this.sessionsDir, { recursive: true });
     mkdirSync(this.messagesDir, { recursive: true });
@@ -30,22 +36,51 @@ export class FileStorageAdapter implements Storage.Adapter {
   }
 
   private atomicWrite(filePath: string, data: unknown): void {
-    const dir = join(filePath, "..");
-    mkdirSync(dir, { recursive: true });
-    const tmpPath = `${filePath}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-      renameSync(tmpPath, filePath);
-    } catch (err) {
+    const write = (): void => {
+      const dir = join(filePath, "..");
+      mkdirSync(dir, { recursive: true });
+      const tmpPath = `${filePath}.${randomUUID()}.tmp`;
       try {
-        unlinkSync(tmpPath);
-      } catch (_cleanupErr: unknown) {
-        // tmp file cleanup is best-effort; original write error is rethrown below
+        // Note: fsync is intentionally omitted - this is a dev tool where crash safety is acceptable
+        writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+        renameSync(tmpPath, filePath);
+      } catch (err) {
+        try {
+          unlinkSync(tmpPath);
+        } catch (_cleanupErr: unknown) {
+          // tmp file cleanup is best-effort; original write error is rethrown below
+        }
+        throw new Error(
+          `FileStorageAdapter: failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-      throw new Error(
-        `FileStorageAdapter: failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-      );
+    };
+
+    if (this.lockPath) {
+      FileLock.withLock(this.lockPath, write);
+      return;
     }
+
+    write();
+  }
+
+  private getPartStartTime(part: Message.Part): number | undefined {
+    if (
+      (part.type === "text" || part.type === "reasoning") &&
+      part.time?.start !== undefined
+    ) {
+      return part.time.start;
+    }
+
+    if (
+      part.type === "tool" &&
+      part.state.status !== "pending" &&
+      part.state.time?.start !== undefined
+    ) {
+      return part.state.time.start;
+    }
+
+    return undefined;
   }
 
   private readJSON<T>(filePath: string): T | undefined {
@@ -146,6 +181,9 @@ export class FileStorageAdapter implements Storage.Adapter {
         const msg = this.readJSON<Message.Info>(join(dir, file));
         if (msg) results.push(msg);
       }
+      results.sort(
+        (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id),
+      );
       return results;
     },
 
@@ -189,6 +227,19 @@ export class FileStorageAdapter implements Storage.Adapter {
         const pt = this.readJSON<Message.Part>(join(dir, file));
         if (pt) results.push(pt);
       }
+      results.sort((a, b) => {
+        const aStart = this.getPartStartTime(a);
+        const bStart = this.getPartStartTime(b);
+
+        if (aStart !== undefined && bStart !== undefined) {
+          return aStart - bStart || a.id.localeCompare(b.id);
+        }
+
+        if (aStart !== undefined) return -1;
+        if (bStart !== undefined) return 1;
+
+        return a.id.localeCompare(b.id);
+      });
       return results;
     },
 
