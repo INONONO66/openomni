@@ -196,6 +196,7 @@ describe("Session.addMessage metadata hooks", () => {
       const after = Date.now();
 
       const updated = Session.get(session.id)!;
+      expect(updated.time.updated).toBeGreaterThanOrEqual(originalUpdated);
       expect(updated.time.updated).toBeGreaterThanOrEqual(before);
       expect(updated.time.updated).toBeLessThanOrEqual(after);
     });

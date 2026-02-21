@@ -173,14 +173,13 @@ export namespace Session {
         updated: Date.now(),
       },
       ...(message.role === "assistant" && {
-        tokens: {
-          input: (session.tokens?.input ?? 0) + message.tokens.input,
-          output: (session.tokens?.output ?? 0) + message.tokens.output,
-          total:
-            (session.tokens?.total ?? 0) +
-            message.tokens.input +
-            message.tokens.output,
-        },
+        tokens: (() => {
+          const input =
+            (session.tokens?.input ?? 0) + message.tokens.input;
+          const output =
+            (session.tokens?.output ?? 0) + message.tokens.output;
+          return { input, output, total: input + output };
+        })(),
       }),
     };
 
