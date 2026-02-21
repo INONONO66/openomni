@@ -7,8 +7,8 @@ export {
   CachedStorageAdapter,
   ensureGitignore,
   initialize,
-  InitializeOptions,
 } from "./storage";
+export type { InitializeOptions } from "./storage";
 export { Session } from "./session";
 export { SessionStatus } from "./status";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
