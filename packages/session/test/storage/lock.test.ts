@@ -46,21 +46,26 @@ describe("FileLock.acquire", () => {
     FileLock.release(lockPath);
   });
 
-  test("overrides lock with missing info.json as stale", () => {
+  test("treats lock with missing info.json as active (not stale)", () => {
     mkdirSync(lockPath);
+    // No info.json — could be a freshly acquired lock between mkdirSync and writeLockInfo.
+    // Must NOT treat as stale to avoid race condition.
+    expect(() =>
+      FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
+    ).toThrow(/timeout/i);
 
-    FileLock.acquire(lockPath);
-    expect(existsSync(join(lockPath, "info.json"))).toBe(true);
-    FileLock.release(lockPath);
+    rmSync(lockPath, { recursive: true, force: true });
   });
 
-  test("overrides lock with invalid info.json as stale", () => {
+  test("treats lock with invalid info.json as active (not stale)", () => {
     mkdirSync(lockPath);
     writeFileSync(join(lockPath, "info.json"), "NOT_JSON");
+    // Unreadable info.json — safer to assume lock is active.
+    expect(() =>
+      FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
+    ).toThrow(/timeout/i);
 
-    FileLock.acquire(lockPath);
-    expect(existsSync(join(lockPath, "info.json"))).toBe(true);
-    FileLock.release(lockPath);
+    rmSync(lockPath, { recursive: true, force: true });
   });
 
   test("throws on timeout when lock is held by active process", () => {

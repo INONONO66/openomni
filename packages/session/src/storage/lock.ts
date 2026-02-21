@@ -44,7 +44,10 @@ function readLockInfo(lockPath: string): LockInfo | null {
 
 function isStale(lockPath: string, staleMs: number): boolean {
   const info = readLockInfo(lockPath);
-  if (!info) return true;
+  // If info.json is missing or unreadable, treat the lock as active (not stale).
+  // Returning true here would cause a race: between mkdirSync and writeLockInfo,
+  // a concurrent process could see the lock as stale and force-remove it.
+  if (!info) return false;
   return info.timestamp + staleMs < Date.now();
 }
 
