@@ -27,6 +27,17 @@ function makeUserMessage(sessionID: string, messageID: string): Message.Info {
   };
 }
 
+function makeUserMessageAt(
+  sessionID: string,
+  messageID: string,
+  created: number,
+): Message.Info {
+  return {
+    ...makeUserMessage(sessionID, messageID),
+    time: { created },
+  };
+}
+
 function makeTextPart(
   sessionID: string,
   messageID: string,
@@ -136,6 +147,31 @@ describe("FileStorageAdapter", () => {
     test("should return false when removing non-existent message", () => {
       expect(adapter.message.remove("s1", "nonexistent")).toBe(false);
     });
+
+    test("should list messages ordered by created time ascending", () => {
+      const messages: Message.Info[] = [
+        makeUserMessageAt("s1", "a-msg", 50),
+        makeUserMessageAt("s1", "b-msg", 40),
+        makeUserMessageAt("s1", "c-msg", 30),
+        makeUserMessageAt("s1", "d-msg", 20),
+        makeUserMessageAt("s1", "e-msg", 10),
+      ];
+
+      adapter.message.set("s1", messages[2]);
+      adapter.message.set("s1", messages[4]);
+      adapter.message.set("s1", messages[0]);
+      adapter.message.set("s1", messages[3]);
+      adapter.message.set("s1", messages[1]);
+
+      const listed = adapter.message.list("s1");
+      expect(listed.map((message) => message.id)).toEqual([
+        "e-msg",
+        "d-msg",
+        "c-msg",
+        "b-msg",
+        "a-msg",
+      ]);
+    });
   });
 
   describe("part", () => {
@@ -172,6 +208,89 @@ describe("FileStorageAdapter", () => {
 
     test("should return false when removing non-existent part", () => {
       expect(adapter.part.remove("m1", "nonexistent")).toBe(false);
+    });
+
+    test("should list parts by time start and fallback to stable id order", () => {
+      const parts: Message.Part[] = [
+        {
+          id: "x-tool-error-30",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "tool",
+          callID: "call-1",
+          tool: "tool-1",
+          state: {
+            status: "error",
+            input: {},
+            error: "failed",
+            time: { start: 30, end: 31 },
+          },
+        },
+        {
+          id: "z-tool-running-10",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "tool",
+          callID: "call-2",
+          tool: "tool-2",
+          state: {
+            status: "running",
+            input: {},
+            time: { start: 10 },
+          },
+        },
+        {
+          id: "y-text-20",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "text",
+          text: "text at 20",
+          time: { start: 20 },
+        },
+        {
+          id: "w-reasoning-20",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "reasoning",
+          text: "reasoning at 20",
+          time: { start: 20 },
+        },
+        {
+          id: "a-tool-pending",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "tool",
+          callID: "call-3",
+          tool: "tool-3",
+          state: {
+            status: "pending",
+            input: {},
+          },
+        },
+        {
+          id: "b-step-start",
+          sessionID: "s1",
+          messageID: "m1",
+          type: "step-start",
+        },
+      ];
+
+      adapter.part.set("m1", parts[0]);
+      adapter.part.set("m1", parts[5]);
+      adapter.part.set("m1", parts[2]);
+      adapter.part.set("m1", parts[4]);
+      adapter.part.set("m1", parts[1]);
+      adapter.part.set("m1", parts[3]);
+
+      const listed = adapter.part.list("m1");
+      expect(listed.map((part) => part.id)).toEqual([
+        "z-tool-running-10",
+        "w-reasoning-20",
+        "y-text-20",
+        "x-tool-error-30",
+        "a-tool-pending",
+        "b-step-start",
+      ]);
     });
   });
 

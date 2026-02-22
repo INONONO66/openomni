@@ -161,6 +161,30 @@ export namespace Session {
 
   export function addMessage(sessionID: string, message: Message.Info): void {
     Storage.getAdapter().message.set(sessionID, message);
+
+    const session = Storage.getAdapter().session.get(sessionID);
+    if (!session) return;
+
+    const updated: Info = {
+      ...session,
+      messageCount: (session.messageCount ?? 0) + 1,
+      time: {
+        ...session.time,
+        updated: Date.now(),
+      },
+      ...(message.role === "assistant" && {
+        tokens: (() => {
+          const input =
+            (session.tokens?.input ?? 0) + message.tokens.input;
+          const output =
+            (session.tokens?.output ?? 0) + message.tokens.output;
+          return { input, output, total: input + output };
+        })(),
+      }),
+    };
+
+    Storage.getAdapter().session.set(sessionID, updated);
+    Bus.publish(Event.Updated, { info: updated });
   }
 
   export function getMessages(sessionID: string): Message.Info[] {

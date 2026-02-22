@@ -1,5 +1,14 @@
 export { Bus, BusEvent } from "./bus";
-export { Storage, InMemoryStorage, FileStorageAdapter } from "./storage";
+export {
+  Storage,
+  InMemoryStorage,
+  FileStorageAdapter,
+  FileLock,
+  CachedStorageAdapter,
+  ensureGitignore,
+  initialize,
+} from "./storage";
+export type { InitializeOptions } from "./storage";
 export { Session } from "./session";
 export { SessionStatus } from "./status";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
