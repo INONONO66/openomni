@@ -1,2 +1,4 @@
 // @openomni/openomni — Orchestration package
-// Placeholder for future orchestration APIs
+
+// Re-export legacy modules
+export * from "./legacy";
