@@ -6,7 +6,7 @@
 
 ## OVERVIEW
 
-OpenOmni — multi-agent task orchestration framework for LLM-powered autonomous agents. TypeScript monorepo (Bun + Turborepo) with 4 packages and 1 CLI app.
+OpenOmni — multi-agent task orchestration framework for LLM-powered autonomous agents. TypeScript monorepo (Bun + Turborepo) with 5 packages and 1 CLI app.
 
 ## STRUCTURE
 
@@ -17,7 +17,8 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas: Message, Tool, Run, Sink, Events
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter, Compaction
 │   ├── llm/             # LLM abstraction: providers, OAuth, streaming, retry
-│   └── agent/           # Core: task lifecycle, orchestration loop, triggers, agent graph
+│   ├── agent/           # Pure ChatAgent primitive: stateless LLM + Tool ReAct loop
+│   └── openomni/        # Orchestration: legacy agent code (RunWorker, TaskManager, IngressEngine, etc.)
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -25,12 +26,14 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol  ←  session  ←  llm  ←  agent  ←  cli
+protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orchestration + legacy)  ←  cli
+    └──────────────────────┘              ↑
+    └─────────────────────────────────────┘
     └──────────────────────┘         ↑
     └────────────────────────────────┘
 ```
 
-`protocol` is the leaf — zero internal deps. `session` depends on `protocol`. `llm` depends on `protocol` + `session`. `agent` depends on all three. `cli` depends on all four.
+`protocol` is the leaf — zero internal deps. `session` depends on `protocol`. `llm` depends on `protocol` + `session`. `agent` (pure ChatAgent) depends on `protocol` + `llm`. `openomni` depends on all four. `cli` depends on all five.
 
 ## WHERE TO LOOK
 
@@ -43,10 +46,11 @@ protocol  ←  session  ←  llm  ←  agent  ←  cli
 | Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                                                |
 | Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                                                  |
 | Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                                              |
-| Agent profile/graph          | `packages/agent/src/agent/`                           | Graph validation, routing, messaging                                 |
-| Task lifecycle               | `packages/agent/src/task/`                            | State machine, manager, checkpoint, recovery                         |
-| Orchestration loop           | `packages/agent/src/loop/`                            | Envelope → Router → Dispatcher → Supervisor                          |
-| Triggers (cron/fs/webhook)   | `packages/agent/src/trigger/`                         | EventQueue + schedulers                                              |
+| ChatAgent (stateless ReAct) | `packages/agent/src/chat-agent.ts`                    | create(), run(), stream() stub                                       |
+| Agent profile/graph          | `packages/openomni/src/legacy/agent/`                 | Graph validation, routing, messaging                                 |
+| Task lifecycle               | `packages/openomni/src/legacy/task/`                  | State machine, manager, checkpoint, recovery                         |
+| Orchestration loop           | `packages/openomni/src/legacy/`                       | Envelope → Router → Dispatcher → Supervisor                          |
+| Triggers (cron/fs/webhook)   | `packages/openomni/src/legacy/trigger/`               | EventQueue + schedulers                                              |
 | CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                                           |
 
 ## CONVENTIONS
@@ -101,3 +105,5 @@ openomni agent --mode orchestrated   # full pipeline
 - No CI/CD workflows yet (`.github/workflows/` absent).
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
+- `packages/agent` is now a pure ChatAgent primitive — stateless, no session dependency. Use `@openomni/agent` for the ReAct loop.
+- `packages/openomni` contains all legacy orchestration code (moved as-is from packages/agent in Phase 1). Use `@openomni/openomni` for RunWorker, TaskManager, IngressEngine, etc.
