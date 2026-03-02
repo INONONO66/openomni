@@ -1,0 +1,23 @@
+{
+  "name": "@openomni/openomni",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "test": "bun test",
+    "test:ci": "bun test --preload ./test/force-exit.ts test/openomni"
+  },
+  "dependencies": {
+    "@openomni/agent": "workspace:*",
+    "@openomni/llm": "workspace:*",
+    "@openomni/session": "workspace:*",
+    "@openomni/protocol": "workspace:*",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
