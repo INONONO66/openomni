@@ -1,4 +1,4 @@
-import type { Message, Tool, Sink } from "@openomni/protocol";
+import type { Tool, Sink } from "@openomni/protocol";
 
 /**
  * Token usage statistics from LLM execution
@@ -38,7 +38,9 @@ export interface ChatAgentConfig {
  * Input to ChatAgent.run() or ChatAgent.stream()
  */
 export interface ChatAgentInput {
-  messages: Message.Info[];
+  messages: Array<
+    { role: "user"; content: string } | { role: "assistant"; content: string }
+  >;
   metadata?: Record<string, unknown>;
 }
 

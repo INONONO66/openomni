@@ -1,10 +1,30 @@
-import type { Sink } from "@openomni/protocol";
+import {
+  ModelsDev,
+  Provider,
+  run as llmRun,
+  type RunInput,
+} from "@openomni/llm";
+import type { Message, Sink, Tool } from "@openomni/protocol";
 import type {
   ChatAgentConfig,
   ChatAgentInput,
   AgentResult,
   AgentStep,
+  TokenUsage,
 } from "./types";
+import {
+  createBudgetState,
+  checkBudget,
+  recordTurn,
+  recordToolCall,
+} from "./budget";
+import {
+  DEFAULT_RETRY_POLICY,
+  calculateBackoffMs,
+  classifyRetryReason,
+  shouldRetry,
+  sleep,
+} from "./retry";
 
 /**
  * ChatAgent instance interface
@@ -12,6 +32,184 @@ import type {
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
   stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentStep>;
+}
+
+const noopSink: Sink = {
+  onMessage: () => {},
+  onToolCall: () => {},
+  onToolResult: () => {},
+  onSnapshot: () => {},
+};
+
+async function resolveProviderModel(model: {
+  provider: string;
+  id: string;
+}): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
+  const providerData = data[model.provider];
+
+  if (!providerData) {
+    throw new Error(`Provider not found: ${model.provider}`);
+  }
+
+  const rawModel = providerData.models?.[model.id];
+  if (!rawModel) {
+    throw new Error(
+      `Model not found: ${model.id} for provider ${model.provider}`,
+    );
+  }
+
+  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+}
+
+function createUserMessage(content: string): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "chat-agent";
+  const now = Date.now();
+  const info: Message.UserMessage = {
+    id,
+    sessionID,
+    role: "user",
+    time: { created: now },
+    agent: "chat-agent",
+    model: { providerID: "", modelID: "" },
+  };
+  const textPart: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID: id,
+    type: "text",
+    text: content,
+  };
+  return { info, parts: [textPart] };
+}
+
+function createAssistantMessage(
+  content: string,
+  parentID: string,
+): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "chat-agent";
+  const now = Date.now();
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID,
+    modelID: "",
+    providerID: "",
+    agent: "chat-agent",
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+  const textPart: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID: id,
+    type: "text",
+    text: content,
+  };
+  return { info, parts: [textPart] };
+}
+
+function toMessagesWithParts(
+  messages: ChatAgentInput["messages"],
+): Message.WithParts[] {
+  const output: Message.WithParts[] = [];
+
+  for (const message of messages) {
+    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
+    output.push(
+      message.role === "user"
+        ? createUserMessage(message.content)
+        : createAssistantMessage(message.content, parentID),
+    );
+  }
+
+  return output;
+}
+
+async function executeTools(
+  calls: Tool.Call[],
+  _specs: Tool.Spec[],
+): Promise<Tool.Result[]> {
+  return calls.map((call) => ({
+    id: crypto.randomUUID(),
+    toolCallId: call.id,
+    output: `Tool '${call.tool}' executed (no executor configured)`,
+    isError: false,
+  }));
+}
+
+function buildAssistantMessageWithTools(
+  toolCalls: Tool.Call[],
+  toolResults: Tool.Result[],
+  parentID: string,
+): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "chat-agent";
+  const now = Date.now();
+
+  const resultByCallId = new Map(
+    toolResults.map((result) => [result.toolCallId, result]),
+  );
+  const parts: Message.ToolPart[] = toolCalls.map((call) => {
+    const result = resultByCallId.get(call.id);
+    const start = now;
+    const end = now;
+
+    if (result?.isError) {
+      return {
+        id: crypto.randomUUID(),
+        sessionID,
+        messageID: id,
+        type: "tool",
+        callID: call.id,
+        tool: call.tool,
+        state: {
+          status: "error",
+          input: call.input,
+          error: result.output,
+          time: { start, end },
+        },
+      };
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      sessionID,
+      messageID: id,
+      type: "tool",
+      callID: call.id,
+      tool: call.tool,
+      state: {
+        status: "completed",
+        input: call.input,
+        output: result?.output ?? "",
+        title: call.tool,
+        metadata: {},
+        time: { start, end },
+      },
+    };
+  });
+
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID,
+    modelID: "",
+    providerID: "",
+    agent: "chat-agent",
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+
+  return { info, parts };
 }
 
 /**
@@ -24,13 +222,161 @@ export namespace ChatAgent {
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
       async run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult> {
-        throw new Error("not implemented");
+        const effectiveSink = sink ?? noopSink;
+        const retryPolicy = DEFAULT_RETRY_POLICY;
+
+        let attempt = 1;
+        let lastError = "";
+        const steps: AgentStep[] = [];
+        const totalUsage: TokenUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        };
+
+        while (attempt <= retryPolicy.maxAttempts) {
+          try {
+            const providerModel = await resolveProviderModel(config.model);
+            let budgetState = createBudgetState();
+            let messages = toMessagesWithParts(input.messages);
+            let lastAssistantText = "";
+
+            const trackingSink: Sink = {
+              onMessage: (message) => {
+                const text = message.parts
+                  .filter(
+                    (part): part is Message.TextPart => part.type === "text",
+                  )
+                  .map((part) => part.text)
+                  .join("");
+                if (text) {
+                  lastAssistantText = text;
+                }
+                effectiveSink.onMessage(message);
+              },
+              onToolCall: effectiveSink.onToolCall,
+              onToolResult: effectiveSink.onToolResult,
+              onSnapshot: effectiveSink.onSnapshot,
+            };
+
+            while (true) {
+              if (checkBudget(budgetState, config.budget) === "exceeded") {
+                return {
+                  text: lastAssistantText,
+                  steps,
+                  usage: totalUsage,
+                  finishReason: "max-steps",
+                };
+              }
+
+              budgetState = recordTurn(budgetState);
+
+              if (config.signal?.aborted) {
+                throw new Error("aborted");
+              }
+
+              const runInput: RunInput = {
+                messages,
+                tools: config.tools ?? [],
+                system: config.systemPrompt,
+                signal: config.signal,
+                model: providerModel,
+              };
+
+              const outcome = await llmRun(runInput, trackingSink);
+
+              if (outcome.type === "stop") {
+                const step: AgentStep = {
+                  type: "text",
+                  content: lastAssistantText,
+                };
+                steps.push(step);
+
+                if (config.onStepFinish) {
+                  await config.onStepFinish(step);
+                }
+
+                return {
+                  text: lastAssistantText,
+                  steps,
+                  usage: totalUsage,
+                  finishReason: "stop",
+                };
+              }
+
+              if (outcome.type === "aborted") {
+                throw new Error("aborted");
+              }
+
+              if (outcome.type === "error") {
+                throw new Error(outcome.error.message);
+              }
+
+              if (outcome.toolCalls.length === 0) {
+                throw new Error("Tool wait requested with no tool calls");
+              }
+
+              const toolStart = Date.now();
+              const toolResults = await executeTools(
+                outcome.toolCalls,
+                config.tools ?? [],
+              );
+              const elapsed = Date.now() - toolStart;
+              const perToolMs =
+                toolResults.length > 0
+                  ? Math.max(1, Math.ceil(elapsed / toolResults.length))
+                  : elapsed;
+
+              for (const result of toolResults) {
+                effectiveSink.onToolResult(result);
+                budgetState = recordToolCall(budgetState, perToolMs);
+              }
+
+              const toolStep: AgentStep = {
+                type: "tool-call",
+                content: "",
+                toolCalls: outcome.toolCalls,
+                toolResults,
+              };
+              steps.push(toolStep);
+
+              if (config.onStepFinish) {
+                await config.onStepFinish(toolStep);
+              }
+
+              const parentID =
+                messages.length > 0
+                  ? messages[messages.length - 1].info.id
+                  : "";
+              const assistantWithTools = buildAssistantMessageWithTools(
+                outcome.toolCalls,
+                toolResults,
+                parentID,
+              );
+              messages = [...messages, assistantWithTools];
+            }
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+            const retryReason = classifyRetryReason(lastError);
+
+            if (shouldRetry(retryPolicy, retryReason, attempt)) {
+              const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+              await sleep(backoffMs);
+              attempt += 1;
+              continue;
+            }
+
+            throw error;
+          }
+        }
+
+        throw new Error(lastError || "Max retry attempts exceeded");
       },
       async *stream(
-        input: ChatAgentInput,
-        sink?: Sink,
+        _input: ChatAgentInput,
+        _sink?: Sink,
       ): AsyncIterable<AgentStep> {
-        throw new Error("not implemented");
+        throw new Error("stream() not implemented yet (Phase 2)");
       },
     };
   }
