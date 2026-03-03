@@ -2,7 +2,6 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import pkg from "../package.json";
 import { AuthCommand } from "./cmd/auth";
-import { AgentCommand } from "./cmd/agent";
 import { ModelsDev } from "@openomni/llm";
 
 ModelsDev.init();
@@ -14,7 +13,6 @@ await yargs(hideBin(process.argv))
   .version("version", "Show version number", pkg.version)
   .alias("version", "v")
   .command(AuthCommand)
-  .command(AgentCommand)
   .demandCommand(1, "Run a command. Try --help for usage.")
   .strict()
   .parseAsync();

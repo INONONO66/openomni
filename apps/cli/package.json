@@ -12,7 +12,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^0.0.50",
     "@clack/prompts": "^1.0.0",
-    "@openomni/agent": "workspace:*",
+    "@openomni/openomni": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
