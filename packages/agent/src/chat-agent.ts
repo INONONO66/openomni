@@ -227,12 +227,6 @@ export namespace ChatAgent {
 
         let attempt = 1;
         let lastError = "";
-        const steps: AgentStep[] = [];
-        const totalUsage: TokenUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-        };
 
         while (attempt <= retryPolicy.maxAttempts) {
           try {
@@ -240,9 +234,21 @@ export namespace ChatAgent {
             let budgetState = createBudgetState();
             let messages = toMessagesWithParts(input.messages);
             let lastAssistantText = "";
+            const steps: AgentStep[] = [];
+            const totalUsage: TokenUsage = {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+            };
 
             const trackingSink: Sink = {
               onMessage: (message) => {
+                if (message.info.role === "assistant") {
+                  const tokens = (message.info as Message.AssistantMessage).tokens;
+                  totalUsage.inputTokens += tokens.input;
+                  totalUsage.outputTokens += tokens.output;
+                  totalUsage.totalTokens += tokens.input + tokens.output;
+                }
                 const text = message.parts
                   .filter(
                     (part): part is Message.TextPart => part.type === "text",
