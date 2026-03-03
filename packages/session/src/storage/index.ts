@@ -6,3 +6,4 @@ export { SqliteStorageAdapter } from "./sqlite-storage";
 export { ensureGitignore } from "./gitignore";
 export { initialize } from "./initialize";
 export type { InitializeOptions } from "./initialize";
+export { migrateToSqlite } from "./migrate-to-sqlite";
