@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Message } from "@openomni/protocol";
+import { getPartStartTime } from "./part-time";
 import { SessionInfo } from "../session/info";
 import { FileLock } from "./lock";
 import { Storage } from "./storage";
@@ -64,24 +65,6 @@ export class FileStorageAdapter implements Storage.Adapter {
     write();
   }
 
-  private getPartStartTime(part: Message.Part): number | undefined {
-    if (
-      (part.type === "text" || part.type === "reasoning") &&
-      part.time?.start !== undefined
-    ) {
-      return part.time.start;
-    }
-
-    if (
-      part.type === "tool" &&
-      part.state.status !== "pending" &&
-      part.state.time?.start !== undefined
-    ) {
-      return part.state.time.start;
-    }
-
-    return undefined;
-  }
 
   private readJSON<T>(filePath: string): T | undefined {
     try {
@@ -228,8 +211,8 @@ export class FileStorageAdapter implements Storage.Adapter {
         if (pt) results.push(pt);
       }
       results.sort((a, b) => {
-        const aStart = this.getPartStartTime(a);
-        const bStart = this.getPartStartTime(b);
+        const aStart = getPartStartTime(a);
+        const bStart = getPartStartTime(b);
 
         if (aStart !== undefined && bStart !== undefined) {
           return aStart - bStart || a.id.localeCompare(b.id);
