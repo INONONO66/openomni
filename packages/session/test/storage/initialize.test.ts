@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { Storage, InMemoryStorage } from "../../src/storage/storage";
 import { CachedStorageAdapter } from "../../src/storage/cache";
 import { FileStorageAdapter } from "../../src/storage/file-storage";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initialize } from "../../src/storage/initialize";
 
 let tmpDir: string;
@@ -25,16 +26,21 @@ describe("Storage.initialize", () => {
     expect(existsSync(join(tmpDir, ".openomni"))).toBe(true);
   });
 
-  test("creates subdirectories for file storage", () => {
-    initialize({ cwd: tmpDir });
+  test("creates subdirectories for file storage backend", () => {
+    initialize({ cwd: tmpDir, backend: "file" });
     const base = join(tmpDir, ".openomni");
     expect(existsSync(join(base, "sessions"))).toBe(true);
     expect(existsSync(join(base, "messages"))).toBe(true);
     expect(existsSync(join(base, "parts"))).toBe(true);
   });
 
-  test("configures adapter as CachedStorageAdapter", () => {
+  test("default backend is sqlite", () => {
     initialize({ cwd: tmpDir });
+    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
+  });
+
+  test("file backend configures CachedStorageAdapter", () => {
+    initialize({ cwd: tmpDir, backend: "file" });
     expect(Storage.getAdapter()).toBeInstanceOf(CachedStorageAdapter);
   });
 
@@ -43,8 +49,28 @@ describe("Storage.initialize", () => {
     expect(Storage.getAdapter()).not.toBeInstanceOf(InMemoryStorage);
   });
 
-  test("sessions persist to disk", () => {
+  test("sessions persist to disk with sqlite backend", () => {
     initialize({ cwd: tmpDir });
+
+    const session = {
+      id: "s1",
+      title: "Persisted",
+      model: { providerID: "test", modelID: "test-model" },
+      time: { created: Date.now(), updated: Date.now() },
+    };
+    Storage.getAdapter().session.set("s1", session);
+
+    // Verify by opening a second adapter to the same DB
+    const dbPath = join(tmpDir, ".openomni", "storage.db");
+    const verifyAdapter = new SqliteStorageAdapter(dbPath);
+    const recovered = verifyAdapter.session.get("s1");
+    verifyAdapter.close();
+    expect(recovered).toBeDefined();
+    expect(recovered?.title).toBe("Persisted");
+  });
+
+  test("sessions persist to disk with file backend", () => {
+    initialize({ cwd: tmpDir, backend: "file" });
 
     const session = {
       id: "s1",
@@ -96,6 +122,6 @@ describe("Storage.initialize", () => {
   test("Storage.initialize is callable on the namespace", () => {
     expect(typeof Storage.initialize).toBe("function");
     Storage.initialize({ cwd: tmpDir });
-    expect(Storage.getAdapter()).toBeInstanceOf(CachedStorageAdapter);
+    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 });
