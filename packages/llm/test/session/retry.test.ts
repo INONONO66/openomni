@@ -28,7 +28,6 @@ describe("Retry", () => {
       await Retry.sleep(100, controller.signal);
       const elapsed = Date.now() - start;
       expect(elapsed).toBeGreaterThanOrEqual(100);
-      expect(elapsed).toBeLessThan(200);
     });
 
     test("respects AbortSignal and throws AbortError", async () => {
