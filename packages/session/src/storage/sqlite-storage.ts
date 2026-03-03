@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { Message } from "@openomni/protocol";
+import { getPartStartTime } from "./part-time";
 import { SessionInfo } from "../session/info";
 import { Storage } from "./storage";
 
@@ -118,24 +119,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     return JSON.parse(row.data) as T;
   }
 
-  private getPartStartTime(part: Message.Part): number | undefined {
-    if (
-      (part.type === "text" || part.type === "reasoning") &&
-      part.time?.start !== undefined
-    ) {
-      return part.time.start;
-    }
-
-    if (
-      part.type === "tool" &&
-      part.state.status !== "pending" &&
-      part.state.time?.start !== undefined
-    ) {
-      return part.state.time.start;
-    }
-
-    return undefined;
-  }
 
   session = {
     get: (id: string): SessionInfo | undefined => {
@@ -202,7 +185,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
 
     set: (messageID: string, part: Message.Part): void => {
-      const timeStart = this.getPartStartTime(part);
+      const timeStart = getPartStartTime(part);
       this.partStatements.set.run(
         part.id,
         messageID,
@@ -226,6 +209,10 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.maintenanceStatements.clearParts.run();
     this.maintenanceStatements.clearMessages.run();
     this.maintenanceStatements.clearSessions.run();
+  }
+
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
   }
 
   close(): void {
