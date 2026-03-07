@@ -1,9 +1,12 @@
-import type { Plan, PlanStep, Team } from "@openomni/protocol";
+import type { Plan, PlanStep } from "@openomni/protocol";
+import { Team } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { DAG } from "../dag/index";
 import { RunLedger } from "./run-ledger";
 import { StallDetector } from "./stall-detector";
 import { ReviewLoop } from "./review-loop";
 import { Teammate } from "./teammate";
+
 
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
@@ -50,6 +53,17 @@ export namespace TeamOrchestrator {
         acyclic.cycle.length > 0 ? `: ${acyclic.cycle.join(" -> ")}` : "";
       throw new Error(`Plan contains cycle${cycleText}`);
     }
+
+    // Publish plan.created event (fire-and-forget)
+    void Bus.publish(Team.Events.PlanCreated, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      payload: {
+        planId: plan.planId,
+        goal: plan.goal,
+        stepCount: plan.steps.length,
+      },
+    });
 
     const ledger = RunLedger.create(plan.steps);
     const completed = new Set<string>();
@@ -98,6 +112,29 @@ export namespace TeamOrchestrator {
         const attemptNumber = ledger.getStepState(stepId)?.attempts ?? 1;
         const teammateConfig = resolveTeammate(step, config);
 
+        // Publish step.assigned event (fire-and-forget)
+        void Bus.publish(Team.Events.StepAssigned, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          payload: {
+            planId: plan.planId,
+            stepId,
+            agentId: teammateConfig.agentId,
+          },
+        });
+
+        // Publish step.started event (fire-and-forget)
+        void Bus.publish(Team.Events.StepStarted, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          payload: {
+            planId: plan.planId,
+            stepId,
+            agentId: teammateConfig.agentId,
+            attempt: attemptNumber,
+          },
+        });
+
         try {
           const execution = await Teammate.execute(
             {
@@ -121,12 +158,35 @@ export namespace TeamOrchestrator {
             },
           );
 
+          // Publish review.decision event (fire-and-forget)
+          void Bus.publish(Team.Events.ReviewDecision, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: {
+              planId: plan.planId,
+              stepId,
+              decision: review.decision,
+              feedback: review.feedback,
+            },
+          });
+
           if (review.decision === "accept") {
             ledger.transition(stepId, "succeeded");
             ledger.resetRejectionStreak(stepId);
             completed.add(stepId);
             results.set(stepId, execution.output);
             DAG.complete(dag, stepId, completed);
+
+            // Publish step.completed event (fire-and-forget)
+            void Bus.publish(Team.Events.StepCompleted, {
+              traceId: crypto.randomUUID(),
+              time: Date.now(),
+              payload: {
+                planId: plan.planId,
+                stepId,
+                result: execution.output,
+              },
+            });
             progressed = true;
             continue;
           }
@@ -138,6 +198,17 @@ export namespace TeamOrchestrator {
           if (attempts >= maxAttemptsPerStep) {
             ledger.transition(stepId, "failed");
             failed.add(stepId);
+
+            // Publish step.failed event (fire-and-forget)
+            void Bus.publish(Team.Events.StepFailed, {
+              traceId: crypto.randomUUID(),
+              time: Date.now(),
+              payload: {
+                planId: plan.planId,
+                stepId,
+                error: `Max attempts (${maxAttemptsPerStep}) reached`,
+              },
+            });
             skipDependents(
               stepId,
               dag,
@@ -173,12 +244,36 @@ export namespace TeamOrchestrator {
                 systemPrompt: config.reviewSystemPrompt,
               },
             );
+
+            // Publish step.handoff event (fire-and-forget)
+            void Bus.publish(Team.Events.StepHandoff, {
+              traceId: crypto.randomUUID(),
+              time: Date.now(),
+              payload: {
+                planId: plan.planId,
+                stepId,
+                from: execution.agentId,
+                to: execution.agentId,
+                handoffDocument,
+              },
+            });
           }
 
           pendingRetry.set(stepId, { handoffDocument });
         } catch {
           ledger.transition(stepId, "failed");
           failed.add(stepId);
+
+          // Publish step.failed event (fire-and-forget)
+          void Bus.publish(Team.Events.StepFailed, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: {
+              planId: plan.planId,
+              stepId,
+              error: "Execution error",
+            },
+          });
           skipDependents(
             stepId,
             dag,
@@ -198,7 +293,18 @@ export namespace TeamOrchestrator {
         stallConfig,
         noProgressTurns,
       );
-      if (stall.stalled) {
+      if (stall.stalled && stall.reason) {
+        // Publish stall.detected event (fire-and-forget)
+        void Bus.publish(Team.Events.StallDetected, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          payload: {
+            planId: plan.planId,
+            reason: stall.reason,
+            details: `Stall detected: ${stall.reason}`,
+          },
+        });
+
         return buildResult(
           plan.steps,
           ledger,
@@ -220,6 +326,20 @@ export namespace TeamOrchestrator {
     }
 
     const final = buildResult(plan.steps, ledger, results);
+
+    // Publish execution.complete event (fire-and-forget)
+    void Bus.publish(Team.Events.ExecutionComplete, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      payload: {
+        planId: plan.planId,
+        status: final.status,
+        completedSteps: final.completedSteps.length,
+        failedSteps: final.failedSteps.length,
+        skippedSteps: final.skippedSteps.length,
+      },
+    });
+
     if (final.failedSteps.length > 0) {
       return { ...final, status: "failed" };
     }
