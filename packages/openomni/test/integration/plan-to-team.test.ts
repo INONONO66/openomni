@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import * as SessionModule from "@openomni/session";
 import type { Message, Run, Sink } from "@openomni/protocol";
 
 const responseQueue: string[] = [];
@@ -42,7 +43,8 @@ mock.module("@openomni/llm", () => ({
 }));
 
 mock.module("@openomni/session", () => ({
-  Bus: { publish: mockBusPublish },
+  ...SessionModule,
+  Bus: { ...SessionModule.Bus, publish: mockBusPublish },
 }));
 
 let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
