@@ -47,6 +47,10 @@ protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orches
 | Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                                                  |
 | Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                                              |
 | ChatAgent (stateless ReAct) | `packages/agent/src/chat-agent.ts`                    | create(), run(), stream() stub                                       |
+| Plan Mode (PlanAgent)        | `packages/openomni/src/plan/`                         | PlanAgent.generate(goal, config) → PlanResult; LLM-based, no exec   |
+| Team Mode (TeamOrchestrator) | `packages/openomni/src/team/`                         | TeamOrchestrator.execute(plan, config) → TeamResult; deterministic   |
+| DAG utilities                | `packages/openomni/src/dag/`                          | Pure functions: build, validateAcyclic, getReady, complete           |
+| Plan/Team schemas            | `packages/protocol/src/plan/` + `src/team/`           | Plan, PlanStep, PlanResult; Team.StepState, StallReason, 10 events  |
 | Agent profile/graph          | `packages/openomni/src/legacy/agent/`                 | Graph validation, routing, messaging                                 |
 | Task lifecycle               | `packages/openomni/src/legacy/task/`                  | State machine, manager, checkpoint, recovery                         |
 | Orchestration loop           | `packages/openomni/src/legacy/`                       | Envelope → Router → Dispatcher → Supervisor                          |
@@ -107,3 +111,5 @@ openomni agent --mode orchestrated   # full pipeline
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
 - `packages/agent` is now a pure ChatAgent primitive — stateless, no session dependency. Use `@openomni/agent` for the ReAct loop.
 - `packages/openomni` contains all legacy orchestration code (moved as-is from packages/agent in Phase 1). Use `@openomni/openomni` for RunWorker, TaskManager, IngressEngine, etc.
+- **Plan Mode** (`PlanAgent`) and **Team Mode** (`TeamOrchestrator`) are now implemented in `packages/openomni/src/plan/` and `packages/openomni/src/team/`. Plan Mode generates a structured `Plan` via LLM; Team Mode executes it with a deterministic dispatch loop (LLM used only in ReviewLoop).
+- Plan/Team protocol types live in `packages/protocol/src/plan/` and `packages/protocol/src/team/` — 4 Plan schemas + 4 Team types + 10 BusEvents.
