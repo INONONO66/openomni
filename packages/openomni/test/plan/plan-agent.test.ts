@@ -1,33 +1,37 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { Message, Run, Sink } from "@openomni/protocol";
 
-type MockAgentResult = {
-  text: string;
-  steps: [];
-  usage: { inputTokens: number; outputTokens: number; totalTokens: number };
-  finishReason: "stop";
-};
+// --- Mock setup (must be before dynamic import) ---
 
-const mockRun = mock(
-  async (): Promise<MockAgentResult> => ({
-    text: "{}",
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    finishReason: "stop",
-  }),
-);
+type MockLlmFn = (input: any, sink: Sink) => Promise<Run.Outcome>;
 
-const mockCreate = mock(() => ({
-  run: mockRun,
-  stream: async function* () {
-    return;
+let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
+
+const mockModelsGet = mock(async () => ({
+  anthropic: {
+    id: "anthropic",
+    name: "Anthropic",
+    models: {
+      "claude-3-haiku-20240307": {
+        id: "claude-3-haiku-20240307",
+        name: "Claude 3 Haiku",
+      },
+    },
   },
 }));
 
-mock.module("@openomni/agent", () => ({
-  ChatAgent: {
-    create: mockCreate,
-  },
+const mockProviderFromModelsDevModel = mock(() => ({
+  id: "claude-3-haiku-20240307",
+  providerID: "anthropic",
 }));
+
+mock.module("@openomni/llm", () => ({
+  ModelsDev: { get: mockModelsGet },
+  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  run: (input: any, sink: Sink) => mockRunFn(input, sink),
+}));
+
+// --- Dynamic import after mock ---
 
 let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
 
@@ -35,17 +39,59 @@ beforeAll(async () => {
   ({ PlanAgent } = await import("../../src/plan/plan-agent"));
 });
 
+// --- Helpers ---
+
+function createAssistantMessage(text: string): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "plan-test";
+  const now = Date.now();
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID: "",
+    modelID: "claude-3-haiku-20240307",
+    providerID: "anthropic",
+    agent: "chat-agent",
+    path: { cwd: "", root: "" },
+    cost: 0,
+    tokens: {
+      input: 10,
+      output: 5,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+  const textPart: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID: id,
+    type: "text",
+    text,
+  };
+  return { info, parts: [textPart] };
+}
+
+function setupMockResponse(text: string) {
+  mockRunFn = async (_input: any, sink: Sink) => {
+    sink.onMessage(createAssistantMessage(text));
+    return { type: "stop" } as Run.Outcome;
+  };
+}
+
 beforeEach(() => {
-  mockRun.mockClear();
-  mockCreate.mockClear();
+  mockRunFn = async () => ({ type: "stop" }) as Run.Outcome;
+  mockModelsGet.mockClear();
+  mockProviderFromModelsDevModel.mockClear();
 });
 
 describe("PlanAgent.generate", () => {
   it("returns PlanResult when LLM returns valid plan JSON", async () => {
     const goal = "Build API gateway";
     const now = new Date().toISOString();
-    mockRun.mockResolvedValueOnce({
-      text: JSON.stringify({
+    setupMockResponse(
+      JSON.stringify({
         planId: "plan-1",
         goal,
         steps: [
@@ -59,10 +105,7 @@ describe("PlanAgent.generate", () => {
         createdAt: now,
         version: 1,
       }),
-      steps: [],
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      finishReason: "stop",
-    });
+    );
 
     const result = await PlanAgent.generate(goal, {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -72,17 +115,10 @@ describe("PlanAgent.generate", () => {
     expect(result.plan.goal).toBe(goal);
     expect(result.plan.steps).toHaveLength(1);
     expect(result.plan.createdAt).toBeInstanceOf(Date);
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockRun).toHaveBeenCalledTimes(1);
   });
 
   it("throws when LLM output is not valid JSON", async () => {
-    mockRun.mockResolvedValueOnce({
-      text: "not-json",
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop",
-    });
+    setupMockResponse("not-json");
 
     return expect(
       PlanAgent.generate("Write docs", {
@@ -92,8 +128,8 @@ describe("PlanAgent.generate", () => {
   });
 
   it("throws when JSON fails Plan schema validation", async () => {
-    mockRun.mockResolvedValueOnce({
-      text: JSON.stringify({
+    setupMockResponse(
+      JSON.stringify({
         planId: "plan-2",
         goal: "Ship feature",
         steps: [
@@ -106,10 +142,7 @@ describe("PlanAgent.generate", () => {
         createdAt: new Date().toISOString(),
         version: 1,
       }),
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop",
-    });
+    );
 
     return expect(
       PlanAgent.generate("Ship feature", {
@@ -120,18 +153,15 @@ describe("PlanAgent.generate", () => {
 
   it("ensures generated plan goal matches input goal", async () => {
     const goal = "Migrate billing service";
-    mockRun.mockResolvedValueOnce({
-      text: JSON.stringify({
+    setupMockResponse(
+      JSON.stringify({
         planId: "plan-3",
         goal,
         steps: [],
         createdAt: new Date().toISOString(),
         version: 1,
       }),
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop",
-    });
+    );
 
     const result = await PlanAgent.generate(goal, {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -141,8 +171,8 @@ describe("PlanAgent.generate", () => {
   });
 
   it("parses steps with dependsOn links", async () => {
-    mockRun.mockResolvedValueOnce({
-      text: JSON.stringify({
+    setupMockResponse(
+      JSON.stringify({
         planId: "plan-4",
         goal: "Deploy app",
         steps: [
@@ -162,10 +192,7 @@ describe("PlanAgent.generate", () => {
         createdAt: new Date().toISOString(),
         version: 1,
       }),
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop",
-    });
+    );
 
     const result = await PlanAgent.generate("Deploy app", {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -175,18 +202,15 @@ describe("PlanAgent.generate", () => {
   });
 
   it("accepts empty steps array as a valid plan", async () => {
-    mockRun.mockResolvedValueOnce({
-      text: JSON.stringify({
+    setupMockResponse(
+      JSON.stringify({
         planId: "plan-empty",
         goal: "Simple goal",
         steps: [],
         createdAt: new Date().toISOString(),
         version: 1,
       }),
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop",
-    });
+    );
 
     const result = await PlanAgent.generate("Simple goal", {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
