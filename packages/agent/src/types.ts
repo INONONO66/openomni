@@ -31,6 +31,7 @@ export interface ChatAgentConfig {
   };
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
+  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
 }
 

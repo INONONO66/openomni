@@ -254,3 +254,107 @@ describe("ChatAgent", () => {
     expect(content.includes(forbiddenImport)).toBe(false);
   });
 });
+
+  it("uses toolExecutor when provided to execute tool calls", async () => {
+    let callCount = 0;
+    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+      callCount += 1;
+      if (callCount === 1) {
+        const call = createToolCall("call-1", "custom_tool");
+        sink.onToolCall(call);
+        return createToolCallOutcome([call]);
+      }
+
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
+    };
+
+    const toolExecutorCalls: Tool.Call[] = [];
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      toolExecutor: async (call) => {
+        toolExecutorCalls.push(call);
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: "real result from executor",
+          isError: false,
+        };
+      },
+    });
+
+    const result = await agent.run({
+      messages: [{ role: "user", content: "Use a tool" }],
+    });
+
+    expect(toolExecutorCalls).toHaveLength(1);
+    expect(toolExecutorCalls[0]?.tool).toBe("custom_tool");
+    expect(result.steps.some((step) => step.type === "tool-call")).toBe(true);
+    const toolStep = result.steps.find((step) => step.type === "tool-call");
+    expect(toolStep?.toolResults?.[0]?.output).toBe("real result from executor");
+  });
+
+  it("handles toolExecutor errors by setting isError: true", async () => {
+    let callCount = 0;
+    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+      callCount += 1;
+      if (callCount === 1) {
+        const call = createToolCall("call-1", "failing_tool");
+        sink.onToolCall(call);
+        return createToolCallOutcome([call]);
+      }
+
+      sink.onMessage(createAssistantMessage("handled error"));
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      toolExecutor: async (call) => {
+        throw new Error("Tool execution failed: database connection lost");
+      },
+    });
+
+    const result = await agent.run({
+      messages: [{ role: "user", content: "Use a tool" }],
+    });
+
+    const toolStep = result.steps.find((step) => step.type === "tool-call");
+    expect(toolStep?.toolResults).toHaveLength(1);
+    expect(toolStep?.toolResults?.[0]?.isError).toBe(true);
+    expect(toolStep?.toolResults?.[0]?.output).toContain(
+      "Tool execution failed",
+    );
+  });
+
+  it("preserves stub behavior when toolExecutor is not provided", async () => {
+    let callCount = 0;
+    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+      callCount += 1;
+      if (callCount === 1) {
+        const call = createToolCall("call-1", "stub_tool");
+        sink.onToolCall(call);
+        return createToolCallOutcome([call]);
+      }
+
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      // No toolExecutor provided
+    });
+
+    const result = await agent.run({
+      messages: [{ role: "user", content: "Use a tool" }],
+    });
+
+    const toolStep = result.steps.find((step) => step.type === "tool-call");
+    expect(toolStep?.toolResults).toHaveLength(1);
+    expect(toolStep?.toolResults?.[0]?.output).toContain(
+      "Tool 'stub_tool' executed (no executor configured)",
+    );
+    expect(toolStep?.toolResults?.[0]?.isError).toBe(false);
+  });
+

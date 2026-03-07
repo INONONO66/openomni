@@ -134,7 +134,26 @@ function toMessagesWithParts(
 async function executeTools(
   calls: Tool.Call[],
   _specs: Tool.Spec[],
+  config?: ChatAgentConfig,
 ): Promise<Tool.Result[]> {
+  if (config?.toolExecutor) {
+    const results: Tool.Result[] = [];
+    for (const call of calls) {
+      try {
+        const result = await config.toolExecutor(call);
+        results.push(result);
+      } catch (error) {
+        results.push({
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: error instanceof Error ? error.message : String(error),
+          isError: true,
+        });
+      }
+    }
+    return results;
+  }
+
   return calls.map((call) => ({
     id: crypto.randomUUID(),
     toolCallId: call.id,
@@ -326,6 +345,7 @@ export namespace ChatAgent {
               const toolResults = await executeTools(
                 outcome.toolCalls,
                 config.tools ?? [],
+                config,
               );
               const elapsed = Date.now() - toolStart;
               const perToolMs =
