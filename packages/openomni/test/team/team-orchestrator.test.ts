@@ -1,105 +1,47 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Plan, PlanStep, Run, Sink } from "@openomni/protocol";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import type { AgentResult } from "@openomni/agent";
+import type { Plan, PlanStep } from "@openomni/protocol";
 import type { Teammate } from "../../src/team/teammate";
-
-type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
-
-let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
-
-const mockModelsGet = mock(async () => ({
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    models: {
-      "claude-3-haiku-20240307": {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
-      },
-    },
-  },
-}));
-
-const mockProviderFromModelsDevModel = mock(() => ({
-  id: "claude-3-haiku-20240307",
-  providerID: "anthropic",
-}));
-
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mockModelsGet },
-  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-}));
-
-let TeamOrchestrator: typeof import("../../src/team/team-orchestrator").TeamOrchestrator;
 
 const responseQueue: string[] = [];
 const executedTasks: string[] = [];
 
-beforeAll(async () => {
-  ({ TeamOrchestrator } = await import("../../src/team/team-orchestrator"));
-});
+mock.module("@openomni/agent", () => ({
+  ChatAgent: {
+    create: () => ({
+      run: async (input: {
+        messages: Array<{ role: string; content: string }>;
+      }) => {
+        const userPrompt = input.messages[0]?.content ?? "";
+        if (userPrompt.includes("Execute the following task:")) {
+          const matchedTask = userPrompt.match(/Task:\s*(.+)/);
+          if (matchedTask?.[1]) {
+            executedTasks.push(matchedTask[1].trim());
+          }
+        }
+
+        const text = responseQueue.shift() ?? "{}";
+        return {
+          text,
+          steps: [],
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          finishReason: "stop",
+        } as AgentResult;
+      },
+    }),
+  },
+}));
+
+const { TeamOrchestrator } = await import("../../src/team/team-orchestrator");
 
 beforeEach(() => {
   responseQueue.length = 0;
   executedTasks.length = 0;
-
-  mockRunFn = async (input: unknown, sink: Sink) => {
-    const messageInput = input as {
-      messages?: Message.WithParts[];
-    };
-
-    const text =
-      messageInput.messages?.[0]?.parts
-        ?.filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("\n") ?? "";
-
-    if (text.includes("Execute the following task:")) {
-      const matchedTask = text.match(/Task:\s*(.+)/);
-      if (matchedTask?.[1]) {
-        executedTasks.push(matchedTask[1].trim());
-      }
-    }
-
-    const responseText = responseQueue.shift() ?? "{}";
-    sink.onMessage(createAssistantMessage(responseText));
-    return { type: "stop" };
-  };
 });
-
-function createAssistantMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "team-orchestrator-test";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID: "",
-    modelID: "claude-3-haiku-20240307",
-    providerID: "anthropic",
-    agent: "chat-agent",
-    path: { cwd: "", root: "" },
-    cost: 0,
-    tokens: {
-      input: 10,
-      output: 5,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-
-  return { info, parts: [textPart] };
-}
 
 function makeStep(
   stepId: string,
