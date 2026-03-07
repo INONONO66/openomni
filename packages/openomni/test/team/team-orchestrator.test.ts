@@ -1,0 +1,280 @@
+import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { Message, Plan, PlanStep, Run, Sink } from "@openomni/protocol";
+import type { Teammate } from "../../src/team/teammate";
+
+type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
+
+let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
+
+const mockModelsGet = mock(async () => ({
+  anthropic: {
+    id: "anthropic",
+    name: "Anthropic",
+    models: {
+      "claude-3-haiku-20240307": {
+        id: "claude-3-haiku-20240307",
+        name: "Claude 3 Haiku",
+      },
+    },
+  },
+}));
+
+const mockProviderFromModelsDevModel = mock(() => ({
+  id: "claude-3-haiku-20240307",
+  providerID: "anthropic",
+}));
+
+mock.module("@openomni/llm", () => ({
+  ModelsDev: { get: mockModelsGet },
+  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
+}));
+
+let TeamOrchestrator: typeof import("../../src/team/team-orchestrator").TeamOrchestrator;
+
+const responseQueue: string[] = [];
+const executedTasks: string[] = [];
+
+beforeAll(async () => {
+  ({ TeamOrchestrator } = await import("../../src/team/team-orchestrator"));
+});
+
+beforeEach(() => {
+  responseQueue.length = 0;
+  executedTasks.length = 0;
+
+  mockRunFn = async (input: unknown, sink: Sink) => {
+    const messageInput = input as {
+      messages?: Message.WithParts[];
+    };
+
+    const text =
+      messageInput.messages?.[0]?.parts
+        ?.filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("\n") ?? "";
+
+    if (text.includes("Execute the following task:")) {
+      const matchedTask = text.match(/Task:\s*(.+)/);
+      if (matchedTask?.[1]) {
+        executedTasks.push(matchedTask[1].trim());
+      }
+    }
+
+    const responseText = responseQueue.shift() ?? "{}";
+    sink.onMessage(createAssistantMessage(responseText));
+    return { type: "stop" };
+  };
+});
+
+function createAssistantMessage(text: string): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "team-orchestrator-test";
+  const now = Date.now();
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID: "",
+    modelID: "claude-3-haiku-20240307",
+    providerID: "anthropic",
+    agent: "chat-agent",
+    path: { cwd: "", root: "" },
+    cost: 0,
+    tokens: {
+      input: 10,
+      output: 5,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+
+  const textPart: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID: id,
+    type: "text",
+    text,
+  };
+
+  return { info, parts: [textPart] };
+}
+
+function makeStep(
+  stepId: string,
+  dependsOn: string[] = [],
+  suggestedAgent?: string,
+): PlanStep {
+  return {
+    stepId,
+    description: `${stepId} task`,
+    expectedOutput: `${stepId} output`,
+    dependsOn,
+    suggestedAgent,
+  };
+}
+
+function makePlan(steps: PlanStep[]): Plan {
+  return {
+    planId: "plan-1",
+    goal: "execute plan",
+    steps,
+    createdAt: new Date(),
+    version: 1,
+  };
+}
+
+const defaultTeammateConfig: Teammate.TeammateConfig = {
+  agentId: "default-agent",
+  model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+};
+
+function makeConfig(overrides?: {
+  teammates?: Map<string, Teammate.TeammateConfig>;
+  maxAttemptsPerStep?: number;
+  stallConfig?: {
+    maxConsecutiveRejections: number;
+    maxNoProgressTurns: number;
+  };
+}) {
+  return {
+    reviewModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    teammates:
+      overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
+    defaultTeammateConfig,
+    maxAttemptsPerStep: overrides?.maxAttemptsPerStep,
+    stallConfig: overrides?.stallConfig,
+  };
+}
+
+describe("TeamOrchestrator.execute", () => {
+  it("completes a single accepted step", async () => {
+    responseQueue.push("single-step output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual(["s1"]);
+    expect(result.failedSteps).toEqual([]);
+    expect(result.skippedSteps).toEqual([]);
+    expect(result.results.get("s1")).toBe("single-step output");
+  });
+
+  it("runs dependent steps in order", async () => {
+    responseQueue.push("s1 output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+    responseQueue.push("s2 output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1"), makeStep("s2", ["s1"])]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual(["s1", "s2"]);
+    expect(executedTasks).toEqual(["s1 task", "s2 task"]);
+  });
+
+  it("retries once after rejection and then succeeds", async () => {
+    responseQueue.push("first attempt output");
+    responseQueue.push(
+      JSON.stringify({ decision: "reject", feedback: "needs improvement" }),
+    );
+    responseQueue.push("second attempt output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({ maxAttemptsPerStep: 3 }),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual(["s1"]);
+    expect(result.results.get("s1")).toBe("second attempt output");
+    expect(executedTasks.filter((task) => task === "s1 task")).toHaveLength(2);
+  });
+
+  it("fails when max attempts are exhausted", async () => {
+    responseQueue.push("attempt 1 output");
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "bad" }));
+    responseQueue.push("attempt 2 output");
+    responseQueue.push(
+      JSON.stringify({ decision: "reject", feedback: "still bad" }),
+    );
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({ maxAttemptsPerStep: 2 }),
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.failedSteps).toEqual(["s1"]);
+    expect(result.completedSteps).toEqual([]);
+  });
+
+  it("skips dependents when a prerequisite step fails", async () => {
+    responseQueue.push("attempt output");
+    responseQueue.push(
+      JSON.stringify({ decision: "reject", feedback: "fatal" }),
+    );
+
+    const plan = makePlan([makeStep("s1"), makeStep("s2", ["s1"])]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({ maxAttemptsPerStep: 1 }),
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.failedSteps).toEqual(["s1"]);
+    expect(result.skippedSteps).toEqual(["s2"]);
+  });
+
+  it("returns stalled when consecutive rejection threshold is hit", async () => {
+    responseQueue.push("attempt 1 output");
+    responseQueue.push(
+      JSON.stringify({ decision: "reject", feedback: "nope" }),
+    );
+    responseQueue.push("attempt 2 output");
+    responseQueue.push(
+      JSON.stringify({ decision: "reject", feedback: "still nope" }),
+    );
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({
+        maxAttemptsPerStep: 10,
+        stallConfig: {
+          maxConsecutiveRejections: 2,
+          maxNoProgressTurns: 100,
+        },
+      }),
+    );
+
+    expect(result.status).toBe("stalled");
+    expect(result.stallReason).toBe("consecutive_rejections");
+  });
+
+  it("throws on cyclic DAG", async () => {
+    const plan = makePlan([makeStep("s1", ["s2"]), makeStep("s2", ["s1"])]);
+
+    return expect(TeamOrchestrator.execute(plan, makeConfig())).rejects.toThrow(
+      /cycle/i,
+    );
+  });
+
+  it("completes an empty plan", async () => {
+    const plan = makePlan([]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual([]);
+    expect(result.failedSteps).toEqual([]);
+    expect(result.skippedSteps).toEqual([]);
+    expect(result.results.size).toBe(0);
+  });
+});
