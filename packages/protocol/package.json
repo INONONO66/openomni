@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc",
     "check-types": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "bun test"
   },
   "dependencies": {
     "zod": "^3.22.0"
