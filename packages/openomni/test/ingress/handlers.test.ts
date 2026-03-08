@@ -308,7 +308,10 @@ describe("IngressHandlers", () => {
       reviewerModel,
     );
     expect(result.mode).toBe("team");
-    expect(result.result).toBe(teamResult);
+    expect(result.result).toEqual({
+      ...teamResult,
+      results: Object.fromEntries(teamResult.results),
+    });
   });
 
   it("handleTeam throws when no plan exists in session", async () => {

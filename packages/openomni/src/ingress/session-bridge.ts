@@ -70,6 +70,7 @@ export namespace SessionBridge {
     // Scan for the last plan in session
     let lastPlanJson: string | undefined;
     for (const message of messages) {
+      if (message.role !== "assistant") continue;
       const parts = Session.getParts(message.id);
       for (const part of parts) {
         if (part.type === "text" && part.text.startsWith(PLAN_PREFIX)) {
@@ -110,6 +111,7 @@ export namespace SessionBridge {
 
     let lastPlanText: string | undefined;
     for (const message of messages) {
+      if (message.role !== "assistant") continue;
       const parts = Session.getParts(message.id);
       for (const part of parts) {
         if (part.type === "text" && part.text.startsWith(PLAN_PREFIX)) {
@@ -140,7 +142,7 @@ export namespace SessionBridge {
     for (const message of messages) {
       const parts = Session.getParts(message.id);
       for (const part of parts) {
-        if (part.type === "text") {
+        if (part.type === "text" && !part.text.startsWith(PLAN_PREFIX)) {
           result.push({ role: message.role, content: part.text });
         }
       }

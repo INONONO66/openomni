@@ -46,6 +46,7 @@ export namespace IngressHandlers {
         systemPrompt: ctx.event.agents.executor.systemPrompt,
         tools: ctx.event.agents.executor.tools,
         toolExecutor: ctx.event.agents.executor.toolExecutor,
+        budget: ctx.event.agents.executor.budget,
       },
       teammates: new Map(),
     };
@@ -57,7 +58,14 @@ export namespace IngressHandlers {
       ctx.event.agents.reviewer.model,
     );
 
-    return { mode: "team", sessionId: ctx.sessionId, result };
+    return {
+      mode: "team",
+      sessionId: ctx.sessionId,
+      result: {
+        ...result,
+        results: Object.fromEntries(result.results),
+      },
+    };
   }
 
   export async function handleDirect(

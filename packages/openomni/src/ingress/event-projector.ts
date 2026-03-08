@@ -32,7 +32,7 @@ export namespace IngressEventProjector {
       return (event.payload as Record<string, unknown>).text as string;
     }
 
-    return JSON.stringify(event.payload);
+    return JSON.stringify(event.payload) ?? "";
   }
 
   /**

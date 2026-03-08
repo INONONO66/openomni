@@ -23,26 +23,20 @@ export namespace IngressSessionResolver {
 
   /**
    * Build a SurfaceKey from event origin fields.
-   * Format: "surface:workspace:channel" (omit undefined parts)
+   * Format: "surface:workspace:channel" (always 3 positional parts).
+   * Missing workspace/channel are represented as empty strings to prevent collisions.
    * Examples:
-   *   {surface: "tui", workspace: "/project"} → "tui:/project"
    *   {surface: "slack", workspace: "team-a", channel: "C123"} → "slack:team-a:C123"
-   *   {surface: "tui"} → "tui" (single element, no ":" — will fail SurfaceKey.create validation)
-   *
-   * For single-surface keys, we use the raw string directly since SurfaceKey.create()
-   * requires at least 2 parts to include a ":" separator.
+   *   {surface: "tui", workspace: "/project"} → "tui:/project:"
+   *   {surface: "tui"} → "tui::"
+   *   {surface: "slack", channel: "C123"} → "slack::C123"
    */
   export function extractSurfaceKey(event: ResolvableEvent): string {
-    const parts = [event.surface, event.workspace, event.channel].filter(
-      (p): p is string => p !== undefined && p !== "",
-    );
-
-    // If only surface, return it directly (no ":" separator)
-    if (parts.length === 1) {
-      return parts[0];
-    }
-
-    // Multiple parts: use SurfaceKey.create() which validates ":" presence
+    const parts = [
+      event.surface,
+      event.workspace ?? "",
+      event.channel ?? "",
+    ];
     return SurfaceKey.create(parts);
   }
 

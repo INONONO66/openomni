@@ -68,7 +68,7 @@ export type TeamResult = {
   failedSteps: string[];
   skippedSteps: string[];
   stallReason?: string;
-  results: Map<string, string>;
+  results: Record<string, string>;
 };
 
 // DirectResult
