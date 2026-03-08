@@ -54,6 +54,28 @@ describe("StallDetector", () => {
     });
   });
 
+    it("ignores terminal (failed/succeeded/skipped) steps when checking rejections", () => {
+      const steps = [makeStep("A"), makeStep("B")];
+      const ledger = RunLedger.create(steps);
+
+      // Step A: failed with high rejection streak
+      ledger.transition("A", "running");
+      ledger.recordRejection("A");
+      ledger.recordRejection("A");
+      ledger.recordRejection("A");
+      ledger.transition("A", "failed");
+
+      // Step B: running with no rejections
+      ledger.transition("B", "running");
+
+      // Should NOT detect stall — A is terminal and should be filtered
+      const result = StallDetector.checkConsecutiveRejections(
+        ledger,
+        DEFAULT_CONFIG,
+      );
+      expect(result.stalled).toBe(false);
+    });
+
   describe("checkNoProgress", () => {
     it("detects stall when noProgressTurns >= max and no running steps", () => {
       const steps = [makeStep("A"), makeStep("B")];
@@ -162,11 +184,11 @@ describe("StallDetector", () => {
       const ledger = RunLedger.create(steps);
       const dag = DAG.build(steps);
 
+      // Step A is running with 3 rejections (not terminal)
       ledger.transition("A", "running");
       ledger.recordRejection("A");
       ledger.recordRejection("A");
       ledger.recordRejection("A");
-      ledger.transition("A", "failed");
       const result = StallDetector.check(ledger, dag, DEFAULT_CONFIG, 5);
       expect(result.stalled).toBe(true);
       expect(result.reason).toBe("consecutive_rejections");

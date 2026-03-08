@@ -7,6 +7,10 @@ export const DEFAULT_REVIEW_PROMPT =
   'Always respond with valid JSON containing a "decision" field ' +
   '("accept" or "reject") and an optional "feedback" field.';
 
+export const DEFAULT_HANDOFF_PROMPT =
+  "You are an expert at analyzing failed task executions and creating handoff documents. " +
+  "Summarize what was attempted, why it failed, and what should be tried differently. " +
+  "Respond with a clear, concise handoff document in plain text.";
 export namespace ReviewLoop {
   export interface ReviewConfig {
     model: { provider: string; id: string };
@@ -88,7 +92,7 @@ export namespace ReviewLoop {
     attemptNumber: number,
     maxAttempts: number,
   ): boolean {
-    return attemptNumber >= maxAttempts;
+    return attemptNumber >= maxAttempts - 1;
   }
 
   export async function generateHandoff(
@@ -98,7 +102,7 @@ export namespace ReviewLoop {
   ): Promise<string> {
     const agent = ChatAgent.create({
       model: config.model,
-      systemPrompt: config.systemPrompt ?? DEFAULT_REVIEW_PROMPT,
+      systemPrompt: DEFAULT_HANDOFF_PROMPT,
       budget: config.budget,
     });
 

@@ -198,6 +198,7 @@ export namespace TeamOrchestrator {
           if (attempts >= maxAttemptsPerStep) {
             ledger.transition(stepId, "failed");
             failed.add(stepId);
+            ledger.resetRejectionStreak(stepId);
 
             // Publish step.failed event (fire-and-forget)
             void Bus.publish(Team.Events.StepFailed, {

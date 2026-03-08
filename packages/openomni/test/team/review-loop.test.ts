@@ -179,12 +179,23 @@ describe("ReviewLoop", () => {
       expect(ReviewLoop.shouldHandoff(3, 3)).toBe(true);
     });
 
-    it("returns false when not at max attempts", () => {
-      expect(ReviewLoop.shouldHandoff(2, 3)).toBe(false);
+    it("returns true at penultimate attempt (handoff before final retry)", () => {
+      // Fix for off-by-one: handoff triggers at maxAttempts - 1
+      // so the final retry gets a handoff document
+      expect(ReviewLoop.shouldHandoff(2, 3)).toBe(true);
     });
 
-    it("returns false on first attempt", () => {
+    it("returns false when well below max attempts", () => {
       expect(ReviewLoop.shouldHandoff(1, 3)).toBe(false);
+    });
+
+    it("returns true on first attempt with max=2 (penultimate = first)", () => {
+      // With max=2, attempt 1 is the penultimate, so handoff triggers
+      expect(ReviewLoop.shouldHandoff(1, 2)).toBe(true);
+    });
+
+    it("returns true on first attempt with max=1 (immediate handoff)", () => {
+      expect(ReviewLoop.shouldHandoff(1, 1)).toBe(true);
     });
   });
 

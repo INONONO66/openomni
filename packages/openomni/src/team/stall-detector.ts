@@ -25,6 +25,9 @@ export namespace StallDetector {
     config: StallConfig,
   ): StallResult {
     for (const [, entry] of ledger.getState()) {
+      if (TERMINAL_STATES.includes(entry.state)) {
+        continue;
+      }
       if (entry.rejectionStreak >= config.maxConsecutiveRejections) {
         return {
           stalled: true,
