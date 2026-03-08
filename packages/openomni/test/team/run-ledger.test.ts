@@ -122,6 +122,21 @@ describe("RunLedger", () => {
     expect(ledger.getStepState("step-1")!.attempts).toBe(0);
   });
 
+  it("returns deep-copied Date fields that cannot mutate internal state", () => {
+    const ledger = RunLedger.create(makeSteps(["step-1"]));
+    ledger.transition("step-1", "running");
+
+    const entry = ledger.getStepState("step-1")!;
+    const originalTime = entry.startedAt!.getTime();
+
+    // Mutate the returned Date
+    entry.startedAt!.setTime(0);
+
+    // Internal state should be unchanged
+    const fresh = ledger.getStepState("step-1")!;
+    expect(fresh.startedAt!.getTime()).toBe(originalTime);
+  });
+
   it("getRunning returns only running steps", () => {
     const ledger = RunLedger.create(makeSteps(["s1", "s2", "s3"]));
     ledger.transition("s1", "running");

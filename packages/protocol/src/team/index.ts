@@ -104,7 +104,7 @@ export namespace Team {
           planId: z.string(),
           stepId: z.string(),
           agentId: z.string(),
-          attempt: z.number().int(),
+          attempt: z.number().int().min(1),
         }),
       }),
     );
@@ -204,9 +204,9 @@ export namespace Team {
         payload: z.object({
           planId: z.string(),
           status: z.string(),
-          completedSteps: z.number().int(),
-          failedSteps: z.number().int(),
-          skippedSteps: z.number().int(),
+          completedSteps: z.number().int().min(0),
+          failedSteps: z.number().int().min(0),
+          skippedSteps: z.number().int().min(0),
         }),
       }),
     );

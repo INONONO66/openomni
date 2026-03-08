@@ -24,7 +24,13 @@ const VALID_TRANSITIONS: Record<StepState, StepState[]> = {
 const COMPLETED_STATES: StepState[] = ["succeeded", "failed", "skipped"];
 
 function cloneEntry(entry: RunLedgerEntry): RunLedgerEntry {
-  return { ...entry };
+  return {
+    ...entry,
+    startedAt: entry.startedAt ? new Date(entry.startedAt.getTime()) : undefined,
+    completedAt: entry.completedAt
+      ? new Date(entry.completedAt.getTime())
+      : undefined,
+  };
 }
 
 function getEntryOrThrow(
