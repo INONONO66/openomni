@@ -13,6 +13,14 @@ const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxNoProgressTurns: 5,
 };
 
+/** Publish a bus event, swallowing any synchronous errors. */
+function safePublish<T>(...args: Parameters<typeof Bus.publish<T>>): void {
+  try {
+    Bus.publish(...args);
+  } catch {
+    // fire-and-forget: event errors must never crash the orchestrator
+  }
+}
 export namespace TeamOrchestrator {
   export interface OrchestratorConfig {
     reviewModel: { provider: string; id: string };
@@ -55,7 +63,7 @@ export namespace TeamOrchestrator {
     }
 
     // Publish plan.created event (fire-and-forget)
-    void Bus.publish(Team.Events.PlanCreated, {
+    safePublish(Team.Events.PlanCreated, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       payload: {
@@ -113,7 +121,7 @@ export namespace TeamOrchestrator {
         const teammateConfig = resolveTeammate(step, config);
 
         // Publish step.assigned event (fire-and-forget)
-        void Bus.publish(Team.Events.StepAssigned, {
+        safePublish(Team.Events.StepAssigned, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           payload: {
@@ -124,7 +132,7 @@ export namespace TeamOrchestrator {
         });
 
         // Publish step.started event (fire-and-forget)
-        void Bus.publish(Team.Events.StepStarted, {
+        safePublish(Team.Events.StepStarted, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           payload: {
@@ -159,7 +167,7 @@ export namespace TeamOrchestrator {
           );
 
           // Publish review.decision event (fire-and-forget)
-          void Bus.publish(Team.Events.ReviewDecision, {
+          safePublish(Team.Events.ReviewDecision, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
             payload: {
@@ -178,7 +186,7 @@ export namespace TeamOrchestrator {
             DAG.complete(dag, stepId, completed);
 
             // Publish step.completed event (fire-and-forget)
-            void Bus.publish(Team.Events.StepCompleted, {
+            safePublish(Team.Events.StepCompleted, {
               traceId: crypto.randomUUID(),
               time: Date.now(),
               payload: {
@@ -201,7 +209,7 @@ export namespace TeamOrchestrator {
             ledger.resetRejectionStreak(stepId);
 
             // Publish step.failed event (fire-and-forget)
-            void Bus.publish(Team.Events.StepFailed, {
+            safePublish(Team.Events.StepFailed, {
               traceId: crypto.randomUUID(),
               time: Date.now(),
               payload: {
@@ -247,7 +255,7 @@ export namespace TeamOrchestrator {
             );
 
             // Publish step.handoff event (fire-and-forget)
-            void Bus.publish(Team.Events.StepHandoff, {
+            safePublish(Team.Events.StepHandoff, {
               traceId: crypto.randomUUID(),
               time: Date.now(),
               payload: {
@@ -266,7 +274,7 @@ export namespace TeamOrchestrator {
           failed.add(stepId);
 
           // Publish step.failed event (fire-and-forget)
-          void Bus.publish(Team.Events.StepFailed, {
+          safePublish(Team.Events.StepFailed, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
             payload: {
@@ -296,7 +304,7 @@ export namespace TeamOrchestrator {
       );
       if (stall.stalled && stall.reason) {
         // Publish stall.detected event (fire-and-forget)
-        void Bus.publish(Team.Events.StallDetected, {
+        safePublish(Team.Events.StallDetected, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           payload: {
@@ -329,7 +337,7 @@ export namespace TeamOrchestrator {
     const final = buildResult(plan.steps, ledger, results);
 
     // Publish execution.complete event (fire-and-forget)
-    void Bus.publish(Team.Events.ExecutionComplete, {
+    safePublish(Team.Events.ExecutionComplete, {
       traceId: crypto.randomUUID(),
       time: Date.now(),
       payload: {

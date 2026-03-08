@@ -243,21 +243,30 @@ describe("TeamOrchestrator event stream", () => {
     });
   });
 
-  it("publishes events synchronously without awaiting (fire-and-forget pattern)", async () => {
-    // Bus.publish is synchronous (returns void), and the orchestrator
-    // calls it with `void Bus.publish(...)` to signal fire-and-forget intent.
-    // This test verifies that events are published and execution completes.
-    responseQueue.push("step output");
-    responseQueue.push(JSON.stringify({ decision: "accept" }));
+  it("completes execution even when Bus.publish throws (fire-and-forget)", async () => {
+    // Replace Bus.publish with a throwing implementation to verify
+    // that safePublish() in team-orchestrator catches the error.
+    const { Bus } = await import("@openomni/session");
+    const originalPublish = Bus.publish;
+    let throwCount = 0;
+    Bus.publish = ((..._args: unknown[]) => {
+      throwCount++;
+      throw new Error("Bus.publish sync error");
+    }) as typeof Bus.publish;
 
-    const plan = makePlan([makeStep("s1")]);
-    const result = await TeamOrchestrator.execute(plan, makeConfig());
+    try {
+      responseQueue.push("step output");
+      responseQueue.push(JSON.stringify({ decision: "accept" }));
 
-    // Execution completed successfully
-    expect(result.status).toBe("completed");
-    // Events were published during execution
-    expect(publishedEvents.length).toBeGreaterThan(0);
-    // Verify specific event ordering: plan.created should come first
-    expect(publishedEvents[0]?.eventName).toBe("plan.created");
+      const plan = makePlan([makeStep("s1")]);
+      const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+      // Execution MUST complete despite Bus.publish throwing
+      expect(result.status).toBe("completed");
+      // safePublish was called (and caught the throws)
+      expect(throwCount).toBeGreaterThan(0);
+    } finally {
+      Bus.publish = originalPublish;
+    }
   });
 });
