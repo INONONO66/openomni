@@ -243,18 +243,21 @@ describe("TeamOrchestrator event stream", () => {
     });
   });
 
-  it("publishes events as fire-and-forget (no await)", async () => {
-    // This test verifies that Bus.publish errors don't propagate
-    // by checking that execution completes even if publish throws
+  it("publishes events synchronously without awaiting (fire-and-forget pattern)", async () => {
+    // Bus.publish is synchronous (returns void), and the orchestrator
+    // calls it with `void Bus.publish(...)` to signal fire-and-forget intent.
+    // This test verifies that events are published and execution completes.
     responseQueue.push("step output");
     responseQueue.push(JSON.stringify({ decision: "accept" }));
 
     const plan = makePlan([makeStep("s1")]);
     const result = await TeamOrchestrator.execute(plan, makeConfig());
 
-    // If events were awaited and threw, execution would fail
-    // Since we got a result, events were fire-and-forget
+    // Execution completed successfully
     expect(result.status).toBe("completed");
+    // Events were published during execution
     expect(publishedEvents.length).toBeGreaterThan(0);
+    // Verify specific event ordering: plan.created should come first
+    expect(publishedEvents[0]?.eventName).toBe("plan.created");
   });
 });
