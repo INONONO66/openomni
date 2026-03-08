@@ -15,7 +15,7 @@ Output ONLY valid JSON matching this schema:
       "dependsOn": ["<stepId>", ...],
       "suggestedAgent": "<optional agent hint>",
       "guardrail": "<optional acceptance criteria>",
-      "tools": ["<optional tool names>"]
+      "tools": [{ "name": "<tool-name>", "description": "<what it does>", "inputSchema": { "type": "object", "properties": {} } }]
     }
   ],
   "createdAt": "<ISO date string>",

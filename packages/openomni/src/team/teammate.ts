@@ -59,6 +59,28 @@ export namespace Teammate {
   }
 
   /**
+   * Merge config-level and step-level tools, deduplicating by name.
+   * Step tools take precedence over config tools with the same name.
+   */
+  function mergeTools(
+    configTools?: Tool.Spec[],
+    stepTools?: Tool.Spec[],
+  ): Tool.Spec[] | undefined {
+    if (!configTools && !stepTools) return undefined;
+    if (!configTools) return stepTools;
+    if (!stepTools) return configTools;
+
+    const merged = new Map<string, Tool.Spec>();
+    for (const tool of configTools) {
+      merged.set(tool.name, tool);
+    }
+    for (const tool of stepTools) {
+      merged.set(tool.name, tool);
+    }
+    return [...merged.values()];
+  }
+
+  /**
    * Execute a single step using a fresh ChatAgent instance
    * Each call creates a NEW ChatAgent (no cross-step state)
    */
@@ -70,7 +92,7 @@ export namespace Teammate {
     const agentConfig: ChatAgentConfig = {
       model: config.model,
       systemPrompt: config.systemPrompt,
-      tools: config.tools,
+      tools: mergeTools(config.tools, input.step.tools),
       budget: config.budget,
       toolExecutor: config.toolExecutor,
     };

@@ -4,6 +4,7 @@ import type { AgentResult, TokenUsage } from "@openomni/agent";
 import { Teammate } from "../../src/team/teammate";
 
 // Mock ChatAgent module
+const mockChatAgentConfigs: unknown[] = [];
 const mockChatAgentInstances: Array<{
   run: (input: unknown) => Promise<AgentResult>;
 }> = [];
@@ -11,6 +12,7 @@ const mockChatAgentInstances: Array<{
 mock.module("@openomni/agent", () => ({
   ChatAgent: {
     create: (config: unknown) => {
+      mockChatAgentConfigs.push(config);
       const instance = {
         run: mock(async (input: unknown): Promise<AgentResult> => {
           return {
@@ -33,6 +35,7 @@ mock.module("@openomni/agent", () => ({
 
 describe("Teammate", () => {
   beforeEach(() => {
+    mockChatAgentConfigs.length = 0;
     mockChatAgentInstances.length = 0;
   });
 
@@ -163,9 +166,10 @@ describe("Teammate", () => {
 
       await Teammate.execute({ step }, config);
 
-      // Verify ChatAgent.create was called with toolExecutor in config
-      // This is verified by checking that the instance was created
-      expect(mockChatAgentInstances.length).toBe(1);
+      // Verify ChatAgent.create was called with toolExecutor
+      expect(mockChatAgentConfigs.length).toBe(1);
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      expect(passedConfig.toolExecutor).toBe(mockToolExecutor);
     });
 
     it("should return result.output matching AgentResult.text", async () => {
@@ -229,8 +233,10 @@ describe("Teammate", () => {
 
       await Teammate.execute({ step }, config);
 
-      // Verify ChatAgent.create was called
-      expect(mockChatAgentInstances.length).toBe(1);
+      // Verify ChatAgent.create was called with correct systemPrompt
+      expect(mockChatAgentConfigs.length).toBe(1);
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      expect(passedConfig.systemPrompt).toBe("You are a helpful assistant");
     });
 
     it("should pass tools to ChatAgent config when provided", async () => {
@@ -260,7 +266,9 @@ describe("Teammate", () => {
 
       await Teammate.execute({ step }, config);
 
-      expect(mockChatAgentInstances.length).toBe(1);
+      expect(mockChatAgentConfigs.length).toBe(1);
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      expect(passedConfig.tools).toEqual(tools);
     });
 
     it("should pass budget to ChatAgent config when provided", async () => {
@@ -280,7 +288,78 @@ describe("Teammate", () => {
 
       await Teammate.execute({ step }, config);
 
-      expect(mockChatAgentInstances.length).toBe(1);
+      expect(mockChatAgentConfigs.length).toBe(1);
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      expect(passedConfig.budget).toEqual(budget);
+    });
+
+    it("should merge config tools with step-level tools", async () => {
+      const configTool: Tool.Spec = {
+        name: "config-tool",
+        description: "Tool from config",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      };
+      const stepTool: Tool.Spec = {
+        name: "step-tool",
+        description: "Tool from step",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      };
+
+      const step: PlanStep = {
+        stepId: "step-1",
+        description: "Test step",
+        expectedOutput: "Expected result",
+        dependsOn: [],
+        tools: [stepTool],
+      };
+
+      const config: Teammate.TeammateConfig = {
+        agentId: "agent-1",
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        tools: [configTool],
+      };
+
+      await Teammate.execute({ step }, config);
+
+      expect(mockChatAgentConfigs.length).toBe(1);
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      const tools = passedConfig.tools as Tool.Spec[];
+      expect(tools).toHaveLength(2);
+      expect(tools.map((t) => t.name).sort()).toEqual(["config-tool", "step-tool"]);
+    });
+
+    it("step tools override config tools with same name", async () => {
+      const configTool: Tool.Spec = {
+        name: "shared-tool",
+        description: "From config",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      };
+      const stepTool: Tool.Spec = {
+        name: "shared-tool",
+        description: "From step (override)",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      };
+
+      const step: PlanStep = {
+        stepId: "step-1",
+        description: "Test step",
+        expectedOutput: "Expected result",
+        dependsOn: [],
+        tools: [stepTool],
+      };
+
+      const config: Teammate.TeammateConfig = {
+        agentId: "agent-1",
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        tools: [configTool],
+      };
+
+      await Teammate.execute({ step }, config);
+
+      const passedConfig = mockChatAgentConfigs[0] as Record<string, unknown>;
+      const tools = passedConfig.tools as Tool.Spec[];
+      expect(tools).toHaveLength(1);
+      expect(tools[0].description).toBe("From step (override)");
     });
   });
 });
