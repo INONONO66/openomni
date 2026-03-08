@@ -8,3 +8,4 @@ export * from "./event/index.js";
 export * from "./notification/index.js";
 export * from "./plan/index.js";
 export * from "./team/index.js";
+export * from "./ingress/index.js";
