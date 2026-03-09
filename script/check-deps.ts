@@ -188,6 +188,8 @@ async function validateDependencyDirection(): Promise<string[]> {
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = /from\s+["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
+  // Limitation: This regex only detects `from "@openomni/..."` imports.
+  // Side-effect imports (`import "@openomni/..."`) are not detected.
   const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({

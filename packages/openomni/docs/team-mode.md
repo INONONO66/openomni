@@ -154,7 +154,7 @@ namespace ReviewLoop {
 }
 ```
 
-**Key constraint**: ReviewLoop is the **only place LLM is used** in Team Mode execution. The orchestrator dispatch loop itself is deterministic.
+**Key constraint**: ReviewLoop is the **only place LLM is used for review decisions** in Team Mode. `Teammate.execute()` also uses LLM via ChatAgent for step execution. The orchestrator dispatch loop itself is deterministic.
 
 ### StallDetector API
 

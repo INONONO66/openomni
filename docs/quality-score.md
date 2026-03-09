@@ -10,7 +10,7 @@ Last updated: 2026-03-09
 | session  | ⭐⭐⭐ (10 test files) | ⭐⭐⭐ (strict)            | ⭐⭐⭐ (stable)         | ⭐⭐⭐ (AGENTS.md 47L)            | **A-**  |
 | llm      | ⭐⭐⭐ (19 test files) | ⭐⭐ (noEmit)              | ⭐⭐ (evolving)         | ⭐⭐⭐ (AGENTS.md 52L)            | **B+**  |
 | agent    | ⭐⭐ (2 test files)    | ⭐⭐⭐ (strict)            | ⭐⭐ (stream() stub)    | ⭐⭐⭐ (AGENTS.md 95L)            | **B**   |
-| openomni | ⭐⭐⭐ (67 test files) | ⭐⭐ (legacy has some any) | ⭐⭐ (legacy + new)     | ⭐⭐ (AGENTS.md 516L → splitting) | **B-**  |
+| openomni | ⭐⭐⭐ (67 test files) | ⭐⭐ (legacy has some any) | ⭐⭐ (legacy + new)     | ⭐⭐⭐ (AGENTS.md 72L + docs/) | **B**   |
 | cli      | ⭐ (0 test files)      | ⭐⭐ (strict)              | ⭐ (demo/hardcoded)     | ⭐⭐ (AGENTS.md 37L)              | **C**   |
 
 ## Rating Criteria
@@ -22,7 +22,7 @@ Last updated: 2026-03-09
 
 ## Known Tech Debt
 
-- CLI deep imports into `@openomni/llm/src/` internals (3 violations)
+- CLI deep imports into `@openomni/llm/src/` internals (2 violations)
 - CLI has zero test files
 - openomni legacy code has broader `any` usage than other packages
 - agent `stream()` is a stub (Phase 2 planned)

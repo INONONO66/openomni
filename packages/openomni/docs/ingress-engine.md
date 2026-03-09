@@ -38,9 +38,9 @@ namespace IngressEngine {
 ```typescript
 // Discriminated union by mode
 type InboundEvent =
-  | { mode: "plan";   surface: string; workspace?: string; channel?: string; payload: unknown; agent: AgentDef }
-  | { mode: "team";   surface: string; workspace?: string; channel?: string; payload: unknown; agents: { reviewer: AgentDef; executor: AgentDef } }
-  | { mode: "direct"; surface: string; workspace?: string; channel?: string; payload: unknown; agent: AgentDef };
+  | { mode: "plan";   id: string; surface: string; workspace?: string; channel?: string; userId?: string; payload: unknown; meta?: Record<string, unknown>; agent: AgentDef }
+  | { mode: "team";   id: string; surface: string; workspace?: string; channel?: string; userId?: string; payload: unknown; meta?: Record<string, unknown>; agents: { reviewer: AgentDef; executor: AgentDef } }
+  | { mode: "direct"; id: string; surface: string; workspace?: string; channel?: string; userId?: string; payload: unknown; meta?: Record<string, unknown>; agent: AgentDef };
 
 type AgentDef = {
   model: { provider: string; id: string };
@@ -56,7 +56,7 @@ type AgentDef = {
 ```typescript
 type IngressResult =
   | { mode: "plan";   sessionId: string; result: PlanResult }
-  | { mode: "team";   sessionId: string; result: TeamOrchestrator.TeamResult }
+  | { mode: "team";   sessionId: string; result: TeamResult }
   | { mode: "direct"; sessionId: string; result: { output: string; finishReason: string } };
 ```
 

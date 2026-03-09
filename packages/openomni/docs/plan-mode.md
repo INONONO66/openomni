@@ -38,6 +38,8 @@ namespace PlanAgent {
 
 ```typescript
 import { PlanAgent } from "@openomni/openomni";
+// NOTE: PlanAgent is not yet exported from the package barrel (src/index.ts).
+// Direct import: import { PlanAgent } from "@openomni/openomni/src/plan/plan-agent"
 
 const result = await PlanAgent.generate(
   "Build a REST API for user management",

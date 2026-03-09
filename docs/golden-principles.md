@@ -20,7 +20,7 @@ Each package may depend only on packages to its LEFT. Reverse dependencies are b
 - `protocol`: zero `@openomni/*` deps (leaf)
 - `session`: only `@openomni/protocol`
 - `llm`: `@openomni/protocol`, `@openomni/session`
-- `agent`: `@openomni/protocol`, `@openomni/llm`, `@openomni/session`
+- `agent`: `@openomni/protocol`, `@openomni/llm`
 - `openomni`: any `@openomni/*`
 - `cli`: any `@openomni/*`
 
