@@ -37,3 +37,9 @@ jobs:
       - name: Test (agent)
         run: bun run test:ci
         working-directory: packages/agent
+      - name: Test (protocol)
+        run: bun test
+        working-directory: packages/protocol
+      - name: Test (openomni)
+        run: bun run test:ci
+        working-directory: packages/openomni

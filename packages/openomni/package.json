@@ -8,7 +8,7 @@
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "test": "bun test",
-    "test:ci": "bun test --preload ./test/legacy/force-exit.ts test/legacy"
+    "test:ci": "bun test test/team test/dag test/ingress"
   },
   "dependencies": {
     "@openomni/agent": "workspace:*",

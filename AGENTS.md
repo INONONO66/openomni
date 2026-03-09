@@ -103,10 +103,10 @@ openomni agent --mode orchestrated   # full pipeline
 
 ## NOTES
 
-- README.md is stock Turborepo template — does NOT describe this project.
+- README.md describes project architecture, dependency graph, and getting started.
 - `packages/protocol` publishes built `dist/` artifacts (`main: ./dist/index.js`). Other packages point `main` at source (`./src/index.ts`) for Bun's native TS support.
 - No ESLint config present (referenced in scripts but not configured).
-- No CI/CD workflows yet (`.github/workflows/` absent).
+- CI pipeline: `.github/workflows/ci.yml` — build, check-types, tests for all packages.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
 - `packages/agent` is now a pure ChatAgent primitive — stateless, no session dependency. Use `@openomni/agent` for the ReAct loop.
