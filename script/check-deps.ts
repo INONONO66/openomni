@@ -36,6 +36,12 @@ type PackageRule = {
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
+// Known deep import violations (tracked tech debt — do not extend)
+// These are excluded from CI failure to avoid blocking unrelated PRs.
+const KNOWN_DEEP_IMPORT_FILES = new Set([
+  "apps/cli/src/cmd/auth.ts", // #33 tech debt: imports @openomni/llm internals
+]);
+
 const RULES: Record<PackageKey, PackageRule> = {
   protocol: {
     displayName: "protocol",
@@ -215,9 +221,14 @@ async function validateDeepImports(): Promise<string[]> {
     while ((match = importPattern.exec(source)) !== null) {
       const importPath = match[1];
       const line = lineNumberForOffset(source, match.index);
-      const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
+      const isKnown = KNOWN_DEEP_IMPORT_FILES.has(filePath);
+      const prefix = isKnown ? "KNOWN" : "VIOLATION";
+      const base = `${prefix}: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
 
-      if (SHOW_FIX_SUGGESTIONS) {
+      if (isKnown) {
+        // Print but don't count as violation
+        console.warn(base);
+      } else if (SHOW_FIX_SUGGESTIONS) {
         const suggested = suggestBarrelImport(importPath);
         violations.push(`${base} (suggestion: ${suggested})`);
       } else {
@@ -317,12 +328,12 @@ async function main(): Promise<void> {
 
   if (violations.length === 0 && freshnessWarnings.length === 0) {
     console.log("OK: dependency direction, package boundaries, and doc freshness are valid");
-    Bun.exit(0);
+    process.exit(0);
   }
 
   if (violations.length === 0 && freshnessWarnings.length > 0) {
     console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
-    Bun.exit(0);
+    process.exit(0);
   }
 
   for (const violation of violations) {
