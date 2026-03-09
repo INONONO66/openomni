@@ -230,13 +230,99 @@ async function validateDeepImports(): Promise<string[]> {
   return violations;
 }
 
+// --- Document Freshness Check ---
+
+const TRACKED_DOCS = [
+  "AGENTS.md",
+  "packages/protocol/AGENTS.md",
+  "packages/session/AGENTS.md",
+  "packages/llm/AGENTS.md",
+  "packages/agent/AGENTS.md",
+  "packages/openomni/AGENTS.md",
+  "docs/golden-principles.md",
+  "docs/quality-score.md",
+];
+
+const STALE_THRESHOLD = 50; // commits since last modification
+
+async function checkDocFreshness(): Promise<string[]> {
+  const warnings: string[] = [];
+
+  for (const docPath of TRACKED_DOCS) {
+    const file = Bun.file(docPath);
+    if (!(await file.exists())) {
+      warnings.push(`WARNING: tracked doc missing: ${docPath}`);
+      continue;
+    }
+
+    try {
+      const proc = Bun.spawn({
+        cmd: ["git", "log", "--oneline", `HEAD`, "--", docPath],
+        stdout: "pipe",
+        stderr: "pipe",
+      }) as { stdout: ReadableStream; exited: Promise<number> };
+
+      const output = await new Response(proc.stdout).text();
+      await proc.exited;
+
+      const totalCommits = output.trim().split("\n").filter(Boolean).length;
+      if (totalCommits === 0) {
+        // File exists but has no git history (untracked or new)
+        continue;
+      }
+
+      // Count commits since last modification of this file
+      const lastTouchProc = Bun.spawn({
+        cmd: ["git", "log", "-1", "--format=%H", "--", docPath],
+        stdout: "pipe",
+        stderr: "pipe",
+      }) as { stdout: ReadableStream; exited: Promise<number> };
+
+      const lastTouchHash = (await new Response(lastTouchProc.stdout).text()).trim();
+      await lastTouchProc.exited;
+
+      if (!lastTouchHash) continue;
+
+      const sinceProc = Bun.spawn({
+        cmd: ["git", "rev-list", "--count", `${lastTouchHash}..HEAD`],
+        stdout: "pipe",
+        stderr: "pipe",
+      }) as { stdout: ReadableStream; exited: Promise<number> };
+
+      const commitsSince = parseInt((await new Response(sinceProc.stdout).text()).trim(), 10);
+      await sinceProc.exited;
+
+      if (commitsSince >= STALE_THRESHOLD) {
+        warnings.push(
+          `STALE: ${docPath} — last updated ${commitsSince} commits ago (threshold: ${STALE_THRESHOLD})`,
+        );
+      }
+    } catch {
+      // git not available or other error — skip silently
+    }
+  }
+
+  return warnings;
+}
+
 async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
   const deepImportViolations = await validateDeepImports();
+  const freshnessWarnings = await checkDocFreshness();
   const violations = [...depViolations, ...deepImportViolations];
 
-  if (violations.length === 0) {
-    console.log("OK: dependency direction and package boundaries are valid");
+  // Print freshness warnings (non-blocking)
+  for (const warning of freshnessWarnings) {
+    console.warn(warning);
+  }
+
+  if (violations.length === 0 && freshnessWarnings.length === 0) {
+    console.log("OK: dependency direction, package boundaries, and doc freshness are valid");
+    Bun.exit(0);
+  }
+
+  if (violations.length === 0 && freshnessWarnings.length > 0) {
+    console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
     Bun.exit(0);
   }
 
