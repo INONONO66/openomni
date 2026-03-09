@@ -28,11 +28,15 @@
 - [ ] `session`
 - [ ] `llm`
 - [ ] `agent`
+- [ ] `openomni`
 - [ ] `cli`
+- [ ] `infra` (CI, scripts, docs)
 
 ## Checklist
 
 - [ ] `bun run check-types` passes
-- [ ] `bun run build` passes
+- [ ] `bun run script/check-deps.ts` clean (no new violations)
 - [ ] Tests added/updated for changes
 - [ ] No `as any`, `@ts-ignore`, or `@ts-expect-error` added
+- [ ] AGENTS.md / docs updated if public API or architecture changed
+- [ ] Relevant ADR added if this introduces a new design decision

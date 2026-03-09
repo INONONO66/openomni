@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something is broken or not working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: "When I run X, Y happens instead of Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. Run `bun test` in packages/llm
+        2. See error in test X
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected Package
+      description: Which package is affected?
+      multiple: true
+      options:
+        - protocol
+        - session
+        - llm
+        - agent
+        - openomni
+        - cli
+        - infra (CI, scripts, config)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Error logs, screenshots, relevant file paths, related ADRs or golden principles.
+      placeholder: "Error output, stack trace, or link to docs/design-decisions/003-*.md"
+    validations:
+      required: false

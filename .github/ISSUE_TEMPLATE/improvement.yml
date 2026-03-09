@@ -1,0 +1,69 @@
+name: Improvement
+description: Enhancement, tech debt, enforcement gap, or new tooling
+labels: ["improvement"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What kind of improvement is this?
+      options:
+        - enforcement — add mechanical enforcement for an existing rule
+        - tooling — new script, CI step, or dev workflow
+        - tech-debt — clean up known debt or anti-patterns
+        - docs — documentation gap or staleness
+        - feature — new capability
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's missing, broken, or suboptimal? Reference specific docs if applicable.
+      placeholder: "golden-principles #5 (no empty catch) has no mechanical enforcement — violations go undetected."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: How should this be fixed? Be specific about files, scripts, CI steps.
+      placeholder: |
+        Add grep-based check to script/check-deps.ts:
+        - Detect `catch(e) {}` pattern
+        - Detect `as any` outside protocol/
+        - Run in CI alongside existing checks
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected Package
+      description: Which package(s) are affected?
+      multiple: true
+      options:
+        - protocol
+        - session
+        - llm
+        - agent
+        - openomni
+        - cli
+        - infra (CI, scripts, config)
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort Estimate
+      options:
+        - trivial (< 30 min)
+        - small (30 min - 2 hr)
+        - medium (2 hr - 1 day)
+        - large (1+ days)
+    validations:
+      required: true
