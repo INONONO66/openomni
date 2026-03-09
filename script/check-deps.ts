@@ -62,7 +62,6 @@ const RULES: Record<PackageKey, PackageRule> = {
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/llm",
-      "@openomni/session",
     ]),
   },
   openomni: {
