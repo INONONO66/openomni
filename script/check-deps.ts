@@ -36,6 +36,13 @@ type PackageRule = {
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
+// Known deep import violations (tracked tech debt — do not extend)
+// Keyed by "file:importPath" to avoid file-wide exemptions that could hide new violations.
+const KNOWN_DEEP_IMPORTS = new Set([
+  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/registry",
+  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/storage",
+]);
+
 const RULES: Record<PackageKey, PackageRule> = {
   protocol: {
     displayName: "protocol",
@@ -62,7 +69,6 @@ const RULES: Record<PackageKey, PackageRule> = {
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/llm",
-      "@openomni/session",
     ]),
   },
   openomni: {
@@ -216,14 +222,120 @@ async function validateDeepImports(): Promise<string[]> {
     while ((match = importPattern.exec(source)) !== null) {
       const importPath = match[1];
       const line = lineNumberForOffset(source, match.index);
-      const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
+      const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
+      const prefix = isKnown ? "KNOWN" : "VIOLATION";
+      const base = `${prefix}: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
 
-      if (SHOW_FIX_SUGGESTIONS) {
+      if (isKnown) {
+        // Print but don't count as violation
+        console.warn(base);
+      } else if (SHOW_FIX_SUGGESTIONS) {
         const suggested = suggestBarrelImport(importPath);
         violations.push(`${base} (suggestion: ${suggested})`);
       } else {
         violations.push(base);
       }
+    }
+  }
+
+  return violations;
+}
+
+// --- Golden Principles Enforcement (Phase 1) ---
+// See docs/golden-principles.md for the full list.
+
+// Allowed `as any` locations:
+// - protocol/error: sole exception per golden-principles.md #5
+// - remaining entries: pre-existing tech debt (do not extend)
+const ALLOWED_AS_ANY_FILES = new Set([
+  "packages/protocol/src/error/index.ts",
+  "packages/llm/src/session/processor.ts",
+  "packages/openomni/src/ingress/event-projector.ts",
+]);
+
+// Known catch-all filenames (pre-existing tech debt)
+const KNOWN_CATCHALL_FILES = new Set([
+  "apps/cli/src/serve/utils.ts",
+]);
+
+// Known empty catch blocks (pre-existing tech debt — do not extend)
+// Keyed by "file:line" to track exact locations.
+const KNOWN_EMPTY_CATCHES = new Set([
+  "apps/cli/src/serve/surface-store.ts:80",
+  "packages/session/src/storage/lock.ts:65",
+  "packages/session/src/storage/lock.ts:113",
+  "packages/session/src/storage/lock.ts:127",
+]);
+
+async function validateGoldenPrinciples(): Promise<string[]> {
+  const violations: string[] = [];
+  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (
+      filePath.includes("/node_modules/") ||
+      filePath.startsWith("node_modules/") ||
+      filePath.includes("/dist/") ||
+      filePath.startsWith("dist/") ||
+      isTestFile(filePath) ||
+      filePath.startsWith("script/")
+    ) {
+      continue;
+    }
+
+    const source = await Bun.file(filePath).text();
+    const lines = source.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+
+      // #5: No `as any` (except allowed files)
+      if (!ALLOWED_AS_ANY_FILES.has(filePath) && /\bas\s+any\b/.test(line)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${lineNum} — \`as any\` detected. See docs/golden-principles.md #5`,
+        );
+      }
+
+      // #5: No @ts-ignore or @ts-expect-error
+      if (/@ts-ignore|@ts-expect-error/.test(line)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${lineNum} — type suppression directive detected. See docs/golden-principles.md #5`,
+        );
+      }
+
+      // #5: No empty catch blocks (checked via whole-source regex after loop)
+
+    }
+
+    // #5: No empty catch blocks (multi-line aware)
+    const emptyCatchPattern = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/gm;
+    let emptyCatchMatch: RegExpExecArray | null = null;
+    while ((emptyCatchMatch = emptyCatchPattern.exec(source)) !== null) {
+      const catchLine = lineNumberForOffset(source, emptyCatchMatch.index);
+      const key = `${filePath}:${catchLine}`;
+      if (KNOWN_EMPTY_CATCHES.has(key)) {
+        console.warn(`KNOWN: ${key} — empty catch block (tracked tech debt)`);
+      } else {
+        violations.push(
+          `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.md #5`,
+        );
+      }
+    }
+
+
+    // #7: No catch-all filenames
+    const basename = filePath.split("/").pop() ?? "";
+    if (/^(utils|helpers|common|service)\.ts$/.test(basename) && filePath.includes("/src/") && !KNOWN_CATCHALL_FILES.has(filePath)) {
+      violations.push(
+        `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.md #7`,
+      );
     }
   }
 
@@ -308,8 +420,9 @@ async function checkDocFreshness(): Promise<string[]> {
 async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
   const deepImportViolations = await validateDeepImports();
+  const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
-  const violations = [...depViolations, ...deepImportViolations];
+  const violations = [...depViolations, ...deepImportViolations, ...goldenViolations];
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
@@ -317,13 +430,13 @@ async function main(): Promise<void> {
   }
 
   if (violations.length === 0 && freshnessWarnings.length === 0) {
-    console.log("OK: dependency direction, package boundaries, and doc freshness are valid");
-    Bun.exit(0);
+    console.log("OK: dependency direction, package boundaries, golden principles, and doc freshness are valid");
+    process.exit(0);
   }
 
   if (violations.length === 0 && freshnessWarnings.length > 0) {
     console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
-    Bun.exit(0);
+    process.exit(0);
   }
 
   for (const violation of violations) {

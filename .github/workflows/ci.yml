@@ -28,6 +28,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@openomni/protocol
       - run: bun run check-types
+      - name: Check dependency rules
+        run: bun run script/check-deps.ts
       - name: Test (session)
         run: bun test
         working-directory: packages/session
