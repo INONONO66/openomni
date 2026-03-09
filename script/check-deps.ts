@@ -240,6 +240,86 @@ async function validateDeepImports(): Promise<string[]> {
   return violations;
 }
 
+// --- Golden Principles Enforcement (Phase 1) ---
+// See docs/golden-principles.md for the full list.
+
+// Allowed `as any` locations:
+// - protocol/error: sole exception per golden-principles.md #5
+// - remaining entries: pre-existing tech debt (do not extend)
+const ALLOWED_AS_ANY_FILES = new Set([
+  "packages/protocol/src/error/index.ts",
+  "packages/llm/src/session/processor.ts",
+  "packages/openomni/src/ingress/event-projector.ts",
+]);
+
+// Known catch-all filenames (pre-existing tech debt)
+const KNOWN_CATCHALL_FILES = new Set([
+  "apps/cli/src/serve/utils.ts",
+]);
+
+async function validateGoldenPrinciples(): Promise<string[]> {
+  const violations: string[] = [];
+  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (
+      filePath.includes("/node_modules/") ||
+      filePath.startsWith("node_modules/") ||
+      filePath.includes("/dist/") ||
+      filePath.startsWith("dist/") ||
+      isTestFile(filePath) ||
+      filePath.startsWith("script/")
+    ) {
+      continue;
+    }
+
+    const source = await Bun.file(filePath).text();
+    const lines = source.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+
+      // #5: No `as any` (except allowed files)
+      if (!ALLOWED_AS_ANY_FILES.has(filePath) && /\bas\s+any\b/.test(line)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${lineNum} — \`as any\` detected. See docs/golden-principles.md #5`,
+        );
+      }
+
+      // #5: No @ts-ignore or @ts-expect-error
+      if (/@ts-ignore|@ts-expect-error/.test(line)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${lineNum} — type suppression directive detected. See docs/golden-principles.md #5`,
+        );
+      }
+
+      // #5: No empty catch blocks
+      if (/catch\s*\([^)]*\)\s*\{\s*\}/.test(line)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${lineNum} — empty catch block detected. See docs/golden-principles.md #5`,
+        );
+      }
+    }
+
+    // #7: No catch-all filenames
+    const basename = filePath.split("/").pop() ?? "";
+    if (/^(utils|helpers|common|service)\.ts$/.test(basename) && filePath.includes("/src/") && !KNOWN_CATCHALL_FILES.has(filePath)) {
+      violations.push(
+        `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.md #7`,
+      );
+    }
+  }
+
+  return violations;
+}
+
 // --- Document Freshness Check ---
 
 const TRACKED_DOCS = [
@@ -318,8 +398,9 @@ async function checkDocFreshness(): Promise<string[]> {
 async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
   const deepImportViolations = await validateDeepImports();
+  const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
-  const violations = [...depViolations, ...deepImportViolations];
+  const violations = [...depViolations, ...deepImportViolations, ...goldenViolations];
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
@@ -327,7 +408,7 @@ async function main(): Promise<void> {
   }
 
   if (violations.length === 0 && freshnessWarnings.length === 0) {
-    console.log("OK: dependency direction, package boundaries, and doc freshness are valid");
+    console.log("OK: dependency direction, package boundaries, golden principles, and doc freshness are valid");
     process.exit(0);
   }
 
