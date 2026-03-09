@@ -8,11 +8,11 @@ CLI entry point for OpenOmni. Built with yargs + @clack/prompts.
 src/
 ├── index.ts          # CLI entry — yargs command registration
 ├── cmd/
-│   ├── auth.ts       # `openomni auth login/logout/status` — OAuth flow
-│   ├── config.ts     # `openomni config` — model/provider configuration
+│   ├── auth.ts       # `openomni auth login/logout/list` — credential management
+│   ├── config.ts     # `openomni config` — adapter configuration (add/list/remove)
 │   └── serve.ts      # `openomni serve` — start adapter-based server
 ├── adapter/
-│   ├── types.ts      # SurfaceAdapter interface
+│   ├── types.ts      # Adapter.Surface interface + Adapter namespace
 │   ├── telegram.ts   # Telegram Bot API adapter
 │   ├── github.ts     # GitHub webhooks adapter
 │   └── discord.ts    # Discord bot adapter
@@ -36,7 +36,7 @@ src/
 ### New Adapter
 
 1. Create `src/adapter/{name}.ts`
-2. Implement `SurfaceAdapter` interface from `src/adapter/types.ts`
+2. Implement `Adapter.Surface` interface from `src/adapter/types.ts`
 3. Wire into `src/cmd/serve.ts`
 
 ## ANTI-PATTERNS
@@ -47,6 +47,6 @@ src/
 ## KNOWN TECH DEBT
 
 - Zero test files — no test coverage at all
-- Hardcoded model configuration in serve command
+- Adapters are demo/prototype quality — not production-ready
 - Adapters are demo/prototype quality — not production-ready
 - Deep imports into `@openomni/llm` internals (2 violations)

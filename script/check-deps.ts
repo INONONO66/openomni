@@ -37,9 +37,10 @@ type PackageRule = {
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
 // Known deep import violations (tracked tech debt — do not extend)
-// These are excluded from CI failure to avoid blocking unrelated PRs.
-const KNOWN_DEEP_IMPORT_FILES = new Set([
-  "apps/cli/src/cmd/auth.ts", // #33 tech debt: imports @openomni/llm internals
+// Keyed by "file:importPath" to avoid file-wide exemptions that could hide new violations.
+const KNOWN_DEEP_IMPORTS = new Set([
+  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/registry",
+  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/storage",
 ]);
 
 const RULES: Record<PackageKey, PackageRule> = {
@@ -221,7 +222,7 @@ async function validateDeepImports(): Promise<string[]> {
     while ((match = importPattern.exec(source)) !== null) {
       const importPath = match[1];
       const line = lineNumberForOffset(source, match.index);
-      const isKnown = KNOWN_DEEP_IMPORT_FILES.has(filePath);
+      const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
       const prefix = isKnown ? "KNOWN" : "VIOLATION";
       const base = `${prefix}: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
 
@@ -255,6 +256,15 @@ const ALLOWED_AS_ANY_FILES = new Set([
 // Known catch-all filenames (pre-existing tech debt)
 const KNOWN_CATCHALL_FILES = new Set([
   "apps/cli/src/serve/utils.ts",
+]);
+
+// Known empty catch blocks (pre-existing tech debt — do not extend)
+// Keyed by "file:line" to track exact locations.
+const KNOWN_EMPTY_CATCHES = new Set([
+  "apps/cli/src/serve/surface-store.ts:80",
+  "packages/session/src/storage/lock.ts:65",
+  "packages/session/src/storage/lock.ts:113",
+  "packages/session/src/storage/lock.ts:127",
 ]);
 
 async function validateGoldenPrinciples(): Promise<string[]> {
@@ -300,13 +310,25 @@ async function validateGoldenPrinciples(): Promise<string[]> {
         );
       }
 
-      // #5: No empty catch blocks
-      if (/catch\s*\([^)]*\)\s*\{\s*\}/.test(line)) {
+      // #5: No empty catch blocks (checked via whole-source regex after loop)
+
+    }
+
+    // #5: No empty catch blocks (multi-line aware)
+    const emptyCatchPattern = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/gm;
+    let emptyCatchMatch: RegExpExecArray | null = null;
+    while ((emptyCatchMatch = emptyCatchPattern.exec(source)) !== null) {
+      const catchLine = lineNumberForOffset(source, emptyCatchMatch.index);
+      const key = `${filePath}:${catchLine}`;
+      if (KNOWN_EMPTY_CATCHES.has(key)) {
+        console.warn(`KNOWN: ${key} — empty catch block (tracked tech debt)`);
+      } else {
         violations.push(
-          `VIOLATION: ${filePath}:${lineNum} — empty catch block detected. See docs/golden-principles.md #5`,
+          `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.md #5`,
         );
       }
     }
+
 
     // #7: No catch-all filenames
     const basename = filePath.split("/").pop() ?? "";
