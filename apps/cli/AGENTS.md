@@ -1,37 +1,52 @@
 # apps/cli
 
-CLI entry point for OpenOmni. Yargs for command routing, @clack/prompts for interactive UI.
+CLI entry point for OpenOmni. Built with yargs + @clack/prompts.
 
 ## STRUCTURE
 
 ```
 src/
-├── index.ts       # Yargs bootstrap, registers commands
-└── cmd/
-    ├── auth.ts    # auth login|logout|list — credential management
-    └── agent.ts   # agent --mode direct|orchestrated — test agent execution
+├── index.ts          # CLI entry — yargs command registration
+├── cmd/
+│   ├── auth.ts       # `openomni auth login/logout/status` — OAuth flow
+│   ├── config.ts     # `openomni config` — model/provider configuration
+│   └── serve.ts      # `openomni serve` — start adapter-based server
+├── adapter/
+│   ├── types.ts      # SurfaceAdapter interface
+│   ├── telegram.ts   # Telegram Bot API adapter
+│   ├── github.ts     # GitHub webhooks adapter
+│   └── discord.ts    # Discord bot adapter
+├── serve/
+│   ├── conversation.ts  # Conversation state management
+│   ├── surface-store.ts # Surface key → session mapping
+│   ├── trigger.ts       # Event trigger wiring
+│   ├── dedupe.ts        # Message deduplication
+│   └── utils.ts         # Serve utilities (tech debt — catch-all filename)
+└── config/              # Runtime configuration
 ```
 
-## KEY PATTERNS
+## HOW TO ADD
 
-- **Command structure**: Each file exports a `CommandModule` from yargs. Registered in `index.ts` via `.command()`.
-- **Auth flow**: `auth login` → select provider → select method (OAuth or API key) → store via `Auth.set()`.
-- **Agent modes**: `direct` uses `streamText()` directly. `orchestrated` uses full `Orchestrator.run()` pipeline with TaskManager, AgentRegistry, session.
-- **cancel() helper**: Wraps `@clack/prompts` cancel detection → `process.exit(0)`.
+### New Command
+
+1. Create `src/cmd/{name}.ts`
+2. Export a yargs `CommandModule`
+3. Register in `src/index.ts`
+
+### New Adapter
+
+1. Create `src/adapter/{name}.ts`
+2. Implement `SurfaceAdapter` interface from `src/adapter/types.ts`
+3. Wire into `src/cmd/serve.ts`
 
 ## ANTI-PATTERNS
 
-- Imports reach into package internals (e.g., `@openomni/llm/src/auth/storage` instead of `@openomni/llm`). Known tech debt.
-- `agent.ts` has hardcoded model ID (`claude-sonnet-4-20250514`) and fake tools. This is a demo/test command.
+- **Deep imports**: `auth.ts` imports `@openomni/llm/src/auth/registry` and `@openomni/llm/src/auth/storage` directly instead of through the package barrel. This is tracked tech debt — do NOT extend. Use `@openomni/llm` barrel for new code.
+- **`serve/utils.ts`**: Catch-all filename. New utilities should go in purpose-named files.
 
-## COMMANDS
+## KNOWN TECH DEBT
 
-```bash
-bun run --cwd apps/cli dev             # Run CLI in dev mode
-openomni auth login                    # Add credential
-openomni auth logout                   # Remove credential
-openomni auth list                     # List credentials
-openomni agent                         # Run direct mode
-openomni agent --mode orchestrated     # Run full pipeline
-openomni agent -m "your query"         # Custom query
-```
+- Zero test files — no test coverage at all
+- Hardcoded model configuration in serve command
+- Adapters are demo/prototype quality — not production-ready
+- Deep imports into `@openomni/llm` internals (2 violations)
