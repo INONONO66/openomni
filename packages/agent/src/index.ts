@@ -6,6 +6,7 @@ export type {
   ChatAgentInput,
   AgentResult,
   AgentStep,
+  AgentEvent,
   AgentBudget,
   TokenUsage,
   Sink,

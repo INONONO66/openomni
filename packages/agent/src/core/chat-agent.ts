@@ -25,13 +25,15 @@ import {
   shouldRetry,
   sleep,
 } from "./retry";
+import { streamAgent } from "./execution/stream-engine";
+import type { AgentEvent } from "./types";
 
 /**
  * ChatAgent instance interface
  */
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
-  stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentStep>;
+  stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentEvent>;
 }
 
 const noopSink: Sink = {
@@ -400,10 +402,10 @@ export namespace ChatAgent {
         throw new Error(lastError || "Max retry attempts exceeded");
       },
       async *stream(
-        _input: ChatAgentInput,
-        _sink?: Sink,
-      ): AsyncIterable<AgentStep> {
-        throw new Error("stream() not implemented yet (Phase 2)");
+        input: ChatAgentInput,
+        sink?: Sink,
+      ): AsyncIterable<AgentEvent> {
+        yield* streamAgent(input, config, sink);
       },
     };
   }
