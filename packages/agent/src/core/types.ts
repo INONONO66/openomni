@@ -1,27 +1,23 @@
 import type { Tool, Sink, Guardrail } from "@openomni/protocol";
 
-/**
- * Token usage statistics from LLM execution
- */
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  totalCost?: number;
 }
 
-/**
- * Budget constraints for agent execution
- */
 export interface AgentBudget {
   maxTurns?: number;
   maxToolCalls?: number;
   maxWallTimeMs?: number;
   maxToolRuntimeMs?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  maxTotalTokens?: number;
+  maxCost?: number;
 }
 
-/**
- * Configuration for ChatAgent initialization
- */
 export interface ChatAgentConfig {
   systemPrompt?: string;
   tools?: Tool.Spec[];
@@ -36,9 +32,6 @@ export interface ChatAgentConfig {
   permissions?: Guardrail.ToolPermission;
 }
 
-/**
- * Input to ChatAgent.run() or ChatAgent.stream()
- */
 export interface ChatAgentInput {
   messages: Array<
     { role: "user"; content: string } | { role: "assistant"; content: string }
@@ -46,9 +39,6 @@ export interface ChatAgentInput {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * A single step in agent execution (tool call or text generation)
- */
 export interface AgentStep {
   type: "tool-call" | "text";
   content: string;
@@ -56,9 +46,6 @@ export interface AgentStep {
   toolResults?: Tool.Result[];
 }
 
-/**
- * Result of agent execution
- */
 export interface AgentResult {
   text: string;
   steps: AgentStep[];
@@ -80,5 +67,4 @@ export type AgentEvent =
   | { type: "error"; error: Error; willRetry: boolean }
   | { type: "complete"; result: AgentResult };
 
-// Re-export Sink for convenience
 export type { Sink };
