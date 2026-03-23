@@ -263,7 +263,8 @@ export namespace ChatAgent {
             const trackingSink: Sink = {
               onMessage: (message) => {
                 if (message.info.role === "assistant") {
-                  const tokens = (message.info as Message.AssistantMessage).tokens;
+                  const tokens = (message.info as Message.AssistantMessage)
+                    .tokens;
                   totalUsage.inputTokens += tokens.input;
                   totalUsage.outputTokens += tokens.output;
                   totalUsage.totalTokens += tokens.input + tokens.output;

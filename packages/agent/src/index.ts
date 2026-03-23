@@ -1,6 +1,6 @@
 // Agent package public API — ChatAgent only
-export { ChatAgent } from "./chat-agent";
-export type { ChatAgentInstance } from "./chat-agent";
+export { ChatAgent } from "./core/chat-agent";
+export type { ChatAgentInstance } from "./core/chat-agent";
 export type {
   ChatAgentConfig,
   ChatAgentInput,
@@ -9,4 +9,4 @@ export type {
   AgentBudget,
   TokenUsage,
   Sink,
-} from "./types";
+} from "./core/types";
