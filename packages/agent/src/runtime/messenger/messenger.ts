@@ -26,6 +26,11 @@ export interface AgentMessengerOptions {
   allowPatterns?: Messenger.AllowPattern[];
 }
 
+export interface RequestOptions {
+  timeout: number;
+  signal?: AbortSignal;
+}
+
 export namespace AgentMessenger {
   export interface Instance {
     send(envelope: Messenger.MessageEnvelope): Promise<void>;
@@ -33,6 +38,10 @@ export namespace AgentMessenger {
       agentId: string,
       handler: (env: Messenger.MessageEnvelope) => void,
     ): () => void;
+    request(
+      envelope: Messenger.MessageEnvelope,
+      options: RequestOptions,
+    ): Promise<Messenger.MessageEnvelope>;
   }
 
   export function create(
@@ -61,6 +70,47 @@ export namespace AgentMessenger {
         handler: (env: Messenger.MessageEnvelope) => void,
       ): () => void {
         return transport.subscribe(agentId, handler);
+      },
+
+      async request(
+        envelope: Messenger.MessageEnvelope,
+        reqOptions: RequestOptions,
+      ): Promise<Messenger.MessageEnvelope> {
+        const correlationId = envelope.id;
+
+        return new Promise<Messenger.MessageEnvelope>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            unsub();
+            reject(
+              new Error(`Request timed out after ${reqOptions.timeout}ms`),
+            );
+          }, reqOptions.timeout);
+
+          const unsub = transport.subscribe(
+            envelope.fromAgentId,
+            (response) => {
+              if (response.correlationId === correlationId) {
+                clearTimeout(timer);
+                unsub();
+                resolve(response);
+              }
+            },
+          );
+
+          if (reqOptions.signal) {
+            reqOptions.signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              unsub();
+              reject(new Error("Request aborted"));
+            });
+          }
+
+          this.send(envelope).catch((err: unknown) => {
+            clearTimeout(timer);
+            unsub();
+            reject(err);
+          });
+        });
       },
     };
   }
