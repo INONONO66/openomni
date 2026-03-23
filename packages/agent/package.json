@@ -11,8 +11,9 @@
     "test:ci": "bun test"
   },
   "dependencies": {
-    "@openomni/protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@openomni/llm": "workspace:*",
+    "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
     "zod": "^3.22.4"
   },
