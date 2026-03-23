@@ -66,5 +66,18 @@ export interface AgentResult {
   handoffTarget?: string;
 }
 
+export type AgentEvent =
+  | { type: "text_chunk"; text: string }
+  | {
+      type: "tool_call_start";
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    }
+  | { type: "tool_call_complete"; toolCallId: string; result: Tool.Result }
+  | { type: "turn_complete"; turnIndex: number; usage: TokenUsage }
+  | { type: "error"; error: Error; willRetry: boolean }
+  | { type: "complete"; result: AgentResult };
+
 // Re-export Sink for convenience
 export type { Sink };
