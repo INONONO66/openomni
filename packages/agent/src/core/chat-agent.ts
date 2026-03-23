@@ -31,6 +31,7 @@ import { ToolGuard } from "./tool-guard";
 import { streamAgent } from "./execution/stream-engine";
 import { ToolExecutor } from "./execution/tool-executor";
 import { InMemoryCompactor } from "./execution/compaction";
+import { ParallelToolExecutor } from "./execution/parallel-tools";
 import type { AgentEvent } from "./types";
 
 /**
@@ -140,13 +141,21 @@ function toMessagesWithParts(
 
 async function executeTools(
   calls: Tool.Call[],
-  _specs: Tool.Spec[],
+  specs: Tool.Spec[],
   config?: ChatAgentConfig,
 ): Promise<Tool.Result[]> {
   if (config?.toolExecutor) {
     const guard = config.permissions
       ? (toolName: string) => ToolGuard.check(toolName, config.permissions!)
       : undefined;
+
+    const mode = config.parallelTools ?? "safe-only";
+    if (mode !== "off") {
+      return ParallelToolExecutor.execute(calls, specs, config.toolExecutor, {
+        guard,
+        mode,
+      });
+    }
 
     return ToolExecutor.executeSequential(calls, config.toolExecutor, {
       guard,
