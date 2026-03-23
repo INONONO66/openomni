@@ -5,10 +5,21 @@ export interface BudgetState {
   turns: number;
   toolCalls: number;
   toolRuntimeMs: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
 }
 
 export function createBudgetState(): BudgetState {
-  return { startTime: Date.now(), turns: 0, toolCalls: 0, toolRuntimeMs: 0 };
+  return {
+    startTime: Date.now(),
+    turns: 0,
+    toolCalls: 0,
+    toolRuntimeMs: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCost: 0,
+  };
 }
 
 export function checkBudget(
@@ -25,6 +36,25 @@ export function checkBudget(
   if (state.turns >= maxTurns) return "exceeded";
   if (state.toolCalls >= maxToolCalls) return "exceeded";
   if (state.toolRuntimeMs >= maxToolRuntimeMs) return "exceeded";
+
+  if (
+    budget?.maxInputTokens !== undefined &&
+    state.totalInputTokens >= budget.maxInputTokens
+  )
+    return "exceeded";
+  if (
+    budget?.maxOutputTokens !== undefined &&
+    state.totalOutputTokens >= budget.maxOutputTokens
+  )
+    return "exceeded";
+  if (
+    budget?.maxTotalTokens !== undefined &&
+    state.totalInputTokens + state.totalOutputTokens >= budget.maxTotalTokens
+  )
+    return "exceeded";
+  if (budget?.maxCost !== undefined && state.totalCost >= budget.maxCost)
+    return "exceeded";
+
   return "ok";
 }
 
@@ -40,5 +70,19 @@ export function recordToolCall(
     ...state,
     toolCalls: state.toolCalls + 1,
     toolRuntimeMs: state.toolRuntimeMs + durationMs,
+  };
+}
+
+export function recordTokenUsage(
+  state: BudgetState,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,
+): BudgetState {
+  return {
+    ...state,
+    totalInputTokens: state.totalInputTokens + inputTokens,
+    totalOutputTokens: state.totalOutputTokens + outputTokens,
+    totalCost: state.totalCost + cost,
   };
 }
