@@ -9,6 +9,7 @@ export const PlanStepSchema = z.object({
   suggestedAgent: z.string().optional(),
   guardrail: z.string().optional(),
   tools: z.array(Tool.Spec).optional(),
+  requiresApproval: z.boolean().optional(),
 });
 
 export type PlanStep = z.infer<typeof PlanStepSchema>;
