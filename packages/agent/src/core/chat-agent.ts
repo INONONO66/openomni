@@ -30,6 +30,7 @@ import {
 import { ToolGuard } from "./tool-guard";
 import { streamAgent } from "./execution/stream-engine";
 import { ToolExecutor } from "./execution/tool-executor";
+import { InMemoryCompactor } from "./execution/compaction";
 import type { AgentEvent } from "./types";
 
 /**
@@ -252,6 +253,7 @@ export namespace ChatAgent {
             let messages = toMessagesWithParts(input.messages);
             let lastAssistantText = "";
             const steps: AgentStep[] = [];
+            let compactionCount = 0;
             const totalUsage: TokenUsage = {
               inputTokens: 0,
               outputTokens: 0,
@@ -302,6 +304,8 @@ export namespace ChatAgent {
                   steps,
                   usage: totalUsage,
                   finishReason: "max-steps",
+                  compactionCount:
+                    compactionCount > 0 ? compactionCount : undefined,
                 };
               }
 
@@ -337,6 +341,8 @@ export namespace ChatAgent {
                   steps,
                   usage: totalUsage,
                   finishReason: "stop",
+                  compactionCount:
+                    compactionCount > 0 ? compactionCount : undefined,
                 };
               }
 
@@ -391,6 +397,26 @@ export namespace ChatAgent {
                 parentID,
               );
               messages = [...messages, assistantWithTools];
+
+              if (config.compaction) {
+                const totalTokens =
+                  budgetState.totalInputTokens + budgetState.totalOutputTokens;
+                if (
+                  InMemoryCompactor.shouldCompact(
+                    totalTokens,
+                    config.compaction,
+                  )
+                ) {
+                  const result = await InMemoryCompactor.compact(
+                    messages,
+                    config.compaction,
+                  );
+                  if (result.compacted) {
+                    messages = result.messages;
+                    compactionCount += 1;
+                  }
+                }
+              }
             }
           } catch (error) {
             lastError = error instanceof Error ? error.message : String(error);
