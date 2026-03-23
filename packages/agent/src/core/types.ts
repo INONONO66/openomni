@@ -1,5 +1,6 @@
 import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
 import type { ParallelToolsMode } from "./execution/parallel-tools";
+import type { Memory } from "./memory";
 
 export interface TokenUsage {
   inputTokens: number;
@@ -38,6 +39,7 @@ export interface ChatAgentConfig {
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
   parallelTools?: ParallelToolsMode;
+  memory?: Memory;
 }
 
 export interface ChatAgentInput {

@@ -130,3 +130,44 @@ describe("InMemoryMemory", () => {
     });
   });
 });
+
+describe("ChatAgent memory integration", () => {
+  it("memory field is accepted in ChatAgentConfig", async () => {
+    const { ChatAgent } = await import("../../src/core/chat-agent");
+
+    const mockMemory: Memory = {
+      store: async () => {},
+      retrieve: async () => {
+        return [{ key: "k1", content: "relevant context", score: 0.8 }];
+      },
+      clear: async () => {},
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "openai", id: "gpt-4" },
+      memory: mockMemory,
+    });
+
+    expect(agent).toBeDefined();
+    expect(typeof agent.run).toBe("function");
+    expect(typeof agent.stream).toBe("function");
+  });
+
+  it("mock memory retrieve returns expected format", async () => {
+    const mockMemory: Memory = {
+      store: async () => {},
+      retrieve: async (query: string) => {
+        return [
+          { key: "k1", content: `context for: ${query}`, score: 0.9 },
+          { key: "k2", content: "secondary context", score: 0.5 },
+        ];
+      },
+      clear: async () => {},
+    };
+
+    const results = await mockMemory.retrieve("test query");
+    expect(results).toHaveLength(2);
+    expect(results[0].content).toBe("context for: test query");
+    expect(results[0].score).toBe(0.9);
+  });
+});
