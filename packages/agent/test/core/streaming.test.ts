@@ -15,6 +15,10 @@ mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mock(async () => mockProviderData) },
   Provider: { fromModelsDevModel: mock(() => mockProviderModel) },
   run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
 }));
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;

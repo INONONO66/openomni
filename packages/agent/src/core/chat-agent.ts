@@ -2,6 +2,7 @@ import {
   ModelsDev,
   Provider,
   run as llmRun,
+  TokenTracker,
   type RunInput,
 } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
@@ -17,6 +18,7 @@ import {
   checkBudget,
   recordTurn,
   recordToolCall,
+  recordTokenUsage,
 } from "./budget";
 import {
   DEFAULT_RETRY_POLICY,
@@ -264,6 +266,18 @@ export namespace ChatAgent {
                   totalUsage.inputTokens += tokens.input;
                   totalUsage.outputTokens += tokens.output;
                   totalUsage.totalTokens += tokens.input + tokens.output;
+                  const cost = TokenTracker.calculateCost(
+                    { inputTokens: tokens.input, outputTokens: tokens.output },
+                    config.model.id,
+                  );
+                  budgetState = recordTokenUsage(
+                    budgetState,
+                    tokens.input,
+                    tokens.output,
+                    cost.totalCost,
+                  );
+                  totalUsage.totalCost =
+                    (totalUsage.totalCost ?? 0) + cost.totalCost;
                 }
                 const text = message.parts
                   .filter(
