@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { readFile } from "node:fs/promises";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import type { AgentStep } from "../src/types";
+import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
   createToolCallOutcome,
@@ -25,10 +25,10 @@ mock.module("@openomni/llm", () => ({
   run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
 }));
 
-let ChatAgent: typeof import("../src/chat-agent").ChatAgent;
+let ChatAgent: typeof import("../src/core/chat-agent").ChatAgent;
 
 beforeAll(async () => {
-  ({ ChatAgent } = await import("../src/chat-agent"));
+  ({ ChatAgent } = await import("../src/core/chat-agent"));
 });
 
 function createToolCall(id: string, tool = "test_tool"): Tool.Call {
@@ -247,7 +247,7 @@ describe("ChatAgent", () => {
   it("keeps ChatAgent source free of session package dependency", async () => {
     const forbiddenImport = "@openomni/" + "session";
     const content = await readFile(
-      new URL("../src/chat-agent.ts", import.meta.url),
+      new URL("../src/core/chat-agent.ts", import.meta.url),
       "utf8",
     );
 
@@ -255,106 +255,103 @@ describe("ChatAgent", () => {
   });
 });
 
-  it("uses toolExecutor when provided to execute tool calls", async () => {
-    let callCount = 0;
-    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-      callCount += 1;
-      if (callCount === 1) {
-        const call = createToolCall("call-1", "custom_tool");
-        sink.onToolCall(call);
-        return createToolCallOutcome([call]);
-      }
+it("uses toolExecutor when provided to execute tool calls", async () => {
+  let callCount = 0;
+  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+    callCount += 1;
+    if (callCount === 1) {
+      const call = createToolCall("call-1", "custom_tool");
+      sink.onToolCall(call);
+      return createToolCallOutcome([call]);
+    }
 
-      sink.onMessage(createAssistantMessage("done"));
-      return createStopOutcome();
-    };
+    sink.onMessage(createAssistantMessage("done"));
+    return createStopOutcome();
+  };
 
-    const toolExecutorCalls: Tool.Call[] = [];
-    const agent = ChatAgent.create({
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      toolExecutor: async (call) => {
-        toolExecutorCalls.push(call);
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: "real result from executor",
-          isError: false,
-        };
-      },
-    });
-
-    const result = await agent.run({
-      messages: [{ role: "user", content: "Use a tool" }],
-    });
-
-    expect(toolExecutorCalls).toHaveLength(1);
-    expect(toolExecutorCalls[0]?.tool).toBe("custom_tool");
-    expect(result.steps.some((step) => step.type === "tool-call")).toBe(true);
-    const toolStep = result.steps.find((step) => step.type === "tool-call");
-    expect(toolStep?.toolResults?.[0]?.output).toBe("real result from executor");
+  const toolExecutorCalls: Tool.Call[] = [];
+  const agent = ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    toolExecutor: async (call) => {
+      toolExecutorCalls.push(call);
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: "real result from executor",
+        isError: false,
+      };
+    },
   });
 
-  it("handles toolExecutor errors by setting isError: true", async () => {
-    let callCount = 0;
-    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-      callCount += 1;
-      if (callCount === 1) {
-        const call = createToolCall("call-1", "failing_tool");
-        sink.onToolCall(call);
-        return createToolCallOutcome([call]);
-      }
-
-      sink.onMessage(createAssistantMessage("handled error"));
-      return createStopOutcome();
-    };
-
-    const agent = ChatAgent.create({
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      toolExecutor: async (call) => {
-        throw new Error("Tool execution failed: database connection lost");
-      },
-    });
-
-    const result = await agent.run({
-      messages: [{ role: "user", content: "Use a tool" }],
-    });
-
-    const toolStep = result.steps.find((step) => step.type === "tool-call");
-    expect(toolStep?.toolResults).toHaveLength(1);
-    expect(toolStep?.toolResults?.[0]?.isError).toBe(true);
-    expect(toolStep?.toolResults?.[0]?.output).toContain(
-      "Tool execution failed",
-    );
+  const result = await agent.run({
+    messages: [{ role: "user", content: "Use a tool" }],
   });
 
-  it("preserves stub behavior when toolExecutor is not provided", async () => {
-    let callCount = 0;
-    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-      callCount += 1;
-      if (callCount === 1) {
-        const call = createToolCall("call-1", "stub_tool");
-        sink.onToolCall(call);
-        return createToolCallOutcome([call]);
-      }
+  expect(toolExecutorCalls).toHaveLength(1);
+  expect(toolExecutorCalls[0]?.tool).toBe("custom_tool");
+  expect(result.steps.some((step) => step.type === "tool-call")).toBe(true);
+  const toolStep = result.steps.find((step) => step.type === "tool-call");
+  expect(toolStep?.toolResults?.[0]?.output).toBe("real result from executor");
+});
 
-      sink.onMessage(createAssistantMessage("done"));
-      return createStopOutcome();
-    };
+it("handles toolExecutor errors by setting isError: true", async () => {
+  let callCount = 0;
+  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+    callCount += 1;
+    if (callCount === 1) {
+      const call = createToolCall("call-1", "failing_tool");
+      sink.onToolCall(call);
+      return createToolCallOutcome([call]);
+    }
 
-    const agent = ChatAgent.create({
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      // No toolExecutor provided
-    });
+    sink.onMessage(createAssistantMessage("handled error"));
+    return createStopOutcome();
+  };
 
-    const result = await agent.run({
-      messages: [{ role: "user", content: "Use a tool" }],
-    });
-
-    const toolStep = result.steps.find((step) => step.type === "tool-call");
-    expect(toolStep?.toolResults).toHaveLength(1);
-    expect(toolStep?.toolResults?.[0]?.output).toContain(
-      "Tool 'stub_tool' executed (no executor configured)",
-    );
-    expect(toolStep?.toolResults?.[0]?.isError).toBe(false);
+  const agent = ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    toolExecutor: async (call) => {
+      throw new Error("Tool execution failed: database connection lost");
+    },
   });
 
+  const result = await agent.run({
+    messages: [{ role: "user", content: "Use a tool" }],
+  });
+
+  const toolStep = result.steps.find((step) => step.type === "tool-call");
+  expect(toolStep?.toolResults).toHaveLength(1);
+  expect(toolStep?.toolResults?.[0]?.isError).toBe(true);
+  expect(toolStep?.toolResults?.[0]?.output).toContain("Tool execution failed");
+});
+
+it("preserves stub behavior when toolExecutor is not provided", async () => {
+  let callCount = 0;
+  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
+    callCount += 1;
+    if (callCount === 1) {
+      const call = createToolCall("call-1", "stub_tool");
+      sink.onToolCall(call);
+      return createToolCallOutcome([call]);
+    }
+
+    sink.onMessage(createAssistantMessage("done"));
+    return createStopOutcome();
+  };
+
+  const agent = ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    // No toolExecutor provided
+  });
+
+  const result = await agent.run({
+    messages: [{ role: "user", content: "Use a tool" }],
+  });
+
+  const toolStep = result.steps.find((step) => step.type === "tool-call");
+  expect(toolStep?.toolResults).toHaveLength(1);
+  expect(toolStep?.toolResults?.[0]?.output).toContain(
+    "Tool 'stub_tool' executed (no executor configured)",
+  );
+  expect(toolStep?.toolResults?.[0]?.isError).toBe(false);
+});
