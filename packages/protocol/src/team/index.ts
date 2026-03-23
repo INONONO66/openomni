@@ -183,6 +183,22 @@ export namespace Team {
     );
 
     /**
+     * approval.requested - Emitted when a step requires human approval
+     */
+    export const ApprovalRequested = BusEvent.define(
+      "approval.requested",
+      BaseEvent.extend({
+        payload: z.object({
+          planId: z.string(),
+          stepId: z.string(),
+          stepTitle: z.string(),
+          stepDescription: z.string().optional(),
+          timeoutMs: z.number(),
+        }),
+      }),
+    );
+
+    /**
      * replan.requested - Emitted when replanning is requested
      */
     export const ReplanRequested = BusEvent.define(

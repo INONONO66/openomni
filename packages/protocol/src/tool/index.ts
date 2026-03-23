@@ -67,6 +67,7 @@ export namespace Tool {
     name: z.string(),
     description: z.string().optional(),
     inputSchema: z.record(z.string(), z.unknown()),
+    safe: z.boolean().optional(),
   });
   export type Spec = z.infer<typeof Spec>;
 }

@@ -1,0 +1,317 @@
+import {
+  ModelsDev,
+  Provider,
+  run as llmRun,
+  type RunInput,
+} from "@openomni/llm";
+import type { Message, Sink, Tool } from "@openomni/protocol";
+import type {
+  AgentEvent,
+  AgentResult,
+  AgentStep,
+  ChatAgentConfig,
+  ChatAgentInput,
+  TokenUsage,
+} from "../types";
+import {
+  createBudgetState,
+  checkBudget,
+  recordTurn,
+  recordToolCall,
+} from "../budget";
+import {
+  DEFAULT_RETRY_POLICY,
+  calculateBackoffMs,
+  classifyRetryReason,
+  shouldRetry,
+  sleep,
+} from "../retry";
+
+async function resolveProviderModel(model: {
+  provider: string;
+  id: string;
+}): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
+  const providerData = data[model.provider];
+  if (!providerData) throw new Error(`Provider not found: ${model.provider}`);
+  const rawModel = providerData.models?.[model.id];
+  if (!rawModel) throw new Error(`Model not found: ${model.id}`);
+  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+}
+
+function createUserMessage(content: string): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "stream-engine";
+  const now = Date.now();
+  const info: Message.UserMessage = {
+    id,
+    sessionID,
+    role: "user",
+    time: { created: now },
+    agent: "stream-engine",
+    model: { providerID: "", modelID: "" },
+  };
+  return {
+    info,
+    parts: [
+      {
+        id: crypto.randomUUID(),
+        sessionID,
+        messageID: id,
+        type: "text",
+        text: content,
+      },
+    ],
+  };
+}
+
+function createAssistantMessage(
+  content: string,
+  parentID: string,
+): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "stream-engine";
+  const now = Date.now();
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID,
+    modelID: "",
+    providerID: "",
+    agent: "stream-engine",
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  };
+  return {
+    info,
+    parts: [
+      {
+        id: crypto.randomUUID(),
+        sessionID,
+        messageID: id,
+        type: "text",
+        text: content,
+      },
+    ],
+  };
+}
+
+function toMessagesWithParts(
+  messages: ChatAgentInput["messages"],
+): Message.WithParts[] {
+  const output: Message.WithParts[] = [];
+  for (const message of messages) {
+    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
+    output.push(
+      message.role === "user"
+        ? createUserMessage(message.content)
+        : createAssistantMessage(message.content, parentID),
+    );
+  }
+  return output;
+}
+
+export async function* streamAgent(
+  input: ChatAgentInput,
+  config: ChatAgentConfig,
+  sink?: Sink,
+): AsyncGenerator<AgentEvent> {
+  const retryPolicy = DEFAULT_RETRY_POLICY;
+  let attempt = 1;
+  let lastError = "";
+
+  while (attempt <= retryPolicy.maxAttempts) {
+    try {
+      const providerModel = await resolveProviderModel(config.model);
+      let budgetState = createBudgetState();
+      let messages = toMessagesWithParts(input.messages);
+      let lastAssistantText = "";
+      const steps: AgentStep[] = [];
+      const totalUsage: TokenUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      };
+      let turnIndex = 0;
+
+      while (true) {
+        if (checkBudget(budgetState, config.budget) === "exceeded") {
+          yield {
+            type: "complete",
+            result: {
+              text: lastAssistantText,
+              steps,
+              usage: totalUsage,
+              finishReason: "max-steps",
+            },
+          };
+          return;
+        }
+
+        budgetState = recordTurn(budgetState);
+
+        if (config.signal?.aborted) throw new Error("aborted");
+
+        const runInput: RunInput = {
+          messages,
+          tools: config.tools ?? [],
+          system: config.systemPrompt,
+          signal: config.signal,
+          model: providerModel,
+        };
+
+        const turnUsage: TokenUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        };
+
+        const trackingSink: Sink = {
+          onMessage: (message: Message.WithParts) => {
+            if (message.info.role === "assistant") {
+              const tokens = (message.info as Message.AssistantMessage).tokens;
+              turnUsage.inputTokens += tokens.input;
+              turnUsage.outputTokens += tokens.output;
+              turnUsage.totalTokens += tokens.input + tokens.output;
+              totalUsage.inputTokens += tokens.input;
+              totalUsage.outputTokens += tokens.output;
+              totalUsage.totalTokens += tokens.input + tokens.output;
+            }
+            const text = message.parts
+              .filter(
+                (part: Message.Part): part is Message.TextPart =>
+                  part.type === "text",
+              )
+              .map((part: Message.TextPart) => part.text)
+              .join("");
+            if (text) lastAssistantText = text;
+            sink?.onMessage(message);
+          },
+          onToolCall: sink?.onToolCall ?? (() => {}),
+          onToolResult: sink?.onToolResult ?? (() => {}),
+          onSnapshot: sink?.onSnapshot ?? (() => {}),
+        };
+
+        const outcome = await llmRun(runInput, trackingSink);
+
+        if (outcome.type === "stop") {
+          if (lastAssistantText)
+            yield { type: "text_chunk", text: lastAssistantText };
+          yield { type: "turn_complete", turnIndex, usage: turnUsage };
+
+          const step: AgentStep = { type: "text", content: lastAssistantText };
+          steps.push(step);
+          if (config.onStepFinish) await config.onStepFinish(step);
+
+          yield {
+            type: "complete",
+            result: {
+              text: lastAssistantText,
+              steps,
+              usage: totalUsage,
+              finishReason: "stop",
+            },
+          };
+          return;
+        }
+
+        if (outcome.type === "aborted") throw new Error("aborted");
+        if (outcome.type === "error") throw new Error(outcome.error.message);
+        if (outcome.toolCalls.length === 0)
+          throw new Error("Tool wait requested with no tool calls");
+
+        for (const call of outcome.toolCalls) {
+          yield {
+            type: "tool_call_start",
+            toolCallId: call.id,
+            toolName: call.tool,
+            args: call.input,
+          };
+        }
+
+        const toolStart = Date.now();
+        const toolResults: Tool.Result[] = [];
+        for (const call of outcome.toolCalls) {
+          let result: Tool.Result;
+          if (config.toolExecutor) {
+            try {
+              result = await config.toolExecutor(call);
+            } catch (error) {
+              result = {
+                id: crypto.randomUUID(),
+                toolCallId: call.id,
+                output: error instanceof Error ? error.message : String(error),
+                isError: true,
+              };
+            }
+          } else {
+            result = {
+              id: crypto.randomUUID(),
+              toolCallId: call.id,
+              output: `Tool '${call.tool}' executed (no executor configured)`,
+              isError: false,
+            };
+          }
+          toolResults.push(result);
+          yield { type: "tool_call_complete", toolCallId: call.id, result };
+          sink?.onToolResult(result);
+        }
+
+        const elapsed = Date.now() - toolStart;
+        const perToolMs =
+          toolResults.length > 0
+            ? Math.max(1, Math.ceil(elapsed / toolResults.length))
+            : elapsed;
+        for (let i = 0; i < toolResults.length; i++) {
+          budgetState = recordToolCall(budgetState, perToolMs);
+        }
+
+        yield { type: "turn_complete", turnIndex, usage: turnUsage };
+        turnIndex++;
+
+        const toolStep: AgentStep = {
+          type: "tool-call",
+          content: "",
+          toolCalls: outcome.toolCalls,
+          toolResults,
+        };
+        steps.push(toolStep);
+        if (config.onStepFinish) await config.onStepFinish(toolStep);
+
+        const parentID =
+          messages.length > 0 ? messages[messages.length - 1].info.id : "";
+        messages = [
+          ...messages,
+          createAssistantMessage(lastAssistantText, parentID),
+        ];
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      const retryReason = classifyRetryReason(lastError);
+
+      if (shouldRetry(retryPolicy, retryReason, attempt)) {
+        const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+        yield {
+          type: "error",
+          error: error instanceof Error ? error : new Error(lastError),
+          willRetry: true,
+        };
+        await sleep(backoffMs);
+        attempt += 1;
+        continue;
+      }
+
+      yield {
+        type: "error",
+        error: error instanceof Error ? error : new Error(lastError),
+        willRetry: false,
+      };
+      throw error;
+    }
+  }
+
+  throw new Error(lastError || "Max retry attempts exceeded");
+}

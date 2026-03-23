@@ -14,11 +14,18 @@ OpenOmni — multi-agent task orchestration framework for LLM-powered autonomous
 openomni/
 ├── apps/cli/            # CLI entry point (yargs + @clack/prompts)
 ├── packages/
-│   ├── protocol/        # Shared Zod schemas: Message, Tool, Run, Sink, Events
-│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter, Compaction
+│   ├── protocol/        # Shared Zod schemas: Message, Tool, Run, Sink, Events, Agent, Artifact, Guardrail, Messenger, EventLog
+│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter, Compaction, EventLog, Artifact
 │   ├── llm/             # LLM abstraction: providers, OAuth, streaming, retry
-│   ├── agent/           # Pure ChatAgent primitive: stateless LLM + Tool ReAct loop
-│   └── openomni/        # Orchestration: legacy agent code (RunWorker, TaskManager, IngressEngine, etc.)
+│   ├── agent/           # ChatAgent core + multi-agent runtime
+│   │   ├── src/core/           # ChatAgent, budget, retry, tool-guard, delegation, telemetry
+│   │   │   └── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
+│   │   └── src/runtime/        # Multi-agent infrastructure
+│   │       ├── messenger/      # AgentMessenger, BusTransport, InstanceRegistry
+│   │       ├── registry/       # AgentRegistry
+│   │       ├── tools/          # SubagentTool
+│   │       └── mcp/            # McpClient, type conversion
+│   └── openomni/        # Orchestration: Plan/Team mode, DAG, legacy agent code
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -37,25 +44,40 @@ protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orches
 
 ## WHERE TO LOOK
 
-| Task                         | Location                                              | Notes                                                                |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------- |
-| Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts`             | 8 domains: error, tool, message, run, sink, bus, event, notification |
-| Add/modify events            | `packages/protocol/src/event/index.ts`                | BusEvent.define() pattern                                            |
-| Session CRUD                 | `packages/session/src/session/`                       | Namespace-based API                                                  |
-| Storage backend              | `packages/session/src/storage/`                       | Implement `StorageAdapter` interface                                 |
-| Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                                                |
-| Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                                                  |
-| Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                                              |
-| ChatAgent (stateless ReAct) | `packages/agent/src/chat-agent.ts`                    | create(), run(), stream() stub                                       |
-| Plan Mode (PlanAgent)        | `packages/openomni/src/plan/`                         | PlanAgent.generate(goal, config) → PlanResult; LLM-based, no exec   |
-| Team Mode (TeamOrchestrator) | `packages/openomni/src/team/`                         | TeamOrchestrator.execute(plan, config) → TeamResult; deterministic   |
-| DAG utilities                | `packages/openomni/src/dag/`                          | Pure functions: build, validateAcyclic, getReady, complete           |
-| Plan/Team schemas            | `packages/protocol/src/plan/` + `src/team/`           | Plan, PlanStep, PlanResult; Team.StepState, StallReason, 10 events  |
-| Agent profile/graph          | `packages/openomni/src/legacy/agent/`                 | Graph validation, routing, messaging                                 |
-| Task lifecycle               | `packages/openomni/src/legacy/task/`                  | State machine, manager, checkpoint, recovery                         |
-| Orchestration loop           | `packages/openomni/src/legacy/`                       | Envelope → Router → Dispatcher → Supervisor                          |
-| Triggers (cron/fs/webhook)   | `packages/openomni/src/legacy/trigger/`               | EventQueue + schedulers                                              |
-| CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                                           |
+| Task                         | Location                                              | Notes                                                                                                                   |
+| ---------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts`             | 13 domains: error, tool, message, run, sink, bus, event, notification, agent, artifact, guardrail, messenger, event-log |
+| Add/modify events            | `packages/protocol/src/event/index.ts`                | BusEvent.define() pattern                                                                                               |
+| Agent profile schema         | `packages/protocol/src/agent/index.ts`                | AgentProfile Zod schema                                                                                                 |
+| Artifact schemas             | `packages/protocol/src/artifact/index.ts`             | Artifact.Meta, Artifact.Part schemas                                                                                    |
+| Guardrail schemas            | `packages/protocol/src/guardrail/index.ts`            | ToolPermission, Guardrail, DelegationPolicy                                                                             |
+| Messenger schemas            | `packages/protocol/src/messenger/index.ts`            | MessageEnvelope, AllowPattern, PersistencePolicy                                                                        |
+| Execution event log schema   | `packages/protocol/src/event-log/index.ts`            | ExecutionEvent discriminated union                                                                                      |
+| Session CRUD                 | `packages/session/src/session/`                       | Namespace-based API                                                                                                     |
+| Storage backend              | `packages/session/src/storage/`                       | Implement `StorageAdapter` interface                                                                                    |
+| Session event log            | `packages/session/src/event-log/`                     | EventLog.append/replay/listIncomplete/markComplete                                                                      |
+| Session artifacts            | `packages/session/src/artifact/`                      | Artifact.store/get/list/versions                                                                                        |
+| Add LLM provider             | `packages/llm/src/fetch/` + `packages/llm/src/oauth/` | One file per provider                                                                                                   |
+| Provider SDK wiring          | `packages/llm/src/provider/provider.ts`               | `getSDK()` function                                                                                                     |
+| Model catalog                | `packages/llm/src/model/`                             | Fetches from models.dev                                                                                                 |
+| ChatAgent core               | `packages/agent/src/core/`                            | ChatAgent, budget, retry, tool-guard, delegation, telemetry                                                             |
+| Agent execution engine       | `packages/agent/src/core/execution/`                  | StreamEngine, ToolExecutor, compaction, parallel-tools                                                                  |
+| Agent messenger              | `packages/agent/src/runtime/messenger/`               | AgentMessenger, BusTransport, InstanceRegistry                                                                          |
+| Agent registry               | `packages/agent/src/runtime/registry/`                | AgentRegistry for multi-agent lookup                                                                                    |
+| Subagent tool                | `packages/agent/src/runtime/tools/`                   | SubagentTool for agent delegation                                                                                       |
+| MCP client                   | `packages/agent/src/runtime/mcp/`                     | McpClient, type conversion                                                                                              |
+| Plan Mode (PlanAgent)        | `packages/openomni/src/plan/`                         | PlanAgent.generate(goal, config) → PlanResult; LLM-based, no exec                                                       |
+| Spec validator               | `packages/openomni/src/plan/spec-validator.ts`        | SpecValidator for plan validation                                                                                       |
+| Team Mode (TeamOrchestrator) | `packages/openomni/src/team/`                         | TeamOrchestrator.execute(plan, config) → TeamResult; deterministic                                                      |
+| Approval gate                | `packages/openomni/src/team/approval-gate.ts`         | ApprovalGate for human-in-the-loop approval                                                                             |
+| Evaluation gate              | `packages/openomni/src/team/evaluation-gate.ts`       | EvaluationGate for step result quality checks                                                                           |
+| DAG utilities                | `packages/openomni/src/dag/`                          | Pure functions: build, validateAcyclic, getReady, complete                                                              |
+| Plan/Team schemas            | `packages/protocol/src/plan/` + `src/team/`           | Plan, PlanStep, PlanResult; Team.StepState, StallReason, 10 events                                                      |
+| Agent profile/graph          | `packages/openomni/src/legacy/agent/`                 | Graph validation, routing, messaging                                                                                    |
+| Task lifecycle               | `packages/openomni/src/legacy/task/`                  | State machine, manager, checkpoint, recovery                                                                            |
+| Orchestration loop           | `packages/openomni/src/legacy/`                       | Envelope → Router → Dispatcher → Supervisor                                                                             |
+| Triggers (cron/fs/webhook)   | `packages/openomni/src/legacy/trigger/`               | EventQueue + schedulers                                                                                                 |
+| CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                                                                                              |
 
 ## CONVENTIONS
 
@@ -109,7 +131,7 @@ openomni agent --mode orchestrated   # full pipeline
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, tests for all packages.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
-- `packages/agent` is now a pure ChatAgent primitive — stateless, no session dependency. Use `@openomni/agent` for the ReAct loop.
-- `packages/openomni` contains all legacy orchestration code (moved as-is from packages/agent in Phase 1). Use `@openomni/openomni` for RunWorker, TaskManager, IngressEngine, etc.
+- `packages/agent` contains ChatAgent core (`src/core/`) with budget, retry, tool-guard, delegation, telemetry, and execution engine (StreamEngine, ToolExecutor, compaction, parallel-tools). Also contains multi-agent runtime (`src/runtime/`) with messenger, registry, subagent tool, and MCP client.
+- `packages/openomni` contains orchestration (Plan/Team mode, DAG) and legacy code. Use `@openomni/openomni` for RunWorker, TaskManager, IngressEngine, etc.
 - **Plan Mode** (`PlanAgent`) and **Team Mode** (`TeamOrchestrator`) are now implemented in `packages/openomni/src/plan/` and `packages/openomni/src/team/`. Plan Mode generates a structured `Plan` via LLM; Team Mode executes it with a deterministic dispatch loop (LLM used only in ReviewLoop).
 - Plan/Team protocol types live in `packages/protocol/src/plan/` and `packages/protocol/src/team/` — 4 Plan schemas + 4 Team types + 10 BusEvents.
