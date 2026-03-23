@@ -1,4 +1,4 @@
-import type { Tool, Sink, Guardrail } from "@openomni/protocol";
+import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
 
 export interface TokenUsage {
   inputTokens: number;
@@ -30,6 +30,12 @@ export interface ChatAgentConfig {
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
   permissions?: Guardrail.ToolPermission;
+  compaction?: {
+    contextWindowTokens: number;
+    thresholdRatio?: number;
+    protectRecentMessages?: number;
+    onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+  };
 }
 
 export interface ChatAgentInput {
@@ -52,6 +58,7 @@ export interface AgentResult {
   usage: TokenUsage;
   finishReason: "stop" | "tool-calls" | "max-steps" | "handoff";
   handoffTarget?: string;
+  compactionCount?: number;
 }
 
 export type AgentEvent =
