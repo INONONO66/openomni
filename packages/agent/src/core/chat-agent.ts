@@ -27,6 +27,7 @@ import {
 } from "./retry";
 import { ToolGuard } from "./tool-guard";
 import { streamAgent } from "./execution/stream-engine";
+import { ToolExecutor } from "./execution/tool-executor";
 import type { AgentEvent } from "./types";
 
 /**
@@ -140,42 +141,13 @@ async function executeTools(
   config?: ChatAgentConfig,
 ): Promise<Tool.Result[]> {
   if (config?.toolExecutor) {
-    const results: Tool.Result[] = [];
-    for (const call of calls) {
-      if (config.permissions) {
-        const guardResult = ToolGuard.check(call.tool, config.permissions);
-        if (guardResult === "deny") {
-          results.push({
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Permission denied: tool '${call.tool}' is not allowed`,
-            isError: true,
-          });
-          continue;
-        }
-        if (guardResult === "require_approval") {
-          results.push({
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Approval required: tool '${call.tool}' requires human approval`,
-            isError: true,
-          });
-          continue;
-        }
-      }
-      try {
-        const result = await config.toolExecutor(call);
-        results.push(result);
-      } catch (error) {
-        results.push({
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: error instanceof Error ? error.message : String(error),
-          isError: true,
-        });
-      }
-    }
-    return results;
+    const guard = config.permissions
+      ? (toolName: string) => ToolGuard.check(toolName, config.permissions!)
+      : undefined;
+
+    return ToolExecutor.executeSequential(calls, config.toolExecutor, {
+      guard,
+    });
   }
 
   return calls.map((call) => ({
