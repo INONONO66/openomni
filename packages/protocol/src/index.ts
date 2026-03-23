@@ -10,3 +10,4 @@ export * from "./plan/index.js";
 export * from "./team/index.js";
 export * from "./ingress/index.js";
 export * from "./messenger/index.js";
+export * from "./guardrail/index.js";
