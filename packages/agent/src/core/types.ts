@@ -1,4 +1,5 @@
 import type { Tool, Sink, Guardrail } from "@openomni/protocol";
+import type { ParallelToolsMode } from "./execution/parallel-tools";
 
 export interface TokenUsage {
   inputTokens: number;
@@ -30,6 +31,7 @@ export interface ChatAgentConfig {
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
   permissions?: Guardrail.ToolPermission;
+  parallelTools?: ParallelToolsMode;
 }
 
 export interface ChatAgentInput {
