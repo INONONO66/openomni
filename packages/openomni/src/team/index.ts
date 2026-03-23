@@ -1,3 +1,4 @@
+export { ApprovalGate } from "./approval-gate.js";
 export { Teammate } from "./teammate.js";
 export { TeamOrchestrator } from "./team-orchestrator.js";
 export { ReviewLoop } from "./review-loop.js";
