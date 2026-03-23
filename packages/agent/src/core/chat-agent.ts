@@ -32,6 +32,7 @@ import { streamAgent } from "./execution/stream-engine";
 import { ToolExecutor } from "./execution/tool-executor";
 import { InMemoryCompactor } from "./execution/compaction";
 import { ParallelToolExecutor } from "./execution/parallel-tools";
+import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
 
 /**
@@ -249,200 +250,215 @@ export namespace ChatAgent {
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
       async run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult> {
-        const effectiveSink = sink ?? noopSink;
-        const retryPolicy = DEFAULT_RETRY_POLICY;
+        return Telemetry.span(
+          "ChatAgent.run",
+          async (_span) => {
+            const effectiveSink = sink ?? noopSink;
+            const retryPolicy = DEFAULT_RETRY_POLICY;
 
-        let attempt = 1;
-        let lastError = "";
+            let attempt = 1;
+            let lastError = "";
 
-        while (attempt <= retryPolicy.maxAttempts) {
-          try {
-            const providerModel = await resolveProviderModel(config.model);
-            let budgetState = createBudgetState();
-            let messages = toMessagesWithParts(input.messages);
-            let lastAssistantText = "";
-            const steps: AgentStep[] = [];
-            let compactionCount = 0;
-            const totalUsage: TokenUsage = {
-              inputTokens: 0,
-              outputTokens: 0,
-              totalTokens: 0,
-            };
-
-            const trackingSink: Sink = {
-              onMessage: (message) => {
-                if (message.info.role === "assistant") {
-                  const tokens = (message.info as Message.AssistantMessage)
-                    .tokens;
-                  totalUsage.inputTokens += tokens.input;
-                  totalUsage.outputTokens += tokens.output;
-                  totalUsage.totalTokens += tokens.input + tokens.output;
-                  const cost = TokenTracker.calculateCost(
-                    { inputTokens: tokens.input, outputTokens: tokens.output },
-                    config.model.id,
-                  );
-                  budgetState = recordTokenUsage(
-                    budgetState,
-                    tokens.input,
-                    tokens.output,
-                    cost.totalCost,
-                  );
-                  totalUsage.totalCost =
-                    (totalUsage.totalCost ?? 0) + cost.totalCost;
-                }
-                const text = message.parts
-                  .filter(
-                    (part): part is Message.TextPart => part.type === "text",
-                  )
-                  .map((part) => part.text)
-                  .join("");
-                if (text) {
-                  lastAssistantText = text;
-                }
-                effectiveSink.onMessage(message);
-              },
-              onToolCall: effectiveSink.onToolCall,
-              onToolResult: effectiveSink.onToolResult,
-              onSnapshot: effectiveSink.onSnapshot,
-            };
-
-            while (true) {
-              if (checkBudget(budgetState, config.budget) === "exceeded") {
-                return {
-                  text: lastAssistantText,
-                  steps,
-                  usage: totalUsage,
-                  finishReason: "max-steps",
-                  compactionCount:
-                    compactionCount > 0 ? compactionCount : undefined,
+            while (attempt <= retryPolicy.maxAttempts) {
+              try {
+                const providerModel = await resolveProviderModel(config.model);
+                let budgetState = createBudgetState();
+                let messages = toMessagesWithParts(input.messages);
+                let lastAssistantText = "";
+                const steps: AgentStep[] = [];
+                let compactionCount = 0;
+                const totalUsage: TokenUsage = {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0,
                 };
-              }
 
-              budgetState = recordTurn(budgetState);
-
-              if (config.signal?.aborted) {
-                throw new Error("aborted");
-              }
-
-              const runInput: RunInput = {
-                messages,
-                tools: config.tools ?? [],
-                system: config.systemPrompt,
-                signal: config.signal,
-                model: providerModel,
-              };
-
-              const outcome = await llmRun(runInput, trackingSink);
-
-              if (outcome.type === "stop") {
-                const step: AgentStep = {
-                  type: "text",
-                  content: lastAssistantText,
+                const trackingSink: Sink = {
+                  onMessage: (message) => {
+                    if (message.info.role === "assistant") {
+                      const tokens = (message.info as Message.AssistantMessage)
+                        .tokens;
+                      totalUsage.inputTokens += tokens.input;
+                      totalUsage.outputTokens += tokens.output;
+                      totalUsage.totalTokens += tokens.input + tokens.output;
+                      const cost = TokenTracker.calculateCost(
+                        {
+                          inputTokens: tokens.input,
+                          outputTokens: tokens.output,
+                        },
+                        config.model.id,
+                      );
+                      budgetState = recordTokenUsage(
+                        budgetState,
+                        tokens.input,
+                        tokens.output,
+                        cost.totalCost,
+                      );
+                      totalUsage.totalCost =
+                        (totalUsage.totalCost ?? 0) + cost.totalCost;
+                    }
+                    const text = message.parts
+                      .filter(
+                        (part): part is Message.TextPart =>
+                          part.type === "text",
+                      )
+                      .map((part) => part.text)
+                      .join("");
+                    if (text) {
+                      lastAssistantText = text;
+                    }
+                    effectiveSink.onMessage(message);
+                  },
+                  onToolCall: effectiveSink.onToolCall,
+                  onToolResult: effectiveSink.onToolResult,
+                  onSnapshot: effectiveSink.onSnapshot,
                 };
-                steps.push(step);
 
-                if (config.onStepFinish) {
-                  await config.onStepFinish(step);
-                }
+                while (true) {
+                  if (checkBudget(budgetState, config.budget) === "exceeded") {
+                    return {
+                      text: lastAssistantText,
+                      steps,
+                      usage: totalUsage,
+                      finishReason: "max-steps",
+                      compactionCount:
+                        compactionCount > 0 ? compactionCount : undefined,
+                    };
+                  }
 
-                return {
-                  text: lastAssistantText,
-                  steps,
-                  usage: totalUsage,
-                  finishReason: "stop",
-                  compactionCount:
-                    compactionCount > 0 ? compactionCount : undefined,
-                };
-              }
+                  budgetState = recordTurn(budgetState);
 
-              if (outcome.type === "aborted") {
-                throw new Error("aborted");
-              }
+                  if (config.signal?.aborted) {
+                    throw new Error("aborted");
+                  }
 
-              if (outcome.type === "error") {
-                throw new Error(outcome.error.message);
-              }
-
-              if (outcome.toolCalls.length === 0) {
-                throw new Error("Tool wait requested with no tool calls");
-              }
-
-              const toolStart = Date.now();
-              const toolResults = await executeTools(
-                outcome.toolCalls,
-                config.tools ?? [],
-                config,
-              );
-              const elapsed = Date.now() - toolStart;
-              const perToolMs =
-                toolResults.length > 0
-                  ? Math.max(1, Math.ceil(elapsed / toolResults.length))
-                  : elapsed;
-
-              for (const result of toolResults) {
-                effectiveSink.onToolResult(result);
-                budgetState = recordToolCall(budgetState, perToolMs);
-              }
-
-              const toolStep: AgentStep = {
-                type: "tool-call",
-                content: "",
-                toolCalls: outcome.toolCalls,
-                toolResults,
-              };
-              steps.push(toolStep);
-
-              if (config.onStepFinish) {
-                await config.onStepFinish(toolStep);
-              }
-
-              const parentID =
-                messages.length > 0
-                  ? messages[messages.length - 1].info.id
-                  : "";
-              const assistantWithTools = buildAssistantMessageWithTools(
-                outcome.toolCalls,
-                toolResults,
-                parentID,
-              );
-              messages = [...messages, assistantWithTools];
-
-              if (config.compaction) {
-                const totalTokens =
-                  budgetState.totalInputTokens + budgetState.totalOutputTokens;
-                if (
-                  InMemoryCompactor.shouldCompact(
-                    totalTokens,
-                    config.compaction,
-                  )
-                ) {
-                  const result = await InMemoryCompactor.compact(
+                  const runInput: RunInput = {
                     messages,
-                    config.compaction,
+                    tools: config.tools ?? [],
+                    system: config.systemPrompt,
+                    signal: config.signal,
+                    model: providerModel,
+                  };
+
+                  const outcome = await llmRun(runInput, trackingSink);
+
+                  if (outcome.type === "stop") {
+                    const step: AgentStep = {
+                      type: "text",
+                      content: lastAssistantText,
+                    };
+                    steps.push(step);
+
+                    if (config.onStepFinish) {
+                      await config.onStepFinish(step);
+                    }
+
+                    return {
+                      text: lastAssistantText,
+                      steps,
+                      usage: totalUsage,
+                      finishReason: "stop",
+                      compactionCount:
+                        compactionCount > 0 ? compactionCount : undefined,
+                    };
+                  }
+
+                  if (outcome.type === "aborted") {
+                    throw new Error("aborted");
+                  }
+
+                  if (outcome.type === "error") {
+                    throw new Error(outcome.error.message);
+                  }
+
+                  if (outcome.toolCalls.length === 0) {
+                    throw new Error("Tool wait requested with no tool calls");
+                  }
+
+                  const toolStart = Date.now();
+                  const toolResults = await executeTools(
+                    outcome.toolCalls,
+                    config.tools ?? [],
+                    config,
                   );
-                  if (result.compacted) {
-                    messages = result.messages;
-                    compactionCount += 1;
+                  const elapsed = Date.now() - toolStart;
+                  const perToolMs =
+                    toolResults.length > 0
+                      ? Math.max(1, Math.ceil(elapsed / toolResults.length))
+                      : elapsed;
+
+                  for (const result of toolResults) {
+                    effectiveSink.onToolResult(result);
+                    budgetState = recordToolCall(budgetState, perToolMs);
+                  }
+
+                  const toolStep: AgentStep = {
+                    type: "tool-call",
+                    content: "",
+                    toolCalls: outcome.toolCalls,
+                    toolResults,
+                  };
+                  steps.push(toolStep);
+
+                  if (config.onStepFinish) {
+                    await config.onStepFinish(toolStep);
+                  }
+
+                  const parentID =
+                    messages.length > 0
+                      ? messages[messages.length - 1].info.id
+                      : "";
+                  const assistantWithTools = buildAssistantMessageWithTools(
+                    outcome.toolCalls,
+                    toolResults,
+                    parentID,
+                  );
+                  messages = [...messages, assistantWithTools];
+
+                  if (config.compaction) {
+                    const totalTokens =
+                      budgetState.totalInputTokens +
+                      budgetState.totalOutputTokens;
+                    if (
+                      InMemoryCompactor.shouldCompact(
+                        totalTokens,
+                        config.compaction,
+                      )
+                    ) {
+                      const result = await InMemoryCompactor.compact(
+                        messages,
+                        config.compaction,
+                      );
+                      if (result.compacted) {
+                        messages = result.messages;
+                        compactionCount += 1;
+                      }
+                    }
                   }
                 }
+              } catch (error) {
+                lastError =
+                  error instanceof Error ? error.message : String(error);
+                const retryReason = classifyRetryReason(lastError);
+
+                if (shouldRetry(retryPolicy, retryReason, attempt)) {
+                  const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+                  await sleep(backoffMs);
+                  attempt += 1;
+                  continue;
+                }
+
+                throw error;
               }
             }
-          } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-            const retryReason = classifyRetryReason(lastError);
 
-            if (shouldRetry(retryPolicy, retryReason, attempt)) {
-              const backoffMs = calculateBackoffMs(retryPolicy, attempt);
-              await sleep(backoffMs);
-              attempt += 1;
-              continue;
-            }
-
-            throw error;
-          }
-        }
-
-        throw new Error(lastError || "Max retry attempts exceeded");
+            throw new Error(lastError || "Max retry attempts exceeded");
+          },
+          {
+            "agent.model": config.model.id,
+            "agent.provider": config.model.provider,
+          },
+        );
       },
       async *stream(
         input: ChatAgentInput,
