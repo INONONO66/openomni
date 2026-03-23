@@ -11,3 +11,4 @@ export * from "./team/index.js";
 export * from "./ingress/index.js";
 export * from "./messenger/index.js";
 export * from "./guardrail/index.js";
+export * from "./event-log/index.js";
