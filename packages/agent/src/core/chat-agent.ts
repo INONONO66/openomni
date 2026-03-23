@@ -25,6 +25,7 @@ import {
   shouldRetry,
   sleep,
 } from "./retry";
+import { ToolGuard } from "./tool-guard";
 
 /**
  * ChatAgent instance interface
@@ -139,6 +140,27 @@ async function executeTools(
   if (config?.toolExecutor) {
     const results: Tool.Result[] = [];
     for (const call of calls) {
+      if (config.permissions) {
+        const guardResult = ToolGuard.check(call.tool, config.permissions);
+        if (guardResult === "deny") {
+          results.push({
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: `Permission denied: tool '${call.tool}' is not allowed`,
+            isError: true,
+          });
+          continue;
+        }
+        if (guardResult === "require_approval") {
+          results.push({
+            id: crypto.randomUUID(),
+            toolCallId: call.id,
+            output: `Approval required: tool '${call.tool}' requires human approval`,
+            isError: true,
+          });
+          continue;
+        }
+      }
       try {
         const result = await config.toolExecutor(call);
         results.push(result);

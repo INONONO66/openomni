@@ -1,4 +1,4 @@
-import type { Tool, Sink } from "@openomni/protocol";
+import type { Tool, Sink, Guardrail } from "@openomni/protocol";
 
 /**
  * Token usage statistics from LLM execution
@@ -33,6 +33,7 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
+  permissions?: Guardrail.ToolPermission;
 }
 
 /**
