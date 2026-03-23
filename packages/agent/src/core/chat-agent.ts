@@ -34,6 +34,7 @@ import { InMemoryCompactor } from "./execution/compaction";
 import { ParallelToolExecutor } from "./execution/parallel-tools";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
+import type { Memory, MemoryResult } from "./memory";
 
 /**
  * ChatAgent instance interface
@@ -121,6 +122,30 @@ function createAssistantMessage(
     text: content,
   };
   return { info, parts: [textPart] };
+}
+
+function getLastUserMessageText(messages: Message.WithParts[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].info.role === "user") {
+      return messages[i].parts
+        .filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    }
+  }
+  return null;
+}
+
+function formatMemoryContext(results: MemoryResult[]): string {
+  const entries = results.map((r) => `- ${r.content}`).join("\n");
+  return `[Memory Context]\n${entries}`;
+}
+
+function prependContextMessage(
+  messages: Message.WithParts[],
+  contextText: string,
+): Message.WithParts[] {
+  return [createUserMessage(contextText), ...messages];
 }
 
 function toMessagesWithParts(
@@ -332,8 +357,23 @@ export namespace ChatAgent {
                     throw new Error("aborted");
                   }
 
+                  let effectiveMessages = messages;
+                  if (config.memory) {
+                    const lastUserText = getLastUserMessageText(messages);
+                    if (lastUserText) {
+                      const memoryResults =
+                        await config.memory.retrieve(lastUserText);
+                      if (memoryResults.length > 0) {
+                        effectiveMessages = prependContextMessage(
+                          messages,
+                          formatMemoryContext(memoryResults),
+                        );
+                      }
+                    }
+                  }
+
                   const runInput: RunInput = {
-                    messages,
+                    messages: effectiveMessages,
                     tools: config.tools ?? [],
                     system: config.systemPrompt,
                     signal: config.signal,
