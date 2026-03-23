@@ -8,3 +8,9 @@ export type {
   TokenUsage,
   Sink,
 } from "./types";
+export {
+  InMemoryMemory,
+  type Memory,
+  type MemoryResult,
+  type MemoryEntry,
+} from "./memory";
