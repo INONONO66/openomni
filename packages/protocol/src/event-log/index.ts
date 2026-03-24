@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Tool } from "../tool/index";
+import { Tool } from "../tool/index.js";
 
 const baseEvent = {
   timestamp: z.string(),
