@@ -1,8 +1,5 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2025-02-09
-**Commit:** 9ee94b4
-**Branch:** main
 
 ## OVERVIEW
 
@@ -81,15 +78,9 @@ protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orches
 
 ## CONVENTIONS
 
-- **Namespace pattern**: All modules export TypeScript namespaces (`Session.create()`, `Auth.get()`, `Provider.Model`, `Message.Part`). NOT class instances.
-- **Zod-first types**: Schemas defined as `z.object(...)`, then `type X = z.infer<typeof X>`. Schema and type share the same name.
-- **ESM only**: All packages use `"type": "module"`. Imports use `from "./foo"` (no `.ts` extension in source, bundler resolution).
-- **No shared tsconfig**: Each package has its own `tsconfig.json` (ES2020, bundler moduleResolution, strict).
-- **Index re-exports**: Every subdir has `index.ts` that re-exports public API. Never import from internal files across package boundaries (CLI does reach into internals — see anti-patterns).
-- **In-memory by default**: Storage adapters default to `InMemoryStorage`. Production adapters injected via `Storage.configure()`.
-- **BusEvent pattern**: Events defined with `BusEvent.define(name, zodSchema)` in protocol, published via `Bus.publish()` in session.
-- **Testing**: Bun test runner (`bun test`). Tests mirror `src/` structure in `test/` dirs. No shared test utils.
-- **Discriminated unions**: `z.discriminatedUnion()` for Tool.State, Message.Part, Message.Info, RunOutcome.
+See [Golden Principles](docs/golden-principles.md) for all coding invariants (enforced by `script/check-deps.ts` in CI).
+
+Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, BusEvent.define() for events.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
