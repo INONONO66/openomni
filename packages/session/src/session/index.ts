@@ -3,8 +3,17 @@ import { Message } from "@openomni/protocol";
 import { SessionInfo } from "./info";
 import { Storage } from "../storage/storage";
 import { Bus, BusEvent } from "../bus";
+import { EventLog } from "../event-log/index";
 
 export namespace Session {
+  export type RecoveredMessage = {
+    role: "assistant";
+    text: string;
+    timestamp: string;
+    sequence: number;
+    turnIndex: number;
+  };
+
   export const Info = SessionInfo;
   export type Info = SessionInfo;
 
@@ -174,10 +183,8 @@ export namespace Session {
       },
       ...(message.role === "assistant" && {
         tokens: (() => {
-          const input =
-            (session.tokens?.input ?? 0) + message.tokens.input;
-          const output =
-            (session.tokens?.output ?? 0) + message.tokens.output;
+          const input = (session.tokens?.input ?? 0) + message.tokens.input;
+          const output = (session.tokens?.output ?? 0) + message.tokens.output;
           return { input, output, total: input + output };
         })(),
       }),
@@ -197,5 +204,57 @@ export namespace Session {
 
   export function getParts(messageID: string): Message.Part[] {
     return Storage.getAdapter().part.list(messageID);
+  }
+
+  async function nextSequence(sessionId: string): Promise<number> {
+    let maxSequence = 0;
+    for await (const event of EventLog.replay(sessionId)) {
+      if (event.sequence > maxSequence) {
+        maxSequence = event.sequence;
+      }
+    }
+    return maxSequence + 1;
+  }
+
+  export async function suspend(id: string): Promise<boolean> {
+    const session = get(id);
+    if (!session) {
+      return false;
+    }
+
+    await EventLog.append(id, {
+      type: "session_suspended",
+      reason: "session suspended",
+      timestamp: new Date().toISOString(),
+      sequence: await nextSequence(id),
+    });
+
+    return true;
+  }
+
+  export async function resume(id: string): Promise<RecoveredMessage[]> {
+    const recovered: RecoveredMessage[] = [];
+
+    for await (const event of EventLog.replay(id)) {
+      if (event.type !== "llm_response") {
+        continue;
+      }
+
+      recovered.push({
+        role: "assistant",
+        text: event.text,
+        timestamp: event.timestamp,
+        sequence: event.sequence,
+        turnIndex: event.turnIndex,
+      });
+    }
+
+    return recovered;
+  }
+
+  export async function abandon(id: string): Promise<boolean> {
+    const removed = remove(id);
+    await EventLog.remove(id);
+    return removed;
   }
 }
