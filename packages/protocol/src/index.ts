@@ -9,3 +9,8 @@ export * from "./notification/index.js";
 export * from "./plan/index.js";
 export * from "./team/index.js";
 export * from "./ingress/index.js";
+export * from "./messenger/index.js";
+export * from "./guardrail/index.js";
+export * from "./event-log/index.js";
+export * from "./agent/index.js";
+export * from "./artifact/index.js";

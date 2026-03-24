@@ -6,7 +6,7 @@ import { RunLedger } from "./run-ledger";
 import { StallDetector } from "./stall-detector";
 import { ReviewLoop } from "./review-loop";
 import { Teammate } from "./teammate";
-
+import { ApprovalGate } from "./approval-gate";
 
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
@@ -29,6 +29,7 @@ export namespace TeamOrchestrator {
     defaultTeammateConfig: Teammate.TeammateConfig;
     stallConfig?: StallDetector.StallConfig;
     maxAttemptsPerStep?: number;
+    approvalGate?: ApprovalGate.Gate;
   }
 
   export interface TeamResult {
@@ -116,11 +117,45 @@ export namespace TeamOrchestrator {
           ledger.transition(stepId, "running");
         }
 
+        if (step.requiresApproval && config.approvalGate) {
+          const approvalResult = await config.approvalGate.requestApproval({
+            stepId: step.stepId,
+            stepTitle: step.description,
+            stepDescription: step.expectedOutput,
+            plan,
+          });
+
+          if (approvalResult === "rejected") {
+            ledger.transition(stepId, "failed");
+            failed.add(stepId);
+
+            safePublish(Team.Events.StepFailed, {
+              traceId: crypto.randomUUID(),
+              time: Date.now(),
+              payload: {
+                planId: plan.planId,
+                stepId,
+                error: "approval_rejected",
+              },
+            });
+            skipDependents(
+              stepId,
+              dag,
+              ledger,
+              failed,
+              skipped,
+              completed,
+              pendingRetry,
+            );
+            progressed = true;
+            continue;
+          }
+        }
+
         ledger.recordAttempt(stepId);
         const attemptNumber = ledger.getStepState(stepId)?.attempts ?? 1;
         const teammateConfig = resolveTeammate(step, config);
 
-        // Publish step.assigned event (fire-and-forget)
         safePublish(Team.Events.StepAssigned, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
