@@ -2,6 +2,14 @@
 
 > Invariants that MUST hold across all packages. Violations should be caught by linting or CI.
 
+## Enforcement Notes
+
+- `§1 Package Boundaries` + `§2 Dependency Direction`: enforced by `script/check-deps.ts` and the pre-push hook.
+- `§5 Error Handling` (no `as any`, no empty catch): enforced by Biome lint rules (warn-level) and `script/check-deps.ts`.
+- `§6 Testing`: coverage is reported via `bunfig.toml` (`text` + `lcov`), with no threshold yet.
+- Commit format: enforced by commitlint via `.commitlintrc.yml`.
+- Format + lint: enforced by Biome (`biome.json`) and Lefthook pre-commit.
+
 ## 1. Package Boundaries
 
 - Cross-package imports go through `index.ts` barrel only.
