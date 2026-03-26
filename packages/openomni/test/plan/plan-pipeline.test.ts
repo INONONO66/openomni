@@ -113,6 +113,15 @@ describe("PlanPipeline.run", () => {
       expect(result.attempts).toBe(2);
     }
     expect(mockGenerate).toHaveBeenCalledTimes(2);
+
+    const mockCalls = (mockGenerate as any).mock.calls;
+    const firstCallGoal = mockCalls[0]?.[0];
+    expect(firstCallGoal).toBe("Plan rollout");
+
+    const secondCallGoal = mockCalls[1]?.[0];
+    expect(secondCallGoal).toContain("Plan rollout");
+    expect(secondCallGoal).toContain("Increase step granularity");
+
     expect(contexts[0]).toMatchObject({
       attempt: 1,
       previousFeedback: undefined,

@@ -34,7 +34,13 @@ export namespace PlanPipeline {
     let lastPlan: Plan | undefined;
 
     while (attempt <= maxRetries) {
-      const planResult = await PlanAgent.generate(goal, config.generator);
+      const enrichedGoal = previousFeedback
+        ? `${goal}\n\n[Previous plan was rejected. Address this feedback:\n${previousFeedback}]`
+        : goal;
+      const planResult = await PlanAgent.generate(
+        enrichedGoal,
+        config.generator,
+      );
       lastPlan = planResult.plan;
 
       const failedFeedback: string[] = [];
