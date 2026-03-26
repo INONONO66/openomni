@@ -1,5 +1,5 @@
 import { ChatAgent, type AgentBudget } from "@openomni/agent";
-import { PlanSchema, type PlanResult } from "@openomni/protocol";
+import { PlanSchema, type PlanResult, type Tool } from "@openomni/protocol";
 
 function normalizePlanPayload(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") {
@@ -41,6 +41,7 @@ export namespace PlanAgent {
     model: { provider: string; id: string };
     systemPrompt?: string;
     budget?: AgentBudget;
+    tools?: Tool.Spec[];
   }
 
   export async function generate(goal: string, config: GenerateConfig): Promise<PlanResult> {
@@ -48,6 +49,7 @@ export namespace PlanAgent {
       model: config.model,
       systemPrompt: config.systemPrompt ?? "",
       budget: config.budget,
+      tools: config.tools,
     });
 
     const result = await agent.run({
