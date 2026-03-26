@@ -14,3 +14,4 @@ export * from "./guardrail/index.js";
 export * from "./event-log/index.js";
 export * from "./agent/index.js";
 export * from "./artifact/index.js";
+export * from "./gate/index.js";
