@@ -149,14 +149,10 @@ export namespace Adapter {
    * Handles an inbound message and returns an optional response.
    * Returning `null` means no response should be sent.
    */
-  export type MessageHandler = (
-    message: InboundMessage,
-  ) => Promise<OutboundMessage | null>;
+  export type MessageHandler = (message: InboundMessage) => Promise<OutboundMessage | null>;
 
   /** Handles a platform command invocation. */
-  export type CommandHandler = (
-    ctx: CommandContext,
-  ) => Promise<OutboundMessage | null>;
+  export type CommandHandler = (ctx: CommandContext) => Promise<OutboundMessage | null>;
 
   /**
    * Streaming sink for adapters that support incremental delivery.
@@ -178,10 +174,7 @@ export namespace Adapter {
    * Streaming handler — used instead of MessageHandler when the adapter
    * supports incremental delivery.
    */
-  export type StreamingHandler = (
-    message: InboundMessage,
-    sink: StreamSink,
-  ) => Promise<void>;
+  export type StreamingHandler = (message: InboundMessage, sink: StreamSink) => Promise<void>;
 
   // ── Config ────────────────────────────────────────────────────
 

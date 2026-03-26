@@ -16,10 +16,7 @@ export interface SummaryData {
 }
 
 export namespace SummaryDelivery {
-  export function extract(
-    sessionId: string,
-    _template: SummaryTemplate,
-  ): SummaryData {
+  export function extract(sessionId: string, _template: SummaryTemplate): SummaryData {
     const messages = Session.getMessages(sessionId);
 
     let result = "";
@@ -29,9 +26,7 @@ export namespace SummaryDelivery {
         const parts = Session.getParts(msg.id);
         const textParts = parts.filter((p) => p.type === "text");
         if (textParts.length > 0) {
-          result = textParts
-            .map((p) => (p as Message.TextPart).text)
-            .join("\n");
+          result = textParts.map((p) => (p as Message.TextPart).text).join("\n");
         }
         break;
       }

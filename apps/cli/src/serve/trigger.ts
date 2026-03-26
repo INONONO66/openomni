@@ -15,10 +15,7 @@ export function evaluateTriggers(
   return rules.every((rule) => evaluateRule(rule, ctx));
 }
 
-function evaluateRule(
-  rule: Adapter.TriggerRule,
-  ctx: Adapter.TriggerContext,
-): boolean {
+function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): boolean {
   switch (rule.type) {
     case "event":
       return rule.events.includes(ctx.event);
@@ -51,13 +48,9 @@ function evaluateRule(
  * Strip trigger-related prefixes from message text.
  * Call after trigger evaluation passes.
  */
-export function stripTriggerPrefix(
-  text: string,
-  rules: Adapter.TriggerRule[],
-): string {
+export function stripTriggerPrefix(text: string, rules: Adapter.TriggerRule[]): string {
   const prefix = rules.find(
-    (r): r is Extract<Adapter.TriggerRule, { type: "prefix" }> =>
-      r.type === "prefix",
+    (r): r is Extract<Adapter.TriggerRule, { type: "prefix" }> => r.type === "prefix",
   );
   if (prefix) {
     return text.slice(prefix.value.length).trim();
@@ -76,9 +69,7 @@ export function normalizeContent(
 ): string {
   let result = stripTriggerPrefix(text, rules);
   if (botUsername) {
-    result = result
-      .replace(new RegExp(`@${escapeRegex(botUsername)}\\s*`, "g"), "")
-      .trim();
+    result = result.replace(new RegExp(`@${escapeRegex(botUsername)}\\s*`, "g"), "").trim();
   }
   return result;
 }

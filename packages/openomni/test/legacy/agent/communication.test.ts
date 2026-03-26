@@ -6,9 +6,7 @@ import {
   type MessageEnvelope,
 } from "../../../src/legacy/agent/communication";
 
-const createEnvelope = (
-  overrides: Partial<MessageEnvelope> = {},
-): MessageEnvelope => ({
+const createEnvelope = (overrides: Partial<MessageEnvelope> = {}): MessageEnvelope => ({
   traceId: randomUUID(),
   sessionId: randomUUID(),
   runId: randomUUID(),
@@ -163,9 +161,9 @@ describe("AgentMessenger", () => {
       toAgentId: `agent-${randomUUID()}`,
     };
 
-    return expect(
-      AgentMessenger.request(envelope, { timeoutMs: 10 }),
-    ).rejects.toThrow(MessagingError);
+    return expect(AgentMessenger.request(envelope, { timeoutMs: 10 })).rejects.toThrow(
+      MessagingError,
+    );
   });
 
   it("request rejects on send error", async () => {
@@ -173,9 +171,7 @@ describe("AgentMessenger", () => {
       toAgentId: "",
     });
 
-    return expect(AgentMessenger.request(invalidEnvelope)).rejects.toThrow(
-      MessagingError,
-    );
+    return expect(AgentMessenger.request(invalidEnvelope)).rejects.toThrow(MessagingError);
   });
 
   it("Invalid envelope throws MessagingError", async () => {
@@ -184,9 +180,7 @@ describe("AgentMessenger", () => {
       payload: undefined,
     };
 
-    return expect(AgentMessenger.send(invalidEnvelope)).rejects.toThrow(
-      MessagingError,
-    );
+    return expect(AgentMessenger.send(invalidEnvelope)).rejects.toThrow(MessagingError);
   });
 
   it("Multiple subscribers all receive message", async () => {

@@ -2,9 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { checkDelegation } from "../../src/core/delegation";
 import type { DelegationContext } from "../../src/core/delegation";
 
-const makeContext = (
-  overrides: Partial<DelegationContext> = {},
-): DelegationContext => ({
+const makeContext = (overrides: Partial<DelegationContext> = {}): DelegationContext => ({
   depth: 0,
   maxDepth: 3,
   visitedAgents: new Set(),

@@ -119,9 +119,7 @@ function enqueuePlan(planId: string, goal: string, stepId: string): void {
   );
 }
 
-function extractTextMessages(
-  input: unknown,
-): Array<{ role: string; content: string }> {
+function extractTextMessages(input: unknown): Array<{ role: string; content: string }> {
   if (!input || typeof input !== "object") {
     return [];
   }
@@ -193,9 +191,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const replanInput = llmInputs[1];
       const replanMessages = extractTextMessages(replanInput);
-      const replanGoal = replanMessages
-        .map((message) => message.content)
-        .join("\n");
+      const replanGoal = replanMessages.map((message) => message.content).join("\n");
       expect(replanGoal).toContain("Previous plan:");
       expect(replanGoal).toContain("Build a REST API");
       expect(replanGoal).toContain("User feedback:");
@@ -260,9 +256,7 @@ describe("IngressEngine integration pipeline", () => {
 
       const secondInput = llmInputs[1];
       const secondMessages = extractTextMessages(secondInput);
-      const secondUserMessages = secondMessages.filter(
-        (message) => message.role === "user",
-      );
+      const secondUserMessages = secondMessages.filter((message) => message.role === "user");
 
       expect(secondUserMessages).toHaveLength(2);
       expect(secondUserMessages[0]?.content).toBe("Hello");
@@ -305,9 +299,7 @@ describe("IngressEngine integration pipeline", () => {
       expect(planB.goal).toBe("Plan B");
 
       const replanInputForProjectB = llmInputs[1];
-      const replanMessagesForProjectB = extractTextMessages(
-        replanInputForProjectB,
-      )
+      const replanMessagesForProjectB = extractTextMessages(replanInputForProjectB)
         .map((message) => message.content)
         .join("\n");
       expect(replanMessagesForProjectB).not.toContain("Previous plan:");

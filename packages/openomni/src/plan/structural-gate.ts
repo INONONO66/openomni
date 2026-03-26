@@ -45,18 +45,12 @@ export const structuralGateCheck: Gate.Check = {
   },
 };
 
-function resolveConfig(
-  config?: StructuralGate.Config,
-): Required<StructuralGate.Config> {
+function resolveConfig(config?: StructuralGate.Config): Required<StructuralGate.Config> {
   return {
-    minDescriptionWords:
-      config?.minDescriptionWords ?? DEFAULT_MIN_DESCRIPTION_WORDS,
-    minExpectedOutputWords:
-      config?.minExpectedOutputWords ?? DEFAULT_MIN_EXPECTED_OUTPUT_WORDS,
-    maxDependencyDepth:
-      config?.maxDependencyDepth ?? DEFAULT_MAX_DEPENDENCY_DEPTH,
-    duplicateThreshold:
-      config?.duplicateThreshold ?? DEFAULT_DUPLICATE_THRESHOLD,
+    minDescriptionWords: config?.minDescriptionWords ?? DEFAULT_MIN_DESCRIPTION_WORDS,
+    minExpectedOutputWords: config?.minExpectedOutputWords ?? DEFAULT_MIN_EXPECTED_OUTPUT_WORDS,
+    maxDependencyDepth: config?.maxDependencyDepth ?? DEFAULT_MAX_DEPENDENCY_DEPTH,
+    duplicateThreshold: config?.duplicateThreshold ?? DEFAULT_DUPLICATE_THRESHOLD,
     requireGuardrail: config?.requireGuardrail ?? DEFAULT_REQUIRE_GUARDRAIL,
   };
 }

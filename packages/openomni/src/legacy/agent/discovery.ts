@@ -79,9 +79,7 @@ function parseSimpleYaml(lines: string[]): Record<string, unknown> {
       }
 
       if (nested.length > 0) {
-        const isBlockArray = nested.every(
-          (l) => l.trim().startsWith("- ") || l.trim() === "",
-        );
+        const isBlockArray = nested.every((l) => l.trim().startsWith("- ") || l.trim() === "");
 
         if (isBlockArray) {
           result[key] = nested
@@ -120,10 +118,7 @@ function parseValue(raw: string): unknown {
 }
 
 function parseScalar(raw: string): unknown {
-  if (
-    (raw.startsWith('"') && raw.endsWith('"')) ||
-    (raw.startsWith("'") && raw.endsWith("'"))
-  ) {
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
     return raw.slice(1, -1);
   }
 
@@ -163,10 +158,7 @@ export interface AgentDiscoveryOptions {
  * extends the systemPrompt. Validates all definitions with Zod.
  */
 export namespace AgentDiscovery {
-  export function load(
-    dir: string,
-    options: AgentDiscoveryOptions = {},
-  ): AgentLoadResult[] {
+  export function load(dir: string, options: AgentDiscoveryOptions = {}): AgentLoadResult[] {
     const { allowOverride = false, strict = false } = options;
     const results: AgentLoadResult[] = [];
 
@@ -195,10 +187,7 @@ export namespace AgentDiscovery {
     return results;
   }
 
-  export function loadFile(
-    filePath: string,
-    options: AgentDiscoveryOptions = {},
-  ): AgentLoadResult {
+  export function loadFile(filePath: string, options: AgentDiscoveryOptions = {}): AgentLoadResult {
     const { allowOverride = false, strict = false } = options;
     const file = filePath;
 
@@ -227,8 +216,7 @@ export namespace AgentDiscovery {
 
       return { file, success: true, agent: validated };
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Unknown error loading agent file";
+      const msg = err instanceof Error ? err.message : "Unknown error loading agent file";
       if (strict) throw err;
       return { file, success: false, error: msg };
     }
@@ -238,10 +226,7 @@ export namespace AgentDiscovery {
    * Atomically replaces an existing agent by clearing and re-registering all agents.
    * Required because BuiltinAgentRegistry.define() throws on duplicate names.
    */
-  function overrideAgent(
-    definition: AgentDefinition,
-    file: string,
-  ): AgentLoadResult {
+  function overrideAgent(definition: AgentDefinition, file: string): AgentLoadResult {
     const existing = BuiltinAgentRegistry.list();
     BuiltinAgentRegistry.clear();
 

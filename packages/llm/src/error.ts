@@ -70,7 +70,4 @@ export const AbortedError = NamedError.create(
   }),
 );
 
-export const OutputLengthError = NamedError.create(
-  "OutputLengthError",
-  z.object({}),
-);
+export const OutputLengthError = NamedError.create("OutputLengthError", z.object({}));

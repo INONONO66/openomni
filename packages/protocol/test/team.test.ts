@@ -5,13 +5,7 @@ import { Team, BusEvent } from "../src/index.js";
 describe("Team Protocol Types", () => {
   describe("StepState", () => {
     it("should validate valid step states", () => {
-      const validStates = [
-        "ready",
-        "running",
-        "succeeded",
-        "failed",
-        "skipped",
-      ];
+      const validStates = ["ready", "running", "succeeded", "failed", "skipped"];
       validStates.forEach((state) => {
         expect(() => Team.StepState.parse(state)).not.toThrow();
       });
@@ -83,11 +77,7 @@ describe("Team Protocol Types", () => {
 
   describe("StallReason", () => {
     it("should validate valid stall reasons", () => {
-      const validReasons = [
-        "consecutive_rejections",
-        "no_progress",
-        "unsatisfiable_deps",
-      ];
+      const validReasons = ["consecutive_rejections", "no_progress", "unsatisfiable_deps"];
       validReasons.forEach((reason) => {
         expect(() => Team.StallReason.parse(reason)).not.toThrow();
       });

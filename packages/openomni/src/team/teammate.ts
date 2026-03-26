@@ -62,10 +62,7 @@ export namespace Teammate {
    * Merge config-level and step-level tools, deduplicating by name.
    * Step tools take precedence over config tools with the same name.
    */
-  function mergeTools(
-    configTools?: Tool.Spec[],
-    stepTools?: Tool.Spec[],
-  ): Tool.Spec[] | undefined {
+  function mergeTools(configTools?: Tool.Spec[], stepTools?: Tool.Spec[]): Tool.Spec[] | undefined {
     if (!configTools && !stepTools) return undefined;
     if (!configTools) return stepTools;
     if (!stepTools) return configTools;

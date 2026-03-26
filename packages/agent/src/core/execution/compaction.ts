@@ -17,13 +17,9 @@ const DEFAULT_THRESHOLD_RATIO = 0.8;
 const DEFAULT_PROTECT_RECENT = 6;
 
 export namespace InMemoryCompactor {
-  export function shouldCompact(
-    totalTokens: number,
-    options: CompactionOptions,
-  ): boolean {
+  export function shouldCompact(totalTokens: number, options: CompactionOptions): boolean {
     const threshold =
-      options.contextWindowTokens *
-      (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
+      options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
     return totalTokens >= threshold;
   }
 
@@ -31,8 +27,7 @@ export namespace InMemoryCompactor {
     messages: Message.WithParts[],
     options: CompactionOptions,
   ): Promise<CompactionResult> {
-    const protectRecent =
-      options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
+    const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
 
     if (messages.length <= protectRecent) {
       return { messages, compacted: false, removedCount: 0 };

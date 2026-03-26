@@ -60,8 +60,7 @@ export class AgentRegistry {
   private store: AgentRegistryStore;
 
   constructor(store?: AgentRegistryStore) {
-    this.store =
-      store ?? AgentRegistry.defaultStore ?? new InMemoryAgentRegistryStore();
+    this.store = store ?? AgentRegistry.defaultStore ?? new InMemoryAgentRegistryStore();
   }
 
   /**

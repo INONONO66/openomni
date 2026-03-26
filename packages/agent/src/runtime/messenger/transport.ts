@@ -3,10 +3,7 @@ import type { Messenger } from "@openomni/protocol";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
-  subscribe(
-    agentId: string,
-    handler: (env: Messenger.MessageEnvelope) => void,
-  ): () => void;
+  subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void;
 }
 
 const messengerEvent = BusEvent.define<Messenger.MessageEnvelope>(
@@ -20,10 +17,7 @@ export class BusTransport implements Transport {
     Bus.publish(messengerEvent, envelope);
   }
 
-  subscribe(
-    agentId: string,
-    handler: (env: Messenger.MessageEnvelope) => void,
-  ): () => void {
+  subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void {
     return Bus.subscribe(messengerEvent, (env) => {
       if (env.toAgentId === agentId) {
         handler(env);

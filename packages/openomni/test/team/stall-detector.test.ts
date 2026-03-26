@@ -29,10 +29,7 @@ describe("StallDetector", () => {
       ledger.recordRejection("A");
       ledger.recordRejection("A");
 
-      const result = StallDetector.checkConsecutiveRejections(
-        ledger,
-        DEFAULT_CONFIG,
-      );
+      const result = StallDetector.checkConsecutiveRejections(ledger, DEFAULT_CONFIG);
       expect(result.stalled).toBe(true);
       expect(result.reason).toBe("consecutive_rejections");
       expect(result.stalledStepId).toBe("A");
@@ -46,35 +43,29 @@ describe("StallDetector", () => {
       ledger.recordRejection("A");
       ledger.recordRejection("A");
 
-      const result = StallDetector.checkConsecutiveRejections(
-        ledger,
-        DEFAULT_CONFIG,
-      );
+      const result = StallDetector.checkConsecutiveRejections(ledger, DEFAULT_CONFIG);
       expect(result.stalled).toBe(false);
     });
   });
 
-    it("ignores terminal (failed/succeeded/skipped) steps when checking rejections", () => {
-      const steps = [makeStep("A"), makeStep("B")];
-      const ledger = RunLedger.create(steps);
+  it("ignores terminal (failed/succeeded/skipped) steps when checking rejections", () => {
+    const steps = [makeStep("A"), makeStep("B")];
+    const ledger = RunLedger.create(steps);
 
-      // Step A: failed with high rejection streak
-      ledger.transition("A", "running");
-      ledger.recordRejection("A");
-      ledger.recordRejection("A");
-      ledger.recordRejection("A");
-      ledger.transition("A", "failed");
+    // Step A: failed with high rejection streak
+    ledger.transition("A", "running");
+    ledger.recordRejection("A");
+    ledger.recordRejection("A");
+    ledger.recordRejection("A");
+    ledger.transition("A", "failed");
 
-      // Step B: running with no rejections
-      ledger.transition("B", "running");
+    // Step B: running with no rejections
+    ledger.transition("B", "running");
 
-      // Should NOT detect stall — A is terminal and should be filtered
-      const result = StallDetector.checkConsecutiveRejections(
-        ledger,
-        DEFAULT_CONFIG,
-      );
-      expect(result.stalled).toBe(false);
-    });
+    // Should NOT detect stall — A is terminal and should be filtered
+    const result = StallDetector.checkConsecutiveRejections(ledger, DEFAULT_CONFIG);
+    expect(result.stalled).toBe(false);
+  });
 
   describe("checkNoProgress", () => {
     it("detects stall when noProgressTurns >= max and no running steps", () => {
@@ -82,13 +73,7 @@ describe("StallDetector", () => {
       const ledger = RunLedger.create(steps);
       const dag = DAG.build(steps);
 
-
-      const result = StallDetector.checkNoProgress(
-        ledger,
-        dag,
-        DEFAULT_CONFIG,
-        5,
-      );
+      const result = StallDetector.checkNoProgress(ledger, dag, DEFAULT_CONFIG, 5);
       expect(result.stalled).toBe(true);
       expect(result.reason).toBe("no_progress");
     });
@@ -100,12 +85,7 @@ describe("StallDetector", () => {
 
       ledger.transition("A", "running");
 
-      const result = StallDetector.checkNoProgress(
-        ledger,
-        dag,
-        DEFAULT_CONFIG,
-        5,
-      );
+      const result = StallDetector.checkNoProgress(ledger, dag, DEFAULT_CONFIG, 5);
       expect(result.stalled).toBe(false);
     });
 
@@ -114,12 +94,7 @@ describe("StallDetector", () => {
       const ledger = RunLedger.create(steps);
       const dag = DAG.build(steps);
 
-      const result = StallDetector.checkNoProgress(
-        ledger,
-        dag,
-        DEFAULT_CONFIG,
-        3,
-      );
+      const result = StallDetector.checkNoProgress(ledger, dag, DEFAULT_CONFIG, 3);
       expect(result.stalled).toBe(false);
     });
   });

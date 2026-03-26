@@ -58,9 +58,7 @@ export async function fetchWithRetry(
 
   if (response.status === 429) {
     if (retries >= MAX_API_RETRIES) {
-      throw new Error(
-        `${label}: rate limited after ${MAX_API_RETRIES} retries`,
-      );
+      throw new Error(`${label}: rate limited after ${MAX_API_RETRIES} retries`);
     }
 
     let retryAfter = 5;

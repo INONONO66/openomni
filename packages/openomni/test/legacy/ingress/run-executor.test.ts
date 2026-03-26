@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  DefaultRunExecutor,
-  type RunExecutor,
-} from "../../../src/legacy/ingress/run-executor";
+import { DefaultRunExecutor, type RunExecutor } from "../../../src/legacy/ingress/run-executor";
 import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import { TaskStorage } from "../../../src/legacy/task/storage";

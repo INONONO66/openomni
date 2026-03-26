@@ -4,9 +4,7 @@ import type { Artifact as ArtifactSchema } from "@openomni/protocol";
 
 const now = new Date().toISOString();
 
-function makeMeta(
-  overrides: Partial<ArtifactSchema.Meta> = {},
-): ArtifactSchema.Meta {
+function makeMeta(overrides: Partial<ArtifactSchema.Meta> = {}): ArtifactSchema.Meta {
   return {
     id: "art-1",
     sessionId: "sess-1",
@@ -74,11 +72,7 @@ describe("Artifact", () => {
     });
 
     it("deduplicates to latest version per artifact", async () => {
-      await Artifact.store(
-        "sess-1",
-        makeMeta({ id: "art-1", version: 1 }),
-        "v1",
-      );
+      await Artifact.store("sess-1", makeMeta({ id: "art-1", version: 1 }), "v1");
       await Artifact.store(
         "sess-1",
         makeMeta({ id: "art-1", version: 2, title: "updated.txt" }),
@@ -93,11 +87,7 @@ describe("Artifact", () => {
 
     it("isolates artifacts between sessions", async () => {
       await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "c1");
-      await Artifact.store(
-        "sess-2",
-        makeMeta({ id: "art-2", sessionId: "sess-2" }),
-        "c2",
-      );
+      await Artifact.store("sess-2", makeMeta({ id: "art-2", sessionId: "sess-2" }), "c2");
 
       const s1 = await Artifact.list("sess-1");
       const s2 = await Artifact.list("sess-2");
@@ -110,21 +100,9 @@ describe("Artifact", () => {
 
   describe("versions", () => {
     it("returns all versions sorted by version number", async () => {
-      await Artifact.store(
-        "sess-1",
-        makeMeta({ version: 1, title: "v1" }),
-        "content-v1",
-      );
-      await Artifact.store(
-        "sess-1",
-        makeMeta({ version: 3, title: "v3" }),
-        "content-v3",
-      );
-      await Artifact.store(
-        "sess-1",
-        makeMeta({ version: 2, title: "v2" }),
-        "content-v2",
-      );
+      await Artifact.store("sess-1", makeMeta({ version: 1, title: "v1" }), "content-v1");
+      await Artifact.store("sess-1", makeMeta({ version: 3, title: "v3" }), "content-v3");
+      await Artifact.store("sess-1", makeMeta({ version: 2, title: "v2" }), "content-v2");
 
       const vers = await Artifact.versions("art-1");
       expect(vers).toHaveLength(3);

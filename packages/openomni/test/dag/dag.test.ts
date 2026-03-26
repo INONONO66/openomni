@@ -48,12 +48,7 @@ describe("DAG", () => {
   });
 
   it("unblocks diamond DAG only after both prerequisites complete", () => {
-    const dag = DAG.build([
-      step("A"),
-      step("B", ["A"]),
-      step("C", ["A"]),
-      step("D", ["B", "C"]),
-    ]);
+    const dag = DAG.build([step("A"), step("B", ["A"]), step("C", ["A"]), step("D", ["B", "C"])]);
     const completed = new Set<string>();
 
     expect(DAG.getReady(dag, completed)).toEqual(["A"]);
@@ -71,11 +66,7 @@ describe("DAG", () => {
   });
 
   it("detects cycle A -> B -> C -> A", () => {
-    const dag = DAG.build([
-      step("A", ["C"]),
-      step("B", ["A"]),
-      step("C", ["B"]),
-    ]);
+    const dag = DAG.build([step("A", ["C"]), step("B", ["A"]), step("C", ["B"])]);
 
     expect(DAG.validateAcyclic(dag)).toEqual({
       valid: false,
@@ -108,24 +99,17 @@ describe("DAG", () => {
   it("does not mutate DAGStructure in getReady", () => {
     const dag = DAG.build([step("A"), step("B", ["A"])]);
     const nodesBefore = [...dag.nodes];
-    const edgesBefore = [...dag.edges.entries()].map(([id, deps]) => [
-      id,
-      [...deps],
-    ]);
-    const reverseEdgesBefore = [...dag.reverseEdges.entries()].map(
-      ([id, deps]) => [id, [...deps]],
-    );
+    const edgesBefore = [...dag.edges.entries()].map(([id, deps]) => [id, [...deps]]);
+    const reverseEdgesBefore = [...dag.reverseEdges.entries()].map(([id, deps]) => [id, [...deps]]);
     const pendingBefore = [...dag.pendingDeps.entries()];
 
     DAG.getReady(dag, new Set());
 
     expect([...dag.nodes]).toEqual(nodesBefore);
-    expect(
-      [...dag.edges.entries()].map(([id, deps]) => [id, [...deps]]),
-    ).toEqual(edgesBefore);
-    expect(
-      [...dag.reverseEdges.entries()].map(([id, deps]) => [id, [...deps]]),
-    ).toEqual(reverseEdgesBefore);
+    expect([...dag.edges.entries()].map(([id, deps]) => [id, [...deps]])).toEqual(edgesBefore);
+    expect([...dag.reverseEdges.entries()].map(([id, deps]) => [id, [...deps]])).toEqual(
+      reverseEdgesBefore,
+    );
     expect([...dag.pendingDeps.entries()]).toEqual(pendingBefore);
   });
 });

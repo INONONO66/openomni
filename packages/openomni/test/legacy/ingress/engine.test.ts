@@ -32,9 +32,7 @@ describe("IngressEngine", () => {
   beforeEach(() => {
     IngressEngine.ingest = originalIngest;
     if ((IngressEngine.ingest as unknown as { mock?: unknown }).mock) {
-      (
-        IngressEngine.ingest as unknown as { mockRestore: () => void }
-      ).mockRestore();
+      (IngressEngine.ingest as unknown as { mockRestore: () => void }).mockRestore();
     }
     IngressEngine.reset();
     IngressEngine.configure({});

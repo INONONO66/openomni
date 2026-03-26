@@ -37,10 +37,7 @@ function isActiveRunStatus(status: Task.Run["status"]): boolean {
   return status === "scheduled" || status === "running" || status === "blocked";
 }
 
-function upsertRunHistory(
-  history: Task.Run[] | undefined,
-  run: Task.Run,
-): Task.Run[] {
+function upsertRunHistory(history: Task.Run[] | undefined, run: Task.Run): Task.Run[] {
   if (!history || history.length === 0) {
     return [run];
   }
@@ -109,10 +106,7 @@ export namespace TaskManager {
     return task;
   }
 
-  export function update(
-    id: string,
-    input: Task.UpdateInput,
-  ): Task.Info | undefined {
+  export function update(id: string, input: Task.UpdateInput): Task.Info | undefined {
     const validated = Task.UpdateInput.parse(input);
 
     const store = TaskStorage.getAdapter();
@@ -193,9 +187,7 @@ export namespace TaskManager {
 
     if (filter?.hasTriggersOfType) {
       const triggerType = filter.hasTriggersOfType;
-      tasks = tasks.filter((task) =>
-        task.triggers.some((trigger) => trigger.type === triggerType),
-      );
+      tasks = tasks.filter((task) => task.triggers.some((trigger) => trigger.type === triggerType));
     }
 
     return tasks;
@@ -286,9 +278,7 @@ export namespace TaskManager {
     }
 
     if (
-      (newStatus === "done" ||
-        newStatus === "failed" ||
-        newStatus === "cancelled") &&
+      (newStatus === "done" || newStatus === "failed" || newStatus === "cancelled") &&
       !run.endedAt
     ) {
       updatedRun.endedAt = now;
@@ -305,15 +295,9 @@ export namespace TaskManager {
             : undefined
           : task.pendingRun;
 
-      const lastRun = isActiveRunStatus(updatedRun.status)
-        ? task.lastRun
-        : updatedRun;
+      const lastRun = isActiveRunStatus(updatedRun.status) ? task.lastRun : updatedRun;
 
-      const statusUpdated = TaskStatusManager.updateFromRun(
-        task,
-        pendingRun,
-        lastRun,
-      );
+      const statusUpdated = TaskStatusManager.updateFromRun(task, pendingRun, lastRun);
 
       const updatedTask: Task.Info = {
         ...statusUpdated,
@@ -353,11 +337,7 @@ export namespace TaskManager {
     }
 
     // Can only cancel if in cancellable state
-    const cancellableStatuses: Task.Run["status"][] = [
-      "scheduled",
-      "running",
-      "blocked",
-    ];
+    const cancellableStatuses: Task.Run["status"][] = ["scheduled", "running", "blocked"];
     if (!cancellableStatuses.includes(run.status)) {
       return false;
     }
@@ -415,10 +395,7 @@ export namespace TaskManager {
   /**
    * List blocked runs awaiting approval (for crash recovery)
    */
-  export function listBlockedRuns(filter?: {
-    taskId?: string;
-    userId?: string;
-  }): Task.Run[] {
+  export function listBlockedRuns(filter?: { taskId?: string; userId?: string }): Task.Run[] {
     const store = TaskStorage.getAdapter();
     let blockedRuns = store.run.listByStatus(["blocked"]);
 
@@ -427,9 +404,7 @@ export namespace TaskManager {
     }
 
     if (filter?.userId) {
-      blockedRuns = blockedRuns.filter(
-        (r) => r.context?.userId === filter.userId,
-      );
+      blockedRuns = blockedRuns.filter((r) => r.context?.userId === filter.userId);
     }
 
     return blockedRuns;

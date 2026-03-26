@@ -10,14 +10,8 @@ export namespace Agent {
    */
   export const Info = z.object({
     name: z.string().describe("Unique identifier for the agent"),
-    description: z
-      .string()
-      .optional()
-      .describe("Human-readable description of the agent"),
-    systemPrompt: z
-      .string()
-      .optional()
-      .describe("System prompt to guide agent behavior"),
+    description: z.string().optional().describe("Human-readable description of the agent"),
+    systemPrompt: z.string().optional().describe("System prompt to guide agent behavior"),
     temperature: z
       .number()
       .min(0)

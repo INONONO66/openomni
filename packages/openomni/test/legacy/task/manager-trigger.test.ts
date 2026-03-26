@@ -17,9 +17,7 @@ describe("TaskManager.trigger", () => {
     });
   }
 
-  function createSignal(
-    overrides: Partial<Task.TriggerSignal> = {},
-  ): Task.TriggerSignal {
+  function createSignal(overrides: Partial<Task.TriggerSignal> = {}): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",
@@ -130,14 +128,8 @@ describe("TaskManager.trigger", () => {
         policy: { dedupe: { windowMs: 60000 } },
       });
 
-      const result1 = await TaskManager.trigger(
-        task.id,
-        createSignal({ occurredAt: 1000 }),
-      );
-      const result2 = await TaskManager.trigger(
-        task.id,
-        createSignal({ occurredAt: 2000 }),
-      );
+      const result1 = await TaskManager.trigger(task.id, createSignal({ occurredAt: 1000 }));
+      const result2 = await TaskManager.trigger(task.id, createSignal({ occurredAt: 2000 }));
 
       expect("runId" in result1).toBe(true);
       expect("runId" in result2).toBe(true);

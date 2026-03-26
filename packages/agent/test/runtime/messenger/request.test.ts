@@ -4,11 +4,7 @@ import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import { BusTransport } from "../../../src/runtime/messenger/transport";
 import type { Messenger } from "@openomni/protocol";
 
-function makeEnvelope(
-  from: string,
-  to: string,
-  id?: string,
-): Messenger.MessageEnvelope {
+function makeEnvelope(from: string, to: string, id?: string): Messenger.MessageEnvelope {
   return {
     id: id ?? crypto.randomUUID(),
     traceId: "trace-1",
@@ -57,9 +53,7 @@ describe("AgentMessenger.request", () => {
 
     const requestEnvelope = makeEnvelope("agent-a", "agent-b");
 
-    await expect(
-      messenger.request(requestEnvelope, { timeout: 50 }),
-    ).rejects.toThrow("timed out");
+    await expect(messenger.request(requestEnvelope, { timeout: 50 })).rejects.toThrow("timed out");
   });
 
   it("rejects when aborted via signal", async () => {

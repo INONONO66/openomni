@@ -43,9 +43,7 @@ export class FileTaskStore implements TaskStore {
       if (!filter) return tasks;
 
       if (filter.status) {
-        const statuses = Array.isArray(filter.status)
-          ? filter.status
-          : [filter.status];
+        const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
         tasks = tasks.filter((t) => statuses.includes(t.status));
       }
 
@@ -54,15 +52,11 @@ export class FileTaskStore implements TaskStore {
       }
 
       if (filter.assignedAgentId) {
-        tasks = tasks.filter(
-          (t) => t.assignedAgentId === filter.assignedAgentId,
-        );
+        tasks = tasks.filter((t) => t.assignedAgentId === filter.assignedAgentId);
       }
 
       if (filter.tags && filter.tags.length > 0) {
-        tasks = tasks.filter((t) =>
-          filter.tags!.every((tag) => t.tags?.includes(tag)),
-        );
+        tasks = tasks.filter((t) => filter.tags!.every((tag) => t.tags?.includes(tag)));
       }
 
       return tasks;
@@ -203,10 +197,7 @@ export class FileTaskStore implements TaskStore {
     const path = join(this.dir, "statusIndex.json");
     if (!existsSync(path)) return;
     try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<
-        string,
-        string[]
-      >;
+      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, string[]>;
       this.statusIndex = new Map();
       for (const [status, ids] of Object.entries(raw)) {
         this.statusIndex.set(status as Task.Run["status"], new Set(ids));
@@ -258,10 +249,7 @@ export class FileTaskStore implements TaskStore {
   }
 
   private flushMap<V>(filename: string, map: Map<string, V>): void {
-    this.atomicWrite(
-      filename,
-      JSON.stringify(Object.fromEntries(map), null, 2),
-    );
+    this.atomicWrite(filename, JSON.stringify(Object.fromEntries(map), null, 2));
   }
 
   private flushTasks(): void {

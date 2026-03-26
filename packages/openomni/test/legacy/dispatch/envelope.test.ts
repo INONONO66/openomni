@@ -111,9 +111,7 @@ describe("Envelope Functions", () => {
 
   describe("Envelope.isExpired", () => {
     it("returns true for old envelopes", () => {
-      const twoHoursAgo = new Date(
-        Date.now() - 2 * 60 * 60 * 1000,
-      ).toISOString();
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       const oldEnvelope: EventEnvelope = {
         eventId: "test-id",
         name: "test-event",

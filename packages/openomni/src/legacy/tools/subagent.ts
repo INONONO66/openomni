@@ -1,16 +1,8 @@
 import { z } from "zod";
 import { Session } from "@openomni/session";
 import type { Tool } from "@openomni/protocol";
-import {
-  BuiltinAgentRegistry,
-  AgentMessenger,
-  type MessageEnvelope,
-} from "../agent";
-import type {
-  OrchestratorConfig,
-  OrchestratorRunInput,
-  SessionMode,
-} from "../worker";
+import { BuiltinAgentRegistry, AgentMessenger, type MessageEnvelope } from "../agent";
+import type { OrchestratorConfig, OrchestratorRunInput, SessionMode } from "../worker";
 import { RunWorker } from "../worker";
 import { TaskManager } from "../task";
 import { IngressEngine } from "../ingress";
@@ -18,10 +10,7 @@ import { IngressEngine } from "../ingress";
 export const SubagentInput = z.object({
   agentType: z.string().describe("Agent type: 'explore', 'implement', etc."),
   prompt: z.string().describe("Instruction for the subagent"),
-  sessionId: z
-    .string()
-    .optional()
-    .describe("Resume existing session (optional)"),
+  sessionId: z.string().optional().describe("Resume existing session (optional)"),
 });
 export type SubagentInput = z.infer<typeof SubagentInput>;
 
@@ -69,8 +58,7 @@ export namespace Subagent {
       return {
         id: crypto.randomUUID(),
         toolCallId,
-        output:
-          "Nested delegation not allowed: subagent cannot call subagent/dispatch",
+        output: "Nested delegation not allowed: subagent cannot call subagent/dispatch",
         isError: true,
       };
     }
@@ -192,11 +180,7 @@ export namespace Subagent {
     };
 
     try {
-      const result = await executeWithAbort(
-        config,
-        orchestratorInput,
-        context.abortSignal,
-      );
+      const result = await executeWithAbort(config, orchestratorInput, context.abortSignal);
 
       announceCompletion(context, input, config, result);
 
@@ -239,10 +223,7 @@ export namespace Subagent {
         },
         occurredAt: new Date().toISOString(),
       }).catch((error) => {
-        console.error(
-          `[Subagent] Failed to emit failure event for task ${childTask.id}:`,
-          error,
-        );
+        console.error(`[Subagent] Failed to emit failure event for task ${childTask.id}:`, error);
       });
 
       return {

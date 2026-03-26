@@ -124,9 +124,7 @@ export namespace Processor {
                       type: "text",
                       text: "",
                       time: { start: now },
-                      metadata:
-                        (event.providerMetadata as Record<string, unknown>) ||
-                        {},
+                      metadata: (event.providerMetadata as Record<string, unknown>) || {},
                     };
                     addMessagePart(currentText);
                     break;
@@ -136,10 +134,7 @@ export namespace Processor {
                     if (currentText) {
                       currentText.text += String(event.text || "");
                       if (event.providerMetadata) {
-                        currentText.metadata = event.providerMetadata as Record<
-                          string,
-                          unknown
-                        >;
+                        currentText.metadata = event.providerMetadata as Record<string, unknown>;
                       }
                       updateMessagePart(currentText);
                     }
@@ -154,10 +149,7 @@ export namespace Processor {
                         end: Date.now(),
                       };
                       if (event.providerMetadata) {
-                        currentText.metadata = event.providerMetadata as Record<
-                          string,
-                          unknown
-                        >;
+                        currentText.metadata = event.providerMetadata as Record<string, unknown>;
                       }
                       updateMessagePart(currentText);
                     }
@@ -176,9 +168,7 @@ export namespace Processor {
                         type: "reasoning",
                         text: "",
                         time: { start: now, end: undefined },
-                        metadata:
-                          (event.providerMetadata as Record<string, unknown>) ||
-                          {},
+                        metadata: (event.providerMetadata as Record<string, unknown>) || {},
                       };
                       reasoningMap[reasoningId] = part;
                       addMessagePart(part);
@@ -192,10 +182,7 @@ export namespace Processor {
                       const part = reasoningMap[reasoningId];
                       part.text += String(event.text || "");
                       if (event.providerMetadata) {
-                        part.metadata = event.providerMetadata as Record<
-                          string,
-                          unknown
-                        >;
+                        part.metadata = event.providerMetadata as Record<string, unknown>;
                       }
                       updateMessagePart(part);
                     }
@@ -212,10 +199,7 @@ export namespace Processor {
                         end: Date.now(),
                       };
                       if (event.providerMetadata) {
-                        part.metadata = event.providerMetadata as Record<
-                          string,
-                          unknown
-                        >;
+                        part.metadata = event.providerMetadata as Record<string, unknown>;
                       }
                       updateMessagePart(part);
                       delete reasoningMap[reasoningId];
@@ -261,8 +245,7 @@ export namespace Processor {
                           title: result.title,
                           metadata: result.metadata ?? {},
                           time: {
-                            start:
-                              (toolPart.state as any).time?.start ?? Date.now(),
+                            start: (toolPart.state as any).time?.start ?? Date.now(),
                             end: Date.now(),
                           },
                         };
@@ -273,15 +256,13 @@ export namespace Processor {
                           output: result.output,
                         });
                       } catch (err) {
-                        const errorMessage =
-                          err instanceof Error ? err.message : String(err);
+                        const errorMessage = err instanceof Error ? err.message : String(err);
                         toolPart.state = {
                           status: "error",
                           input: toolPart.state.input,
                           error: errorMessage,
                           time: {
-                            start:
-                              (toolPart.state as any).time?.start ?? Date.now(),
+                            start: (toolPart.state as any).time?.start ?? Date.now(),
                             end: Date.now(),
                           },
                         };
@@ -311,9 +292,7 @@ export namespace Processor {
                   }
 
                   case "step-finish": {
-                    const finishReason = String(
-                      event.finishReason || "end_turn",
-                    );
+                    const finishReason = String(event.finishReason || "end_turn");
                     const usage = event.usage as
                       | {
                           promptTokens?: number;
@@ -338,8 +317,7 @@ export namespace Processor {
                     assistantMessage.finish = finishReason;
                     if (usage) {
                       assistantMessage.tokens.input += usage.promptTokens ?? 0;
-                      assistantMessage.tokens.output +=
-                        usage.completionTokens ?? 0;
+                      assistantMessage.tokens.output += usage.completionTokens ?? 0;
                     }
                     break;
                   }
@@ -366,10 +344,7 @@ export namespace Processor {
 
               if (retryReason !== undefined) {
                 attempt++;
-                const delayMs = Retry.delay(
-                  attempt,
-                  APIError.isInstance(e) ? e : undefined,
-                );
+                const delayMs = Retry.delay(attempt, APIError.isInstance(e) ? e : undefined);
 
                 publishStatus({
                   type: "retry",
@@ -381,10 +356,7 @@ export namespace Processor {
                 try {
                   await Retry.sleep(delayMs, abort);
                 } catch (sleepError) {
-                  if (
-                    sleepError instanceof DOMException &&
-                    sleepError.name === "AbortError"
-                  ) {
+                  if (sleepError instanceof DOMException && sleepError.name === "AbortError") {
                     cleanupPendingTools(pendingTools, updateMessagePart, sink);
                     publishStatus({ type: "idle" });
                     throw sleepError;
@@ -437,10 +409,7 @@ export namespace Processor {
           input: tool.state.input,
           error: "Processing was interrupted",
           time: {
-            start:
-              tool.state.status === "running"
-                ? tool.state.time.start
-                : Date.now(),
+            start: tool.state.status === "running" ? tool.state.time.start : Date.now(),
             end: Date.now(),
           },
         };

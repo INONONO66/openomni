@@ -12,11 +12,7 @@ const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
   "@ai-sdk/openai": createOpenAI,
 };
 
-type CustomModelLoader = (
-  sdk: any,
-  modelID: string,
-  options?: Record<string, any>,
-) => any;
+type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => any;
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
@@ -58,18 +54,15 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
     sdkOptions.apiKey = auth.key;
   } else if (providerID === "anthropic") {
     const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
-    const oauthFetch = createOAuthFetch(
-      oauthAuth,
-      async (access, refresh, expires) => {
-        await Auth.set(providerID, {
-          type: "oauth",
-          access,
-          refresh,
-          expires,
-          ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
-        });
-      },
-    );
+    const oauthFetch = createOAuthFetch(oauthAuth, async (access, refresh, expires) => {
+      await Auth.set(providerID, {
+        type: "oauth",
+        access,
+        refresh,
+        expires,
+        ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
+      });
+    });
     sdkOptions.apiKey = "";
     sdkOptions.fetch = oauthFetch;
   } else if (providerID === "openai") {
@@ -89,10 +82,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
   return factory(sdkOptions);
 }
 
-export function getLanguage(
-  model: Provider.Model,
-  auth: Auth.Info,
-): LanguageModelV1 {
+export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModelV1 {
   const sdk = getSDK(model, auth);
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -106,9 +96,7 @@ export function getLanguage(
   return sdk.languageModel(modelID);
 }
 
-export function fromModelsDevProvider(
-  provider: ModelsDev.Provider,
-): Provider.Info {
+export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {
   const models: Record<string, Provider.Model> = {};
 
   if (provider.models) {
@@ -116,10 +104,7 @@ export function fromModelsDevProvider(
       const isValid = typeof rawModel === "object" && rawModel !== null;
       if (!isValid) continue;
 
-      models[id] = Provider.fromModelsDevModel(
-        provider,
-        rawModel as ModelsDev.Model,
-      );
+      models[id] = Provider.fromModelsDevModel(provider, rawModel as ModelsDev.Model);
     }
   }
 

@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  EventProjector,
-  DefaultEventProjector,
-} from "../../../src/legacy/ingress/event-projector";
+import { EventProjector, DefaultEventProjector } from "../../../src/legacy/ingress/event-projector";
 import { Envelope } from "../../../src/legacy/dispatch/envelope";
 import { Session } from "@openomni/session";
 import { Message } from "@openomni/protocol";

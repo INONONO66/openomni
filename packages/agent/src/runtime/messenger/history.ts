@@ -16,30 +16,21 @@ export interface HistoryResult {
   hasMore: boolean;
 }
 
-export function queryHistory(
-  agentId: string,
-  options: HistoryQueryOptions = {},
-): HistoryResult {
+export function queryHistory(agentId: string, options: HistoryQueryOptions = {}): HistoryResult {
   const { limit = 50, offset = 0 } = options;
   const all = AgentMessenger.getLog();
 
   const visible = all.filter((msg) => {
     if (msg.persistencePolicy === "asker_only") {
-      if (msg.fromAgentId !== agentId && msg.toAgentId !== agentId)
-        return false;
-      if (msg.toAgentId === agentId && msg.fromAgentId !== agentId)
-        return false;
+      if (msg.fromAgentId !== agentId && msg.toAgentId !== agentId) return false;
+      if (msg.toAgentId === agentId && msg.fromAgentId !== agentId) return false;
     } else {
-      if (msg.fromAgentId !== agentId && msg.toAgentId !== agentId)
-        return false;
+      if (msg.fromAgentId !== agentId && msg.toAgentId !== agentId) return false;
     }
 
     if (options.schemaRef && msg.schemaRef !== options.schemaRef) return false;
     if (options.traceId && msg.traceId !== options.traceId) return false;
-    if (
-      options.correlationId !== undefined &&
-      msg.correlationId !== options.correlationId
-    )
+    if (options.correlationId !== undefined && msg.correlationId !== options.correlationId)
       return false;
     if (options.timeRange?.from) {
       const sentAt = new Date(msg.sentAt).getTime();

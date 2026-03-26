@@ -8,21 +8,15 @@ import type { Task } from "../../../src/legacy/task/types";
 describe("TaskStateMachine", () => {
   describe("validateTransition", () => {
     test("idle -> scheduled is valid", () => {
-      expect(TaskStateMachine.validateTransition("idle", "scheduled")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("idle", "scheduled")).toBe(true);
     });
 
     test("scheduled -> running is valid", () => {
-      expect(TaskStateMachine.validateTransition("scheduled", "running")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("scheduled", "running")).toBe(true);
     });
 
     test("scheduled -> cancelled is valid", () => {
-      expect(
-        TaskStateMachine.validateTransition("scheduled", "cancelled"),
-      ).toBe(true);
+      expect(TaskStateMachine.validateTransition("scheduled", "cancelled")).toBe(true);
     });
 
     test("running -> done is valid", () => {
@@ -30,33 +24,23 @@ describe("TaskStateMachine", () => {
     });
 
     test("running -> failed is valid", () => {
-      expect(TaskStateMachine.validateTransition("running", "failed")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("running", "failed")).toBe(true);
     });
 
     test("running -> cancelled is valid", () => {
-      expect(TaskStateMachine.validateTransition("running", "cancelled")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("running", "cancelled")).toBe(true);
     });
 
     test("running -> blocked is valid", () => {
-      expect(TaskStateMachine.validateTransition("running", "blocked")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("running", "blocked")).toBe(true);
     });
 
     test("blocked -> running is valid", () => {
-      expect(TaskStateMachine.validateTransition("blocked", "running")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("blocked", "running")).toBe(true);
     });
 
     test("blocked -> cancelled is valid", () => {
-      expect(TaskStateMachine.validateTransition("blocked", "cancelled")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("blocked", "cancelled")).toBe(true);
     });
 
     test("done -> idle is valid", () => {
@@ -68,15 +52,11 @@ describe("TaskStateMachine", () => {
     });
 
     test("cancelled -> idle is valid", () => {
-      expect(TaskStateMachine.validateTransition("cancelled", "idle")).toBe(
-        true,
-      );
+      expect(TaskStateMachine.validateTransition("cancelled", "idle")).toBe(true);
     });
 
     test("idle -> running is invalid", () => {
-      expect(TaskStateMachine.validateTransition("idle", "running")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("idle", "running")).toBe(false);
     });
 
     test("idle -> done is invalid", () => {
@@ -84,45 +64,31 @@ describe("TaskStateMachine", () => {
     });
 
     test("scheduled -> done is invalid", () => {
-      expect(TaskStateMachine.validateTransition("scheduled", "done")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("scheduled", "done")).toBe(false);
     });
 
     test("scheduled -> blocked is invalid", () => {
-      expect(TaskStateMachine.validateTransition("scheduled", "blocked")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("scheduled", "blocked")).toBe(false);
     });
 
     test("running -> scheduled is invalid", () => {
-      expect(TaskStateMachine.validateTransition("running", "scheduled")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("running", "scheduled")).toBe(false);
     });
 
     test("blocked -> scheduled is invalid", () => {
-      expect(TaskStateMachine.validateTransition("blocked", "scheduled")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("blocked", "scheduled")).toBe(false);
     });
 
     test("blocked -> done is invalid", () => {
-      expect(TaskStateMachine.validateTransition("blocked", "done")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("blocked", "done")).toBe(false);
     });
 
     test("done -> running is invalid", () => {
-      expect(TaskStateMachine.validateTransition("done", "running")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("done", "running")).toBe(false);
     });
 
     test("done -> scheduled is invalid", () => {
-      expect(TaskStateMachine.validateTransition("done", "scheduled")).toBe(
-        false,
-      );
+      expect(TaskStateMachine.validateTransition("done", "scheduled")).toBe(false);
     });
   });
 
@@ -294,9 +260,7 @@ describe("TaskStateMachine", () => {
         scheduledAt: Date.now(),
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe(
-        "scheduled",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe("scheduled");
     });
 
     test("derives running from pending run", () => {
@@ -312,9 +276,7 @@ describe("TaskStateMachine", () => {
         startedAt: Date.now(),
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe(
-        "running",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe("running");
     });
 
     test("derives blocked from pending run", () => {
@@ -330,9 +292,7 @@ describe("TaskStateMachine", () => {
         startedAt: Date.now(),
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe(
-        "blocked",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun)).toBe("blocked");
     });
 
     test("auto-resets to idle for recurring task after done", () => {
@@ -349,9 +309,7 @@ describe("TaskStateMachine", () => {
         endedAt: Date.now(),
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe(
-        "idle",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe("idle");
     });
 
     test("auto-resets to idle for recurring task after failed", () => {
@@ -369,9 +327,7 @@ describe("TaskStateMachine", () => {
         error: "Something went wrong",
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe(
-        "idle",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe("idle");
     });
 
     test("auto-resets to idle for recurring task after cancelled", () => {
@@ -388,9 +344,7 @@ describe("TaskStateMachine", () => {
         endedAt: Date.now(),
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe(
-        "idle",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, undefined, lastRun)).toBe("idle");
     });
 
     test("keeps done status for one-time task", () => {
@@ -412,9 +366,7 @@ describe("TaskStateMachine", () => {
         endedAt: Date.now(),
       };
 
-      expect(
-        TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun),
-      ).toBe("done");
+      expect(TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun)).toBe("done");
     });
 
     test("keeps failed status for one-time task", () => {
@@ -437,9 +389,7 @@ describe("TaskStateMachine", () => {
         error: "Failed",
       };
 
-      expect(
-        TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun),
-      ).toBe("failed");
+      expect(TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun)).toBe("failed");
     });
 
     test("keeps cancelled status for one-time task", () => {
@@ -461,9 +411,7 @@ describe("TaskStateMachine", () => {
         endedAt: Date.now(),
       };
 
-      expect(
-        TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun),
-      ).toBe("cancelled");
+      expect(TaskStateMachine.deriveStatus(oneTimeTask, undefined, lastRun)).toBe("cancelled");
     });
 
     test("prefers pending run status over last run", () => {
@@ -492,9 +440,7 @@ describe("TaskStateMachine", () => {
         endedAt: Date.now() - 500,
       };
 
-      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun, lastRun)).toBe(
-        "running",
-      );
+      expect(TaskStateMachine.deriveStatus(baseTask, pendingRun, lastRun)).toBe("running");
     });
   });
 
@@ -537,10 +483,7 @@ describe("TaskStateMachine", () => {
 
     test("auto-resets recurring task from cancelled to idle", () => {
       const runningTask: Task.Info = { ...baseTask, status: "running" };
-      const updated = TaskStateMachine.applyTransition(
-        runningTask,
-        "cancelled",
-      );
+      const updated = TaskStateMachine.applyTransition(runningTask, "cancelled");
       expect(updated.status).toBe("idle");
     });
 
@@ -657,11 +600,7 @@ describe("TaskStatusManager", () => {
         endedAt: Date.now(),
       };
 
-      const updated = TaskStatusManager.updateFromRun(
-        baseTask,
-        undefined,
-        lastRun,
-      );
+      const updated = TaskStatusManager.updateFromRun(baseTask, undefined, lastRun);
       expect(updated.status).toBe("idle");
       expect(updated.lastRun).toEqual(lastRun);
     });
@@ -691,11 +630,7 @@ describe("TaskStatusManager", () => {
         endedAt: Date.now() - 500,
       };
 
-      const updated = TaskStatusManager.updateFromRun(
-        baseTask,
-        pendingRun,
-        lastRun,
-      );
+      const updated = TaskStatusManager.updateFromRun(baseTask, pendingRun, lastRun);
       expect(updated.status).toBe("scheduled");
       expect(updated.pendingRun).toEqual(pendingRun);
       expect(updated.lastRun).toEqual(lastRun);

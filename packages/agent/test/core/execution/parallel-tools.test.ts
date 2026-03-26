@@ -31,11 +31,7 @@ describe("ParallelToolExecutor", () => {
   describe("mode: off", () => {
     it("executes all tools sequentially regardless of safe flag", async () => {
       const calls = [makeCall("a"), makeCall("b"), makeCall("c")];
-      const specs = [
-        makeSpec("a", true),
-        makeSpec("b", true),
-        makeSpec("c", true),
-      ];
+      const specs = [makeSpec("a", true), makeSpec("b", true), makeSpec("c", true)];
       const order: string[] = [];
       const executor = async (call: Tool.Call): Promise<Tool.Result> => {
         order.push(call.tool);
@@ -56,11 +52,7 @@ describe("ParallelToolExecutor", () => {
 
   describe("mode: safe-only", () => {
     it("runs safe tools in parallel and unsafe tools sequentially", async () => {
-      const calls = [
-        makeCall("safe-a"),
-        makeCall("unsafe-b"),
-        makeCall("safe-c"),
-      ];
+      const calls = [makeCall("safe-a"), makeCall("unsafe-b"), makeCall("safe-c")];
       const specs = [
         makeSpec("safe-a", true),
         makeSpec("unsafe-b", false),
@@ -79,31 +71,21 @@ describe("ParallelToolExecutor", () => {
       };
 
       const start = Date.now();
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        { mode: "safe-only" },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+      });
       const elapsed = Date.now() - start;
 
       expect(results).toHaveLength(3);
       expect(elapsed).toBeLessThan(150);
       expect(startTimes["safe-a"]).toBeDefined();
       expect(startTimes["safe-c"]).toBeDefined();
-      const safeTimeDiff = Math.abs(
-        startTimes["safe-a"] - startTimes["safe-c"],
-      );
+      const safeTimeDiff = Math.abs(startTimes["safe-a"] - startTimes["safe-c"]);
       expect(safeTimeDiff).toBeLessThan(20);
     });
 
     it("preserves original call order in results", async () => {
-      const calls = [
-        makeCall("a"),
-        makeCall("b"),
-        makeCall("c"),
-        makeCall("d"),
-      ];
+      const calls = [makeCall("a"), makeCall("b"), makeCall("c"), makeCall("d")];
       const specs = [
         makeSpec("a", true),
         makeSpec("b", false),
@@ -112,12 +94,9 @@ describe("ParallelToolExecutor", () => {
       ];
       const executor = makeExecutor(0, { a: "ra", b: "rb", c: "rc", d: "rd" });
 
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        { mode: "safe-only" },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+      });
 
       expect(results[0].output).toBe("ra");
       expect(results[1].output).toBe("rb");
@@ -139,12 +118,9 @@ describe("ParallelToolExecutor", () => {
         };
       };
 
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        { mode: "safe-only" },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+      });
       expect(results).toHaveLength(1);
       expect(order).toEqual(["unknown"]);
     });
@@ -153,11 +129,7 @@ describe("ParallelToolExecutor", () => {
   describe("mode: all", () => {
     it("runs all tools in parallel including unsafe ones", async () => {
       const calls = [makeCall("a"), makeCall("b"), makeCall("c")];
-      const specs = [
-        makeSpec("a", false),
-        makeSpec("b", false),
-        makeSpec("c", false),
-      ];
+      const specs = [makeSpec("a", false), makeSpec("b", false), makeSpec("c", false)];
       const startTimes: number[] = [];
       const executor = async (call: Tool.Call): Promise<Tool.Result> => {
         startTimes.push(Date.now());
@@ -185,18 +157,12 @@ describe("ParallelToolExecutor", () => {
       const calls = [makeCall("blocked"), makeCall("allowed")];
       const specs = [makeSpec("blocked"), makeSpec("allowed")];
       const executor = makeExecutor();
-      const guard = (name: string) =>
-        name === "blocked" ? ("deny" as const) : ("allow" as const);
+      const guard = (name: string) => (name === "blocked" ? ("deny" as const) : ("allow" as const));
 
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        {
-          mode: "safe-only",
-          guard,
-        },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+        guard,
+      });
 
       expect(results[0].isError).toBe(true);
       expect(results[0].output).toContain("Permission denied");
@@ -209,15 +175,10 @@ describe("ParallelToolExecutor", () => {
       const executor = makeExecutor();
       const guard = () => "require_approval" as const;
 
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        {
-          mode: "safe-only",
-          guard,
-        },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+        guard,
+      });
 
       expect(results[0].isError).toBe(true);
       expect(results[0].output).toContain("Approval required");
@@ -232,12 +193,9 @@ describe("ParallelToolExecutor", () => {
         throw new Error("executor failed");
       };
 
-      const results = await ParallelToolExecutor.execute(
-        calls,
-        specs,
-        executor,
-        { mode: "safe-only" },
-      );
+      const results = await ParallelToolExecutor.execute(calls, specs, executor, {
+        mode: "safe-only",
+      });
       expect(results[0].isError).toBe(true);
       expect(results[0].output).toBe("executor failed");
     });

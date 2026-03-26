@@ -13,7 +13,9 @@ declare const Bun: {
     exists(): Promise<boolean>;
     text(): Promise<string>;
   };
-  Glob: new (pattern: string) => {
+  Glob: new (
+    pattern: string,
+  ) => {
     scan(options: {
       cwd: string;
       absolute: boolean;
@@ -66,11 +68,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
     packageName: "@openomni/agent",
-    allowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/llm",
-      "@openomni/session",
-    ]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/llm", "@openomni/session"]),
   },
   openomni: {
     displayName: "openomni",
@@ -142,11 +140,7 @@ function collectOpenOmniDeps(pkg: Record<string, unknown>): string[] {
 }
 
 function isTestFile(path: string): boolean {
-  if (
-    path.includes("/test/") ||
-    path.includes("/tests/") ||
-    path.includes("/__tests__/")
-  ) {
+  if (path.includes("/test/") || path.includes("/tests/") || path.includes("/__tests__/")) {
     return true;
   }
 
@@ -195,8 +189,7 @@ async function validateDependencyDirection(): Promise<string[]> {
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
-  const importPattern =
-    /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
+  const importPattern = /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
   const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
@@ -394,9 +387,7 @@ async function checkDocFreshness(): Promise<string[]> {
         stderr: "pipe",
       }) as { stdout: ReadableStream; exited: Promise<number> };
 
-      const lastTouchHash = (
-        await new Response(lastTouchProc.stdout).text()
-      ).trim();
+      const lastTouchHash = (await new Response(lastTouchProc.stdout).text()).trim();
       await lastTouchProc.exited;
 
       if (!lastTouchHash) continue;
@@ -407,10 +398,7 @@ async function checkDocFreshness(): Promise<string[]> {
         stderr: "pipe",
       }) as { stdout: ReadableStream; exited: Promise<number> };
 
-      const commitsSince = parseInt(
-        (await new Response(sinceProc.stdout).text()).trim(),
-        10,
-      );
+      const commitsSince = parseInt((await new Response(sinceProc.stdout).text()).trim(), 10);
       await sinceProc.exited;
 
       if (commitsSince >= STALE_THRESHOLD) {
@@ -431,11 +419,7 @@ async function main(): Promise<void> {
   const deepImportViolations = await validateDeepImports();
   const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
-  const violations = [
-    ...depViolations,
-    ...deepImportViolations,
-    ...goldenViolations,
-  ];
+  const violations = [...depViolations, ...deepImportViolations, ...goldenViolations];
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
@@ -450,9 +434,7 @@ async function main(): Promise<void> {
   }
 
   if (violations.length === 0 && freshnessWarnings.length > 0) {
-    console.log(
-      `OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`,
-    );
+    console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
     process.exit(0);
   }
 

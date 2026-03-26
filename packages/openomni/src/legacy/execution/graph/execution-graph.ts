@@ -1,9 +1,5 @@
 import { BuiltinAgentRegistry } from "../../agent";
-import type {
-  DependencyGraph,
-  DispatchTask,
-  DispatchTaskState,
-} from "../execution-types";
+import type { DependencyGraph, DispatchTask, DispatchTaskState } from "../execution-types";
 
 export function buildDependencyGraph(tasks: DispatchTask[]): DependencyGraph {
   const states = new Map<string, DispatchTaskState>();
@@ -17,9 +13,7 @@ export function buildDependencyGraph(tasks: DispatchTask[]): DependencyGraph {
 
     const agent = BuiltinAgentRegistry.get(task.agentType);
     if (!agent) {
-      throw new Error(
-        `Unknown agent type in dispatch task "${task.id}": ${task.agentType}`,
-      );
+      throw new Error(`Unknown agent type in dispatch task "${task.id}": ${task.agentType}`);
     }
 
     states.set(task.id, {
@@ -44,9 +38,7 @@ export function buildDependencyGraph(tasks: DispatchTask[]): DependencyGraph {
   for (const task of tasks) {
     for (const dependencyId of task.dependencies) {
       if (!states.has(dependencyId)) {
-        throw new Error(
-          `Task "${task.id}" depends on unknown task "${dependencyId}"`,
-        );
+        throw new Error(`Task "${task.id}" depends on unknown task "${dependencyId}"`);
       }
 
       const dependencyDependents = dependents.get(dependencyId);

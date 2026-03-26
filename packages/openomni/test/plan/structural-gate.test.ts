@@ -32,12 +32,8 @@ describe("StructuralGate", () => {
   describe("Check 1: DAG validity", () => {
     it("passes for valid DAG", () => {
       const result = StructuralGate.evaluate(makePlan());
-      expect(
-        result.issues.find((issue) => issue.code === "invalid_dag"),
-      ).toBeUndefined();
-      expect(
-        result.issues.find((issue) => issue.code === "circular_dependency"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "invalid_dag")).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "circular_dependency")).toBeUndefined();
     });
 
     it("fails for circular dependency", () => {
@@ -61,9 +57,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      const cycleIssue = result.issues.find(
-        (issue) => issue.code === "circular_dependency",
-      );
+      const cycleIssue = result.issues.find((issue) => issue.code === "circular_dependency");
 
       expect(cycleIssue).toBeDefined();
       expect(cycleIssue?.severity).toBe("error");
@@ -85,9 +79,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      const invalidDagIssue = result.issues.find(
-        (issue) => issue.code === "invalid_dag",
-      );
+      const invalidDagIssue = result.issues.find((issue) => issue.code === "invalid_dag");
 
       expect(invalidDagIssue).toBeDefined();
       expect(invalidDagIssue?.severity).toBe("error");
@@ -97,9 +89,7 @@ describe("StructuralGate", () => {
   describe("Check 2: Field completeness", () => {
     it("passes for complete fields", () => {
       const result = StructuralGate.evaluate(makePlan());
-      expect(
-        result.issues.find((issue) => issue.code === "empty_field"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "empty_field")).toBeUndefined();
     });
 
     it("fails for empty description", () => {
@@ -116,9 +106,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "empty_field",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "empty_field");
 
       expect(issue).toBeDefined();
       expect(issue?.stepId).toBe("step-1");
@@ -140,9 +128,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "empty_field",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "empty_field");
 
       expect(issue).toBeDefined();
       expect(issue?.stepId).toBe("step-1");
@@ -163,9 +149,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan, { requireGuardrail: true });
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "missing_guardrail",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "missing_guardrail");
 
       expect(issue).toBeDefined();
       expect(issue?.stepId).toBe("step-1");
@@ -184,9 +168,7 @@ describe("StructuralGate", () => {
         result.issues.find((issue) => issue.code === "low_quality_description"),
       ).toBeUndefined();
       expect(
-        result.issues.find(
-          (issue) => issue.code === "low_quality_expected_output",
-        ),
+        result.issues.find((issue) => issue.code === "low_quality_expected_output"),
       ).toBeUndefined();
     });
 
@@ -204,9 +186,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan, { minDescriptionWords: 3 });
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "low_quality_description",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "low_quality_description");
 
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe("warning");
@@ -263,9 +243,7 @@ describe("StructuralGate", () => {
       const result = StructuralGate.evaluate(plan, {
         duplicateThreshold: 0.85,
       });
-      expect(
-        result.issues.find((issue) => issue.code === "duplicate_steps"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "duplicate_steps")).toBeUndefined();
     });
 
     it("warns for similar steps above threshold", () => {
@@ -289,9 +267,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan, { duplicateThreshold: 0.8 });
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "duplicate_steps",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "duplicate_steps");
 
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe("warning");
@@ -305,9 +281,7 @@ describe("StructuralGate", () => {
       const result = StructuralGate.evaluate(makePlan(), {
         maxDependencyDepth: 2,
       });
-      expect(
-        result.issues.find((issue) => issue.code === "deep_dependency_chain"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "deep_dependency_chain")).toBeUndefined();
     });
 
     it("warns for deep chain", () => {
@@ -345,9 +319,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan, { maxDependencyDepth: 2 });
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "deep_dependency_chain",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "deep_dependency_chain");
 
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe("warning");
@@ -357,9 +329,7 @@ describe("StructuralGate", () => {
   describe("Check 6: Isolated step detection", () => {
     it("passes for connected steps", () => {
       const result = StructuralGate.evaluate(makePlan());
-      expect(
-        result.issues.find((issue) => issue.code === "isolated_step"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "isolated_step")).toBeUndefined();
     });
 
     it("warns for isolated step in multi-step plan", () => {
@@ -390,9 +360,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      const issue = result.issues.find(
-        (candidate) => candidate.code === "isolated_step",
-      );
+      const issue = result.issues.find((candidate) => candidate.code === "isolated_step");
 
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe("warning");
@@ -413,9 +381,7 @@ describe("StructuralGate", () => {
       });
 
       const result = StructuralGate.evaluate(plan);
-      expect(
-        result.issues.find((issue) => issue.code === "isolated_step"),
-      ).toBeUndefined();
+      expect(result.issues.find((issue) => issue.code === "isolated_step")).toBeUndefined();
     });
   });
 
@@ -435,12 +401,8 @@ describe("StructuralGate", () => {
 
       const result = StructuralGate.evaluate(plan, { minDescriptionWords: 3 });
       expect(result.passed).toBe(true);
-      expect(result.issues.some((issue) => issue.severity === "warning")).toBe(
-        true,
-      );
-      expect(result.issues.some((issue) => issue.severity === "error")).toBe(
-        false,
-      );
+      expect(result.issues.some((issue) => issue.severity === "warning")).toBe(true);
+      expect(result.issues.some((issue) => issue.severity === "error")).toBe(false);
     });
 
     it("returns passed: false when any error exists", () => {
@@ -458,9 +420,7 @@ describe("StructuralGate", () => {
 
       const result = StructuralGate.evaluate(plan);
       expect(result.passed).toBe(false);
-      expect(result.issues.some((issue) => issue.severity === "error")).toBe(
-        true,
-      );
+      expect(result.issues.some((issue) => issue.severity === "error")).toBe(true);
     });
 
     it("collects all issues across all checks", () => {
@@ -497,26 +457,14 @@ describe("StructuralGate", () => {
         requireGuardrail: true,
       });
 
-      expect(result.issues.some((issue) => issue.code === "empty_field")).toBe(
+      expect(result.issues.some((issue) => issue.code === "empty_field")).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "missing_guardrail")).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "low_quality_description")).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "low_quality_expected_output")).toBe(
         true,
       );
-      expect(
-        result.issues.some((issue) => issue.code === "missing_guardrail"),
-      ).toBe(true);
-      expect(
-        result.issues.some((issue) => issue.code === "low_quality_description"),
-      ).toBe(true);
-      expect(
-        result.issues.some(
-          (issue) => issue.code === "low_quality_expected_output",
-        ),
-      ).toBe(true);
-      expect(
-        result.issues.some((issue) => issue.code === "duplicate_steps"),
-      ).toBe(true);
-      expect(
-        result.issues.some((issue) => issue.code === "isolated_step"),
-      ).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "duplicate_steps")).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "isolated_step")).toBe(true);
     });
 
     it("skips duplicate and depth checks when DAG is invalid", () => {
@@ -544,15 +492,9 @@ describe("StructuralGate", () => {
         maxDependencyDepth: 0,
       });
 
-      expect(result.issues.some((issue) => issue.code === "invalid_dag")).toBe(
-        true,
-      );
-      expect(
-        result.issues.some((issue) => issue.code === "duplicate_steps"),
-      ).toBe(false);
-      expect(
-        result.issues.some((issue) => issue.code === "deep_dependency_chain"),
-      ).toBe(false);
+      expect(result.issues.some((issue) => issue.code === "invalid_dag")).toBe(true);
+      expect(result.issues.some((issue) => issue.code === "duplicate_steps")).toBe(false);
+      expect(result.issues.some((issue) => issue.code === "deep_dependency_chain")).toBe(false);
     });
   });
 });

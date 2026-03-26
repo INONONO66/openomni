@@ -1,19 +1,8 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-  spyOn,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { BuiltinAgentRegistry } from "../../../src/legacy/agent/registry/registry";
-import {
-  AgentMessenger,
-  type MessageEnvelope,
-} from "../../../src/legacy/agent/communication";
+import { AgentMessenger, type MessageEnvelope } from "../../../src/legacy/agent/communication";
 import { TaskStorage } from "../../../src/legacy/task/storage";
 import { Subagent, type SubagentContext } from "../../../src/legacy/tools/subagent";
 
@@ -57,9 +46,7 @@ function createMockLLM(behavior: "stop" | "error" = "stop") {
   };
 }
 
-function baseContext(
-  overrides: Partial<SubagentContext> = {},
-): SubagentContext {
+function baseContext(overrides: Partial<SubagentContext> = {}): SubagentContext {
   return {
     parentDepth: 0,
     llm: createMockLLM(),
@@ -191,9 +178,7 @@ describe("Subagent Completion Announce", () => {
     });
 
     it("announce failure does not affect parent run result", async () => {
-      AgentMessenger.configureAllowPatterns([
-        { from: "blocked-agent", to: "blocked-agent" },
-      ]);
+      AgentMessenger.configureAllowPatterns([{ from: "blocked-agent", to: "blocked-agent" }]);
 
       const result = await Subagent.execute(
         "call-announce-fail",
@@ -212,9 +197,7 @@ describe("Subagent Completion Announce", () => {
     it("announce failure logs error but does not throw", async () => {
       const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
-      AgentMessenger.configureAllowPatterns([
-        { from: "blocked-agent", to: "blocked-agent" },
-      ]);
+      AgentMessenger.configureAllowPatterns([{ from: "blocked-agent", to: "blocked-agent" }]);
 
       await Subagent.execute(
         "call-log-error",
@@ -224,10 +207,7 @@ describe("Subagent Completion Announce", () => {
 
       await new Promise((r) => setTimeout(r, 5));
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "Announce failed (non-fatal):",
-        expect.any(Error),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith("Announce failed (non-fatal):", expect.any(Error));
 
       consoleSpy.mockRestore();
     });

@@ -101,9 +101,7 @@ describe("ChatAgent.stream()", () => {
     mockRunFn = async (_input, sink) => {
       callCount++;
       if (callCount === 1) {
-        return createToolCallOutcome([
-          { id: "call-1", tool: "test_tool", input: { q: "test" } },
-        ]);
+        return createToolCallOutcome([{ id: "call-1", tool: "test_tool", input: { q: "test" } }]);
       }
       sink.onMessage({
         info: {

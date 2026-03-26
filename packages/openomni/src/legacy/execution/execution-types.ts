@@ -87,9 +87,7 @@ export interface DispatchContext {
   agentId?: string;
   availableAgents?: string[];
   timeoutMs?: number;
-  review?: (
-    input: DispatchReviewInput,
-  ) => DispatchReviewDecision | Promise<DispatchReviewDecision>;
+  review?: (input: DispatchReviewInput) => DispatchReviewDecision | Promise<DispatchReviewDecision>;
   parentTaskId?: string;
   parentRunId?: string;
   parentSessionId?: string;

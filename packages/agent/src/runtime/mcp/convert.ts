@@ -11,10 +11,7 @@ interface McpToolResult {
   isError?: boolean;
 }
 
-export function convertMcpTool(
-  mcpTool: McpTool,
-  serverName?: string,
-): Tool.Spec {
+export function convertMcpTool(mcpTool: McpTool, serverName?: string): Tool.Spec {
   const toolName = serverName ? `${serverName}.${mcpTool.name}` : mcpTool.name;
   return {
     name: toolName,
@@ -23,10 +20,7 @@ export function convertMcpTool(
   };
 }
 
-export function convertMcpResult(
-  mcpResult: McpToolResult,
-  toolCallId: string,
-): Tool.Result {
+export function convertMcpResult(mcpResult: McpToolResult, toolCallId: string): Tool.Result {
   const text = mcpResult.content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")

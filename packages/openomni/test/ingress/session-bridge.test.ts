@@ -112,27 +112,21 @@ describe("SessionBridge", () => {
       expect(extracted.steps[0].stepId).toBe("s1");
       expect(extracted.steps[1].dependsOn).toEqual(["s1"]);
       expect(extracted.createdAt).toBeInstanceOf(Date);
-      expect(extracted.createdAt.toISOString()).toBe(
-        plan.createdAt.toISOString(),
-      );
+      expect(extracted.createdAt.toISOString()).toBe(plan.createdAt.toISOString());
       expect(extracted.version).toBe(1);
     });
   });
 
   describe("extractPlan", () => {
     it("should throw Error with 'No plan' when session is empty", () => {
-      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(
-        /No plan found in session/,
-      );
+      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(/No plan found in session/);
     });
 
     it("should throw Error with 'No plan' when session has only user messages", () => {
       addUserMessage(sessionId, "Hello");
       addUserMessage(sessionId, "Build me something");
 
-      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(
-        /No plan found in session/,
-      );
+      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(/No plan found in session/);
     });
 
     it("should ignore plan prefix in user messages (spoofing prevention)", () => {
@@ -145,9 +139,7 @@ describe("SessionBridge", () => {
       });
       addUserMessage(sessionId, `__OPENOMNI_PLAN__${fakePlan}`);
 
-      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(
-        /No plan found in session/,
-      );
+      expect(() => SessionBridge.extractPlan(sessionId)).toThrow(/No plan found in session/);
     });
   });
 
@@ -204,7 +196,13 @@ describe("SessionBridge", () => {
     it("should exclude __OPENOMNI_PLAN__ parts from direct messages", () => {
       addUserMessage(sessionId, "Hello");
       // Simulate a plan stored as assistant message
-      const plan = JSON.stringify({ planId: "p1", goal: "test", steps: [], createdAt: new Date(), version: 1 });
+      const plan = JSON.stringify({
+        planId: "p1",
+        goal: "test",
+        steps: [],
+        createdAt: new Date(),
+        version: 1,
+      });
       addAssistantMessage(sessionId, `__OPENOMNI_PLAN__${plan}`);
       addUserMessage(sessionId, "Continue chat");
 

@@ -261,20 +261,13 @@ export namespace Scheduler {
     try {
       await IngressEngine.ingest(inboundEvent);
     } catch (error) {
-      console.error(
-        `[Scheduler] Error firing trigger ${trigger.id} for task ${taskId}:`,
-        error,
-      );
+      console.error(`[Scheduler] Error firing trigger ${trigger.id} for task ${taskId}:`, error);
     }
   }
 
   export function register(task: Task.Info): void {
     for (const trigger of task.triggers) {
-      if (
-        trigger.type === "cron" ||
-        trigger.type === "interval" ||
-        trigger.type === "once"
-      ) {
+      if (trigger.type === "cron" || trigger.type === "interval" || trigger.type === "once") {
         registerTrigger(task.id, trigger);
       }
     }
@@ -337,9 +330,7 @@ export namespace Scheduler {
         if (!fields) {
           const parsed = CronParser.parse(trigger.expr);
           if (!parsed) {
-            console.error(
-              `[Scheduler] Invalid cron expression: ${trigger.expr}`,
-            );
+            console.error(`[Scheduler] Invalid cron expression: ${trigger.expr}`);
             return false;
           }
           fields = parsed;
@@ -353,10 +344,7 @@ export namespace Scheduler {
           const currentFields = cronFieldsCache.get(trigger.expr);
           if (!currentFields) return;
 
-          const nextTime = CronParser.getNextFireTime(
-            currentFields,
-            new Date(),
-          );
+          const nextTime = CronParser.getNextFireTime(currentFields, new Date());
           const nextDelay = nextTime.getTime() - Date.now();
 
           const entry = registry.get(key);
@@ -399,10 +387,7 @@ export namespace Scheduler {
     }
   }
 
-  export function unregisterTrigger(
-    taskId: string,
-    triggerId: string,
-  ): boolean {
+  export function unregisterTrigger(taskId: string, triggerId: string): boolean {
     const key = makeKey(taskId, triggerId);
     const entry = registry.get(key);
 
@@ -416,10 +401,7 @@ export namespace Scheduler {
     return true;
   }
 
-  export function getNextFireTime(
-    taskId: string,
-    triggerId: string,
-  ): number | undefined {
+  export function getNextFireTime(taskId: string, triggerId: string): number | undefined {
     const key = makeKey(taskId, triggerId);
     return registry.get(key)?.nextFireTime;
   }

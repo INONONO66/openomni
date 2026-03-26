@@ -9,8 +9,7 @@ import { FilesystemWatcher } from "../../../src/legacy/trigger/watcher";
 import { Router, Dispatcher, Envelope } from "../../../src/legacy/dispatch";
 import { RunWorker } from "../../../src/legacy/worker/run/run-worker";
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function createTask(overrides: Partial<Task.CreateInput> = {}): Task.Info {
   return TaskManager.create({
@@ -106,9 +105,7 @@ describe("P7-3 E2E integration flows", () => {
     );
 
     expect(orchestration.success).toBe(true);
-    expect(orchestration.summary).toContain(
-      "Manual trigger orchestration completed.",
-    );
+    expect(orchestration.summary).toContain("Manual trigger orchestration completed.");
 
     const run = TaskManager.getRun(triggerResult.runId);
     expect(run?.status).toBe("done");

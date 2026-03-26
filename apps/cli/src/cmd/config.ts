@@ -17,7 +17,10 @@ async function promptUsers(): Promise<string[] | undefined> {
 
   const trimmed = input.trim();
   if (!trimmed) return undefined;
-  return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+  return trimmed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,9 +163,7 @@ const ConfigListCommand: CommandModule = {
     for (const entry of entries) {
       prompts.log.info(entry);
     }
-    prompts.outro(
-      `${entries.length} adapter${entries.length === 1 ? "" : "s"}`,
-    );
+    prompts.outro(`${entries.length} adapter${entries.length === 1 ? "" : "s"}`);
   },
 };
 

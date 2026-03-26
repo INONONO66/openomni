@@ -58,9 +58,7 @@ export namespace BuiltinAgentRegistry {
     const validated = AgentDefinitionSchema.parse(definition);
 
     if (registry.has(validated.name)) {
-      throw new Error(
-        `Agent "${validated.name}" is already registered in the registry`,
-      );
+      throw new Error(`Agent "${validated.name}" is already registered in the registry`);
     }
 
     registry.set(validated.name, validated);
@@ -153,8 +151,7 @@ export namespace BuiltinAgentRegistry {
     // implement: full-access agent for implementation
     define({
       name: "implement",
-      description:
-        "Full-access agent for implementing features, refactoring, and code generation",
+      description: "Full-access agent for implementing features, refactoring, and code generation",
       systemPrompt:
         "You are an expert software engineer. Your role is to implement features, refactor code, and generate solutions. You have full access to all tools and can read, write, and execute code. Focus on clean, maintainable, and well-tested implementations.",
       tools: [
@@ -187,8 +184,7 @@ export namespace BuiltinAgentRegistry {
     // review: read + LSP agent for code review and analysis
     define({
       name: "review",
-      description:
-        "Code review agent with read access and LSP tools for deep analysis",
+      description: "Code review agent with read access and LSP tools for deep analysis",
       systemPrompt:
         "You are an expert code reviewer. Your role is to analyze code quality, identify issues, and suggest improvements. You have read access and LSP tools for deep code understanding. Focus on correctness, performance, maintainability, and best practices.",
       tools: [

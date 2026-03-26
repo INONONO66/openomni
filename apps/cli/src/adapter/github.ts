@@ -95,9 +95,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
   async start(): Promise<void> {
     if (!this.handler) {
-      throw new Error(
-        "[github] No message handler registered. Call onMessage() before start().",
-      );
+      throw new Error("[github] No message handler registered. Call onMessage() before start().");
     }
     console.log("[github] Webhook handler ready");
   }
@@ -106,10 +104,7 @@ export class GitHubAdapter implements Adapter.Surface {
     // Webhook-based — no persistent connection to tear down
   }
 
-  async send(
-    surfaceKey: string,
-    message: Adapter.OutboundMessage,
-  ): Promise<void> {
+  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
     const issueNumber = parseInt(parsed.id!.split("-")[1]);
@@ -235,10 +230,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
   // -- Event processing -----------------------------------------------------
 
-  private async processEvent(
-    content: GitHubEventContent,
-    eventKey: string,
-  ): Promise<void> {
+  private async processEvent(content: GitHubEventContent, eventKey: string): Promise<void> {
     const surfaceKey = SurfaceKey.fromChannel({
       surface: "github",
       namespace: content.repo,
@@ -250,11 +242,7 @@ export class GitHubAdapter implements Adapter.Surface {
       `[github] ${content.repo}#${content.issueNumber} (${eventKey}): ${content.text.slice(0, 80)}`,
     );
 
-    const normalizedText = normalizeContent(
-      content.text,
-      this.config.triggers,
-      this.botUsername,
-    );
+    const normalizedText = normalizeContent(content.text, this.config.triggers, this.botUsername);
 
     try {
       const inbound: Adapter.InboundMessage = {
@@ -272,29 +260,18 @@ export class GitHubAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
 
       if (outbound?.text && this.githubToken) {
-        await this.postComment(
-          content.repo,
-          content.issueNumber,
-          outbound.text,
-        );
+        await this.postComment(content.repo, content.issueNumber, outbound.text);
       } else if (outbound?.text) {
-        console.log(
-          `[github] Response (no token, not posted):\n${outbound.text}`,
-        );
+        console.log(`[github] Response (no token, not posted):\n${outbound.text}`);
       }
     } catch (err) {
-      console.error(
-        `[github] Error in ${content.repo}#${content.issueNumber}:`,
-        err,
-      );
+      console.error(`[github] Error in ${content.repo}#${content.issueNumber}:`, err);
     }
   }
 
   private getHandler(): Adapter.MessageHandler {
     if (!this.handler) {
-      throw new Error(
-        `[${this.id}] No handler registered. Call onMessage() before processing.`,
-      );
+      throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
     }
     return this.handler;
   }
@@ -308,11 +285,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
   // -- GitHub API -----------------------------------------------------------
 
-  private async postComment(
-    repo: string,
-    issueNumber: number,
-    body: string,
-  ): Promise<void> {
+  private async postComment(repo: string, issueNumber: number, body: string): Promise<void> {
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
 
     const response = await fetchWithRetry(
@@ -340,10 +313,7 @@ export class GitHubAdapter implements Adapter.Surface {
 
   // -- Signature verification -----------------------------------------------
 
-  private async verifySignature(
-    payload: string,
-    signature: string,
-  ): Promise<boolean> {
+  private async verifySignature(payload: string, signature: string): Promise<boolean> {
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",

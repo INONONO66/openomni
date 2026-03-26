@@ -6,10 +6,7 @@ export namespace BusEvent {
     schema: z.ZodSchema<T>;
   }
 
-  export function define<T>(
-    name: string,
-    schema: z.ZodSchema<T>,
-  ): Descriptor<T> {
+  export function define<T>(name: string, schema: z.ZodSchema<T>): Descriptor<T> {
     return { name, schema };
   }
 }

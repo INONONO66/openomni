@@ -42,9 +42,7 @@ interface OpenAIUsage {
 }
 
 export namespace TokenTracker {
-  export function extractUsage(response: {
-    usage?: AnthropicUsage | OpenAIUsage;
-  }): TokenUsage {
+  export function extractUsage(response: { usage?: AnthropicUsage | OpenAIUsage }): TokenUsage {
     const usage = response.usage;
     if (!usage) return { inputTokens: 0, outputTokens: 0 };
 
@@ -68,15 +66,12 @@ export namespace TokenTracker {
   export function calculateCost(usage: TokenUsage, modelId: string): TokenCost {
     const pricing = MODEL_PRICING[modelId];
     if (!pricing) {
-      console.warn(
-        `[TokenTracker] No pricing data for model '${modelId}'. Cost set to 0.`,
-      );
+      console.warn(`[TokenTracker] No pricing data for model '${modelId}'. Cost set to 0.`);
       return { inputCost: 0, outputCost: 0, totalCost: 0 };
     }
 
     const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPerMillion;
-    const outputCost =
-      (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+    const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
     return {
       inputCost,
       outputCost,

@@ -43,10 +43,7 @@ export namespace PlanAgent {
     budget?: AgentBudget;
   }
 
-  export async function generate(
-    goal: string,
-    config: GenerateConfig,
-  ): Promise<PlanResult> {
+  export async function generate(goal: string, config: GenerateConfig): Promise<PlanResult> {
     const agent = ChatAgent.create({
       model: config.model,
       systemPrompt: config.systemPrompt ?? "",

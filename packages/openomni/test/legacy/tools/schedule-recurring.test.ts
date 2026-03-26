@@ -385,12 +385,7 @@ describe("ScheduleTool - Recurring Schedules", () => {
       const now = Date.now();
       const dueAtMs = now + 60 * 60 * 1000;
 
-      const expressions = [
-        "0 0 * * *",
-        "*/15 * * * *",
-        "0 0 1 * *",
-        "0 0 * * 0",
-      ];
+      const expressions = ["0 0 * * *", "*/15 * * * *", "0 0 1 * *", "0 0 * * 0"];
 
       for (const expr of expressions) {
         const input = {
@@ -462,8 +457,7 @@ describe("ScheduleTool - Recurring Schedules", () => {
 
       const output = JSON.parse(result.output);
       const plannedStartAtMs = new Date(output.plannedStartAt).getTime();
-      const expectedPlannedStartAtMs =
-        dueAtMs - estimatedRuntimeMs - safetyBufferMs;
+      const expectedPlannedStartAtMs = dueAtMs - estimatedRuntimeMs - safetyBufferMs;
 
       expect(plannedStartAtMs).toBe(expectedPlannedStartAtMs);
     });

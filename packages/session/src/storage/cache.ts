@@ -8,9 +8,7 @@ export class CachedStorageAdapter implements Storage.Adapter {
   private messageCache = new Map<string, Message.Info[]>();
   private partCache = new Map<string, Message.Part[]>();
 
-  constructor(
-    private readonly underlying: Storage.Adapter & { clear?: () => void },
-  ) {}
+  constructor(private readonly underlying: Storage.Adapter & { clear?: () => void }) {}
 
   session = {
     get: (id: string): SessionInfo | undefined => {
@@ -119,10 +117,7 @@ export class CachedStorageAdapter implements Storage.Adapter {
     this.sessionListCache = null;
     this.messageCache.clear();
     this.partCache.clear();
-    if (
-      "clear" in this.underlying &&
-      typeof this.underlying.clear === "function"
-    ) {
+    if ("clear" in this.underlying && typeof this.underlying.clear === "function") {
       this.underlying.clear();
     }
   }

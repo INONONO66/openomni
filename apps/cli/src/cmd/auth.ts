@@ -1,9 +1,6 @@
 import type { CommandModule } from "yargs";
 import * as prompts from "@clack/prompts";
-import {
-  getAuthProviders,
-  type AuthCallbacks,
-} from "@openomni/llm/src/auth/registry";
+import { getAuthProviders, type AuthCallbacks } from "@openomni/llm/src/auth/registry";
 import { Auth } from "@openomni/llm/src/auth/storage";
 
 function cancel(): never {
@@ -76,10 +73,7 @@ const AuthLoginCommand: CommandModule = {
     if (providerID === "other") {
       const customId = await prompts.text({
         message: "Enter provider id",
-        validate: (v) =>
-          v && v.match(/^[0-9a-z-]+$/)
-            ? undefined
-            : "a-z, 0-9 and hyphens only",
+        validate: (v) => (v && v.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       });
       if (prompts.isCancel(customId)) cancel();
 
@@ -160,9 +154,7 @@ const AuthListCommand: CommandModule = {
     for (const [key, value] of entries) {
       prompts.log.info(`${key} — ${value.type}`);
     }
-    prompts.outro(
-      `${entries.length} credential${entries.length === 1 ? "" : "s"}`,
-    );
+    prompts.outro(`${entries.length} credential${entries.length === 1 ? "" : "s"}`);
   },
 };
 

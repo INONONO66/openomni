@@ -1,9 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  createBudgetState,
-  checkBudget,
-  recordTokenUsage,
-} from "../../src/core/budget";
+import { createBudgetState, checkBudget, recordTokenUsage } from "../../src/core/budget";
 
 describe("BudgetState token tracking", () => {
   it("starts with zero token counts", () => {

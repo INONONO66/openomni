@@ -5,10 +5,7 @@ import { SurfaceStore } from "../serve/surface-store";
 import { TelegramAdapter } from "../adapter/telegram";
 import { GitHubAdapter } from "../adapter/github";
 import { DiscordAdapter } from "../adapter/discord";
-import {
-  createMessageHandler,
-  type ConversationConfig,
-} from "../serve/conversation";
+import { createMessageHandler, type ConversationConfig } from "../serve/conversation";
 import type { Adapter } from "../adapter/types";
 
 type ServeArgs = {
@@ -53,9 +50,7 @@ async function resolveModel(
   if (requestedModelID) {
     const model = models.find((m) => m.id === requestedModelID);
     if (!model) {
-      console.error(
-        `Model '${requestedModelID}' not found for '${providerID}'.`,
-      );
+      console.error(`Model '${requestedModelID}' not found for '${providerID}'.`);
       process.exit(1);
     }
     return model;
@@ -138,19 +133,13 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
       adapterConfig.telegram?.token;
 
     const githubSecret =
-      argv["github-secret"] ??
-      process.env.OPENOMNI_GITHUB_SECRET ??
-      adapterConfig.github?.secret;
+      argv["github-secret"] ?? process.env.OPENOMNI_GITHUB_SECRET ?? adapterConfig.github?.secret;
 
     const githubToken =
-      argv["github-token"] ??
-      process.env.OPENOMNI_GITHUB_TOKEN ??
-      adapterConfig.github?.token;
+      argv["github-token"] ?? process.env.OPENOMNI_GITHUB_TOKEN ?? adapterConfig.github?.token;
 
     const discordToken =
-      argv["discord-token"] ??
-      process.env.OPENOMNI_DISCORD_TOKEN ??
-      adapterConfig.discord?.token;
+      argv["discord-token"] ?? process.env.OPENOMNI_DISCORD_TOKEN ?? adapterConfig.discord?.token;
 
     // -- Start adapters ---------------------------------------------------
 
@@ -160,9 +149,7 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
       const telegramAllowed = adapterConfig.telegram?.allowedUsers;
       const telegram = new TelegramAdapter(telegramToken, {
         triggers: [
-          ...(telegramAllowed
-            ? [{ type: "sender" as const, allow: telegramAllowed }]
-            : []),
+          ...(telegramAllowed ? [{ type: "sender" as const, allow: telegramAllowed }] : []),
         ],
         // TODO: DeliveryPolicy is not yet enforced — currently a placeholder type only
         deliveryPolicy: "final",
@@ -183,9 +170,7 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
               type: "event",
               events: ["issue_comment.created", "issues.opened"],
             },
-            ...(githubAllowed
-              ? [{ type: "sender" as const, allow: githubAllowed }]
-              : []),
+            ...(githubAllowed ? [{ type: "sender" as const, allow: githubAllowed }] : []),
           ],
           // TODO: DeliveryPolicy is not yet enforced — currently a placeholder type only
           deliveryPolicy: "final",
@@ -203,9 +188,7 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
       const discord = new DiscordAdapter(discordToken, {
         triggers: [
           { type: "mention" },
-          ...(discordAllowed
-            ? [{ type: "sender" as const, allow: discordAllowed }]
-            : []),
+          ...(discordAllowed ? [{ type: "sender" as const, allow: discordAllowed }] : []),
         ],
         // TODO: DeliveryPolicy is not yet enforced — currently a placeholder type only
         deliveryPolicy: "final",
@@ -216,9 +199,7 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
     }
 
     if (adapters.length === 0) {
-      console.log(
-        "No adapters configured. Run 'openomni config add' or pass tokens via CLI args.",
-      );
+      console.log("No adapters configured. Run 'openomni config add' or pass tokens via CLI args.");
       console.log("Server will start but won't process any messages.");
     }
 
@@ -234,11 +215,7 @@ export const ServeCommand: CommandModule<object, ServeArgs> = {
           return new Response("OK");
         }
 
-        if (
-          url.pathname === "/github/webhook" &&
-          github &&
-          request.method === "POST"
-        ) {
+        if (url.pathname === "/github/webhook" && github && request.method === "POST") {
           return github.handleWebhook(request);
         }
 

@@ -91,10 +91,8 @@ export namespace ModelsDev {
     const cached = await file.json().catch(() => undefined);
     if (cached) return cached as Record<string, Provider>;
 
-    const snapshotModule =
-      await import("../provider/models-snapshot.json").catch(() => undefined);
-    if (snapshotModule?.default)
-      return snapshotModule.default as Record<string, Provider>;
+    const snapshotModule = await import("../provider/models-snapshot.json").catch(() => undefined);
+    if (snapshotModule?.default) return snapshotModule.default as Record<string, Provider>;
 
     if (process.env.OPENOMNI_DISABLE_MODELS_FETCH) return buildFallback();
 

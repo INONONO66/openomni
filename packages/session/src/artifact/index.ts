@@ -7,11 +7,7 @@ const contents = new Map<string, string>();
 const indices = new Map<string, ArtifactSchema.Meta[]>();
 const artifactSessions = new Map<string, string>();
 
-function contentKey(
-  sessionId: string,
-  artifactId: string,
-  version: number,
-): string {
+function contentKey(sessionId: string, artifactId: string, version: number): string {
   return `artifact:${sessionId}:${artifactId}:v${version}`;
 }
 
@@ -48,17 +44,13 @@ export namespace Artifact {
     if (matching.length === 0) return null;
 
     const latest = matching.reduce((a, b) => (a.version > b.version ? a : b));
-    const content = contents.get(
-      contentKey(sessionId, artifactId, latest.version),
-    );
+    const content = contents.get(contentKey(sessionId, artifactId, latest.version));
     if (content === undefined) return null;
 
     return { meta: latest, content };
   }
 
-  export async function list(
-    sessionId: string,
-  ): Promise<ArtifactSchema.Meta[]> {
+  export async function list(sessionId: string): Promise<ArtifactSchema.Meta[]> {
     const idxKey = indexKey(sessionId);
     const metas = indices.get(idxKey) ?? [];
 
@@ -73,17 +65,13 @@ export namespace Artifact {
     return Array.from(latest.values());
   }
 
-  export async function versions(
-    artifactId: string,
-  ): Promise<ArtifactSchema.Meta[]> {
+  export async function versions(artifactId: string): Promise<ArtifactSchema.Meta[]> {
     const sessionId = artifactSessions.get(artifactId);
     if (!sessionId) return [];
 
     const idxKey = indexKey(sessionId);
     const metas = indices.get(idxKey) ?? [];
-    return metas
-      .filter((m) => m.id === artifactId)
-      .sort((a, b) => a.version - b.version);
+    return metas.filter((m) => m.id === artifactId).sort((a, b) => a.version - b.version);
   }
 
   export function _reset(): void {

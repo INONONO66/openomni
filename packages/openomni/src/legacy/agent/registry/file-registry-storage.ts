@@ -90,10 +90,7 @@ export class FileAgentRegistryStore implements AgentRegistryStore {
   }
 
   private flushProfile(id: string, profile: AgentProfile): void {
-    this.atomicWrite(
-      `${this.encodeFilename(id)}.json`,
-      JSON.stringify(profile, null, 2),
-    );
+    this.atomicWrite(`${this.encodeFilename(id)}.json`, JSON.stringify(profile, null, 2));
   }
 
   private atomicWrite(filename: string, data: string): void {

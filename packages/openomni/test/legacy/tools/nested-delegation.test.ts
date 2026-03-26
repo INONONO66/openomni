@@ -44,9 +44,7 @@ function createMockLLM() {
   };
 }
 
-function baseSubagentContext(
-  overrides: Partial<SubagentContext> = {},
-): SubagentContext {
+function baseSubagentContext(overrides: Partial<SubagentContext> = {}): SubagentContext {
   return {
     parentDepth: 0,
     llm: createMockLLM(),
@@ -54,9 +52,7 @@ function baseSubagentContext(
   };
 }
 
-function baseDispatchContext(
-  overrides: Partial<DispatchContext> = {},
-): DispatchContext {
+function baseDispatchContext(overrides: Partial<DispatchContext> = {}): DispatchContext {
   return {
     llm: createMockLLM(),
     ...overrides,
@@ -177,9 +173,7 @@ describe("Nested Delegation Guard", () => {
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Nested delegation not allowed");
-      expect(result.output).toContain(
-        "dispatch child cannot call subagent/dispatch",
-      );
+      expect(result.output).toContain("dispatch child cannot call subagent/dispatch");
       expect(result.toolCallId).toBe("dispatch-nested");
       expect(result.id).toBeDefined();
     });

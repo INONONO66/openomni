@@ -58,10 +58,7 @@ export namespace ConcurrencyGate {
    * @param taskId - The ID of the task
    * @param decision - The decision made: 'allow', 'queue', or 'drop'
    */
-  export function record(
-    _taskId: string,
-    decision: "allow" | "queue" | "drop",
-  ): void {
+  export function record(_taskId: string, decision: "allow" | "queue" | "drop"): void {
     if (decision === "allow") {
       stats.allowed++;
     } else if (decision === "queue") {
@@ -169,10 +166,7 @@ export namespace RunSupervisor {
    * @param budget - Budget limits to check against
    * @returns 'ok' if within budget, 'exceeded' if any limit is breached
    */
-  export function checkBudget(
-    state: RunState,
-    budget: RunBudget,
-  ): BudgetStatus {
+  export function checkBudget(state: RunState, budget: RunBudget): BudgetStatus {
     const elapsed = Date.now() - state.startTime;
 
     if (elapsed >= budget.maxWallTimeMs) {
@@ -212,10 +206,7 @@ export namespace RunSupervisor {
    * @param durationMs - Duration of the tool call in milliseconds
    * @returns New state with incremented tool call count and runtime
    */
-  export function recordToolCall(
-    state: RunState,
-    durationMs: number,
-  ): RunState {
+  export function recordToolCall(state: RunState, durationMs: number): RunState {
     return {
       ...state,
       toolCalls: state.toolCalls + 1,

@@ -27,16 +27,11 @@ function cloneEntry(entry: RunLedgerEntry): RunLedgerEntry {
   return {
     ...entry,
     startedAt: entry.startedAt ? new Date(entry.startedAt.getTime()) : undefined,
-    completedAt: entry.completedAt
-      ? new Date(entry.completedAt.getTime())
-      : undefined,
+    completedAt: entry.completedAt ? new Date(entry.completedAt.getTime()) : undefined,
   };
 }
 
-function getEntryOrThrow(
-  entries: Map<string, RunLedgerEntry>,
-  stepId: string,
-): RunLedgerEntry {
+function getEntryOrThrow(entries: Map<string, RunLedgerEntry>, stepId: string): RunLedgerEntry {
   const entry = entries.get(stepId);
   if (!entry) {
     throw new Error(`Step not found: "${stepId}"`);

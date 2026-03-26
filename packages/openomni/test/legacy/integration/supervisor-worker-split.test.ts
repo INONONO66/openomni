@@ -248,13 +248,9 @@ describe("Supervisor/Worker split boundary", () => {
       expect(result).toBeDefined();
       expect(result.type).toBeDefined();
       expect(typeof result.type).toBe("string");
-      expect([
-        "immediate",
-        "plan_pending",
-        "execution_forked",
-        "ended",
-        "error",
-      ]).toContain(result.type);
+      expect(["immediate", "plan_pending", "execution_forked", "ended", "error"]).toContain(
+        result.type,
+      );
 
       if (result.type === "error") {
         expect(typeof result.error).toBe("string");
@@ -263,17 +259,16 @@ describe("Supervisor/Worker split boundary", () => {
     });
 
     it("ExecutionSupervisor result has required fields", async () => {
-      const { ExecutionSupervisor } =
-        await import("../../../src/legacy/execution/execution-supervisor");
+      const { ExecutionSupervisor } = await import(
+        "../../../src/legacy/execution/execution-supervisor"
+      );
 
       const result = await ExecutionSupervisor.run({
         history: { summary: "test", constraints: [] },
         plan: {
           planId: "plan-1",
           objective: "test",
-          steps: [
-            { stepId: "step-0", description: "do something", dependsOn: [] },
-          ],
+          steps: [{ stepId: "step-0", description: "do something", dependsOn: [] }],
         },
         sessionMode: "persistent",
         sessionId: "session-1",

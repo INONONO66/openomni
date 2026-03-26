@@ -76,8 +76,7 @@ export namespace SpecValidator {
       } catch {
         issues.push({
           code: "circular_dependency",
-          message:
-            "Failed to build DAG — possible circular or invalid dependencies",
+          message: "Failed to build DAG — possible circular or invalid dependencies",
         });
       }
     }

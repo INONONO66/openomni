@@ -59,10 +59,7 @@ export function createOAuthFetch(
     await pendingRefresh;
   }
 
-  return async function oauthFetch(
-    input: string | Request | URL,
-    init?: RequestInit,
-  ) {
+  return async function oauthFetch(input: string | Request | URL, init?: RequestInit) {
     await ensureValidToken();
 
     const requestHeaders = new Headers();
@@ -83,9 +80,7 @@ export function createOAuthFetch(
       .split(",")
       .map((b) => b.trim())
       .filter(Boolean);
-    const mergedBetas = [
-      ...new Set([...REQUIRED_BETAS, ...incomingBetas]),
-    ].join(",");
+    const mergedBetas = [...new Set([...REQUIRED_BETAS, ...incomingBetas])].join(",");
 
     requestHeaders.set("authorization", `Bearer ${currentAccess}`);
     requestHeaders.set("anthropic-beta", mergedBetas);

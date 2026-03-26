@@ -6,22 +6,10 @@ import { randomUUID } from "crypto";
  * Used by the router when matching tasks to agents
  */
 export const AgentCapabilitiesSchema = z.object({
-  skills: z
-    .array(z.string())
-    .optional()
-    .describe("Skills available to this agent"),
-  tools: z
-    .array(z.string())
-    .optional()
-    .describe("Tools available to this agent"),
-  toolAllowlist: z
-    .array(z.string())
-    .optional()
-    .describe("Explicit allowlist of tools"),
-  toolDenylist: z
-    .array(z.string())
-    .optional()
-    .describe("Explicit denylist of tools"),
+  skills: z.array(z.string()).optional().describe("Skills available to this agent"),
+  tools: z.array(z.string()).optional().describe("Tools available to this agent"),
+  toolAllowlist: z.array(z.string()).optional().describe("Explicit allowlist of tools"),
+  toolDenylist: z.array(z.string()).optional().describe("Explicit denylist of tools"),
 });
 
 export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
@@ -47,10 +35,7 @@ export type DataScope = z.infer<typeof DataScopeSchema>;
 
 export const PolicySpecSchema = z.object({
   tools: z.array(z.string()).describe("Tools allowed by this policy"),
-  dataScopes: z
-    .array(DataScopeSchema)
-    .optional()
-    .describe("Data access scopes"),
+  dataScopes: z.array(DataScopeSchema).optional().describe("Data access scopes"),
   capabilities: z
     .array(z.enum(["delegate", "escalate"]))
     .optional()
@@ -63,18 +48,9 @@ export const AgentProfileSchema = z.object({
   id: z.string().describe("Unique identifier for the agent profile"),
   name: z.string().describe("Human-readable name of the agent"),
   role: z.string().optional().describe("Role or specialization of the agent"),
-  systemPrompt: z
-    .string()
-    .optional()
-    .describe("System prompt to guide agent behavior"),
-  skills: z
-    .array(z.string())
-    .optional()
-    .describe("List of skills the agent possesses"),
-  tools: z
-    .array(z.string())
-    .optional()
-    .describe("List of tools the agent can use"),
+  systemPrompt: z.string().optional().describe("System prompt to guide agent behavior"),
+  skills: z.array(z.string()).optional().describe("List of skills the agent possesses"),
+  tools: z.array(z.string()).optional().describe("List of tools the agent can use"),
   policy: z
     .lazy(() => PolicySpecSchema)
     .optional()
@@ -95,19 +71,11 @@ export const AgentIdentitySchema = z.object({
 
 export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 
-export const AgentStatusSchema = z.enum([
-  "idle",
-  "busy",
-  "degraded",
-  "offline",
-]);
+export const AgentStatusSchema = z.enum(["idle", "busy", "degraded", "offline"]);
 
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 
-export function createAgentIdentity(
-  profile: AgentProfile,
-  version?: string,
-): AgentIdentity {
+export function createAgentIdentity(profile: AgentProfile, version?: string): AgentIdentity {
   return AgentIdentitySchema.parse({
     agentId: profile.id,
     instanceId: randomUUID(),

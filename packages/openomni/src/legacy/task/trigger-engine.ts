@@ -93,10 +93,7 @@ function stableStringify(obj: unknown): string {
   );
 }
 
-function generateIdempotencyKey(
-  taskId: string,
-  signal: Task.TriggerSignal,
-): string {
+function generateIdempotencyKey(taskId: string, signal: Task.TriggerSignal): string {
   const { triggerId, type, payload, occurredAt } = signal;
 
   switch (type) {
@@ -112,10 +109,7 @@ function generateIdempotencyKey(
       return `${taskId}:${triggerId}:${occurredAt}`;
     case "event": {
       const naturalKey = payload
-        ? createHash("sha256")
-            .update(stableStringify(payload))
-            .digest("hex")
-            .slice(0, 16)
+        ? createHash("sha256").update(stableStringify(payload)).digest("hex").slice(0, 16)
         : "no-payload";
       return `${taskId}:${triggerId}:${naturalKey}`;
     }
@@ -151,9 +145,7 @@ function checkConcurrency(
   const mode = concurrency?.mode ?? "drop";
 
   const runs = store.run.list(taskId);
-  const activeRuns = runs.filter(
-    (r) => r.status === "running" || r.status === "blocked",
-  );
+  const activeRuns = runs.filter((r) => r.status === "running" || r.status === "blocked");
   const scheduledRuns = runs.filter((r) => r.status === "scheduled");
 
   if (activeRuns.length >= maxRunning) {
@@ -184,10 +176,7 @@ export async function triggerTask(
       return { error: "not_found" };
     }
 
-    if (
-      signal.context?.originTaskId &&
-      signal.context.originTaskId === taskId
-    ) {
+    if (signal.context?.originTaskId && signal.context.originTaskId === taskId) {
       console.warn(
         `[anti-loop] self-retrigger blocked in TaskManager.trigger: originTaskId=${signal.context.originTaskId}, taskId=${taskId}`,
       );
@@ -203,22 +192,12 @@ export async function triggerTask(
 
     const idempotencyKey = generateIdempotencyKey(taskId, signal);
 
-    const deduped = checkDedupe(
-      store,
-      idempotencyKey,
-      policy.dedupe?.windowMs,
-      now,
-    );
+    const deduped = checkDedupe(store, idempotencyKey, policy.dedupe?.windowMs, now);
     if (deduped) {
       return { error: "deduped" };
     }
 
-    const concurrencyResult = checkConcurrency(
-      store,
-      taskId,
-      task,
-      policy.concurrency,
-    );
+    const concurrencyResult = checkConcurrency(store, taskId, task, policy.concurrency);
     if (!concurrencyResult.allowed) {
       return { error: "concurrency_blocked" };
     }
@@ -232,8 +211,7 @@ export async function triggerTask(
 
     const runId = randomUUID();
     const sessionKey = `task:${taskId}:run:${runId}`;
-    const status: Task.Run["status"] =
-      permission === "ask" ? "blocked" : "scheduled";
+    const status: Task.Run["status"] = permission === "ask" ? "blocked" : "scheduled";
 
     const taskRun: Task.Run = {
       runId,
@@ -255,11 +233,7 @@ export async function triggerTask(
 
     store.run.set(taskId, taskRun);
 
-    const statusUpdated = TaskStatusManager.updateFromRun(
-      task,
-      taskRun,
-      task.lastRun,
-    );
+    const statusUpdated = TaskStatusManager.updateFromRun(task, taskRun, task.lastRun);
     const updatedTask: Task.Info = {
       ...statusUpdated,
       updatedAt: now,

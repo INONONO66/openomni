@@ -51,11 +51,7 @@ export interface OrchestratorRunInput {
   };
 }
 
-type RetryReason =
-  | "timeout"
-  | "tool_error"
-  | "transient_error"
-  | "validation_error";
+type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
 
 const DEFAULT_PERMISSION: PermissionLevel = "notify";
 
@@ -133,8 +129,7 @@ function resolveBudget(task: Task.Info) {
 
 function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
   const rawDelay =
-    policy.backoffMs.initial *
-    Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
+    policy.backoffMs.initial * Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
   return Math.min(rawDelay, policy.backoffMs.max);
 }
 
@@ -160,11 +155,7 @@ function classifyRetryReason(errorMessage: string): RetryReason {
   return "transient_error";
 }
 
-function shouldRetry(
-  policy: Run.RetryPolicy,
-  reason: RetryReason,
-  attempt: number,
-): boolean {
+function shouldRetry(policy: Run.RetryPolicy, reason: RetryReason, attempt: number): boolean {
   if (attempt >= policy.maxAttempts) {
     return false;
   }
@@ -182,11 +173,7 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-function createEphemeralSession(
-  taskId: string,
-  runId: string,
-  sessionKey: string,
-): Session.Info {
+function createEphemeralSession(taskId: string, runId: string, sessionKey: string): Session.Info {
   const existing = Session.get(sessionKey);
   if (existing) {
     Session.remove(sessionKey);
@@ -302,11 +289,7 @@ export namespace RunWorker {
     AuditLog.logPermission(config.runId, permission);
 
     if (permission.level === "deny") {
-      TaskManager.setRunStatus(
-        config.runId,
-        "failed",
-        permission.reason ?? "Permission denied",
-      );
+      TaskManager.setRunStatus(config.runId, "failed", permission.reason ?? "Permission denied");
 
       return {
         success: false,
@@ -344,19 +327,12 @@ export namespace RunWorker {
       }
       session = existing;
     } else {
-      session = createEphemeralSession(
-        config.taskId,
-        config.runId,
-        taskRun.sessionKey,
-      );
+      session = createEphemeralSession(config.taskId, config.runId, taskRun.sessionKey);
     }
 
     const sink = createSessionSink(session.id);
 
-    const retryPolicy = resolveRetryPolicy(
-      task.policy.retry,
-      config.maxRetries,
-    );
+    const retryPolicy = resolveRetryPolicy(task.policy.retry, config.maxRetries);
     const runBudget = resolveBudget(task);
     const toolExecutor = input.toolExecutor ?? fallbackToolExecutor;
 
@@ -461,10 +437,7 @@ export namespace RunWorker {
             for (const result of toolResults) {
               sink.onToolResult(result);
               accumulatedToolResults = [...accumulatedToolResults, result];
-              runState = RunSupervisor.recordToolCall(
-                runState,
-                perToolRuntimeMs,
-              );
+              runState = RunSupervisor.recordToolCall(runState, perToolRuntimeMs);
             }
 
             currentInput = {
@@ -477,11 +450,7 @@ export namespace RunWorker {
           const retryReason = classifyRetryReason(lastError);
 
           if (shouldRetry(retryPolicy, retryReason, attempt)) {
-            TaskManager.setRunStatus(
-              config.runId,
-              "scheduled",
-              `retrying:${retryReason}`,
-            );
+            TaskManager.setRunStatus(config.runId, "scheduled", `retrying:${retryReason}`);
 
             const backoffMs = calculateBackoffMs(retryPolicy, attempt);
             await sleep(backoffMs);

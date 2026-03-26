@@ -56,9 +56,7 @@ export namespace ParallelToolExecutor {
     executor: (call: Tool.Call) => Promise<Tool.Result>,
     options?: ParallelExecutorOptions,
   ): Promise<Tool.Result[]> {
-    return Promise.all(
-      toolCalls.map((call) => executeSingle(call, executor, options)),
-    );
+    return Promise.all(toolCalls.map((call) => executeSingle(call, executor, options)));
   }
 
   async function executeSafeParallel(
@@ -88,17 +86,13 @@ export namespace ParallelToolExecutor {
 
     // Execute safe tools in parallel
     const safeResults = await Promise.all(
-      safeIndices.map((idx) =>
-        executeSingle(toolCalls[idx], executor, options),
-      ),
+      safeIndices.map((idx) => executeSingle(toolCalls[idx], executor, options)),
     );
 
     // Execute unsafe tools sequentially
     const unsafeResults: Tool.Result[] = [];
     for (const idx of unsafeIndices) {
-      unsafeResults.push(
-        await executeSingle(toolCalls[idx], executor, options),
-      );
+      unsafeResults.push(await executeSingle(toolCalls[idx], executor, options));
     }
 
     // Reconstruct results in original order
@@ -152,11 +146,7 @@ export namespace ParallelToolExecutor {
   }
 }
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  toolName: string,
-): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error(`Tool '${toolName}' timed out after ${ms}ms`));

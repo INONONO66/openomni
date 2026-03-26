@@ -48,9 +48,7 @@ function createMockLLM(behavior: "stop" | "error" | "hang" = "stop") {
   };
 }
 
-function baseContext(
-  overrides: Partial<SubagentContext> = {},
-): SubagentContext {
+function baseContext(overrides: Partial<SubagentContext> = {}): SubagentContext {
   return {
     parentDepth: 0,
     llm: createMockLLM(),
@@ -81,11 +79,7 @@ describe("Subagent", () => {
     });
 
     it("returns error for invalid input (missing prompt)", async () => {
-      const result = await Subagent.execute(
-        "call-2",
-        { agentType: "explore" },
-        baseContext(),
-      );
+      const result = await Subagent.execute("call-2", { agentType: "explore" }, baseContext());
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Invalid subagent input");

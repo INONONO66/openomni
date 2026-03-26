@@ -6,9 +6,7 @@ import type { Provider } from "../../src/provider/index";
 describe("ProviderTransform.sdkKey", () => {
   test("maps anthropic packages", () => {
     expect(ProviderTransform.sdkKey("@ai-sdk/anthropic")).toBe("anthropic");
-    expect(ProviderTransform.sdkKey("@ai-sdk/google-vertex/anthropic")).toBe(
-      "anthropic",
-    );
+    expect(ProviderTransform.sdkKey("@ai-sdk/google-vertex/anthropic")).toBe("anthropic");
   });
 
   test("maps openai packages", () => {
@@ -22,9 +20,7 @@ describe("ProviderTransform.sdkKey", () => {
   });
 
   test("maps openrouter", () => {
-    expect(ProviderTransform.sdkKey("@openrouter/ai-sdk-provider")).toBe(
-      "openrouter",
-    );
+    expect(ProviderTransform.sdkKey("@openrouter/ai-sdk-provider")).toBe("openrouter");
   });
 
   test("returns undefined for unknown packages", () => {
@@ -69,9 +65,7 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    expect(result[0].content).toEqual([
-      { type: "text", text: "actual content" },
-    ]);
+    expect(result[0].content).toEqual([{ type: "text", text: "actual content" }]);
   });
 
   test("anthropic removes message when all array parts are empty", () => {
@@ -145,10 +139,7 @@ describe("ProviderTransform.normalizeMessages", () => {
         ],
       },
     ];
-    const result = ProviderTransform.normalizeMessages(
-      msgs,
-      nonClaudeAnthropicModel,
-    );
+    const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
     const part = (result[0].content as any[])[0];
     expect(part.toolCallId).toBe("call.with.dots");
   });

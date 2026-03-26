@@ -17,13 +17,7 @@ export namespace Team {
   /**
    * Step execution state enum
    */
-  export const StepState = z.enum([
-    "ready",
-    "running",
-    "succeeded",
-    "failed",
-    "skipped",
-  ]);
+  export const StepState = z.enum(["ready", "running", "succeeded", "failed", "skipped"]);
   export type StepState = z.infer<typeof StepState>;
 
   /**

@@ -89,15 +89,11 @@ function createMockLLM(config?: {
         const prompt = String(input.prompt ?? "");
         const taskId = extractTaskId(prompt);
         const sessionId = String(input.sessionID ?? "unknown-session");
-        const isHandoff = prompt.includes(
-          "Create a handoff document for replacement agent.",
-        );
+        const isHandoff = prompt.includes("Create a handoff document for replacement agent.");
 
         calls.push({ taskId, prompt, sessionId, isHandoff });
 
-        const startLabel = isHandoff
-          ? `start:handoff:${taskId}`
-          : `start:${taskId}`;
+        const startLabel = isHandoff ? `start:handoff:${taskId}` : `start:${taskId}`;
         events.push(startLabel);
 
         inFlight += 1;
@@ -114,9 +110,7 @@ function createMockLLM(config?: {
 
         emitAssistantText(sink, sessionId, summary);
 
-        const endLabel = isHandoff
-          ? `stop:handoff:${taskId}`
-          : `stop:${taskId}`;
+        const endLabel = isHandoff ? `stop:handoff:${taskId}` : `stop:${taskId}`;
         events.push(endLabel);
 
         return { type: "stop" as const };
@@ -282,9 +276,7 @@ describe("Dispatch", () => {
     expect(executionCalls[2]?.prompt).toContain("needs-fix-2");
     expect(executionCalls[3]?.prompt).toContain("Handoff Document");
 
-    const firstThreeSessions = executionCalls
-      .slice(0, 3)
-      .map((call) => call.sessionId);
+    const firstThreeSessions = executionCalls.slice(0, 3).map((call) => call.sessionId);
     expect(new Set(firstThreeSessions).size).toBe(1);
 
     expect(sendSpy.mock.calls.length).toBeGreaterThanOrEqual(3);

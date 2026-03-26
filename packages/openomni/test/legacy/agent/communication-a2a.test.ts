@@ -7,9 +7,7 @@ import {
   type AuditEntry,
 } from "../../../src/legacy/agent/communication";
 
-const createEnvelope = (
-  overrides: Partial<MessageEnvelope> = {},
-): MessageEnvelope => ({
+const createEnvelope = (overrides: Partial<MessageEnvelope> = {}): MessageEnvelope => ({
   traceId: randomUUID(),
   sessionId: randomUUID(),
   runId: randomUUID(),
@@ -441,18 +439,14 @@ describe("AgentMessenger Allow Pattern Gate", () => {
 
   describe("blocked communication", () => {
     it("throws MessagingError when no pattern matches", async () => {
-      AgentMessenger.configureAllowPatterns([
-        { from: "other-agent", to: "other-target" },
-      ]);
+      AgentMessenger.configureAllowPatterns([{ from: "other-agent", to: "other-target" }]);
 
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
 
     it("includes source and target in error message", async () => {
@@ -476,39 +470,29 @@ describe("AgentMessenger Allow Pattern Gate", () => {
         toAgentId: receiver,
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
 
     it("blocks when source matches but target does not", async () => {
-      AgentMessenger.configureAllowPatterns([
-        { from: sender, to: "wrong-target" },
-      ]);
+      AgentMessenger.configureAllowPatterns([{ from: sender, to: "wrong-target" }]);
 
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
 
     it("blocks when target matches but source does not", async () => {
-      AgentMessenger.configureAllowPatterns([
-        { from: "wrong-source", to: receiver },
-      ]);
+      AgentMessenger.configureAllowPatterns([{ from: "wrong-source", to: receiver }]);
 
       const envelope = createEnvelope({
         fromAgentId: sender,
         toAgentId: receiver,
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
   });
 
@@ -617,9 +601,7 @@ describe("AgentMessenger Allow Pattern Gate", () => {
         toAgentId: receiver,
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
   });
 });
@@ -643,9 +625,7 @@ describe("AgentMessenger Both Policy Enforcement", () => {
         persistencePolicy: "both",
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
       await expect(AgentMessenger.send(envelope)).rejects.toThrow(
         'Persistence policy "both" requires explicit opt-in via enableBothPolicy()',
       );
@@ -705,9 +685,7 @@ describe("AgentMessenger Both Policy Enforcement", () => {
         persistencePolicy: "both",
       });
 
-      await expect(AgentMessenger.send(envelope)).rejects.toThrow(
-        MessagingError,
-      );
+      await expect(AgentMessenger.send(envelope)).rejects.toThrow(MessagingError);
     });
 
     it("enableBothPolicy() is idempotent", async () => {

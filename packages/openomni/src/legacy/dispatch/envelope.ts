@@ -166,10 +166,7 @@ export namespace Envelope {
    * @param maxAgeMs - Maximum age in milliseconds
    * @returns true if envelope timestamp is older than maxAgeMs, false otherwise
    */
-  export function isExpired(
-    envelope: EventEnvelope,
-    maxAgeMs: number,
-  ): boolean {
+  export function isExpired(envelope: EventEnvelope, maxAgeMs: number): boolean {
     const envelopeTime = new Date(envelope.receivedAt).getTime();
     const currentTime = new Date().getTime();
     return currentTime - envelopeTime > maxAgeMs;

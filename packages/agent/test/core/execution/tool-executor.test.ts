@@ -2,10 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { ToolExecutor } from "../../../src/core/execution/tool-executor";
 import type { Tool } from "@openomni/protocol";
 
-function makeCall(
-  tool: string,
-  input: Record<string, unknown> = {},
-): Tool.Call {
+function makeCall(tool: string, input: Record<string, unknown> = {}): Tool.Call {
   return { id: crypto.randomUUID(), tool, input };
 }
 
@@ -71,11 +68,7 @@ describe("ToolExecutor.executeSequential", () => {
 
   it("guard deny returns error result without calling executor", async () => {
     const executorCalled: string[] = [];
-    const calls = [
-      makeCall("tool-a"),
-      makeCall("forbidden"),
-      makeCall("tool-b"),
-    ];
+    const calls = [makeCall("tool-a"), makeCall("forbidden"), makeCall("tool-b")];
     const executor = async (call: Tool.Call): Promise<Tool.Result> => {
       executorCalled.push(call.tool);
       return {

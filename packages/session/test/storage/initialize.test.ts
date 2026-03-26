@@ -101,9 +101,7 @@ describe("Storage.initialize", () => {
     initialize({ cwd: tmpDir });
     initialize({ cwd: tmpDir });
     const content = readFileSync(join(tmpDir, ".gitignore"), "utf-8");
-    const matches = content
-      .split("\n")
-      .filter((line) => line.trim() === ".openomni/");
+    const matches = content.split("\n").filter((line) => line.trim() === ".openomni/");
     expect(matches).toHaveLength(1);
   });
 

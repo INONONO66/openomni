@@ -36,14 +36,7 @@ export namespace Run {
       max: z.number(),
     }),
     retryOn: z
-      .array(
-        z.enum([
-          "timeout",
-          "tool_error",
-          "transient_error",
-          "validation_error",
-        ]),
-      )
+      .array(z.enum(["timeout", "tool_error", "transient_error", "validation_error"]))
       .optional(),
   });
   export type RetryPolicy = z.infer<typeof RetryPolicy>;

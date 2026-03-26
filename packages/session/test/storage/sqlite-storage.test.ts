@@ -15,11 +15,7 @@ function makeSession(id: string): SessionInfo {
   };
 }
 
-function makeUserMessage(
-  sessionID: string,
-  messageID: string,
-  timeCreated?: number,
-): Message.Info {
+function makeUserMessage(sessionID: string, messageID: string, timeCreated?: number): Message.Info {
   return {
     id: messageID,
     sessionID,
@@ -119,10 +115,7 @@ describe("SqliteStorageAdapter", () => {
   let adapter: SqliteStorageAdapter;
 
   beforeEach(() => {
-    dbPath = join(
-      tmpdir(),
-      `test-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
-    );
+    dbPath = join(tmpdir(), `test-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
     adapter = new SqliteStorageAdapter(dbPath);
   });
 
@@ -284,13 +277,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p0"));
 
       const list = adapter.part.list("m1");
-      expect(list.map((item) => item.id)).toEqual([
-        "p1",
-        "p2",
-        "p3",
-        "p0",
-        "p4",
-      ]);
+      expect(list.map((item) => item.id)).toEqual(["p1", "p2", "p3", "p0", "p4"]);
     });
 
     test("list: only returns parts for the given message", () => {
@@ -334,18 +321,9 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("part list: tool parts with non-pending state use state.time.start for sorting", () => {
-      adapter.part.set(
-        "m1",
-        makeToolPart("s1", "m1", "tool-pending", "pending"),
-      );
-      adapter.part.set(
-        "m1",
-        makeToolPart("s1", "m1", "tool-running", "running", 300),
-      );
-      adapter.part.set(
-        "m1",
-        makeToolPart("s1", "m1", "tool-completed", "completed", 100),
-      );
+      adapter.part.set("m1", makeToolPart("s1", "m1", "tool-pending", "pending"));
+      adapter.part.set("m1", makeToolPart("s1", "m1", "tool-running", "running", 300));
+      adapter.part.set("m1", makeToolPart("s1", "m1", "tool-completed", "completed", 100));
       adapter.part.set("m1", makeToolPart("s1", "m1", "text", "error", 200));
 
       const list = adapter.part.list("m1");
@@ -363,11 +341,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeToolPart("s1", "m1", "m-pending", "pending"));
 
       const list = adapter.part.list("m1");
-      expect(list.map((item) => item.id)).toEqual([
-        "a-no-time",
-        "m-pending",
-        "z-no-time",
-      ]);
+      expect(list.map((item) => item.id)).toEqual(["a-no-time", "m-pending", "z-no-time"]);
     });
   });
 

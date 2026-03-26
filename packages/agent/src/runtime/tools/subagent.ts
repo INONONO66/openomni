@@ -78,9 +78,7 @@ export namespace SubagentTool {
         };
       }
 
-      const childAbort = ctx?.parentAbort
-        ? AbortSignal.any([ctx.parentAbort])
-        : undefined;
+      const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
 
       try {
         const childAgent = ChatAgent.create({
@@ -89,9 +87,7 @@ export namespace SubagentTool {
             id: "claude-3-haiku-20240307",
           },
           systemPrompt: definition.systemPrompt,
-          budget: definition.maxTurns
-            ? { maxTurns: definition.maxTurns }
-            : undefined,
+          budget: definition.maxTurns ? { maxTurns: definition.maxTurns } : undefined,
           permissions: definition.permissions,
           signal: childAbort,
         });

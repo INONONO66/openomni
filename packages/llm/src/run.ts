@@ -29,8 +29,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const abortSignal = signal || abortController!.signal;
 
   const sessionID =
-    messages[0]?.info.sessionID ||
-    `session-${Math.random().toString(36).substring(2, 11)}`;
+    messages[0]?.info.sessionID || `session-${Math.random().toString(36).substring(2, 11)}`;
   const messageID = `msg-${Math.random().toString(36).substring(2, 11)}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
@@ -84,10 +83,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<
-        string,
-        { description?: string; parameters: unknown }
-      > = {};
+      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
       for (const spec of input.tools) {
         sdkTools[spec.name] = {
           description: spec.description,

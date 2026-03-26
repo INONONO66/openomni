@@ -107,10 +107,7 @@ function createAssistantMessage(text: string): Message.WithParts {
   return { info, parts: [textPart] };
 }
 
-function enqueuePlan(
-  goal: string,
-  steps: Array<{ stepId: string; dependsOn: string[] }>,
-) {
+function enqueuePlan(goal: string, steps: Array<{ stepId: string; dependsOn: string[] }>) {
   responseQueue.push(
     JSON.stringify({
       planId: "plan-integration",
@@ -172,10 +169,7 @@ describe("PlanAgent.generate -> TeamOrchestrator.execute integration", () => {
     const planResult = await PlanAgent.generate(goal, {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
-    const result = await TeamOrchestrator.execute(
-      planResult.plan,
-      makeConfig(),
-    );
+    const result = await TeamOrchestrator.execute(planResult.plan, makeConfig());
 
     expect(result.status).toBe("completed");
     expect(result.completedSteps).toEqual(["s1", "s2"]);
@@ -193,10 +187,7 @@ describe("PlanAgent.generate -> TeamOrchestrator.execute integration", () => {
     const planResult = await PlanAgent.generate(goal, {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
-    const result = await TeamOrchestrator.execute(
-      planResult.plan,
-      makeConfig(),
-    );
+    const result = await TeamOrchestrator.execute(planResult.plan, makeConfig());
 
     expect(result.status).toBe("completed");
     expect(result.completedSteps).toEqual(["s1"]);
@@ -209,19 +200,14 @@ describe("PlanAgent.generate -> TeamOrchestrator.execute integration", () => {
 
     enqueuePlan(goal, [{ stepId: "s1", dependsOn: [] }]);
     responseQueue.push("Step output attempt 1");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "Need fixes" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "Need fixes" }));
     responseQueue.push("Step output attempt 2");
     responseQueue.push(JSON.stringify({ decision: "accept" }));
 
     const planResult = await PlanAgent.generate(goal, {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
-    const result = await TeamOrchestrator.execute(
-      planResult.plan,
-      makeConfig(),
-    );
+    const result = await TeamOrchestrator.execute(planResult.plan, makeConfig());
 
     const executionCalls = llmInputs
       .map((input) => extractUserText(input))

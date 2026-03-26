@@ -48,9 +48,7 @@ describe("RunLedger", () => {
 
   it("throws when transitioning ready → succeeded (must run first)", () => {
     const ledger = RunLedger.create(makeSteps(["step-2"]));
-    expect(() => ledger.transition("step-2", "succeeded")).toThrow(
-      /invalid.*transition/i,
-    );
+    expect(() => ledger.transition("step-2", "succeeded")).toThrow(/invalid.*transition/i);
   });
 
   it("throws when transitioning succeeded → running", () => {
@@ -58,9 +56,7 @@ describe("RunLedger", () => {
     ledger.transition("step-1", "running");
     ledger.transition("step-1", "succeeded");
 
-    expect(() => ledger.transition("step-1", "running")).toThrow(
-      /invalid.*transition/i,
-    );
+    expect(() => ledger.transition("step-1", "running")).toThrow(/invalid.*transition/i);
   });
 
   it("increments attempts on recordAttempt", () => {
@@ -165,18 +161,11 @@ describe("RunLedger", () => {
 
   it("throws step not found for non-existent step", () => {
     const ledger = RunLedger.create(makeSteps(["s1"]));
-    expect(() => ledger.transition("nope", "running")).toThrow(
-      /step not found/i,
-    );
+    expect(() => ledger.transition("nope", "running")).toThrow(/step not found/i);
   });
 
   it("allows transition to skipped from any state", () => {
-    const steps = makeSteps([
-      "ready-s",
-      "running-s",
-      "succeeded-s",
-      "failed-s",
-    ]);
+    const steps = makeSteps(["ready-s", "running-s", "succeeded-s", "failed-s"]);
     const ledger = RunLedger.create(steps);
 
     ledger.transition("running-s", "running");
@@ -210,9 +199,7 @@ describe("RunLedger", () => {
     ledger.transition("step-1", "running");
     ledger.transition("step-1", "failed");
 
-    expect(() => ledger.transition("step-1", "running")).toThrow(
-      /invalid.*transition/i,
-    );
+    expect(() => ledger.transition("step-1", "running")).toThrow(/invalid.*transition/i);
   });
 
   it("getStepState returns undefined for unknown step", () => {
@@ -232,8 +219,6 @@ describe("RunLedger", () => {
 
   it("throws on resetRejectionStreak for unknown step", () => {
     const ledger = RunLedger.create(makeSteps(["s1"]));
-    expect(() => ledger.resetRejectionStreak("nope")).toThrow(
-      /step not found/i,
-    );
+    expect(() => ledger.resetRejectionStreak("nope")).toThrow(/step not found/i);
   });
 });

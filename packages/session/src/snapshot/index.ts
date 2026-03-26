@@ -27,9 +27,7 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
   track(sessionID: string): string {
     const adapter = Storage.getAdapter();
     const snapshotID = `snap-${Math.random().toString(36).substring(2, 11)}`;
-    const messages = adapter.message
-      .list(sessionID)
-      .map((m: Message.Info) => ({ ...m }));
+    const messages = adapter.message.list(sessionID).map((m: Message.Info) => ({ ...m }));
     const parts = new Map<string, Message.Part[]>();
     for (const msg of messages) {
       const msgParts = adapter.part
@@ -72,9 +70,7 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
     const adapter = Storage.getAdapter();
     const currentMsgs = adapter.message.list(sessionID);
 
-    const snapshotIDs = new Set(
-      snapshot.messages.map((m: Message.Info) => m.id),
-    );
+    const snapshotIDs = new Set(snapshot.messages.map((m: Message.Info) => m.id));
     const currentIDs = new Set(currentMsgs.map((m: Message.Info) => m.id));
 
     const added = currentMsgs

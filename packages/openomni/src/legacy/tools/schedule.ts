@@ -7,21 +7,12 @@ import { randomUUID } from "crypto";
 export const ScheduleInput = z.object({
   description: z.string().describe("Task description"),
   dueAt: z.string().datetime().describe("ISO 8601 datetime for execution"),
-  estimatedRuntimeMs: z
-    .number()
-    .positive()
-    .describe("Estimated runtime in milliseconds"),
+  estimatedRuntimeMs: z.number().positive().describe("Estimated runtime in milliseconds"),
   recurring: z
     .object({
       type: z.enum(["cron", "interval", "once"]).describe("Recurrence type"),
-      expression: z
-        .string()
-        .optional()
-        .describe("Cron expression (for cron type)"),
-      intervalMs: z
-        .number()
-        .optional()
-        .describe("Interval in milliseconds (for interval type)"),
+      expression: z.string().optional().describe("Cron expression (for cron type)"),
+      intervalMs: z.number().optional().describe("Interval in milliseconds (for interval type)"),
     })
     .optional()
     .describe("Recurrence configuration (optional)"),
@@ -74,8 +65,7 @@ export namespace ScheduleTool {
         toolCallId: "",
         output: JSON.stringify({
           error: "task_from_task_prohibited",
-          message:
-            "Cannot schedule a task from within a task execution context",
+          message: "Cannot schedule a task from within a task execution context",
         }),
         isError: true,
       };
@@ -97,8 +87,7 @@ export namespace ScheduleTool {
       }
 
       // Calculate plannedStartAt = dueAt - estimatedRuntimeMs - safetyBufferMs
-      let plannedStartAtMs =
-        dueAtMs - validated.estimatedRuntimeMs - SAFETY_BUFFER_MS;
+      let plannedStartAtMs = dueAtMs - validated.estimatedRuntimeMs - SAFETY_BUFFER_MS;
 
       // Handle late-start: if plannedStartAt is in the past, execute immediately
       const now = Date.now();

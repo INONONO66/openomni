@@ -1,10 +1,7 @@
 import { Message } from "@openomni/protocol";
 
 export function getPartStartTime(part: Message.Part): number | undefined {
-  if (
-    (part.type === "text" || part.type === "reasoning") &&
-    part.time?.start !== undefined
-  ) {
+  if ((part.type === "text" || part.type === "reasoning") && part.time?.start !== undefined) {
     return part.time.start;
   }
 

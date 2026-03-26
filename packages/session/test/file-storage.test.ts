@@ -27,22 +27,14 @@ function makeUserMessage(sessionID: string, messageID: string): Message.Info {
   };
 }
 
-function makeUserMessageAt(
-  sessionID: string,
-  messageID: string,
-  created: number,
-): Message.Info {
+function makeUserMessageAt(sessionID: string, messageID: string, created: number): Message.Info {
   return {
     ...makeUserMessage(sessionID, messageID),
     time: { created },
   };
 }
 
-function makeTextPart(
-  sessionID: string,
-  messageID: string,
-  partID: string,
-): Message.Part {
+function makeTextPart(sessionID: string, messageID: string, partID: string): Message.Part {
   return {
     id: partID,
     sessionID,

@@ -71,10 +71,7 @@ describe("Session.addMessage metadata hooks", () => {
       });
 
       Session.addMessage(session.id, makeUserMessage(session.id));
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 10, output: 5 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 10, output: 5 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.messageCount).toBe(2);
@@ -87,15 +84,9 @@ describe("Session.addMessage metadata hooks", () => {
       });
 
       Session.addMessage(session.id, makeUserMessage(session.id));
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 10, output: 5 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 10, output: 5 }));
       Session.addMessage(session.id, makeUserMessage(session.id));
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 20, output: 10 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 20, output: 10 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.messageCount).toBe(4);
@@ -121,10 +112,7 @@ describe("Session.addMessage metadata hooks", () => {
         model: { providerID: "test", modelID: "test-model" },
       });
 
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 100, output: 50 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 100, output: 50 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.tokens).toEqual({
@@ -140,14 +128,8 @@ describe("Session.addMessage metadata hooks", () => {
         model: { providerID: "test", modelID: "test-model" },
       });
 
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 100, output: 50 }),
-      );
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 200, output: 80 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 100, output: 50 }));
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 200, output: 80 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.tokens).toEqual({
@@ -163,15 +145,9 @@ describe("Session.addMessage metadata hooks", () => {
         model: { providerID: "test", modelID: "test-model" },
       });
 
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 100, output: 50 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 100, output: 50 }));
       Session.addMessage(session.id, makeUserMessage(session.id));
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 200, output: 80 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 200, output: 80 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.tokens).toEqual({
@@ -205,9 +181,7 @@ describe("Session.addMessage metadata hooks", () => {
   describe("edge cases", () => {
     test("does not throw when session does not exist", () => {
       const msg = makeUserMessage("nonexistent-session");
-      expect(() =>
-        Session.addMessage("nonexistent-session", msg),
-      ).not.toThrow();
+      expect(() => Session.addMessage("nonexistent-session", msg)).not.toThrow();
     });
 
     test("preserves other session fields when updating metadata", () => {
@@ -217,10 +191,7 @@ describe("Session.addMessage metadata hooks", () => {
         ttlMs: 60000,
       });
 
-      Session.addMessage(
-        session.id,
-        makeAssistantMessage(session.id, { input: 50, output: 25 }),
-      );
+      Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 50, output: 25 }));
 
       const updated = Session.get(session.id)!;
       expect(updated.title).toBe("Original Title");

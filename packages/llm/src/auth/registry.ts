@@ -46,9 +46,7 @@ function createAnthropicOAuthMethod(
         return;
       }
       cb.updateProgress("Creating API key...");
-      const apiKeyResult = await anthropicOAuth.createApiKey(
-        tokenResult.access,
-      );
+      const apiKeyResult = await anthropicOAuth.createApiKey(tokenResult.access);
       if (apiKeyResult.type === "failed") {
         await Auth.set("anthropic", {
           type: "oauth",
@@ -71,11 +69,7 @@ const anthropicProvider: AuthProvider = {
   hint: "Claude Max or Console",
   methods: [
     createAnthropicOAuthMethod("max", "Max", "claude.ai Pro/Max subscription"),
-    createAnthropicOAuthMethod(
-      "console",
-      "Console",
-      "console.anthropic.com API",
-    ),
+    createAnthropicOAuthMethod("console", "Console", "console.anthropic.com API"),
   ],
 };
 
@@ -109,9 +103,7 @@ const openaiProvider: AuthProvider = {
           });
           cb.stopProgress("Login successful");
         } catch (err) {
-          cb.stopProgress(
-            `Login failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
           openaiOAuth.stopOAuthServer();
         }
@@ -144,9 +136,7 @@ const openaiProvider: AuthProvider = {
           });
           cb.stopProgress("Login successful");
         } catch (err) {
-          cb.stopProgress(
-            `Login failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       },
     },

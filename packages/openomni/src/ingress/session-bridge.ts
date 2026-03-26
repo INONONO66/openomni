@@ -133,9 +133,7 @@ export namespace SessionBridge {
    * Build a simple message array for ChatAgent.run() from session messages.
    * Each message with a TextPart becomes { role, content }.
    */
-  export function buildDirectMessages(
-    sessionId: string,
-  ): Array<{ role: string; content: string }> {
+  export function buildDirectMessages(sessionId: string): Array<{ role: string; content: string }> {
     const messages = Session.getMessages(sessionId);
     const result: Array<{ role: string; content: string }> = [];
 

@@ -42,8 +42,7 @@ describe("ScheduleTool", () => {
 
       // Verify plannedStartAt calculation
       const plannedStartAtMs = new Date(output.plannedStartAt).getTime();
-      const expectedPlannedStartAtMs =
-        dueAtMs - estimatedRuntimeMs - safetyBufferMs;
+      const expectedPlannedStartAtMs = dueAtMs - estimatedRuntimeMs - safetyBufferMs;
       expect(plannedStartAtMs).toBe(expectedPlannedStartAtMs);
     });
 
@@ -236,8 +235,7 @@ describe("ScheduleTool", () => {
       expect(plannedStartAtMs).toBe(expectedMs);
 
       // Verify the math: plannedStartAt + estimatedRuntime + safetyBuffer = dueAt
-      const reconstructedDueAt =
-        plannedStartAtMs + estimatedRuntimeMs + safetyBufferMs;
+      const reconstructedDueAt = plannedStartAtMs + estimatedRuntimeMs + safetyBufferMs;
       expect(reconstructedDueAt).toBe(dueAtMs);
     });
 

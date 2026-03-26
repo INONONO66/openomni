@@ -1,11 +1,4 @@
-import {
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  statSync,
-  existsSync,
-  rmSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 interface LockOptions {
@@ -31,10 +24,7 @@ function readLockInfo(lockPath: string): LockInfo | null {
   try {
     const raw = readFileSync(join(lockPath, "info.json"), "utf-8");
     const parsed = JSON.parse(raw);
-    if (
-      typeof parsed.pid === "number" &&
-      typeof parsed.timestamp === "number"
-    ) {
+    if (typeof parsed.pid === "number" && typeof parsed.timestamp === "number") {
       return parsed as LockInfo;
     }
     return null;
@@ -94,9 +84,7 @@ export namespace FileLock {
           }
 
           if (Date.now() - startTime > timeoutMs) {
-            throw new Error(
-              `FileLock: timeout acquiring lock after ${timeoutMs}ms: ${lockPath}`,
-            );
+            throw new Error(`FileLock: timeout acquiring lock after ${timeoutMs}ms: ${lockPath}`);
           }
 
           syncSleep(pollMs);
@@ -113,11 +101,7 @@ export namespace FileLock {
     } catch {}
   }
 
-  export function withLock<T>(
-    lockPath: string,
-    fn: () => T,
-    options?: LockOptions,
-  ): T {
+  export function withLock<T>(lockPath: string, fn: () => T, options?: LockOptions): T {
     acquire(lockPath, options);
     try {
       return fn();
@@ -128,10 +112,7 @@ export namespace FileLock {
     }
   }
 
-  export function isLocked(
-    lockPath: string,
-    options?: Pick<LockOptions, "staleMs">,
-  ): boolean {
+  export function isLocked(lockPath: string, options?: Pick<LockOptions, "staleMs">): boolean {
     if (!existsSync(lockPath)) return false;
     const staleMs = options?.staleMs ?? DEFAULT_STALE_MS;
     return !isStale(lockPath, staleMs);

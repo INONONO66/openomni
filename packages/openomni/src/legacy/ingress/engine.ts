@@ -4,10 +4,7 @@ import { RunWorker } from "../worker";
 import { SessionResolver } from "./session-resolver";
 import { TaskManager } from "../task";
 import type { Session } from "@openomni/session";
-import type {
-  NotificationRequest,
-  NotificationResult,
-} from "@openomni/protocol";
+import type { NotificationRequest, NotificationResult } from "@openomni/protocol";
 import { DefaultRunExecutor, type RunExecutor } from "./run-executor";
 
 // ============================================================
@@ -211,14 +208,11 @@ export const DefaultRunPlanner: RunPlanner = {
     }
 
     const isCompletion =
-      envelope.name === "subagent.completed" ||
-      envelope.name === "subagent.failed";
+      envelope.name === "subagent.completed" || envelope.name === "subagent.failed";
 
     if (isCompletion) {
       if (!envelope.meta?.taskId) {
-        console.warn(
-          `[IngressEngine] Completion event without taskId dropped: ${envelope.name}`,
-        );
+        console.warn(`[IngressEngine] Completion event without taskId dropped: ${envelope.name}`);
         return [];
       }
 
@@ -260,9 +254,7 @@ export const DefaultRunPlanner: RunPlanner = {
 
     // D6: Block trigger_task from task execution context
     if (envelope.meta?.executionContext === "task") {
-      console.warn(
-        `[D6] trigger_task blocked: executionContext=task, event=${envelope.name}`,
-      );
+      console.warn(`[D6] trigger_task blocked: executionContext=task, event=${envelope.name}`);
       return [];
     }
 
@@ -283,8 +275,7 @@ export const DefaultRunPlanner: RunPlanner = {
           triggerSignal: {
             triggerId: (envelope.meta.triggerId as string) ?? envelope.eventId,
             type:
-              (envelope.meta
-                .triggerType as RunRequest["triggerSignal"] extends {
+              (envelope.meta.triggerType as RunRequest["triggerSignal"] extends {
                 type: infer T;
               }
                 ? T
@@ -368,9 +359,7 @@ export namespace IngressEngine {
   }
 
   function toEventEnvelope(event: InboundEvent): EventEnvelope {
-    const sourceId = [event.surface, event.workspace, event.channel]
-      .filter(Boolean)
-      .join(":");
+    const sourceId = [event.surface, event.workspace, event.channel].filter(Boolean).join(":");
 
     return Envelope.normalize({
       id: event.id,

@@ -30,9 +30,7 @@ export namespace DAG {
     for (const step of steps) {
       for (const dependencyId of step.dependsOn) {
         if (!nodes.has(dependencyId)) {
-          throw new Error(
-            `Step "${step.stepId}" depends on unknown step "${dependencyId}"`,
-          );
+          throw new Error(`Step "${step.stepId}" depends on unknown step "${dependencyId}"`);
         }
 
         const dependents = reverseEdges.get(dependencyId);
@@ -104,10 +102,7 @@ export namespace DAG {
     };
   }
 
-  export function getReady(
-    dag: DAGStructure,
-    completed: Set<string>,
-  ): string[] {
+  export function getReady(dag: DAGStructure, completed: Set<string>): string[] {
     const ready: string[] = [];
     for (const nodeId of dag.nodes) {
       if (completed.has(nodeId)) {
@@ -168,10 +163,7 @@ export namespace DAG {
   }
 }
 
-function findCycle(
-  nodes: Set<string>,
-  adjacency: Map<string, Set<string>>,
-): string[] {
+function findCycle(nodes: Set<string>, adjacency: Map<string, Set<string>>): string[] {
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const stack: string[] = [];

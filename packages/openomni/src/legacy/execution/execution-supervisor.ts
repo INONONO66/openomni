@@ -38,11 +38,7 @@ import type {
   SupervisorDecision,
   WorkerRuntimeConfig,
 } from "./execution-types";
-import type {
-  OrchestratorConfig,
-  OrchestratorRunInput,
-  ToolExecutor,
-} from "../worker";
+import type { OrchestratorConfig, OrchestratorRunInput, ToolExecutor } from "../worker";
 import { RunWorker } from "../worker";
 
 const DEFAULT_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -62,9 +58,7 @@ export namespace ExecutionSupervisor {
   /**
    * Decision loop: plan -> select -> delegate -> re-evaluate.
    */
-  export async function run(
-    config: ExecutionSupervisorConfig,
-  ): Promise<ExecutionSupervisorResult> {
+  export async function run(config: ExecutionSupervisorConfig): Promise<ExecutionSupervisorResult> {
     const stepOutcomes: StepOutcome[] = [];
 
     while (true) {
@@ -91,12 +85,9 @@ export namespace ExecutionSupervisor {
     }
 
     const completedStepIds = new Set(stepOutcomes.map((o) => o.stepId));
-    const unexecutedSteps = config.plan.steps.filter(
-      (s) => !completedStepIds.has(s.stepId),
-    );
+    const unexecutedSteps = config.plan.steps.filter((s) => !completedStepIds.has(s.stepId));
     const allStepsExecuted = unexecutedSteps.length === 0;
-    const allSucceeded =
-      allStepsExecuted && stepOutcomes.every((o) => o.success);
+    const allSucceeded = allStepsExecuted && stepOutcomes.every((o) => o.success);
 
     const errors: string[] = stepOutcomes
       .filter((o) => !o.success)
@@ -111,8 +102,7 @@ export namespace ExecutionSupervisor {
 
     return {
       success: allSucceeded,
-      summary:
-        stepOutcomes.map((o) => o.summary).join("\n") || "No work executed.",
+      summary: stepOutcomes.map((o) => o.summary).join("\n") || "No work executed.",
       error: errors.length > 0 ? errors.join("; ") : undefined,
       terminalDecision: "finish",
       stepOutcomes,
@@ -148,8 +138,7 @@ export namespace ExecutionSupervisor {
 
     return executionPlan.steps.filter(
       (step) =>
-        !completedIds.has(step.stepId) &&
-        step.dependsOn.every((dep) => completedIds.has(dep)),
+        !completedIds.has(step.stepId) && step.dependsOn.every((dep) => completedIds.has(dep)),
     );
   }
 
@@ -188,15 +177,11 @@ export namespace ExecutionSupervisor {
     const dispatchContext: DispatchContext = {
       ...runtime.dispatchContext,
       ...(config.agentId ? { agentId: config.agentId } : {}),
-      ...(config.availableAgents
-        ? { availableAgents: [...config.availableAgents] }
-        : {}),
+      ...(config.availableAgents ? { availableAgents: [...config.availableAgents] } : {}),
     };
 
     const output = await executeDispatchGraph(input, dispatchContext);
-    const resultById = new Map(
-      output.results.map((result) => [result.id, result]),
-    );
+    const resultById = new Map(output.results.map((result) => [result.id, result]));
 
     return steps.map((step) => {
       const result = resultById.get(step.stepId);
@@ -226,10 +211,7 @@ async function executeDispatchGraph(
   const startedAt = Date.now();
   const graph = buildDependencyGraph(input.tasks);
   const hybridRuntime = await resolveDispatchHybridRuntime(context);
-  const workerRuntimeCache = new Map<
-    string,
-    Promise<WorkerRuntimeConfig | undefined>
-  >();
+  const workerRuntimeCache = new Map<string, Promise<WorkerRuntimeConfig | undefined>>();
 
   initializeTaskStates(graph, input.objective);
 
@@ -293,24 +275,18 @@ async function executeDispatchGraph(
       if (dispatchAbortController.signal.aborted) {
         cancelRunningChildren(
           running,
-          abortReason === "timeout"
-            ? "dispatch_timeout"
-            : "dispatch_parent_aborted",
+          abortReason === "timeout" ? "dispatch_timeout" : "dispatch_parent_aborted",
         );
         markPendingAsFailed(
           graph,
-          abortReason === "timeout"
-            ? "Dispatch timed out"
-            : "Dispatch aborted by parent",
+          abortReason === "timeout" ? "Dispatch timed out" : "Dispatch aborted by parent",
         );
         return buildOutput(
           input.objective,
           graph,
           startedAt,
           false,
-          abortReason === "timeout"
-            ? "Dispatch timed out"
-            : "Dispatch aborted by parent",
+          abortReason === "timeout" ? "Dispatch timed out" : "Dispatch aborted by parent",
         );
       }
 
@@ -349,32 +325,23 @@ async function executeDispatchGraph(
         );
       }
 
-      const next = await waitForNextResult(
-        running,
-        dispatchAbortController.signal,
-      );
+      const next = await waitForNextResult(running, dispatchAbortController.signal);
 
       if (next.type === "aborted") {
         cancelRunningChildren(
           running,
-          abortReason === "timeout"
-            ? "dispatch_timeout"
-            : "dispatch_parent_aborted",
+          abortReason === "timeout" ? "dispatch_timeout" : "dispatch_parent_aborted",
         );
         markPendingAsFailed(
           graph,
-          abortReason === "timeout"
-            ? "Dispatch timed out"
-            : "Dispatch aborted by parent",
+          abortReason === "timeout" ? "Dispatch timed out" : "Dispatch aborted by parent",
         );
         return buildOutput(
           input.objective,
           graph,
           startedAt,
           false,
-          abortReason === "timeout"
-            ? "Dispatch timed out"
-            : "Dispatch aborted by parent",
+          abortReason === "timeout" ? "Dispatch timed out" : "Dispatch aborted by parent",
         );
       }
 
@@ -411,19 +378,13 @@ async function executeDispatchGraph(
           if (failureDecision.reasoning.trim().length > 0) {
             state.summaries.push(`Skipped: ${failureDecision.reasoning}`);
           }
-          completeTaskAndUnblockDependents(
-            graph,
-            state.task.id,
-            completed,
-            ready,
-          );
+          completeTaskAndUnblockDependents(graph, state.task.id, completed, ready);
           continue;
         }
 
         if (failureDecision?.action === "replan") {
           const reason =
-            failureDecision.reasoning.trim() ||
-            "Supervisor requested replan for failed step";
+            failureDecision.reasoning.trim() || "Supervisor requested replan for failed step";
           state.status = "failed";
           state.errors.push(`Replan requested: ${reason}`);
           markPendingAsFailed(graph, "Dispatch requires replan");
@@ -441,33 +402,18 @@ async function executeDispatchGraph(
         !next.result.success && failureDecision
           ? {
               decision: "reject",
-              feedback:
-                failureDecision.reasoning ||
-                next.result.error ||
-                "Task execution failed",
+              feedback: failureDecision.reasoning || next.result.error || "Task execution failed",
             }
-          : await reviewTaskResult(
-              input.objective,
-              state,
-              next.result,
-              context,
-            );
+          : await reviewTaskResult(input.objective, state, next.result, context);
 
       if (reviewDecision.decision === "accept") {
-        completeTaskAndUnblockDependents(
-          graph,
-          state.task.id,
-          completed,
-          ready,
-        );
+        completeTaskAndUnblockDependents(graph, state.task.id, completed, ready);
 
         continue;
       }
 
       const feedback =
-        reviewDecision.feedback ||
-        next.result.error ||
-        "Result rejected. Revise and retry.";
+        reviewDecision.feedback || next.result.error || "Result rejected. Revise and retry.";
 
       state.totalRejections += 1;
       state.rejectionStreak += 1;
@@ -598,9 +544,7 @@ function buildDispatchInputFromSteps(
       description: step.description,
       agentType: "implement",
       suggestedAgent: step.suggestedAgent,
-      dependencies: step.dependsOn.filter((dependencyId) =>
-        selectedStepIds.has(dependencyId),
-      ),
+      dependencies: step.dependsOn.filter((dependencyId) => selectedStepIds.has(dependencyId)),
       fileScope: [],
     };
   });
@@ -623,11 +567,7 @@ function initializeTaskStates(graph: DependencyGraph, objective: string): void {
     state.agentInstanceId = createAgentInstanceId(state.task.id);
     state.agentHistory.push(state.agentInstanceId);
     state.sessionId = createSessionId(state.task.id);
-    ensurePersistentSession(
-      state.sessionId,
-      `${objective}: ${state.task.id}`,
-      agent.name,
-    );
+    ensurePersistentSession(state.sessionId, `${objective}: ${state.task.id}`, agent.name);
     state.childTaskId = createChildTask(state.task, state.agentInstanceId);
   }
 }
@@ -640,11 +580,7 @@ function createAgentInstanceId(taskId: string): string {
   return `dispatch-agent:${taskId}:${crypto.randomUUID()}`;
 }
 
-function ensurePersistentSession(
-  sessionId: string,
-  title: string,
-  agentName: string,
-): void {
+function ensurePersistentSession(sessionId: string, title: string, agentName: string): void {
   if (Session.get(sessionId)) {
     return;
   }
@@ -827,16 +763,14 @@ async function startTaskRun(
     toolExecutor: workerRuntime.toolExecutor,
   };
 
-  const promise = executeChildRunWithAbort(
-    config,
-    orchestratorInput,
-    abortSignal,
-  ).then((result) => ({
-    runId,
-    success: result.success,
-    summary: result.summary,
-    error: result.error,
-  }));
+  const promise = executeChildRunWithAbort(config, orchestratorInput, abortSignal).then(
+    (result) => ({
+      runId,
+      success: result.success,
+      summary: result.summary,
+      error: result.error,
+    }),
+  );
 
   return {
     taskId: state.task.id,
@@ -847,10 +781,7 @@ async function startTaskRun(
   };
 }
 
-function buildExecutionPrompt(
-  objective: string,
-  state: DispatchTaskState,
-): string {
+function buildExecutionPrompt(objective: string, state: DispatchTaskState): string {
   const lines: string[] = [
     `Objective: ${objective}`,
     `Task ID: ${state.task.id}`,
@@ -867,9 +798,7 @@ function buildExecutionPrompt(
   }
 
   if (state.feedbackHistory.length > 0) {
-    lines.push(
-      `Review Feedback History:\n- ${state.feedbackHistory.join("\n- ")}`,
-    );
+    lines.push(`Review Feedback History:\n- ${state.feedbackHistory.join("\n- ")}`);
   }
 
   if (state.handoffDocument) {
@@ -898,11 +827,7 @@ async function executeChildRunWithAbort(
   return new Promise((resolve) => {
     let settled = false;
 
-    const finalize = (result: {
-      success: boolean;
-      summary: string;
-      error: string;
-    }) => {
+    const finalize = (result: { success: boolean; summary: string; error: string }) => {
       if (settled) {
         return;
       }
@@ -982,9 +907,7 @@ async function waitForNextResult(
 }
 
 function normalizeFileScope(fileScope: string[]): string[] {
-  return Array.from(
-    new Set(fileScope.filter((path) => path.trim().length > 0)),
-  );
+  return Array.from(new Set(fileScope.filter((path) => path.trim().length > 0)));
 }
 
 function acquireFileLocks(files: string[], agentId: string): boolean {
@@ -1007,10 +930,7 @@ function releaseFileLocks(files: string[], agentId: string): void {
   }
 }
 
-function cancelRunningChildren(
-  running: Map<string, RunningTask>,
-  reason: string,
-): void {
+function cancelRunningChildren(running: Map<string, RunningTask>, reason: string): void {
   for (const active of running.values()) {
     if (active.runId) {
       TaskManager.cancelRun(active.runId, reason);

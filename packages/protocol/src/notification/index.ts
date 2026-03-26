@@ -3,12 +3,7 @@ import { z } from "zod";
 export const NotificationSeverity = z.enum(["info", "warning", "error"]);
 export type NotificationSeverity = z.infer<typeof NotificationSeverity>;
 
-export const DeliveryMode = z.enum([
-  "reply_current_session",
-  "dm",
-  "new_session",
-  "new_thread",
-]);
+export const DeliveryMode = z.enum(["reply_current_session", "dm", "new_session", "new_thread"]);
 export type DeliveryMode = z.infer<typeof DeliveryMode>;
 
 export const NotificationRequest = z.object({

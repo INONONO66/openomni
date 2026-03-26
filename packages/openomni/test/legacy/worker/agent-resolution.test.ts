@@ -31,9 +31,7 @@ const FAKE_ANTHROPIC_PROVIDER: ModelsDev.Provider = {
 };
 
 function mockModelsDevGet(data?: Record<string, ModelsDev.Provider>) {
-  return spyOn(ModelsDev, "get").mockResolvedValue(
-    data ?? { anthropic: FAKE_ANTHROPIC_PROVIDER },
-  );
+  return spyOn(ModelsDev, "get").mockResolvedValue(data ?? { anthropic: FAKE_ANTHROPIC_PROVIDER });
 }
 
 describe("agent-resolution", () => {
@@ -124,9 +122,7 @@ describe("agent-resolution", () => {
 
     it("rejects disallowed tools", async () => {
       const executor = resolveToolExecutor(["read", "grep"]);
-      const results = await executor.execute([
-        { id: "call-1", tool: "write", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "call-1", tool: "write", input: {} }]);
 
       expect(results).toHaveLength(1);
       expect(results[0].isError).toBe(true);
@@ -136,9 +132,7 @@ describe("agent-resolution", () => {
 
     it("accepts allowed tools with placeholder response", async () => {
       const executor = resolveToolExecutor(["read", "write"]);
-      const results = await executor.execute([
-        { id: "call-1", tool: "read", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "call-1", tool: "read", input: {} }]);
 
       expect(results).toHaveLength(1);
       expect(results[0].toolCallId).toBe("call-1");
@@ -171,9 +165,7 @@ describe("agent-resolution", () => {
 
     it("preserves toolCallId from input", async () => {
       const executor = resolveToolExecutor(["read"]);
-      const results = await executor.execute([
-        { id: "my-call-id", tool: "read", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "my-call-id", tool: "read", input: {} }]);
 
       expect(results[0].toolCallId).toBe("my-call-id");
     });
@@ -236,9 +228,7 @@ describe("agent-resolution", () => {
     it("throws when default model also fails", async () => {
       const spy = mockModelsDevGet({});
       try {
-        await expect(resolveLLM(undefined)).rejects.toThrow(
-          "Provider not found: anthropic",
-        );
+        await expect(resolveLLM(undefined)).rejects.toThrow("Provider not found: anthropic");
       } finally {
         spy.mockRestore();
       }
@@ -279,9 +269,7 @@ describe("agent-resolution", () => {
       const spy = mockModelsDevGet();
       try {
         const config = await resolveAgentForWorker("implement");
-        expect((config.input as any).system).toContain(
-          "expert software engineer",
-        );
+        expect((config.input as any).system).toContain("expert software engineer");
       } finally {
         spy.mockRestore();
       }

@@ -141,18 +141,16 @@ describe("ReviewLoop", () => {
     it("throws when LLM returns invalid JSON", async () => {
       setupMockResponse("This is definitely not JSON");
 
-      await expect(
-        ReviewLoop.review(defaultInput, defaultConfig),
-      ).rejects.toThrow(/failed to parse/i);
+      await expect(ReviewLoop.review(defaultInput, defaultConfig)).rejects.toThrow(
+        /failed to parse/i,
+      );
     });
 
     it("includes guardrail in review prompt when step has guardrail", async () => {
       let capturedInput: any;
       mockRunFn = async (input: any, sink: Sink) => {
         capturedInput = input;
-        sink.onMessage(
-          createAssistantMessage(JSON.stringify({ decision: "accept" })),
-        );
+        sink.onMessage(createAssistantMessage(JSON.stringify({ decision: "accept" })));
         return { type: "stop" } as Run.Outcome;
       };
 
@@ -161,20 +159,15 @@ describe("ReviewLoop", () => {
         guardrail: "Must not expose user passwords in logs",
       };
 
-      await ReviewLoop.review(
-        { ...defaultInput, step: stepWithGuardrail },
-        defaultConfig,
-      );
+      await ReviewLoop.review({ ...defaultInput, step: stepWithGuardrail }, defaultConfig);
 
       // The user message (first in messages array) should contain the guardrail
       const messages = capturedInput.messages as Message.WithParts[];
       const userMsg = messages[0];
-      const textPart = userMsg.parts.find(
-        (p: Message.Part) => p.type === "text",
-      ) as Message.TextPart | undefined;
-      expect(textPart?.text).toContain(
-        "Must not expose user passwords in logs",
-      );
+      const textPart = userMsg.parts.find((p: Message.Part) => p.type === "text") as
+        | Message.TextPart
+        | undefined;
+      expect(textPart?.text).toContain("Must not expose user passwords in logs");
     });
   });
 
@@ -205,9 +198,7 @@ describe("ReviewLoop", () => {
 
   describe("generateHandoff", () => {
     it("returns a non-empty handoff document", async () => {
-      setupMockResponse(
-        "## Handoff Document\n\nThe login feature was rejected because...",
-      );
+      setupMockResponse("## Handoff Document\n\nThe login feature was rejected because...");
 
       const handoff = await ReviewLoop.generateHandoff(
         defaultInput,

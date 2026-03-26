@@ -55,10 +55,7 @@ export namespace ReviewLoop {
     ].join("\n");
   }
 
-  export async function review(
-    input: ReviewInput,
-    config: ReviewConfig,
-  ): Promise<ReviewOutput> {
+  export async function review(input: ReviewInput, config: ReviewConfig): Promise<ReviewOutput> {
     const agent = ChatAgent.create({
       model: config.model,
       systemPrompt: config.systemPrompt ?? DEFAULT_REVIEW_PROMPT,
@@ -73,9 +70,7 @@ export namespace ReviewLoop {
     try {
       parsed = JSON.parse(result.text);
     } catch {
-      throw new Error(
-        `Failed to parse review response as JSON: ${result.text}`,
-      );
+      throw new Error(`Failed to parse review response as JSON: ${result.text}`);
     }
 
     if (parsed.decision !== "accept" && parsed.decision !== "reject") {
@@ -88,10 +83,7 @@ export namespace ReviewLoop {
     };
   }
 
-  export function shouldHandoff(
-    attemptNumber: number,
-    maxAttempts: number,
-  ): boolean {
+  export function shouldHandoff(attemptNumber: number, maxAttempts: number): boolean {
     return attemptNumber >= maxAttempts - 1;
   }
 

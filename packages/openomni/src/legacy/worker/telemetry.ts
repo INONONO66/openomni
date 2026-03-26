@@ -85,10 +85,7 @@ export namespace Observability {
    * @param metadata - Correlation IDs and timing information
    * @returns Enriched event with metadata
    */
-  export function enrichEvent(
-    event: unknown,
-    metadata: EventMetadata,
-  ): unknown {
+  export function enrichEvent(event: unknown, metadata: EventMetadata): unknown {
     if (typeof event !== "object" || event === null) {
       return {
         data: event,
@@ -136,11 +133,7 @@ export namespace Observability {
    * @param event - The lifecycle event name
    * @param metrics - Run metrics to include
    */
-  export function emitRunEvent(
-    runId: string,
-    event: string,
-    metrics: RunMetrics,
-  ): void {
+  export function emitRunEvent(runId: string, event: string, metrics: RunMetrics): void {
     // Store metrics for later retrieval
     metricsStore.runs.set(runId, { ...metrics });
 

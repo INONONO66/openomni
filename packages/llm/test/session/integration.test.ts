@@ -78,9 +78,7 @@ describe("Integration", () => {
     expect(Session.getParts(userMsg.id)).toHaveLength(1);
     expect(Session.getParts(assistantMsg.id)).toHaveLength(1);
     expect(Session.getParts(userMsg.id)[0].type).toBe("text");
-    expect((Session.getParts(userMsg.id)[0] as Message.TextPart).text).toBe(
-      "Hello, world!",
-    );
+    expect((Session.getParts(userMsg.id)[0] as Message.TextPart).text).toBe("Hello, world!");
   });
 
   it("should fire bus events on session changes", () => {

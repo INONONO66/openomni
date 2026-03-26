@@ -12,11 +12,7 @@ import type {
   FailureAction,
   FailureDecision,
 } from "./execution-types";
-import type {
-  OrchestratorConfig,
-  OrchestratorRunInput,
-  ToolExecutor,
-} from "../worker";
+import type { OrchestratorConfig, OrchestratorRunInput, ToolExecutor } from "../worker";
 
 const DEFAULT_MAX_SUBAGENT_DEPTH = 3;
 const DISPATCH_AGENT_ID = "dispatch-supervisor";
@@ -185,11 +181,7 @@ export async function requestHandoffDocument(
     toolExecutor: context.toolExecutor,
   };
 
-  const result = await executeChildRunWithAbort(
-    config,
-    orchestratorInput,
-    abortSignal,
-  );
+  const result = await executeChildRunWithAbort(config, orchestratorInput, abortSignal);
 
   if (!result.success || !result.summary.trim()) {
     return [
@@ -206,9 +198,7 @@ export async function requestHandoffDocument(
 export function rotateAgent(state: DispatchTaskState, objective: string): void {
   const agent = BuiltinAgentRegistry.get(state.task.agentType);
   if (!agent) {
-    state.errors.push(
-      `Unable to rotate agent: ${state.task.agentType} not found`,
-    );
+    state.errors.push(`Unable to rotate agent: ${state.task.agentType} not found`);
     state.status = "failed";
     return;
   }
@@ -265,9 +255,7 @@ async function requestFailureDecision(
   const fallbackDecision: FailureDecision = {
     action: failedStep.attempts <= 1 ? "retry" : "skip",
     reasoning:
-      failedStep.attempts <= 1
-        ? "Retry once before skipping"
-        : "Skip after repeated failure",
+      failedStep.attempts <= 1 ? "Retry once before skipping" : "Skip after repeated failure",
   };
 
   let selectedDecision = fallbackDecision;
@@ -344,8 +332,7 @@ function defaultReviewDecision(summary: string): DispatchReviewDecision {
   if (normalized.startsWith("reject:")) {
     return {
       decision: "reject",
-      feedback:
-        summary.trim().slice("reject:".length).trim() || "Result rejected",
+      feedback: summary.trim().slice("reject:".length).trim() || "Result rejected",
     };
   }
 

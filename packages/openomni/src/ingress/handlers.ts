@@ -52,11 +52,7 @@ export namespace IngressHandlers {
     };
 
     const result = await TeamOrchestrator.execute(plan, orchestratorConfig);
-    SessionBridge.storeTeamResult(
-      ctx.sessionId,
-      result,
-      ctx.event.agents.reviewer.model,
-    );
+    SessionBridge.storeTeamResult(ctx.sessionId, result, ctx.event.agents.reviewer.model);
 
     return {
       mode: "team",
@@ -95,11 +91,7 @@ export namespace IngressHandlers {
     const runResult = await agent.run({ messages });
     const output = runResult.text;
 
-    SessionBridge.storeDirectResult(
-      ctx.sessionId,
-      output,
-      ctx.event.agent.model,
-    );
+    SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     return {
       mode: "direct",

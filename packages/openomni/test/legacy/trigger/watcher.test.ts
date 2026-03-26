@@ -41,12 +41,9 @@ describe("FilesystemWatcher", () => {
   const createWatcher = (overrides: Partial<WatcherConfig> = {}) => {
     watcher?.clearAll();
     events = [];
-    watcher = new FilesystemWatcher(
-      { ...baseConfig, ...overrides },
-      (event) => {
-        events.push(event);
-      },
-    );
+    watcher = new FilesystemWatcher({ ...baseConfig, ...overrides }, (event) => {
+      events.push(event);
+    });
     return watcher;
   };
 

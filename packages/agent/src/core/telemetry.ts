@@ -60,10 +60,7 @@ export namespace Telemetry {
   }
 
   export function counter(name: string): {
-    add: (
-      value: number,
-      attributes?: Record<string, string | number | boolean>,
-    ) => void;
+    add: (value: number, attributes?: Record<string, string | number | boolean>) => void;
   } {
     if (!_config.enabled || !_meter) {
       return { add: () => {} };
@@ -75,10 +72,7 @@ export namespace Telemetry {
   }
 
   export function histogram(name: string): {
-    record: (
-      value: number,
-      attributes?: Record<string, string | number | boolean>,
-    ) => void;
+    record: (value: number, attributes?: Record<string, string | number | boolean>) => void;
   } {
     if (!_config.enabled || !_meter) {
       return { record: () => {} };

@@ -82,20 +82,12 @@ export class TaskStateMachine {
    * @param lastRun - Last completed run (if any)
    * @returns Derived task status
    */
-  static deriveStatus(
-    task: Task.Info,
-    pendingRun?: Task.Run,
-    lastRun?: Task.Run,
-  ): Task.Status {
+  static deriveStatus(task: Task.Info, pendingRun?: Task.Run, lastRun?: Task.Run): Task.Status {
     // If there's a pending/active run, use its status
     if (pendingRun) {
       const runStatus = pendingRun.status;
       // Map Task.Run status to Task status
-      if (
-        runStatus === "scheduled" ||
-        runStatus === "running" ||
-        runStatus === "blocked"
-      ) {
+      if (runStatus === "scheduled" || runStatus === "running" || runStatus === "blocked") {
         return runStatus;
       }
     }
@@ -103,11 +95,7 @@ export class TaskStateMachine {
     // If last run is in terminal state
     if (lastRun) {
       const runStatus = lastRun.status;
-      if (
-        runStatus === "done" ||
-        runStatus === "failed" ||
-        runStatus === "cancelled"
-      ) {
+      if (runStatus === "done" || runStatus === "failed" || runStatus === "cancelled") {
         // Auto-reset to idle for recurring tasks
         if (this.shouldAutoReset(task)) {
           return "idle";
@@ -134,9 +122,7 @@ export class TaskStateMachine {
 
     // Validate transition
     if (!this.validateTransition(currentStatus, newStatus)) {
-      throw new Error(
-        `Invalid state transition: ${currentStatus} -> ${newStatus}`,
-      );
+      throw new Error(`Invalid state transition: ${currentStatus} -> ${newStatus}`);
     }
 
     // Apply transition
@@ -190,16 +176,8 @@ export class TaskStatusManager {
    * @param lastRun - Last completed run
    * @returns Updated task with derived status
    */
-  static updateFromRun(
-    task: Task.Info,
-    pendingRun?: Task.Run,
-    lastRun?: Task.Run,
-  ): Task.Info {
-    const derivedStatus = TaskStateMachine.deriveStatus(
-      task,
-      pendingRun,
-      lastRun,
-    );
+  static updateFromRun(task: Task.Info, pendingRun?: Task.Run, lastRun?: Task.Run): Task.Info {
+    const derivedStatus = TaskStateMachine.deriveStatus(task, pendingRun, lastRun);
 
     return {
       ...task,

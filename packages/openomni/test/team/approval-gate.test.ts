@@ -56,10 +56,7 @@ const defaultTeammateConfig: Teammate.TeammateConfig = {
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
 };
 
-function makeConfig(overrides?: {
-  approvalGate?: ApprovalGate.Gate;
-  maxAttemptsPerStep?: number;
-}) {
+function makeConfig(overrides?: { approvalGate?: ApprovalGate.Gate; maxAttemptsPerStep?: number }) {
   return {
     reviewModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     teammates: new Map<string, Teammate.TeammateConfig>(),
@@ -177,10 +174,7 @@ describe("TeamOrchestrator with ApprovalGate", () => {
 
     const plan = makePlan([makeStep("s1", { requiresApproval: true })]);
 
-    const resultPromise = TeamOrchestrator.execute(
-      plan,
-      makeConfig({ approvalGate: gate }),
-    );
+    const resultPromise = TeamOrchestrator.execute(plan, makeConfig({ approvalGate: gate }));
 
     // Small delay to let orchestrator reach the approval gate
     await new Promise((r) => setTimeout(r, 10));
@@ -197,10 +191,7 @@ describe("TeamOrchestrator with ApprovalGate", () => {
 
     const plan = makePlan([makeStep("s1", { requiresApproval: true })]);
 
-    const resultPromise = TeamOrchestrator.execute(
-      plan,
-      makeConfig({ approvalGate: gate }),
-    );
+    const resultPromise = TeamOrchestrator.execute(plan, makeConfig({ approvalGate: gate }));
 
     await new Promise((r) => setTimeout(r, 10));
     gate.respond("rejected");
@@ -215,10 +206,7 @@ describe("TeamOrchestrator with ApprovalGate", () => {
 
     const plan = makePlan([makeStep("s1", { requiresApproval: true })]);
 
-    const result = await TeamOrchestrator.execute(
-      plan,
-      makeConfig({ approvalGate: gate }),
-    );
+    const result = await TeamOrchestrator.execute(plan, makeConfig({ approvalGate: gate }));
 
     expect(result.status).toBe("failed");
     expect(result.failedSteps).toEqual(["s1"]);
@@ -232,10 +220,7 @@ describe("TeamOrchestrator with ApprovalGate", () => {
       makeStep("s2", { dependsOn: ["s1"] }),
     ]);
 
-    const resultPromise = TeamOrchestrator.execute(
-      plan,
-      makeConfig({ approvalGate: gate }),
-    );
+    const resultPromise = TeamOrchestrator.execute(plan, makeConfig({ approvalGate: gate }));
 
     await new Promise((r) => setTimeout(r, 10));
     gate.respond("rejected");
@@ -279,10 +264,7 @@ describe("TeamOrchestrator with ApprovalGate", () => {
 
     const plan = makePlan([makeStep("s1", { requiresApproval: true })]);
 
-    const result = await TeamOrchestrator.execute(
-      plan,
-      makeConfig({ approvalGate: customGate }),
-    );
+    const result = await TeamOrchestrator.execute(plan, makeConfig({ approvalGate: customGate }));
 
     expect(result.status).toBe("completed");
     expect(result.completedSteps).toEqual(["s1"]);

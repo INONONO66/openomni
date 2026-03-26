@@ -119,10 +119,7 @@ export async function assignAgentsToReadyTasks(
   );
 
   for (const state of readyStates) {
-    const fallbackAgent = resolveFallbackAgentAssignment(
-      state.task,
-      hybridRuntime.availableAgents,
-    );
+    const fallbackAgent = resolveFallbackAgentAssignment(state.task, hybridRuntime.availableAgents);
     const assignedAgent = assignmentByStep.get(state.task.id) ?? fallbackAgent;
     if (!assignedAgent) {
       continue;
@@ -148,10 +145,7 @@ export function resolveFallbackAgentAssignment(
     return task.suggestedAgent;
   }
 
-  if (
-    availableAgents.includes(task.agentType) &&
-    BuiltinAgentRegistry.has(task.agentType)
-  ) {
+  if (availableAgents.includes(task.agentType) && BuiltinAgentRegistry.has(task.agentType)) {
     return task.agentType;
   }
 
@@ -169,11 +163,7 @@ export async function resolveWorkerRuntimeForTask(
     return cached;
   }
 
-  const pending = resolveWorkerRuntimeForTaskInternal(
-    agentId,
-    context,
-    hybridRuntime,
-  );
+  const pending = resolveWorkerRuntimeForTaskInternal(agentId, context, hybridRuntime);
   workerRuntimeCache?.set(agentId, pending);
   return pending;
 }
@@ -227,11 +217,7 @@ async function requestAgentAssignments(
           };
         }
 
-        const parsed = parseAgentAssignments(
-          call.input,
-          stepIds,
-          availableAgentIds,
-        );
+        const parsed = parseAgentAssignments(call.input, stepIds, availableAgentIds);
         if (parsed.length > 0) {
           selectedAssignments = parsed;
         }
@@ -265,10 +251,7 @@ async function requestAgentAssignments(
   );
 
   const assignmentByStep = new Map(
-    fallbackAssignments.map((assignment) => [
-      assignment.stepId,
-      assignment.agentId,
-    ]),
+    fallbackAssignments.map((assignment) => [assignment.stepId, assignment.agentId]),
   );
   for (const assignment of selectedAssignments) {
     assignmentByStep.set(assignment.stepId, assignment.agentId);
@@ -337,15 +320,11 @@ function parseAgentAssignments(
 }
 
 function resolveAvailableAgentIds(availableAgents?: string[]): string[] {
-  const registeredAgentIds = new Set(
-    BuiltinAgentRegistry.list().map((agent) => agent.name),
-  );
+  const registeredAgentIds = new Set(BuiltinAgentRegistry.list().map((agent) => agent.name));
 
   if (availableAgents && availableAgents.length > 0) {
     return Array.from(
-      new Set(
-        availableAgents.filter((agentId) => registeredAgentIds.has(agentId)),
-      ),
+      new Set(availableAgents.filter((agentId) => registeredAgentIds.has(agentId))),
     );
   }
 
@@ -389,8 +368,7 @@ async function resolveWorkerRuntimeForTaskInternal(
   try {
     const resolved = await resolveAgentForWorker(agentId);
     const systemPrompt =
-      typeof resolved.input.system === "string" &&
-      resolved.input.system.trim().length > 0
+      typeof resolved.input.system === "string" && resolved.input.system.trim().length > 0
         ? resolved.input.system.trim()
         : agent.systemPrompt;
 
@@ -416,10 +394,7 @@ async function resolveWorkerRuntimeForTaskInternal(
   }
 }
 
-function createFilteredToolExecutor(
-  allowedTools: string[],
-  upstream: ToolExecutor,
-): ToolExecutor {
+function createFilteredToolExecutor(allowedTools: string[], upstream: ToolExecutor): ToolExecutor {
   const allowed = new Set(allowedTools);
 
   return {
@@ -440,8 +415,7 @@ function createFilteredToolExecutor(
         allowedCalls.push(call);
       }
 
-      const upstreamResults =
-        allowedCalls.length > 0 ? await upstream.execute(allowedCalls) : [];
+      const upstreamResults = allowedCalls.length > 0 ? await upstream.execute(allowedCalls) : [];
       const upstreamByCallId = new Map(
         upstreamResults.map((result) => [result.toolCallId, result]),
       );

@@ -45,11 +45,7 @@ beforeEach(() => {
   publishedEvents.length = 0;
 });
 
-function makeStep(
-  stepId: string,
-  dependsOn: string[] = [],
-  suggestedAgent?: string,
-): PlanStep {
+function makeStep(stepId: string, dependsOn: string[] = [], suggestedAgent?: string): PlanStep {
   return {
     stepId,
     description: `${stepId} task`,
@@ -80,8 +76,7 @@ function makeConfig(overrides?: {
 }) {
   return {
     reviewModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    teammates:
-      overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
+    teammates: overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
     defaultTeammateConfig,
     maxAttemptsPerStep: overrides?.maxAttemptsPerStep,
   };
@@ -95,9 +90,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const planCreatedEvent = publishedEvents.find(
-      (e) => e.eventName === "plan.created",
-    );
+    const planCreatedEvent = publishedEvents.find((e) => e.eventName === "plan.created");
     expect(planCreatedEvent).toBeDefined();
     expect(planCreatedEvent?.data).toMatchObject({
       payload: {
@@ -117,9 +110,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1"), makeStep("s2")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const assignedEvents = publishedEvents.filter(
-      (e) => e.eventName === "step.assigned",
-    );
+    const assignedEvents = publishedEvents.filter((e) => e.eventName === "step.assigned");
     expect(assignedEvents.length).toBe(2);
     expect(assignedEvents[0]?.data).toMatchObject({
       payload: {
@@ -144,9 +135,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const startedEvent = publishedEvents.find(
-      (e) => e.eventName === "step.started",
-    );
+    const startedEvent = publishedEvents.find((e) => e.eventName === "step.started");
     expect(startedEvent).toBeDefined();
     expect(startedEvent?.data).toMatchObject({
       payload: {
@@ -165,9 +154,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const completedEvent = publishedEvents.find(
-      (e) => e.eventName === "step.completed",
-    );
+    const completedEvent = publishedEvents.find((e) => e.eventName === "step.completed");
     expect(completedEvent).toBeDefined();
     expect(completedEvent?.data).toMatchObject({
       payload: {
@@ -185,9 +172,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const decisionEvent = publishedEvents.find(
-      (e) => e.eventName === "review.decision",
-    );
+    const decisionEvent = publishedEvents.find((e) => e.eventName === "review.decision");
     expect(decisionEvent).toBeDefined();
     expect(decisionEvent?.data).toMatchObject({
       payload: {
@@ -209,9 +194,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig({ maxAttemptsPerStep: 3 }));
 
-    const failedEvent = publishedEvents.find(
-      (e) => e.eventName === "step.failed",
-    );
+    const failedEvent = publishedEvents.find((e) => e.eventName === "step.failed");
     expect(failedEvent).toBeDefined();
     expect(failedEvent?.data).toMatchObject({
       payload: {
@@ -228,9 +211,7 @@ describe("TeamOrchestrator event stream", () => {
     const plan = makePlan([makeStep("s1")]);
     await TeamOrchestrator.execute(plan, makeConfig());
 
-    const completeEvent = publishedEvents.find(
-      (e) => e.eventName === "execution.complete",
-    );
+    const completeEvent = publishedEvents.find((e) => e.eventName === "execution.complete");
     expect(completeEvent).toBeDefined();
     expect(completeEvent?.data).toMatchObject({
       payload: {

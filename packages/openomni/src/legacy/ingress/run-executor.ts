@@ -89,10 +89,7 @@ export class DefaultRunExecutor implements RunExecutor {
           };
         }
 
-        const triggerResult = await TaskManager.trigger(
-          request.taskId,
-          request.triggerSignal,
-        );
+        const triggerResult = await TaskManager.trigger(request.taskId, request.triggerSignal);
 
         if ("error" in triggerResult) {
           return {
@@ -278,9 +275,7 @@ export class DefaultRunExecutor implements RunExecutor {
           },
         };
 
-        const result = await notificationAdapter.notify(
-          request.notificationRequest,
-        );
+        const result = await notificationAdapter.notify(request.notificationRequest);
 
         return {
           success: result.delivered,

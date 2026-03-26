@@ -53,9 +53,7 @@ export namespace Router {
 
     if (match.tags && match.tags.length > 0) {
       const envelopeTags = Array.isArray(envelope.meta?.tags)
-        ? (envelope.meta.tags as unknown[]).filter(
-            (tag): tag is string => typeof tag === "string",
-          )
+        ? (envelope.meta.tags as unknown[]).filter((tag): tag is string => typeof tag === "string")
         : [];
 
       if (!match.tags.every((tag) => envelopeTags.includes(tag))) {
@@ -181,10 +179,7 @@ export namespace Router {
   /**
    * Configure the deduplication window and max entries
    */
-  export function configureDedupeWindow(
-    windowMs: number,
-    maxEntries: number,
-  ): void {
+  export function configureDedupeWindow(windowMs: number, maxEntries: number): void {
     dedupeWindowMs = windowMs;
     maxDedupeEntries = maxEntries;
   }

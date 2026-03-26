@@ -7,9 +7,7 @@ import {
   type AuditEntry,
 } from "../../../src/legacy/agent/communication";
 
-const createEnvelope = (
-  overrides: Partial<MessageEnvelope> = {},
-): MessageEnvelope => ({
+const createEnvelope = (overrides: Partial<MessageEnvelope> = {}): MessageEnvelope => ({
   traceId: randomUUID(),
   sessionId: randomUUID(),
   runId: randomUUID(),
