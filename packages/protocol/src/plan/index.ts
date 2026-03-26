@@ -51,17 +51,6 @@ export const PlanSchema = z
 
 export type Plan = z.infer<typeof PlanSchema>;
 
-export const PlanConfigSchema = z.object({
-  model: z.object({
-    provider: z.string(),
-    id: z.string(),
-  }),
-  systemPrompt: z.string().optional(),
-  reviewPrompt: z.string().optional(),
-});
-
-export type PlanConfig = z.infer<typeof PlanConfigSchema>;
-
 export const PlanResultSchema = z.object({
   plan: PlanSchema,
   reviewNotes: z.string().optional(),
