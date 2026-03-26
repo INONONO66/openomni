@@ -52,7 +52,9 @@ function isStale(lockPath: string, staleMs: number): boolean {
 function forceRemoveLock(lockPath: string): void {
   try {
     rmSync(lockPath, { recursive: true, force: true });
-  } catch {}
+  } catch {
+    void 0;
+  }
 }
 
 function writeLockInfo(lockPath: string): void {
@@ -98,7 +100,9 @@ export namespace FileLock {
   export function release(lockPath: string): void {
     try {
       rmSync(lockPath, { recursive: true, force: true });
-    } catch {}
+    } catch {
+      void 0;
+    }
   }
 
   export function withLock<T>(lockPath: string, fn: () => T, options?: LockOptions): T {
@@ -108,7 +112,9 @@ export namespace FileLock {
     } finally {
       try {
         release(lockPath);
-      } catch {}
+      } catch {
+        void 0;
+      }
     }
   }
 

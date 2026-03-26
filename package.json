@@ -4,6 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "prepare": "lefthook install",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "format": "bunx biome format --write .",
@@ -12,6 +13,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.0",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "lefthook": "^2.1.4",
     "turbo": "^2.8.1",
     "typescript": "5.9.2"
   },
