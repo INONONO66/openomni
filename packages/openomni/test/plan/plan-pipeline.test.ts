@@ -1,6 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Gate, Plan } from "@openomni/protocol";
 
+// Prevent module cache contamination from @openomni/llm missing exports
+mock.module("@openomni/agent", () => ({
+  ChatAgent: { create: () => ({ run: async () => ({ text: "{}" }) }) },
+}));
+
 const mockGenerate = mock(async () => ({ plan: createPlan("plan-default") }));
 
 mock.module("../../src/plan/plan-agent", () => ({
