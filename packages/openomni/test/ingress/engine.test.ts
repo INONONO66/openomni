@@ -34,6 +34,10 @@ mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
   run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
 }));
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;

@@ -29,6 +29,10 @@ mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
   run: (input: any, sink: Sink) => mockRunFn(input, sink),
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
 }));
 
 // --- Dynamic import after mock ---

@@ -2,7 +2,6 @@ import { describe, test, expect } from "bun:test";
 import {
   PlanStepSchema,
   PlanSchema,
-  PlanConfigSchema,
   PlanResultSchema,
 } from "../src/plan/index.js";
 
@@ -170,51 +169,6 @@ describe("Plan", () => {
         // missing goal
         steps: [],
         createdAt: now,
-      }),
-    ).toThrow();
-  });
-});
-
-describe("PlanConfig", () => {
-  test("should parse valid config with required fields", () => {
-    const config = PlanConfigSchema.parse({
-      model: {
-        provider: "anthropic",
-        id: "claude-3-5-sonnet",
-      },
-    });
-    expect(config.model.provider).toBe("anthropic");
-    expect(config.model.id).toBe("claude-3-5-sonnet");
-  });
-
-  test("should parse config with optional prompts", () => {
-    const config = PlanConfigSchema.parse({
-      model: {
-        provider: "openai",
-        id: "gpt-4",
-      },
-      systemPrompt: "You are a helpful assistant",
-      reviewPrompt: "Review the plan for completeness",
-    });
-    expect(config.systemPrompt).toBe("You are a helpful assistant");
-    expect(config.reviewPrompt).toBe("Review the plan for completeness");
-  });
-
-  test("should reject missing model", () => {
-    expect(() =>
-      PlanConfigSchema.parse({
-        // missing model
-      }),
-    ).toThrow();
-  });
-
-  test("should reject missing model provider", () => {
-    expect(() =>
-      PlanConfigSchema.parse({
-        model: {
-          // missing provider
-          id: "claude-3-5-sonnet",
-        },
       }),
     ).toThrow();
   });

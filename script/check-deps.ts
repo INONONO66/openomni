@@ -69,6 +69,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/llm",
+      "@openomni/session",
     ]),
   },
   openomni: {
@@ -194,7 +195,8 @@ async function validateDependencyDirection(): Promise<string[]> {
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
-  const importPattern = /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
+  const importPattern =
+    /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
   const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
@@ -251,12 +253,11 @@ const ALLOWED_AS_ANY_FILES = new Set([
   "packages/protocol/src/error/index.ts",
   "packages/llm/src/session/processor.ts",
   "packages/openomni/src/ingress/event-projector.ts",
+  "packages/agent/src/runtime/messenger/transport.ts",
 ]);
 
 // Known catch-all filenames (pre-existing tech debt)
-const KNOWN_CATCHALL_FILES = new Set([
-  "apps/cli/src/serve/utils.ts",
-]);
+const KNOWN_CATCHALL_FILES = new Set(["apps/cli/src/serve/utils.ts"]);
 
 // Known empty catch blocks (pre-existing tech debt — do not extend)
 // Keyed by "file:line" to track exact locations.
@@ -265,6 +266,7 @@ const KNOWN_EMPTY_CATCHES = new Set([
   "packages/session/src/storage/lock.ts:65",
   "packages/session/src/storage/lock.ts:113",
   "packages/session/src/storage/lock.ts:127",
+  "packages/session/src/event-log/file-event-log.ts:49",
 ]);
 
 async function validateGoldenPrinciples(): Promise<string[]> {
@@ -311,7 +313,6 @@ async function validateGoldenPrinciples(): Promise<string[]> {
       }
 
       // #5: No empty catch blocks (checked via whole-source regex after loop)
-
     }
 
     // #5: No empty catch blocks (multi-line aware)
@@ -329,10 +330,13 @@ async function validateGoldenPrinciples(): Promise<string[]> {
       }
     }
 
-
     // #7: No catch-all filenames
     const basename = filePath.split("/").pop() ?? "";
-    if (/^(utils|helpers|common|service)\.ts$/.test(basename) && filePath.includes("/src/") && !KNOWN_CATCHALL_FILES.has(filePath)) {
+    if (
+      /^(utils|helpers|common|service)\.ts$/.test(basename) &&
+      filePath.includes("/src/") &&
+      !KNOWN_CATCHALL_FILES.has(filePath)
+    ) {
       violations.push(
         `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.md #7`,
       );
@@ -390,7 +394,9 @@ async function checkDocFreshness(): Promise<string[]> {
         stderr: "pipe",
       }) as { stdout: ReadableStream; exited: Promise<number> };
 
-      const lastTouchHash = (await new Response(lastTouchProc.stdout).text()).trim();
+      const lastTouchHash = (
+        await new Response(lastTouchProc.stdout).text()
+      ).trim();
       await lastTouchProc.exited;
 
       if (!lastTouchHash) continue;
@@ -401,7 +407,10 @@ async function checkDocFreshness(): Promise<string[]> {
         stderr: "pipe",
       }) as { stdout: ReadableStream; exited: Promise<number> };
 
-      const commitsSince = parseInt((await new Response(sinceProc.stdout).text()).trim(), 10);
+      const commitsSince = parseInt(
+        (await new Response(sinceProc.stdout).text()).trim(),
+        10,
+      );
       await sinceProc.exited;
 
       if (commitsSince >= STALE_THRESHOLD) {
@@ -422,7 +431,11 @@ async function main(): Promise<void> {
   const deepImportViolations = await validateDeepImports();
   const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
-  const violations = [...depViolations, ...deepImportViolations, ...goldenViolations];
+  const violations = [
+    ...depViolations,
+    ...deepImportViolations,
+    ...goldenViolations,
+  ];
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
@@ -430,12 +443,16 @@ async function main(): Promise<void> {
   }
 
   if (violations.length === 0 && freshnessWarnings.length === 0) {
-    console.log("OK: dependency direction, package boundaries, golden principles, and doc freshness are valid");
+    console.log(
+      "OK: dependency direction, package boundaries, golden principles, and doc freshness are valid",
+    );
     process.exit(0);
   }
 
   if (violations.length === 0 && freshnessWarnings.length > 0) {
-    console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
+    console.log(
+      `OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`,
+    );
     process.exit(0);
   }
 

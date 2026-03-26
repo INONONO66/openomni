@@ -1,6 +1,8 @@
 // @openomni/openomni — Orchestration package
 
 export * from "./plan/plan-agent.js";
+export * from "./plan/structural-gate.js";
+export * from "./plan/plan-pipeline.js";
 export * from "./team/index.js";
 export * from "./dag/index.js";
 

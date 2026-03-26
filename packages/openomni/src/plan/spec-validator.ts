@@ -19,6 +19,10 @@ export interface SpecValidationResult {
   issues: SpecIssue[];
 }
 
+/**
+ * @deprecated Use StructuralGate from "./structural-gate.js" instead.
+ * SpecValidator is kept for backward compatibility only.
+ */
 export namespace SpecValidator {
   export function validate(
     plan: Plan,

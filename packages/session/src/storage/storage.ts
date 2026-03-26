@@ -114,6 +114,10 @@ export namespace Storage {
     adapter = newAdapter;
   }
 
+  export function get(): Adapter {
+    return adapter;
+  }
+
   export function getAdapter(): Adapter {
     return adapter;
   }
