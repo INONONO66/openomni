@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Message } from "@openomni/protocol";
 import type { InboundEvent, Plan } from "@openomni/protocol";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
@@ -88,6 +88,10 @@ afterEach(() => {
   if (originalFns.storeDirectResult) {
     SessionBridge.storeDirectResult = originalFns.storeDirectResult;
   }
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 function createSession(): string {

@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Run, Sink } from "@openomni/protocol";
 
 // --- Mock setup (must be before dynamic import) ---
@@ -41,6 +41,10 @@ let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
 
 beforeAll(async () => {
   ({ PlanAgent } = await import("../../src/plan/plan-agent"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 // --- Helpers ---

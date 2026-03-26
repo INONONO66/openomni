@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { InboundEvent, Message, Run, Sink } from "@openomni/protocol";
 import { ZodError } from "zod";
 
@@ -50,6 +50,10 @@ let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBrid
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
   ({ SessionBridge } = await import("../../src/ingress/session-bridge"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 beforeEach(() => {

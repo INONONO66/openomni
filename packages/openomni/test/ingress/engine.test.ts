@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Run, Sink } from "@openomni/protocol";
 import type { InboundEvent } from "@openomni/protocol";
 
@@ -44,6 +44,10 @@ let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 beforeEach(() => {
