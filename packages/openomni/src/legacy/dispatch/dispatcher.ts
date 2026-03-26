@@ -82,32 +82,16 @@ export namespace Dispatcher {
       }
 
       case "gt":
-        return (
-          typeof actualValue === "number" &&
-          typeof value === "number" &&
-          actualValue > value
-        );
+        return typeof actualValue === "number" && typeof value === "number" && actualValue > value;
 
       case "gte":
-        return (
-          typeof actualValue === "number" &&
-          typeof value === "number" &&
-          actualValue >= value
-        );
+        return typeof actualValue === "number" && typeof value === "number" && actualValue >= value;
 
       case "lt":
-        return (
-          typeof actualValue === "number" &&
-          typeof value === "number" &&
-          actualValue < value
-        );
+        return typeof actualValue === "number" && typeof value === "number" && actualValue < value;
 
       case "lte":
-        return (
-          typeof actualValue === "number" &&
-          typeof value === "number" &&
-          actualValue <= value
-        );
+        return typeof actualValue === "number" && typeof value === "number" && actualValue <= value;
 
       default:
         return false;
@@ -119,10 +103,7 @@ export namespace Dispatcher {
    * mode: 'all' requires all conditions to pass (AND logic)
    * mode: 'any' requires at least one condition to pass (OR logic)
    */
-  export function evaluateFilter(
-    filter: Task.TriggerFilter,
-    payload: unknown,
-  ): boolean {
+  export function evaluateFilter(filter: Task.TriggerFilter, payload: unknown): boolean {
     const { conditions, mode } = filter;
 
     if (conditions.length === 0) return true;

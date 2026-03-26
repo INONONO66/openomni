@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  convertMcpTool,
-  convertMcpResult,
-} from "../../../src/runtime/mcp/convert";
+import { convertMcpTool, convertMcpResult } from "../../../src/runtime/mcp/convert";
 
 describe("convertMcpTool", () => {
   it("converts basic MCP tool to Tool.Spec", () => {
@@ -23,10 +20,7 @@ describe("convertMcpTool", () => {
   });
 
   it("namespaces tool name with server name", () => {
-    const spec = convertMcpTool(
-      { name: "read", description: "Read" },
-      "fs-server",
-    );
+    const spec = convertMcpTool({ name: "read", description: "Read" }, "fs-server");
     expect(spec.name).toBe("fs-server.read");
   });
 

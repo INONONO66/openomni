@@ -12,9 +12,7 @@ export function toModelMessages(
     if (msg.parts.length === 0) continue;
 
     if (msg.info.role === "user") {
-      const textParts = msg.parts.filter(
-        (p): p is Message.TextPart => p.type === "text",
-      );
+      const textParts = msg.parts.filter((p): p is Message.TextPart => p.type === "text");
       const content = textParts.map((p) => p.text).join("\n");
       if (content.length > 0) {
         coreMessages.push({

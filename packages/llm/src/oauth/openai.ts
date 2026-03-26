@@ -2,8 +2,7 @@ import { AuthError, TokenRefreshError } from "../error";
 
 export const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 export const ISSUER = "https://auth.openai.com";
-export const CODEX_API_ENDPOINT =
-  "https://chatgpt.com/backend-api/codex/responses";
+export const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 export const OAUTH_PORT = 1455;
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000;
 
@@ -44,11 +43,7 @@ let pendingOAuth:
     }
   | undefined;
 
-export function buildAuthorizeUrl(
-  redirectUri: string,
-  pkce: PkceCodes,
-  state: string,
-): string {
+export function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CLIENT_ID,
@@ -89,9 +84,7 @@ export async function exchangeCodeForTokens(
   return response.json() as Promise<TokenResponse>;
 }
 
-export async function refreshAccessToken(
-  refreshToken: string,
-): Promise<TokenResponse> {
+export async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -110,9 +103,7 @@ export async function refreshAccessToken(
   return response.json() as Promise<TokenResponse>;
 }
 
-export function parseJwtClaims(
-  token: string,
-): Record<string, unknown> | undefined {
+export function parseJwtClaims(token: string): Record<string, unknown> | undefined {
   const parts = token.split(".");
   if (parts.length !== 3) return undefined;
   try {
@@ -137,9 +128,7 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
     if (accountId) return accountId;
   }
   if (tokens.access_token) {
-    const claims = parseJwtClaims(tokens.access_token) as
-      | IdTokenClaims
-      | undefined;
+    const claims = parseJwtClaims(tokens.access_token) as IdTokenClaims | undefined;
     return claims ? extractAccountIdFromClaims(claims) : undefined;
   }
   return undefined;
@@ -172,57 +161,41 @@ export async function startOAuthServer(): Promise<{
             const errorMsg = errorDescription || error;
             pendingOAuth?.reject(new Error(errorMsg));
             pendingOAuth = undefined;
-            return new Response(
-              `<html><body>Error: ${errorMsg}</body></html>`,
-              {
-                headers: { "Content-Type": "text/html" },
-              },
-            );
+            return new Response(`<html><body>Error: ${errorMsg}</body></html>`, {
+              headers: { "Content-Type": "text/html" },
+            });
           }
 
           if (!code) {
             const errorMsg = "Missing authorization code";
             pendingOAuth?.reject(new Error(errorMsg));
             pendingOAuth = undefined;
-            return new Response(
-              `<html><body>Error: ${errorMsg}</body></html>`,
-              {
-                status: 400,
-                headers: { "Content-Type": "text/html" },
-              },
-            );
+            return new Response(`<html><body>Error: ${errorMsg}</body></html>`, {
+              status: 400,
+              headers: { "Content-Type": "text/html" },
+            });
           }
 
           if (!pendingOAuth || state !== pendingOAuth.state) {
             const errorMsg = "Invalid state - potential CSRF attack";
             pendingOAuth?.reject(new Error(errorMsg));
             pendingOAuth = undefined;
-            return new Response(
-              `<html><body>Error: ${errorMsg}</body></html>`,
-              {
-                status: 400,
-                headers: { "Content-Type": "text/html" },
-              },
-            );
+            return new Response(`<html><body>Error: ${errorMsg}</body></html>`, {
+              status: 400,
+              headers: { "Content-Type": "text/html" },
+            });
           }
 
           const current = pendingOAuth;
           pendingOAuth = undefined;
 
-          exchangeCodeForTokens(
-            code,
-            `http://localhost:${OAUTH_PORT}/auth/callback`,
-            current.pkce,
-          )
+          exchangeCodeForTokens(code, `http://localhost:${OAUTH_PORT}/auth/callback`, current.pkce)
             .then((tokens) => current.resolve(tokens))
             .catch((err) => current.reject(err));
 
-          return new Response(
-            "<html><body>Success! You can close this tab.</body></html>",
-            {
-              headers: { "Content-Type": "text/html" },
-            },
-          );
+          return new Response("<html><body>Success! You can close this tab.</body></html>", {
+            headers: { "Content-Type": "text/html" },
+          });
         }
 
         if (url.pathname === "/cancel") {
@@ -235,12 +208,7 @@ export async function startOAuthServer(): Promise<{
       },
     });
   } catch (err: unknown) {
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "EADDRINUSE"
-    ) {
+    if (err && typeof err === "object" && "code" in err && err.code === "EADDRINUSE") {
       return {
         port: OAUTH_PORT,
         redirectUri: `http://localhost:${OAUTH_PORT}/auth/callback`,
@@ -262,18 +230,13 @@ export function stopOAuthServer(): void {
   }
 }
 
-export function waitForOAuthCallback(
-  pkce: PkceCodes,
-  state: string,
-): Promise<TokenResponse> {
+export function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResponse> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => {
         if (pendingOAuth) {
           pendingOAuth = undefined;
-          reject(
-            new Error("OAuth callback timeout - authorization took too long"),
-          );
+          reject(new Error("OAuth callback timeout - authorization took too long"));
         }
       },
       5 * 60 * 1000,

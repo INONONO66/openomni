@@ -1,9 +1,4 @@
-import {
-  ModelsDev,
-  Provider,
-  run as llmRun,
-  type RunInput,
-} from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEvent,
@@ -13,12 +8,7 @@ import type {
   ChatAgentInput,
   TokenUsage,
 } from "../types";
-import {
-  createBudgetState,
-  checkBudget,
-  recordTurn,
-  recordToolCall,
-} from "../budget";
+import { createBudgetState, checkBudget, recordTurn, recordToolCall } from "../budget";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -65,10 +55,7 @@ function createUserMessage(content: string): Message.WithParts {
   };
 }
 
-function createAssistantMessage(
-  content: string,
-  parentID: string,
-): Message.WithParts {
+function createAssistantMessage(content: string, parentID: string): Message.WithParts {
   const id = crypto.randomUUID();
   const sessionID = "stream-engine";
   const now = Date.now();
@@ -99,9 +86,7 @@ function createAssistantMessage(
   };
 }
 
-function toMessagesWithParts(
-  messages: ChatAgentInput["messages"],
-): Message.WithParts[] {
+function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
   const output: Message.WithParts[] = [];
   for (const message of messages) {
     const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
@@ -181,10 +166,7 @@ export async function* streamAgent(
               totalUsage.totalTokens += tokens.input + tokens.output;
             }
             const text = message.parts
-              .filter(
-                (part: Message.Part): part is Message.TextPart =>
-                  part.type === "text",
-              )
+              .filter((part: Message.Part): part is Message.TextPart => part.type === "text")
               .map((part: Message.TextPart) => part.text)
               .join("");
             if (text) lastAssistantText = text;
@@ -198,8 +180,7 @@ export async function* streamAgent(
         const outcome = await llmRun(runInput, trackingSink);
 
         if (outcome.type === "stop") {
-          if (lastAssistantText)
-            yield { type: "text_chunk", text: lastAssistantText };
+          if (lastAssistantText) yield { type: "text_chunk", text: lastAssistantText };
           yield { type: "turn_complete", turnIndex, usage: turnUsage };
 
           const step: AgentStep = { type: "text", content: lastAssistantText };
@@ -262,9 +243,7 @@ export async function* streamAgent(
 
         const elapsed = Date.now() - toolStart;
         const perToolMs =
-          toolResults.length > 0
-            ? Math.max(1, Math.ceil(elapsed / toolResults.length))
-            : elapsed;
+          toolResults.length > 0 ? Math.max(1, Math.ceil(elapsed / toolResults.length)) : elapsed;
         for (let i = 0; i < toolResults.length; i++) {
           budgetState = recordToolCall(budgetState, perToolMs);
         }
@@ -281,12 +260,8 @@ export async function* streamAgent(
         steps.push(toolStep);
         if (config.onStepFinish) await config.onStepFinish(toolStep);
 
-        const parentID =
-          messages.length > 0 ? messages[messages.length - 1].info.id : "";
-        messages = [
-          ...messages,
-          createAssistantMessage(lastAssistantText, parentID),
-        ];
+        const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
+        messages = [...messages, createAssistantMessage(lastAssistantText, parentID)];
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

@@ -37,10 +37,7 @@ export namespace InstanceRegistry {
     return Array.from(store.values()).filter((i) => i.agentId === agentId);
   }
 
-  export function updateStatus(
-    instanceId: string,
-    status: InstanceStatus,
-  ): void {
+  export function updateStatus(instanceId: string, status: InstanceStatus): void {
     const instance = store.get(instanceId);
     if (!instance) throw new Error(`Instance '${instanceId}' not registered`);
     store.set(instanceId, { ...instance, status });

@@ -17,9 +17,7 @@ describe("TaskManager - Run Management APIs", () => {
     });
   }
 
-  function createSignal(
-    overrides: Partial<Task.TriggerSignal> = {},
-  ): Task.TriggerSignal {
+  function createSignal(overrides: Partial<Task.TriggerSignal> = {}): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",
@@ -248,11 +246,7 @@ describe("TaskManager - Run Management APIs", () => {
       const task = createTask();
       const runId = await createRun(task.id);
 
-      const result = TaskManager.setRunStatus(
-        runId,
-        "cancelled",
-        "user_requested",
-      );
+      const result = TaskManager.setRunStatus(runId, "cancelled", "user_requested");
       expect(result).toBe(true);
     });
   });

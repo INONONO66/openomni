@@ -6,11 +6,7 @@ type ProviderFetch = NonNullable<OpenAIProviderSettings["fetch"]>;
 
 const OAUTH_DUMMY_KEY = "oauth-dummy-key";
 
-type TokenRefreshCallback = (tokens: {
-  access: string;
-  refresh: string;
-  expires: number;
-}) => void;
+type TokenRefreshCallback = (tokens: { access: string; refresh: string; expires: number }) => void;
 
 export function createCodexOAuthFetch(
   auth: Extract<Auth.Info, { type: "oauth" }>,
@@ -59,9 +55,7 @@ export function createCodexOAuthFetch(
         init.headers.delete("authorization");
         init.headers.delete("Authorization");
       } else if (Array.isArray(init.headers)) {
-        init.headers = init.headers.filter(
-          ([key]) => key.toLowerCase() !== "authorization",
-        );
+        init.headers = init.headers.filter(([key]) => key.toLowerCase() !== "authorization");
       } else {
         delete (init.headers as Record<string, string>)["authorization"];
         delete (init.headers as Record<string, string>)["Authorization"];
@@ -79,9 +73,7 @@ export function createCodexOAuthFetch(
           if (value !== undefined) headers.set(key, String(value));
         }
       } else {
-        for (const [key, value] of Object.entries(
-          init.headers as Record<string, string>,
-        )) {
+        for (const [key, value] of Object.entries(init.headers as Record<string, string>)) {
           if (value !== undefined) headers.set(key, String(value));
         }
       }
@@ -99,8 +91,7 @@ export function createCodexOAuthFetch(
         : new URL(typeof input === "string" ? input : (input as Request).url);
 
     const url =
-      parsed.pathname.includes("/v1/responses") ||
-      parsed.pathname.includes("/chat/completions")
+      parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
         ? new URL(CODEX_API_ENDPOINT)
         : parsed;
 

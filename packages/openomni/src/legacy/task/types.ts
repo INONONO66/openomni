@@ -103,18 +103,7 @@ export namespace Task {
 
   export const TriggerFilterCondition = z.object({
     path: z.string(),
-    op: z.enum([
-      "eq",
-      "neq",
-      "in",
-      "nin",
-      "exists",
-      "regex",
-      "gt",
-      "gte",
-      "lt",
-      "lte",
-    ]),
+    op: z.enum(["eq", "neq", "in", "nin", "exists", "regex", "gt", "gte", "lt", "lte"]),
     value: z.unknown().optional(),
   });
   export type TriggerFilterCondition = z.infer<typeof TriggerFilterCondition>;
@@ -207,14 +196,7 @@ export namespace Task {
     runId: z.string(),
     taskId: z.string(),
     sessionKey: z.string(), // SessionKey pattern: task:${string}:run:${string}
-    status: z.enum([
-      "scheduled",
-      "running",
-      "blocked",
-      "done",
-      "failed",
-      "cancelled",
-    ]),
+    status: z.enum(["scheduled", "running", "blocked", "done", "failed", "cancelled"]),
     trigger: z.object({
       id: z.string(),
       type: z.enum(["cron", "interval", "once", "event", "manual"]),

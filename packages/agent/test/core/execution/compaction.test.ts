@@ -52,21 +52,15 @@ function makeAssistantMessage(text: string): Message.WithParts {
 describe("InMemoryCompactor", () => {
   describe("shouldCompact", () => {
     it("returns false when tokens are below threshold", () => {
-      expect(
-        InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 }),
-      ).toBe(false);
+      expect(InMemoryCompactor.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
     });
 
     it("returns true when tokens reach 80% threshold", () => {
-      expect(
-        InMemoryCompactor.shouldCompact(800, { contextWindowTokens: 1000 }),
-      ).toBe(true);
+      expect(InMemoryCompactor.shouldCompact(800, { contextWindowTokens: 1000 })).toBe(true);
     });
 
     it("returns true when tokens exceed threshold", () => {
-      expect(
-        InMemoryCompactor.shouldCompact(900, { contextWindowTokens: 1000 }),
-      ).toBe(true);
+      expect(InMemoryCompactor.shouldCompact(900, { contextWindowTokens: 1000 })).toBe(true);
     });
 
     it("respects custom thresholdRatio", () => {
@@ -99,9 +93,7 @@ describe("InMemoryCompactor", () => {
 
     it("removes oldest non-system messages beyond protectRecent", async () => {
       const messages = Array.from({ length: 10 }, (_, i) =>
-        i % 2 === 0
-          ? makeUserMessage(`user ${i}`)
-          : makeAssistantMessage(`assistant ${i}`),
+        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
       const result = await InMemoryCompactor.compact(messages, {
         contextWindowTokens: 1000,
@@ -130,9 +122,7 @@ describe("InMemoryCompactor", () => {
       expect(result.compacted).toBe(true);
       expect(result.messages).toHaveLength(6);
       const texts = result.messages.flatMap((m) =>
-        m.parts
-          .filter((p): p is Message.TextPart => p.type === "text")
-          .map((p) => p.text),
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
       );
       expect(texts).toContain("recent-3");
       expect(texts).not.toContain("old-1");
@@ -140,9 +130,7 @@ describe("InMemoryCompactor", () => {
 
     it("inserts summary message when onSummarize is provided", async () => {
       const messages = Array.from({ length: 8 }, (_, i) =>
-        i % 2 === 0
-          ? makeUserMessage(`user ${i}`)
-          : makeAssistantMessage(`assistant ${i}`),
+        i % 2 === 0 ? makeUserMessage(`user ${i}`) : makeAssistantMessage(`assistant ${i}`),
       );
       const result = await InMemoryCompactor.compact(messages, {
         contextWindowTokens: 1000,
@@ -151,21 +139,13 @@ describe("InMemoryCompactor", () => {
       });
       expect(result.compacted).toBe(true);
       const allTexts = result.messages.flatMap((m) =>
-        m.parts
-          .filter((p): p is Message.TextPart => p.type === "text")
-          .map((p) => p.text),
+        m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
       );
-      expect(
-        allTexts.some((t) => t.includes("Summary of removed messages")),
-      ).toBe(true);
+      expect(allTexts.some((t) => t.includes("Summary of removed messages"))).toBe(true);
     });
 
     it("does not compact when non-system messages are within protectRecent", async () => {
-      const messages = [
-        makeUserMessage("a"),
-        makeAssistantMessage("b"),
-        makeUserMessage("c"),
-      ];
+      const messages = [makeUserMessage("a"), makeAssistantMessage("b"), makeUserMessage("c")];
       const result = await InMemoryCompactor.compact(messages, {
         contextWindowTokens: 1000,
         protectRecentMessages: 6,

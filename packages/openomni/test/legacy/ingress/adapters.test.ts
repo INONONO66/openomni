@@ -1,9 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import type {
-  EventSourceAdapter,
-  EventDecoder,
-  InboundEvent,
-} from "../../../src/legacy/ingress";
+import type { EventSourceAdapter, EventDecoder, InboundEvent } from "../../../src/legacy/ingress";
 
 describe("EventSourceAdapter interface", () => {
   it("should allow mock implementation with required properties", () => {

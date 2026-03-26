@@ -105,9 +105,7 @@ describe("ScheduleTool - Late-Start Execution", () => {
     expect(task).toBeDefined();
 
     // Verify plannedStartAt is approximately now (within 1 second)
-    const plannedStartAtStr = task?.metadata?.plannedStartAt as
-      | string
-      | undefined;
+    const plannedStartAtStr = task?.metadata?.plannedStartAt as string | undefined;
     expect(plannedStartAtStr).toBeDefined();
     const plannedStartAtMs = new Date(plannedStartAtStr || "").getTime();
     expect(Math.abs(plannedStartAtMs - now)).toBeLessThan(1000);

@@ -1,10 +1,6 @@
 import type { Run } from "@openomni/protocol";
 
-export type RetryReason =
-  | "timeout"
-  | "tool_error"
-  | "transient_error"
-  | "validation_error";
+export type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
 
 export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
   maxAttempts: 1,
@@ -12,13 +8,9 @@ export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
   retryOn: ["timeout", "tool_error", "transient_error"],
 };
 
-export function calculateBackoffMs(
-  policy: Run.RetryPolicy,
-  attempt: number,
-): number {
+export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
   const rawDelay =
-    policy.backoffMs.initial *
-    Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
+    policy.backoffMs.initial * Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
   return Math.min(rawDelay, policy.backoffMs.max);
 }
 
@@ -55,7 +47,5 @@ export function shouldRetry(
 }
 
 export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) =>
-    setTimeout(resolve, Math.max(0, Math.floor(ms))),
-  );
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
 }

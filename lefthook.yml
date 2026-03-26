@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome-check:
+      glob: "*.{ts,tsx,js,jsx,json,css}"
+      run: bunx biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    type-check:
+      run: bun run check-types
+    dep-check:
+      run: bun run script/check-deps.ts
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bunx commitlint --edit {1}

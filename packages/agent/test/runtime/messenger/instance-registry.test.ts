@@ -40,8 +40,6 @@ describe("InstanceRegistry", () => {
 
   it("stores metadata", () => {
     InstanceRegistry.register("inst-1", "agent-a", { region: "us-east" });
-    expect(InstanceRegistry.getById("inst-1")?.metadata?.region).toBe(
-      "us-east",
-    );
+    expect(InstanceRegistry.getById("inst-1")?.metadata?.region).toBe("us-east");
   });
 });

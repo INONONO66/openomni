@@ -79,9 +79,7 @@ export class DiscordAdapter implements Adapter.Surface {
   private ackReceived = true;
   private reconnectAttempt = 0;
   private readonly maxBackoff = 60_000;
-  private readonly FATAL_CLOSE_CODES = new Set([
-    4004, 4010, 4011, 4012, 4013, 4014,
-  ]);
+  private readonly FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
 
   constructor(
     private readonly token: string,
@@ -94,9 +92,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
   async start(): Promise<void> {
     if (!this.handler) {
-      throw new Error(
-        "[discord] No message handler registered. Call onMessage() before start().",
-      );
+      throw new Error("[discord] No message handler registered. Call onMessage() before start().");
     }
 
     this.running = true;
@@ -113,10 +109,7 @@ export class DiscordAdapter implements Adapter.Surface {
     console.log("[discord] Bot stopped");
   }
 
-  async send(
-    surfaceKey: string,
-    message: Adapter.OutboundMessage,
-  ): Promise<void> {
+  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     let channelId = parsed.id!;
 
@@ -182,9 +175,7 @@ export class DiscordAdapter implements Adapter.Surface {
         const code = event.code;
         if (this.FATAL_CLOSE_CODES.has(code)) {
           this.running = false;
-          console.error(
-            `[discord] Fatal close code (${code}), stopping reconnect attempts`,
-          );
+          console.error(`[discord] Fatal close code (${code}), stopping reconnect attempts`);
           return;
         }
 
@@ -278,9 +269,7 @@ export class DiscordAdapter implements Adapter.Surface {
         this.botId = d.user.id;
         this.botUsername = d.user.username;
         this.reconnectAttempt = 0;
-        console.log(
-          `[discord] Bot started: @${this.botUsername} (${this.botId})`,
-        );
+        console.log(`[discord] Bot started: @${this.botUsername} (${this.botId})`);
         return true;
       }
 
@@ -299,8 +288,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
         // Build trigger context and evaluate
         const isDM = !message.guild_id;
-        const mentioned =
-          message.mentions?.some((u) => u.id === this.botId) ?? false;
+        const mentioned = message.mentions?.some((u) => u.id === this.botId) ?? false;
 
         const ctx: Adapter.TriggerContext = {
           event: "message",
@@ -326,19 +314,14 @@ export class DiscordAdapter implements Adapter.Surface {
 
   // -- Message handling -----------------------------------------------------
 
-  private async handleIncoming(
-    message: DiscordMessage,
-    mentioned: boolean,
-  ): Promise<void> {
+  private async handleIncoming(message: DiscordMessage, mentioned: boolean): Promise<void> {
     const channelId = message.channel_id;
     const isDM = !message.guild_id;
 
     // Strip @mention from content for cleaner LLM input
     let content = message.content;
     if (mentioned && !isDM) {
-      content = content
-        .replace(new RegExp(`<@!?${this.botId}>\\s*`), "")
-        .trim();
+      content = content.replace(new RegExp(`<@!?${this.botId}>\\s*`), "").trim();
     }
 
     // Strip prefix via normalizeContent (no botUsername — Discord uses ID-based mentions)
@@ -352,9 +335,7 @@ export class DiscordAdapter implements Adapter.Surface {
       id: isDM ? message.author.id : channelId,
     });
 
-    console.log(
-      `[discord] ${isDM ? "dm" : channelId}: ${content.slice(0, 80)}`,
-    );
+    console.log(`[discord] ${isDM ? "dm" : channelId}: ${content.slice(0, 80)}`);
 
     // Typing indicator (repeat every 8s until done)
     this.sendTyping(channelId);
@@ -388,17 +369,12 @@ export class DiscordAdapter implements Adapter.Surface {
 
   private getHandler(): Adapter.MessageHandler {
     if (!this.handler) {
-      throw new Error(
-        `[${this.id}] No handler registered. Call onMessage() before processing.`,
-      );
+      throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
     }
     return this.handler;
   }
 
-  private async sendOutbound(
-    channelId: string,
-    message: Adapter.OutboundMessage,
-  ): Promise<void> {
+  private async sendOutbound(channelId: string, message: Adapter.OutboundMessage): Promise<void> {
     if (message.text) {
       const chunks = splitText(message.text, 2000);
       for (const chunk of chunks) {
@@ -419,10 +395,7 @@ export class DiscordAdapter implements Adapter.Surface {
 
   // -- Discord REST helper --------------------------------------------------
 
-  private async api(
-    path: string,
-    body: Record<string, unknown>,
-  ): Promise<unknown> {
+  private async api(path: string, body: Record<string, unknown>): Promise<unknown> {
     const res = await fetchWithRetry(
       `${this.baseUrl}${path}`,
       {
@@ -453,10 +426,7 @@ export class DiscordAdapter implements Adapter.Surface {
   // -- Gateway helpers ------------------------------------------------------
 
   private calculateBackoff(): number {
-    return (
-      Math.min(1000 * 2 ** this.reconnectAttempt, this.maxBackoff) +
-      Math.random() * 1000
-    );
+    return Math.min(1000 * 2 ** this.reconnectAttempt, this.maxBackoff) + Math.random() * 1000;
   }
 
   private identify(): void {

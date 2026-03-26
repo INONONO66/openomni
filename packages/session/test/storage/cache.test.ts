@@ -24,11 +24,7 @@ function makeUserMessage(sessionID: string, messageID: string): Message.Info {
   };
 }
 
-function makeTextPart(
-  sessionID: string,
-  messageID: string,
-  partID: string,
-): Message.Part {
+function makeTextPart(sessionID: string, messageID: string, partID: string): Message.Part {
   return {
     id: partID,
     sessionID,

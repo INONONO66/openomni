@@ -115,10 +115,7 @@ export namespace Retry {
     initialDelay?: number;
   }
 
-  export async function withRetry<T>(
-    fn: () => Promise<T>,
-    options?: WithRetryOptions,
-  ): Promise<T> {
+  export async function withRetry<T>(fn: () => Promise<T>, options?: WithRetryOptions): Promise<T> {
     const maxAttempts = options?.maxAttempts ?? 3;
     const signal = options?.signal;
     const initialDelay = options?.initialDelay ?? RETRY_INITIAL_DELAY;
@@ -157,10 +154,7 @@ export namespace Retry {
           try {
             await sleep(delayMs, signal ?? new AbortController().signal);
           } catch (sleepError) {
-            if (
-              sleepError instanceof DOMException &&
-              sleepError.name === "AbortError"
-            ) {
+            if (sleepError instanceof DOMException && sleepError.name === "AbortError") {
               throw sleepError;
             }
             throw sleepError;

@@ -3,11 +3,7 @@ import type { Transport } from "./transport";
 
 const messageLog: Messenger.MessageEnvelope[] = [];
 
-function matchesPattern(
-  pattern: Messenger.AllowPattern,
-  from: string,
-  to: string,
-): boolean {
+function matchesPattern(pattern: Messenger.AllowPattern, from: string, to: string): boolean {
   const fromMatch = pattern.from === "*" || pattern.from === from;
   const toMatch = pattern.to === "*" || pattern.to === to;
   return fromMatch && toMatch;
@@ -34,41 +30,24 @@ export interface RequestOptions {
 export namespace AgentMessenger {
   export interface Instance {
     send(envelope: Messenger.MessageEnvelope): Promise<void>;
-    subscribe(
-      agentId: string,
-      handler: (env: Messenger.MessageEnvelope) => void,
-    ): () => void;
+    subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void;
     request(
       envelope: Messenger.MessageEnvelope,
       options: RequestOptions,
     ): Promise<Messenger.MessageEnvelope>;
   }
 
-  export function create(
-    transport: Transport,
-    options?: AgentMessengerOptions,
-  ): Instance {
+  export function create(transport: Transport, options?: AgentMessengerOptions): Instance {
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
-        if (
-          !isAuthorized(
-            options?.allowPatterns,
-            envelope.fromAgentId,
-            envelope.toAgentId,
-          )
-        ) {
-          throw new Error(
-            `Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`,
-          );
+        if (!isAuthorized(options?.allowPatterns, envelope.fromAgentId, envelope.toAgentId)) {
+          throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
         }
         messageLog.push(envelope);
         await transport.send(envelope);
       },
 
-      subscribe(
-        agentId: string,
-        handler: (env: Messenger.MessageEnvelope) => void,
-      ): () => void {
+      subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void {
         return transport.subscribe(agentId, handler);
       },
 
@@ -81,21 +60,16 @@ export namespace AgentMessenger {
         return new Promise<Messenger.MessageEnvelope>((resolve, reject) => {
           const timer = setTimeout(() => {
             unsub();
-            reject(
-              new Error(`Request timed out after ${reqOptions.timeout}ms`),
-            );
+            reject(new Error(`Request timed out after ${reqOptions.timeout}ms`));
           }, reqOptions.timeout);
 
-          const unsub = transport.subscribe(
-            envelope.fromAgentId,
-            (response) => {
-              if (response.correlationId === correlationId) {
-                clearTimeout(timer);
-                unsub();
-                resolve(response);
-              }
-            },
-          );
+          const unsub = transport.subscribe(envelope.fromAgentId, (response) => {
+            if (response.correlationId === correlationId) {
+              clearTimeout(timer);
+              unsub();
+              resolve(response);
+            }
+          });
 
           if (reqOptions.signal) {
             reqOptions.signal.addEventListener("abort", () => {

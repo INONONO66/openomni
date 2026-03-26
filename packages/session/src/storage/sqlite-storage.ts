@@ -54,19 +54,13 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         "CREATE TABLE IF NOT EXISTS message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, data TEXT NOT NULL, time_created INTEGER NOT NULL)",
       )
       .run();
-    this.db
-      .query(
-        "CREATE INDEX IF NOT EXISTS idx_message_session ON message(session_id)",
-      )
-      .run();
+    this.db.query("CREATE INDEX IF NOT EXISTS idx_message_session ON message(session_id)").run();
     this.db
       .query(
         "CREATE TABLE IF NOT EXISTS part (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, data TEXT NOT NULL, time_start INTEGER)",
       )
       .run();
-    this.db
-      .query("CREATE INDEX IF NOT EXISTS idx_part_message ON part(message_id)")
-      .run();
+    this.db.query("CREATE INDEX IF NOT EXISTS idx_part_message ON part(message_id)").run();
 
     this.sessionStatements = {
       get: this.db.query("SELECT data FROM session WHERE id = ?"),
@@ -78,24 +72,18 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     };
 
     this.messageStatements = {
-      get: this.db.query(
-        "SELECT data FROM message WHERE id = ? AND session_id = ?",
-      ),
+      get: this.db.query("SELECT data FROM message WHERE id = ? AND session_id = ?"),
       set: this.db.query(
         "INSERT OR REPLACE INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
       ),
       list: this.db.query(
         "SELECT data FROM message WHERE session_id = ? ORDER BY time_created ASC, id ASC",
       ),
-      remove: this.db.query(
-        "DELETE FROM message WHERE id = ? AND session_id = ?",
-      ),
+      remove: this.db.query("DELETE FROM message WHERE id = ? AND session_id = ?"),
     };
 
     this.partStatements = {
-      get: this.db.query(
-        "SELECT data FROM part WHERE id = ? AND message_id = ?",
-      ),
+      get: this.db.query("SELECT data FROM part WHERE id = ? AND message_id = ?"),
       set: this.db.query(
         "INSERT OR REPLACE INTO part (id, message_id, data, time_start) VALUES (?, ?, ?, ?)",
       ),
@@ -118,7 +106,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     }
     return JSON.parse(row.data) as T;
   }
-
 
   session = {
     get: (id: string): SessionInfo | undefined => {
@@ -148,10 +135,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
   message = {
     get: (sessionID: string, messageID: string): Message.Info | undefined => {
-      const row = this.messageStatements.get.get(
-        messageID,
-        sessionID,
-      ) as DataRow | null;
+      const row = this.messageStatements.get.get(messageID, sessionID) as DataRow | null;
       return this.parseData<Message.Info>(row);
     },
 
@@ -177,21 +161,13 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
   part = {
     get: (messageID: string, partID: string): Message.Part | undefined => {
-      const row = this.partStatements.get.get(
-        partID,
-        messageID,
-      ) as DataRow | null;
+      const row = this.partStatements.get.get(partID, messageID) as DataRow | null;
       return this.parseData<Message.Part>(row);
     },
 
     set: (messageID: string, part: Message.Part): void => {
       const timeStart = getPartStartTime(part);
-      this.partStatements.set.run(
-        part.id,
-        messageID,
-        JSON.stringify(part),
-        timeStart ?? null,
-      );
+      this.partStatements.set.run(part.id, messageID, JSON.stringify(part), timeStart ?? null);
     },
 
     list: (messageID: string): Message.Part[] => {

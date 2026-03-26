@@ -37,10 +37,7 @@ export namespace PlanPipeline {
       const enrichedGoal = previousFeedback
         ? `${goal}\n\n[Previous plan was rejected. Address this feedback:\n${previousFeedback}]`
         : goal;
-      const planResult = await PlanAgent.generate(
-        enrichedGoal,
-        config.generator,
-      );
+      const planResult = await PlanAgent.generate(enrichedGoal, config.generator);
       lastPlan = planResult.plan;
 
       const failedFeedback: string[] = [];
@@ -55,9 +52,7 @@ export namespace PlanPipeline {
 
         gateResults.push({ gateName: gate.name, verdict });
 
-        const hasErrorIssue = verdict.issues.some(
-          (issue) => issue.severity === "error",
-        );
+        const hasErrorIssue = verdict.issues.some((issue) => issue.severity === "error");
         const failed = !verdict.passed || hasErrorIssue;
 
         if (failed && verdict.feedback) {
@@ -82,8 +77,7 @@ export namespace PlanPipeline {
         };
       }
 
-      previousFeedback =
-        failedFeedback.length > 0 ? failedFeedback.join("\n") : undefined;
+      previousFeedback = failedFeedback.length > 0 ? failedFeedback.join("\n") : undefined;
       attempt += 1;
     }
 

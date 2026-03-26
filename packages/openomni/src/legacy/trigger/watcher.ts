@@ -116,11 +116,8 @@ class FilesystemWatcher implements Watcher {
   private matchesPatterns(path: string): boolean {
     const { includePatterns, excludePatterns } = this.config;
     const matchesInclude =
-      includePatterns.length === 0 ||
-      includePatterns.some((pattern) => path.includes(pattern));
-    const matchesExclude = excludePatterns.some((pattern) =>
-      path.includes(pattern),
-    );
+      includePatterns.length === 0 || includePatterns.some((pattern) => path.includes(pattern));
+    const matchesExclude = excludePatterns.some((pattern) => path.includes(pattern));
 
     return matchesInclude && !matchesExclude;
   }

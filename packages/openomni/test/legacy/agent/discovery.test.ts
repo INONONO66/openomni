@@ -105,9 +105,7 @@ describe("AgentDiscovery.load", () => {
 
   it("loads valid supervisor agent from .md file", () => {
     const results = AgentDiscovery.load(FIXTURES_DIR);
-    const supervisor = results.find(
-      (r) => r.agent?.name === "conversation-supervisor",
-    );
+    const supervisor = results.find((r) => r.agent?.name === "conversation-supervisor");
 
     expect(supervisor).toBeDefined();
     expect(supervisor!.success).toBe(true);
@@ -120,9 +118,7 @@ describe("AgentDiscovery.load", () => {
     const results = AgentDiscovery.load(FIXTURES_DIR);
     const worker = results.find((r) => r.agent?.name === "code-analyzer");
 
-    expect(worker!.agent!.systemPrompt).toContain(
-      "You are a code analysis agent.",
-    );
+    expect(worker!.agent!.systemPrompt).toContain("You are a code analysis agent.");
     expect(worker!.agent!.systemPrompt).toContain("Extended Instructions");
     expect(worker!.agent!.systemPrompt).toContain("anti-patterns");
   });
@@ -149,9 +145,9 @@ describe("AgentDiscovery.load", () => {
   });
 
   it("throws in strict mode for non-existent directory", () => {
-    expect(() =>
-      AgentDiscovery.load("/non/existent/path", { strict: true }),
-    ).toThrow("Agent discovery directory does not exist");
+    expect(() => AgentDiscovery.load("/non/existent/path", { strict: true })).toThrow(
+      "Agent discovery directory does not exist",
+    );
   });
 });
 
@@ -202,14 +198,10 @@ describe("AgentDiscovery override protection", () => {
     const worker = results.find((r) => r.file.includes("valid-worker.md"));
 
     expect(worker!.success).toBe(true);
-    expect(worker!.agent!.description).toBe(
-      "Analyzes codebases for patterns and issues",
-    );
+    expect(worker!.agent!.description).toBe("Analyzes codebases for patterns and issues");
 
     const registered = BuiltinAgentRegistry.get("code-analyzer");
-    expect(registered!.description).toBe(
-      "Analyzes codebases for patterns and issues",
-    );
+    expect(registered!.description).toBe("Analyzes codebases for patterns and issues");
   });
 
   it("throws in strict mode when agent name conflicts without override", () => {
@@ -238,9 +230,7 @@ describe("AgentDiscovery override protection", () => {
 
 describe("AgentDiscovery.loadFile", () => {
   it("loads a single agent file", () => {
-    const result = AgentDiscovery.loadFile(
-      join(FIXTURES_DIR, "valid-worker.md"),
-    );
+    const result = AgentDiscovery.loadFile(join(FIXTURES_DIR, "valid-worker.md"));
 
     expect(result.success).toBe(true);
     expect(result.agent!.name).toBe("code-analyzer");

@@ -9,12 +9,8 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "eq",
       value: "active",
     };
-    expect(Dispatcher.evaluateCondition(condition, { status: "active" })).toBe(
-      true,
-    );
-    expect(
-      Dispatcher.evaluateCondition(condition, { status: "inactive" }),
-    ).toBe(false);
+    expect(Dispatcher.evaluateCondition(condition, { status: "active" })).toBe(true);
+    expect(Dispatcher.evaluateCondition(condition, { status: "inactive" })).toBe(false);
   });
 
   it("neq operator matches non-equal values", () => {
@@ -23,12 +19,8 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "neq",
       value: "active",
     };
-    expect(
-      Dispatcher.evaluateCondition(condition, { status: "inactive" }),
-    ).toBe(true);
-    expect(Dispatcher.evaluateCondition(condition, { status: "active" })).toBe(
-      false,
-    );
+    expect(Dispatcher.evaluateCondition(condition, { status: "inactive" })).toBe(true);
+    expect(Dispatcher.evaluateCondition(condition, { status: "active" })).toBe(false);
   });
 
   it("in operator checks array membership", () => {
@@ -37,12 +29,8 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "in",
       value: ["admin", "editor"],
     };
-    expect(Dispatcher.evaluateCondition(condition, { role: "admin" })).toBe(
-      true,
-    );
-    expect(Dispatcher.evaluateCondition(condition, { role: "viewer" })).toBe(
-      false,
-    );
+    expect(Dispatcher.evaluateCondition(condition, { role: "admin" })).toBe(true);
+    expect(Dispatcher.evaluateCondition(condition, { role: "viewer" })).toBe(false);
   });
 
   it("nin operator checks non-membership", () => {
@@ -51,12 +39,8 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "nin",
       value: ["admin", "editor"],
     };
-    expect(Dispatcher.evaluateCondition(condition, { role: "viewer" })).toBe(
-      true,
-    );
-    expect(Dispatcher.evaluateCondition(condition, { role: "admin" })).toBe(
-      false,
-    );
+    expect(Dispatcher.evaluateCondition(condition, { role: "viewer" })).toBe(true);
+    expect(Dispatcher.evaluateCondition(condition, { role: "admin" })).toBe(false);
   });
 
   it("exists operator checks path existence", () => {
@@ -70,14 +54,10 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "exists",
       value: false,
     };
-    expect(Dispatcher.evaluateCondition(existsTrue, { name: "alice" })).toBe(
-      true,
-    );
+    expect(Dispatcher.evaluateCondition(existsTrue, { name: "alice" })).toBe(true);
     expect(Dispatcher.evaluateCondition(existsTrue, { age: 30 })).toBe(false);
     expect(Dispatcher.evaluateCondition(existsFalse, { age: 30 })).toBe(true);
-    expect(Dispatcher.evaluateCondition(existsFalse, { name: "alice" })).toBe(
-      false,
-    );
+    expect(Dispatcher.evaluateCondition(existsFalse, { name: "alice" })).toBe(false);
   });
 
   it("regex operator matches patterns", () => {
@@ -86,15 +66,9 @@ describe("Dispatcher.evaluateCondition", () => {
       op: "regex",
       value: "^[a-z]+@example\\.com$",
     };
-    expect(
-      Dispatcher.evaluateCondition(condition, { email: "alice@example.com" }),
-    ).toBe(true);
-    expect(
-      Dispatcher.evaluateCondition(condition, { email: "ALICE@example.com" }),
-    ).toBe(false);
-    expect(
-      Dispatcher.evaluateCondition(condition, { email: "alice@other.com" }),
-    ).toBe(false);
+    expect(Dispatcher.evaluateCondition(condition, { email: "alice@example.com" })).toBe(true);
+    expect(Dispatcher.evaluateCondition(condition, { email: "ALICE@example.com" })).toBe(false);
+    expect(Dispatcher.evaluateCondition(condition, { email: "alice@other.com" })).toBe(false);
   });
 
   it("gt/gte/lt/lte operators for numeric comparison", () => {
@@ -163,15 +137,9 @@ describe("Dispatcher.evaluateFilter", () => {
         { path: "score", op: "gt", value: 50 },
       ],
     };
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "active", score: 80 }),
-    ).toBe(true);
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "active", score: 30 }),
-    ).toBe(false);
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "inactive", score: 80 }),
-    ).toBe(false);
+    expect(Dispatcher.evaluateFilter(filter, { status: "active", score: 80 })).toBe(true);
+    expect(Dispatcher.evaluateFilter(filter, { status: "active", score: 30 })).toBe(false);
+    expect(Dispatcher.evaluateFilter(filter, { status: "inactive", score: 80 })).toBe(false);
   });
 
   it("mode 'any' requires at least one condition to pass", () => {
@@ -182,14 +150,8 @@ describe("Dispatcher.evaluateFilter", () => {
         { path: "score", op: "gt", value: 90 },
       ],
     };
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "active", score: 10 }),
-    ).toBe(true);
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "inactive", score: 95 }),
-    ).toBe(true);
-    expect(
-      Dispatcher.evaluateFilter(filter, { status: "inactive", score: 10 }),
-    ).toBe(false);
+    expect(Dispatcher.evaluateFilter(filter, { status: "active", score: 10 })).toBe(true);
+    expect(Dispatcher.evaluateFilter(filter, { status: "inactive", score: 95 })).toBe(true);
+    expect(Dispatcher.evaluateFilter(filter, { status: "inactive", score: 10 })).toBe(false);
   });
 });

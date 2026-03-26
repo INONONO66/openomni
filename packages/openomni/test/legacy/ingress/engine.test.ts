@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { IngressEngine } from "../../../src/legacy/ingress/engine";
+import { ConversationSupervisor } from "../../../src/legacy/conversation";
 import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import { TaskStorage } from "../../../src/legacy/task/storage";
@@ -8,10 +9,11 @@ import type {
   RunResult,
   DeliveryAdapter,
   RunPlanner,
-} from "../../../src/legacy/ingress/interfaces";
+} from "../../../src/legacy/ingress/engine";
 import { randomUUID } from "crypto";
 
 const originalIngest = IngressEngine.ingest;
+const originalConversationRun = ConversationSupervisor.run;
 
 function makeEvent(overrides: Partial<InboundEvent> = {}): InboundEvent {
   return {
@@ -30,11 +32,13 @@ function makeEvent(overrides: Partial<InboundEvent> = {}): InboundEvent {
 
 describe("IngressEngine", () => {
   beforeEach(() => {
+    ConversationSupervisor.run = async () => ({
+      type: "error",
+      error: "mocked conversation supervisor failure",
+    });
     IngressEngine.ingest = originalIngest;
     if ((IngressEngine.ingest as unknown as { mock?: unknown }).mock) {
-      (
-        IngressEngine.ingest as unknown as { mockRestore: () => void }
-      ).mockRestore();
+      (IngressEngine.ingest as unknown as { mockRestore: () => void }).mockRestore();
     }
     IngressEngine.reset();
     IngressEngine.configure({});
@@ -44,6 +48,7 @@ describe("IngressEngine", () => {
   });
 
   afterEach(() => {
+    ConversationSupervisor.run = originalConversationRun;
     IngressEngine.reset();
     IngressEngine.configure({});
     Session.storage.clear();

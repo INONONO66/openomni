@@ -76,8 +76,7 @@ function createTransport(config: McpServerConfig) {
       return new SSEClientTransport(new URL(config.url));
     }
     case "streamable-http": {
-      if (!config.url)
-        throw new Error("streamable-http transport requires url");
+      if (!config.url) throw new Error("streamable-http transport requires url");
       return new StreamableHTTPClientTransport(new URL(config.url));
     }
     default:

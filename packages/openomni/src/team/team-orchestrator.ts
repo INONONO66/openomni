@@ -41,10 +41,7 @@ export namespace TeamOrchestrator {
     results: Map<string, string>;
   }
 
-  export async function execute(
-    plan: Plan,
-    config: OrchestratorConfig,
-  ): Promise<TeamResult> {
+  export async function execute(plan: Plan, config: OrchestratorConfig): Promise<TeamResult> {
     if (plan.steps.length === 0) {
       return {
         status: "completed",
@@ -58,8 +55,7 @@ export namespace TeamOrchestrator {
     const dag = DAG.build(plan.steps);
     const acyclic = DAG.validateAcyclic(dag);
     if (!acyclic.valid) {
-      const cycleText =
-        acyclic.cycle.length > 0 ? `: ${acyclic.cycle.join(" -> ")}` : "";
+      const cycleText = acyclic.cycle.length > 0 ? `: ${acyclic.cycle.join(" -> ")}` : "";
       throw new Error(`Plan contains cycle${cycleText}`);
     }
 
@@ -138,15 +134,7 @@ export namespace TeamOrchestrator {
                 error: "approval_rejected",
               },
             });
-            skipDependents(
-              stepId,
-              dag,
-              ledger,
-              failed,
-              skipped,
-              completed,
-              pendingRetry,
-            );
+            skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
             progressed = true;
             continue;
           }
@@ -235,8 +223,7 @@ export namespace TeamOrchestrator {
           }
 
           ledger.recordRejection(stepId);
-          const attempts =
-            ledger.getStepState(stepId)?.attempts ?? attemptNumber;
+          const attempts = ledger.getStepState(stepId)?.attempts ?? attemptNumber;
 
           if (attempts >= maxAttemptsPerStep) {
             ledger.transition(stepId, "failed");
@@ -253,15 +240,7 @@ export namespace TeamOrchestrator {
                 error: `Max attempts (${maxAttemptsPerStep}) reached`,
               },
             });
-            skipDependents(
-              stepId,
-              dag,
-              ledger,
-              failed,
-              skipped,
-              completed,
-              pendingRetry,
-            );
+            skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
             progressed = true;
             continue;
           }
@@ -271,10 +250,7 @@ export namespace TeamOrchestrator {
             handoffDocument = review.feedback;
           }
 
-          if (
-            ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep) &&
-            review.feedback
-          ) {
+          if (ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep) && review.feedback) {
             handoffDocument = await ReviewLoop.generateHandoff(
               {
                 step,
@@ -318,25 +294,12 @@ export namespace TeamOrchestrator {
               error: "Execution error",
             },
           });
-          skipDependents(
-            stepId,
-            dag,
-            ledger,
-            failed,
-            skipped,
-            completed,
-            pendingRetry,
-          );
+          skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
           progressed = true;
         }
       }
 
-      const stall = StallDetector.check(
-        ledger,
-        dag,
-        stallConfig,
-        noProgressTurns,
-      );
+      const stall = StallDetector.check(ledger, dag, stallConfig, noProgressTurns);
       if (stall.stalled && stall.reason) {
         // Publish stall.detected event (fire-and-forget)
         safePublish(Team.Events.StallDetected, {
@@ -349,13 +312,7 @@ export namespace TeamOrchestrator {
           },
         });
 
-        return buildResult(
-          plan.steps,
-          ledger,
-          results,
-          "stalled",
-          stall.reason,
-        );
+        return buildResult(plan.steps, ledger, results, "stalled", stall.reason);
       }
 
       if (isExecutionFinished(plan.steps, ledger)) {
@@ -397,18 +354,13 @@ function resolveTeammate(
   config: TeamOrchestrator.OrchestratorConfig,
 ): Teammate.TeammateConfig {
   if (step.suggestedAgent && config.teammates.has(step.suggestedAgent)) {
-    return (
-      config.teammates.get(step.suggestedAgent) ?? config.defaultTeammateConfig
-    );
+    return config.teammates.get(step.suggestedAgent) ?? config.defaultTeammateConfig;
   }
 
   return config.defaultTeammateConfig;
 }
 
-function buildContext(
-  step: PlanStep,
-  results: Map<string, string>,
-): string | undefined {
+function buildContext(step: PlanStep, results: Map<string, string>): string | undefined {
   if (step.dependsOn.length === 0) {
     return undefined;
   }

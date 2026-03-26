@@ -1,18 +1,6 @@
-import {
-  ModelsDev,
-  Provider,
-  run as llmRun,
-  TokenTracker,
-  type RunInput,
-} from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
-import type {
-  ChatAgentConfig,
-  ChatAgentInput,
-  AgentResult,
-  AgentStep,
-  TokenUsage,
-} from "./types";
+import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
 import {
   createBudgetState,
   checkBudget,
@@ -64,9 +52,7 @@ async function resolveProviderModel(model: {
 
   const rawModel = providerData.models?.[model.id];
   if (!rawModel) {
-    throw new Error(
-      `Model not found: ${model.id} for provider ${model.provider}`,
-    );
+    throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
   }
 
   return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
@@ -94,10 +80,7 @@ function createUserMessage(content: string): Message.WithParts {
   return { info, parts: [textPart] };
 }
 
-function createAssistantMessage(
-  content: string,
-  parentID: string,
-): Message.WithParts {
+function createAssistantMessage(content: string, parentID: string): Message.WithParts {
   const id = crypto.randomUUID();
   const sessionID = "chat-agent";
   const now = Date.now();
@@ -148,9 +131,7 @@ function prependContextMessage(
   return [createUserMessage(contextText), ...messages];
 }
 
-function toMessagesWithParts(
-  messages: ChatAgentInput["messages"],
-): Message.WithParts[] {
+function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
   const output: Message.WithParts[] = [];
 
   for (const message of messages) {
@@ -205,9 +186,7 @@ function buildAssistantMessageWithTools(
   const sessionID = "chat-agent";
   const now = Date.now();
 
-  const resultByCallId = new Map(
-    toolResults.map((result) => [result.toolCallId, result]),
-  );
+  const resultByCallId = new Map(toolResults.map((result) => [result.toolCallId, result]));
   const parts: Message.ToolPart[] = toolCalls.map((call) => {
     const result = resultByCallId.get(call.id);
     const start = now;
@@ -301,8 +280,7 @@ export namespace ChatAgent {
                 const trackingSink: Sink = {
                   onMessage: (message) => {
                     if (message.info.role === "assistant") {
-                      const tokens = (message.info as Message.AssistantMessage)
-                        .tokens;
+                      const tokens = (message.info as Message.AssistantMessage).tokens;
                       totalUsage.inputTokens += tokens.input;
                       totalUsage.outputTokens += tokens.output;
                       totalUsage.totalTokens += tokens.input + tokens.output;
@@ -319,14 +297,10 @@ export namespace ChatAgent {
                         tokens.output,
                         cost.totalCost,
                       );
-                      totalUsage.totalCost =
-                        (totalUsage.totalCost ?? 0) + cost.totalCost;
+                      totalUsage.totalCost = (totalUsage.totalCost ?? 0) + cost.totalCost;
                     }
                     const text = message.parts
-                      .filter(
-                        (part): part is Message.TextPart =>
-                          part.type === "text",
-                      )
+                      .filter((part): part is Message.TextPart => part.type === "text")
                       .map((part) => part.text)
                       .join("");
                     if (text) {
@@ -346,8 +320,7 @@ export namespace ChatAgent {
                       steps,
                       usage: totalUsage,
                       finishReason: "max-steps",
-                      compactionCount:
-                        compactionCount > 0 ? compactionCount : undefined,
+                      compactionCount: compactionCount > 0 ? compactionCount : undefined,
                     };
                   }
 
@@ -361,8 +334,7 @@ export namespace ChatAgent {
                   if (config.memory) {
                     const lastUserText = getLastUserMessageText(messages);
                     if (lastUserText) {
-                      const memoryResults =
-                        await config.memory.retrieve(lastUserText);
+                      const memoryResults = await config.memory.retrieve(lastUserText);
                       if (memoryResults.length > 0) {
                         effectiveMessages = prependContextMessage(
                           messages,
@@ -398,8 +370,7 @@ export namespace ChatAgent {
                       steps,
                       usage: totalUsage,
                       finishReason: "stop",
-                      compactionCount:
-                        compactionCount > 0 ? compactionCount : undefined,
+                      compactionCount: compactionCount > 0 ? compactionCount : undefined,
                     };
                   }
 
@@ -444,10 +415,7 @@ export namespace ChatAgent {
                     await config.onStepFinish(toolStep);
                   }
 
-                  const parentID =
-                    messages.length > 0
-                      ? messages[messages.length - 1].info.id
-                      : "";
+                  const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
                   const assistantWithTools = buildAssistantMessageWithTools(
                     outcome.toolCalls,
                     toolResults,
@@ -457,18 +425,9 @@ export namespace ChatAgent {
 
                   if (config.compaction) {
                     const totalTokens =
-                      budgetState.totalInputTokens +
-                      budgetState.totalOutputTokens;
-                    if (
-                      InMemoryCompactor.shouldCompact(
-                        totalTokens,
-                        config.compaction,
-                      )
-                    ) {
-                      const result = await InMemoryCompactor.compact(
-                        messages,
-                        config.compaction,
-                      );
+                      budgetState.totalInputTokens + budgetState.totalOutputTokens;
+                    if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
+                      const result = await InMemoryCompactor.compact(messages, config.compaction);
                       if (result.compacted) {
                         messages = result.messages;
                         compactionCount += 1;
@@ -477,8 +436,7 @@ export namespace ChatAgent {
                   }
                 }
               } catch (error) {
-                lastError =
-                  error instanceof Error ? error.message : String(error);
+                lastError = error instanceof Error ? error.message : String(error);
                 const retryReason = classifyRetryReason(lastError);
 
                 if (shouldRetry(retryPolicy, retryReason, attempt)) {
@@ -500,10 +458,7 @@ export namespace ChatAgent {
           },
         );
       },
-      async *stream(
-        input: ChatAgentInput,
-        sink?: Sink,
-      ): AsyncIterable<AgentEvent> {
+      async *stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentEvent> {
         yield* streamAgent(input, config, sink);
       },
     };

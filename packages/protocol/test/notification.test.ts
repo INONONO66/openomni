@@ -27,9 +27,7 @@ describe("NotificationSeverity", () => {
 
 describe("DeliveryMode", () => {
   test("should parse valid delivery modes", () => {
-    expect(DeliveryMode.parse("reply_current_session")).toBe(
-      "reply_current_session",
-    );
+    expect(DeliveryMode.parse("reply_current_session")).toBe("reply_current_session");
     expect(DeliveryMode.parse("dm")).toBe("dm");
     expect(DeliveryMode.parse("new_session")).toBe("new_session");
     expect(DeliveryMode.parse("new_thread")).toBe("new_thread");

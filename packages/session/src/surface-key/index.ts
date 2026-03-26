@@ -78,12 +78,7 @@ export namespace SurfaceKey {
   ]);
 
   export function fromChannel(descriptor: ChannelDescriptor): string {
-    const parts = [
-      descriptor.surface,
-      descriptor.namespace,
-      descriptor.kind,
-      descriptor.id,
-    ];
+    const parts = [descriptor.surface, descriptor.namespace, descriptor.kind, descriptor.id];
     if (descriptor.threadId) {
       parts.push("thread", descriptor.threadId);
     }

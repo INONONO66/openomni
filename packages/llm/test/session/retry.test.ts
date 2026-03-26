@@ -61,10 +61,7 @@ describe("Retry", () => {
       const controller = new AbortController();
       const start = Date.now();
       // Request a delay larger than RETRY_MAX_DELAY
-      const promise = Retry.sleep(
-        Retry.RETRY_MAX_DELAY + 1000,
-        controller.signal,
-      );
+      const promise = Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal);
 
       // Should complete within reasonable time (capped at RETRY_MAX_DELAY)
       setTimeout(() => controller.abort(), 100);

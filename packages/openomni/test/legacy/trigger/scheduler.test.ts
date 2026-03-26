@@ -52,9 +52,7 @@ describe("CronParser", () => {
       expect(fields).not.toBeNull();
       expect(fields!.minute).toEqual([0, 30]);
       expect(fields!.hour).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17]);
-      expect(fields!.dayOfMonth).toEqual([
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-      ]);
+      expect(fields!.dayOfMonth).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
       expect(fields!.month).toEqual([1, 6]);
       expect(fields!.dayOfWeek).toEqual([1, 2, 3, 4, 5]);
     });

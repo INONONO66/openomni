@@ -9,9 +9,7 @@ interface ToolPartRef {
   startedAt: number;
 }
 
-function createSyntheticAssistantMessage(
-  sessionID: string,
-): Message.AssistantMessage {
+function createSyntheticAssistantMessage(sessionID: string): Message.AssistantMessage {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
@@ -42,10 +40,7 @@ function createSyntheticAssistantMessage(
   };
 }
 
-function serializeSnapshot(snapshot: {
-  id: string;
-  timestamp: number;
-}): string {
+function serializeSnapshot(snapshot: { id: string; timestamp: number }): string {
   return `${snapshot.id}:${snapshot.timestamp}`;
 }
 

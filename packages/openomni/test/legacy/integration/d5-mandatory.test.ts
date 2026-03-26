@@ -4,11 +4,7 @@ import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import { TaskStorage } from "../../../src/legacy/task/storage";
 import { Scheduler } from "../../../src/legacy/trigger/scheduler";
-import type {
-  InboundEvent,
-  RunRequest,
-  RunResult,
-} from "../../../src/legacy/ingress/interfaces";
+import type { InboundEvent, RunRequest, RunResult } from "../../../src/legacy/ingress/interfaces";
 import type { RunExecutor } from "../../../src/legacy/ingress/run-executor";
 import { randomUUID } from "crypto";
 
@@ -33,10 +29,7 @@ class TestRunExecutor implements RunExecutor {
           };
         }
 
-        const triggerResult = await TaskManager.trigger(
-          request.taskId,
-          request.triggerSignal,
-        );
+        const triggerResult = await TaskManager.trigger(request.taskId, request.triggerSignal);
 
         if ("error" in triggerResult) {
           return {

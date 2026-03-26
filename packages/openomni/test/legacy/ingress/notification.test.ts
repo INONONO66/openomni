@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { NoopNotificationAdapter } from "../../../src/legacy/ingress/engine";
 import type { NotificationAdapter } from "../../../src/legacy/ingress/interfaces";
-import type {
-  NotificationRequest,
-  NotificationResult,
-} from "@openomni/protocol";
+import type { NotificationRequest, NotificationResult } from "@openomni/protocol";
 
 describe("NotificationAdapter", () => {
   describe("NotificationAdapter interface", () => {
@@ -23,9 +20,7 @@ describe("NotificationAdapter", () => {
     it("should accept NotificationRequest and return NotificationResult", async () => {
       const adapter: NotificationAdapter = {
         name: "test",
-        async notify(
-          request: NotificationRequest,
-        ): Promise<NotificationResult> {
+        async notify(request: NotificationRequest): Promise<NotificationResult> {
           return {
             delivered: true,
             destination: "test@example.com",
@@ -103,9 +98,7 @@ describe("NotificationAdapter", () => {
     it("should support custom adapter with error handling", async () => {
       const adapter: NotificationAdapter = {
         name: "custom",
-        async notify(
-          request: NotificationRequest,
-        ): Promise<NotificationResult> {
+        async notify(request: NotificationRequest): Promise<NotificationResult> {
           if (request.severity === "error") {
             return {
               delivered: false,
@@ -131,9 +124,7 @@ describe("NotificationAdapter", () => {
     it("should support adapter with external message ID tracking", async () => {
       const adapter: NotificationAdapter = {
         name: "tracking",
-        async notify(
-          request: NotificationRequest,
-        ): Promise<NotificationResult> {
+        async notify(request: NotificationRequest): Promise<NotificationResult> {
           const messageId = `msg-${Date.now()}`;
           return {
             delivered: true,

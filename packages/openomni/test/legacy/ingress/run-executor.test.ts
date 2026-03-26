@@ -1,12 +1,10 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  DefaultRunExecutor,
-  type RunExecutor,
-} from "../../../src/legacy/ingress/run-executor";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { DefaultRunExecutor, type RunExecutor } from "../../../src/legacy/ingress/run-executor";
+import { ConversationSupervisor } from "../../../src/legacy/conversation";
 import { Session, SurfaceKey } from "@openomni/session";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import { TaskStorage } from "../../../src/legacy/task/storage";
-import type { RunRequest } from "../../../src/legacy/ingress/interfaces";
+import type { RunRequest } from "../../../src/legacy/ingress/engine";
 import { randomUUID } from "crypto";
 
 function makeRunRequest(overrides: Partial<RunRequest> = {}): RunRequest {
@@ -42,11 +40,21 @@ function makeRunRequest(overrides: Partial<RunRequest> = {}): RunRequest {
 }
 
 describe("DefaultRunExecutor", () => {
+  const originalConversationRun = ConversationSupervisor.run;
+
   beforeEach(() => {
+    ConversationSupervisor.run = async () => ({
+      type: "error",
+      error: "mocked conversation supervisor failure",
+    });
     Session.storage.clear();
     SurfaceKey.clear();
     const store = TaskStorage.getAdapter();
     store.task.list().forEach((t) => store.task.remove(t.id));
+  });
+
+  afterEach(() => {
+    ConversationSupervisor.run = originalConversationRun;
   });
 
   describe("trigger_task", () => {

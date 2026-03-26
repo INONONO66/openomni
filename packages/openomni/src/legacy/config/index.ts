@@ -77,9 +77,7 @@ export namespace ConfigManager {
   /**
    * Create a configuration with defaults merged with overrides
    */
-  export function create(
-    overrides: Partial<AutonomousLoopConfig> = {},
-  ): AutonomousLoopConfig {
+  export function create(overrides: Partial<AutonomousLoopConfig> = {}): AutonomousLoopConfig {
     const defaults = getDefaultsInternal();
     return deepMerge(defaults, overrides);
   }
@@ -104,9 +102,7 @@ export namespace ConfigManager {
       return false;
     }
 
-    if (
-      !["drop", "coalesce", "summarize"].includes(config.dedupe.onDuplicate)
-    ) {
+    if (!["drop", "coalesce", "summarize"].includes(config.dedupe.onDuplicate)) {
       return false;
     }
 

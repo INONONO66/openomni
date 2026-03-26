@@ -19,14 +19,8 @@ export const DispatchInput = z.object({
         id: z.string().describe("Unique task identifier"),
         description: z.string().describe("Task description"),
         agentType: z.string().describe("Agent type to execute task"),
-        dependencies: z
-          .array(z.string())
-          .default([])
-          .describe("Task IDs this task depends on"),
-        fileScope: z
-          .array(z.string())
-          .default([])
-          .describe("Files this task operates on"),
+        dependencies: z.array(z.string()).default([]).describe("Task IDs this task depends on"),
+        fileScope: z.array(z.string()).default([]).describe("Files this task operates on"),
       }),
     )
     .describe("Array of tasks to dispatch"),
@@ -55,8 +49,7 @@ export namespace Dispatch {
       return {
         id: crypto.randomUUID(),
         toolCallId,
-        output:
-          "Nested delegation not allowed: dispatch child cannot call subagent/dispatch",
+        output: "Nested delegation not allowed: dispatch child cannot call subagent/dispatch",
         isError: true,
       };
     }
@@ -65,10 +58,7 @@ export namespace Dispatch {
       const output = await executeDispatch(input, context);
 
       for (const result of output.results) {
-        const eventName =
-          result.status === "completed"
-            ? "subagent.completed"
-            : "subagent.failed";
+        const eventName = result.status === "completed" ? "subagent.completed" : "subagent.failed";
 
         IngressEngine.ingest({
           id: crypto.randomUUID(),

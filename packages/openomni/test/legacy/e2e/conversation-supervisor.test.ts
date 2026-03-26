@@ -1,18 +1,108 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  ConversationSupervisor,
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import type {
   ConversationSupervisorConfig,
   ConversationInput,
 } from "../../../src/legacy/conversation";
+import type { Message, Run, Sink } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { TaskStorage } from "../../../src/legacy/task/storage";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import type { Task } from "../../../src/legacy/task/types";
 
+type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
+
+let mockRunFn: MockLlmFn = async (_input: unknown, sink: Sink) => {
+  sink.onMessage(createAssistantMessage("Mock assistant response"));
+  return { type: "stop" };
+};
+
+const mockModelsGet = mock(async () => ({
+  anthropic: {
+    id: "anthropic",
+    name: "Anthropic",
+    models: {
+      "claude-3-haiku-20240307": {
+        id: "claude-3-haiku-20240307",
+        name: "Claude 3 Haiku",
+      },
+      "claude-sonnet-4-20250514": {
+        id: "claude-sonnet-4-20250514",
+        name: "Claude Sonnet 4",
+      },
+    },
+  },
+}));
+
+const mockProviderFromModelsDevModel = mock(() => ({
+  id: "claude-sonnet-4-20250514",
+  providerID: "anthropic",
+}));
+
+mock.module("@openomni/llm", () => ({
+  ModelsDev: { get: mockModelsGet },
+  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
+}));
+
+let ConversationSupervisor: typeof import("../../../src/legacy/conversation").ConversationSupervisor;
+
+beforeAll(async () => {
+  ({ ConversationSupervisor } = await import("../../../src/legacy/conversation"));
+});
+
+afterAll(() => {
+  mock.restore();
+});
+
+function createAssistantMessage(text: string): Message.WithParts {
+  const id = crypto.randomUUID();
+  const sessionID = "conversation-supervisor-test";
+  const now = Date.now();
+
+  const info: Message.AssistantMessage = {
+    id,
+    sessionID,
+    role: "assistant",
+    time: { created: now },
+    parentID: "",
+    modelID: "claude-sonnet-4-20250514",
+    providerID: "anthropic",
+    agent: "chat-agent",
+    path: { cwd: "", root: "" },
+    cost: 0,
+    tokens: {
+      input: 1,
+      output: 1,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+
+  const textPart: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID: id,
+    type: "text",
+    text,
+  };
+
+  return { info, parts: [textPart] };
+}
+
 describe("ConversationSupervisor", () => {
   beforeEach(() => {
     TaskStorage.reset();
     Session.storage.clear();
+    mockModelsGet.mockClear();
+    mockProviderFromModelsDevModel.mockClear();
+    mockRunFn = async (_input: unknown, sink: Sink) => {
+      sink.onMessage(createAssistantMessage("Mock assistant response"));
+      return { type: "stop" };
+    };
   });
 
   function createTask(overrides: Partial<Task.CreateInput> = {}): Task.Info {

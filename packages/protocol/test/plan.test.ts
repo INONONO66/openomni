@@ -1,9 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import {
-  PlanStepSchema,
-  PlanSchema,
-  PlanResultSchema,
-} from "../src/plan/index.js";
+import { PlanStepSchema, PlanSchema, PlanResultSchema } from "../src/plan/index.js";
 
 describe("PlanStep", () => {
   test("should parse valid step with required fields", () => {

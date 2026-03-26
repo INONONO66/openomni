@@ -99,10 +99,7 @@ export namespace Provider {
   });
   export type Info = z.infer<typeof Info>;
 
-  export function fromModelsDevModel(
-    provider: ModelsDev.Provider,
-    model: ModelsDev.Model,
-  ): Model {
+  export function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     return {
       id: model.id,
       providerID: provider.id,
@@ -184,9 +181,7 @@ export namespace Provider {
     return Object.keys(data);
   }
 
-  export async function getProviderInfo(
-    providerID: string,
-  ): Promise<Info | undefined> {
+  export async function getProviderInfo(providerID: string): Promise<Info | undefined> {
     const data = await ModelsDev.get();
     const provider = data[providerID];
     if (!provider) return undefined;

@@ -1,9 +1,5 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import {
-  getSDK,
-  CODEX_ALLOWED_MODELS,
-  Provider,
-} from "../../src/provider/index";
+import { getSDK, CODEX_ALLOWED_MODELS, Provider } from "../../src/provider/index";
 import { createCodexOAuthFetch } from "../../src/fetch/openai";
 import type { Auth } from "../../src/auth";
 
@@ -21,9 +17,7 @@ function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   };
 }
 
-const mockFetch = mock(() =>
-  Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-);
+const mockFetch = mock(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 })));
 
 describe("getSDK (OpenAI)", () => {
   afterEach(() => {
@@ -88,9 +82,7 @@ describe("createCodexOAuthFetch (OpenAI)", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url] = mockFetch.mock.calls[0] as [URL, RequestInit];
-    expect(url.toString()).toBe(
-      "https://chatgpt.com/backend-api/codex/responses",
-    );
+    expect(url.toString()).toBe("https://chatgpt.com/backend-api/codex/responses");
   });
 
   test("rewrites URL for /chat/completions path", async () => {
@@ -108,9 +100,7 @@ describe("createCodexOAuthFetch (OpenAI)", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url] = mockFetch.mock.calls[0] as [URL, RequestInit];
-    expect(url.toString()).toBe(
-      "https://chatgpt.com/backend-api/codex/responses",
-    );
+    expect(url.toString()).toBe("https://chatgpt.com/backend-api/codex/responses");
   });
 
   test("injects Bearer token and removes dummy auth header", async () => {
@@ -191,8 +181,7 @@ describe("createCodexOAuthFetch (OpenAI)", () => {
     let refreshCount = 0;
 
     globalThis.fetch = mock((...args: any[]) => {
-      const url =
-        typeof args[0] === "string" ? args[0] : (args[0]?.toString?.() ?? "");
+      const url = typeof args[0] === "string" ? args[0] : (args[0]?.toString?.() ?? "");
       if (typeof url === "string" && url.includes("/oauth/token")) {
         refreshCount++;
         return Promise.resolve(

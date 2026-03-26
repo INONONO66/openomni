@@ -126,9 +126,7 @@ describe("SpecValidator", () => {
       });
       const result = SpecValidator.validate(plan, { strictness: "strict" });
       expect(result.valid).toBe(false);
-      const issue = result.issues.find(
-        (i) => i.code === "missing_expected_output",
-      );
+      const issue = result.issues.find((i) => i.code === "missing_expected_output");
       expect(issue).toBeDefined();
       expect(issue?.stepId).toBe("step-1");
     });

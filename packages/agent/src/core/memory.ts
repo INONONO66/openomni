@@ -13,11 +13,7 @@ export interface MemoryResult {
 }
 
 export interface Memory {
-  store(
-    key: string,
-    content: string,
-    metadata?: Record<string, unknown>,
-  ): Promise<void>;
+  store(key: string, content: string, metadata?: Record<string, unknown>): Promise<void>;
   retrieve(
     query: string,
     options?: { limit?: number; threshold?: number },
@@ -51,11 +47,7 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
 export class InMemoryMemory implements Memory {
   private entries: MemoryEntry[] = [];
 
-  async store(
-    key: string,
-    content: string,
-    metadata?: Record<string, unknown>,
-  ): Promise<void> {
+  async store(key: string, content: string, metadata?: Record<string, unknown>): Promise<void> {
     this.entries.push({
       key,
       content,

@@ -4,10 +4,7 @@ export abstract class NamedError extends Error {
   abstract schema(): z.ZodType;
   abstract toObject(): { name: string; data: unknown };
 
-  static create<Name extends string, Data extends z.ZodType>(
-    name: Name,
-    data: Data,
-  ) {
+  static create<Name extends string, Data extends z.ZodType>(name: Name, data: Data) {
     const schema = z.object({
       name: z.literal(name),
       data,
@@ -37,10 +34,7 @@ export abstract class NamedError extends Error {
 
       static isInstance(input: unknown): input is InstanceType<typeof result> {
         return (
-          typeof input === "object" &&
-          input !== null &&
-          "name" in input &&
-          input.name === name
+          typeof input === "object" && input !== null && "name" in input && input.name === name
         );
       }
 

@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Message } from "@openomni/protocol";
 import type { InboundEvent, Plan } from "@openomni/protocol";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
@@ -84,11 +76,9 @@ beforeEach(() => {
 
 afterEach(() => {
   if (originalFns.planGenerate) PlanAgent.generate = originalFns.planGenerate;
-  if (originalFns.teamExecute)
-    TeamOrchestrator.execute = originalFns.teamExecute;
+  if (originalFns.teamExecute) TeamOrchestrator.execute = originalFns.teamExecute;
   if (originalFns.chatCreate) ChatAgent.create = originalFns.chatCreate;
-  if (originalFns.buildPlanGoal)
-    SessionBridge.buildPlanGoal = originalFns.buildPlanGoal;
+  if (originalFns.buildPlanGoal) SessionBridge.buildPlanGoal = originalFns.buildPlanGoal;
   if (originalFns.storePlanResult) {
     SessionBridge.storePlanResult = originalFns.storePlanResult;
   }
@@ -100,6 +90,10 @@ afterEach(() => {
   }
 });
 
+afterAll(() => {
+  mock.restore();
+});
+
 function createSession(): string {
   return Session.create({
     title: "Handlers Test Session",
@@ -107,11 +101,7 @@ function createSession(): string {
   }).id;
 }
 
-function addTextMessage(
-  sessionId: string,
-  role: "user" | "assistant",
-  text: string,
-): void {
+function addTextMessage(sessionId: string, role: "user" | "assistant", text: string): void {
   if (role === "user") {
     const message: Message.UserMessage = {
       id: crypto.randomUUID(),
@@ -238,11 +228,7 @@ describe("IngressHandlers", () => {
       systemPrompt: "planner system",
       budget: { maxTurns: 2 },
     });
-    expect(storePlanResultMock).toHaveBeenCalledWith(
-      sessionId,
-      planResult,
-      event.agent.model,
-    );
+    expect(storePlanResultMock).toHaveBeenCalledWith(sessionId, planResult, event.agent.model);
   });
 
   it("handleTeam executes extracted plan and returns team result", async () => {
@@ -258,14 +244,13 @@ describe("IngressHandlers", () => {
     const plan = createPlan();
     SessionBridge.storePlanResult(sessionId, { plan }, reviewerModel);
 
-    const teamResult: import("../../src/team/team-orchestrator").TeamOrchestrator.TeamResult =
-      {
-        status: "completed",
-        completedSteps: ["s1"],
-        failedSteps: [],
-        skippedSteps: [],
-        results: new Map([["s1", "done"]]),
-      };
+    const teamResult: import("../../src/team/team-orchestrator").TeamOrchestrator.TeamResult = {
+      status: "completed",
+      completedSteps: ["s1"],
+      failedSteps: [],
+      skippedSteps: [],
+      results: new Map([["s1", "done"]]),
+    };
 
     const executeMock = mock(async () => teamResult);
     const storeTeamResultMock = mock(() => {});
@@ -306,11 +291,7 @@ describe("IngressHandlers", () => {
         }),
       }),
     );
-    expect(storeTeamResultMock).toHaveBeenCalledWith(
-      sessionId,
-      teamResult,
-      reviewerModel,
-    );
+    expect(storeTeamResultMock).toHaveBeenCalledWith(sessionId, teamResult, reviewerModel);
     expect(result.mode).toBe("team");
     expect(result.result).toEqual({
       ...teamResult,
@@ -340,9 +321,9 @@ describe("IngressHandlers", () => {
       },
     };
 
-    await expect(
-      IngressHandlers.handleTeam({ sessionId, event }),
-    ).rejects.toThrow(/No plan found in session/);
+    await expect(IngressHandlers.handleTeam({ sessionId, event })).rejects.toThrow(
+      /No plan found in session/,
+    );
     expect(executeMock).toHaveBeenCalledTimes(0);
   });
 

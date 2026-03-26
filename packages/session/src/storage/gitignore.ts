@@ -9,11 +9,7 @@ export function ensureGitignore(dir: string, pattern: string): void {
     content = readFileSync(gitignorePath, "utf-8");
   } catch (err: unknown) {
     if (
-      !(
-        err instanceof Error &&
-        "code" in err &&
-        (err as NodeJS.ErrnoException).code === "ENOENT"
-      )
+      !(err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT")
     ) {
       throw err;
     }
@@ -30,11 +26,7 @@ export function ensureGitignore(dir: string, pattern: string): void {
   }
 
   let newContent = content;
-  if (
-    content.length > 0 &&
-    !content.endsWith("\n") &&
-    !content.endsWith("\r\n")
-  ) {
+  if (content.length > 0 && !content.endsWith("\n") && !content.endsWith("\r\n")) {
     newContent += eol;
   }
   newContent += pattern + eol;

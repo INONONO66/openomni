@@ -17,9 +17,7 @@ describe("TaskManager - Spawn Lineage Tracking", () => {
     });
   }
 
-  function createSignal(
-    overrides: Partial<Task.TriggerSignal> = {},
-  ): Task.TriggerSignal {
+  function createSignal(overrides: Partial<Task.TriggerSignal> = {}): Task.TriggerSignal {
     return {
       triggerId: "manual-1",
       type: "manual",

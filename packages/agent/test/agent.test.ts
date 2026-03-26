@@ -250,10 +250,7 @@ describe("ChatAgent", () => {
 
   it("keeps ChatAgent source free of session package dependency", async () => {
     const forbiddenImport = "@openomni/" + "session";
-    const content = await readFile(
-      new URL("../src/core/chat-agent.ts", import.meta.url),
-      "utf8",
-    );
+    const content = await readFile(new URL("../src/core/chat-agent.ts", import.meta.url), "utf8");
 
     expect(content.includes(forbiddenImport)).toBe(false);
   });

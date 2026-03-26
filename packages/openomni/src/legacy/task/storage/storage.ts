@@ -62,9 +62,7 @@ export class InMemoryTaskStore implements TaskStore {
       if (!filter) return tasks;
 
       if (filter.status) {
-        const statuses = Array.isArray(filter.status)
-          ? filter.status
-          : [filter.status];
+        const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
         tasks = tasks.filter((t) => statuses.includes(t.status));
       }
 
@@ -73,15 +71,11 @@ export class InMemoryTaskStore implements TaskStore {
       }
 
       if (filter.assignedAgentId) {
-        tasks = tasks.filter(
-          (t) => t.assignedAgentId === filter.assignedAgentId,
-        );
+        tasks = tasks.filter((t) => t.assignedAgentId === filter.assignedAgentId);
       }
 
       if (filter.tags && filter.tags.length > 0) {
-        tasks = tasks.filter((t) =>
-          filter.tags!.every((tag) => t.tags?.includes(tag)),
-        );
+        tasks = tasks.filter((t) => filter.tags!.every((tag) => t.tags?.includes(tag)));
       }
 
       return tasks;

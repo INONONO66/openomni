@@ -79,17 +79,13 @@ export class TelegramAdapter implements Adapter.Surface {
 
   async start(): Promise<void> {
     if (!this.handler) {
-      throw new Error(
-        "[telegram] No message handler registered. Call onMessage() before start().",
-      );
+      throw new Error("[telegram] No message handler registered. Call onMessage() before start().");
     }
 
     const me = await this.api<TelegramUser>("getMe");
     this.botId = String(me.id);
     this.botUsername = me.username ?? "";
-    console.log(
-      `[telegram] Bot started: @${me.username ?? me.first_name} (${me.id})`,
-    );
+    console.log(`[telegram] Bot started: @${me.username ?? me.first_name} (${me.id})`);
 
     this.running = true;
     this.poll();
@@ -101,10 +97,7 @@ export class TelegramAdapter implements Adapter.Surface {
     console.log("[telegram] Bot stopped");
   }
 
-  async send(
-    surfaceKey: string,
-    message: Adapter.OutboundMessage,
-  ): Promise<void> {
+  async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     const chatId = parsed.id!;
     await this.sendOutbound(chatId, message);
@@ -156,8 +149,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const isDM = message.chat.type === "private";
 
     // Check for @mention in text
-    const mentioned =
-      this.botUsername !== "" && text.includes(`@${this.botUsername}`);
+    const mentioned = this.botUsername !== "" && text.includes(`@${this.botUsername}`);
 
     // Build trigger context and evaluate
     const ctx: Adapter.TriggerContext = {
@@ -172,11 +164,7 @@ export class TelegramAdapter implements Adapter.Surface {
     if (!evaluateTriggers(this.config.triggers, ctx)) return;
 
     // Strip prefix if a prefix rule matched
-    const content = normalizeContent(
-      text,
-      this.config.triggers,
-      this.botUsername,
-    );
+    const content = normalizeContent(text, this.config.triggers, this.botUsername);
     if (!content) return;
 
     const surfaceKey = SurfaceKey.fromChannel({
@@ -190,12 +178,12 @@ export class TelegramAdapter implements Adapter.Surface {
 
     // Typing indicator (repeat every 4s until done)
     const typingInterval = setInterval(() => {
-      this.api("sendChatAction", { chat_id: chatId, action: "typing" }).catch(
-        (e) => console.error("[telegram] typing indicator error:", e),
+      this.api("sendChatAction", { chat_id: chatId, action: "typing" }).catch((e) =>
+        console.error("[telegram] typing indicator error:", e),
       );
     }, 4000);
-    this.api("sendChatAction", { chat_id: chatId, action: "typing" }).catch(
-      (e) => console.error("[telegram] typing indicator error:", e),
+    this.api("sendChatAction", { chat_id: chatId, action: "typing" }).catch((e) =>
+      console.error("[telegram] typing indicator error:", e),
     );
 
     try {
@@ -222,17 +210,12 @@ export class TelegramAdapter implements Adapter.Surface {
 
   private getHandler(): Adapter.MessageHandler {
     if (!this.handler) {
-      throw new Error(
-        `[${this.id}] No handler registered. Call onMessage() before processing.`,
-      );
+      throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
     }
     return this.handler;
   }
 
-  private async sendOutbound(
-    chatId: string,
-    message: Adapter.OutboundMessage,
-  ): Promise<void> {
+  private async sendOutbound(chatId: string, message: Adapter.OutboundMessage): Promise<void> {
     if (message.text) {
       const chunks = splitText(message.text, 4096);
       for (const chunk of chunks) {
@@ -273,16 +256,12 @@ export class TelegramAdapter implements Adapter.Surface {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        `Telegram API ${method} failed (${response.status}): ${body}`,
-      );
+      throw new Error(`Telegram API ${method} failed (${response.status}): ${body}`);
     }
 
     const body = (await response.json()) as TelegramResponse<T>;
     if (!body.ok) {
-      throw new Error(
-        `Telegram API ${method}: ${body.description ?? "Unknown error"}`,
-      );
+      throw new Error(`Telegram API ${method}: ${body.description ?? "Unknown error"}`);
     }
 
     return body.result;

@@ -113,11 +113,7 @@ describe("createOAuthFetch (Anthropic)", () => {
 
     globalThis.fetch = mock(async (input: any, init: any) => {
       const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("oauth/token")) {
         refreshCalled = true;
         return new Response(
@@ -133,9 +129,7 @@ describe("createOAuthFetch (Anthropic)", () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as any;
 
-    const onTokenRefresh = mock(
-      (_access: string, _refresh: string, _expires: number) => {},
-    );
+    const onTokenRefresh = mock((_access: string, _refresh: string, _expires: number) => {});
 
     const oauthFetch = createOAuthFetch(auth, onTokenRefresh);
     await oauthFetch("https://api.anthropic.com/v1/messages", {
@@ -145,11 +139,7 @@ describe("createOAuthFetch (Anthropic)", () => {
 
     expect(refreshCalled).toBe(true);
     expect(capturedAuthHeader).toBe("Bearer new-tok");
-    expect(onTokenRefresh).toHaveBeenCalledWith(
-      "new-tok",
-      "new-ref",
-      expect.any(Number),
-    );
+    expect(onTokenRefresh).toHaveBeenCalledWith("new-tok", "new-ref", expect.any(Number));
   });
 
   test("concurrent requests share single token refresh (promise dedup)", async () => {
@@ -164,11 +154,7 @@ describe("createOAuthFetch (Anthropic)", () => {
 
     globalThis.fetch = mock(async (input: any, _init: any) => {
       const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("oauth/token")) {
         refreshCount++;
         await new Promise((r) => setTimeout(r, 50));

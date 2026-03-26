@@ -11,12 +11,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: CI
+  static:
+    name: Static Analysis (${{ matrix.task }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      matrix:
+        task: [lint, check-types]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.6"
@@ -27,9 +32,46 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@openomni/protocol
-      - run: bun run check-types
-      - name: Check dependency rules
-        run: bun run script/check-deps.ts
+      - run: bunx turbo run ${{ matrix.task }}
+
+  deps:
+    name: Dependency Rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.6"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run script/check-deps.ts
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [static, deps]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.6"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@openomni/protocol
       - name: Test (session)
         run: bun test
         working-directory: packages/session
@@ -45,3 +87,9 @@ jobs:
       - name: Test (openomni)
         run: bun run test:ci
         working-directory: packages/openomni
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: packages/*/coverage/
+          if-no-files-found: ignore

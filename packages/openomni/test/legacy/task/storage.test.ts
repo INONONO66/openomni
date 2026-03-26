@@ -419,10 +419,7 @@ describe("InMemoryTaskStore", () => {
 
       const scheduledRuns = store.run.listByStatus(["scheduled"]);
       expect(scheduledRuns).toHaveLength(2);
-      expect(scheduledRuns.map((r) => r.runId).sort()).toEqual([
-        "run-1",
-        "run-3",
-      ]);
+      expect(scheduledRuns.map((r) => r.runId).sort()).toEqual(["run-1", "run-3"]);
 
       const activeRuns = store.run.listByStatus(["scheduled", "running"]);
       expect(activeRuns).toHaveLength(3);

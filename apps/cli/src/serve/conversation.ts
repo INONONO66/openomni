@@ -22,24 +22,19 @@ const LLM_TIMEOUT_MS = 120_000; // 2 minutes
  * Each handler instance maintains its own per-surface serialization queue
  * to prevent history race conditions.
  */
-export function createMessageHandler(
-  config: ConversationConfig,
-): Adapter.MessageHandler {
+export function createMessageHandler(config: ConversationConfig): Adapter.MessageHandler {
   const queues = new Map<string, Promise<unknown>>();
 
   return async (message) => {
     // TODO: respect Adapter.Config.deliveryPolicy - currently always delivers final response only
     const prev = queues.get(message.surfaceKey) ?? Promise.resolve();
-    const current = prev.then(() =>
-      processMessage(message.surfaceKey, message.text, config),
-    );
+    const current = prev.then(() => processMessage(message.surfaceKey, message.text, config));
     const tail = current.catch(() => {});
     queues.set(message.surfaceKey, tail);
 
     // Cleanup: remove queue entry when no more messages are pending
     tail.then(() => {
-      if (queues.get(message.surfaceKey) === tail)
-        queues.delete(message.surfaceKey);
+      if (queues.get(message.surfaceKey) === tail) queues.delete(message.surfaceKey);
     });
 
     const text = await current;

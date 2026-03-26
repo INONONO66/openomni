@@ -65,10 +65,7 @@ describe("PlanPipeline.run", () => {
     if (result.ok) {
       expect(result.attempts).toBe(1);
       expect(result.gateResults).toHaveLength(2);
-      expect(result.gateResults.map((entry) => entry.gateName)).toEqual([
-        "gate-a",
-        "gate-b",
-      ]);
+      expect(result.gateResults.map((entry) => entry.gateName)).toEqual(["gate-a", "gate-b"]);
     }
   });
 

@@ -26,10 +26,7 @@ export namespace Messenger {
   export const MessageEnvelopeSchema = z.object({
     id: z.string().describe("Unique message ID"),
     traceId: z.string().describe("Trace ID for distributed tracing"),
-    correlationId: z
-      .string()
-      .nullable()
-      .describe("Correlation ID for request/response pairing"),
+    correlationId: z.string().nullable().describe("Correlation ID for request/response pairing"),
     sessionId: z.string().describe("Session ID"),
     runId: z.string().describe("Run ID"),
     fromAgentId: z.string().describe("Sender agent ID"),

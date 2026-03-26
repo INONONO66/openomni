@@ -1,91 +1,56 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
 import type { PlanStep } from "@openomni/protocol";
-import type { Message, Run, Sink } from "@openomni/protocol";
+import { ReviewLoop } from "../../src/team/review-loop";
 
-// --- Mock setup (must be before dynamic import) ---
+const originalCreate = ChatAgent.create;
+const createSpy = spyOn(ChatAgent, "create");
 
-type MockLlmFn = (input: any, sink: Sink) => Promise<Run.Outcome>;
+function makeAgentResult(text: string): AgentResult {
+  return {
+    text,
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    finishReason: "stop",
+  };
+}
 
-let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
-
-const mockModelsGet = mock(async () => ({
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    models: {
-      "claude-3-haiku-20240307": {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
-      },
-    },
-  },
-}));
-
-const mockProviderFromModelsDevModel = mock(() => ({
-  id: "claude-3-haiku-20240307",
-  providerID: "anthropic",
-}));
-
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mockModelsGet },
-  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: (input: any, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
-  },
-}));
-
-// --- Dynamic import after mock ---
-
-let ReviewLoop: typeof import("../../src/team/review-loop").ReviewLoop;
-
-beforeAll(async () => {
-  ({ ReviewLoop } = await import("../../src/team/review-loop"));
+let capturedInput: ChatAgentInput | undefined;
+let runImpl = mock(async (input: ChatAgentInput) => {
+  capturedInput = input;
+  return makeAgentResult("{}");
 });
 
-// --- Helpers ---
+beforeEach(() => {
+  capturedInput = undefined;
+  runImpl = mock(async (input: ChatAgentInput) => {
+    capturedInput = input;
+    return makeAgentResult("{}");
+  });
 
-function createAssistantMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "review-test";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID: "",
-    modelID: "claude-3-haiku-20240307",
-    providerID: "anthropic",
-    agent: "chat-agent",
-    path: { cwd: "", root: "" },
-    cost: 0,
-    tokens: {
-      input: 10,
-      output: 5,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-  return { info, parts: [textPart] };
-}
+  createSpy.mockImplementation((config) => {
+    const realAgent = originalCreate(config);
+    return {
+      ...realAgent,
+      run: async (input: ChatAgentInput) => {
+        const firstMessage = input.messages[0]?.content ?? "";
+        if (
+          firstMessage.includes("You are reviewing the output of a task execution") ||
+          firstMessage.includes(
+            "Generate a handoff document for the following failed task execution",
+          )
+        ) {
+          return runImpl(input);
+        }
+        return realAgent.run(input);
+      },
+    };
+  });
+});
 
-function setupMockResponse(text: string) {
-  mockRunFn = async (_input: any, sink: Sink) => {
-    sink.onMessage(createAssistantMessage(text));
-    return { type: "stop" } as Run.Outcome;
-  };
-}
-
-// --- Fixtures ---
+afterAll(() => {
+  createSpy.mockRestore();
+});
 
 const defaultConfig = {
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -105,18 +70,13 @@ const defaultInput = {
   attemptNumber: 1,
 };
 
-// --- Tests ---
-
 describe("ReviewLoop", () => {
-  beforeEach(() => {
-    mockRunFn = async () => ({ type: "stop" }) as Run.Outcome;
-    mockModelsGet.mockClear();
-    mockProviderFromModelsDevModel.mockClear();
-  });
-
   describe("review", () => {
     it("returns accept decision when LLM accepts", async () => {
-      setupMockResponse(JSON.stringify({ decision: "accept" }));
+      runImpl = mock(async (input: ChatAgentInput) => {
+        capturedInput = input;
+        return makeAgentResult(JSON.stringify({ decision: "accept" }));
+      });
 
       const output = await ReviewLoop.review(defaultInput, defaultConfig);
 
@@ -125,12 +85,15 @@ describe("ReviewLoop", () => {
     });
 
     it("returns reject decision with feedback", async () => {
-      setupMockResponse(
-        JSON.stringify({
-          decision: "reject",
-          feedback: "Missing error handling",
-        }),
-      );
+      runImpl = mock(async (input: ChatAgentInput) => {
+        capturedInput = input;
+        return makeAgentResult(
+          JSON.stringify({
+            decision: "reject",
+            feedback: "Missing error handling",
+          }),
+        );
+      });
 
       const output = await ReviewLoop.review(defaultInput, defaultConfig);
 
@@ -139,42 +102,31 @@ describe("ReviewLoop", () => {
     });
 
     it("throws when LLM returns invalid JSON", async () => {
-      setupMockResponse("This is definitely not JSON");
+      runImpl = mock(async (input: ChatAgentInput) => {
+        capturedInput = input;
+        return makeAgentResult("This is definitely not JSON");
+      });
 
-      await expect(
-        ReviewLoop.review(defaultInput, defaultConfig),
-      ).rejects.toThrow(/failed to parse/i);
+      await expect(ReviewLoop.review(defaultInput, defaultConfig)).rejects.toThrow(
+        /failed to parse/i,
+      );
     });
 
     it("includes guardrail in review prompt when step has guardrail", async () => {
-      let capturedInput: any;
-      mockRunFn = async (input: any, sink: Sink) => {
+      runImpl = mock(async (input: ChatAgentInput) => {
         capturedInput = input;
-        sink.onMessage(
-          createAssistantMessage(JSON.stringify({ decision: "accept" })),
-        );
-        return { type: "stop" } as Run.Outcome;
-      };
+        return makeAgentResult(JSON.stringify({ decision: "accept" }));
+      });
 
       const stepWithGuardrail: PlanStep = {
         ...defaultStep,
         guardrail: "Must not expose user passwords in logs",
       };
 
-      await ReviewLoop.review(
-        { ...defaultInput, step: stepWithGuardrail },
-        defaultConfig,
-      );
+      await ReviewLoop.review({ ...defaultInput, step: stepWithGuardrail }, defaultConfig);
 
-      // The user message (first in messages array) should contain the guardrail
-      const messages = capturedInput.messages as Message.WithParts[];
-      const userMsg = messages[0];
-      const textPart = userMsg.parts.find(
-        (p: Message.Part) => p.type === "text",
-      ) as Message.TextPart | undefined;
-      expect(textPart?.text).toContain(
-        "Must not expose user passwords in logs",
-      );
+      const prompt = capturedInput?.messages[0]?.content;
+      expect(prompt).toContain("Must not expose user passwords in logs");
     });
   });
 
@@ -184,8 +136,6 @@ describe("ReviewLoop", () => {
     });
 
     it("returns true at penultimate attempt (handoff before final retry)", () => {
-      // Fix for off-by-one: handoff triggers at maxAttempts - 1
-      // so the final retry gets a handoff document
       expect(ReviewLoop.shouldHandoff(2, 3)).toBe(true);
     });
 
@@ -194,7 +144,6 @@ describe("ReviewLoop", () => {
     });
 
     it("returns true on first attempt with max=2 (penultimate = first)", () => {
-      // With max=2, attempt 1 is the penultimate, so handoff triggers
       expect(ReviewLoop.shouldHandoff(1, 2)).toBe(true);
     });
 
@@ -205,9 +154,10 @@ describe("ReviewLoop", () => {
 
   describe("generateHandoff", () => {
     it("returns a non-empty handoff document", async () => {
-      setupMockResponse(
-        "## Handoff Document\n\nThe login feature was rejected because...",
-      );
+      runImpl = mock(async (input: ChatAgentInput) => {
+        capturedInput = input;
+        return makeAgentResult("## Handoff Document\n\nThe login feature was rejected because...");
+      });
 
       const handoff = await ReviewLoop.generateHandoff(
         defaultInput,

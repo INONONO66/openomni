@@ -65,7 +65,6 @@ export class FileStorageAdapter implements Storage.Adapter {
     write();
   }
 
-
   private readJSON<T>(filePath: string): T | undefined {
     try {
       const raw = readFileSync(filePath, "utf-8");
@@ -143,16 +142,11 @@ export class FileStorageAdapter implements Storage.Adapter {
 
   message = {
     get: (sessionID: string, messageID: string): Message.Info | undefined => {
-      return this.readJSON<Message.Info>(
-        join(this.messagesDir, sessionID, `${messageID}.json`),
-      );
+      return this.readJSON<Message.Info>(join(this.messagesDir, sessionID, `${messageID}.json`));
     },
 
     set: (sessionID: string, message: Message.Info): void => {
-      this.atomicWrite(
-        join(this.messagesDir, sessionID, `${message.id}.json`),
-        message,
-      );
+      this.atomicWrite(join(this.messagesDir, sessionID, `${message.id}.json`), message);
     },
 
     list: (sessionID: string): Message.Info[] => {
@@ -164,9 +158,7 @@ export class FileStorageAdapter implements Storage.Adapter {
         const msg = this.readJSON<Message.Info>(join(dir, file));
         if (msg) results.push(msg);
       }
-      results.sort(
-        (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id),
-      );
+      results.sort((a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id));
       return results;
     },
 
@@ -192,9 +184,7 @@ export class FileStorageAdapter implements Storage.Adapter {
 
   part = {
     get: (messageID: string, partID: string): Message.Part | undefined => {
-      return this.readJSON<Message.Part>(
-        join(this.partsDir, messageID, `${partID}.json`),
-      );
+      return this.readJSON<Message.Part>(join(this.partsDir, messageID, `${partID}.json`));
     },
 
     set: (messageID: string, part: Message.Part): void => {

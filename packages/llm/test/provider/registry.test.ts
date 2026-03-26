@@ -2,11 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { getSDK, Provider } from "../../src/provider/index";
 import type { Auth } from "../../src/auth";
 
-function makeModel(
-  providerID: string,
-  npm: string,
-  id?: string,
-): Provider.Model {
+function makeModel(providerID: string, npm: string, id?: string): Provider.Model {
   return {
     id: id ?? "test-model",
     providerID,
@@ -19,11 +15,7 @@ describe("Provider Registry", () => {
   describe("getSDK", () => {
     it("should return configured Anthropic provider with API auth", () => {
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
-      const model = makeModel(
-        "anthropic",
-        "@ai-sdk/anthropic",
-        "claude-sonnet-4-20250514",
-      );
+      const model = makeModel("anthropic", "@ai-sdk/anthropic", "claude-sonnet-4-20250514");
       const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
@@ -36,11 +28,7 @@ describe("Provider Registry", () => {
         refresh: "test-refresh-token",
         expires: Date.now() + 3600000,
       };
-      const model = makeModel(
-        "anthropic",
-        "@ai-sdk/anthropic",
-        "claude-sonnet-4-20250514",
-      );
+      const model = makeModel("anthropic", "@ai-sdk/anthropic", "claude-sonnet-4-20250514");
       const provider = getSDK(model, auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
@@ -112,9 +100,7 @@ describe("Provider Registry", () => {
     });
 
     it("should throw error for unknown provider", async () => {
-      await expect(Provider.listModels("unknown")).rejects.toThrow(
-        "Unknown provider: unknown",
-      );
+      await expect(Provider.listModels("unknown")).rejects.toThrow("Unknown provider: unknown");
     });
   });
 

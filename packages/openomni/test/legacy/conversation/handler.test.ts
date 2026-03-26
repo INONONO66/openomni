@@ -90,9 +90,7 @@ describe("ConversationHandler", () => {
       const result = ConversationHandler.decide(context);
 
       expect(result.path).toBe("task");
-      expect(result.reason).toBe(
-        "Requires file writes across multiple modules",
-      );
+      expect(result.reason).toBe("Requires file writes across multiple modules");
     });
 
     it("returns 'inline' when estimatedDuration < 30s (Heuristic 5)", () => {

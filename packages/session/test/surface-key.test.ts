@@ -18,26 +18,15 @@ describe("SurfaceKey", () => {
     });
 
     test("throws error on empty parts", () => {
-      expect(() => SurfaceKey.create([])).toThrow(
-        "SurfaceKey parts cannot be empty",
-      );
+      expect(() => SurfaceKey.create([])).toThrow("SurfaceKey parts cannot be empty");
     });
 
     test("throws error if format validation fails (no colon)", () => {
-      expect(() => SurfaceKey.create(["singlepart"])).toThrow(
-        /Invalid surfaceKey format/,
-      );
+      expect(() => SurfaceKey.create(["singlepart"])).toThrow(/Invalid surfaceKey format/);
     });
 
     test("creates complex keys with multiple colons", () => {
-      const key = SurfaceKey.create([
-        "slack",
-        "workspaceA",
-        "channel",
-        "C123",
-        "thread",
-        "171000",
-      ]);
+      const key = SurfaceKey.create(["slack", "workspaceA", "channel", "C123", "thread", "171000"]);
       expect(key).toBe("slack:workspaceA:channel:C123:thread:171000");
     });
   });
@@ -259,9 +248,7 @@ describe("SurfaceKey", () => {
     });
 
     test("parses a thread key", () => {
-      const parsed = SurfaceKey.parse(
-        "slack:workspaceA:group:C456:thread:171000",
-      );
+      const parsed = SurfaceKey.parse("slack:workspaceA:group:C456:thread:171000");
       expect(parsed.kind).toBe("group");
       expect(parsed.id).toBe("C456");
       expect(parsed.threadId).toBe("171000");

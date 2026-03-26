@@ -10,10 +10,7 @@ import type {
   RunResult,
 } from "../../../src/legacy/ingress/interfaces";
 import type { RunExecutor } from "../../../src/legacy/ingress/run-executor";
-import {
-  RunWorker,
-  type OrchestratorRunInput,
-} from "../../../src/legacy/worker/run/run-worker";
+import { RunWorker, type OrchestratorRunInput } from "../../../src/legacy/worker/run/run-worker";
 import { TaskManager } from "../../../src/legacy/task/manager";
 import { TaskStorage } from "../../../src/legacy/task/storage";
 import type { Task } from "../../../src/legacy/task/types";
@@ -122,10 +119,7 @@ function createTask(overrides: Partial<Task.CreateInput> = {}): Task.Info {
   });
 }
 
-async function createRun(
-  taskId: string,
-  triggerId = "manual-1",
-): Promise<string> {
+async function createRun(taskId: string, triggerId = "manual-1"): Promise<string> {
   const result = await TaskManager.trigger(taskId, {
     triggerId,
     type: "manual",
@@ -139,11 +133,7 @@ async function createRun(
   return result.runId;
 }
 
-function emitAssistantText(
-  sink: Sink,
-  text: string,
-  sessionID = "test-session",
-): void {
+function emitAssistantText(sink: Sink, text: string, sessionID = "test-session"): void {
   const messageID = crypto.randomUUID();
 
   sink.onMessage({
@@ -271,9 +261,7 @@ describe("Agent orchestration e2e", () => {
     const llm: OrchestratorRunInput["llm"] = {
       run: async (input, sink) => {
         llmInputs.push(input);
-        const toolResults = isToolResultArray(input.toolResults)
-          ? input.toolResults
-          : [];
+        const toolResults = isToolResultArray(input.toolResults) ? input.toolResults : [];
 
         if (toolResults.length === 0) {
           const call: Tool.Call = {
@@ -287,10 +275,7 @@ describe("Agent orchestration e2e", () => {
           return { type: "await_tool" as const, toolCalls: [call] };
         }
 
-        emitAssistantText(
-          sink,
-          `Tool loop finished with: ${toolResults[0].output}`,
-        );
+        emitAssistantText(sink, `Tool loop finished with: ${toolResults[0].output}`);
         return { type: "stop" as const };
       },
     };
@@ -346,9 +331,7 @@ describe("Agent orchestration e2e", () => {
       run: async (input, sink) => {
         const prompt = typeof input.prompt === "string" ? input.prompt : "";
         seenPrompts.push(prompt);
-        const toolResults = isToolResultArray(input.toolResults)
-          ? input.toolResults
-          : [];
+        const toolResults = isToolResultArray(input.toolResults) ? input.toolResults : [];
 
         if (prompt === "spawn-depth-2" && toolResults.length === 0) {
           const subCall: Tool.Call = {
@@ -513,9 +496,7 @@ describe("Agent orchestration e2e", () => {
     const mainLLM: OrchestratorRunInput["llm"] = {
       run: async (input, sink) => {
         mainTurns += 1;
-        const toolResults = isToolResultArray(input.toolResults)
-          ? input.toolResults
-          : [];
+        const toolResults = isToolResultArray(input.toolResults) ? input.toolResults : [];
 
         if (toolResults.length === 0) {
           const subagentCall: Tool.Call = {
@@ -532,10 +513,7 @@ describe("Agent orchestration e2e", () => {
           return { type: "await_tool" as const, toolCalls: [subagentCall] };
         }
 
-        emitAssistantText(
-          sink,
-          `Main agent received subagent output: ${toolResults[0].output}`,
-        );
+        emitAssistantText(sink, `Main agent received subagent output: ${toolResults[0].output}`);
         return { type: "stop" as const };
       },
     };

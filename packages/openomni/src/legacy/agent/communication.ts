@@ -80,26 +80,18 @@ export class MessagingError extends Error {
 export namespace AgentMessenger {
   const inboxes = new Map<string, MessageEnvelope[]>();
   const auditLogs = new Map<string, AuditEntry[]>();
-  const subscribers = new Map<
-    string,
-    ((envelope: MessageEnvelope) => void)[]
-  >();
+  const subscribers = new Map<string, ((envelope: MessageEnvelope) => void)[]>();
   let allowPatterns: AllowPattern[] | null = null;
   let bothPolicyEnabled = false;
 
   const isValidEnvelope = (envelope: MessageEnvelope): boolean => {
-    return Boolean(
-      envelope.toAgentId &&
-      envelope.fromAgentId &&
-      envelope.payload !== undefined,
-    );
+    return Boolean(envelope.toAgentId && envelope.fromAgentId && envelope.payload !== undefined);
   };
 
   const isAllowed = (from: string, to: string): boolean => {
     if (allowPatterns === null) return true;
     return allowPatterns.some(
-      (p) =>
-        (p.from === "*" || p.from === from) && (p.to === "*" || p.to === to),
+      (p) => (p.from === "*" || p.from === from) && (p.to === "*" || p.to === to),
     );
   };
 

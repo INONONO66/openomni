@@ -22,10 +22,7 @@ export function createBudgetState(): BudgetState {
   };
 }
 
-export function checkBudget(
-  state: BudgetState,
-  budget?: AgentBudget,
-): "ok" | "exceeded" {
+export function checkBudget(state: BudgetState, budget?: AgentBudget): "ok" | "exceeded" {
   const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
   const maxTurns = budget?.maxTurns ?? 24;
   const maxToolCalls = budget?.maxToolCalls ?? 40;
@@ -37,23 +34,16 @@ export function checkBudget(
   if (state.toolCalls >= maxToolCalls) return "exceeded";
   if (state.toolRuntimeMs >= maxToolRuntimeMs) return "exceeded";
 
-  if (
-    budget?.maxInputTokens !== undefined &&
-    state.totalInputTokens >= budget.maxInputTokens
-  )
+  if (budget?.maxInputTokens !== undefined && state.totalInputTokens >= budget.maxInputTokens)
     return "exceeded";
-  if (
-    budget?.maxOutputTokens !== undefined &&
-    state.totalOutputTokens >= budget.maxOutputTokens
-  )
+  if (budget?.maxOutputTokens !== undefined && state.totalOutputTokens >= budget.maxOutputTokens)
     return "exceeded";
   if (
     budget?.maxTotalTokens !== undefined &&
     state.totalInputTokens + state.totalOutputTokens >= budget.maxTotalTokens
   )
     return "exceeded";
-  if (budget?.maxCost !== undefined && state.totalCost >= budget.maxCost)
-    return "exceeded";
+  if (budget?.maxCost !== undefined && state.totalCost >= budget.maxCost) return "exceeded";
 
   return "ok";
 }
@@ -62,10 +52,7 @@ export function recordTurn(state: BudgetState): BudgetState {
   return { ...state, turns: state.turns + 1 };
 }
 
-export function recordToolCall(
-  state: BudgetState,
-  durationMs: number,
-): BudgetState {
+export function recordToolCall(state: BudgetState, durationMs: number): BudgetState {
   return {
     ...state,
     toolCalls: state.toolCalls + 1,

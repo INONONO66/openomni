@@ -1,12 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  existsSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { FileLock } from "../../src/storage/lock";
@@ -50,9 +43,7 @@ describe("FileLock.acquire", () => {
     mkdirSync(lockPath);
     // No info.json — could be a freshly acquired lock between mkdirSync and writeLockInfo.
     // Directory mtime is recent, so it should NOT be considered stale.
-    expect(() =>
-      FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
-    ).toThrow(/timeout/i);
+    expect(() => FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 })).toThrow(/timeout/i);
 
     rmSync(lockPath, { recursive: true, force: true });
   });
@@ -61,9 +52,7 @@ describe("FileLock.acquire", () => {
     mkdirSync(lockPath);
     writeFileSync(join(lockPath, "info.json"), "NOT_JSON");
     // Unreadable info.json, but directory mtime is recent → not stale.
-    expect(() =>
-      FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
-    ).toThrow(/timeout/i);
+    expect(() => FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 })).toThrow(/timeout/i);
 
     rmSync(lockPath, { recursive: true, force: true });
   });
@@ -85,9 +74,7 @@ describe("FileLock.acquire", () => {
       JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
     );
 
-    expect(() =>
-      FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 }),
-    ).toThrow(/timeout/i);
+    expect(() => FileLock.acquire(lockPath, { timeoutMs: 150, pollMs: 50 })).toThrow(/timeout/i);
 
     rmSync(lockPath, { recursive: true, force: true });
   });

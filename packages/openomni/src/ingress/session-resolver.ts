@@ -32,11 +32,7 @@ export namespace IngressSessionResolver {
    *   {surface: "slack", channel: "C123"} → "slack::C123"
    */
   export function extractSurfaceKey(event: ResolvableEvent): string {
-    const parts = [
-      event.surface,
-      event.workspace ?? "",
-      event.channel ?? "",
-    ];
+    const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
     return SurfaceKey.create(parts);
   }
 

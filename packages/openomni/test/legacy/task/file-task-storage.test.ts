@@ -20,11 +20,7 @@ function makeTask(id: string, overrides?: Partial<Task.Info>): Task.Info {
   };
 }
 
-function makeRun(
-  runId: string,
-  taskId: string,
-  overrides?: Partial<Task.Run>,
-): Task.Run {
+function makeRun(runId: string, taskId: string, overrides?: Partial<Task.Run>): Task.Run {
   return {
     runId,
     taskId,
@@ -102,18 +98,9 @@ describe("FileTaskStore", () => {
 
     test("listByStatus returns matching runs", () => {
       const store = new FileTaskStore(dir);
-      store.run.set(
-        "task-1",
-        makeRun("run-1", "task-1", { status: "scheduled" }),
-      );
-      store.run.set(
-        "task-1",
-        makeRun("run-2", "task-1", { status: "running" }),
-      );
-      store.run.set(
-        "task-2",
-        makeRun("run-3", "task-2", { status: "scheduled" }),
-      );
+      store.run.set("task-1", makeRun("run-1", "task-1", { status: "scheduled" }));
+      store.run.set("task-1", makeRun("run-2", "task-1", { status: "running" }));
+      store.run.set("task-2", makeRun("run-3", "task-2", { status: "scheduled" }));
 
       const scheduled = store.run.listByStatus(["scheduled"]);
       expect(scheduled).toHaveLength(2);
@@ -156,10 +143,7 @@ describe("FileTaskStore", () => {
       const now = Date.now();
 
       for (let i = 0; i < 5; i++) {
-        store.run.set(
-          "task-1",
-          makeRun(`run-${i}`, "task-1", { scheduledAt: now + i }),
-        );
+        store.run.set("task-1", makeRun(`run-${i}`, "task-1", { scheduledAt: now + i }));
       }
 
       const page = store.run.list("task-1", {
@@ -227,14 +211,8 @@ describe("FileTaskStore", () => {
       store1.task.set("task-1", makeTask("task-1"));
       store1.task.set("task-2", makeTask("task-2"));
       store1.run.set("task-1", makeRun("run-1", "task-1", { status: "done" }));
-      store1.run.set(
-        "task-1",
-        makeRun("run-2", "task-1", { status: "running" }),
-      );
-      store1.run.set(
-        "task-2",
-        makeRun("run-3", "task-2", { status: "scheduled" }),
-      );
+      store1.run.set("task-1", makeRun("run-2", "task-1", { status: "running" }));
+      store1.run.set("task-2", makeRun("run-3", "task-2", { status: "scheduled" }));
 
       const store2 = new FileTaskStore(dir);
       expect(store2.task.list()).toHaveLength(2);

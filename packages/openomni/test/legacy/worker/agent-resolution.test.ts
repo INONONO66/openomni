@@ -1,13 +1,6 @@
-import { describe, it, expect, beforeEach, spyOn } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { ModelsDev } from "@openomni/llm";
 import { BuiltinAgentRegistry } from "../../../src/legacy/agent/registry/registry";
-import { ModelsDev } from "@openomni/llm/src/provider";
-import {
-  resolveAgentDefinition,
-  resolveLLM,
-  resolveToolExecutor,
-  resolveAgentForWorker,
-  fallbackToolExecutor,
-} from "../../../src/legacy/worker/agent-resolution";
 
 const FAKE_ANTHROPIC_PROVIDER: ModelsDev.Provider = {
   id: "anthropic",
@@ -30,18 +23,58 @@ const FAKE_ANTHROPIC_PROVIDER: ModelsDev.Provider = {
   },
 };
 
-function mockModelsDevGet(data?: Record<string, ModelsDev.Provider>) {
-  return spyOn(ModelsDev, "get").mockResolvedValue(
-    data ?? { anthropic: FAKE_ANTHROPIC_PROVIDER },
-  );
-}
+let modelsCatalog: Record<string, ModelsDev.Provider> = {
+  anthropic: FAKE_ANTHROPIC_PROVIDER,
+};
+
+const mockModelsGet = mock(async () => modelsCatalog);
+const mockProviderFromModelsDevModel = mock((provider: { id: string }, model: { id: string }) => ({
+  id: model.id,
+  providerID: provider.id,
+}));
+const mockRun = mock(async () => ({ type: "stop" as const }));
+
+mock.module("@openomni/llm", () => ({
+  ModelsDev: { get: mockModelsGet },
+  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  run: mockRun,
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
+}));
+
+let resolveAgentDefinition: typeof import("../../../src/legacy/worker/agent-resolution").resolveAgentDefinition;
+let resolveLLM: typeof import("../../../src/legacy/worker/agent-resolution").resolveLLM;
+let resolveToolExecutor: typeof import("../../../src/legacy/worker/agent-resolution").resolveToolExecutor;
+let resolveAgentForWorker: typeof import("../../../src/legacy/worker/agent-resolution").resolveAgentForWorker;
+let fallbackToolExecutor: typeof import("../../../src/legacy/worker/agent-resolution").fallbackToolExecutor;
+
+beforeAll(async () => {
+  ({
+    resolveAgentDefinition,
+    resolveLLM,
+    resolveToolExecutor,
+    resolveAgentForWorker,
+    fallbackToolExecutor,
+  } = await import("../../../src/legacy/worker/agent-resolution"));
+});
+
+beforeEach(() => {
+  modelsCatalog = { anthropic: FAKE_ANTHROPIC_PROVIDER };
+  mockModelsGet.mockClear();
+  mockProviderFromModelsDevModel.mockClear();
+  mockRun.mockClear();
+
+  BuiltinAgentRegistry.clear();
+  BuiltinAgentRegistry.initializeBuiltins();
+});
+
+afterAll(() => {
+  mock.restore();
+});
 
 describe("agent-resolution", () => {
-  beforeEach(() => {
-    BuiltinAgentRegistry.clear();
-    BuiltinAgentRegistry.initializeBuiltins();
-  });
-
   describe("resolveAgentDefinition", () => {
     it("returns definition for existing agent", () => {
       const def = resolveAgentDefinition("explore");
@@ -124,9 +157,7 @@ describe("agent-resolution", () => {
 
     it("rejects disallowed tools", async () => {
       const executor = resolveToolExecutor(["read", "grep"]);
-      const results = await executor.execute([
-        { id: "call-1", tool: "write", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "call-1", tool: "write", input: {} }]);
 
       expect(results).toHaveLength(1);
       expect(results[0].isError).toBe(true);
@@ -136,9 +167,7 @@ describe("agent-resolution", () => {
 
     it("accepts allowed tools with placeholder response", async () => {
       const executor = resolveToolExecutor(["read", "write"]);
-      const results = await executor.execute([
-        { id: "call-1", tool: "read", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "call-1", tool: "read", input: {} }]);
 
       expect(results).toHaveLength(1);
       expect(results[0].toolCallId).toBe("call-1");
@@ -171,9 +200,7 @@ describe("agent-resolution", () => {
 
     it("preserves toolCallId from input", async () => {
       const executor = resolveToolExecutor(["read"]);
-      const results = await executor.execute([
-        { id: "my-call-id", tool: "read", input: {} },
-      ]);
+      const results = await executor.execute([{ id: "my-call-id", tool: "read", input: {} }]);
 
       expect(results[0].toolCallId).toBe("my-call-id");
     });
@@ -181,125 +208,80 @@ describe("agent-resolution", () => {
 
   describe("resolveLLM", () => {
     it("returns LLM runner for valid model config", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const llm = await resolveLLM({
-          providerID: "anthropic",
-          modelID: "claude-sonnet-4-20250514",
-        });
-        expect(llm).toBeDefined();
-        expect(typeof llm.run).toBe("function");
-      } finally {
-        spy.mockRestore();
-      }
+      const llm = await resolveLLM({
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      });
+      expect(llm).toBeDefined();
+      expect(typeof llm.run).toBe("function");
     });
 
     it("returns default LLM runner when model is undefined", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const llm = await resolveLLM(undefined);
-        expect(llm).toBeDefined();
-        expect(typeof llm.run).toBe("function");
-      } finally {
-        spy.mockRestore();
-      }
+      const llm = await resolveLLM(undefined);
+      expect(llm).toBeDefined();
+      expect(typeof llm.run).toBe("function");
     });
 
     it("falls back to default when custom model provider not found", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const llm = await resolveLLM({
-          providerID: "nonexistent-provider",
-          modelID: "some-model",
-        });
-        expect(llm).toBeDefined();
-        expect(typeof llm.run).toBe("function");
-      } finally {
-        spy.mockRestore();
-      }
+      const llm = await resolveLLM({
+        providerID: "nonexistent-provider",
+        modelID: "some-model",
+      });
+      expect(llm).toBeDefined();
+      expect(typeof llm.run).toBe("function");
     });
 
     it("falls back to default when custom model ID not found", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const llm = await resolveLLM({
-          providerID: "anthropic",
-          modelID: "nonexistent-model",
-        });
-        expect(llm).toBeDefined();
-        expect(typeof llm.run).toBe("function");
-      } finally {
-        spy.mockRestore();
-      }
+      const llm = await resolveLLM({
+        providerID: "anthropic",
+        modelID: "nonexistent-model",
+      });
+      expect(llm).toBeDefined();
+      expect(typeof llm.run).toBe("function");
     });
 
     it("throws when default model also fails", async () => {
-      const spy = mockModelsDevGet({});
-      try {
-        await expect(resolveLLM(undefined)).rejects.toThrow(
-          "Provider not found: anthropic",
-        );
-      } finally {
-        spy.mockRestore();
-      }
+      modelsCatalog = {};
+      await expect(resolveLLM(undefined)).rejects.toThrow("Provider not found: anthropic");
     });
   });
 
   describe("resolveAgentForWorker", () => {
     it("returns complete config for existing agent", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const config = await resolveAgentForWorker("explore");
-        expect(config.llm).toBeDefined();
-        expect(typeof config.llm.run).toBe("function");
-        expect(config.input).toHaveProperty("system");
-        expect(typeof (config.input as any).system).toBe("string");
-        expect((config.input as any).system.length).toBeGreaterThan(0);
-        expect(config.toolExecutor).toBeDefined();
-        expect(config.toolExecutor).not.toBe(fallbackToolExecutor);
-      } finally {
-        spy.mockRestore();
+      const config = await resolveAgentForWorker("explore");
+      expect(config.llm).toBeDefined();
+      expect(typeof config.llm.run).toBe("function");
+      expect(config.input).toHaveProperty("system");
+      if ("system" in config.input && typeof config.input.system === "string") {
+        expect(config.input.system.length).toBeGreaterThan(0);
       }
+      expect(config.toolExecutor).toBeDefined();
+      expect(config.toolExecutor).not.toBe(fallbackToolExecutor);
     });
 
     it("returns fallback config for nonexistent agent", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const config = await resolveAgentForWorker("nonexistent-agent");
-        expect(config.llm).toBeDefined();
-        expect(typeof config.llm.run).toBe("function");
-        expect(config.input).toEqual({});
-        expect(config.toolExecutor).toBe(fallbackToolExecutor);
-      } finally {
-        spy.mockRestore();
-      }
+      const config = await resolveAgentForWorker("nonexistent-agent");
+      expect(config.llm).toBeDefined();
+      expect(typeof config.llm.run).toBe("function");
+      expect(config.input).toEqual({});
+      expect(config.toolExecutor).toBe(fallbackToolExecutor);
     });
 
     it("uses agent systemPrompt in input", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const config = await resolveAgentForWorker("implement");
-        expect((config.input as any).system).toContain(
-          "expert software engineer",
-        );
-      } finally {
-        spy.mockRestore();
+      const config = await resolveAgentForWorker("implement");
+      if ("system" in config.input && typeof config.input.system === "string") {
+        expect(config.input.system).toContain("expert software engineer");
       }
     });
 
     it("uses agent tools for toolExecutor", async () => {
-      const spy = mockModelsDevGet();
-      try {
-        const config = await resolveAgentForWorker("explore");
-        const results = await config.toolExecutor.execute([
-          { id: "c1", tool: "read", input: {} },
-          { id: "c2", tool: "write", input: {} },
-        ]);
-        expect(results[0].output).toContain("allowed but no executor");
-        expect(results[1].output).toContain("not allowed");
-      } finally {
-        spy.mockRestore();
-      }
+      const config = await resolveAgentForWorker("explore");
+      const results = await config.toolExecutor.execute([
+        { id: "c1", tool: "read", input: {} },
+        { id: "c2", tool: "write", input: {} },
+      ]);
+      expect(results[0].output).toContain("allowed but no executor");
+      expect(results[1].output).toContain("not allowed");
     });
   });
 

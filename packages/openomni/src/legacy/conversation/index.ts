@@ -35,13 +35,7 @@ export namespace ConversationHandler {
    * @returns Decision with path ("inline" or "task") and reason
    */
   export function decide(request: RequestContext): Decision {
-    const {
-      estimatedDuration,
-      fileCount,
-      needsApproval,
-      userIntent,
-      complexity,
-    } = request;
+    const { estimatedDuration, fileCount, needsApproval, userIntent, complexity } = request;
 
     // Heuristic 1: Needs design review or approval → Task
     if (needsApproval) {
@@ -63,8 +57,7 @@ export namespace ConversationHandler {
     if (deferredKeywords.some((keyword) => intentLower.includes(keyword))) {
       return {
         path: "task",
-        reason:
-          'User requested deferred execution ("later", "when you have time")',
+        reason: 'User requested deferred execution ("later", "when you have time")',
       };
     }
 

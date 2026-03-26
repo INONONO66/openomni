@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/session";
-import {
-  AgentMessenger,
-  BusTransport,
-} from "../../../src/runtime/messenger/index";
+import { AgentMessenger, BusTransport } from "../../../src/runtime/messenger/index";
 import type { Messenger } from "@openomni/protocol";
 
 function makeEnvelope(
@@ -63,9 +60,7 @@ describe("AgentMessenger", () => {
     const transport = new BusTransport();
     const messenger = AgentMessenger.create(transport);
 
-    await expect(
-      messenger.send(makeEnvelope("agent-x", "agent-y")),
-    ).resolves.toBeUndefined();
+    await expect(messenger.send(makeEnvelope("agent-x", "agent-y"))).resolves.toBeUndefined();
   });
 
   it("allows message matching allow pattern", async () => {
@@ -74,9 +69,7 @@ describe("AgentMessenger", () => {
       allowPatterns: [{ from: "agent-a", to: "agent-b" }],
     });
 
-    await expect(
-      messenger.send(makeEnvelope("agent-a", "agent-b")),
-    ).resolves.toBeUndefined();
+    await expect(messenger.send(makeEnvelope("agent-a", "agent-b"))).resolves.toBeUndefined();
   });
 
   it("denies message not matching allow pattern", async () => {
@@ -85,9 +78,9 @@ describe("AgentMessenger", () => {
       allowPatterns: [{ from: "agent-a", to: "agent-b" }],
     });
 
-    await expect(
-      messenger.send(makeEnvelope("agent-c", "agent-b")),
-    ).rejects.toThrow("Authorization denied");
+    await expect(messenger.send(makeEnvelope("agent-c", "agent-b"))).rejects.toThrow(
+      "Authorization denied",
+    );
   });
 
   it("allows wildcard * in allow pattern", async () => {
@@ -96,9 +89,7 @@ describe("AgentMessenger", () => {
       allowPatterns: [{ from: "*", to: "*" }],
     });
 
-    await expect(
-      messenger.send(makeEnvelope("any-agent", "any-other")),
-    ).resolves.toBeUndefined();
+    await expect(messenger.send(makeEnvelope("any-agent", "any-other"))).resolves.toBeUndefined();
   });
 
   it("handles 3 concurrent sends without message loss", async () => {

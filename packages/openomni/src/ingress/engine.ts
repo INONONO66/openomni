@@ -1,8 +1,4 @@
-import {
-  InboundEventSchema,
-  type InboundEvent,
-  type IngressResult,
-} from "@openomni/protocol";
+import { InboundEventSchema, type InboundEvent, type IngressResult } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey } from "@openomni/session";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
@@ -18,8 +14,7 @@ export namespace IngressEngine {
   export async function ingest(event: InboundEvent): Promise<IngressResult> {
     InboundEventSchema.parse(event);
 
-    const agentModel =
-      event.mode === "team" ? event.agents.executor.model : event.agent.model;
+    const agentModel = event.mode === "team" ? event.agents.executor.model : event.agent.model;
     const { session } = IngressSessionResolver.resolve(event, {
       providerID: agentModel.provider,
       modelID: agentModel.id,

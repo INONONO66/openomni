@@ -26,11 +26,7 @@
 import { z } from "zod";
 import { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import {
-  resolveAgentDefinition,
-  resolveLLM,
-  resolveToolExecutor,
-} from "../worker";
+import { resolveAgentDefinition, resolveLLM, resolveToolExecutor } from "../worker";
 import { BuiltinAgentRegistry } from "../agent";
 import { RunWorker } from "../worker";
 import type {
@@ -115,10 +111,7 @@ export const ClassifyIntentInput = z.object({
     .describe(
       "User intent classification: 'immediate' for simple queries/tasks that can be answered directly, 'plan_needed' for complex work requiring decomposition and approval",
     ),
-  reasoning: z
-    .string()
-    .optional()
-    .describe("Brief reasoning for the classification"),
+  reasoning: z.string().optional().describe("Brief reasoning for the classification"),
 });
 export type ClassifyIntentInput = z.infer<typeof ClassifyIntentInput>;
 
@@ -134,24 +127,13 @@ export const GeneratePlanInput = z.object({
     .array(
       z.object({
         description: z.string().describe("Work item description"),
-        effort: z
-          .enum(["trivial", "small", "medium", "large"])
-          .describe("Effort estimate"),
-        dependsOn: z
-          .array(z.number())
-          .optional()
-          .describe("Indices of dependent work items"),
-        suggestedAgent: z
-          .string()
-          .optional()
-          .describe("Recommended agent for this work item"),
+        effort: z.enum(["trivial", "small", "medium", "large"]).describe("Effort estimate"),
+        dependsOn: z.array(z.number()).optional().describe("Indices of dependent work items"),
+        suggestedAgent: z.string().optional().describe("Recommended agent for this work item"),
       }),
     )
     .describe("Array of work items"),
-  estimatedRuntimeMs: z
-    .number()
-    .optional()
-    .describe("Estimated total runtime in milliseconds"),
+  estimatedRuntimeMs: z.number().optional().describe("Estimated total runtime in milliseconds"),
 });
 export type GeneratePlanInput = z.infer<typeof GeneratePlanInput>;
 
@@ -310,21 +292,15 @@ export namespace ConversationSupervisor {
     }
 
     const parts = Session.getParts(lastMessage.id);
-    const toolParts = parts.filter(
-      (part): part is Message.ToolPart => part.type === "tool",
-    );
+    const toolParts = parts.filter((part): part is Message.ToolPart => part.type === "tool");
 
-    const classifyIntentCall = toolParts.find(
-      (part) => part.tool === "classify_intent",
-    );
+    const classifyIntentCall = toolParts.find((part) => part.tool === "classify_intent");
 
     if (classifyIntentCall) {
       const input = classifyIntentCall.state.input as ClassifyIntentInput;
 
       if (input.intent === "immediate") {
-        const textParts = parts.filter(
-          (part): part is Message.TextPart => part.type === "text",
-        );
+        const textParts = parts.filter((part): part is Message.TextPart => part.type === "text");
         const response = textParts.map((p) => p.text).join("");
 
         return {
@@ -333,9 +309,7 @@ export namespace ConversationSupervisor {
         };
       }
     } else {
-      const textParts = parts.filter(
-        (part): part is Message.TextPart => part.type === "text",
-      );
+      const textParts = parts.filter((part): part is Message.TextPart => part.type === "text");
       const response = textParts.map((p) => p.text).join("");
 
       if (response) {
@@ -399,9 +373,7 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
       (part): part is Message.ToolPart => part.type === "tool",
     );
 
-    const generatePlanCall = planToolParts.find(
-      (part) => part.tool === "generate_plan",
-    );
+    const generatePlanCall = planToolParts.find((part) => part.tool === "generate_plan");
 
     if (!generatePlanCall) {
       return {
@@ -410,9 +382,7 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
       };
     }
 
-    const planInputResult = GeneratePlanInput.safeParse(
-      generatePlanCall.state.input,
-    );
+    const planInputResult = GeneratePlanInput.safeParse(generatePlanCall.state.input);
     if (!planInputResult.success) {
       return {
         type: "error",
@@ -434,9 +404,7 @@ When generating a plan, assign a suggestedAgent to each work item based on the a
     const agentNames = new Set(availableAgents.map((a) => a.name));
     for (const item of plan.workItems) {
       if (item.suggestedAgent && !agentNames.has(item.suggestedAgent)) {
-        console.warn(
-          `[ConversationSupervisor] Invalid suggestedAgent: ${item.suggestedAgent}`,
-        );
+        console.warn(`[ConversationSupervisor] Invalid suggestedAgent: ${item.suggestedAgent}`);
       }
     }
 

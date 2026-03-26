@@ -8,9 +8,7 @@ function resolveDefaultEventLogDir(): string {
   const maybeWrapped = adapter as Storage.Adapter & {
     underlying?: unknown;
   };
-  const maybeUnderlying = maybeWrapped.underlying as
-    | { baseDir?: string }
-    | undefined;
+  const maybeUnderlying = maybeWrapped.underlying as { baseDir?: string } | undefined;
 
   const maybeDirect = adapter as Storage.Adapter & { baseDir?: string };
   const baseDir = maybeDirect.baseDir ?? maybeUnderlying?.baseDir;
@@ -28,16 +26,11 @@ export namespace EventLog {
     backend = new FileEventLog(baseDir);
   }
 
-  export async function append(
-    sessionId: string,
-    event: ExecutionEvent.T,
-  ): Promise<void> {
+  export async function append(sessionId: string, event: ExecutionEvent.T): Promise<void> {
     backend.append(sessionId, event);
   }
 
-  export async function* replay(
-    sessionId: string,
-  ): AsyncGenerator<ExecutionEvent.T> {
+  export async function* replay(sessionId: string): AsyncGenerator<ExecutionEvent.T> {
     for (const event of backend.replay(sessionId)) {
       yield event;
     }

@@ -19,10 +19,7 @@ export namespace AgentRegistry {
     return Array.from(store.values());
   }
 
-  export function override(
-    name: string,
-    partial: Partial<AgentProfile.Definition>,
-  ): void {
+  export function override(name: string, partial: Partial<AgentProfile.Definition>): void {
     const existing = store.get(name);
     if (!existing) throw new Error(`Agent '${name}' not registered`);
     store.set(name, { ...existing, ...partial });

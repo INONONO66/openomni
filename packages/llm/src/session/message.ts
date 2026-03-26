@@ -140,10 +140,7 @@ export namespace Message {
   });
   export type AssistantMessage = z.infer<typeof AssistantMessage>;
 
-  export const Info = z.discriminatedUnion("role", [
-    UserMessage,
-    AssistantMessage,
-  ]);
+  export const Info = z.discriminatedUnion("role", [UserMessage, AssistantMessage]);
   export type Info = z.infer<typeof Info>;
 
   export const WithParts = z.object({

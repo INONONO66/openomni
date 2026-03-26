@@ -130,8 +130,7 @@ describe("Teammate", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       };
 
-      const handoffDocument =
-        "Previous attempt notes: try a different approach";
+      const handoffDocument = "Previous attempt notes: try a different approach";
 
       await Teammate.execute({ step, handoffDocument }, config);
 
@@ -211,9 +210,7 @@ describe("Teammate", () => {
       const userMessage = input.messages[0];
       expect(userMessage.content).toContain("Execute the following task:");
       expect(userMessage.content).toContain("Task: Analyze the data");
-      expect(userMessage.content).toContain(
-        "Expected Output: A summary of findings",
-      );
+      expect(userMessage.content).toContain("Expected Output: A summary of findings");
     });
 
     it("should pass systemPrompt to ChatAgent config when provided", async () => {

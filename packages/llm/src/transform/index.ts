@@ -61,27 +61,19 @@ export namespace ProviderTransform {
     return undefined;
   }
 
-  export function variants(
-    model: Provider.Model,
-  ): Record<string, Record<string, any>> {
+  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities?.reasoning) return {};
 
     const npm = model.api?.npm;
     const id = model.id.toLowerCase();
 
     // For anthropic models
-    if (
-      npm === "@ai-sdk/anthropic" ||
-      npm === "@ai-sdk/google-vertex/anthropic"
-    ) {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       return {
         high: {
           thinking: {
             type: "enabled",
-            budgetTokens: Math.min(
-              16_000,
-              Math.floor((model.limit?.output ?? 0) / 2 - 1),
-            ),
+            budgetTokens: Math.min(16_000, Math.floor((model.limit?.output ?? 0) / 2 - 1)),
           },
         },
         max: {
@@ -114,10 +106,7 @@ export namespace ProviderTransform {
     return {};
   }
 
-  function normalizeAnthropic(
-    msgs: CoreMessage[],
-    model: NormalizeOptions,
-  ): CoreMessage[] {
+  function normalizeAnthropic(msgs: CoreMessage[], model: NormalizeOptions): CoreMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -135,16 +124,11 @@ export namespace ProviderTransform {
         if (filtered.length === 0) return undefined;
         return { ...msg, content: filtered };
       })
-      .filter(
-        (msg): msg is CoreMessage => msg !== undefined && msg.content !== "",
-      );
+      .filter((msg): msg is CoreMessage => msg !== undefined && msg.content !== "");
 
     if (model.modelId.includes("claude")) {
       result = result.map((msg) => {
-        if (
-          (msg.role === "assistant" || msg.role === "tool") &&
-          Array.isArray(msg.content)
-        ) {
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           return {
             ...msg,
             content: msg.content.map((part: any) => {
@@ -154,9 +138,10 @@ export namespace ProviderTransform {
               ) {
                 return {
                   ...part,
-                  toolCallId: (
-                    part as { toolCallId: string }
-                  ).toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                  toolCallId: (part as { toolCallId: string }).toolCallId.replace(
+                    /[^a-zA-Z0-9_-]/g,
+                    "_",
+                  ),
                 };
               }
               return part;

@@ -31,12 +31,8 @@ describe("Guardrail schemas", () => {
 
   describe("GuardrailType", () => {
     it("accepts valid enum values", () => {
-      expect(() =>
-        Guardrail.GuardrailType.parse("output_validation"),
-      ).not.toThrow();
-      expect(() =>
-        Guardrail.GuardrailType.parse("content_filter"),
-      ).not.toThrow();
+      expect(() => Guardrail.GuardrailType.parse("output_validation")).not.toThrow();
+      expect(() => Guardrail.GuardrailType.parse("content_filter")).not.toThrow();
       expect(() => Guardrail.GuardrailType.parse("cost_limit")).not.toThrow();
       expect(() => Guardrail.GuardrailType.parse("custom")).not.toThrow();
     });

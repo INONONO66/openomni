@@ -7,15 +7,11 @@ describe("ToolGuard.check", () => {
   });
 
   it("denies tool on denylist", () => {
-    expect(
-      ToolGuard.check("dangerous_tool", { denylist: ["dangerous_tool"] }),
-    ).toBe("deny");
+    expect(ToolGuard.check("dangerous_tool", { denylist: ["dangerous_tool"] })).toBe("deny");
   });
 
   it("allows tool not on denylist", () => {
-    expect(ToolGuard.check("safe_tool", { denylist: ["dangerous_tool"] })).toBe(
-      "allow",
-    );
+    expect(ToolGuard.check("safe_tool", { denylist: ["dangerous_tool"] })).toBe("allow");
   });
 
   it("denies all tools when allowlist is empty array", () => {
@@ -27,27 +23,19 @@ describe("ToolGuard.check", () => {
   });
 
   it("allows tool explicitly in allowlist", () => {
-    expect(
-      ToolGuard.check("allowed_tool", { allowlist: ["allowed_tool"] }),
-    ).toBe("allow");
+    expect(ToolGuard.check("allowed_tool", { allowlist: ["allowed_tool"] })).toBe("allow");
   });
 
   it("denies tool not in allowlist", () => {
-    expect(ToolGuard.check("other_tool", { allowlist: ["allowed_tool"] })).toBe(
-      "deny",
-    );
+    expect(ToolGuard.check("other_tool", { allowlist: ["allowed_tool"] })).toBe("deny");
   });
 
   it("allows tool matching prefix wildcard mcp.*", () => {
-    expect(ToolGuard.check("mcp.search", { allowlist: ["mcp.*"] })).toBe(
-      "allow",
-    );
+    expect(ToolGuard.check("mcp.search", { allowlist: ["mcp.*"] })).toBe("allow");
   });
 
   it("denies tool not matching prefix wildcard", () => {
-    expect(ToolGuard.check("other.search", { allowlist: ["mcp.*"] })).toBe(
-      "deny",
-    );
+    expect(ToolGuard.check("other.search", { allowlist: ["mcp.*"] })).toBe("deny");
   });
 
   it("returns require_approval for tool in requireApproval list", () => {

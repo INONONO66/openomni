@@ -1,10 +1,5 @@
 import type { Run, Sink, Tool } from "@openomni/protocol";
-import {
-  ModelsDev,
-  Provider,
-  run as llmRun,
-  type RunInput,
-} from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import { BuiltinAgentRegistry, type AgentDefinition } from "../agent";
 import type { ToolExecutor, OrchestratorRunInput } from "./run";
 
@@ -24,9 +19,7 @@ const fallbackToolExecutor: ToolExecutor = {
   },
 };
 
-export function resolveAgentDefinition(
-  agentId?: string,
-): AgentDefinition | undefined {
+export function resolveAgentDefinition(agentId?: string): AgentDefinition | undefined {
   if (!agentId) return undefined;
   return BuiltinAgentRegistry.get(agentId);
 }
@@ -67,9 +60,7 @@ async function resolveProviderModel(config: {
 
   const rawModel = providerData.models?.[config.modelID];
   if (!rawModel) {
-    throw new Error(
-      `Model not found: ${config.modelID} for provider ${config.providerID}`,
-    );
+    throw new Error(`Model not found: ${config.modelID} for provider ${config.providerID}`);
   }
 
   return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
@@ -77,14 +68,9 @@ async function resolveProviderModel(config: {
 
 // Bridges Provider.Model → OrchestratorRunInput["llm"] by wrapping
 // the llm package's run() function with the resolved model.
-function createLLMRunner(
-  providerModel: Provider.Model,
-): OrchestratorRunInput["llm"] {
+function createLLMRunner(providerModel: Provider.Model): OrchestratorRunInput["llm"] {
   return {
-    async run(
-      input: Record<string, unknown>,
-      sink: Sink,
-    ): Promise<Run.Outcome> {
+    async run(input: Record<string, unknown>, sink: Sink): Promise<Run.Outcome> {
       const runInput: RunInput = {
         messages: (input.messages ?? []) as RunInput["messages"],
         tools: (input.tools ?? []) as RunInput["tools"],

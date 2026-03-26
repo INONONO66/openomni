@@ -55,9 +55,7 @@ describe("AuthError", () => {
   test("isInstance type guard", () => {
     const err = new AuthError({ message: "test", provider: "openai" });
     expect(AuthError.isInstance(err)).toBe(true);
-    expect(
-      AuthError.isInstance(new ProviderError({ message: "x", provider: "y" })),
-    ).toBe(false);
+    expect(AuthError.isInstance(new ProviderError({ message: "x", provider: "y" }))).toBe(false);
   });
 
   test("schema is defined", () => {
@@ -81,9 +79,7 @@ describe("ProviderError", () => {
   test("isInstance type guard", () => {
     const err = new ProviderError({ message: "test", provider: "x" });
     expect(ProviderError.isInstance(err)).toBe(true);
-    expect(
-      ProviderError.isInstance(new AuthError({ message: "x", provider: "y" })),
-    ).toBe(false);
+    expect(ProviderError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(false);
   });
 });
 
@@ -111,11 +107,9 @@ describe("TokenRefreshError", () => {
   test("isInstance type guard", () => {
     const err = new TokenRefreshError({ message: "test", status: 500 });
     expect(TokenRefreshError.isInstance(err)).toBe(true);
-    expect(
-      TokenRefreshError.isInstance(
-        new AuthError({ message: "x", provider: "y" }),
-      ),
-    ).toBe(false);
+    expect(TokenRefreshError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(
+      false,
+    );
   });
 
   test("can be caught and inspected", () => {
@@ -167,9 +161,7 @@ describe("SessionError", () => {
   test("isInstance type guard", () => {
     const err = new SessionError({ message: "test" });
     expect(SessionError.isInstance(err)).toBe(true);
-    expect(
-      SessionError.isInstance(new AuthError({ message: "x", provider: "y" })),
-    ).toBe(false);
+    expect(SessionError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(false);
   });
 });
 
@@ -193,9 +185,7 @@ describe("StreamError", () => {
   test("isInstance type guard", () => {
     const err = new StreamError({ message: "test" });
     expect(StreamError.isInstance(err)).toBe(true);
-    expect(StreamError.isInstance(new SessionError({ message: "x" }))).toBe(
-      false,
-    );
+    expect(StreamError.isInstance(new SessionError({ message: "x" }))).toBe(false);
   });
 });
 
@@ -240,9 +230,7 @@ describe("RetryError", () => {
   test("isInstance type guard", () => {
     const err = new RetryError({ message: "test", attempts: 1 });
     expect(RetryError.isInstance(err)).toBe(true);
-    expect(RetryError.isInstance(new StreamError({ message: "x" }))).toBe(
-      false,
-    );
+    expect(RetryError.isInstance(new StreamError({ message: "x" }))).toBe(false);
   });
 });
 
@@ -301,9 +289,7 @@ describe("APIError", () => {
   test("isInstance type guard", () => {
     const err = new APIError({ message: "test", isRetryable: true });
     expect(APIError.isInstance(err)).toBe(true);
-    expect(
-      APIError.isInstance(new RetryError({ message: "x", attempts: 1 })),
-    ).toBe(false);
+    expect(APIError.isInstance(new RetryError({ message: "x", attempts: 1 }))).toBe(false);
   });
 });
 
@@ -327,11 +313,7 @@ describe("AbortedError", () => {
   test("isInstance type guard", () => {
     const err = new AbortedError({ message: "test" });
     expect(AbortedError.isInstance(err)).toBe(true);
-    expect(
-      AbortedError.isInstance(
-        new APIError({ message: "x", isRetryable: false }),
-      ),
-    ).toBe(false);
+    expect(AbortedError.isInstance(new APIError({ message: "x", isRetryable: false }))).toBe(false);
   });
 });
 
@@ -355,9 +337,7 @@ describe("OutputLengthError", () => {
   test("isInstance type guard", () => {
     const err = new OutputLengthError({});
     expect(OutputLengthError.isInstance(err)).toBe(true);
-    expect(
-      OutputLengthError.isInstance(new AbortedError({ message: "x" })),
-    ).toBe(false);
+    expect(OutputLengthError.isInstance(new AbortedError({ message: "x" }))).toBe(false);
   });
 
   test("can be thrown and caught", () => {

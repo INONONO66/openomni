@@ -1,12 +1,6 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-  chmodSync,
-} from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { z } from "zod";
 
 const CONFIG_PATH = join(homedir(), ".openomni", "config.json");
@@ -66,10 +60,7 @@ export namespace Config {
       const parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
       const result = AdaptersSchema.safeParse(parsed);
       if (!result.success) {
-        console.warn(
-          "[config] invalid config.json, ignoring:",
-          result.error.message,
-        );
+        console.warn("[config] invalid config.json, ignoring:", result.error.message);
         return {};
       }
       return result.data;

@@ -9,9 +9,7 @@ const executedTasks: string[] = [];
 mock.module("@openomni/agent", () => ({
   ChatAgent: {
     create: () => ({
-      run: async (input: {
-        messages: Array<{ role: string; content: string }>;
-      }) => {
+      run: async (input: { messages: Array<{ role: string; content: string }> }) => {
         const userPrompt = input.messages[0]?.content ?? "";
         if (userPrompt.includes("Execute the following task:")) {
           const matchedTask = userPrompt.match(/Task:\s*(.+)/);
@@ -43,11 +41,7 @@ beforeEach(() => {
   executedTasks.length = 0;
 });
 
-function makeStep(
-  stepId: string,
-  dependsOn: string[] = [],
-  suggestedAgent?: string,
-): PlanStep {
+function makeStep(stepId: string, dependsOn: string[] = [], suggestedAgent?: string): PlanStep {
   return {
     stepId,
     description: `${stepId} task`,
@@ -82,8 +76,7 @@ function makeConfig(overrides?: {
 }) {
   return {
     reviewModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    teammates:
-      overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
+    teammates: overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
     defaultTeammateConfig,
     maxAttemptsPerStep: overrides?.maxAttemptsPerStep,
     stallConfig: overrides?.stallConfig,
@@ -121,17 +114,12 @@ describe("TeamOrchestrator.execute", () => {
 
   it("retries once after rejection and then succeeds", async () => {
     responseQueue.push("first attempt output");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "needs improvement" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "needs improvement" }));
     responseQueue.push("second attempt output");
     responseQueue.push(JSON.stringify({ decision: "accept" }));
 
     const plan = makePlan([makeStep("s1")]);
-    const result = await TeamOrchestrator.execute(
-      plan,
-      makeConfig({ maxAttemptsPerStep: 3 }),
-    );
+    const result = await TeamOrchestrator.execute(plan, makeConfig({ maxAttemptsPerStep: 3 }));
 
     expect(result.status).toBe("completed");
     expect(result.completedSteps).toEqual(["s1"]);
@@ -143,15 +131,10 @@ describe("TeamOrchestrator.execute", () => {
     responseQueue.push("attempt 1 output");
     responseQueue.push(JSON.stringify({ decision: "reject", feedback: "bad" }));
     responseQueue.push("attempt 2 output");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "still bad" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "still bad" }));
 
     const plan = makePlan([makeStep("s1")]);
-    const result = await TeamOrchestrator.execute(
-      plan,
-      makeConfig({ maxAttemptsPerStep: 2 }),
-    );
+    const result = await TeamOrchestrator.execute(plan, makeConfig({ maxAttemptsPerStep: 2 }));
 
     expect(result.status).toBe("failed");
     expect(result.failedSteps).toEqual(["s1"]);
@@ -160,15 +143,10 @@ describe("TeamOrchestrator.execute", () => {
 
   it("skips dependents when a prerequisite step fails", async () => {
     responseQueue.push("attempt output");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "fatal" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "fatal" }));
 
     const plan = makePlan([makeStep("s1"), makeStep("s2", ["s1"])]);
-    const result = await TeamOrchestrator.execute(
-      plan,
-      makeConfig({ maxAttemptsPerStep: 1 }),
-    );
+    const result = await TeamOrchestrator.execute(plan, makeConfig({ maxAttemptsPerStep: 1 }));
 
     expect(result.status).toBe("failed");
     expect(result.failedSteps).toEqual(["s1"]);
@@ -177,13 +155,9 @@ describe("TeamOrchestrator.execute", () => {
 
   it("returns stalled when consecutive rejection threshold is hit", async () => {
     responseQueue.push("attempt 1 output");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "nope" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "nope" }));
     responseQueue.push("attempt 2 output");
-    responseQueue.push(
-      JSON.stringify({ decision: "reject", feedback: "still nope" }),
-    );
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "still nope" }));
 
     const plan = makePlan([makeStep("s1")]);
     const result = await TeamOrchestrator.execute(
@@ -204,9 +178,7 @@ describe("TeamOrchestrator.execute", () => {
   it("throws on cyclic DAG", async () => {
     const plan = makePlan([makeStep("s1", ["s2"]), makeStep("s2", ["s1"])]);
 
-    return expect(TeamOrchestrator.execute(plan, makeConfig())).rejects.toThrow(
-      /cycle/i,
-    );
+    return expect(TeamOrchestrator.execute(plan, makeConfig())).rejects.toThrow(/cycle/i);
   });
 
   it("completes an empty plan", async () => {
