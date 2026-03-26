@@ -40,6 +40,10 @@ mock.module("@openomni/llm", () => ({
     llmInputs.push(input);
     return mockRunFn(input, sink);
   },
+  TokenTracker: {
+    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
+    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
+  },
 }));
 
 mock.module("@openomni/session", () => ({
