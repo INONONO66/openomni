@@ -1,6 +1,8 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { Team, BusEvent } from "../src/index.js";
+
+const it = test;
 
 describe("Team Protocol Types", () => {
   describe("StepState", () => {
@@ -309,6 +311,94 @@ describe("Team Protocol Types", () => {
         },
       };
       expect(() => eventDescriptor.schema.parse(payload)).not.toThrow();
+    });
+
+    describe("Team.Events.ApprovalRequested", () => {
+      it("event name is correct", () =>
+        expect(Team.Events.ApprovalRequested.name).toBe("approval.requested"));
+      it("parses valid payload", () =>
+        expect(() =>
+          Team.Events.ApprovalRequested.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: {
+              planId: "p",
+              stepId: "s",
+              stepTitle: "title",
+              timeoutMs: 5000,
+            },
+          }),
+        ).not.toThrow());
+      it("rejects missing stepTitle", () =>
+        expect(() =>
+          Team.Events.ApprovalRequested.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: { planId: "p", stepId: "s", timeoutMs: 5000 },
+          }),
+        ).toThrow());
+      it("rejects missing timeoutMs", () =>
+        expect(() =>
+          Team.Events.ApprovalRequested.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: { planId: "p", stepId: "s", stepTitle: "title" },
+          }),
+        ).toThrow());
+    });
+
+    describe("StepStarted attempt constraint (.int().min(1))", () => {
+      it("attempt 0 rejects", () =>
+        expect(() =>
+          Team.Events.StepStarted.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: { planId: "p", stepId: "s", agentId: "a", attempt: 0 },
+          }),
+        ).toThrow());
+      it("attempt -1 rejects", () =>
+        expect(() =>
+          Team.Events.StepStarted.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: { planId: "p", stepId: "s", agentId: "a", attempt: -1 },
+          }),
+        ).toThrow());
+      it("attempt 1 accepts", () =>
+        expect(() =>
+          Team.Events.StepStarted.schema.parse({
+            traceId: "t",
+            time: 1,
+            payload: { planId: "p", stepId: "s", agentId: "a", attempt: 1 },
+          }),
+        ).not.toThrow());
+    });
+
+    describe("RunLedgerEntry constraints (.int().min(0))", () => {
+      it("attempts -1 rejects", () =>
+        expect(() =>
+          Team.RunLedgerEntry.parse({
+            stepId: "s",
+            state: "ready",
+            attempts: -1,
+          }),
+        ).toThrow());
+      it("attempts 1.5 rejects", () =>
+        expect(() =>
+          Team.RunLedgerEntry.parse({
+            stepId: "s",
+            state: "ready",
+            attempts: 1.5,
+          }),
+        ).toThrow());
+      it("attempts 0 accepts (boundary)", () =>
+        expect(() =>
+          Team.RunLedgerEntry.parse({
+            stepId: "s",
+            state: "ready",
+            attempts: 0,
+          }),
+        ).not.toThrow());
     });
   });
 });

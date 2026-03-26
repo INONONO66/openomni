@@ -1,5 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { AgentProfile } from "../src/agent/index";
+
+const it = test;
 
 describe("AgentProfile.Definition", () => {
   it("parses minimal definition", () => {
@@ -29,4 +31,52 @@ describe("AgentProfile.Definition", () => {
   it("rejects missing required fields", () => {
     expect(() => AgentProfile.Definition.parse({ name: "x" })).toThrow();
   });
+});
+
+describe("rejection (schema-enforced)", () => {
+  it("rejects maxTurns = 0", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        maxTurns: 0,
+      }),
+    ).toThrow());
+  it("rejects maxTurns = -1", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        maxTurns: -1,
+      }),
+    ).toThrow());
+  it("rejects maxTurns = 1.5", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        maxTurns: 1.5,
+      }),
+    ).toThrow());
+});
+
+describe("acceptance (documents current behavior)", () => {
+  it("accepts maxTurns = 1", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        maxTurns: 1,
+      }),
+    ).not.toThrow());
+  it("accepts empty name string", () =>
+    expect(() => AgentProfile.Definition.parse({ name: "", description: "x" })).not.toThrow());
+  it("accepts permissions: {}", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        permissions: {},
+      }),
+    ).not.toThrow());
 });
