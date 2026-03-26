@@ -1,33 +1,6 @@
 import { ChatAgent, type AgentBudget } from "@openomni/agent";
 import { PlanSchema, type PlanResult } from "@openomni/protocol";
 
-export const DEFAULT_SYSTEM_PROMPT = `You are a planning agent. Given a goal, produce a structured execution plan as JSON.
-
-Output ONLY valid JSON matching this schema:
-{
-  "planId": "<uuid>",
-  "goal": "<the goal>",
-  "steps": [
-    {
-      "stepId": "<unique-id>",
-      "description": "<what to do>",
-      "expectedOutput": "<what success looks like>",
-      "dependsOn": ["<stepId>", ...],
-      "suggestedAgent": "<optional agent hint>",
-      "guardrail": "<optional acceptance criteria>",
-      "tools": [{ "name": "<tool-name>", "description": "<what it does>", "inputSchema": { "type": "object", "properties": {} } }]
-    }
-  ],
-  "createdAt": "<ISO date string>",
-  "version": 1
-}
-
-Rules:
-- stepId must be unique across all steps
-- dependsOn must reference valid stepIds
-- Steps with no dependencies have dependsOn: []
-- Minimize dependencies - only add when truly sequential`;
-
 function normalizePlanPayload(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") {
     return payload;
@@ -67,7 +40,6 @@ export namespace PlanAgent {
   export interface GenerateConfig {
     model: { provider: string; id: string };
     systemPrompt?: string;
-    reviewPrompt?: string;
     budget?: AgentBudget;
   }
 
@@ -75,14 +47,9 @@ export namespace PlanAgent {
     goal: string,
     config: GenerateConfig,
   ): Promise<PlanResult> {
-    const promptParts = [config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT];
-    if (config.reviewPrompt) {
-      promptParts.push(config.reviewPrompt);
-    }
-
     const agent = ChatAgent.create({
       model: config.model,
-      systemPrompt: promptParts.join("\n\n"),
+      systemPrompt: config.systemPrompt ?? "",
       budget: config.budget,
     });
 
