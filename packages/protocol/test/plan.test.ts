@@ -211,3 +211,92 @@ describe("PlanResult", () => {
     ).toThrow();
   });
 });
+
+describe("version constraint (.int() only)", () => {
+  test("rejects float version", () => {
+    const now = new Date();
+    expect(() =>
+      PlanSchema.parse({
+        planId: "p",
+        goal: "g",
+        steps: [],
+        createdAt: now,
+        version: 1.5,
+      }),
+    ).toThrow();
+  });
+
+  test("accepts version 0 (no positive constraint)", () => {
+    const now = new Date();
+    expect(() =>
+      PlanSchema.parse({
+        planId: "p",
+        goal: "g",
+        steps: [],
+        createdAt: now,
+        version: 0,
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("superRefine gaps (documented, not fixed)", () => {
+  test("self-dependency A→A is accepted (not detected by superRefine)", () => {
+    const now = new Date();
+    expect(() =>
+      PlanSchema.parse({
+        planId: "p",
+        goal: "g",
+        steps: [
+          {
+            stepId: "A",
+            description: "d",
+            expectedOutput: "o",
+            dependsOn: ["A"],
+          },
+        ],
+        createdAt: now,
+        version: 1,
+      }),
+    ).not.toThrow();
+  });
+
+  test("circular dependency A→B→A is accepted (not detected by superRefine)", () => {
+    const now = new Date();
+    expect(() =>
+      PlanSchema.parse({
+        planId: "p",
+        goal: "g",
+        steps: [
+          {
+            stepId: "A",
+            description: "d",
+            expectedOutput: "o",
+            dependsOn: ["B"],
+          },
+          {
+            stepId: "B",
+            description: "d",
+            expectedOutput: "o",
+            dependsOn: ["A"],
+          },
+        ],
+        createdAt: now,
+        version: 1,
+      }),
+    ).not.toThrow();
+  });
+
+  test("z.date() rejects string from JSON.parse (round-trip fails)", () => {
+    const now = new Date();
+    const plan = {
+      planId: "p",
+      goal: "g",
+      steps: [],
+      createdAt: now,
+      version: 1,
+    };
+    const json = JSON.stringify(plan);
+    expect(() => PlanSchema.parse(JSON.parse(json))).toThrow();
+  });
+});

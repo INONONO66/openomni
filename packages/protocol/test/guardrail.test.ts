@@ -1,5 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Guardrail } from "../src/guardrail/index";
+
+const it = test;
 
 describe("Guardrail schemas", () => {
   describe("ToolPermission", () => {
@@ -91,6 +93,48 @@ describe("Guardrail schemas", () => {
           abortPropagation: true,
         }),
       ).toThrow();
+    });
+
+    describe("DelegationPolicy.maxDepth (bare z.number())", () => {
+      it("accepts float maxDepth", () =>
+        expect(() =>
+          Guardrail.DelegationPolicy.parse({
+            maxDepth: 1.5,
+            budgetPolicy: "inherit",
+            abortPropagation: true,
+          }),
+        ).not.toThrow());
+      it("accepts negative maxDepth", () =>
+        expect(() =>
+          Guardrail.DelegationPolicy.parse({
+            maxDepth: -1,
+            budgetPolicy: "inherit",
+            abortPropagation: true,
+          }),
+        ).not.toThrow());
+      it("accepts zero maxDepth", () =>
+        expect(() =>
+          Guardrail.DelegationPolicy.parse({
+            maxDepth: 0,
+            budgetPolicy: "inherit",
+            abortPropagation: true,
+          }),
+        ).not.toThrow());
+    });
+
+    describe("action enum completeness", () => {
+      ["reject", "retry", "warn", "escalate"].forEach((action) => {
+        it(`accepts action "${action}"`, () =>
+          expect(() =>
+            Guardrail.GuardrailSchema.parse({
+              type: "custom",
+              rule: "r",
+              action,
+            }),
+          ).not.toThrow());
+      });
+      it("empty allowlist accepted", () =>
+        expect(() => Guardrail.ToolPermission.parse({ allowlist: [] })).not.toThrow());
     });
   });
 });

@@ -1,5 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ExecutionEvent } from "../src/event-log/index";
+
+const it = test;
 
 const now = new Date().toISOString();
 
@@ -85,4 +87,66 @@ describe("ExecutionEvent schemas", () => {
       }),
     ).toThrow();
   });
+});
+
+describe("required field rejection", () => {
+  it("llm_response: missing text rejects", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "llm_response",
+        turnIndex: 0,
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        timestamp: "x",
+        sequence: 1,
+      }),
+    ).toThrow());
+  it("tool_started: missing toolCallId rejects", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "tool_started",
+        toolName: "x",
+        timestamp: "x",
+        sequence: 1,
+      }),
+    ).toThrow());
+  it("tool_completed: missing result rejects", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "tool_completed",
+        toolCallId: "c",
+        timestamp: "x",
+        sequence: 1,
+      }),
+    ).toThrow());
+});
+
+describe("acceptance (documents current behavior)", () => {
+  it("sequence accepts float (bare z.number())", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "session_suspended",
+        reason: "r",
+        timestamp: "x",
+        sequence: 1.5,
+      }),
+    ).not.toThrow());
+  it("sequence accepts negative", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "session_suspended",
+        reason: "r",
+        timestamp: "x",
+        sequence: -1,
+      }),
+    ).not.toThrow());
+  it("timestamp accepts empty string (no format validation)", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "session_suspended",
+        reason: "r",
+        timestamp: "",
+        sequence: 1,
+      }),
+    ).not.toThrow());
 });

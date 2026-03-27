@@ -1,5 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Artifact } from "../src/artifact/index";
+
+const it = test;
 
 describe("Artifact schemas", () => {
   describe("Meta", () => {
@@ -46,6 +48,65 @@ describe("Artifact schemas", () => {
           createdAt: "2025-01-01T00:00:00Z",
         }),
       ).toThrow();
+    });
+
+    describe("version constraint (.int() only)", () => {
+      it("rejects float version", () =>
+        expect(() =>
+          Artifact.Meta.parse({
+            id: "a",
+            sessionId: "b",
+            mimeType: "text/plain",
+            title: "t",
+            version: 1.5,
+            createdAt: "x",
+          }),
+        ).toThrow());
+      it("accepts version 0 (no positive constraint)", () =>
+        expect(() =>
+          Artifact.Meta.parse({
+            id: "a",
+            sessionId: "b",
+            mimeType: "text/plain",
+            title: "t",
+            version: 0,
+            createdAt: "x",
+          }),
+        ).not.toThrow());
+      it("accepts version -1 (no min constraint)", () =>
+        expect(() =>
+          Artifact.Meta.parse({
+            id: "a",
+            sessionId: "b",
+            mimeType: "text/plain",
+            title: "t",
+            version: -1,
+            createdAt: "x",
+          }),
+        ).not.toThrow());
+    });
+
+    describe("acceptance (documents current behavior)", () => {
+      it("accepts empty string createdAt", () =>
+        expect(() =>
+          Artifact.Meta.parse({
+            id: "a",
+            sessionId: "b",
+            mimeType: "text/plain",
+            title: "t",
+            createdAt: "",
+          }),
+        ).not.toThrow());
+      it("accepts empty mimeType", () =>
+        expect(() =>
+          Artifact.Meta.parse({
+            id: "a",
+            sessionId: "b",
+            mimeType: "",
+            title: "t",
+            createdAt: "x",
+          }),
+        ).not.toThrow());
     });
   });
 
