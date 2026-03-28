@@ -40,7 +40,8 @@ async function resolveModel(
     process.exit(1);
   }
 
-  const models = await Provider.listModels(providerID, auth.type);
+  const authType = auth.type === "oauth" ? "api" : auth.type;
+  const models = await Provider.listModels(providerID, authType);
 
   if (models.length === 0) {
     console.error(`No models found for provider '${providerID}'.`);
