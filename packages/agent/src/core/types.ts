@@ -2,6 +2,20 @@ import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
 import type { ParallelToolsMode } from "./execution/parallel-tools";
 import type { Memory } from "./memory";
 
+export type StepGuardVerdict =
+  | { action: "continue" }
+  | { action: "inject"; message: string }
+  | { action: "abort"; reason?: string };
+
+export interface StepGuardContext {
+  steps: AgentStep[];
+  usage: TokenUsage;
+  turnCount: number;
+  isCompletion: boolean;
+  continuationCount: number;
+  elapsedMs: number;
+}
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -40,6 +54,10 @@ export interface ChatAgentConfig {
   };
   parallelTools?: ParallelToolsMode;
   memory?: Memory;
+  stepGuard?: (
+    step: AgentStep,
+    context: StepGuardContext,
+  ) => Promise<StepGuardVerdict> | StepGuardVerdict;
 }
 
 export interface ChatAgentInput {
@@ -61,6 +79,7 @@ export interface AgentResult {
   finishReason: "stop" | "tool-calls" | "max-steps" | "handoff";
   handoffTarget?: string;
   compactionCount?: number;
+  guardAborted?: boolean;
 }
 
 export type AgentEvent =

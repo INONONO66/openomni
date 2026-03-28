@@ -10,6 +10,8 @@ export type {
   AgentBudget,
   TokenUsage,
   Sink,
+  StepGuardVerdict,
+  StepGuardContext,
 } from "./core/types";
 export { AgentMessenger, BusTransport } from "./runtime/index";
 export type { Transport, AgentMessengerOptions } from "./runtime/index";
