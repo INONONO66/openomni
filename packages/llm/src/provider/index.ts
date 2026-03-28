@@ -1,14 +1,7 @@
 import { z } from "zod";
-import { Auth } from "../auth/storage";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
-import {
-  getSDK,
-  getLanguage,
-  fromModelsDevProvider,
-  filterModels,
-  CODEX_ALLOWED_MODELS,
-} from "./provider";
+import { fromModelsDevProvider, filterModels } from "./provider";
 
 export namespace Provider {
   export const Model = z.object({
@@ -161,7 +154,7 @@ export namespace Provider {
 
   export async function listModels(
     providerID: string,
-    authType?: "oauth" | "api",
+    authType?: "proxy" | "api",
   ): Promise<Model[]> {
     const data = await ModelsDev.get();
     const provider = data[providerID];

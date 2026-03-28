@@ -15,7 +15,13 @@ const ApiAuth = z.object({
   key: z.string(),
 });
 
-const Info = z.discriminatedUnion("type", [OauthAuth, ApiAuth]);
+const ProxyAuth = z.object({
+  type: z.literal("proxy"),
+  baseURL: z.string(),
+  apiKey: z.string().optional(),
+});
+
+const Info = z.discriminatedUnion("type", [OauthAuth, ApiAuth, ProxyAuth]);
 type Info = z.infer<typeof Info>;
 
 const getAuthFilePath = () => {

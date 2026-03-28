@@ -1,11 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { LanguageModelV1 } from "ai";
-import { Auth } from "../auth/storage";
-import { createOAuthFetch } from "../fetch/anthropic";
-import { createCodexOAuthFetch } from "../fetch/openai";
+import type { LanguageModel } from "ai";
+import type { Auth } from "../auth/storage";
 import { Provider } from "./index";
-import { ModelsDev } from "../model";
+import type { ModelsDev } from "../model";
 
 const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
   "@ai-sdk/anthropic": createAnthropic,
@@ -23,7 +21,7 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
   anthropic: () => ({
     options: {
       headers: {
-        "anthropic-beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14",
+        "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
       },
     },
   }),
@@ -52,37 +50,16 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
 
   if (auth.type === "api") {
     sdkOptions.apiKey = auth.key;
-  } else if (providerID === "anthropic") {
-    const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
-    const oauthFetch = createOAuthFetch(oauthAuth, async (access, refresh, expires) => {
-      await Auth.set(providerID, {
-        type: "oauth",
-        access,
-        refresh,
-        expires,
-        ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
-      });
-    });
-    sdkOptions.apiKey = "";
-    sdkOptions.fetch = oauthFetch;
-  } else if (providerID === "openai") {
-    const oauthAuth = auth as Extract<Auth.Info, { type: "oauth" }>;
-    sdkOptions.apiKey = "oauth-dummy-key";
-    sdkOptions.fetch = createCodexOAuthFetch(oauthAuth, async (tokens) => {
-      await Auth.set(providerID, {
-        type: "oauth",
-        access: tokens.access,
-        refresh: tokens.refresh,
-        expires: tokens.expires,
-        ...(oauthAuth.accountId && { accountId: oauthAuth.accountId }),
-      });
-    });
+  } else if (auth.type === "proxy") {
+    const proxyAuth = auth as Extract<Auth.Info, { type: "proxy" }>;
+    if (proxyAuth.baseURL) sdkOptions.baseURL = proxyAuth.baseURL;
+    sdkOptions.apiKey = proxyAuth.apiKey ?? "proxy";
   }
 
   return factory(sdkOptions);
 }
 
-export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModelV1 {
+export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const sdk = getSDK(model, auth);
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -90,7 +67,7 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageMod
   const modelID = model.api?.id ?? model.id;
 
   if (custom?.getModel) {
-    return custom.getModel(sdk, modelID) as LanguageModelV1;
+    return custom.getModel(sdk, modelID) as LanguageModel;
   }
 
   return sdk.languageModel(modelID);
@@ -127,10 +104,10 @@ export const CODEX_ALLOWED_MODELS = new Set([
 
 export function filterModels(
   providerID: string,
-  authType: "api" | "oauth",
+  authType: "api" | "proxy",
   models: Provider.Model[],
 ): Provider.Model[] {
-  if (providerID === "openai" && authType === "oauth") {
+  if (providerID === "openai" && authType === "proxy") {
     return models.filter((m) => CODEX_ALLOWED_MODELS.has(m.id));
   }
   return models;

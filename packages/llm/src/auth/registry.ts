@@ -1,6 +1,3 @@
-import * as anthropicOAuth from "../oauth/anthropic";
-import * as openaiOAuth from "../oauth/openai";
-import { generatePKCE, generateState } from "../oauth/pkce";
 import { Auth } from "./storage";
 
 export type OAuthMethod = {
@@ -26,118 +23,63 @@ export type AuthProvider = {
   methods: OAuthMethod[];
 };
 
-function createAnthropicOAuthMethod(
-  id: "max" | "console",
-  label: string,
-  hint: string,
-): OAuthMethod {
-  return {
-    id,
-    label,
-    hint,
-    async run(cb) {
-      const { url, verifier } = await anthropicOAuth.authorize(id);
-      cb.showUrl(url);
-      const code = await cb.getInput("Paste the authorization code");
-      cb.showProgress("Exchanging code for tokens...");
-      const tokenResult = await anthropicOAuth.exchange(code, verifier);
-      if (tokenResult.type === "failed") {
-        cb.stopProgress("Token exchange failed");
-        return;
-      }
-      cb.updateProgress("Creating API key...");
-      const apiKeyResult = await anthropicOAuth.createApiKey(tokenResult.access);
-      if (apiKeyResult.type === "failed") {
-        await Auth.set("anthropic", {
-          type: "oauth",
-          access: tokenResult.access,
-          refresh: tokenResult.refresh,
-          expires: tokenResult.expires,
-        });
-        cb.stopProgress("Saved OAuth tokens (API key creation unavailable)");
-        return;
-      }
-      await Auth.set("anthropic", { type: "api", key: apiKeyResult.key });
-      cb.stopProgress("Login successful");
-    },
-  };
-}
-
 const anthropicProvider: AuthProvider = {
   id: "anthropic",
   name: "Anthropic",
-  hint: "Claude Max or Console",
+  hint: "CLIProxy or API key",
   methods: [
-    createAnthropicOAuthMethod("max", "Max", "claude.ai Pro/Max subscription"),
-    createAnthropicOAuthMethod("console", "Console", "console.anthropic.com API"),
+    {
+      id: "proxy",
+      label: "CLIProxy",
+      hint: "Connect via CLIProxyAPI (localhost proxy)",
+      async run(cb) {
+        const baseURL = await cb.getInput("CLIProxy URL (default: http://localhost:8317/v1)");
+        const url = baseURL.trim() || "http://localhost:8317/v1";
+        const apiKeyInput = await cb.getInput("CLIProxy API key (leave empty if none)");
+        const apiKey = apiKeyInput.trim() || undefined;
+        await Auth.set("anthropic", { type: "proxy", baseURL: url, ...(apiKey && { apiKey }) });
+        cb.showMessage("Connected via CLIProxy");
+      },
+    },
+    {
+      id: "api",
+      label: "API key",
+      hint: "Use direct Anthropic API key",
+      async run(cb) {
+        const key = await cb.getInput("Anthropic API key");
+        await Auth.set("anthropic", { type: "api", key: key.trim() });
+        cb.showMessage("API key saved");
+      },
+    },
   ],
 };
 
 const openaiProvider: AuthProvider = {
   id: "openai",
   name: "OpenAI",
-  hint: "ChatGPT Plus/Pro or API key",
+  hint: "CLIProxy or API key",
   methods: [
     {
-      id: "browser",
-      label: "Browser",
-      hint: "Opens browser, auto-callback via local server",
+      id: "proxy",
+      label: "CLIProxy",
+      hint: "Connect via CLIProxyAPI (localhost proxy)",
       async run(cb) {
-        const pkce = await generatePKCE();
-        const state = generateState();
-        cb.showProgress("Starting local OAuth server...");
-        const { redirectUri } = await openaiOAuth.startOAuthServer();
-        cb.stopProgress("OAuth server ready");
-        const url = openaiOAuth.buildAuthorizeUrl(redirectUri, pkce, state);
-        cb.showUrl(url);
-        cb.showProgress("Waiting for authorization...");
-        try {
-          const tokens = await openaiOAuth.waitForOAuthCallback(pkce, state);
-          const accountId = openaiOAuth.extractAccountId(tokens);
-          await Auth.set("openai", {
-            type: "oauth",
-            access: tokens.access_token,
-            refresh: tokens.refresh_token,
-            expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-            accountId,
-          });
-          cb.stopProgress("Login successful");
-        } catch (err) {
-          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-          openaiOAuth.stopOAuthServer();
-        }
+        const baseURL = await cb.getInput("CLIProxy URL (default: http://localhost:8317/v1)");
+        const url = baseURL.trim() || "http://localhost:8317/v1";
+        const apiKeyInput = await cb.getInput("CLIProxy API key (leave empty if none)");
+        const apiKey = apiKeyInput.trim() || undefined;
+        await Auth.set("openai", { type: "proxy", baseURL: url, ...(apiKey && { apiKey }) });
+        cb.showMessage("Connected via CLIProxy");
       },
     },
     {
-      id: "device",
-      label: "Device code",
-      hint: "For headless/remote servers",
+      id: "api",
+      label: "API key",
+      hint: "Use direct OpenAI API key",
       async run(cb) {
-        cb.showProgress("Initiating device authorization...");
-        const device = await openaiOAuth.initiateDeviceAuth();
-        cb.stopProgress("Device code ready");
-        cb.showMessage("Go to: https://auth.openai.com/activate");
-        cb.showMessage(`Enter code: ${device.user_code}`);
-        cb.showProgress("Waiting for authorization...");
-        try {
-          const tokens = await openaiOAuth.pollDeviceAuth(
-            device.device_auth_id,
-            device.user_code,
-            parseInt(device.interval) * 1000 || 5000,
-          );
-          const accountId = openaiOAuth.extractAccountId(tokens);
-          await Auth.set("openai", {
-            type: "oauth",
-            access: tokens.access_token,
-            refresh: tokens.refresh_token,
-            expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-            accountId,
-          });
-          cb.stopProgress("Login successful");
-        } catch (err) {
-          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        const key = await cb.getInput("OpenAI API key");
+        await Auth.set("openai", { type: "api", key: key.trim() });
+        cb.showMessage("API key saved");
       },
     },
   ],
