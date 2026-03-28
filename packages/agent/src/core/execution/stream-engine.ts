@@ -310,7 +310,6 @@ export async function* streamAgent(
               createUserMessage(verdict.message),
             ];
             continuationCount++;
-            turnIndex++;
             continue;
           }
 
