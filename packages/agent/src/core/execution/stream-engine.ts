@@ -1,13 +1,6 @@
 import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
-import type {
-  AgentEvent,
-  AgentResult,
-  AgentStep,
-  ChatAgentConfig,
-  ChatAgentInput,
-  TokenUsage,
-} from "../types";
+import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import { createBudgetState, checkBudget, recordTurn, recordToolCall } from "../budget";
 import {
   DEFAULT_RETRY_POLICY,
@@ -310,7 +303,12 @@ export async function* streamAgent(
           });
 
           if (verdict.action === "inject") {
-            messages = [...messages, createUserMessage(verdict.message)];
+            const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
+            messages = [
+              ...messages,
+              createAssistantMessage(lastAssistantText, parentID),
+              createUserMessage(verdict.message),
+            ];
             continuationCount++;
             turnIndex++;
             continue;

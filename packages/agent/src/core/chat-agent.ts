@@ -22,7 +22,7 @@ import { InMemoryCompactor } from "./execution/compaction";
 import { ParallelToolExecutor } from "./execution/parallel-tools";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
-import type { Memory, MemoryResult } from "./memory";
+import type { MemoryResult } from "./memory";
 
 /**
  * ChatAgent instance interface
@@ -462,7 +462,18 @@ export namespace ChatAgent {
                     });
 
                     if (verdict.action === "inject") {
-                      messages = [...messages, createUserMessage(verdict.message)];
+                      const parentID =
+                        messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                      const assistantWithTools = buildAssistantMessageWithTools(
+                        outcome.toolCalls,
+                        toolResults,
+                        parentID,
+                      );
+                      messages = [
+                        ...messages,
+                        assistantWithTools,
+                        createUserMessage(verdict.message),
+                      ];
                       continuationCount++;
                       continue;
                     }

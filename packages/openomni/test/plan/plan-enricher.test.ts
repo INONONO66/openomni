@@ -89,7 +89,7 @@ describe("PlanPipeline enrichers", () => {
     if (result.ok) {
       expect(result.plan.steps).toHaveLength(2);
       expect(result.enricherResults?.[0]?.enricherName).toBe("gap-enricher");
-      expect(result.enricherResults?.[0]?.action).toBe("added_step");
+      expect(result.enricherResults?.[0]?.actions).toContain("added_step");
     }
   });
 

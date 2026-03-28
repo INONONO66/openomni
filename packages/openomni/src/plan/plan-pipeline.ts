@@ -18,7 +18,7 @@ export namespace PlanPipeline {
 
   export interface EnricherRunResult {
     enricherName: string;
-    action: string;
+    actions: string[];
   }
 
   export type RunResult =
@@ -64,7 +64,7 @@ export namespace PlanPipeline {
             });
             enricherResults.push({
               enricherName: enricher.name,
-              action: enrichResult.applied.length > 0 ? enrichResult.applied[0].type : "skip",
+              actions: enrichResult.applied.map((a) => a.type),
             });
             if (enrichResult.applied.length > 0) {
               lastPlan = enrichResult.plan;
