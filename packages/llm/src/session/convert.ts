@@ -5,7 +5,7 @@ import { type Provider, ProviderTransform } from "../provider";
 function stringifyToolOutput(output: unknown): string {
   if (typeof output === "string") return output;
   try {
-    return JSON.stringify(output);
+    return JSON.stringify(output) ?? String(output);
   } catch {
     return String(output);
   }

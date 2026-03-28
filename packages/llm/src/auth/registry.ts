@@ -46,8 +46,12 @@ const anthropicProvider: AuthProvider = {
       label: "API key",
       hint: "Use direct Anthropic API key",
       async run(cb) {
-        const key = await cb.getInput("Anthropic API key");
-        await Auth.set("anthropic", { type: "api", key: key.trim() });
+        const key = (await cb.getInput("Anthropic API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("anthropic", { type: "api", key });
         cb.showMessage("API key saved");
       },
     },
@@ -77,8 +81,12 @@ const openaiProvider: AuthProvider = {
       label: "API key",
       hint: "Use direct OpenAI API key",
       async run(cb) {
-        const key = await cb.getInput("OpenAI API key");
-        await Auth.set("openai", { type: "api", key: key.trim() });
+        const key = (await cb.getInput("OpenAI API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("openai", { type: "api", key });
         cb.showMessage("API key saved");
       },
     },

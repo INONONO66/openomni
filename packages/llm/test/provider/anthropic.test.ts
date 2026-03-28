@@ -64,5 +64,6 @@ describe("getLanguage (Anthropic)", () => {
       auth,
     );
     expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-3-haiku");
   });
 });
