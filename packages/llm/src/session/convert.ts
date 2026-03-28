@@ -1,12 +1,21 @@
-import type { CoreMessage } from "ai";
-import { Message } from "./message";
-import { Provider, ProviderTransform } from "../provider";
+import type { ModelMessage } from "ai";
+import type { Message } from "./message";
+import { type Provider, ProviderTransform } from "../provider";
+
+function stringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
 
 export function toModelMessages(
   messagesWithParts: Message.WithParts[],
   model: Provider.Model,
-): CoreMessage[] {
-  const coreMessages: CoreMessage[] = [];
+): ModelMessage[] {
+  const coreMessages: ModelMessage[] = [];
 
   for (const msg of messagesWithParts) {
     if (msg.parts.length === 0) continue;
@@ -31,7 +40,7 @@ export function toModelMessages(
         type: "tool-call";
         toolCallId: string;
         toolName: string;
-        args: Record<string, unknown>;
+        input: Record<string, unknown>;
       }> = [];
       const toolResults: Array<{
         role: "tool";
@@ -39,7 +48,7 @@ export function toModelMessages(
           type: "tool-result";
           toolCallId: string;
           toolName: string;
-          result: unknown;
+          output: { type: "text"; value: string };
         }>;
       }> = [];
 
@@ -53,7 +62,7 @@ export function toModelMessages(
             type: "tool-call",
             toolCallId: part.callID,
             toolName: part.tool,
-            args: part.state.input,
+            input: part.state.input,
           });
 
           if (part.state.status === "completed") {
@@ -64,7 +73,10 @@ export function toModelMessages(
                   type: "tool-result",
                   toolCallId: part.callID,
                   toolName: part.tool,
-                  result: part.state.output,
+                  output: {
+                    type: "text",
+                    value: stringifyToolOutput(part.state.output),
+                  },
                 },
               ],
             });
@@ -76,7 +88,10 @@ export function toModelMessages(
                   type: "tool-result",
                   toolCallId: part.callID,
                   toolName: part.tool,
-                  result: `Error: ${part.state.error}`,
+                  output: {
+                    type: "text",
+                    value: `Error: ${part.state.error}`,
+                  },
                 },
               ],
             });
@@ -89,7 +104,10 @@ export function toModelMessages(
                   type: "tool-result",
                   toolCallId: part.callID,
                   toolName: part.tool,
-                  result: "[Tool execution was interrupted]",
+                  output: {
+                    type: "text",
+                    value: "[Tool execution was interrupted]",
+                  },
                 },
               ],
             });
@@ -105,7 +123,7 @@ export function toModelMessages(
               type: "tool-call";
               toolCallId: string;
               toolName: string;
-              args: Record<string, unknown>;
+              input: Record<string, unknown>;
             }
         > = [];
 

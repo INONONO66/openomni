@@ -12,9 +12,9 @@
   "dependencies": {
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
-    "ai": "^4.0.0",
-    "@ai-sdk/anthropic": "^0.0.50",
-    "@ai-sdk/openai": "^0.0.50",
+    "ai": "^6.0.141",
+    "@ai-sdk/anthropic": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.48",
     "zod": "^3.22.4"
   },
   "devDependencies": {
