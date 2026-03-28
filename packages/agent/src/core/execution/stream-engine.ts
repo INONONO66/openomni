@@ -121,6 +121,8 @@ export async function* streamAgent(
         totalTokens: 0,
       };
       let turnIndex = 0;
+      let continuationCount = 0;
+      const startTime = Date.now();
 
       while (true) {
         if (checkBudget(budgetState, config.budget) === "exceeded") {
@@ -186,6 +188,43 @@ export async function* streamAgent(
           const step: AgentStep = { type: "text", content: lastAssistantText };
           steps.push(step);
           if (config.onStepFinish) await config.onStepFinish(step);
+
+          if (config.stepGuard) {
+            const verdict = await config.stepGuard(step, {
+              steps,
+              usage: totalUsage,
+              turnCount: turnIndex,
+              isCompletion: true,
+              continuationCount,
+              elapsedMs: Date.now() - startTime,
+            });
+
+            if (verdict.action === "inject") {
+              const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
+              messages = [
+                ...messages,
+                createAssistantMessage(lastAssistantText, parentID),
+                createUserMessage(verdict.message),
+              ];
+              continuationCount++;
+              turnIndex++;
+              continue;
+            }
+
+            if (verdict.action === "abort") {
+              yield {
+                type: "complete",
+                result: {
+                  text: lastAssistantText,
+                  steps,
+                  usage: totalUsage,
+                  finishReason: "stop",
+                  guardAborted: true,
+                },
+              };
+              return;
+            }
+          }
 
           yield {
             type: "complete",
@@ -259,6 +298,38 @@ export async function* streamAgent(
         };
         steps.push(toolStep);
         if (config.onStepFinish) await config.onStepFinish(toolStep);
+
+        if (config.stepGuard) {
+          const verdict = await config.stepGuard(toolStep, {
+            steps,
+            usage: totalUsage,
+            turnCount: turnIndex,
+            isCompletion: false,
+            continuationCount,
+            elapsedMs: Date.now() - startTime,
+          });
+
+          if (verdict.action === "inject") {
+            messages = [...messages, createUserMessage(verdict.message)];
+            continuationCount++;
+            turnIndex++;
+            continue;
+          }
+
+          if (verdict.action === "abort") {
+            yield {
+              type: "complete",
+              result: {
+                text: lastAssistantText,
+                steps,
+                usage: totalUsage,
+                finishReason: "stop",
+                guardAborted: true,
+              },
+            };
+            return;
+          }
+        }
 
         const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
         messages = [...messages, createAssistantMessage(lastAssistantText, parentID)];
