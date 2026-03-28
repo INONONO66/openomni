@@ -1,9 +1,9 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
-import type { CoreMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { streamText, jsonSchema } from "ai";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
-import { Provider, getLanguage } from "./provider";
+import { type Provider, getLanguage } from "./provider";
 import { Auth } from "./auth/storage";
 
 /**
@@ -79,15 +79,15 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
       const normalizedMessages = toModelMessages(messages, model);
 
-      const systemMessages: CoreMessage[] = streamInput.system
+      const systemMessages: ModelMessage[] = streamInput.system
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
+      const sdkTools: Record<string, { description?: string; inputSchema: unknown }> = {};
       for (const spec of input.tools) {
         sdkTools[spec.name] = {
           description: spec.description,
-          parameters: jsonSchema(spec.inputSchema),
+          inputSchema: jsonSchema(spec.inputSchema),
         };
       }
 

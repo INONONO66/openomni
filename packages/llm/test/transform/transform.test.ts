@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CoreMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { ProviderTransform } from "../../src/transform";
 import type { Provider } from "../../src/provider/index";
 
@@ -36,7 +36,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
 
   test("openai is passthrough", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "" },
       { role: "user", content: "hello" },
     ];
@@ -45,7 +45,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic filters empty string content", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "" },
       { role: "user", content: "hello" },
     ];
@@ -54,7 +54,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic filters empty text parts from array content", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -69,7 +69,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic removes message when all array parts are empty", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -83,7 +83,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic sanitizes toolCallId for claude models", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -91,7 +91,7 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-call",
             toolCallId: "call.with.dots/and/slashes",
             toolName: "test",
-            args: {},
+            input: {},
           },
         ],
       },
@@ -103,7 +103,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic sanitizes toolCallId on tool-result parts", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "tool",
         content: [
@@ -111,7 +111,10 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-result",
             toolCallId: "id@with#special$chars",
             toolName: "test",
-            result: "ok",
+            output: {
+              type: "text",
+              value: "ok",
+            },
           },
         ],
       },
@@ -126,7 +129,7 @@ describe("ProviderTransform.normalizeMessages", () => {
       npm: "@ai-sdk/anthropic",
       modelId: "some-other-model",
     };
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -134,7 +137,7 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-call",
             toolCallId: "call.with.dots",
             toolName: "test",
-            args: {},
+            input: {},
           },
         ],
       },
@@ -145,7 +148,7 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("preserves non-text parts like tool-call in anthropic filtering", () => {
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -154,7 +157,7 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-call",
             toolCallId: "abc123",
             toolName: "test",
-            args: {},
+            input: {},
           },
         ],
       },
@@ -172,7 +175,7 @@ describe("ProviderTransform.normalizeMessages", () => {
       name: "Claude Sonnet 4",
       api: { npm: "@ai-sdk/anthropic" },
     };
-    const msgs: CoreMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "" },
       { role: "user", content: "hello" },
     ];

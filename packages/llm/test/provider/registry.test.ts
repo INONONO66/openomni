@@ -21,12 +21,10 @@ describe("Provider Registry", () => {
       expect(provider.languageModel).toBeDefined();
     });
 
-    it("should return configured Anthropic provider with OAuth auth", () => {
+    it("should return configured Anthropic provider with proxy auth", () => {
       const auth: Auth.Info = {
-        type: "oauth",
-        access: "test-access-token",
-        refresh: "test-refresh-token",
-        expires: Date.now() + 3600000,
+        type: "proxy",
+        baseURL: "http://localhost:8317",
       };
       const model = makeModel("anthropic", "@ai-sdk/anthropic", "claude-sonnet-4-20250514");
       const provider = getSDK(model, auth);
@@ -42,13 +40,11 @@ describe("Provider Registry", () => {
       expect(provider.languageModel).toBeDefined();
     });
 
-    it("should return configured OpenAI provider with OAuth auth", () => {
+    it("should return configured OpenAI provider with proxy auth", () => {
       const auth: Auth.Info = {
-        type: "oauth",
-        access: "test-access-token",
-        refresh: "test-refresh-token",
-        expires: Date.now() + 3600000,
-        accountId: "test-account-id",
+        type: "proxy",
+        baseURL: "http://localhost:8317/v1",
+        apiKey: "test-proxy-key",
       };
       const model = makeModel("openai", "@ai-sdk/openai", "gpt-5.1-codex-max");
       const provider = getSDK(model, auth);
@@ -82,8 +78,8 @@ describe("Provider Registry", () => {
       expect(models.length).toBeGreaterThan(0);
     });
 
-    it("should return filtered OpenAI models for OAuth auth type", async () => {
-      const models = await Provider.listModels("openai", "oauth");
+    it("should return filtered OpenAI models for proxy auth type", async () => {
+      const models = await Provider.listModels("openai", "proxy");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
@@ -100,7 +96,7 @@ describe("Provider Registry", () => {
     });
 
     it("should throw error for unknown provider", async () => {
-      await expect(Provider.listModels("unknown")).rejects.toThrow("Unknown provider: unknown");
+      return expect(Provider.listModels("unknown")).rejects.toThrow("Unknown provider: unknown");
     });
   });
 
