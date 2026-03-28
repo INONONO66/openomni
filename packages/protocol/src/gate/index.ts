@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Plan } from "../plan/index.js";
+import type { Plan } from "../plan/index.js";
+import { PlanSchema } from "../plan/index.js";
 
 export namespace Gate {
   export const Issue = z.object({
@@ -28,5 +29,23 @@ export namespace Gate {
   export interface Check {
     name: string;
     check(plan: Plan, context: Context): Promise<Verdict> | Verdict;
+  }
+
+  export const EnrichAction = z.object({
+    type: z.enum(["added_step", "modified_step", "reordered", "added_dependency"]),
+    stepId: z.string().optional(),
+    description: z.string(),
+  });
+  export type EnrichAction = z.infer<typeof EnrichAction>;
+
+  export const EnrichResult = z.object({
+    plan: PlanSchema,
+    applied: z.array(EnrichAction),
+  });
+  export type EnrichResult = z.infer<typeof EnrichResult>;
+
+  export interface Enricher {
+    name: string;
+    enrich(plan: Plan, context: Context): Promise<EnrichResult> | EnrichResult;
   }
 }

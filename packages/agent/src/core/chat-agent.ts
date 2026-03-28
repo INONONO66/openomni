@@ -22,7 +22,7 @@ import { InMemoryCompactor } from "./execution/compaction";
 import { ParallelToolExecutor } from "./execution/parallel-tools";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
-import type { Memory, MemoryResult } from "./memory";
+import type { MemoryResult } from "./memory";
 
 /**
  * ChatAgent instance interface
@@ -271,6 +271,8 @@ export namespace ChatAgent {
                 let lastAssistantText = "";
                 const steps: AgentStep[] = [];
                 let compactionCount = 0;
+                let continuationCount = 0;
+                const startTime = Date.now();
                 const totalUsage: TokenUsage = {
                   inputTokens: 0,
                   outputTokens: 0,
@@ -365,6 +367,40 @@ export namespace ChatAgent {
                       await config.onStepFinish(step);
                     }
 
+                    if (config.stepGuard) {
+                      const verdict = await config.stepGuard(step, {
+                        steps,
+                        usage: totalUsage,
+                        turnCount: budgetState.turns,
+                        isCompletion: true,
+                        continuationCount,
+                        elapsedMs: Date.now() - startTime,
+                      });
+
+                      if (verdict.action === "inject") {
+                        const parentID =
+                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                        messages = [
+                          ...messages,
+                          createAssistantMessage(lastAssistantText, parentID),
+                          createUserMessage(verdict.message),
+                        ];
+                        continuationCount++;
+                        continue;
+                      }
+
+                      if (verdict.action === "abort") {
+                        return {
+                          text: lastAssistantText,
+                          steps,
+                          usage: totalUsage,
+                          finishReason: "stop",
+                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                          guardAborted: true,
+                        };
+                      }
+                    }
+
                     return {
                       text: lastAssistantText,
                       steps,
@@ -413,6 +449,45 @@ export namespace ChatAgent {
 
                   if (config.onStepFinish) {
                     await config.onStepFinish(toolStep);
+                  }
+
+                  if (config.stepGuard) {
+                    const verdict = await config.stepGuard(toolStep, {
+                      steps,
+                      usage: totalUsage,
+                      turnCount: budgetState.turns,
+                      isCompletion: false,
+                      continuationCount,
+                      elapsedMs: Date.now() - startTime,
+                    });
+
+                    if (verdict.action === "inject") {
+                      const parentID =
+                        messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                      const assistantWithTools = buildAssistantMessageWithTools(
+                        outcome.toolCalls,
+                        toolResults,
+                        parentID,
+                      );
+                      messages = [
+                        ...messages,
+                        assistantWithTools,
+                        createUserMessage(verdict.message),
+                      ];
+                      continuationCount++;
+                      continue;
+                    }
+
+                    if (verdict.action === "abort") {
+                      return {
+                        text: lastAssistantText,
+                        steps,
+                        usage: totalUsage,
+                        finishReason: "stop",
+                        compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                        guardAborted: true,
+                      };
+                    }
                   }
 
                   const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
