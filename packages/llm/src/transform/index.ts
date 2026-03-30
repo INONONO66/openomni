@@ -1,4 +1,4 @@
-import type { CoreMessage } from "ai";
+import type { SDKMessage } from "../session/convert";
 import type { Provider } from "../provider/index";
 
 export namespace ProviderTransform {
@@ -26,10 +26,10 @@ export namespace ProviderTransform {
   }
 
   export function normalizeMessages(
-    msgs: CoreMessage[],
+    msgs: SDKMessage[],
     model: Provider.Model | NormalizeOptions,
     _options: Record<string, unknown> = {},
-  ): CoreMessage[] {
+  ): SDKMessage[] {
     let npm: string | undefined;
     let modelId: string;
 
@@ -106,7 +106,7 @@ export namespace ProviderTransform {
     return {};
   }
 
-  function normalizeAnthropic(msgs: CoreMessage[], model: NormalizeOptions): CoreMessage[] {
+  function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -124,7 +124,7 @@ export namespace ProviderTransform {
         if (filtered.length === 0) return undefined;
         return { ...msg, content: filtered };
       })
-      .filter((msg): msg is CoreMessage => msg !== undefined && msg.content !== "");
+      .filter((msg): msg is SDKMessage => msg !== undefined && msg.content !== "");
 
     if (model.modelId.includes("claude")) {
       result = result.map((msg) => {
