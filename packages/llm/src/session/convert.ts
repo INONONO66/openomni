@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { CoreMessage } from "ai";
 import type { Message } from "./message";
 import { type Provider, ProviderTransform } from "../provider";
 
@@ -14,8 +14,8 @@ function stringifyToolOutput(output: unknown): string {
 export function toModelMessages(
   messagesWithParts: Message.WithParts[],
   model: Provider.Model,
-): ModelMessage[] {
-  const coreMessages: ModelMessage[] = [];
+): CoreMessage[] {
+  const coreMessages: unknown[] = [];
 
   for (const msg of messagesWithParts) {
     if (msg.parts.length === 0) continue;
@@ -153,5 +153,5 @@ export function toModelMessages(
     }
   }
 
-  return ProviderTransform.normalizeMessages(coreMessages, model);
+  return ProviderTransform.normalizeMessages(coreMessages as CoreMessage[], model);
 }

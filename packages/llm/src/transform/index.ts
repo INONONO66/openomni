@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { CoreMessage } from "ai";
 import type { Provider } from "../provider/index";
 
 export namespace ProviderTransform {
@@ -26,10 +26,10 @@ export namespace ProviderTransform {
   }
 
   export function normalizeMessages(
-    msgs: ModelMessage[],
+    msgs: CoreMessage[],
     model: Provider.Model | NormalizeOptions,
     _options: Record<string, unknown> = {},
-  ): ModelMessage[] {
+  ): CoreMessage[] {
     let npm: string | undefined;
     let modelId: string;
 
@@ -106,7 +106,7 @@ export namespace ProviderTransform {
     return {};
   }
 
-  function normalizeAnthropic(msgs: ModelMessage[], model: NormalizeOptions): ModelMessage[] {
+  function normalizeAnthropic(msgs: CoreMessage[], model: NormalizeOptions): CoreMessage[] {
     let result = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -124,7 +124,7 @@ export namespace ProviderTransform {
         if (filtered.length === 0) return undefined;
         return { ...msg, content: filtered };
       })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "");
+      .filter((msg): msg is CoreMessage => msg !== undefined && msg.content !== "");
 
     if (model.modelId.includes("claude")) {
       result = result.map((msg) => {
