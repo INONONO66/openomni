@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Hashline } from "@openomni/protocol";
+import { Hashline } from "../../src/plan/hashline.js";
 import { InMemoryPlanStore } from "../../src/plan/plan-store";
 
 const refFor = (lines: string[], lineNumber: number) =>

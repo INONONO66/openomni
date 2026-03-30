@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
-import { Hashline, type Tool } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
+import { Hashline } from "../../src/plan/hashline.js";
 import { InMemoryPlanStore } from "../../src/plan/plan-store";
 import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "../../src/plan/plan-tools";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Hashline } from "../src/hashline/index.js";
+import { Hashline } from "../../src/plan/hashline.js";
 
 const refFor = (lines: string[], lineNumber: number): string =>
   `${lineNumber}#${Hashline.computeHash(lineNumber, lines[lineNumber - 1] ?? "")}`;

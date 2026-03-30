@@ -1,4 +1,5 @@
-import { Hashline, type Tool } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
+import { Hashline } from "./hashline.js";
 import type { PlanStore } from "./plan-store";
 
 export const PLAN_TOOL_SPECS: Tool.Spec[] = [

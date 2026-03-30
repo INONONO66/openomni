@@ -1,4 +1,4 @@
-import { Hashline } from "@openomni/protocol";
+import { Hashline } from "./hashline.js";
 
 export interface PlanDocument {
   planId: string;
