@@ -10,6 +10,11 @@ const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
   "@ai-sdk/openai": createOpenAI,
 };
 
+type SDK = ReturnType<typeof createAnthropic> | ReturnType<typeof createOpenAI>;
+
+const SDK_CACHE = new Map<string, SDK>();
+const LANGUAGE_CACHE = new Map<string, LanguageModel>();
+
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => any;
 
 interface CustomLoaderResult {
@@ -34,6 +39,10 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
 };
 
 export function getSDK(model: Provider.Model, auth: Auth.Info): any {
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${JSON.stringify(auth)}`;
+  const cached = SDK_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const npm = model.api?.npm ?? "@ai-sdk/openai";
   const factory = BUNDLED_PROVIDERS[npm];
   if (!factory) {
@@ -56,21 +65,31 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
     sdkOptions.apiKey = proxyAuth.apiKey ?? "proxy";
   }
 
-  return factory(sdkOptions);
+  const sdk = factory(sdkOptions) as SDK;
+  SDK_CACHE.set(cacheKey, sdk);
+  return sdk;
 }
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
+  const modelID = model.api?.id ?? model.id;
+  const cacheKey = `${model.providerID}:${modelID}:${JSON.stringify(auth)}`;
+  const cached = LANGUAGE_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const sdk = getSDK(model, auth);
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
   const custom = customLoader ? customLoader() : undefined;
-  const modelID = model.api?.id ?? model.id;
 
   if (custom?.getModel) {
-    return custom.getModel(sdk, modelID) as LanguageModel;
+    const languageModel = custom.getModel(sdk, modelID) as LanguageModel;
+    LANGUAGE_CACHE.set(cacheKey, languageModel);
+    return languageModel;
   }
 
-  return sdk.languageModel(modelID);
+  const languageModel = sdk.languageModel(modelID);
+  LANGUAGE_CACHE.set(cacheKey, languageModel);
+  return languageModel;
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {
