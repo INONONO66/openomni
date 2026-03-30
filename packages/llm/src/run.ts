@@ -228,7 +228,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       system,
     });
 
-    if (pendingToolCalls.length > 0) {
+    if (pendingToolCalls.length > 0 && !input.toolExecutor) {
       /** @deprecated Use toolExecutor path which returns "stop" */
       return { type: "await_tool", toolCalls: pendingToolCalls };
     }
