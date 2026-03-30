@@ -80,7 +80,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
       const languageModel = getLanguage(model, auth);
 
-      const normalizedMessages = toModelMessages(messages, model);
+      type InternalWithParts = Parameters<typeof toModelMessages>[0][number];
+      const normalizedMessages = toModelMessages(messages as unknown as InternalWithParts[], model);
 
       const systemMessages: SDKMessage[] = streamInput.system
         ? [{ role: "system" as const, content: streamInput.system }]
