@@ -45,6 +45,11 @@ export namespace Message {
     tokens: z.object({
       input: z.number(),
       output: z.number(),
+      reasoning: z.number(),
+      cache: z.object({
+        read: z.number(),
+        write: z.number(),
+      }),
     }),
   });
   export type StepFinishPart = z.infer<typeof StepFinishPart>;

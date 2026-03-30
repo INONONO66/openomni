@@ -146,7 +146,7 @@ export namespace ProviderTransform {
               }
               return part;
             }),
-          };
+          } as SDKMessage;
         }
         return msg;
       });

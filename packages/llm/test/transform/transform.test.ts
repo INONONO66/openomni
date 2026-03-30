@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelMessage } from "ai";
 import { ProviderTransform } from "../../src/transform";
 import type { Provider } from "../../src/provider/index";
+type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
 describe("ProviderTransform.sdkKey", () => {
   test("maps anthropic packages", () => {
@@ -180,7 +180,12 @@ describe("ProviderTransform.normalizeMessages", () => {
       { role: "user", content: "hello" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, model);
-    expect(result).toEqual([{ role: "user", content: "hello" }]);
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: "hello",
+      },
+    ]);
   });
 });
 
