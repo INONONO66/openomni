@@ -1,5 +1,5 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
-import { streamText, jsonSchema } from "ai";
+import { streamText, jsonSchema, tool } from "ai";
 import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
@@ -19,6 +19,9 @@ export interface RunInput {
   system?: string;
   signal?: AbortSignal;
   model?: Provider.Model;
+  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  toolChoice?: "auto" | "required" | "none";
+  maxSteps?: number;
   providerOptions?: Record<string, unknown>;
 }
 
@@ -83,18 +86,75 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
+      const sdkTools: Record<string, unknown> = {
+        invalid: (tool as any)({
+          description: "Error handler for unrecognized tool calls",
+          parameters: jsonSchema({ type: "object" }),
+          execute: async (args: Record<string, unknown>) => JSON.stringify(args),
+        }),
+      };
       for (const spec of input.tools) {
-        sdkTools[spec.name] = {
-          description: spec.description,
-          parameters: jsonSchema(spec.inputSchema),
-        };
+        if (input.toolExecutor) {
+          sdkTools[spec.name] = (tool as any)({
+            description: spec.description,
+            parameters: jsonSchema(spec.inputSchema),
+            execute: async (args: Record<string, unknown>) => {
+              const call: Tool.Call = {
+                id: crypto.randomUUID(),
+                tool: spec.name,
+                input: args,
+              };
+              const result = await input.toolExecutor!(call);
+              sink.onToolCall(call);
+              sink.onToolResult(result);
+              if (result.isError) return `Error: ${result.output}`;
+              return result.output;
+            },
+          });
+        } else {
+          sdkTools[spec.name] = (tool as any)({
+            description: spec.description,
+            parameters: jsonSchema(spec.inputSchema),
+          });
+        }
       }
 
       const streamArgs = {
         model: languageModel,
         messages: [...systemMessages, ...normalizedMessages],
         tools: sdkTools,
+        toolChoice: input.toolChoice,
+        maxRetries: 0,
+        maxSteps: input.maxSteps ?? 24,
+        onError: ({ error }: { error: unknown }) => {
+          console.error("[llm/run] streamText error", error);
+        },
+        experimental_repairToolCall: async ({
+          toolCall,
+          tools,
+          error,
+        }: {
+          toolCall: { toolName: string; input: unknown } & Record<string, unknown>;
+          tools: Record<string, unknown>;
+          error: Error;
+        }) => {
+          const matchedTool = Object.keys(tools).find(
+            (toolName) => toolName.toLowerCase() === toolCall.toolName.toLowerCase(),
+          );
+
+          if (matchedTool) {
+            return { ...toolCall, toolName: matchedTool };
+          }
+
+          return {
+            ...toolCall,
+            toolName: "invalid",
+            input: {
+              tool: toolCall.toolName,
+              error: error.message,
+            },
+          };
+        },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
       };
@@ -160,6 +220,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     });
 
     if (pendingToolCalls.length > 0) {
+      /** @deprecated Use toolExecutor path which returns "stop" */
       return { type: "await_tool", toolCalls: pendingToolCalls };
     }
 

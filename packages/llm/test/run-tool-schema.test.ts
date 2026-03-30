@@ -4,6 +4,7 @@ import { Auth } from "../src/auth/storage";
 
 const TEST_PROVIDER_ID = "__test_tool_schema__";
 let capturedArgs: Record<string, unknown> | undefined;
+let capturedToolConfigs: Record<string, unknown>[] = [];
 
 mock.module("ai", () => ({
   streamText: (args: Record<string, unknown>) => {
@@ -15,6 +16,10 @@ mock.module("ai", () => ({
     };
   },
   jsonSchema: (schema: unknown) => ({ __jsonSchema: schema }),
+  tool: (config: Record<string, unknown>) => {
+    capturedToolConfigs.push(config);
+    return { __tool: config };
+  },
 }));
 
 let run: typeof import("../src/run").run;
@@ -37,8 +42,9 @@ describe("run() with model - tool schema conversion", () => {
     onSnapshot: () => {},
   };
 
-  test("maps Tool.Spec inputSchema to SDK parameters property", async () => {
+  test("maps Tool.Spec inputSchema to tool() parameters via jsonSchema", async () => {
     capturedArgs = undefined;
+    capturedToolConfigs = [];
 
     await run(
       {
@@ -63,8 +69,20 @@ describe("run() with model - tool schema conversion", () => {
     expect(capturedArgs).toBeDefined();
     const tools = (capturedArgs as { tools?: Record<string, unknown> } | undefined)?.tools;
     expect(tools).toBeDefined();
-    const sdkTool = tools!["test_tool"] as Record<string, unknown>;
-    expect(sdkTool["parameters"]).toBeDefined();
-    expect(sdkTool["inputSchema"]).toBeUndefined();
+    expect(tools!["test_tool"]).toBeDefined();
+    expect(capturedToolConfigs.length).toBe(2);
+    const testToolConfig = capturedToolConfigs.find((cfg) => cfg["description"] === "A test tool");
+    expect(testToolConfig).toBeDefined();
+    expect(testToolConfig!["parameters"]).toEqual({
+      __jsonSchema: { type: "object", properties: { x: { type: "string" } } },
+    });
+    expect(testToolConfig!["execute"]).toBeUndefined();
+    expect(testToolConfig!["inputSchema"]).toBeUndefined();
+
+    const invalidToolConfig = capturedToolConfigs.find(
+      (cfg) => cfg["description"] === "Error handler for unrecognized tool calls",
+    );
+    expect(invalidToolConfig).toBeDefined();
+    expect(invalidToolConfig!["execute"]).toBeFunction();
   });
 });
