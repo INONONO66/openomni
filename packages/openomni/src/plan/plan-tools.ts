@@ -70,8 +70,10 @@ export function createPlanToolExecutor(
       case "plan_read": {
         const { planId, from, to } = call.input as Record<string, unknown>;
         if (typeof planId !== "string") return fail(call, "planId must be a string");
-        const fromNum = typeof from === "number" ? from : undefined;
-        const toNum = typeof to === "number" ? to : undefined;
+        const fromNum = typeof from === "number" ? Math.floor(from) : undefined;
+        const toNum = typeof to === "number" ? Math.floor(to) : undefined;
+        if ((fromNum !== undefined && fromNum < 1) || (toNum !== undefined && toNum < 1))
+          return fail(call, "from and to must be positive integers");
 
         const doc = store.read(planId);
         if (!doc) return fail(call, `Plan '${planId}' not found`);
@@ -97,6 +99,8 @@ export function createPlanToolExecutor(
         const { planId, edits } = call.input as Record<string, unknown>;
         if (typeof planId !== "string") return fail(call, "planId must be a string");
         if (!Array.isArray(edits)) return fail(call, "edits must be an array");
+        if (edits.some((e) => e === null || typeof e !== "object"))
+          return fail(call, "each edit must be a non-null object");
 
         const result = store.edit(planId, edits as Hashline.EditOp[]);
         if (!result.ok) return fail(call, result.errors.join("\n"));

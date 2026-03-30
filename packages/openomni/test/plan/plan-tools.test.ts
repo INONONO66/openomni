@@ -192,4 +192,27 @@ describe("createPlanToolExecutor", () => {
     expect(result.isError).toBe(true);
     expect(result.output).toContain("planId must be a string");
   });
+
+  test("plan_read floors non-integer from/to", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    await execute(makeCall("plan_write", { planId: "p1", content: "A\nB\nC\nD\nE" }));
+    const result = await execute(makeCall("plan_read", { planId: "p1", from: 2.7, to: 3.9 }));
+    expect(result.isError).toBe(false);
+    const lines = result.output.split("\n");
+    expect(lines).toHaveLength(2);
+  });
+
+  test("plan_edit rejects null items in edits array", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    await execute(makeCall("plan_write", { planId: "p1", content: "hello" }));
+    const result = await execute(
+      makeCall("plan_edit", { planId: "p1", edits: [null, { op: "replace" }] }),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("non-null object");
+  });
 });
