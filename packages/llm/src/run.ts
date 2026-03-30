@@ -5,6 +5,7 @@ import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
 import { type Provider, getLanguage } from "./provider";
 import { Auth } from "./auth/storage";
+import { ContextOverflowError } from "./error";
 
 /**
  * Input for the run() function.
@@ -23,6 +24,7 @@ export interface RunInput {
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   providerOptions?: Record<string, unknown>;
+  onContextOverflow?: () => Promise<void>;
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
@@ -237,6 +239,43 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   } catch (error) {
     if (abortSignal.aborted) {
       return { type: "aborted" };
+    }
+
+    if (ContextOverflowError.isInstance(error) && input.onContextOverflow) {
+      await input.onContextOverflow();
+
+      try {
+        const retryResult = await processor.process({
+          messages: messages.map((m) => m.info),
+          model: resolvedModel,
+          system,
+        });
+
+        if (pendingToolCalls.length > 0) {
+          return { type: "await_tool", toolCalls: pendingToolCalls };
+        }
+
+        switch (retryResult) {
+          case "stop":
+            return { type: "stop" };
+          case "continue":
+            return { type: "await_tool", toolCalls: pendingToolCalls };
+          case "compact":
+            return { type: "stop" };
+          default:
+            return { type: "stop" };
+        }
+      } catch (retryError) {
+        const retryErr = retryError instanceof Error ? retryError : new Error(String(retryError));
+        return {
+          type: "error",
+          error: {
+            message: retryErr.message,
+            name: retryErr.name,
+            stack: retryErr.stack,
+          },
+        };
+      }
     }
 
     const err = error instanceof Error ? error : new Error(String(error));

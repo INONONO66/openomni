@@ -70,4 +70,12 @@ export const AbortedError = NamedError.create(
   }),
 );
 
+export const ContextOverflowError = NamedError.create(
+  "ContextOverflowError",
+  z.object({
+    message: z.string(),
+    isRetryable: z.literal(false).default(false),
+  }),
+);
+
 export const OutputLengthError = NamedError.create("OutputLengthError", z.object({}));
