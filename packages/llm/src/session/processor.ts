@@ -4,6 +4,7 @@ import { TokenTracker } from "../token";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import type { Provider } from "../provider";
+import { Guard } from "./guard";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -102,6 +103,7 @@ export namespace Processor {
       async process(streamInput: StreamInput): Promise<ProcessResult> {
         publishStatus({ type: "busy" });
         const pendingTools: Message.ToolPart[] = [];
+        const toolCallHistory: Guard.ToolCallRecord[] = [];
 
         try {
           while (true) {
@@ -208,6 +210,7 @@ export namespace Processor {
                   }
 
                   case "tool-call": {
+                    const input = (event.args as Record<string, unknown>) || {};
                     const toolPart: Message.ToolPart = {
                       id: generateId("part"),
                       sessionID,
@@ -217,7 +220,7 @@ export namespace Processor {
                       tool: String(event.toolName),
                       state: {
                         status: "pending",
-                        input: (event.args as Record<string, unknown>) || {},
+                        input,
                       },
                     };
                     addMessagePart(toolPart);
@@ -227,6 +230,44 @@ export namespace Processor {
                       tool: toolPart.tool,
                       input: toolPart.state.input,
                     });
+
+                    const currentCall: Guard.ToolCallRecord = {
+                      tool: toolPart.tool,
+                      inputHash: Guard.hashInput(input),
+                    };
+
+                    if (Guard.isDoomLoop(toolCallHistory, currentCall)) {
+                      publishStatus({
+                        type: "doom_loop",
+                        tool: toolPart.tool,
+                        input,
+                      });
+
+                      toolPart.state = {
+                        status: "error",
+                        input,
+                        error: "Doom loop detected",
+                        time: {
+                          start: Date.now(),
+                          end: Date.now(),
+                        },
+                      };
+                      updateMessagePart(toolPart);
+                      sink.onToolResult({
+                        id: generateId("tool-result"),
+                        toolCallId: toolPart.callID,
+                        output: "Doom loop detected",
+                        isError: true,
+                      });
+
+                      const idx = pendingTools.indexOf(toolPart);
+                      if (idx >= 0) pendingTools.splice(idx, 1);
+                      assistantMessage.time.completed = Date.now();
+                      publishStatus({ type: "idle" });
+                      return "stop";
+                    }
+
+                    toolCallHistory.push(currentCall);
 
                     if (onToolCall) {
                       toolPart.state = {
