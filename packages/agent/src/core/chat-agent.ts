@@ -315,6 +315,212 @@ export namespace ChatAgent {
                   onSnapshot: effectiveSink.onSnapshot,
                 };
 
+                const configuredToolChoice = (
+                  config as ChatAgentConfig & { toolChoice?: "auto" | "required" | "none" }
+                ).toolChoice;
+
+                if (config.toolExecutor) {
+                  while (true) {
+                    if (checkBudget(budgetState, config.budget) === "exceeded") {
+                      return {
+                        text: lastAssistantText,
+                        steps,
+                        usage: totalUsage,
+                        finishReason: "max-steps",
+                        compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                      };
+                    }
+
+                    budgetState = recordTurn(budgetState);
+
+                    if (config.signal?.aborted) {
+                      throw new Error("aborted");
+                    }
+
+                    let effectiveMessages = messages;
+                    if (config.memory) {
+                      const lastUserText = getLastUserMessageText(messages);
+                      if (lastUserText) {
+                        const memoryResults = await config.memory.retrieve(lastUserText);
+                        if (memoryResults.length > 0) {
+                          effectiveMessages = prependContextMessage(
+                            messages,
+                            formatMemoryContext(memoryResults),
+                          );
+                        }
+                      }
+                    }
+
+                    const runInput: RunInput = {
+                      messages: effectiveMessages,
+                      tools: config.tools ?? [],
+                      system: config.systemPrompt,
+                      signal: config.signal,
+                      model: providerModel,
+                      toolExecutor: config.toolExecutor,
+                      toolChoice: configuredToolChoice,
+                      maxSteps: config.budget?.maxToolCalls ?? 24,
+                    };
+
+                    const outcome = await llmRun(runInput, trackingSink);
+
+                    if (outcome.type === "stop") {
+                      const step: AgentStep = {
+                        type: "text",
+                        content: lastAssistantText,
+                      };
+                      steps.push(step);
+
+                      if (config.onStepFinish) {
+                        await config.onStepFinish(step);
+                      }
+
+                      if (config.stepGuard) {
+                        const verdict = await config.stepGuard(step, {
+                          steps,
+                          usage: totalUsage,
+                          turnCount: budgetState.turns,
+                          isCompletion: true,
+                          continuationCount,
+                          elapsedMs: Date.now() - startTime,
+                        });
+
+                        if (verdict.action === "inject") {
+                          const parentID =
+                            messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                          messages = [
+                            ...messages,
+                            createAssistantMessage(lastAssistantText, parentID),
+                            createUserMessage(verdict.message),
+                          ];
+                          continuationCount++;
+                          continue;
+                        }
+
+                        if (verdict.action === "abort") {
+                          return {
+                            text: lastAssistantText,
+                            steps,
+                            usage: totalUsage,
+                            finishReason: "stop",
+                            compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                            guardAborted: true,
+                          };
+                        }
+                      }
+
+                      return {
+                        text: lastAssistantText,
+                        steps,
+                        usage: totalUsage,
+                        finishReason: "stop",
+                        compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                      };
+                    }
+
+                    if (outcome.type === "aborted") {
+                      throw new Error("aborted");
+                    }
+
+                    if (outcome.type === "error") {
+                      throw new Error(outcome.error.message);
+                    }
+
+                    if (outcome.toolCalls.length === 0) {
+                      throw new Error("Tool wait requested with no tool calls");
+                    }
+
+                    const toolStart = Date.now();
+                    const toolResults = await executeTools(
+                      outcome.toolCalls,
+                      config.tools ?? [],
+                      config,
+                    );
+                    const elapsed = Date.now() - toolStart;
+                    const perToolMs =
+                      toolResults.length > 0
+                        ? Math.max(1, Math.ceil(elapsed / toolResults.length))
+                        : elapsed;
+
+                    for (const result of toolResults) {
+                      effectiveSink.onToolResult(result);
+                      budgetState = recordToolCall(budgetState, perToolMs);
+                    }
+
+                    const toolStep: AgentStep = {
+                      type: "tool-call",
+                      content: "",
+                      toolCalls: outcome.toolCalls,
+                      toolResults,
+                    };
+                    steps.push(toolStep);
+
+                    if (config.onStepFinish) {
+                      await config.onStepFinish(toolStep);
+                    }
+
+                    if (config.stepGuard) {
+                      const verdict = await config.stepGuard(toolStep, {
+                        steps,
+                        usage: totalUsage,
+                        turnCount: budgetState.turns,
+                        isCompletion: false,
+                        continuationCount,
+                        elapsedMs: Date.now() - startTime,
+                      });
+
+                      if (verdict.action === "inject") {
+                        const parentID =
+                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                        const assistantWithTools = buildAssistantMessageWithTools(
+                          outcome.toolCalls,
+                          toolResults,
+                          parentID,
+                        );
+                        messages = [
+                          ...messages,
+                          assistantWithTools,
+                          createUserMessage(verdict.message),
+                        ];
+                        continuationCount++;
+                        continue;
+                      }
+
+                      if (verdict.action === "abort") {
+                        return {
+                          text: lastAssistantText,
+                          steps,
+                          usage: totalUsage,
+                          finishReason: "stop",
+                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                          guardAborted: true,
+                        };
+                      }
+                    }
+
+                    const parentID =
+                      messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                    const assistantWithTools = buildAssistantMessageWithTools(
+                      outcome.toolCalls,
+                      toolResults,
+                      parentID,
+                    );
+                    messages = [...messages, assistantWithTools];
+
+                    if (config.compaction) {
+                      const totalTokens =
+                        budgetState.totalInputTokens + budgetState.totalOutputTokens;
+                      if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
+                        const result = await InMemoryCompactor.compact(messages, config.compaction);
+                        if (result.compacted) {
+                          messages = result.messages;
+                          compactionCount += 1;
+                        }
+                      }
+                    }
+                  }
+                }
+
                 while (true) {
                   if (checkBudget(budgetState, config.budget) === "exceeded") {
                     return {
