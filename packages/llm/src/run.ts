@@ -91,15 +91,14 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         };
       }
 
-      const streamResult = streamText({
+      const streamArgs = {
         model: languageModel,
-        messages: [...systemMessages, ...normalizedMessages] as Parameters<
-          typeof streamText
-        >[0]["messages"],
-        tools: sdkTools as unknown as Parameters<typeof streamText>[0]["tools"],
+        messages: [...systemMessages, ...normalizedMessages],
+        tools: sdkTools,
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
-      });
+      };
+      const streamResult = streamText(streamArgs as unknown as Parameters<typeof streamText>[0]);
 
       async function* adaptStream(): AsyncGenerator<{
         type: string;
