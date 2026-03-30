@@ -69,20 +69,20 @@ describe("run() with model - tool schema conversion", () => {
     expect(capturedArgs).toBeDefined();
     const tools = (capturedArgs as { tools?: Record<string, unknown> } | undefined)?.tools;
     expect(tools).toBeDefined();
-    expect(tools!["test_tool"]).toBeDefined();
+    expect(tools!.test_tool).toBeDefined();
     expect(capturedToolConfigs.length).toBe(2);
-    const testToolConfig = capturedToolConfigs.find((cfg) => cfg["description"] === "A test tool");
+    const testToolConfig = capturedToolConfigs.find((cfg) => cfg.description === "A test tool");
     expect(testToolConfig).toBeDefined();
-    expect(testToolConfig!["parameters"]).toEqual({
+    expect(testToolConfig!.parameters).toEqual({
       __jsonSchema: { type: "object", properties: { x: { type: "string" } } },
     });
-    expect(testToolConfig!["execute"]).toBeUndefined();
-    expect(testToolConfig!["inputSchema"]).toBeUndefined();
+    expect(testToolConfig!.execute).toBeUndefined();
+    expect(testToolConfig!.inputSchema).toBeUndefined();
 
     const invalidToolConfig = capturedToolConfigs.find(
-      (cfg) => cfg["description"] === "Error handler for unrecognized tool calls",
+      (cfg) => cfg.description === "Error handler for unrecognized tool calls",
     );
     expect(invalidToolConfig).toBeDefined();
-    expect(invalidToolConfig!["execute"]).toBeFunction();
+    expect(invalidToolConfig!.execute).toBeFunction();
   });
 });
