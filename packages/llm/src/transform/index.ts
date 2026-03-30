@@ -152,6 +152,32 @@ export namespace ProviderTransform {
       });
     }
 
-    return result;
+    return applyAnthropicCaching(result);
+  }
+
+  /** Inject ephemeral cacheControl on system msgs and last 2 user/assistant msgs. */
+  export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
+    if (msgs.length === 0) return msgs;
+
+    const CACHE_OPTS = {
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
+    };
+
+    const targets = new Set<number>();
+    let found = 0;
+    for (let i = msgs.length - 1; i >= 0 && found < 2; i--) {
+      const role = msgs[i].role;
+      if (role === "user" || role === "assistant") {
+        targets.add(i);
+        found++;
+      }
+    }
+
+    return msgs.map((msg, i) => {
+      if (msg.role === "system" || targets.has(i)) {
+        return { ...msg, ...CACHE_OPTS } as SDKMessage;
+      }
+      return msg;
+    });
   }
 }
