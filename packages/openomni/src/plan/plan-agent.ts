@@ -70,9 +70,10 @@ export namespace PlanAgent {
     const planExecutor = createPlanToolExecutor(store);
 
     const allTools: Tool.Spec[] = [...PLAN_TOOL_SPECS, ...(config.tools ?? [])];
+    const planToolNames = new Set(PLAN_TOOL_SPECS.map((s) => s.name));
 
     const composedExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
-      if (call.tool.startsWith("plan_")) {
+      if (planToolNames.has(call.tool)) {
         return planExecutor(call);
       }
       if (config.toolExecutor) {

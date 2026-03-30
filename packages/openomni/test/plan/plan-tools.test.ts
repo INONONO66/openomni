@@ -95,6 +95,40 @@ describe("createPlanToolExecutor", () => {
     expect(readResult.output).not.toContain("Line 4");
   });
 
+  test("plan_read with from only returns from that line to end", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    const content = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5";
+    await execute(makeCall("plan_write", { planId: "p1", content }));
+
+    const readResult = await execute(makeCall("plan_read", { planId: "p1", from: 4 }));
+    expect(readResult.isError).toBe(false);
+
+    const outputLines = readResult.output.split("\n");
+    expect(outputLines).toHaveLength(2);
+    expect(readResult.output).toContain("Line 4");
+    expect(readResult.output).toContain("Line 5");
+    expect(readResult.output).not.toContain("Line 3");
+  });
+
+  test("plan_read with to only returns from start to that line", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    const content = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5";
+    await execute(makeCall("plan_write", { planId: "p1", content }));
+
+    const readResult = await execute(makeCall("plan_read", { planId: "p1", to: 2 }));
+    expect(readResult.isError).toBe(false);
+
+    const outputLines = readResult.output.split("\n");
+    expect(outputLines).toHaveLength(2);
+    expect(readResult.output).toContain("Line 1");
+    expect(readResult.output).toContain("Line 2");
+    expect(readResult.output).not.toContain("Line 3");
+  });
+
   test("plan_read on nonexistent plan returns error", async () => {
     const store = new InMemoryPlanStore();
     const execute = createPlanToolExecutor(store);
@@ -128,5 +162,34 @@ describe("createPlanToolExecutor", () => {
     const result = await execute(makeCall("plan_delete", { planId: "p1" }));
     expect(result.isError).toBe(true);
     expect(result.output).toContain("Unknown tool");
+  });
+
+  test("plan_write rejects non-string content", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    const result = await execute(makeCall("plan_write", { planId: "p1", content: 123 }));
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("content must be a string");
+  });
+
+  test("plan_edit rejects non-array edits", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    await execute(makeCall("plan_write", { planId: "p1", content: "line one" }));
+
+    const result = await execute(makeCall("plan_edit", { planId: "p1", edits: "not-an-array" }));
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("edits must be an array");
+  });
+
+  test("plan_read rejects non-string planId", async () => {
+    const store = new InMemoryPlanStore();
+    const execute = createPlanToolExecutor(store);
+
+    const result = await execute(makeCall("plan_read", { planId: 42 }));
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("planId must be a string");
   });
 });

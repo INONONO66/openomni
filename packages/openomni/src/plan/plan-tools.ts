@@ -51,80 +51,60 @@ export const PLAN_TOOL_SPECS: Tool.Spec[] = [
 export function createPlanToolExecutor(
   store: PlanStore,
 ): (call: Tool.Call) => Promise<Tool.Result> {
+  const fail = (call: Tool.Call, message: string): Tool.Result => ({
+    id: crypto.randomUUID(),
+    toolCallId: call.id,
+    output: message,
+    isError: true,
+  });
+
+  const ok = (call: Tool.Call, output: string): Tool.Result => ({
+    id: crypto.randomUUID(),
+    toolCallId: call.id,
+    output,
+    isError: false,
+  });
+
   return async (call: Tool.Call): Promise<Tool.Result> => {
     switch (call.tool) {
       case "plan_read": {
-        const { planId, from, to } = call.input as {
-          planId: string;
-          from?: number;
-          to?: number;
-        };
+        const { planId, from, to } = call.input as Record<string, unknown>;
+        if (typeof planId !== "string") return fail(call, "planId must be a string");
+        const fromNum = typeof from === "number" ? from : undefined;
+        const toNum = typeof to === "number" ? to : undefined;
+
         const doc = store.read(planId);
-        if (!doc) {
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Plan '${planId}' not found`,
-            isError: true,
-          };
+        if (!doc) return fail(call, `Plan '${planId}' not found`);
+
+        if (fromNum !== undefined || toNum !== undefined) {
+          const lineCount = doc.content.split("\n").length;
+          return ok(call, Hashline.formatRange(doc.content, fromNum ?? 1, toNum ?? lineCount));
         }
-        const formatted =
-          from !== undefined && to !== undefined
-            ? Hashline.formatRange(doc.content, from, to)
-            : Hashline.format(doc.content);
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: formatted,
-          isError: false,
-        };
+        return ok(call, Hashline.format(doc.content));
       }
 
       case "plan_write": {
-        const { planId, content } = call.input as {
-          planId: string;
-          content: string;
-        };
+        const { planId, content } = call.input as Record<string, unknown>;
+        if (typeof planId !== "string") return fail(call, "planId must be a string");
+        if (typeof content !== "string") return fail(call, "content must be a string");
+
         store.write(planId, content);
         const lineCount = content.split("\n").length;
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: `Plan '${planId}' created (${lineCount} lines)`,
-          isError: false,
-        };
+        return ok(call, `Plan '${planId}' created (${lineCount} lines)`);
       }
 
       case "plan_edit": {
-        const { planId, edits } = call.input as {
-          planId: string;
-          edits: Hashline.EditOp[];
-        };
-        const result = store.edit(planId, edits);
-        if (!result.ok) {
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: result.errors.join("\n"),
-            isError: true,
-          };
-        }
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: `Plan '${planId}' edited`,
-          isError: false,
-        };
+        const { planId, edits } = call.input as Record<string, unknown>;
+        if (typeof planId !== "string") return fail(call, "planId must be a string");
+        if (!Array.isArray(edits)) return fail(call, "edits must be an array");
+
+        const result = store.edit(planId, edits as Hashline.EditOp[]);
+        if (!result.ok) return fail(call, result.errors.join("\n"));
+        return ok(call, `Plan '${planId}' edited`);
       }
 
-      default: {
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: `Unknown tool: ${call.tool}`,
-          isError: true,
-        };
-      }
+      default:
+        return fail(call, `Unknown tool: ${call.tool}`);
     }
   };
 }

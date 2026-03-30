@@ -38,11 +38,8 @@ mock.module("@openomni/llm", () => ({
 // --- Dynamic import after mock ---
 
 let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
-let PLAN_TOOL_SPECS: typeof import("../../src/plan/plan-tools")["PLAN_TOOL_SPECS"];
-
 beforeAll(async () => {
   ({ PlanAgent } = await import("../../src/plan/plan-agent"));
-  ({ PLAN_TOOL_SPECS } = await import("../../src/plan/plan-tools"));
 });
 
 afterAll(() => {
@@ -189,6 +186,50 @@ describe("PlanAgent.create", () => {
 
     expect(result.finishReason).toBe("stop");
     expect(executorCalls).toContain("search");
+  });
+
+  it("routes plan_-prefixed custom tools to user executor, not plan executor", async () => {
+    const executorCalls: string[] = [];
+    const customExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
+      executorCalls.push(call.tool);
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: "custom handled",
+        isError: false,
+      };
+    };
+
+    const customTool: Tool.Spec = {
+      name: "plan_review",
+      description: "Custom review tool with plan_ prefix",
+      inputSchema: { type: "object", properties: {}, required: [] },
+      safe: true,
+    };
+
+    let callCount = 0;
+    mockRunFn = async (_input: any, sink: Sink) => {
+      callCount++;
+      if (callCount === 1) {
+        sink.onMessage(createAssistantMessage(""));
+        return {
+          type: "await_tool",
+          toolCalls: [{ id: "tc-pr", tool: "plan_review", input: {} }],
+        } as Run.Outcome;
+      }
+      sink.onMessage(createAssistantMessage("Done."));
+      return { type: "stop" } as Run.Outcome;
+    };
+
+    const agent = PlanAgent.create({
+      model: MODEL,
+      tools: [customTool],
+      toolExecutor: customExecutor,
+    });
+
+    await agent.run({ messages: [{ role: "user", content: "review" }] });
+
+    expect(executorCalls).toContain("plan_review");
   });
 
   it("returns error result for unknown external tool without executor", async () => {
