@@ -80,31 +80,39 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
       const languageModel = getLanguage(model, auth);
 
-      const normalizedMessages = toModelMessages(messages as any, model);
+      const normalizedMessages = toModelMessages(messages, model);
 
       const systemMessages: SDKMessage[] = streamInput.system
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
+      type ToolFactory = (spec: {
+        description?: string;
+        parameters: ReturnType<typeof jsonSchema>;
+        execute?: (args: Record<string, unknown>) => Promise<unknown>;
+      }) => unknown;
+      const makeTool = tool as unknown as ToolFactory;
+
       const sdkTools: Record<string, unknown> = {
-        invalid: (tool as any)({
+        invalid: makeTool({
           description: "Error handler for unrecognized tool calls",
           parameters: jsonSchema({ type: "object" }),
-          execute: async (args: Record<string, unknown>) => JSON.stringify(args),
+          execute: async (args) => JSON.stringify(args),
         }),
       };
       for (const spec of input.tools) {
         if (input.toolExecutor) {
-          sdkTools[spec.name] = (tool as any)({
+          sdkTools[spec.name] = makeTool({
             description: spec.description,
             parameters: jsonSchema(spec.inputSchema),
-            execute: async (args: Record<string, unknown>) => {
+            execute: async (args) => {
               const call: Tool.Call = {
                 id: crypto.randomUUID(),
                 tool: spec.name,
                 input: args,
               };
-              const result = await input.toolExecutor!(call);
+              const result = await input.toolExecutor?.(call);
+              if (!result) return "";
               sink.onToolCall(call);
               sink.onToolResult(result);
               if (result.isError) return `Error: ${result.output}`;
@@ -112,7 +120,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
             },
           });
         } else {
-          sdkTools[spec.name] = (tool as any)({
+          sdkTools[spec.name] = makeTool({
             description: spec.description,
             parameters: jsonSchema(spec.inputSchema),
           });
