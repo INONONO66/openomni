@@ -1,4 +1,6 @@
 export { Auth } from "./auth";
+export { getAuthProviders, getAuthProvider } from "./auth/registry";
+export type { AuthCallbacks, AuthProvider, OAuthMethod } from "./auth/registry";
 export { Provider, ProviderTransform, ModelsDev } from "./provider";
 export {
   NamedError,
