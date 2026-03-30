@@ -71,8 +71,14 @@ export function createPlanToolExecutor(
       case "plan_read": {
         const { planId, from, to } = call.input as Record<string, unknown>;
         if (typeof planId !== "string") return fail(call, "planId must be a string");
-        const fromNum = typeof from === "number" ? Math.floor(from) : undefined;
-        const toNum = typeof to === "number" ? Math.floor(to) : undefined;
+        const fromNum =
+          typeof from === "number" && Number.isFinite(from) ? Math.floor(from) : undefined;
+        const toNum = typeof to === "number" && Number.isFinite(to) ? Math.floor(to) : undefined;
+        if (
+          (from !== undefined && fromNum === undefined) ||
+          (to !== undefined && toNum === undefined)
+        )
+          return fail(call, "from and to must be finite numbers");
         if ((fromNum !== undefined && fromNum < 1) || (toNum !== undefined && toNum < 1))
           return fail(call, "from and to must be positive integers");
 
