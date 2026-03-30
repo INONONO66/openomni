@@ -26,8 +26,10 @@ describe("getSDK (Anthropic)", () => {
     const auth: Auth.Info = { type: "api", key: "sk-xxx" };
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
-    expect(typeof sdk).toBe("function");
     expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("claude-sonnet-4-20250514");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("claude-sonnet-4-20250514");
   });
 
   test("proxy auth returns SDK with languageModel", () => {
@@ -38,6 +40,9 @@ describe("getSDK (Anthropic)", () => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("claude-sonnet-4-20250514");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("claude-sonnet-4-20250514");
   });
 });
 
@@ -46,6 +51,7 @@ describe("getLanguage (Anthropic)", () => {
     const auth: Auth.Info = { type: "api", key: "sk-xxx" };
     const model = getLanguage(makeModel(), auth);
     expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
   });
 
   test("returns a language model for proxy auth", () => {
@@ -55,6 +61,7 @@ describe("getLanguage (Anthropic)", () => {
     };
     const model = getLanguage(makeModel(), auth);
     expect(model).toBeDefined();
+    expect(model.modelId).toBe("claude-sonnet-4-20250514");
   });
 
   test("uses api.id when provided", () => {
