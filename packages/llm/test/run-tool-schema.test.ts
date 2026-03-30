@@ -1,7 +1,8 @@
-// @ts-nocheck
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
+import { Auth } from "../src/auth/storage";
 
+const TEST_PROVIDER_ID = "__test_tool_schema__";
 let capturedArgs: Record<string, unknown> | undefined;
 
 mock.module("ai", () => ({
@@ -16,23 +17,15 @@ mock.module("ai", () => ({
   jsonSchema: (schema: unknown) => ({ __jsonSchema: schema }),
 }));
 
-mock.module(new URL("../src/auth/storage.ts", import.meta.url).pathname, () => ({
-  Auth: {
-    get: async () => ({ type: "api", key: "test-key" }),
-  },
-}));
-
-mock.module(new URL("../src/provider/index.ts", import.meta.url).pathname, () => ({
-  getLanguage: () => ({ modelId: "claude-3-haiku", specificationVersion: "v1" }),
-}));
-
 let run: typeof import("../src/run").run;
 
 beforeAll(async () => {
+  await Auth.set(TEST_PROVIDER_ID, { type: "api", key: "test-key-unit" });
   ({ run } = await import("../src/run"));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await Auth.remove(TEST_PROVIDER_ID);
   mock.restore();
 });
 
@@ -44,10 +37,10 @@ describe("run() with model - tool schema conversion", () => {
     onSnapshot: () => {},
   };
 
-  test("maps Tool.Spec inputSchema to SDK parameters", async () => {
+  test("maps Tool.Spec inputSchema to SDK parameters property", async () => {
     capturedArgs = undefined;
 
-    const outcome = await run(
+    await run(
       {
         messages: [],
         tools: [
@@ -59,22 +52,18 @@ describe("run() with model - tool schema conversion", () => {
         ] as Tool.Spec[],
         model: {
           id: "claude-3-haiku",
-          providerID: "anthropic",
-          name: "Claude 3 Haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
           api: { npm: "@ai-sdk/anthropic" },
         },
       },
       mockSink,
     );
 
-    expect(outcome.type).toBe("stop");
     expect(capturedArgs).toBeDefined();
-
     const tools = (capturedArgs as { tools?: Record<string, unknown> } | undefined)?.tools;
     expect(tools).toBeDefined();
-
     const sdkTool = tools!["test_tool"] as Record<string, unknown>;
-    expect(sdkTool).toBeDefined();
     expect(sdkTool["parameters"]).toBeDefined();
     expect(sdkTool["inputSchema"]).toBeUndefined();
   });

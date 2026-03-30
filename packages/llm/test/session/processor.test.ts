@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
+import { describe, expect, test, beforeEach } from "bun:test";
 import { Processor } from "../../src/session/processor";
-import { Message, Retry } from "../../src/session";
+import type { Message } from "../../src/session";
 import { APIError } from "../../src/error";
-import { Provider } from "../../src/provider";
+import type { Provider } from "../../src/provider";
 
 describe("Processor", () => {
   let mockAssistantMessage: Message.AssistantMessage;
@@ -87,13 +87,6 @@ describe("Processor", () => {
 
   describe("Processor.process(streamInput)", () => {
     test("handles text-start event and creates TextPart", async () => {
-      const processor = Processor.create({
-        assistantMessage: mockAssistantMessage,
-        sessionID: "session-456",
-        model: mockModel,
-        abort: abortController.signal,
-      });
-
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "text-start", providerMetadata: {} };
@@ -103,23 +96,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("handles reasoning-start event and creates ReasoningPart", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("handles reasoning-start event and creates ReasoningPart", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield {
@@ -137,23 +131,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("handles step-start event", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("handles step-start event", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "step-start" };
@@ -161,23 +156,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("handles step-finish event", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("handles step-finish event", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield {
@@ -190,23 +186,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("accumulates text across multiple text-delta events", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("accumulates text across multiple text-delta events", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "text-start", providerMetadata: {} };
@@ -218,23 +215,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("accumulates reasoning across multiple reasoning-delta events", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("accumulates reasoning across multiple reasoning-delta events", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "reasoning-start", id: "r1", providerMetadata: {} };
@@ -246,23 +244,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("sets time.start on TextPart creation", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("sets time.start on TextPart creation", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "text-start", providerMetadata: {} };
@@ -272,23 +271,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("sets time.start and time.end on ReasoningPart", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("sets time.start and time.end on ReasoningPart", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "reasoning-start", id: "r1", providerMetadata: {} };
@@ -298,44 +298,60 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("returns 'stop' when stream completes successfully", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("returns 'stop' when stream completes successfully", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "finish" };
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("respects abort signal during stream processing", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
+      });
+
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("respects abort signal during stream processing", async () => {
+      const mockStream = {
+        fullStream: (async function* () {
+          yield { type: "finish" };
+        })(),
+      };
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: mockModel,
+        abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
       abortController.abort();
@@ -345,7 +361,7 @@ describe("Processor", () => {
           messages: [],
           model: mockModel,
           system: "",
-        } as any);
+        } as Processor.StreamInput);
         expect.unreachable("Should have thrown AbortError");
       } catch (e) {
         expect(e).toBeInstanceOf(DOMException);
@@ -354,74 +370,105 @@ describe("Processor", () => {
     });
 
     test("handles retryable errors with retry logic", async () => {
+      let attemptCount = 0;
+
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              throw new APIError({
+                message: JSON.stringify({
+                  type: "error",
+                  error: { type: "too_many_requests" },
+                }),
+                isRetryable: true,
+              });
+            }
+            yield { type: "finish" };
+          })(),
+        }),
       });
-
-      let attemptCount = 0;
-      const mockStream = {
-        fullStream: (async function* () {
-          attemptCount++;
-          if (attemptCount === 1) {
-            throw new APIError({
-              message: JSON.stringify({
-                type: "error",
-                error: { type: "too_many_requests" },
-              }),
-              isRetryable: true,
-            });
-          }
-          yield { type: "finish" };
-        })(),
-      };
 
       const result = await processor.process({
         messages: [],
         model: mockModel,
         system: "",
-      } as any);
+      } as Processor.StreamInput);
 
       expect(result).toBeDefined();
+      expect(attemptCount).toBe(2);
     });
 
     test("handles non-retryable errors", async () => {
+      const errorInstance = new APIError({
+        message: "Not found",
+        statusCode: 404,
+        isRetryable: false,
+      });
+
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => ({
+          fullStream: (async function* (shouldThrow = true) {
+            if (shouldThrow) throw errorInstance;
+            yield { type: "finish" };
+          })(),
+        }),
       });
 
-      const mockStream = {
-        fullStream: (async function* () {
-          throw new APIError({
-            message: "Not found",
-            statusCode: 404,
-            isRetryable: false,
-          });
-        })(),
-      };
+      try {
+        await processor.process({
+          messages: [],
+          model: mockModel,
+          system: "",
+        } as Processor.StreamInput);
+        expect.unreachable("Should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(APIError);
+      }
+    });
 
-      const result = await processor.process({
-        messages: [],
+    test("throws original error instance for non-retryable non-abort errors", async () => {
+      const errorInstance = new APIError({
+        message: "Specific error",
+        statusCode: 500,
+        isRetryable: false,
+      });
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
         model: mockModel,
-        system: "",
-      } as any);
+        abort: abortController.signal,
+        createStream: async () => ({
+          fullStream: (async function* (shouldThrow = true) {
+            if (shouldThrow) throw errorInstance;
+            yield { type: "finish" };
+          })(),
+        }),
+      });
 
-      expect(result).toBe("stop");
+      try {
+        await processor.process({
+          messages: [],
+          model: mockModel,
+          system: "",
+        } as Processor.StreamInput);
+        expect.unreachable("Should have thrown");
+      } catch (e) {
+        expect(e).toBe(errorInstance);
+      }
     });
 
     test("ignores duplicate reasoning-start events with same id", async () => {
-      const processor = Processor.create({
-        assistantMessage: mockAssistantMessage,
-        sessionID: "session-456",
-        model: mockModel,
-        abort: abortController.signal,
-      });
-
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "reasoning-start", id: "r1", providerMetadata: {} };
@@ -432,23 +479,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("handles multiple text parts sequentially", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("handles multiple text parts sequentially", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "text-start", providerMetadata: {} };
@@ -461,23 +509,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("trims trailing whitespace from text", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("trims trailing whitespace from text", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "text-start", providerMetadata: {} };
@@ -487,23 +536,24 @@ describe("Processor", () => {
         })(),
       };
 
-      const result = await processor.process({
-        messages: [],
-        model: mockModel,
-        system: "",
-      } as any);
-
-      expect(result).toBe("stop");
-    });
-
-    test("trims trailing whitespace from reasoning", async () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
         model: mockModel,
         abort: abortController.signal,
+        createStream: async () => mockStream,
       });
 
+      const result = await processor.process({
+        messages: [],
+        model: mockModel,
+        system: "",
+      } as Processor.StreamInput);
+
+      expect(result).toBe("stop");
+    });
+
+    test("trims trailing whitespace from reasoning", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield { type: "reasoning-start", id: "r1", providerMetadata: {} };
@@ -513,11 +563,19 @@ describe("Processor", () => {
         })(),
       };
 
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: mockModel,
+        abort: abortController.signal,
+        createStream: async () => mockStream,
+      });
+
       const result = await processor.process({
         messages: [],
         model: mockModel,
         system: "",
-      } as any);
+      } as Processor.StreamInput);
 
       expect(result).toBe("stop");
     });
