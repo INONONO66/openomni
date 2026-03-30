@@ -1,5 +1,7 @@
-import { ChatAgent, type AgentBudget } from "@openomni/agent";
+import { ChatAgent, type AgentBudget, type ChatAgentInstance } from "@openomni/agent";
 import { PlanSchema, type PlanResult, type Tool } from "@openomni/protocol";
+import { InMemoryPlanStore, type PlanStore } from "./plan-store";
+import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "./plan-tools";
 
 function normalizePlanPayload(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") {
@@ -51,6 +53,48 @@ export namespace PlanAgent {
     budget?: AgentBudget;
     tools?: Tool.Spec[];
     toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  }
+
+  export interface CreateConfig {
+    model: { provider: string; id: string };
+    systemPrompt?: string;
+    budget?: AgentBudget;
+    tools?: Tool.Spec[];
+    toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+    planStore?: PlanStore;
+    stepGuard?: Parameters<typeof ChatAgent.create>[0]["stepGuard"];
+  }
+
+  export function create(config: CreateConfig): ChatAgentInstance {
+    const store = config.planStore ?? new InMemoryPlanStore();
+    const planExecutor = createPlanToolExecutor(store);
+
+    const allTools: Tool.Spec[] = [...PLAN_TOOL_SPECS, ...(config.tools ?? [])];
+    const planToolNames = new Set(PLAN_TOOL_SPECS.map((s) => s.name));
+
+    const composedExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
+      if (planToolNames.has(call.tool)) {
+        return planExecutor(call);
+      }
+      if (config.toolExecutor) {
+        return config.toolExecutor(call);
+      }
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `No executor for tool: ${call.tool}`,
+        isError: true,
+      };
+    };
+
+    return ChatAgent.create({
+      model: config.model,
+      systemPrompt: config.systemPrompt,
+      budget: config.budget,
+      tools: allTools,
+      toolExecutor: composedExecutor,
+      stepGuard: config.stepGuard,
+    });
   }
 
   export async function generate(goal: string, config: GenerateConfig): Promise<PlanResult> {

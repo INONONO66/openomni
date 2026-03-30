@@ -25,8 +25,10 @@ describe("getSDK (OpenAI)", () => {
     const auth: Auth.Info = { type: "api", key: "sk-xxx" };
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
-    expect(typeof sdk).toBe("function");
     expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("gpt-4o");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("gpt-4o");
   });
 
   test("proxy auth returns SDK", () => {
@@ -37,6 +39,9 @@ describe("getSDK (OpenAI)", () => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("gpt-4o");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("gpt-4o");
   });
 
   test("proxy auth with apiKey returns SDK", () => {
@@ -47,6 +52,10 @@ describe("getSDK (OpenAI)", () => {
     };
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel("gpt-4o");
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("gpt-4o");
   });
 });
 

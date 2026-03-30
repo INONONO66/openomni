@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Message } from "../../src/session/message";
+import type { Message } from "../../src/session/message";
 import { toModelMessages } from "../../src/session/convert";
-import { Provider } from "../../src/provider";
+import type { Provider } from "../../src/provider";
 
 describe("toModelMessages", () => {
   test("converts empty array", () => {
@@ -52,8 +52,9 @@ describe("toModelMessages", () => {
     };
 
     const result = toModelMessages([userMsg], model);
-    expect(result).toBeDefined();
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
+    expect(result[0].content).toBe("Hello");
   });
 
   test("converts AssistantMessage to model message", () => {
@@ -103,8 +104,9 @@ describe("toModelMessages", () => {
     };
 
     const result = toModelMessages([assistantMsg], model);
-    expect(result).toBeDefined();
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("assistant");
+    expect(result[0].content).toBe("Response");
   });
 
   test("converts mixed messages", () => {
@@ -177,9 +179,11 @@ describe("toModelMessages", () => {
     };
 
     const result = toModelMessages([userMsg, assistantMsg], model);
-    expect(result).toBeDefined();
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThanOrEqual(0);
+    expect(result).toHaveLength(2);
+    expect(result[0].role).toBe("user");
+    expect(result[0].content).toBe("Hello");
+    expect(result[1].role).toBe("assistant");
+    expect(result[1].content).toBe("Response");
   });
 
   test("calls ProviderTransform.normalizeMessages", () => {
@@ -215,7 +219,9 @@ describe("toModelMessages", () => {
       ],
     };
 
-    // Should not throw
-    expect(() => toModelMessages([userMsg], model)).not.toThrow();
+    const result = toModelMessages([userMsg], model);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
+    expect(result[0].content).toBe("Hello");
   });
 });

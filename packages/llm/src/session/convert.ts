@@ -1,6 +1,10 @@
-import type { ModelMessage } from "ai";
 import type { Message } from "./message";
 import { type Provider, ProviderTransform } from "../provider";
+
+export type SDKMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: unknown;
+};
 
 function stringifyToolOutput(output: unknown): string {
   if (typeof output === "string") return output;
@@ -14,8 +18,8 @@ function stringifyToolOutput(output: unknown): string {
 export function toModelMessages(
   messagesWithParts: Message.WithParts[],
   model: Provider.Model,
-): ModelMessage[] {
-  const coreMessages: ModelMessage[] = [];
+): SDKMessage[] {
+  const coreMessages: unknown[] = [];
 
   for (const msg of messagesWithParts) {
     if (msg.parts.length === 0) continue;
@@ -153,5 +157,5 @@ export function toModelMessages(
     }
   }
 
-  return ProviderTransform.normalizeMessages(coreMessages, model);
+  return ProviderTransform.normalizeMessages(coreMessages as SDKMessage[], model);
 }

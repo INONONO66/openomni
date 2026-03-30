@@ -1,9 +1,8 @@
-import { z } from "zod";
 import type { Sink } from "@openomni/protocol";
-import { Message } from "./message";
+import type { Message } from "./message";
 import { Retry } from "./retry";
 import { APIError } from "../error";
-import { Provider } from "../provider";
+import type { Provider } from "../provider";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -142,7 +141,7 @@ export namespace Processor {
                   }
 
                   case "text-end": {
-                    if (currentText && currentText.time) {
+                    if (currentText?.time) {
                       currentText.text = currentText.text.trimEnd();
                       currentText.time = {
                         start: currentText.time.start,
@@ -245,7 +244,10 @@ export namespace Processor {
                           title: result.title,
                           metadata: result.metadata ?? {},
                           time: {
-                            start: (toolPart.state as any).time?.start ?? Date.now(),
+                            start:
+                              toolPart.state.status === "running"
+                                ? toolPart.state.time.start
+                                : Date.now(),
                             end: Date.now(),
                           },
                         };
@@ -262,7 +264,10 @@ export namespace Processor {
                           input: toolPart.state.input,
                           error: errorMessage,
                           time: {
-                            start: (toolPart.state as any).time?.start ?? Date.now(),
+                            start:
+                              toolPart.state.status === "running"
+                                ? toolPart.state.time.start
+                                : Date.now(),
                             end: Date.now(),
                           },
                         };
@@ -376,7 +381,7 @@ export namespace Processor {
               cleanupPendingTools(pendingTools, updateMessagePart, sink);
               assistantMessage.time.completed = Date.now();
               publishStatus({ type: "idle" });
-              return "stop";
+              throw e;
             }
           }
         } catch (e) {
@@ -390,10 +395,10 @@ export namespace Processor {
 
   function createNoopSink(): Sink {
     return {
-      onMessage: () => {},
-      onToolCall: () => {},
-      onToolResult: () => {},
-      onSnapshot: () => {},
+      onMessage: () => void 0,
+      onToolCall: () => void 0,
+      onToolResult: () => void 0,
+      onSnapshot: () => void 0,
     };
   }
 

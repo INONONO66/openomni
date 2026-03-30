@@ -65,6 +65,7 @@ describe("run", () => {
     const outcome = await run(input, mockSink);
 
     expect(outcome.type).toBe("stop");
+    expect(capturedToolCalls.length).toBe(0);
   });
 
   test("handles abort signal", async () => {
@@ -80,6 +81,44 @@ describe("run", () => {
     const outcome = await run(input, mockSink);
 
     expect(outcome.type).toBe("aborted");
+    expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("returns error outcome when auth is not configured", async () => {
+    const input: RunInput = {
+      messages: [],
+      tools: [],
+      model: {
+        id: "claude-3-haiku",
+        providerID: "no-auth-provider-xyz",
+        name: "Test Model",
+        api: { npm: "@ai-sdk/anthropic" },
+      },
+    };
+
+    const outcome = await run(input, mockSink);
+
+    expect(outcome.type).toBe("error");
+    if (outcome.type === "error") {
+      expect(outcome.error.message).toContain("no-auth-provider-xyz");
+    }
+    expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("returns aborted outcome when signal is aborted before run", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const input: RunInput = {
+      messages: [],
+      tools: [],
+      signal: controller.signal,
+    };
+
+    const outcome = await run(input, mockSink);
+
+    expect(outcome.type).toBe("aborted");
+    expect(capturedToolCalls.length).toBe(0);
   });
 
   test("calls sink methods during execution", async () => {
@@ -91,5 +130,6 @@ describe("run", () => {
     await run(input, mockSink);
 
     expect(capturedSnapshots.length).toBeGreaterThan(0);
+    expect(capturedToolCalls.length).toBe(0);
   });
 });

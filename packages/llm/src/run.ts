@@ -1,6 +1,6 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
-import type { ModelMessage } from "ai";
 import { streamText, jsonSchema } from "ai";
+import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
 import { type Provider, getLanguage } from "./provider";
@@ -79,25 +79,26 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
       const normalizedMessages = toModelMessages(messages, model);
 
-      const systemMessages: ModelMessage[] = streamInput.system
+      const systemMessages: SDKMessage[] = streamInput.system
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<string, { description?: string; inputSchema: unknown }> = {};
+      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
       for (const spec of input.tools) {
         sdkTools[spec.name] = {
           description: spec.description,
-          inputSchema: jsonSchema(spec.inputSchema),
+          parameters: jsonSchema(spec.inputSchema),
         };
       }
 
-      const streamResult = streamText({
+      const streamArgs = {
         model: languageModel,
         messages: [...systemMessages, ...normalizedMessages],
-        tools: sdkTools as Parameters<typeof streamText>[0]["tools"],
+        tools: sdkTools,
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
-      });
+      };
+      const streamResult = streamText(streamArgs as unknown as Parameters<typeof streamText>[0]);
 
       async function* adaptStream(): AsyncGenerator<{
         type: string;

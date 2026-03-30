@@ -31,10 +31,14 @@ describe("Provider Integration", () => {
 
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
-    expect(sdk.languageModel).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const sdkLm = sdk.languageModel(model.id);
+    expect(sdkLm).toBeDefined();
+    expect(sdkLm.modelId).toBe(model.id);
 
     const lm = getLanguage(model, auth);
     expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
   });
 
   it("full flow: getSDK → getLanguage (Anthropic proxy)", () => {
@@ -46,9 +50,14 @@ describe("Provider Integration", () => {
 
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
+    expect(typeof sdk.languageModel).toBe("function");
+    const sdkLm = sdk.languageModel(model.id);
+    expect(sdkLm).toBeDefined();
+    expect(sdkLm.modelId).toBe(model.id);
 
     const lm = getLanguage(model, auth);
     expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
   });
 
   it("full flow: getSDK returns valid OpenAI SDK (API)", () => {
@@ -61,6 +70,7 @@ describe("Provider Integration", () => {
 
     const lm = sdk.languageModel("gpt-4o");
     expect(lm).toBeDefined();
+    expect(lm.modelId).toBe("gpt-4o");
   });
 
   it("full flow: getSDK returns valid OpenAI SDK (proxy)", () => {
@@ -74,6 +84,9 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
+    const lm = sdk.languageModel(model.id);
+    expect(lm).toBeDefined();
+    expect(lm.modelId).toBe(model.id);
   });
 
   it("should list all available providers", async () => {
