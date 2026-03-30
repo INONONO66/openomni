@@ -83,11 +83,11 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<string, { description?: string; inputSchema: unknown }> = {};
+      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
       for (const spec of input.tools) {
         sdkTools[spec.name] = {
           description: spec.description,
-          inputSchema: jsonSchema(spec.inputSchema),
+          parameters: jsonSchema(spec.inputSchema),
         };
       }
 
