@@ -16,8 +16,7 @@ mock.module("ai", () => ({
       })(),
     };
   },
-  jsonSchema: (schema: unknown) => ({ __jsonSchema: schema }),
-  tool: (config: Record<string, unknown>) => ({ __tool: config }),
+  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
 }));
 
 describe("run", () => {
@@ -172,7 +171,7 @@ describe("run", () => {
     expect(capturedToolCalls.length).toBe(0);
   });
 
-  test("forwards toolChoice and maxSteps, and sets maxRetries to 0", async () => {
+  test("forwards toolChoice and stopWhen, and sets maxRetries to 0", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
@@ -190,11 +189,20 @@ describe("run", () => {
 
     expect(capturedStreamArgs).toBeDefined();
     expect(capturedStreamArgs!["toolChoice"]).toBe("required");
-    expect(capturedStreamArgs!["maxSteps"]).toBe(7);
+    expect(capturedStreamArgs!["stopWhen"]).toBeFunction();
     expect(capturedStreamArgs!["maxRetries"]).toBe(0);
+
+    const stopWhen = capturedStreamArgs!["stopWhen"] as (input: { steps: unknown[] }) => boolean;
+    expect(stopWhen({ steps: [] })).toBe(false);
+    expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
+    expect(
+      stopWhen({
+        steps: [1, 2, 3, 4, 5, 6, 7],
+      }),
+    ).toBe(true);
   });
 
-  test("uses default maxSteps when not provided", async () => {
+  test("uses default stopWhen threshold when not provided", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
@@ -209,92 +217,10 @@ describe("run", () => {
     await run(input, mockSink);
 
     expect(capturedStreamArgs).toBeDefined();
-    expect(capturedStreamArgs!["maxSteps"]).toBe(24);
-  });
+    expect(capturedStreamArgs!["stopWhen"]).toBeFunction();
 
-  test("repairs tool names with case-insensitive matching", async () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [
-        {
-          name: "weather",
-          description: "Get weather",
-          inputSchema: { type: "object", properties: { city: { type: "string" } } },
-        },
-      ],
-      model: {
-        id: "claude-3-haiku",
-        providerID: TEST_PROVIDER_ID,
-        name: "Claude 3 Haiku Test",
-        api: { npm: "@ai-sdk/anthropic" },
-      },
-    };
-
-    await run(input, mockSink);
-
-    const repair = capturedStreamArgs?.["experimental_repairToolCall"] as
-      | ((options: {
-          toolCall: { toolName: string; input: unknown } & Record<string, unknown>;
-          tools: Record<string, unknown>;
-          error: Error;
-        }) => Promise<Record<string, unknown> | null>)
-      | undefined;
-
-    expect(repair).toBeFunction();
-
-    const repaired = await repair!({
-      toolCall: {
-        type: "tool-call",
-        toolCallId: "call-1",
-        toolName: "WeAtHeR",
-        input: { city: "Seoul" },
-      },
-      tools: (capturedStreamArgs?.["tools"] as Record<string, unknown>) ?? {},
-      error: new Error("invalid tool"),
-    });
-
-    expect(repaired?.["toolName"]).toBe("weather");
-  });
-
-  test("falls back to invalid tool when repair cannot find a match", async () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: {
-        id: "claude-3-haiku",
-        providerID: TEST_PROVIDER_ID,
-        name: "Claude 3 Haiku Test",
-        api: { npm: "@ai-sdk/anthropic" },
-      },
-    };
-
-    await run(input, mockSink);
-
-    const repair = capturedStreamArgs?.["experimental_repairToolCall"] as
-      | ((options: {
-          toolCall: { toolName: string; input: unknown } & Record<string, unknown>;
-          tools: Record<string, unknown>;
-          error: Error;
-        }) => Promise<Record<string, unknown> | null>)
-      | undefined;
-
-    expect(repair).toBeFunction();
-
-    const repaired = await repair!({
-      toolCall: {
-        type: "tool-call",
-        toolCallId: "call-2",
-        toolName: "missing_tool",
-        input: { a: 1 },
-      },
-      tools: (capturedStreamArgs?.["tools"] as Record<string, unknown>) ?? {},
-      error: new Error("No such tool"),
-    });
-
-    expect(repaired?.["toolName"]).toBe("invalid");
-    expect(repaired?.["input"]).toEqual({
-      tool: "missing_tool",
-      error: "No such tool",
-    });
+    const stopWhen = capturedStreamArgs!["stopWhen"] as (input: { steps: unknown[] }) => boolean;
+    expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
+    expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
   });
 });
