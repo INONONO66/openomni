@@ -188,11 +188,17 @@ describe("run", () => {
     await run(input, mockSink);
 
     expect(capturedStreamArgs).toBeDefined();
-    expect(capturedStreamArgs!["toolChoice"]).toBe("required");
-    expect(capturedStreamArgs!["stopWhen"]).toBeFunction();
-    expect(capturedStreamArgs!["maxRetries"]).toBe(0);
+    const streamArgs = capturedStreamArgs as {
+      toolChoice?: unknown;
+      stopWhen?: unknown;
+      maxRetries?: unknown;
+    };
 
-    const stopWhen = capturedStreamArgs!["stopWhen"] as (input: { steps: unknown[] }) => boolean;
+    expect(streamArgs.toolChoice).toBe("required");
+    expect(streamArgs.stopWhen).toBeFunction();
+    expect(streamArgs.maxRetries).toBe(0);
+
+    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
     expect(stopWhen({ steps: [] })).toBe(false);
     expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
     expect(
@@ -217,9 +223,10 @@ describe("run", () => {
     await run(input, mockSink);
 
     expect(capturedStreamArgs).toBeDefined();
-    expect(capturedStreamArgs!["stopWhen"]).toBeFunction();
+    const streamArgs = capturedStreamArgs as { stopWhen?: unknown };
+    expect(streamArgs.stopWhen).toBeFunction();
 
-    const stopWhen = capturedStreamArgs!["stopWhen"] as (input: { steps: unknown[] }) => boolean;
+    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
     expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
     expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
   });

@@ -31,10 +31,10 @@ afterAll(async () => {
 
 describe("run() with model - tool schema conversion", () => {
   const mockSink: Sink = {
-    onMessage: () => {},
-    onToolCall: () => {},
-    onToolResult: () => {},
-    onSnapshot: () => {},
+    onMessage: () => undefined,
+    onToolCall: () => undefined,
+    onToolResult: () => undefined,
+    onSnapshot: () => undefined,
   };
 
   test("maps Tool.Spec inputSchema to raw function tools via jsonSchema", async () => {
