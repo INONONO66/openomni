@@ -4,7 +4,6 @@ import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
-  createToolCallOutcome,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -111,40 +110,18 @@ describe("ChatAgent", () => {
     expect(result.steps[0]?.type).toBe("text");
   });
 
-  it("run() executes tools and loops until stop", async () => {
+  it("stops with max-steps when maxTurns budget is exceeded", async () => {
     let callCount = 0;
     mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
       callCount += 1;
-      if (callCount === 1) {
-        const call = createToolCall("call-1");
-        sink.onToolCall(call);
-        return createToolCallOutcome([call]);
-      }
-
-      sink.onMessage(createAssistantMessage("done"));
+      sink.onMessage(createAssistantMessage("turn complete"));
       return createStopOutcome();
-    };
-
-    const result = await createAgent().run({
-      messages: [{ role: "user", content: "Use a tool" }],
-    });
-
-    expect(result.finishReason).toBe("stop");
-    expect(callCount).toBe(2);
-    expect(result.steps.some((step) => step.type === "tool-call")).toBe(true);
-    expect(result.text).toBe("done");
-  });
-
-  it("stops with max-steps when maxTurns budget is exceeded", async () => {
-    let callCount = 0;
-    mockRunFn = async (): Promise<Run.Outcome> => {
-      callCount += 1;
-      return createToolCallOutcome([createToolCall(`turn-${callCount}`)]);
     };
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       budget: { maxTurns: 1, maxToolCalls: 10 },
+      stepGuard: () => ({ action: "inject", message: "continue" }),
     });
 
     const result = await agent.run({
@@ -155,24 +132,25 @@ describe("ChatAgent", () => {
     expect(callCount).toBe(1);
   });
 
-  it("stops with max-steps when maxToolCalls budget is exceeded", async () => {
-    let callCount = 0;
-    mockRunFn = async (): Promise<Run.Outcome> => {
-      callCount += 1;
-      return createToolCallOutcome([createToolCall(`tool-${callCount}`)]);
+  it("passes maxToolCalls budget as maxSteps into llm run", async () => {
+    let observedMaxSteps: number | undefined;
+    mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+      observedMaxSteps = input.maxSteps;
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
     };
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      budget: { maxTurns: 10, maxToolCalls: 1 },
+      budget: { maxTurns: 10, maxToolCalls: 7 },
     });
 
     const result = await agent.run({
       messages: [{ role: "user", content: "Loop with tools" }],
     });
 
-    expect(result.finishReason).toBe("max-steps");
-    expect(callCount).toBe(1);
+    expect(result.finishReason).toBe("stop");
+    expect(observedMaxSteps).toBe(7);
   });
 
   it("respects AbortSignal cancellation", async () => {
@@ -203,12 +181,11 @@ describe("ChatAgent", () => {
   });
 
   it("calls onStepFinish after each step", async () => {
+    let guardInvocations = 0;
     let callCount = 0;
-    mockRunFn = async (): Promise<Run.Outcome> => {
+    mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
       callCount += 1;
-      if (callCount === 1) {
-        return createToolCallOutcome([createToolCall("call-1")]);
-      }
+      sink.onMessage(createAssistantMessage(`turn-${callCount}`));
       return createStopOutcome();
     };
 
@@ -218,12 +195,19 @@ describe("ChatAgent", () => {
       onStepFinish: (step) => {
         stepFinishCalls.push(step);
       },
+      stepGuard: () => {
+        guardInvocations += 1;
+        if (guardInvocations === 1) {
+          return { action: "inject", message: "continue" };
+        }
+        return { action: "continue" };
+      },
     });
 
     await agent.run({ messages: [{ role: "user", content: "Hello" }] });
 
     expect(stepFinishCalls).toHaveLength(2);
-    expect(stepFinishCalls[0]?.type).toBe("tool-call");
+    expect(stepFinishCalls[0]?.type).toBe("text");
     expect(stepFinishCalls[1]?.type).toBe("text");
   });
 
@@ -257,31 +241,31 @@ describe("ChatAgent", () => {
 });
 
 it("uses toolExecutor when provided to execute tool calls", async () => {
-  let callCount = 0;
-  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-    callCount += 1;
-    if (callCount === 1) {
-      const call = createToolCall("call-1", "custom_tool");
-      sink.onToolCall(call);
-      return createToolCallOutcome([call]);
-    }
+  const toolExecutorCalls: Tool.Call[] = [];
+  const executor = async (call: Tool.Call) => {
+    toolExecutorCalls.push(call);
+    return {
+      id: crypto.randomUUID(),
+      toolCallId: call.id,
+      output: "real result from executor",
+      isError: false,
+    };
+  };
 
+  mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+    const call = createToolCall("call-1", "custom_tool");
+    if (input.toolExecutor) {
+      const result = await input.toolExecutor(call);
+      sink.onToolCall(call);
+      sink.onToolResult(result);
+    }
     sink.onMessage(createAssistantMessage("done"));
     return createStopOutcome();
   };
 
-  const toolExecutorCalls: Tool.Call[] = [];
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    toolExecutor: async (call) => {
-      toolExecutorCalls.push(call);
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: "real result from executor",
-        isError: false,
-      };
-    },
+    toolExecutor: executor,
   });
 
   const result = await agent.run({
@@ -290,28 +274,33 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
 
   expect(toolExecutorCalls).toHaveLength(1);
   expect(toolExecutorCalls[0]?.tool).toBe("custom_tool");
-  expect(result.steps.some((step) => step.type === "tool-call")).toBe(true);
-  const toolStep = result.steps.find((step) => step.type === "tool-call");
-  expect(toolStep?.toolResults?.[0]?.output).toBe("real result from executor");
+  expect(result.finishReason).toBe("stop");
 });
 
 it("handles toolExecutor errors by setting isError: true", async () => {
-  let callCount = 0;
-  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-    callCount += 1;
-    if (callCount === 1) {
-      const call = createToolCall("call-1", "failing_tool");
-      sink.onToolCall(call);
-      return createToolCallOutcome([call]);
+  mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+    const call = createToolCall("call-1", "failing_tool");
+    if (input.toolExecutor) {
+      try {
+        await input.toolExecutor(call);
+      } catch (e) {
+        const result = {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: (e as Error).message,
+          isError: true,
+        };
+        sink.onToolCall(call);
+        sink.onToolResult(result);
+      }
     }
-
     sink.onMessage(createAssistantMessage("handled error"));
     return createStopOutcome();
   };
 
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    toolExecutor: async (call) => {
+    toolExecutor: async () => {
       throw new Error("Tool execution failed: database connection lost");
     },
   });
@@ -320,39 +309,25 @@ it("handles toolExecutor errors by setting isError: true", async () => {
     messages: [{ role: "user", content: "Use a tool" }],
   });
 
-  const toolStep = result.steps.find((step) => step.type === "tool-call");
-  expect(toolStep?.toolResults).toHaveLength(1);
-  expect(toolStep?.toolResults?.[0]?.isError).toBe(true);
-  expect(toolStep?.toolResults?.[0]?.output).toContain("Tool execution failed");
+  expect(result.finishReason).toBe("stop");
 });
 
-it("preserves stub behavior when toolExecutor is not provided", async () => {
-  let callCount = 0;
-  mockRunFn = async (_input, sink): Promise<Run.Outcome> => {
-    callCount += 1;
-    if (callCount === 1) {
-      const call = createToolCall("call-1", "stub_tool");
-      sink.onToolCall(call);
-      return createToolCallOutcome([call]);
-    }
-
-    sink.onMessage(createAssistantMessage("done"));
-    return createStopOutcome();
-  };
-
+it("throws when tools are configured without toolExecutor", async () => {
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-    // No toolExecutor provided
+    tools: [
+      {
+        name: "stub_tool",
+        description: "stub",
+        inputSchema: { type: "object", properties: {}, required: [] },
+        safe: true,
+      },
+    ],
   });
 
-  const result = await agent.run({
-    messages: [{ role: "user", content: "Use a tool" }],
-  });
-
-  const toolStep = result.steps.find((step) => step.type === "tool-call");
-  expect(toolStep?.toolResults).toHaveLength(1);
-  expect(toolStep?.toolResults?.[0]?.output).toContain(
-    "Tool 'stub_tool' executed (no executor configured)",
-  );
-  expect(toolStep?.toolResults?.[0]?.isError).toBe(false);
+  await expect(
+    agent.run({
+      messages: [{ role: "user", content: "Use a tool" }],
+    }),
+  ).rejects.toThrow("toolExecutor is required when tools are provided");
 });

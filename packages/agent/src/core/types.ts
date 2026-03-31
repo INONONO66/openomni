@@ -1,6 +1,7 @@
 import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
-import type { ParallelToolsMode } from "./execution/parallel-tools";
 import type { Memory } from "./memory";
+
+export type ParallelToolsMode = "off" | "safe-only" | "all";
 
 export type StepGuardVerdict =
   | { action: "continue" }

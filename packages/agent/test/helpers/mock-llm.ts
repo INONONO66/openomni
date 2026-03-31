@@ -1,13 +1,9 @@
-import type { Run, Sink, Tool } from "@openomni/protocol";
+import type { Run, Sink } from "@openomni/protocol";
 
 export type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
 
 export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
-}
-
-export function createToolCallOutcome(toolCalls: Tool.Call[]): Run.Outcome {
-  return { type: "await_tool", toolCalls };
 }
 
 export function createAbortedOutcome(): Run.Outcome {

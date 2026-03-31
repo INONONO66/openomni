@@ -1,9 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Sink } from "@openomni/protocol";
-import type { AgentStep, StepGuardContext, StepGuardVerdict } from "../../src/core/types";
+import type { StepGuardContext } from "../../src/core/types";
 import {
   createStopOutcome,
-  createToolCallOutcome,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -108,9 +107,12 @@ describe("StepGuard (run path)", () => {
       messages: [{ role: "user", content: "hello" }],
     });
     expect(capturedContext).not.toBeNull();
-    expect(capturedContext!.isCompletion).toBe(true);
-    expect(capturedContext!.continuationCount).toBe(0);
-    expect(capturedContext!.elapsedMs).toBeGreaterThanOrEqual(0);
+    if (!capturedContext) {
+      throw new Error("Expected step guard context");
+    }
+    expect(capturedContext.isCompletion).toBe(true);
+    expect(capturedContext.continuationCount).toBe(0);
+    expect(capturedContext.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 
   it("increments continuationCount on each inject", async () => {

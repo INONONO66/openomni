@@ -3,7 +3,6 @@ import type { Sink } from "@openomni/protocol";
 import type { AgentEvent } from "../../src/core/types";
 import {
   createStopOutcome,
-  createToolCallOutcome,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -97,11 +96,12 @@ describe("ChatAgent.stream()", () => {
   });
 
   it("yields tool_call_start and tool_call_complete events", async () => {
-    let callCount = 0;
-    mockRunFn = async (_input, sink) => {
-      callCount++;
-      if (callCount === 1) {
-        return createToolCallOutcome([{ id: "call-1", tool: "test_tool", input: { q: "test" } }]);
+    mockRunFn = async (input, sink) => {
+      const call = { id: "call-1", tool: "test_tool", input: { q: "test" } };
+      if (input.toolExecutor) {
+        sink.onToolCall(call);
+        const result = await input.toolExecutor(call);
+        sink.onToolResult(result);
       }
       sink.onMessage({
         info: {

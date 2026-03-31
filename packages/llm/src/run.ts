@@ -28,8 +28,11 @@ export interface RunInput {
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
-  const abortController = signal ? undefined : new AbortController();
-  const abortSignal = signal || abortController!.signal;
+  const abortController = signal ? null : new AbortController();
+  const abortSignal = signal ?? abortController?.signal;
+  if (!abortSignal) {
+    throw new Error("Failed to initialize abort signal");
+  }
 
   const sessionID =
     messages[0]?.info.sessionID || `session-${Math.random().toString(36).substring(2, 11)}`;
@@ -53,18 +56,6 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       reasoning: 0,
       cache: { read: 0, write: 0 },
     },
-  };
-
-  const pendingToolCalls: Tool.Call[] = [];
-
-  const wrappedSink: Sink = {
-    onMessage: sink.onMessage,
-    onToolCall: (call: Tool.Call) => {
-      pendingToolCalls.push(call);
-      sink.onToolCall(call);
-    },
-    onToolResult: sink.onToolResult,
-    onSnapshot: sink.onSnapshot,
   };
 
   let createStream: Processor.ProcessorOptions["createStream"];
@@ -180,7 +171,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     sessionID,
     model: resolvedModel,
     abort: abortSignal,
-    sink: wrappedSink,
+    sink,
     createStream,
   });
 
@@ -191,16 +182,11 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       system,
     });
 
-    if (pendingToolCalls.length > 0 && !input.toolExecutor) {
-      /** @deprecated Use toolExecutor path which returns "stop" */
-      return { type: "await_tool", toolCalls: pendingToolCalls };
-    }
-
     switch (result) {
       case "stop":
         return { type: "stop" };
       case "continue":
-        return { type: "await_tool", toolCalls: pendingToolCalls };
+        return { type: "stop" };
       case "compact":
         return { type: "stop" };
       default:
