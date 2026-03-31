@@ -146,7 +146,7 @@ export namespace ProviderTransform {
               }
               return part;
             }),
-          } as SDKMessage;
+          } as unknown as SDKMessage;
         }
         return msg;
       });
@@ -158,10 +158,6 @@ export namespace ProviderTransform {
   /** Inject ephemeral cacheControl on system msgs and last 2 user/assistant msgs. */
   export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
     if (msgs.length === 0) return msgs;
-
-    const CACHE_OPTS = {
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
-    };
 
     const targets = new Set<number>();
     let found = 0;
@@ -175,7 +171,17 @@ export namespace ProviderTransform {
 
     return msgs.map((msg, i) => {
       if (msg.role === "system" || targets.has(i)) {
-        return { ...msg, ...CACHE_OPTS } as SDKMessage;
+        const existing = (msg as Record<string, unknown>).providerOptions as
+          | Record<string, unknown>
+          | undefined;
+        const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
+        return {
+          ...msg,
+          providerOptions: {
+            ...existing,
+            anthropic: { ...existingAnthropic, cacheControl: { type: "ephemeral" as const } },
+          },
+        } as unknown as SDKMessage;
       }
       return msg;
     });
