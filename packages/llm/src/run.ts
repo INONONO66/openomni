@@ -1,5 +1,5 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
-import { streamText, jsonSchema, tool } from "ai";
+import { streamText, jsonSchema } from "ai";
 import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
@@ -89,26 +89,14 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      type ToolFactory = (spec: {
-        description?: string;
-        parameters: ReturnType<typeof jsonSchema>;
-        execute?: (args: Record<string, unknown>) => Promise<unknown>;
-      }) => unknown;
-      const makeTool = tool as unknown as ToolFactory;
-
-      const sdkTools: Record<string, unknown> = {
-        invalid: makeTool({
-          description: "Error handler for unrecognized tool calls",
-          parameters: jsonSchema({ type: "object" }),
-          execute: async (args) => JSON.stringify(args),
-        }),
-      };
+      const sdkTools: Record<string, unknown> = {};
       for (const spec of input.tools) {
         if (input.toolExecutor) {
-          sdkTools[spec.name] = makeTool({
+          sdkTools[spec.name] = {
+            type: "function" as const,
             description: spec.description,
-            parameters: jsonSchema(spec.inputSchema),
-            execute: async (args) => {
+            inputSchema: jsonSchema(spec.inputSchema),
+            execute: async (args: Record<string, unknown>) => {
               const call: Tool.Call = {
                 id: crypto.randomUUID(),
                 tool: spec.name,
@@ -121,12 +109,13 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
               if (result.isError) return `Error: ${result.output}`;
               return result.output;
             },
-          });
+          };
         } else {
-          sdkTools[spec.name] = makeTool({
+          sdkTools[spec.name] = {
+            type: "function" as const,
             description: spec.description,
-            parameters: jsonSchema(spec.inputSchema),
-          });
+            inputSchema: jsonSchema(spec.inputSchema),
+          };
         }
       }
 
@@ -136,35 +125,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         tools: sdkTools,
         toolChoice: input.toolChoice,
         maxRetries: 0,
-        maxSteps: input.maxSteps ?? 24,
+        stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
         onError: ({ error }: { error: unknown }) => {
           console.error("[llm/run] streamText error", error);
-        },
-        experimental_repairToolCall: async ({
-          toolCall,
-          tools,
-          error,
-        }: {
-          toolCall: { toolName: string; input: unknown } & Record<string, unknown>;
-          tools: Record<string, unknown>;
-          error: Error;
-        }) => {
-          const matchedTool = Object.keys(tools).find(
-            (toolName) => toolName.toLowerCase() === toolCall.toolName.toLowerCase(),
-          );
-
-          if (matchedTool) {
-            return { ...toolCall, toolName: matchedTool };
-          }
-
-          return {
-            ...toolCall,
-            toolName: "invalid",
-            input: {
-              tool: toolCall.toolName,
-              error: error.message,
-            },
-          };
         },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
@@ -230,7 +193,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       system,
     });
 
-    if (pendingToolCalls.length > 0) {
+    if (pendingToolCalls.length > 0 && !input.toolExecutor) {
       /** @deprecated Use toolExecutor path which returns "stop" */
       return { type: "await_tool", toolCalls: pendingToolCalls };
     }
