@@ -98,9 +98,8 @@ export namespace TokenTracker {
     usage?: AnthropicUsage | OpenAIUsage | UsageDetails;
     providerMetadata?: ProviderMetadata;
   }): TokenUsage {
-    const usage = response.usage;
     const providerMetadata = response.providerMetadata;
-    if (!usage) {
+    if (!response.usage) {
       return {
         inputTokens: 0,
         outputTokens: 0,
@@ -110,59 +109,42 @@ export namespace TokenTracker {
       };
     }
 
+    const u = response.usage as Record<string, unknown>;
+    const details = (key: string) => (u[key] ?? {}) as Record<string, unknown>;
+    const num = (v: unknown): number => (typeof v === "number" ? v : 0);
+
     const inputTokens =
-      "inputTokens" in usage
-        ? (usage.inputTokens ?? 0)
-        : "input_tokens" in usage
-          ? (usage.input_tokens ?? 0)
-          : "prompt_tokens" in usage
-            ? (usage.prompt_tokens ?? 0)
-            : 0;
+      num(u.inputTokens) || num(u.input_tokens) || num(u.promptTokens) || num(u.prompt_tokens);
 
     const outputTokens =
-      "outputTokens" in usage
-        ? (usage.outputTokens ?? 0)
-        : "output_tokens" in usage
-          ? (usage.output_tokens ?? 0)
-          : "completion_tokens" in usage
-            ? (usage.completion_tokens ?? 0)
-            : 0;
+      num(u.outputTokens) ||
+      num(u.output_tokens) ||
+      num(u.completionTokens) ||
+      num(u.completion_tokens);
 
     const reasoningTokens =
-      "outputTokenDetails" in usage
-        ? (usage.outputTokenDetails?.reasoningTokens ?? 0)
-        : "reasoningTokens" in usage
-          ? (usage.reasoningTokens ?? 0)
-          : "reasoning_tokens" in usage
-            ? (usage.reasoning_tokens ?? 0)
-            : "raw" in usage
-              ? (usage.raw?.completion_tokens_details?.reasoning_tokens ??
-                providerMetadata?.anthropic?.reasoningTokens ??
-                providerMetadata?.openai?.reasoningTokens ??
-                0)
-              : (providerMetadata?.anthropic?.reasoningTokens ??
-                providerMetadata?.openai?.reasoningTokens ??
-                0);
+      num(details("outputTokenDetails").reasoningTokens) ||
+      num(u.reasoningTokens) ||
+      num(u.reasoning_tokens) ||
+      num(
+        (details("raw").completion_tokens_details as Record<string, unknown> | undefined)
+          ?.reasoning_tokens,
+      ) ||
+      num(providerMetadata?.anthropic?.reasoningTokens) ||
+      num(providerMetadata?.openai?.reasoningTokens);
 
     const cacheReadTokens =
-      "inputTokenDetails" in usage
-        ? (usage.inputTokenDetails?.cacheReadTokens ?? 0)
-        : "cacheReadTokens" in usage
-          ? (usage.cacheReadTokens ?? 0)
-          : "cache_read_input_tokens" in usage
-            ? (usage.cache_read_input_tokens ?? 0)
-            : (providerMetadata?.anthropic?.cacheReadInputTokens ??
-              providerMetadata?.openai?.cachedPromptTokens ??
-              0);
+      num(details("inputTokenDetails").cacheReadTokens) ||
+      num(u.cacheReadTokens) ||
+      num(u.cache_read_input_tokens) ||
+      num(providerMetadata?.anthropic?.cacheReadInputTokens) ||
+      num(providerMetadata?.openai?.cachedPromptTokens);
 
     const cacheWriteTokens =
-      "inputTokenDetails" in usage
-        ? (usage.inputTokenDetails?.cacheWriteTokens ?? 0)
-        : "cacheWriteTokens" in usage
-          ? (usage.cacheWriteTokens ?? 0)
-          : "cache_creation_input_tokens" in usage
-            ? (usage.cache_creation_input_tokens ?? 0)
-            : (providerMetadata?.anthropic?.cacheCreationInputTokens ?? 0);
+      num(details("inputTokenDetails").cacheWriteTokens) ||
+      num(u.cacheWriteTokens) ||
+      num(u.cache_creation_input_tokens) ||
+      num(providerMetadata?.anthropic?.cacheCreationInputTokens);
 
     return {
       inputTokens,

@@ -72,7 +72,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${modelID}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${modelID}:${JSON.stringify(auth)}`;
   const cached = LANGUAGE_CACHE.get(cacheKey);
   if (cached) return cached;
 

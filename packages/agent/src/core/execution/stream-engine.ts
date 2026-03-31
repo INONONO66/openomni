@@ -1,7 +1,7 @@
 import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
-import { createBudgetState, checkBudget, recordTurn, recordToolCall } from "../budget";
+import { createBudgetState, checkBudget, recordTurn } from "../budget";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -116,6 +116,13 @@ export async function* streamAgent(
       let turnIndex = 0;
       let continuationCount = 0;
       const startTime = Date.now();
+      const configuredToolChoice = (
+        config as ChatAgentConfig & { toolChoice?: "auto" | "required" | "none" }
+      ).toolChoice;
+
+      if ((config.tools?.length ?? 0) > 0 && !config.toolExecutor) {
+        throw new Error("toolExecutor is required when tools are provided");
+      }
 
       while (true) {
         if (checkBudget(budgetState, config.budget) === "exceeded") {
@@ -141,6 +148,9 @@ export async function* streamAgent(
           system: config.systemPrompt,
           signal: config.signal,
           model: providerModel,
+          toolExecutor: config.toolExecutor,
+          toolChoice: configuredToolChoice,
+          maxSteps: config.budget?.maxToolCalls ?? 24,
         };
 
         const turnUsage: TokenUsage = {
@@ -148,6 +158,15 @@ export async function* streamAgent(
           outputTokens: 0,
           totalTokens: 0,
         };
+        const turnToolCalls: Array<{
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, unknown>;
+        }> = [];
+        const turnToolResults: Array<{
+          toolCallId: string;
+          result: Tool.Result;
+        }> = [];
 
         const trackingSink: Sink = {
           onMessage: (message: Message.WithParts) => {
@@ -167,15 +186,33 @@ export async function* streamAgent(
             if (text) lastAssistantText = text;
             sink?.onMessage(message);
           },
-          onToolCall: sink?.onToolCall ?? (() => {}),
-          onToolResult: sink?.onToolResult ?? (() => {}),
-          onSnapshot: sink?.onSnapshot ?? (() => {}),
+          onToolCall: (call) => {
+            turnToolCalls.push({
+              toolCallId: call.id,
+              toolName: call.tool,
+              args: call.input,
+            });
+            sink?.onToolCall(call);
+          },
+          onToolResult: (result) => {
+            turnToolResults.push({ toolCallId: result.toolCallId, result });
+            sink?.onToolResult(result);
+          },
+          onSnapshot: sink?.onSnapshot ?? (() => undefined),
         };
 
         const outcome = await llmRun(runInput, trackingSink);
 
         if (outcome.type === "stop") {
           if (lastAssistantText) yield { type: "text_chunk", text: lastAssistantText };
+
+          for (const toolCall of turnToolCalls) {
+            yield { type: "tool_call_start", ...toolCall };
+          }
+          for (const toolResult of turnToolResults) {
+            yield { type: "tool_call_complete", ...toolResult };
+          }
+
           yield { type: "turn_complete", turnIndex, usage: turnUsage };
 
           const step: AgentStep = { type: "text", content: lastAssistantText };
@@ -233,103 +270,7 @@ export async function* streamAgent(
 
         if (outcome.type === "aborted") throw new Error("aborted");
         if (outcome.type === "error") throw new Error(outcome.error.message);
-        if (outcome.toolCalls.length === 0)
-          throw new Error("Tool wait requested with no tool calls");
-
-        for (const call of outcome.toolCalls) {
-          yield {
-            type: "tool_call_start",
-            toolCallId: call.id,
-            toolName: call.tool,
-            args: call.input,
-          };
-        }
-
-        const toolStart = Date.now();
-        const toolResults: Tool.Result[] = [];
-        for (const call of outcome.toolCalls) {
-          let result: Tool.Result;
-          if (config.toolExecutor) {
-            try {
-              result = await config.toolExecutor(call);
-            } catch (error) {
-              result = {
-                id: crypto.randomUUID(),
-                toolCallId: call.id,
-                output: error instanceof Error ? error.message : String(error),
-                isError: true,
-              };
-            }
-          } else {
-            result = {
-              id: crypto.randomUUID(),
-              toolCallId: call.id,
-              output: `Tool '${call.tool}' executed (no executor configured)`,
-              isError: false,
-            };
-          }
-          toolResults.push(result);
-          yield { type: "tool_call_complete", toolCallId: call.id, result };
-          sink?.onToolResult(result);
-        }
-
-        const elapsed = Date.now() - toolStart;
-        const perToolMs =
-          toolResults.length > 0 ? Math.max(1, Math.ceil(elapsed / toolResults.length)) : elapsed;
-        for (let i = 0; i < toolResults.length; i++) {
-          budgetState = recordToolCall(budgetState, perToolMs);
-        }
-
-        yield { type: "turn_complete", turnIndex, usage: turnUsage };
-        turnIndex++;
-
-        const toolStep: AgentStep = {
-          type: "tool-call",
-          content: "",
-          toolCalls: outcome.toolCalls,
-          toolResults,
-        };
-        steps.push(toolStep);
-        if (config.onStepFinish) await config.onStepFinish(toolStep);
-
-        if (config.stepGuard) {
-          const verdict = await config.stepGuard(toolStep, {
-            steps,
-            usage: totalUsage,
-            turnCount: turnIndex,
-            isCompletion: false,
-            continuationCount,
-            elapsedMs: Date.now() - startTime,
-          });
-
-          if (verdict.action === "inject") {
-            const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
-            messages = [
-              ...messages,
-              createAssistantMessage(lastAssistantText, parentID),
-              createUserMessage(verdict.message),
-            ];
-            continuationCount++;
-            continue;
-          }
-
-          if (verdict.action === "abort") {
-            yield {
-              type: "complete",
-              result: {
-                text: lastAssistantText,
-                steps,
-                usage: totalUsage,
-                finishReason: "stop",
-                guardAborted: true,
-              },
-            };
-            return;
-          }
-        }
-
-        const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
-        messages = [...messages, createAssistantMessage(lastAssistantText, parentID)];
+        throw new Error("Unreachable outcome in SDK-driven path");
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

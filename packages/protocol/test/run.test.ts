@@ -1,37 +1,9 @@
 import { describe, test, expect } from "bun:test";
 import { Run } from "../src/run/index.js";
-import { Tool } from "../src/tool/index.js";
 
 describe("Run.Outcome", () => {
   test("parses stop", () => {
     expect(Run.Outcome.parse({ type: "stop" })).toEqual({ type: "stop" });
-  });
-
-  test("parses await_tool with an empty toolCalls array", () => {
-    expect(Run.Outcome.parse({ type: "await_tool", toolCalls: [] })).toEqual({
-      type: "await_tool",
-      toolCalls: [],
-    });
-  });
-
-  test("parses await_tool with tool calls", () => {
-    const toolCall = Tool.Call.parse({
-      id: "call-1",
-      tool: "search",
-      input: {},
-    });
-
-    const outcome = Run.Outcome.parse({
-      type: "await_tool",
-      toolCalls: [toolCall],
-    }) as Extract<Run.Outcome, { type: "await_tool" }>;
-
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0]).toEqual(toolCall);
-  });
-
-  test("rejects await_tool without toolCalls", () => {
-    expect(() => Run.Outcome.parse({ type: "await_tool" })).toThrow();
   });
 
   test("parses aborted", () => {
