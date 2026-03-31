@@ -3,7 +3,11 @@ import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 
 // --- Mock setup (must be before dynamic import) ---
 
-type MockLlmFn = (input: any, sink: Sink) => Promise<Run.Outcome>;
+type MockRunInput = Record<string, unknown> & {
+  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+};
+
+type MockLlmFn = (input: MockRunInput, sink: Sink) => Promise<Run.Outcome>;
 
 let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
 
@@ -28,7 +32,7 @@ const mockProviderFromModelsDevModel = mock(() => ({
 mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: (input: any, sink: Sink) => mockRunFn(input, sink),
+  run: (input: MockRunInput, sink: Sink) => mockRunFn(input, sink),
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
     calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
@@ -83,7 +87,7 @@ function createAssistantMessage(text: string): Message.WithParts {
 }
 
 function setupMockResponse(text: string) {
-  mockRunFn = async (_input: any, sink: Sink) => {
+  mockRunFn = async (_input: MockRunInput, sink: Sink) => {
     sink.onMessage(createAssistantMessage(text));
     return { type: "stop" } as Run.Outcome;
   };
@@ -106,24 +110,17 @@ describe("PlanAgent.create", () => {
   });
 
   it("agent.run() completes with plan_write tool call", async () => {
-    let callCount = 0;
-    mockRunFn = async (_input: any, sink: Sink) => {
-      callCount++;
-      if (callCount === 1) {
-        // First call: LLM returns a plan_write tool call
-        sink.onMessage(createAssistantMessage(""));
-        return {
-          type: "await_tool",
-          toolCalls: [
-            {
-              id: "tc-1",
-              tool: "plan_write",
-              input: { planId: "p1", content: "# My Plan\n- Step 1" },
-            },
-          ],
-        } as Run.Outcome;
+    mockRunFn = async (input: MockRunInput, sink: Sink) => {
+      const call: Tool.Call = {
+        id: "tc-1",
+        tool: "plan_write",
+        input: { planId: "p1", content: "# My Plan\n- Step 1" },
+      };
+      if (input.toolExecutor) {
+        sink.onToolCall(call);
+        const result = await input.toolExecutor(call);
+        sink.onToolResult(result);
       }
-      // Second call: LLM stops
       sink.onMessage(createAssistantMessage("Plan written successfully."));
       return { type: "stop" } as Run.Outcome;
     };
@@ -134,7 +131,6 @@ describe("PlanAgent.create", () => {
     });
 
     expect(result.finishReason).toBe("stop");
-    expect(callCount).toBe(2);
   });
 
   it("routes external tool calls to custom toolExecutor", async () => {
@@ -160,15 +156,12 @@ describe("PlanAgent.create", () => {
       safe: true,
     };
 
-    let callCount = 0;
-    mockRunFn = async (_input: any, sink: Sink) => {
-      callCount++;
-      if (callCount === 1) {
-        sink.onMessage(createAssistantMessage(""));
-        return {
-          type: "await_tool",
-          toolCalls: [{ id: "tc-ext", tool: "search", input: { query: "hello" } }],
-        } as Run.Outcome;
+    mockRunFn = async (input: MockRunInput, sink: Sink) => {
+      const call: Tool.Call = { id: "tc-ext", tool: "search", input: { query: "hello" } };
+      if (input.toolExecutor) {
+        sink.onToolCall(call);
+        const result = await input.toolExecutor(call);
+        sink.onToolResult(result);
       }
       sink.onMessage(createAssistantMessage("Done."));
       return { type: "stop" } as Run.Outcome;
@@ -207,15 +200,12 @@ describe("PlanAgent.create", () => {
       safe: true,
     };
 
-    let callCount = 0;
-    mockRunFn = async (_input: any, sink: Sink) => {
-      callCount++;
-      if (callCount === 1) {
-        sink.onMessage(createAssistantMessage(""));
-        return {
-          type: "await_tool",
-          toolCalls: [{ id: "tc-pr", tool: "plan_review", input: {} }],
-        } as Run.Outcome;
+    mockRunFn = async (input: MockRunInput, sink: Sink) => {
+      const call: Tool.Call = { id: "tc-pr", tool: "plan_review", input: {} };
+      if (input.toolExecutor) {
+        sink.onToolCall(call);
+        const result = await input.toolExecutor(call);
+        sink.onToolResult(result);
       }
       sink.onMessage(createAssistantMessage("Done."));
       return { type: "stop" } as Run.Outcome;
@@ -233,17 +223,14 @@ describe("PlanAgent.create", () => {
   });
 
   it("returns error result for unknown external tool without executor", async () => {
-    let callCount = 0;
     let toolResultOutput = "";
 
-    mockRunFn = async (_input: any, sink: Sink) => {
-      callCount++;
-      if (callCount === 1) {
-        sink.onMessage(createAssistantMessage(""));
-        return {
-          type: "await_tool",
-          toolCalls: [{ id: "tc-unknown", tool: "unknown_tool", input: {} }],
-        } as Run.Outcome;
+    mockRunFn = async (input: MockRunInput, sink: Sink) => {
+      const call: Tool.Call = { id: "tc-unknown", tool: "unknown_tool", input: {} };
+      if (input.toolExecutor) {
+        sink.onToolCall(call);
+        const result = await input.toolExecutor(call);
+        sink.onToolResult(result);
       }
       sink.onMessage(createAssistantMessage("Done."));
       return { type: "stop" } as Run.Outcome;

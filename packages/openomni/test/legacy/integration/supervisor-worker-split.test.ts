@@ -92,7 +92,7 @@ describe("Supervisor/Worker split boundary", () => {
         run: async (_input, sink) => {
           emitText(sink, "Working...");
           return {
-            type: "await_tool" as const,
+            type: "tool_use" as const,
             toolCalls: [{ id: "t1", tool: "slow", input: {} }],
           };
         },

@@ -14,7 +14,7 @@ mock.module("ai", () => ({
       })(),
     };
   },
-  jsonSchema: (schema: unknown) => ({ __jsonSchema: schema }),
+  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
 }));
 
 let run: typeof import("../src/run").run;
@@ -31,13 +31,13 @@ afterAll(async () => {
 
 describe("run() with model - tool schema conversion", () => {
   const mockSink: Sink = {
-    onMessage: () => {},
-    onToolCall: () => {},
-    onToolResult: () => {},
-    onSnapshot: () => {},
+    onMessage: () => undefined,
+    onToolCall: () => undefined,
+    onToolResult: () => undefined,
+    onSnapshot: () => undefined,
   };
 
-  test("maps Tool.Spec inputSchema to SDK parameters property", async () => {
+  test("maps Tool.Spec inputSchema to raw function tools via jsonSchema", async () => {
     capturedArgs = undefined;
 
     await run(
@@ -63,8 +63,11 @@ describe("run() with model - tool schema conversion", () => {
     expect(capturedArgs).toBeDefined();
     const tools = (capturedArgs as { tools?: Record<string, unknown> } | undefined)?.tools;
     expect(tools).toBeDefined();
-    const sdkTool = tools!["test_tool"] as Record<string, unknown>;
-    expect(sdkTool["parameters"]).toBeDefined();
-    expect(sdkTool["inputSchema"]).toBeUndefined();
+    expect(tools!.test_tool).toBeDefined();
+    expect(tools!.test_tool).toEqual({
+      type: "function",
+      description: "A test tool",
+      inputSchema: { jsonSchema: { type: "object", properties: { x: { type: "string" } } } },
+    });
   });
 });

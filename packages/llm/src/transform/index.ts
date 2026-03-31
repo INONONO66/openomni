@@ -146,12 +146,44 @@ export namespace ProviderTransform {
               }
               return part;
             }),
-          };
+          } as unknown as SDKMessage;
         }
         return msg;
       });
     }
 
-    return result;
+    return applyAnthropicCaching(result);
+  }
+
+  /** Inject ephemeral cacheControl on system msgs and last 2 user/assistant msgs. */
+  export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
+    if (msgs.length === 0) return msgs;
+
+    const targets = new Set<number>();
+    let found = 0;
+    for (let i = msgs.length - 1; i >= 0 && found < 2; i--) {
+      const role = msgs[i].role;
+      if (role === "user" || role === "assistant") {
+        targets.add(i);
+        found++;
+      }
+    }
+
+    return msgs.map((msg, i) => {
+      if (msg.role === "system" || targets.has(i)) {
+        const existing = (msg as Record<string, unknown>).providerOptions as
+          | Record<string, unknown>
+          | undefined;
+        const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
+        return {
+          ...msg,
+          providerOptions: {
+            ...existing,
+            anthropic: { ...existingAnthropic, cacheControl: { type: "ephemeral" as const } },
+          },
+        } as unknown as SDKMessage;
+      }
+      return msg;
+    });
   }
 }

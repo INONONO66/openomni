@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelMessage } from "ai";
 import { ProviderTransform } from "../../src/transform";
 import type { Provider } from "../../src/provider/index";
+type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
 describe("ProviderTransform.sdkKey", () => {
   test("maps anthropic packages", () => {
@@ -50,7 +50,9 @@ describe("ProviderTransform.normalizeMessages", () => {
       { role: "user", content: "hello" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect(result).toEqual([{ role: "user", content: "hello" }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
+    expect(result[0].content).toBe("hello");
   });
 
   test("anthropic filters empty text parts from array content", () => {
@@ -180,7 +182,9 @@ describe("ProviderTransform.normalizeMessages", () => {
       { role: "user", content: "hello" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, model);
-    expect(result).toEqual([{ role: "user", content: "hello" }]);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
+    expect(result[0].content).toBe("hello");
   });
 });
 
@@ -239,6 +243,106 @@ describe("ProviderTransform.variants", () => {
     };
     const v = ProviderTransform.variants(model);
     expect(Object.keys(v)).toHaveLength(0);
+  });
+});
+
+describe("ProviderTransform.applyAnthropicCaching", () => {
+  const EXPECTED_OPTS = {
+    providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+  };
+
+  test("returns empty array unchanged", () => {
+    expect(ProviderTransform.applyAnthropicCaching([])).toEqual([]);
+  });
+
+  test("single system message gets cacheControl", () => {
+    const msgs: ModelMessage[] = [{ role: "system", content: "you are helpful" }];
+    const result = ProviderTransform.applyAnthropicCaching(msgs);
+    expect(result).toEqual([{ role: "system", content: "you are helpful", ...EXPECTED_OPTS }]);
+  });
+
+  test("single user message gets cacheControl", () => {
+    const msgs: ModelMessage[] = [{ role: "user", content: "hello" }];
+    const result = ProviderTransform.applyAnthropicCaching(msgs);
+    expect(result).toEqual([{ role: "user", content: "hello", ...EXPECTED_OPTS }]);
+  });
+
+  test("system msgs and last 2 user/assistant get cacheControl", () => {
+    const msgs: ModelMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "msg1" },
+      { role: "assistant", content: "msg2" },
+      { role: "user", content: "msg3" },
+      { role: "assistant", content: "msg4" },
+    ];
+    const result = ProviderTransform.applyAnthropicCaching(msgs);
+
+    expect(result[0]).toEqual({ role: "system", content: "sys", ...EXPECTED_OPTS });
+    expect((result[1] as any).providerOptions).toBeUndefined();
+    expect((result[2] as any).providerOptions).toBeUndefined();
+    expect(result[3]).toEqual({ role: "user", content: "msg3", ...EXPECTED_OPTS });
+    expect(result[4]).toEqual({ role: "assistant", content: "msg4", ...EXPECTED_OPTS });
+  });
+
+  test("tool messages are never cached", () => {
+    const msgs: ModelMessage[] = [
+      { role: "user", content: "run tool" },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "t1", toolName: "x", output: "ok" }],
+      },
+      { role: "assistant", content: "done" },
+    ];
+    const result = ProviderTransform.applyAnthropicCaching(msgs);
+    expect((result[1] as any).providerOptions).toBeUndefined();
+    expect(result[0]).toEqual({ role: "user", content: "run tool", ...EXPECTED_OPTS });
+    expect(result[2]).toEqual({ role: "assistant", content: "done", ...EXPECTED_OPTS });
+  });
+
+  test("does not mutate original messages", () => {
+    const msgs: ModelMessage[] = [{ role: "user", content: "hello" }];
+    const original = { ...msgs[0] };
+    ProviderTransform.applyAnthropicCaching(msgs);
+    expect(msgs[0]).toEqual(original);
+  });
+
+  test("all system messages get cacheControl", () => {
+    const msgs: ModelMessage[] = [
+      { role: "system", content: "sys1" },
+      { role: "system", content: "sys2" },
+    ];
+    const result = ProviderTransform.applyAnthropicCaching(msgs);
+    expect((result[0] as any).providerOptions).toEqual(EXPECTED_OPTS.providerOptions);
+    expect((result[1] as any).providerOptions).toEqual(EXPECTED_OPTS.providerOptions);
+  });
+});
+
+describe("normalizeMessages applies caching for anthropic", () => {
+  const anthropicModel = { npm: "@ai-sdk/anthropic", modelId: "claude-sonnet-4-20250514" };
+  const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
+
+  test("anthropic messages get cacheControl via normalizeMessages", () => {
+    const msgs: ModelMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "hi" },
+    ];
+    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
+    expect((result[0] as any).providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+    });
+    expect((result[1] as any).providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+    });
+  });
+
+  test("openai messages do not get cacheControl", () => {
+    const msgs: ModelMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "hi" },
+    ];
+    const result = ProviderTransform.normalizeMessages(msgs, openaiModel);
+    expect((result[0] as any).providerOptions).toBeUndefined();
+    expect((result[1] as any).providerOptions).toBeUndefined();
   });
 });
 

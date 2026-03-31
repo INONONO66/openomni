@@ -19,14 +19,20 @@ export interface RunInput {
   system?: string;
   signal?: AbortSignal;
   model?: Provider.Model;
+  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  toolChoice?: "auto" | "required" | "none";
+  maxSteps?: number;
   providerOptions?: Record<string, unknown>;
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
-  const abortController = signal ? undefined : new AbortController();
-  const abortSignal = signal || abortController!.signal;
+  const abortController = signal ? null : new AbortController();
+  const abortSignal = signal ?? abortController?.signal;
+  if (!abortSignal) {
+    throw new Error("Failed to initialize abort signal");
+  }
 
   const sessionID =
     messages[0]?.info.sessionID || `session-${Math.random().toString(36).substring(2, 11)}`;
@@ -52,18 +58,6 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     },
   };
 
-  const pendingToolCalls: Tool.Call[] = [];
-
-  const wrappedSink: Sink = {
-    onMessage: sink.onMessage,
-    onToolCall: (call: Tool.Call) => {
-      pendingToolCalls.push(call);
-      sink.onToolCall(call);
-    },
-    onToolResult: sink.onToolResult,
-    onSnapshot: sink.onSnapshot,
-  };
-
   let createStream: Processor.ProcessorOptions["createStream"];
 
   if (model) {
@@ -77,24 +71,53 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
       const languageModel = getLanguage(model, auth);
 
-      const normalizedMessages = toModelMessages(messages, model);
+      type InternalWithParts = Parameters<typeof toModelMessages>[0][number];
+      const normalizedMessages = toModelMessages(messages as unknown as InternalWithParts[], model);
 
       const systemMessages: SDKMessage[] = streamInput.system
         ? [{ role: "system" as const, content: streamInput.system }]
         : [];
 
-      const sdkTools: Record<string, { description?: string; parameters: unknown }> = {};
+      const sdkTools: Record<string, unknown> = {};
       for (const spec of input.tools) {
-        sdkTools[spec.name] = {
-          description: spec.description,
-          parameters: jsonSchema(spec.inputSchema),
-        };
+        if (input.toolExecutor) {
+          sdkTools[spec.name] = {
+            type: "function" as const,
+            description: spec.description,
+            inputSchema: jsonSchema(spec.inputSchema),
+            execute: async (args: Record<string, unknown>) => {
+              const call: Tool.Call = {
+                id: crypto.randomUUID(),
+                tool: spec.name,
+                input: args,
+              };
+              const result = await input.toolExecutor?.(call);
+              if (!result) return "";
+              sink.onToolCall(call);
+              sink.onToolResult(result);
+              if (result.isError) return `Error: ${result.output}`;
+              return result.output;
+            },
+          };
+        } else {
+          sdkTools[spec.name] = {
+            type: "function" as const,
+            description: spec.description,
+            inputSchema: jsonSchema(spec.inputSchema),
+          };
+        }
       }
 
       const streamArgs = {
         model: languageModel,
         messages: [...systemMessages, ...normalizedMessages],
         tools: sdkTools,
+        toolChoice: input.toolChoice,
+        maxRetries: 0,
+        stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
+        onError: ({ error }: { error: unknown }) => {
+          console.error("[llm/run] streamText error", error);
+        },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
       };
@@ -148,7 +171,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     sessionID,
     model: resolvedModel,
     abort: abortSignal,
-    sink: wrappedSink,
+    sink,
     createStream,
   });
 
@@ -159,15 +182,11 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       system,
     });
 
-    if (pendingToolCalls.length > 0) {
-      return { type: "await_tool", toolCalls: pendingToolCalls };
-    }
-
     switch (result) {
       case "stop":
         return { type: "stop" };
       case "continue":
-        return { type: "await_tool", toolCalls: pendingToolCalls };
+        return { type: "stop" };
       case "compact":
         return { type: "stop" };
       default:

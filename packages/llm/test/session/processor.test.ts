@@ -179,7 +179,13 @@ describe("Processor", () => {
           yield {
             type: "step-finish",
             finishReason: "end_turn",
-            usage: { input_tokens: 10, output_tokens: 20 },
+            usage: {
+              input_tokens: 10,
+              output_tokens: 20,
+              reasoning_tokens: 4,
+              cache_creation_input_tokens: 6,
+              cache_read_input_tokens: 2,
+            },
             providerMetadata: {},
           };
           yield { type: "finish" };

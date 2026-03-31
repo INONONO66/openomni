@@ -251,7 +251,7 @@ describe("Agent orchestration e2e", () => {
     }
   });
 
-  it("runs await_tool -> toolExecutor -> stop loop end-to-end", async () => {
+  it("runs tool_use -> toolExecutor -> stop loop end-to-end", async () => {
     const task = createTask();
     const runId = await createRun(task.id);
 
@@ -272,7 +272,7 @@ describe("Agent orchestration e2e", () => {
 
           sink.onToolCall(call);
           emitAssistantText(sink, "Calling lookup_status tool...");
-          return { type: "await_tool" as const, toolCalls: [call] };
+          return { type: "tool_use" as const, toolCalls: [call] };
         }
 
         emitAssistantText(sink, `Tool loop finished with: ${toolResults[0].output}`);
@@ -344,7 +344,7 @@ describe("Agent orchestration e2e", () => {
           };
           sink.onToolCall(subCall);
           emitAssistantText(sink, "Depth-1 delegating to depth-2.");
-          return { type: "await_tool" as const, toolCalls: [subCall] };
+          return { type: "tool_use" as const, toolCalls: [subCall] };
         }
 
         if (prompt === "spawn-depth-2") {
@@ -510,7 +510,7 @@ describe("Agent orchestration e2e", () => {
 
           sink.onToolCall(subagentCall);
           emitAssistantText(sink, "Main agent delegating to subagent.");
-          return { type: "await_tool" as const, toolCalls: [subagentCall] };
+          return { type: "tool_use" as const, toolCalls: [subagentCall] };
         }
 
         emitAssistantText(sink, `Main agent received subagent output: ${toolResults[0].output}`);

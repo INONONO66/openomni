@@ -1,5 +1,6 @@
 import type { Sink } from "@openomni/protocol";
 import type { Message } from "./message";
+import { TokenTracker } from "../token";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import type { Provider } from "../provider";
@@ -298,12 +299,45 @@ export namespace Processor {
 
                   case "step-finish": {
                     const finishReason = String(event.finishReason || "end_turn");
-                    const usage = event.usage as
-                      | {
-                          promptTokens?: number;
-                          completionTokens?: number;
-                        }
-                      | undefined;
+                    const usage = TokenTracker.extractUsage({
+                      usage: event.usage as
+                        | {
+                            inputTokens?: number;
+                            outputTokens?: number;
+                            promptTokens?: number;
+                            completionTokens?: number;
+                            inputTokenDetails?: {
+                              cacheReadTokens?: number;
+                              cacheWriteTokens?: number;
+                            };
+                            outputTokenDetails?: {
+                              reasoningTokens?: number;
+                            };
+                            reasoningTokens?: number;
+                            reasoning_tokens?: number;
+                            cache_creation_input_tokens?: number;
+                            cache_read_input_tokens?: number;
+                            raw?: {
+                              completion_tokens_details?: {
+                                reasoning_tokens?: number;
+                              };
+                            };
+                          }
+                        | undefined,
+                      providerMetadata: event.providerMetadata as
+                        | {
+                            anthropic?: {
+                              reasoningTokens?: number;
+                              cacheCreationInputTokens?: number;
+                              cacheReadInputTokens?: number;
+                            };
+                            openai?: {
+                              reasoningTokens?: number;
+                              cachedPromptTokens?: number;
+                            };
+                          }
+                        | undefined,
+                    });
 
                     const stepFinishPart: Message.StepFinishPart = {
                       id: generateId("part"),
@@ -313,17 +347,23 @@ export namespace Processor {
                       reason: finishReason,
                       cost: 0,
                       tokens: {
-                        input: usage?.promptTokens ?? 0,
-                        output: usage?.completionTokens ?? 0,
+                        input: usage.inputTokens,
+                        output: usage.outputTokens,
+                        reasoning: usage.reasoningTokens ?? 0,
+                        cache: {
+                          read: usage.cacheReadTokens ?? 0,
+                          write: usage.cacheWriteTokens ?? 0,
+                        },
                       },
                     };
                     addMessagePart(stepFinishPart);
 
                     assistantMessage.finish = finishReason;
-                    if (usage) {
-                      assistantMessage.tokens.input += usage.promptTokens ?? 0;
-                      assistantMessage.tokens.output += usage.completionTokens ?? 0;
-                    }
+                    assistantMessage.tokens.input += usage.inputTokens;
+                    assistantMessage.tokens.output += usage.outputTokens;
+                    assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
+                    assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
+                    assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
                     break;
                   }
 

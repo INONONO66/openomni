@@ -130,6 +130,11 @@ describe("Message.StepFinishPart", () => {
       tokens: {
         input: 100,
         output: 50,
+        reasoning: 5,
+        cache: {
+          read: 2,
+          write: 3,
+        },
       },
     };
 

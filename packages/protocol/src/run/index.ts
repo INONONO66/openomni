@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { Tool } from "../tool/index.js";
 
 export namespace Run {
   export const Snapshot = z.object({
@@ -12,10 +11,6 @@ export namespace Run {
 
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
-    z.object({
-      type: z.literal("await_tool"),
-      toolCalls: z.array(Tool.Call),
-    }),
     z.object({ type: z.literal("aborted") }),
     z.object({
       type: z.literal("error"),

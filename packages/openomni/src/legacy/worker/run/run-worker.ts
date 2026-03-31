@@ -39,9 +39,17 @@ export interface ToolExecutor {
   execute(calls: Tool.Call[]): Promise<Tool.Result[]>;
 }
 
+type LegacyRunOutcome = Run.Outcome | { type: string; toolCalls: Tool.Call[] };
+
+function hasToolCalls(
+  outcome: LegacyRunOutcome,
+): outcome is { type: string; toolCalls: Tool.Call[] } {
+  return "toolCalls" in outcome;
+}
+
 export interface OrchestratorRunInput {
   llm: {
-    run(input: Record<string, unknown>, sink: Sink): Promise<Run.Outcome>;
+    run(input: Record<string, unknown>, sink: Sink): Promise<LegacyRunOutcome>;
   };
   input: Record<string, unknown>;
   toolExecutor?: ToolExecutor;
@@ -129,7 +137,7 @@ function resolveBudget(task: Task.Info) {
 
 function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
   const rawDelay =
-    policy.backoffMs.initial * Math.pow(policy.backoffMs.multiplier, Math.max(0, attempt - 1));
+    policy.backoffMs.initial * policy.backoffMs.multiplier ** Math.max(0, attempt - 1);
   return Math.min(rawDelay, policy.backoffMs.max);
 }
 
@@ -418,11 +426,11 @@ export namespace RunWorker {
               throw new Error("Run aborted");
             }
 
-            if (outcome.type === "error") {
+            if (outcome.type === "error" && !hasToolCalls(outcome)) {
               throw outcome.error;
             }
 
-            if (outcome.toolCalls.length === 0) {
+            if (!hasToolCalls(outcome) || outcome.toolCalls.length === 0) {
               throw new Error("Tool wait requested with no tool calls");
             }
 

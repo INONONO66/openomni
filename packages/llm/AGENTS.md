@@ -42,7 +42,7 @@ src/
 - **Provider.Model schema**: Rich Zod schema with capabilities, cost, limits. Built from models.dev data via `Provider.fromModelsDevModel()`.
 - **Auth.Info**: Discriminated `{ type: "api", key } | { type: "oauth", ... }`. Stored via `Auth.set(providerId, info)`.
 - **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink })`. Calls `process()` which returns `"stop" | "continue" | "compact"`.
-- **run()**: Wraps Processor. Input = messages + tools + system. Output = RunOutcome (stop/await_tool/aborted/error).
+- **run()**: Wraps Processor. Input = messages + tools + system. Output = RunOutcome (stop/aborted/error).
 - **Two bundled providers**: `@ai-sdk/anthropic`, `@ai-sdk/openai`. Others via `@ai-sdk/openai-compatible`.
 - **OAuth flows**: Provider-specific in `oauth/`. Each exports a function registered in `auth/registry.ts`.
 

@@ -1,6 +1,23 @@
-import { describe, expect, test, beforeEach } from "bun:test";
-import { run, type RunInput } from "../src/run";
-import type { Sink, Message, Tool, Run } from "@openomni/protocol";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { Auth } from "../src/auth/storage";
+
+const TEST_PROVIDER_ID = "__test_run__";
+let run: typeof import("../src/run").run;
+
+let capturedStreamArgs: Record<string, unknown> | undefined;
+
+mock.module("ai", () => ({
+  streamText: (args: Record<string, unknown>) => {
+    capturedStreamArgs = args;
+    return {
+      fullStream: (async function* () {
+        yield { type: "finish" };
+      })(),
+    };
+  },
+  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+}));
 
 describe("run", () => {
   let mockSink: Sink;
@@ -9,11 +26,22 @@ describe("run", () => {
   let capturedToolResults: Tool.Result[];
   let capturedSnapshots: Run.Snapshot[];
 
+  beforeAll(async () => {
+    await Auth.set(TEST_PROVIDER_ID, { type: "api", key: "test-key-run" });
+    ({ run } = await import("../src/run"));
+  });
+
+  afterAll(async () => {
+    await Auth.remove(TEST_PROVIDER_ID);
+    mock.restore();
+  });
+
   beforeEach(() => {
     capturedMessages = [];
     capturedToolCalls = [];
     capturedToolResults = [];
     capturedSnapshots = [];
+    capturedStreamArgs = undefined;
 
     mockSink = {
       onMessage: (message: Message.WithParts) => {
@@ -32,7 +60,7 @@ describe("run", () => {
   });
 
   test("accepts RunInput with required fields", () => {
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
     };
@@ -45,19 +73,29 @@ describe("run", () => {
 
   test("accepts RunInput with optional fields", () => {
     const abortController = new AbortController();
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
       system: "test system prompt",
       signal: abortController.signal,
+      toolChoice: "required",
+      maxSteps: 12,
+      toolExecutor: async () => ({
+        id: "result-1",
+        toolCallId: "call-1",
+        output: "ok",
+      }),
     };
 
     expect(input.system).toBe("test system prompt");
     expect(input.signal).toBe(abortController.signal);
+    expect(input.toolChoice).toBe("required");
+    expect(input.maxSteps).toBe(12);
+    expect(input.toolExecutor).toBeFunction();
   });
 
   test("returns RunOutcome with stop type", async () => {
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
     };
@@ -70,7 +108,7 @@ describe("run", () => {
 
   test("handles abort signal", async () => {
     const abortController = new AbortController();
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
       signal: abortController.signal,
@@ -85,7 +123,7 @@ describe("run", () => {
   });
 
   test("returns error outcome when auth is not configured", async () => {
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
       model: {
@@ -109,7 +147,7 @@ describe("run", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
       signal: controller.signal,
@@ -122,7 +160,7 @@ describe("run", () => {
   });
 
   test("calls sink methods during execution", async () => {
-    const input: RunInput = {
+    const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
     };
@@ -131,5 +169,65 @@ describe("run", () => {
 
     expect(capturedSnapshots.length).toBeGreaterThan(0);
     expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("forwards toolChoice and stopWhen, and sets maxRetries to 0", async () => {
+    const input: import("../src/run").RunInput = {
+      messages: [],
+      tools: [],
+      toolChoice: "required",
+      maxSteps: 7,
+      model: {
+        id: "claude-3-haiku",
+        providerID: TEST_PROVIDER_ID,
+        name: "Claude 3 Haiku Test",
+        api: { npm: "@ai-sdk/anthropic" },
+      },
+    };
+
+    await run(input, mockSink);
+
+    expect(capturedStreamArgs).toBeDefined();
+    const streamArgs = capturedStreamArgs as {
+      toolChoice?: unknown;
+      stopWhen?: unknown;
+      maxRetries?: unknown;
+    };
+
+    expect(streamArgs.toolChoice).toBe("required");
+    expect(streamArgs.stopWhen).toBeFunction();
+    expect(streamArgs.maxRetries).toBe(0);
+
+    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
+    expect(stopWhen({ steps: [] })).toBe(false);
+    expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
+    expect(
+      stopWhen({
+        steps: [1, 2, 3, 4, 5, 6, 7],
+      }),
+    ).toBe(true);
+  });
+
+  test("uses default stopWhen threshold when not provided", async () => {
+    const input: import("../src/run").RunInput = {
+      messages: [],
+      tools: [],
+      model: {
+        id: "claude-3-haiku",
+        providerID: TEST_PROVIDER_ID,
+        name: "Claude 3 Haiku Test",
+        api: { npm: "@ai-sdk/anthropic" },
+      },
+    };
+
+    await run(input, mockSink);
+
+    expect(capturedStreamArgs).toBeDefined();
+    const streamArgs = capturedStreamArgs as { stopWhen?: unknown };
+    expect(streamArgs.stopWhen).toBeFunction();
+
+    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
+    expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
+    expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
   });
 });

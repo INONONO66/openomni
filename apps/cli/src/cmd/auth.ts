@@ -1,7 +1,6 @@
 import type { CommandModule } from "yargs";
 import * as prompts from "@clack/prompts";
-import { getAuthProviders, type AuthCallbacks } from "@openomni/llm/src/auth/registry";
-import { Auth } from "@openomni/llm/src/auth/storage";
+import { Auth, getAuthProviders, type AuthCallbacks } from "@openomni/llm";
 
 function cancel(): never {
   prompts.cancel("Operation cancelled.");
