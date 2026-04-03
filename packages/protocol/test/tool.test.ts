@@ -278,6 +278,7 @@ describe("Tool.Spec", () => {
     expect(spec.inputSchema).toEqual({});
     expect(spec.description).toBeUndefined();
     expect(spec.safe).toBeUndefined();
+    expect(spec.prompt).toBeUndefined();
   });
 
   test("parses valid full spec", () => {
@@ -286,10 +287,33 @@ describe("Tool.Spec", () => {
       description: "Search the workspace",
       inputSchema: { type: "object" },
       safe: true,
+      prompt: "rules...",
     });
 
     expect(spec.description).toBe("Search the workspace");
     expect(spec.safe).toBe(true);
+    expect(spec.prompt).toBe("rules...");
+  });
+
+  test("parses valid spec with prompt only", () => {
+    const spec = Tool.Spec.parse({
+      name: "bash",
+      inputSchema: {},
+      prompt: "rules...",
+    });
+
+    expect(spec.name).toBe("bash");
+    expect(spec.prompt).toBe("rules...");
+  });
+
+  test("parses valid spec without prompt", () => {
+    const spec = Tool.Spec.parse({
+      name: "bash",
+      inputSchema: {},
+    });
+
+    expect(spec.name).toBe("bash");
+    expect(spec.prompt).toBeUndefined();
   });
 
   test("rejects missing name", () => {
