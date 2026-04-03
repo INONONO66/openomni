@@ -1,6 +1,15 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
-import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
+import type {
+  ChatAgentConfig,
+  ChatAgentInput,
+  AgentResult,
+  AgentStep,
+  ExecutionHooks,
+  HookContext,
+  HookVerdict,
+  TokenUsage,
+} from "./types";
 import {
   createBudgetState,
   checkBudget,
@@ -129,6 +138,56 @@ function createGuardedToolExecutor(
         isError: true,
       };
     }
+    return toolExecutor(call);
+  };
+}
+
+function createHookedToolExecutor(
+  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
+  hooks: ExecutionHooks | undefined,
+  getContext: () => Omit<HookContext, "toolName" | "toolCallId" | "input">,
+): (call: Tool.Call) => Promise<Tool.Result> {
+  if (!hooks?.preToolUse) return toolExecutor;
+
+  return async (call: Tool.Call): Promise<Tool.Result> => {
+    const context: HookContext = {
+      ...getContext(),
+      toolName: call.tool,
+      toolCallId: call.id,
+      input: call.input,
+    };
+
+    let verdict: HookVerdict;
+    try {
+      verdict = await hooks.preToolUse!(context);
+    } catch (err) {
+      console.warn("[hooks.preToolUse] threw, treating as continue:", err);
+      verdict = { action: "continue" };
+    }
+
+    if (verdict.action === "skip") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Skipped: ${verdict.reason ?? "hook"}]`,
+        isError: false,
+      };
+    }
+
+    if (verdict.action === "abort") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Aborted: ${verdict.reason ?? "hook"}]`,
+        isError: true,
+      };
+    }
+
+    if (verdict.action === "transform") {
+      const transformed: Tool.Call = { ...call, input: verdict.input };
+      return toolExecutor(transformed);
+    }
+
     return toolExecutor(call);
   };
 }
@@ -270,16 +329,26 @@ export namespace ChatAgent {
                     }
                   }
 
+                  const baseExecutor =
+                    config.toolExecutor && config.permissions
+                      ? createGuardedToolExecutor(config.toolExecutor, config.permissions)
+                      : config.toolExecutor;
+
+                  const hookedExecutor = baseExecutor
+                    ? createHookedToolExecutor(baseExecutor, config.hooks, () => ({
+                        steps,
+                        turnCount: budgetState.turns,
+                        elapsedMs: Date.now() - startTime,
+                      }))
+                    : undefined;
+
                   const runInput: RunInput = {
                     messages: effectiveMessages,
                     tools: config.tools ?? [],
                     system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
                     signal: config.signal,
                     model: providerModel,
-                    toolExecutor:
-                      config.toolExecutor && config.permissions
-                        ? createGuardedToolExecutor(config.toolExecutor, config.permissions)
-                        : config.toolExecutor,
+                    toolExecutor: hookedExecutor,
                     toolChoice: configuredToolChoice,
                     maxSteps: config.budget?.maxToolCalls ?? 24,
                   };
@@ -297,7 +366,51 @@ export namespace ChatAgent {
                       await config.onStepFinish(step);
                     }
 
-                    if (config.stepGuard) {
+                    if (config.hooks?.postTurn) {
+                      if (config.stepGuard) {
+                        console.warn(
+                          "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
+                        );
+                      }
+
+                      const hookContext: HookContext = {
+                        steps,
+                        turnCount: budgetState.turns,
+                        elapsedMs: Date.now() - startTime,
+                      };
+
+                      let postTurnVerdict: HookVerdict;
+                      try {
+                        postTurnVerdict = await config.hooks.postTurn(hookContext);
+                      } catch (err) {
+                        console.warn("[hooks.postTurn] threw, treating as continue:", err);
+                        postTurnVerdict = { action: "continue" };
+                      }
+
+                      if (postTurnVerdict.action === "inject") {
+                        const parentID =
+                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                        messages = [
+                          ...messages,
+                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
+                          createUserMessage(postTurnVerdict.message, "chat-agent"),
+                        ];
+
+                        continuationCount++;
+                        continue;
+                      }
+
+                      if (postTurnVerdict.action === "abort") {
+                        return {
+                          text: lastAssistantText,
+                          steps,
+                          usage: totalUsage,
+                          finishReason: "stop",
+                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                          guardAborted: true,
+                        };
+                      }
+                    } else if (config.stepGuard) {
                       const verdict = await config.stepGuard(step, {
                         steps,
                         usage: totalUsage,
