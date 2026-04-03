@@ -1,6 +1,7 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
+  AgentEventEmitter,
   ChatAgentConfig,
   ChatAgentInput,
   AgentResult,
@@ -31,6 +32,15 @@ import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
 import { createAssistantMessage, createUserMessage } from "./message-factory";
 import { ToolGuard } from "./tool-guard";
+
+function summarizeInput(input: Record<string, unknown>): string {
+  try {
+    const str = JSON.stringify(input);
+    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+  } catch {
+    return "[unserializable]";
+  }
+}
 
 /**
  * ChatAgent instance interface
@@ -119,10 +129,18 @@ function buildSystemPrompt(basePrompt: string | undefined, tools: Tool.Spec[]): 
 function createGuardedToolExecutor(
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
   permission: Guardrail.ToolPermission,
+  eventEmitter?: AgentEventEmitter,
 ): (call: Tool.Call) => Promise<Tool.Result> {
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const verdict = ToolGuard.check(call.tool, call.input, permission);
     if (verdict === "deny") {
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "chat-agent",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "denied by policy",
+      });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -131,6 +149,13 @@ function createGuardedToolExecutor(
       };
     }
     if (verdict === "require_approval") {
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "chat-agent",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "requires approval",
+      });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -138,6 +163,13 @@ function createGuardedToolExecutor(
         isError: true,
       };
     }
+    eventEmitter?.emit("agent.tool.invoked", {
+      sessionId: "chat-agent",
+      time: Date.now(),
+      toolCallId: call.id,
+      toolName: call.tool,
+      inputSummary: summarizeInput(call.input),
+    });
     return toolExecutor(call);
   };
 }
@@ -286,6 +318,12 @@ export namespace ChatAgent {
                     };
                   }
 
+                  config.eventEmitter?.emit("agent.turn.start", {
+                    sessionId: "chat-agent",
+                    time: Date.now(),
+                    turnIndex: budgetState.turns,
+                  });
+
                   if (budgetStatus === "reassurance" && !reassuranceIssued) {
                     const remaining = describeBudgetRemaining(budgetState, config.budget);
                     messages = [
@@ -296,6 +334,12 @@ export namespace ChatAgent {
                       ),
                     ];
                     reassuranceIssued = true;
+                    config.eventEmitter?.emit("agent.budget.reassurance", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      remaining,
+                      threshold: config.budget?.reassuranceThreshold ?? 0.6,
+                    });
                   }
                   if (budgetStatus === "warning" && !warningIssued) {
                     const remaining = describeBudgetRemaining(budgetState, config.budget);
@@ -307,6 +351,12 @@ export namespace ChatAgent {
                       ),
                     ];
                     warningIssued = true;
+                    config.eventEmitter?.emit("agent.budget.warning", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      remaining,
+                      threshold: config.budget?.warningThreshold ?? 0.8,
+                    });
                   }
 
                   budgetState = recordTurn(budgetState);
@@ -331,7 +381,11 @@ export namespace ChatAgent {
 
                   const baseExecutor =
                     config.toolExecutor && config.permissions
-                      ? createGuardedToolExecutor(config.toolExecutor, config.permissions)
+                      ? createGuardedToolExecutor(
+                          config.toolExecutor,
+                          config.permissions,
+                          config.eventEmitter,
+                        )
                       : config.toolExecutor;
 
                   const hookedExecutor = baseExecutor
@@ -356,6 +410,18 @@ export namespace ChatAgent {
                   const outcome = await llmRun(runInput, trackingSink);
 
                   if (outcome.type === "stop") {
+                    config.eventEmitter?.emit("agent.turn.complete", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      turnIndex: budgetState.turns,
+                      usage: {
+                        inputTokens: totalUsage.inputTokens,
+                        outputTokens: totalUsage.outputTokens,
+                        totalTokens: totalUsage.totalTokens,
+                        totalCost: totalUsage.totalCost,
+                      },
+                    });
+
                     const step: AgentStep = {
                       type: "text",
                       content: lastAssistantText,
@@ -438,8 +504,15 @@ export namespace ChatAgent {
                               config.compaction,
                             );
                             if (result.compacted) {
+                              const messagesBefore = messages.length;
                               messages = result.messages;
                               compactionCount += 1;
+                              config.eventEmitter?.emit("agent.compaction", {
+                                sessionId: "chat-agent",
+                                time: Date.now(),
+                                messagesBefore,
+                                messagesAfter: result.messages.length,
+                              });
                             }
                           }
                         }

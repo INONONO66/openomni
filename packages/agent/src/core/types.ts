@@ -43,6 +43,10 @@ export interface ExecutionHooks {
   onError?: (context: HookContext & { error: Error }) => Promise<HookVerdict> | HookVerdict;
 }
 
+export interface AgentEventEmitter {
+  emit(eventName: string, data: Record<string, unknown>): void;
+}
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -88,6 +92,7 @@ export interface ChatAgentConfig {
     context: StepGuardContext,
   ) => Promise<StepGuardVerdict> | StepGuardVerdict;
   hooks?: ExecutionHooks;
+  eventEmitter?: AgentEventEmitter;
 }
 
 export interface ChatAgentInput {

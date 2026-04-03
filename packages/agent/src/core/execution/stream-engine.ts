@@ -2,6 +2,7 @@ import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEvent,
+  AgentEventEmitter,
   AgentStep,
   ChatAgentConfig,
   ChatAgentInput,
@@ -20,6 +21,15 @@ import {
   shouldRetry,
   sleep,
 } from "../retry";
+
+function summarizeInput(input: Record<string, unknown>): string {
+  try {
+    const str = JSON.stringify(input);
+    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+  } catch {
+    return "[unserializable]";
+  }
+}
 
 async function resolveProviderModel(model: {
   provider: string;
@@ -60,10 +70,18 @@ function buildSystemPrompt(basePrompt: string | undefined, tools: Tool.Spec[]): 
 function createGuardedToolExecutor(
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
   permission: Guardrail.ToolPermission,
+  eventEmitter?: AgentEventEmitter,
 ): (call: Tool.Call) => Promise<Tool.Result> {
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const verdict = ToolGuard.check(call.tool, call.input, permission);
     if (verdict === "deny") {
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "stream-engine",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "denied by policy",
+      });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -72,6 +90,13 @@ function createGuardedToolExecutor(
       };
     }
     if (verdict === "require_approval") {
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "stream-engine",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "requires approval",
+      });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -79,6 +104,13 @@ function createGuardedToolExecutor(
         isError: true,
       };
     }
+    eventEmitter?.emit("agent.tool.invoked", {
+      sessionId: "stream-engine",
+      time: Date.now(),
+      toolCallId: call.id,
+      toolName: call.tool,
+      inputSummary: summarizeInput(call.input),
+    });
     return toolExecutor(call);
   };
 }
@@ -186,6 +218,12 @@ export async function* streamAgent(
           return;
         }
 
+        config.eventEmitter?.emit("agent.turn.start", {
+          sessionId: "stream-engine",
+          time: Date.now(),
+          turnIndex: budgetState.turns,
+        });
+
         if (budgetStatus === "reassurance" && !reassuranceIssued) {
           const remaining = describeBudgetRemaining(budgetState, config.budget);
           messages = [
@@ -196,6 +234,12 @@ export async function* streamAgent(
             ),
           ];
           reassuranceIssued = true;
+          config.eventEmitter?.emit("agent.budget.reassurance", {
+            sessionId: "stream-engine",
+            time: Date.now(),
+            remaining,
+            threshold: config.budget?.reassuranceThreshold ?? 0.6,
+          });
           yield { type: "budget_reassurance", remaining };
         }
         if (budgetStatus === "warning" && !warningIssued) {
@@ -208,6 +252,12 @@ export async function* streamAgent(
             ),
           ];
           warningIssued = true;
+          config.eventEmitter?.emit("agent.budget.warning", {
+            sessionId: "stream-engine",
+            time: Date.now(),
+            remaining,
+            threshold: config.budget?.warningThreshold ?? 0.8,
+          });
           yield { type: "budget_warning", remaining };
         }
 
@@ -219,7 +269,11 @@ export async function* streamAgent(
 
         const baseExecutor =
           config.toolExecutor && config.permissions
-            ? createGuardedToolExecutor(config.toolExecutor, config.permissions)
+            ? createGuardedToolExecutor(
+                config.toolExecutor,
+                config.permissions,
+                config.eventEmitter,
+              )
             : config.toolExecutor;
 
         const hookedExecutor = baseExecutor
@@ -297,6 +351,18 @@ export async function* streamAgent(
         const outcome = await llmRun(runInput, trackingSink);
 
         if (outcome.type === "stop") {
+          config.eventEmitter?.emit("agent.turn.complete", {
+            sessionId: "stream-engine",
+            time: Date.now(),
+            turnIndex,
+            usage: {
+              inputTokens: totalUsage.inputTokens,
+              outputTokens: totalUsage.outputTokens,
+              totalTokens: totalUsage.totalTokens,
+              totalCost: totalUsage.totalCost,
+            },
+          });
+
           if (lastAssistantText) yield { type: "text_chunk", text: lastAssistantText };
 
           for (const toolCall of turnToolCalls) {

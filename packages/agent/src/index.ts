@@ -12,6 +12,7 @@ export type {
   Sink,
   StepGuardVerdict,
   StepGuardContext,
+  AgentEventEmitter,
 } from "./core/types";
 export { AgentMessenger, BusTransport } from "./runtime/index";
 export type { Transport, AgentMessengerOptions } from "./runtime/index";
