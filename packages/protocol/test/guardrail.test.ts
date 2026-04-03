@@ -4,6 +4,34 @@ import { Guardrail } from "../src/guardrail/index";
 const it = test;
 
 describe("Guardrail schemas", () => {
+  describe("InputRule", () => {
+    it("parses a basic rule", () => {
+      const result = Guardrail.InputRule.parse({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+      });
+
+      expect(result.toolPattern).toBe("bash");
+      expect(result.priority).toBe(0);
+    });
+
+    it("parses a rule with reason and priority", () => {
+      const result = Guardrail.InputRule.parse({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+        reason: "dangerous",
+        priority: 10,
+      });
+
+      expect(result.reason).toBe("dangerous");
+      expect(result.priority).toBe(10);
+    });
+  });
+
   describe("ToolPermission", () => {
     it("parses empty object (all optional)", () => {
       expect(() => Guardrail.ToolPermission.parse({})).not.toThrow();
@@ -28,6 +56,27 @@ describe("Guardrail schemas", () => {
         requireApproval: ["sensitive"],
       });
       expect(result.requireApproval).toEqual(["sensitive"]);
+    });
+
+    it("parses with inputRules", () => {
+      const result = Guardrail.ToolPermission.parse({
+        inputRules: [
+          {
+            toolPattern: "bash",
+            field: "command",
+            pattern: "rm",
+            action: "deny",
+          },
+        ],
+      });
+
+      expect(result.inputRules?.[0]).toMatchObject({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+        priority: 0,
+      });
     });
   });
 

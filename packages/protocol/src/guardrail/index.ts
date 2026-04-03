@@ -1,10 +1,21 @@
 import { z } from "zod";
 
 export namespace Guardrail {
+  export const InputRule = z.object({
+    toolPattern: z.string(),
+    field: z.string(),
+    pattern: z.string(),
+    action: z.enum(["allow", "deny", "require_approval"]),
+    reason: z.string().optional(),
+    priority: z.number().default(0),
+  });
+  export type InputRule = z.infer<typeof InputRule>;
+
   export const ToolPermission = z.object({
     allowlist: z.string().array().optional(),
     denylist: z.string().array().optional(),
     requireApproval: z.string().array().optional(),
+    inputRules: InputRule.array().optional(),
   });
   export type ToolPermission = z.infer<typeof ToolPermission>;
 
