@@ -33,6 +33,8 @@ export interface AgentBudget {
   maxOutputTokens?: number;
   maxTotalTokens?: number;
   maxCost?: number;
+  warningThreshold?: number; // 0.0-1.0, default 0.8
+  reassuranceThreshold?: number; // 0.0-1.0, default 0.6
 }
 
 export interface ChatAgentConfig {
@@ -94,6 +96,8 @@ export type AgentEvent =
   | { type: "tool_call_complete"; toolCallId: string; result: Tool.Result }
   | { type: "turn_complete"; turnIndex: number; usage: TokenUsage }
   | { type: "error"; error: Error; willRetry: boolean }
-  | { type: "complete"; result: AgentResult };
+  | { type: "complete"; result: AgentResult }
+  | { type: "budget_warning"; remaining: string }
+  | { type: "budget_reassurance"; remaining: string };
 
 export type { Sink };
