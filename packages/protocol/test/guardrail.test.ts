@@ -124,6 +124,8 @@ describe("Guardrail schemas", () => {
       expect(result.maxDepth).toBe(3);
       expect(result.budgetPolicy).toBe("inherit");
       expect(result.abortPropagation).toBe(true);
+      expect(result.budgetAllocation).toBe(0.5);
+      expect(result.reserveForParent).toBe(0.2);
     });
 
     it("parses with explicit maxDepth", () => {
@@ -140,6 +142,40 @@ describe("Guardrail schemas", () => {
         Guardrail.DelegationPolicy.parse({
           budgetPolicy: "shared",
           abortPropagation: true,
+        }),
+      ).toThrow();
+    });
+
+    it("parses split policy", () => {
+      expect(
+        Guardrail.DelegationPolicy.parse({
+          budgetPolicy: "split",
+          budgetAllocation: 0.5,
+          reserveForParent: 0.2,
+          maxDepth: 3,
+          abortPropagation: false,
+        }),
+      ).toBeTruthy();
+    });
+
+    it("keeps backward compatibility for inherit without allocation fields", () => {
+      const result = Guardrail.DelegationPolicy.parse({
+        budgetPolicy: "inherit",
+        maxDepth: 3,
+        abortPropagation: false,
+      });
+
+      expect(result.budgetAllocation).toBe(0.5);
+      expect(result.reserveForParent).toBe(0.2);
+    });
+
+    it("rejects budgetAllocation greater than 1", () => {
+      expect(() =>
+        Guardrail.DelegationPolicy.parse({
+          budgetPolicy: "split",
+          budgetAllocation: 1.5,
+          maxDepth: 3,
+          abortPropagation: false,
         }),
       ).toThrow();
     });

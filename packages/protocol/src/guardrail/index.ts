@@ -36,8 +36,10 @@ export namespace Guardrail {
 
   export const DelegationPolicy = z.object({
     maxDepth: z.number().default(3),
-    budgetPolicy: z.enum(["inherit", "independent"]),
+    budgetPolicy: z.enum(["inherit", "independent", "split"]),
     abortPropagation: z.boolean(),
+    budgetAllocation: z.number().min(0).max(1).default(0.5),
+    reserveForParent: z.number().min(0).max(1).default(0.2),
   });
   export type DelegationPolicy = z.infer<typeof DelegationPolicy>;
 }
