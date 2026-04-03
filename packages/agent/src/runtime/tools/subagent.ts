@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
 import { ChatAgent } from "../../core/chat-agent";
-import { checkDelegation, type DelegationContext } from "../../core/delegation";
+import { allocateBudget, checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
 import { AgentMessenger } from "../messenger/messenger";
 import { BusTransport } from "../messenger/transport";
@@ -79,6 +79,11 @@ export namespace SubagentTool {
       }
 
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
+      const childBudget = ctx?.parentBudgetState
+        ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
+        : definition.maxTurns
+          ? { maxTurns: definition.maxTurns }
+          : undefined;
 
       try {
         const childAgent = ChatAgent.create({
@@ -87,7 +92,7 @@ export namespace SubagentTool {
             id: "claude-3-haiku-20240307",
           },
           systemPrompt: definition.systemPrompt,
-          budget: definition.maxTurns ? { maxTurns: definition.maxTurns } : undefined,
+          budget: childBudget,
           permissions: definition.permissions,
           signal: childAbort,
         });
