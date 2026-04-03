@@ -594,6 +594,7 @@ export namespace ChatAgent {
                     sessionId: "chat-agent",
                     time: Date.now(),
                     attempt,
+                    maxAttempts: retryPolicy.maxAttempts,
                     error: lastError,
                   });
                   await sleep(backoffMs);

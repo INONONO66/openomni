@@ -534,6 +534,7 @@ export async function* streamAgent(
           sessionId: "stream-engine",
           time: Date.now(),
           attempt,
+          maxAttempts: retryPolicy.maxAttempts,
           error: lastError,
         });
         yield {
