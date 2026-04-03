@@ -1,16 +1,18 @@
 import type { BudgetState } from "./budget";
 import type { AgentBudget } from "./types";
+import type { Guardrail } from "@openomni/protocol";
 
 export type DelegationContext = {
   depth: number;
   maxDepth: number;
   visitedAgents: Set<string>;
   parentAbort: AbortSignal;
-  budgetPolicy: "inherit" | "independent" | "split";
+  budgetPolicy: Guardrail.DelegationPolicy["budgetPolicy"];
   budgetAllocation?: number;
   reserveForParent?: number;
   parentBudgetState?: BudgetState;
   parentBudget?: AgentBudget;
+  onChildBudgetConsumed?: (inputTokens: number, outputTokens: number, cost: number) => void;
 };
 
 export function allocateBudget(

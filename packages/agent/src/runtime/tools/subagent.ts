@@ -101,6 +101,14 @@ export namespace SubagentTool {
           messages: [{ role: "user", content: prompt }],
         });
 
+        if (ctx?.onChildBudgetConsumed && result.usage) {
+          ctx.onChildBudgetConsumed(
+            result.usage.inputTokens,
+            result.usage.outputTokens,
+            result.usage.totalCost ?? 0,
+          );
+        }
+
         const messenger = AgentMessenger.create(new BusTransport(), {
           allowPatterns: options?.messengerAllowPatterns,
         });

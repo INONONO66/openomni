@@ -71,6 +71,7 @@ function createGuardedToolExecutor(
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
   permission: Guardrail.ToolPermission,
   eventEmitter?: AgentEventEmitter,
+  stepGuard?: ChatAgentConfig["stepGuard"],
 ): (call: Tool.Call) => Promise<Tool.Result> {
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const verdict = ToolGuard.check(call.tool, call.input, permission);
@@ -90,6 +91,36 @@ function createGuardedToolExecutor(
       };
     }
     if (verdict === "require_approval") {
+      if (stepGuard) {
+        const syntheticStep: AgentStep = {
+          type: "tool-call",
+          content: `Tool "${call.tool}" requires approval`,
+          toolCalls: [call],
+        };
+        const guardContext = {
+          steps: [],
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          turnCount: 0,
+          isCompletion: false,
+          continuationCount: 0,
+          elapsedMs: 0,
+        };
+        try {
+          const guardVerdict = await stepGuard(syntheticStep, guardContext);
+          if (guardVerdict.action === "continue") {
+            eventEmitter?.emit("agent.tool.invoked", {
+              sessionId: "stream-engine",
+              time: Date.now(),
+              toolCallId: call.id,
+              toolName: call.tool,
+              inputSummary: summarizeInput(call.input),
+            });
+            return toolExecutor(call);
+          }
+        } catch (_error) {
+          void _error;
+        }
+      }
       eventEmitter?.emit("agent.tool.blocked", {
         sessionId: "stream-engine",
         time: Date.now(),
@@ -273,6 +304,7 @@ export async function* streamAgent(
                 config.toolExecutor,
                 config.permissions,
                 config.eventEmitter,
+                config.stepGuard,
               )
             : config.toolExecutor;
 
@@ -498,6 +530,12 @@ export async function* streamAgent(
 
       if (shouldRetry(retryPolicy, retryReason, attempt)) {
         const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+        config.eventEmitter?.emit("agent.error.retry", {
+          sessionId: "stream-engine",
+          time: Date.now(),
+          attempt,
+          error: lastError,
+        });
         yield {
           type: "error",
           error: error instanceof Error ? error : new Error(lastError),
