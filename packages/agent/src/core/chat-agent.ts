@@ -1,7 +1,13 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
-import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
+import {
+  createBudgetState,
+  checkBudget,
+  recordTurn,
+  recordTokenUsage,
+  describeBudgetRemaining,
+} from "./budget";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -206,8 +212,12 @@ export namespace ChatAgent {
                   throw new Error("toolExecutor is required when tools are provided");
                 }
 
+                let reassuranceIssued = false;
+                let warningIssued = false;
+
                 while (true) {
-                  if (checkBudget(budgetState, config.budget) === "exceeded") {
+                  const budgetStatus = checkBudget(budgetState, config.budget);
+                  if (budgetStatus === "exceeded") {
                     return {
                       text: lastAssistantText,
                       steps,
@@ -215,6 +225,29 @@ export namespace ChatAgent {
                       finishReason: "max-steps",
                       compactionCount: compactionCount > 0 ? compactionCount : undefined,
                     };
+                  }
+
+                  if (budgetStatus === "reassurance" && !reassuranceIssued) {
+                    const remaining = describeBudgetRemaining(budgetState, config.budget);
+                    messages = [
+                      ...messages,
+                      createUserMessage(
+                        `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+                        "chat-agent",
+                      ),
+                    ];
+                    reassuranceIssued = true;
+                  }
+                  if (budgetStatus === "warning" && !warningIssued) {
+                    const remaining = describeBudgetRemaining(budgetState, config.budget);
+                    messages = [
+                      ...messages,
+                      createUserMessage(
+                        `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+                        "chat-agent",
+                      ),
+                    ];
+                    warningIssued = true;
                   }
 
                   budgetState = recordTurn(budgetState);

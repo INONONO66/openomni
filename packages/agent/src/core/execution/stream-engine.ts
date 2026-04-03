@@ -1,7 +1,7 @@
 import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
-import { createBudgetState, checkBudget, recordTurn } from "../budget";
+import { createBudgetState, checkBudget, recordTurn, describeBudgetRemaining } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import { ToolGuard } from "../tool-guard";
 import {
@@ -106,8 +106,12 @@ export async function* streamAgent(
         throw new Error("toolExecutor is required when tools are provided");
       }
 
+      let reassuranceIssued = false;
+      let warningIssued = false;
+
       while (true) {
-        if (checkBudget(budgetState, config.budget) === "exceeded") {
+        const budgetStatus = checkBudget(budgetState, config.budget);
+        if (budgetStatus === "exceeded") {
           yield {
             type: "complete",
             result: {
@@ -118,6 +122,31 @@ export async function* streamAgent(
             },
           };
           return;
+        }
+
+        if (budgetStatus === "reassurance" && !reassuranceIssued) {
+          const remaining = describeBudgetRemaining(budgetState, config.budget);
+          messages = [
+            ...messages,
+            createUserMessage(
+              `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+              "stream-engine",
+            ),
+          ];
+          reassuranceIssued = true;
+          yield { type: "budget_reassurance", remaining };
+        }
+        if (budgetStatus === "warning" && !warningIssued) {
+          const remaining = describeBudgetRemaining(budgetState, config.budget);
+          messages = [
+            ...messages,
+            createUserMessage(
+              `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+              "stream-engine",
+            ),
+          ];
+          warningIssued = true;
+          yield { type: "budget_warning", remaining };
         }
 
         budgetState = recordTurn(budgetState);
