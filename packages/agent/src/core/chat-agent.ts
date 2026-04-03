@@ -1,5 +1,5 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
-import type { Message, Sink } from "@openomni/protocol";
+import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
 import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
 import {
@@ -15,6 +15,7 @@ import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
 import { createAssistantMessage, createUserMessage } from "./message-factory";
+import { ToolGuard } from "./tool-guard";
 
 /**
  * ChatAgent instance interface
@@ -87,6 +88,43 @@ function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.With
   }
 
   return output;
+}
+
+function buildSystemPrompt(basePrompt: string | undefined, tools: Tool.Spec[]): string | undefined {
+  const toolPrompts = tools
+    .filter((t) => t.prompt)
+    .map((t) => `## Tool: ${t.name}\n${t.prompt}`)
+    .join("\n\n");
+
+  if (!toolPrompts) return basePrompt;
+  if (!basePrompt) return toolPrompts;
+  return `${basePrompt}\n\n---\n\n${toolPrompts}`;
+}
+
+function createGuardedToolExecutor(
+  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
+  permission: Guardrail.ToolPermission,
+): (call: Tool.Call) => Promise<Tool.Result> {
+  return async (call: Tool.Call): Promise<Tool.Result> => {
+    const verdict = ToolGuard.check(call.tool, call.input, permission);
+    if (verdict === "deny") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Blocked: Tool "${call.tool}" is not permitted by policy]`,
+        isError: true,
+      };
+    }
+    if (verdict === "require_approval") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Blocked: Tool "${call.tool}" requires approval]`,
+        isError: true,
+      };
+    }
+    return toolExecutor(call);
+  };
 }
 
 /**
@@ -202,10 +240,13 @@ export namespace ChatAgent {
                   const runInput: RunInput = {
                     messages: effectiveMessages,
                     tools: config.tools ?? [],
-                    system: config.systemPrompt,
+                    system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
                     signal: config.signal,
                     model: providerModel,
-                    toolExecutor: config.toolExecutor,
+                    toolExecutor:
+                      config.toolExecutor && config.permissions
+                        ? createGuardedToolExecutor(config.toolExecutor, config.permissions)
+                        : config.toolExecutor,
                     toolChoice: configuredToolChoice,
                     maxSteps: config.budget?.maxToolCalls ?? 24,
                   };
