@@ -17,6 +17,32 @@ export interface StepGuardContext {
   elapsedMs: number;
 }
 
+export interface HookContext {
+  toolName?: string;
+  toolCallId?: string;
+  input?: Record<string, unknown>;
+  output?: string;
+  steps: AgentStep[];
+  turnCount: number;
+  elapsedMs: number;
+}
+
+export type HookVerdict =
+  | { action: "continue" }
+  | { action: "skip"; reason?: string }
+  | { action: "abort"; reason?: string }
+  | { action: "retry"; reason?: string }
+  | { action: "transform"; input: Record<string, unknown> }
+  | { action: "inject"; message: string };
+
+export interface ExecutionHooks {
+  preToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  postToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  preTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  postTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  onError?: (context: HookContext & { error: Error }) => Promise<HookVerdict> | HookVerdict;
+}
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -61,6 +87,7 @@ export interface ChatAgentConfig {
     step: AgentStep,
     context: StepGuardContext,
   ) => Promise<StepGuardVerdict> | StepGuardVerdict;
+  hooks?: ExecutionHooks;
 }
 
 export interface ChatAgentInput {
@@ -98,6 +125,7 @@ export type AgentEvent =
   | { type: "error"; error: Error; willRetry: boolean }
   | { type: "complete"; result: AgentResult }
   | { type: "budget_warning"; remaining: string }
-  | { type: "budget_reassurance"; remaining: string };
+  | { type: "budget_reassurance"; remaining: string }
+  | { type: "hook_verdict"; timing: string; action: string; reason?: string };
 
 export type { Sink };
