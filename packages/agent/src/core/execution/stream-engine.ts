@@ -2,6 +2,7 @@ import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm
 import type { Message, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import { createBudgetState, checkBudget, recordTurn } from "../budget";
+import { createAssistantMessage, createUserMessage } from "../message-factory";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -22,71 +23,14 @@ async function resolveProviderModel(model: {
   return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
 }
 
-function createUserMessage(content: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "stream-engine";
-  const now = Date.now();
-  const info: Message.UserMessage = {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: now },
-    agent: "stream-engine",
-    model: { providerID: "", modelID: "" },
-  };
-  return {
-    info,
-    parts: [
-      {
-        id: crypto.randomUUID(),
-        sessionID,
-        messageID: id,
-        type: "text",
-        text: content,
-      },
-    ],
-  };
-}
-
-function createAssistantMessage(content: string, parentID: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "stream-engine";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID,
-    modelID: "",
-    providerID: "",
-    agent: "stream-engine",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  };
-  return {
-    info,
-    parts: [
-      {
-        id: crypto.randomUUID(),
-        sessionID,
-        messageID: id,
-        type: "text",
-        text: content,
-      },
-    ],
-  };
-}
-
 function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
   const output: Message.WithParts[] = [];
   for (const message of messages) {
     const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
     output.push(
       message.role === "user"
-        ? createUserMessage(message.content)
-        : createAssistantMessage(message.content, parentID),
+        ? createUserMessage(message.content, "stream-engine")
+        : createAssistantMessage(message.content, parentID, "stream-engine"),
     );
   }
   return output;
@@ -233,8 +177,8 @@ export async function* streamAgent(
               const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
               messages = [
                 ...messages,
-                createAssistantMessage(lastAssistantText, parentID),
-                createUserMessage(verdict.message),
+                createAssistantMessage(lastAssistantText, parentID, "stream-engine"),
+                createUserMessage(verdict.message, "stream-engine"),
               ];
               continuationCount++;
               turnIndex++;

@@ -1,5 +1,5 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
-import type { Message, Sink, Tool } from "@openomni/protocol";
+import type { Message, Sink } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
 import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
 import {
@@ -14,6 +14,7 @@ import { InMemoryCompactor } from "./execution/compaction";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
+import { createAssistantMessage, createUserMessage } from "./message-factory";
 
 /**
  * ChatAgent instance interface
@@ -49,55 +50,6 @@ async function resolveProviderModel(model: {
   return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
 }
 
-function createUserMessage(content: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "chat-agent";
-  const now = Date.now();
-  const info: Message.UserMessage = {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: now },
-    agent: "chat-agent",
-    model: { providerID: "", modelID: "" },
-  };
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-  };
-  return { info, parts: [textPart] };
-}
-
-function createAssistantMessage(content: string, parentID: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "chat-agent";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID,
-    modelID: "",
-    providerID: "",
-    agent: "chat-agent",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  };
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-  };
-  return { info, parts: [textPart] };
-}
-
 function getLastUserMessageText(messages: Message.WithParts[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].info.role === "user") {
@@ -119,7 +71,7 @@ function prependContextMessage(
   messages: Message.WithParts[],
   contextText: string,
 ): Message.WithParts[] {
-  return [createUserMessage(contextText), ...messages];
+  return [createUserMessage(contextText, "chat-agent"), ...messages];
 }
 
 function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
@@ -129,8 +81,8 @@ function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.With
     const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
     output.push(
       message.role === "user"
-        ? createUserMessage(message.content)
-        : createAssistantMessage(message.content, parentID),
+        ? createUserMessage(message.content, "chat-agent")
+        : createAssistantMessage(message.content, parentID, "chat-agent"),
     );
   }
 
@@ -286,8 +238,8 @@ export namespace ChatAgent {
                           messages.length > 0 ? messages[messages.length - 1].info.id : "";
                         messages = [
                           ...messages,
-                          createAssistantMessage(lastAssistantText, parentID),
-                          createUserMessage(verdict.message),
+                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
+                          createUserMessage(verdict.message, "chat-agent"),
                         ];
 
                         if (config.compaction) {
