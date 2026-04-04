@@ -79,11 +79,18 @@ export namespace SubagentTool {
       }
 
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
-      const childBudget = ctx?.parentBudgetState
+      const allocated = ctx?.parentBudgetState
         ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
         : definition.maxTurns
           ? { maxTurns: definition.maxTurns }
           : undefined;
+      const childBudget =
+        allocated && definition.maxTurns
+          ? {
+              ...allocated,
+              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.maxTurns),
+            }
+          : allocated;
 
       try {
         const childAgent = ChatAgent.create({

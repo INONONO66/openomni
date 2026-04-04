@@ -1,5 +1,8 @@
 import type { Guardrail } from "@openomni/protocol";
 
+const MAX_REGEX_PATTERN_LENGTH = 200;
+const MAX_INPUT_LENGTH = 10_000;
+
 function matchToolPattern(toolName: string, pattern: string): boolean {
   if (pattern === "*") return true;
   if (pattern.endsWith(".*")) return toolName.startsWith(`${pattern.slice(0, -2)}.`);
@@ -7,7 +10,11 @@ function matchToolPattern(toolName: string, pattern: string): boolean {
 }
 
 function matchInputField(input: Record<string, unknown>, field: string, pattern: string): boolean {
-  const value = String(input[field] ?? "");
+  if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return false;
+
+  const raw = String(input[field] ?? "");
+  const value = raw.length > MAX_INPUT_LENGTH ? raw.slice(0, MAX_INPUT_LENGTH) : raw;
+
   try {
     return new RegExp(pattern).test(value);
   } catch {

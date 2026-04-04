@@ -1,18 +1,5 @@
 import { describe, expect, it } from "bun:test";
-
-function buildSystemPrompt(
-  basePrompt: string | undefined,
-  tools: Array<{ name: string; prompt?: string }>,
-): string | undefined {
-  const toolPrompts = tools
-    .filter((t) => t.prompt)
-    .map((t) => `## Tool: ${t.name}\n${t.prompt}`)
-    .join("\n\n");
-
-  if (!toolPrompts) return basePrompt;
-  if (!basePrompt) return toolPrompts;
-  return `${basePrompt}\n\n---\n\n${toolPrompts}`;
-}
+import { buildSystemPrompt } from "../../src/core/prompt-builder";
 
 describe("buildSystemPrompt", () => {
   it("combines base prompt with tool prompt", () => {

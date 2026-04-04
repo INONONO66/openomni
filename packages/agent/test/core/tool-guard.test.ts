@@ -150,6 +150,46 @@ describe("ToolGuard.check", () => {
     ).toBe("allow");
   });
 
+  it("rejects regex patterns longer than 200 characters", () => {
+    expect(
+      ToolGuard.check(
+        "bash",
+        { command: "safe" },
+        {
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "a".repeat(201),
+              action: "deny",
+              priority: 10,
+            },
+          ],
+        },
+      ),
+    ).toBe("allow");
+  });
+
+  it("truncates long input values before regex matching", () => {
+    expect(
+      ToolGuard.check(
+        "bash",
+        { command: `${"a".repeat(10_000)}b` },
+        {
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "b$",
+              action: "deny",
+              priority: 10,
+            },
+          ],
+        },
+      ),
+    ).toBe("allow");
+  });
+
   it("input rule with wildcard toolPattern matches all tools", () => {
     expect(
       ToolGuard.check(

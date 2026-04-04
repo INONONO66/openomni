@@ -32,6 +32,7 @@ import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
 import { createAssistantMessage, createUserMessage } from "./message-factory";
 import { ToolGuard } from "./tool-guard";
+import { buildSystemPrompt } from "./prompt-builder";
 
 function summarizeInput(input: Record<string, unknown>): string {
   try {
@@ -113,17 +114,6 @@ function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.With
   }
 
   return output;
-}
-
-function buildSystemPrompt(basePrompt: string | undefined, tools: Tool.Spec[]): string | undefined {
-  const toolPrompts = tools
-    .filter((t) => t.prompt)
-    .map((t) => `## Tool: ${t.name}\n${t.prompt}`)
-    .join("\n\n");
-
-  if (!toolPrompts) return basePrompt;
-  if (!basePrompt) return toolPrompts;
-  return `${basePrompt}\n\n---\n\n${toolPrompts}`;
 }
 
 function createGuardedToolExecutor(
@@ -249,6 +239,18 @@ function createHookedToolExecutor(
     if (verdict.action === "transform") {
       const transformed: Tool.Call = { ...call, input: verdict.input };
       return toolExecutor(transformed);
+    }
+
+    if (verdict.action === "retry") {
+      console.warn(
+        '[hooks.preToolUse] "retry" verdict is not supported for preToolUse, treating as continue',
+      );
+    }
+
+    if (verdict.action === "inject") {
+      console.warn(
+        '[hooks.preToolUse] "inject" verdict is not supported for preToolUse, treating as continue',
+      );
     }
 
     return toolExecutor(call);
@@ -493,6 +495,28 @@ export namespace ChatAgent {
                           createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
                           createUserMessage(postTurnVerdict.message, "chat-agent"),
                         ];
+
+                        if (config.compaction) {
+                          const totalTokens =
+                            budgetState.totalInputTokens + budgetState.totalOutputTokens;
+                          if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
+                            const result = await InMemoryCompactor.compact(
+                              messages,
+                              config.compaction,
+                            );
+                            if (result.compacted) {
+                              const messagesBefore = messages.length;
+                              messages = result.messages;
+                              compactionCount += 1;
+                              config.eventEmitter?.emit("agent.compaction", {
+                                sessionId: "chat-agent",
+                                time: Date.now(),
+                                messagesBefore,
+                                messagesAfter: result.messages.length,
+                              });
+                            }
+                          }
+                        }
 
                         continuationCount++;
                         continue;

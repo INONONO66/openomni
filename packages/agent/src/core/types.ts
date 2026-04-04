@@ -1,4 +1,4 @@
-import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
+import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
 import type { Memory } from "./memory";
 
 export type ParallelToolsMode = "off" | "safe-only" | "all";
@@ -27,13 +27,7 @@ export interface HookContext {
   elapsedMs: number;
 }
 
-export type HookVerdict =
-  | { action: "continue" }
-  | { action: "skip"; reason?: string }
-  | { action: "abort"; reason?: string }
-  | { action: "retry"; reason?: string }
-  | { action: "transform"; input: Record<string, unknown> }
-  | { action: "inject"; message: string };
+export type HookVerdict = Hook.Verdict;
 
 export interface ExecutionHooks {
   preToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
@@ -131,6 +125,6 @@ export type AgentEvent =
   | { type: "complete"; result: AgentResult }
   | { type: "budget_warning"; remaining: string }
   | { type: "budget_reassurance"; remaining: string }
-  | { type: "hook_verdict"; timing: string; action: string; reason?: string };
+  | { type: "hook_verdict"; timing: Hook.Timing; action: HookVerdict["action"]; reason?: string };
 
 export type { Sink };
