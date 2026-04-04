@@ -1,6 +1,7 @@
 import { Session } from "@openomni/session";
 import { run, type Provider } from "@openomni/llm";
 import type { Message, Sink } from "@openomni/protocol";
+import { sessionCache } from "../cache/session-cache";
 import { SurfaceStore } from "./surface-store";
 import type { Adapter } from "@openomni/protocol";
 
@@ -99,6 +100,8 @@ async function processMessage(
     SurfaceStore.register(surfaceKey, sessionId);
   }
 
+  sessionCache.touch(sessionId);
+
   // 2. Create and persist user message (saved BEFORE LLM call for crash safety)
   const userMessage = createUserMessage(sessionId, config.model, text);
   Session.addMessage(sessionId, userMessage.info, { status: "received" });
@@ -126,6 +129,7 @@ async function processMessage(
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
   let outcome;
+  sessionCache.setStreaming(sessionId, true);
   try {
     outcome = await run(
       {
@@ -139,6 +143,7 @@ async function processMessage(
     );
   } finally {
     clearTimeout(timeout);
+    sessionCache.setStreaming(sessionId, false);
   }
 
   // 5. Persist assistant response and extract text
