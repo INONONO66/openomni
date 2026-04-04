@@ -4,7 +4,17 @@ export namespace Guardrail {
   export const InputRule = z.object({
     toolPattern: z.string(),
     field: z.string(),
-    pattern: z.string(),
+    pattern: z.string().refine(
+      (p) => {
+        try {
+          new RegExp(p);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "pattern must be a valid regular expression" },
+    ),
     action: z.enum(["allow", "deny", "require_approval"]),
     reason: z.string().optional(),
     priority: z.number().default(0),
