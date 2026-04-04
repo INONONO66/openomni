@@ -7,6 +7,7 @@ import type { Adapter } from "@openomni/protocol";
 import { createRouter } from "./routes";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
+import { recoverInterruptedMessages } from "./recovery";
 
 interface AdapterConfig {
   telegram?: {
@@ -83,6 +84,7 @@ async function main(): Promise<void> {
   mkdirSync(dirname(dbPath), { recursive: true });
 
   initialize({ dbPath });
+  await recoverInterruptedMessages();
 
   const sqliteAdapter = Storage.get() as unknown as {
     transaction(fn: () => void): void;

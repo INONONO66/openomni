@@ -167,6 +167,15 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     setStatus: (messageID: string, status: string): void => {
       this.db.update(messageTable).set({ status }).where(eq(messageTable.id, messageID)).run();
     },
+
+    findByStatus: (status: string): Array<{ id: string; sessionId: string }> => {
+      const rows = this.db
+        .select({ id: messageTable.id, sessionId: messageTable.session_id })
+        .from(messageTable)
+        .where(eq(messageTable.status, status))
+        .all();
+      return rows;
+    },
   };
 
   part = {

@@ -22,6 +22,7 @@ export namespace Storage {
       listPage?(sessionID: string, options: { limit: number; before?: string }): MessagePage;
       remove(sessionID: string, messageID: string): boolean;
       setStatus?(messageID: string, status: string): void;
+      findByStatus?(status: string): Array<{ id: string; sessionId: string }>;
     };
     part: {
       get(messageID: string, partID: string): Message.Part | undefined;
