@@ -1,5 +1,5 @@
-import { Message } from "@openomni/protocol";
-import { SessionInfo } from "../session/info";
+import type { Message } from "@openomni/protocol";
+import type { SessionInfo } from "../session/info";
 
 export namespace Storage {
   export interface Adapter {
@@ -21,6 +21,24 @@ export namespace Storage {
       list(messageID: string): Message.Part[];
       remove(messageID: string, partID: string): boolean;
     };
+
+    surfaceKey?: {
+      register(key: string, sessionId: string): void;
+      lookup(key: string): string | undefined;
+      delete(key: string): void;
+    };
+    artifact?: {
+      store(id: string, sessionId: string, meta: string, content: string): void;
+      get(id: string): { meta: string; content: string; sessionId: string } | undefined;
+      list(sessionId: string): Array<{ id: string; meta: string; content: string }>;
+      delete(id: string): void;
+    };
+    eventLog?: {
+      append(sessionId: string, type: string, data: string): number;
+      replay(sessionId: string): Array<{ id: number; type: string; status: string; data: string }>;
+      listIncomplete(sessionId: string): Array<{ id: number; type: string; data: string }>;
+      markComplete(sessionId: string, eventId: number): void;
+    };
   }
 }
 
@@ -28,6 +46,13 @@ export class InMemoryStorage implements Storage.Adapter {
   private sessions = new Map<string, SessionInfo>();
   private messages = new Map<string, Message.Info[]>();
   private parts = new Map<string, Message.Part[]>();
+  private surfaceKeys = new Map<string, string>();
+  private artifacts = new Map<string, { sessionId: string; meta: string; content: string }>();
+  private eventLogs = new Map<
+    string,
+    Array<{ id: number; type: string; status: string; data: string }>
+  >();
+  private eventLogSeq = 0;
 
   session = {
     get: (id: string): SessionInfo | undefined => {
@@ -100,10 +125,77 @@ export class InMemoryStorage implements Storage.Adapter {
     },
   };
 
+  surfaceKey = {
+    register: (key: string, sessionId: string): void => {
+      this.surfaceKeys.set(key, sessionId);
+    },
+    lookup: (key: string): string | undefined => {
+      return this.surfaceKeys.get(key);
+    },
+    delete: (key: string): void => {
+      this.surfaceKeys.delete(key);
+    },
+  };
+
+  artifact = {
+    store: (id: string, sessionId: string, meta: string, content: string): void => {
+      this.artifacts.set(id, { sessionId, meta, content });
+    },
+    get: (id: string): { meta: string; content: string; sessionId: string } | undefined => {
+      return this.artifacts.get(id);
+    },
+    list: (sessionId: string): Array<{ id: string; meta: string; content: string }> => {
+      const result: Array<{ id: string; meta: string; content: string }> = [];
+      for (const [id, entry] of this.artifacts) {
+        if (entry.sessionId === sessionId) {
+          result.push({ id, meta: entry.meta, content: entry.content });
+        }
+      }
+      return result;
+    },
+    delete: (id: string): void => {
+      this.artifacts.delete(id);
+    },
+  };
+
+  eventLog = {
+    append: (sessionId: string, type: string, data: string): number => {
+      const id = ++this.eventLogSeq;
+      const logs = this.eventLogs.get(sessionId) ?? [];
+      logs.push({ id, type, status: "pending", data });
+      this.eventLogs.set(sessionId, logs);
+      return id;
+    },
+    replay: (
+      sessionId: string,
+    ): Array<{ id: number; type: string; status: string; data: string }> => {
+      return this.eventLogs.get(sessionId) ?? [];
+    },
+    listIncomplete: (sessionId: string): Array<{ id: number; type: string; data: string }> => {
+      const logs = this.eventLogs.get(sessionId) ?? [];
+      return logs
+        .filter((e) => e.status !== "completed")
+        .map(({ id, type, data }) => ({ id, type, data }));
+    },
+    markComplete: (_sessionId: string, eventId: number): void => {
+      for (const logs of this.eventLogs.values()) {
+        const entry = logs.find((e) => e.id === eventId);
+        if (entry) {
+          entry.status = "completed";
+          return;
+        }
+      }
+    },
+  };
+
   clear(): void {
     this.sessions.clear();
     this.messages.clear();
     this.parts.clear();
+    this.surfaceKeys.clear();
+    this.artifacts.clear();
+    this.eventLogs.clear();
+    this.eventLogSeq = 0;
   }
 }
 

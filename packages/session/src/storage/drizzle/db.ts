@@ -9,7 +9,11 @@ export type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 const MIGRATION_DIR = join(import.meta.dir, "../../../migration");
 
 function applyMigrations(sqlite: Database): void {
-  const migrations = ["0001_initial/migration.sql", "0002_pragma_fk_indices/migration.sql"];
+  const migrations = [
+    "0001_initial/migration.sql",
+    "0002_pragma_fk_indices/migration.sql",
+    "0003_new_tables/migration.sql",
+  ];
 
   for (const migration of migrations) {
     const migrationSql = readFileSync(join(MIGRATION_DIR, migration), "utf-8");

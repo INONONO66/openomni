@@ -34,3 +34,48 @@ export const partTable = sqliteTable(
   },
   (t) => [index("idx_part_message_id").on(t.message_id, t.id)],
 );
+
+export const surfaceKeyTable = sqliteTable(
+  "surface_key",
+  {
+    key: text("key").primaryKey(),
+    session_id: text("session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
+    time_created: integer("time_created").notNull(),
+  },
+  (t) => [index("idx_surface_key_session").on(t.session_id)],
+);
+
+export const artifactTable = sqliteTable(
+  "artifact",
+  {
+    id: text("id").primaryKey(),
+    session_id: text("session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
+    meta: text("meta").notNull(),
+    content: text("content").notNull(),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+  },
+  (t) => [index("idx_artifact_session").on(t.session_id)],
+);
+
+export const eventLogTable = sqliteTable(
+  "event_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    session_id: text("session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    status: text("status").notNull().default("pending"),
+    data: text("data").notNull(),
+    time_created: integer("time_created").notNull(),
+  },
+  (t) => [
+    index("idx_event_log_session").on(t.session_id),
+    index("idx_event_log_session_id").on(t.session_id, t.id),
+  ],
+);
