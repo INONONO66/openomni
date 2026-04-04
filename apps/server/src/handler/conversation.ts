@@ -99,9 +99,9 @@ async function processMessage(
     SurfaceStore.register(surfaceKey, sessionId);
   }
 
-  // 2. Create and persist user message
+  // 2. Create and persist user message (saved BEFORE LLM call for crash safety)
   const userMessage = createUserMessage(sessionId, config.model, text);
-  Session.addMessage(sessionId, userMessage.info);
+  Session.addMessage(sessionId, userMessage.info, { status: "received" });
   for (const part of userMessage.parts) {
     Session.addPart(userMessage.info.id, part);
   }
@@ -110,6 +110,7 @@ async function processMessage(
   const history = loadHistory(sessionId);
 
   // 4. Call LLM with timeout
+  Session.updateMessageStatus(userMessage.info.id, "processing");
   let assistantMessage: Message.WithParts | undefined;
 
   const sink: Sink = {
@@ -154,6 +155,8 @@ async function processMessage(
       .map((p) => p.text)
       .join("");
   }
+
+  Session.updateMessageStatus(userMessage.info.id, "completed");
 
   if (outcome.type === "error") {
     const msg = outcome.error?.message ?? "Unknown error";

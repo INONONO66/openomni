@@ -163,6 +163,10 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         .all();
       return deleted.length > 0;
     },
+
+    setStatus: (messageID: string, status: string): void => {
+      this.db.update(messageTable).set({ status }).where(eq(messageTable.id, messageID)).run();
+    },
   };
 
   part = {

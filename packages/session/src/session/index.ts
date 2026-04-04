@@ -168,10 +168,20 @@ export namespace Session {
     return exists;
   }
 
-  export function addMessage(sessionID: string, message: Message.Info): void {
-    Storage.getAdapter().message.set(sessionID, message);
+  export function addMessage(
+    sessionID: string,
+    message: Message.Info,
+    options?: { status?: "received" | "processing" | "completed" },
+  ): void {
+    const adapter = Storage.getAdapter();
+    adapter.message.set(sessionID, message);
 
-    const session = Storage.getAdapter().session.get(sessionID);
+    const status = options?.status ?? "completed";
+    if (status !== "completed" && adapter.message.setStatus) {
+      adapter.message.setStatus(message.id, status);
+    }
+
+    const session = adapter.session.get(sessionID);
     if (!session) return;
 
     const updated: Info = {
@@ -190,8 +200,18 @@ export namespace Session {
       }),
     };
 
-    Storage.getAdapter().session.set(sessionID, updated);
+    adapter.session.set(sessionID, updated);
     Bus.publish(Event.Updated, { info: updated });
+  }
+
+  export function updateMessageStatus(
+    messageID: string,
+    status: "received" | "processing" | "completed",
+  ): void {
+    const adapter = Storage.getAdapter();
+    if (adapter.message.setStatus) {
+      adapter.message.setStatus(messageID, status);
+    }
   }
 
   export function getMessages(sessionID: string): Message.Info[] {

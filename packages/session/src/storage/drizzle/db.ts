@@ -9,15 +9,21 @@ export type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 const MIGRATION_DIR = join(import.meta.dir, "../../../migration");
 
 function applyMigrations(sqlite: Database): void {
+  sqlite.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
+
   const migrations = [
     "0001_initial/migration.sql",
     "0002_pragma_fk_indices/migration.sql",
     "0003_new_tables/migration.sql",
+    "0004_message_status/migration.sql",
   ];
 
   for (const migration of migrations) {
+    const applied = sqlite.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration);
+    if (applied) continue;
     const migrationSql = readFileSync(join(MIGRATION_DIR, migration), "utf-8");
     sqlite.exec(migrationSql);
+    sqlite.exec(`INSERT INTO _migrations (name) VALUES ('${migration}')`);
   }
 }
 

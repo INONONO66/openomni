@@ -16,6 +16,7 @@ export const messageTable = sqliteTable(
       .references(() => sessionTable.id, { onDelete: "cascade" }),
     data: text("data").notNull(),
     role: text("role"),
+    status: text("status").notNull().default("completed"),
     time_created: integer("time_created").notNull(),
   },
   (t) => [index("idx_message_session_time").on(t.session_id, t.time_created, t.id)],

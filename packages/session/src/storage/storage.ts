@@ -21,6 +21,7 @@ export namespace Storage {
       list(sessionID: string): Message.Info[];
       listPage?(sessionID: string, options: { limit: number; before?: string }): MessagePage;
       remove(sessionID: string, messageID: string): boolean;
+      setStatus?(messageID: string, status: string): void;
     };
     part: {
       get(messageID: string, partID: string): Message.Part | undefined;
