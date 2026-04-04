@@ -4,6 +4,34 @@ import { Guardrail } from "../src/guardrail/index";
 const it = test;
 
 describe("Guardrail schemas", () => {
+  describe("InputRule", () => {
+    it("parses a basic rule", () => {
+      const result = Guardrail.InputRule.parse({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+      });
+
+      expect(result.toolPattern).toBe("bash");
+      expect(result.priority).toBe(0);
+    });
+
+    it("parses a rule with reason and priority", () => {
+      const result = Guardrail.InputRule.parse({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+        reason: "dangerous",
+        priority: 10,
+      });
+
+      expect(result.reason).toBe("dangerous");
+      expect(result.priority).toBe(10);
+    });
+  });
+
   describe("ToolPermission", () => {
     it("parses empty object (all optional)", () => {
       expect(() => Guardrail.ToolPermission.parse({})).not.toThrow();
@@ -28,6 +56,27 @@ describe("Guardrail schemas", () => {
         requireApproval: ["sensitive"],
       });
       expect(result.requireApproval).toEqual(["sensitive"]);
+    });
+
+    it("parses with inputRules", () => {
+      const result = Guardrail.ToolPermission.parse({
+        inputRules: [
+          {
+            toolPattern: "bash",
+            field: "command",
+            pattern: "rm",
+            action: "deny",
+          },
+        ],
+      });
+
+      expect(result.inputRules?.[0]).toMatchObject({
+        toolPattern: "bash",
+        field: "command",
+        pattern: "rm",
+        action: "deny",
+        priority: 0,
+      });
     });
   });
 
@@ -75,6 +124,8 @@ describe("Guardrail schemas", () => {
       expect(result.maxDepth).toBe(3);
       expect(result.budgetPolicy).toBe("inherit");
       expect(result.abortPropagation).toBe(true);
+      expect(result.budgetAllocation).toBe(0.5);
+      expect(result.reserveForParent).toBe(0.2);
     });
 
     it("parses with explicit maxDepth", () => {
@@ -91,6 +142,40 @@ describe("Guardrail schemas", () => {
         Guardrail.DelegationPolicy.parse({
           budgetPolicy: "shared",
           abortPropagation: true,
+        }),
+      ).toThrow();
+    });
+
+    it("parses split policy", () => {
+      expect(
+        Guardrail.DelegationPolicy.parse({
+          budgetPolicy: "split",
+          budgetAllocation: 0.5,
+          reserveForParent: 0.2,
+          maxDepth: 3,
+          abortPropagation: false,
+        }),
+      ).toBeTruthy();
+    });
+
+    it("keeps backward compatibility for inherit without allocation fields", () => {
+      const result = Guardrail.DelegationPolicy.parse({
+        budgetPolicy: "inherit",
+        maxDepth: 3,
+        abortPropagation: false,
+      });
+
+      expect(result.budgetAllocation).toBe(0.5);
+      expect(result.reserveForParent).toBe(0.2);
+    });
+
+    it("rejects budgetAllocation greater than 1", () => {
+      expect(() =>
+        Guardrail.DelegationPolicy.parse({
+          budgetPolicy: "split",
+          budgetAllocation: 1.5,
+          maxDepth: 3,
+          abortPropagation: false,
         }),
       ).toThrow();
     });

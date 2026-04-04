@@ -1,12 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { checkDelegation } from "../../src/core/delegation";
+import { allocateBudget, checkDelegation } from "../../src/core/delegation";
+import { createBudgetState } from "../../src/core/budget";
 import type { DelegationContext } from "../../src/core/delegation";
 
 const makeContext = (overrides: Partial<DelegationContext> = {}): DelegationContext => ({
   depth: 0,
   maxDepth: 3,
   visitedAgents: new Set(),
-  parentAbort: new AbortController().signal,
+  parentAbort: {} as any,
   budgetPolicy: "inherit",
   ...overrides,
 });
@@ -49,5 +50,62 @@ describe("checkDelegation", () => {
       visitedAgents: new Set(["agent-a"]),
     });
     expect(checkDelegation("agent-a", ctx)).toBe("circular_detected");
+  });
+});
+
+describe("allocateBudget", () => {
+  it("independent returns fixed default budget", () => {
+    const state = createBudgetState();
+    const result = allocateBudget(state, undefined, { budgetPolicy: "independent" });
+    expect(result.maxTurns).toBe(10);
+    expect(result.maxToolCalls).toBe(20);
+  });
+
+  it("inherit passes remaining turns to child", () => {
+    const state = { ...createBudgetState(), turns: 5 };
+    const result = allocateBudget(state, { maxTurns: 24 }, { budgetPolicy: "inherit" });
+    expect(result.maxTurns).toBe(19);
+  });
+
+  it("split allocates remaining × (1-reserve) × allocation", () => {
+    const state = { ...createBudgetState(), turns: 12 };
+    const result = allocateBudget(
+      state,
+      { maxTurns: 24 },
+      {
+        budgetPolicy: "split",
+        budgetAllocation: 0.5,
+        reserveForParent: 0.2,
+      },
+    );
+    expect(result.maxTurns).toBe(4);
+  });
+
+  it("split with near-zero remaining returns at least 1 turn", () => {
+    const state = { ...createBudgetState(), turns: 23 };
+    const result = allocateBudget(
+      state,
+      { maxTurns: 24 },
+      {
+        budgetPolicy: "split",
+        budgetAllocation: 0.5,
+        reserveForParent: 0.2,
+      },
+    );
+    expect(result.maxTurns).toBeGreaterThanOrEqual(1);
+  });
+
+  it("split with cost budget allocates proportionally", () => {
+    const state = { ...createBudgetState(), totalCost: 0.5 };
+    const result = allocateBudget(
+      state,
+      { maxTurns: 24, maxCost: 1.0 },
+      {
+        budgetPolicy: "split",
+        budgetAllocation: 0.5,
+        reserveForParent: 0.2,
+      },
+    );
+    expect(result.maxCost).toBeCloseTo(0.2, 5);
   });
 });

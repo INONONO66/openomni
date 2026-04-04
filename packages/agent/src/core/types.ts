@@ -1,4 +1,4 @@
-import type { Tool, Sink, Guardrail, Message } from "@openomni/protocol";
+import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
 import type { Memory } from "./memory";
 
 export type ParallelToolsMode = "off" | "safe-only" | "all";
@@ -17,6 +17,30 @@ export interface StepGuardContext {
   elapsedMs: number;
 }
 
+export interface HookContext {
+  toolName?: string;
+  toolCallId?: string;
+  input?: Record<string, unknown>;
+  output?: string;
+  steps: AgentStep[];
+  turnCount: number;
+  elapsedMs: number;
+}
+
+export type HookVerdict = Hook.Verdict;
+
+export interface ExecutionHooks {
+  preToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  postToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  preTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  postTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
+  onError?: (context: HookContext & { error: Error }) => Promise<HookVerdict> | HookVerdict;
+}
+
+export interface AgentEventEmitter {
+  emit(eventName: string, data: Record<string, unknown>): void;
+}
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -33,6 +57,8 @@ export interface AgentBudget {
   maxOutputTokens?: number;
   maxTotalTokens?: number;
   maxCost?: number;
+  warningThreshold?: number; // 0.0-1.0, default 0.8
+  reassuranceThreshold?: number; // 0.0-1.0, default 0.6
 }
 
 export interface ChatAgentConfig {
@@ -59,6 +85,8 @@ export interface ChatAgentConfig {
     step: AgentStep,
     context: StepGuardContext,
   ) => Promise<StepGuardVerdict> | StepGuardVerdict;
+  hooks?: ExecutionHooks;
+  eventEmitter?: AgentEventEmitter;
 }
 
 export interface ChatAgentInput {
@@ -94,6 +122,9 @@ export type AgentEvent =
   | { type: "tool_call_complete"; toolCallId: string; result: Tool.Result }
   | { type: "turn_complete"; turnIndex: number; usage: TokenUsage }
   | { type: "error"; error: Error; willRetry: boolean }
-  | { type: "complete"; result: AgentResult };
+  | { type: "complete"; result: AgentResult }
+  | { type: "budget_warning"; remaining: string }
+  | { type: "budget_reassurance"; remaining: string }
+  | { type: "hook_verdict"; timing: Hook.Timing; action: HookVerdict["action"]; reason?: string };
 
 export type { Sink };

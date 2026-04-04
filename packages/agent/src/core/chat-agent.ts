@@ -1,7 +1,23 @@
 import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
-import type { Message, Sink, Tool } from "@openomni/protocol";
-import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
-import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
+import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
+import type {
+  AgentEventEmitter,
+  ChatAgentConfig,
+  ChatAgentInput,
+  AgentResult,
+  AgentStep,
+  ExecutionHooks,
+  HookContext,
+  HookVerdict,
+  TokenUsage,
+} from "./types";
+import {
+  createBudgetState,
+  checkBudget,
+  recordTurn,
+  recordTokenUsage,
+  describeBudgetRemaining,
+} from "./budget";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -14,6 +30,18 @@ import { InMemoryCompactor } from "./execution/compaction";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
+import { createAssistantMessage, createUserMessage } from "./message-factory";
+import { ToolGuard } from "./tool-guard";
+import { buildSystemPrompt } from "./prompt-builder";
+
+function summarizeInput(input: Record<string, unknown>): string {
+  try {
+    const str = JSON.stringify(input);
+    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+  } catch {
+    return "[unserializable]";
+  }
+}
 
 /**
  * ChatAgent instance interface
@@ -49,55 +77,6 @@ async function resolveProviderModel(model: {
   return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
 }
 
-function createUserMessage(content: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "chat-agent";
-  const now = Date.now();
-  const info: Message.UserMessage = {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: now },
-    agent: "chat-agent",
-    model: { providerID: "", modelID: "" },
-  };
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-  };
-  return { info, parts: [textPart] };
-}
-
-function createAssistantMessage(content: string, parentID: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "chat-agent";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID,
-    modelID: "",
-    providerID: "",
-    agent: "chat-agent",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  };
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text: content,
-  };
-  return { info, parts: [textPart] };
-}
-
 function getLastUserMessageText(messages: Message.WithParts[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].info.role === "user") {
@@ -119,7 +98,7 @@ function prependContextMessage(
   messages: Message.WithParts[],
   contextText: string,
 ): Message.WithParts[] {
-  return [createUserMessage(contextText), ...messages];
+  return [createUserMessage(contextText, "chat-agent"), ...messages];
 }
 
 function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
@@ -129,12 +108,153 @@ function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.With
     const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
     output.push(
       message.role === "user"
-        ? createUserMessage(message.content)
-        : createAssistantMessage(message.content, parentID),
+        ? createUserMessage(message.content, "chat-agent")
+        : createAssistantMessage(message.content, parentID, "chat-agent"),
     );
   }
 
   return output;
+}
+
+function createGuardedToolExecutor(
+  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
+  permission: Guardrail.ToolPermission,
+  eventEmitter?: AgentEventEmitter,
+  stepGuard?: ChatAgentConfig["stepGuard"],
+): (call: Tool.Call) => Promise<Tool.Result> {
+  return async (call: Tool.Call): Promise<Tool.Result> => {
+    const verdict = ToolGuard.check(call.tool, call.input, permission);
+    if (verdict === "deny") {
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "chat-agent",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "denied by policy",
+      });
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Blocked: Tool "${call.tool}" is not permitted by policy]`,
+        isError: true,
+      };
+    }
+    if (verdict === "require_approval") {
+      if (stepGuard) {
+        const syntheticStep: AgentStep = {
+          type: "tool-call",
+          content: `Tool "${call.tool}" requires approval`,
+          toolCalls: [call],
+        };
+        const guardContext = {
+          steps: [],
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          turnCount: 0,
+          isCompletion: false,
+          continuationCount: 0,
+          elapsedMs: 0,
+        };
+        try {
+          const guardVerdict = await stepGuard(syntheticStep, guardContext);
+          if (guardVerdict.action === "continue") {
+            eventEmitter?.emit("agent.tool.invoked", {
+              sessionId: "chat-agent",
+              time: Date.now(),
+              toolCallId: call.id,
+              toolName: call.tool,
+              inputSummary: summarizeInput(call.input),
+            });
+            return toolExecutor(call);
+          }
+        } catch (_error) {
+          void _error;
+        }
+      }
+      eventEmitter?.emit("agent.tool.blocked", {
+        sessionId: "chat-agent",
+        time: Date.now(),
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason: "requires approval",
+      });
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Blocked: Tool "${call.tool}" requires approval]`,
+        isError: true,
+      };
+    }
+    eventEmitter?.emit("agent.tool.invoked", {
+      sessionId: "chat-agent",
+      time: Date.now(),
+      toolCallId: call.id,
+      toolName: call.tool,
+      inputSummary: summarizeInput(call.input),
+    });
+    return toolExecutor(call);
+  };
+}
+
+function createHookedToolExecutor(
+  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
+  hooks: ExecutionHooks | undefined,
+  getContext: () => Omit<HookContext, "toolName" | "toolCallId" | "input">,
+): (call: Tool.Call) => Promise<Tool.Result> {
+  if (!hooks?.preToolUse) return toolExecutor;
+
+  return async (call: Tool.Call): Promise<Tool.Result> => {
+    const context: HookContext = {
+      ...getContext(),
+      toolName: call.tool,
+      toolCallId: call.id,
+      input: call.input,
+    };
+
+    let verdict: HookVerdict;
+    try {
+      verdict = await hooks.preToolUse!(context);
+    } catch (err) {
+      console.warn("[hooks.preToolUse] threw, treating as continue:", err);
+      verdict = { action: "continue" };
+    }
+
+    if (verdict.action === "skip") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Skipped: ${verdict.reason ?? "hook"}]`,
+        isError: false,
+      };
+    }
+
+    if (verdict.action === "abort") {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Aborted: ${verdict.reason ?? "hook"}]`,
+        isError: true,
+      };
+    }
+
+    if (verdict.action === "transform") {
+      const transformed: Tool.Call = { ...call, input: verdict.input };
+      return toolExecutor(transformed);
+    }
+
+    if (verdict.action === "retry") {
+      console.warn(
+        '[hooks.preToolUse] "retry" verdict is not supported for preToolUse, treating as continue',
+      );
+    }
+
+    if (verdict.action === "inject") {
+      console.warn(
+        '[hooks.preToolUse] "inject" verdict is not supported for preToolUse, treating as continue',
+      );
+    }
+
+    return toolExecutor(call);
+  };
 }
 
 /**
@@ -216,8 +336,12 @@ export namespace ChatAgent {
                   throw new Error("toolExecutor is required when tools are provided");
                 }
 
+                let reassuranceIssued = false;
+                let warningIssued = false;
+
                 while (true) {
-                  if (checkBudget(budgetState, config.budget) === "exceeded") {
+                  const budgetStatus = checkBudget(budgetState, config.budget);
+                  if (budgetStatus === "exceeded") {
                     return {
                       text: lastAssistantText,
                       steps,
@@ -225,6 +349,47 @@ export namespace ChatAgent {
                       finishReason: "max-steps",
                       compactionCount: compactionCount > 0 ? compactionCount : undefined,
                     };
+                  }
+
+                  config.eventEmitter?.emit("agent.turn.start", {
+                    sessionId: "chat-agent",
+                    time: Date.now(),
+                    turnIndex: budgetState.turns,
+                  });
+
+                  if (budgetStatus === "reassurance" && !reassuranceIssued) {
+                    const remaining = describeBudgetRemaining(budgetState, config.budget);
+                    messages = [
+                      ...messages,
+                      createUserMessage(
+                        `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+                        "chat-agent",
+                      ),
+                    ];
+                    reassuranceIssued = true;
+                    config.eventEmitter?.emit("agent.budget.reassurance", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      remaining,
+                      threshold: config.budget?.reassuranceThreshold ?? 0.6,
+                    });
+                  }
+                  if (budgetStatus === "warning" && !warningIssued) {
+                    const remaining = describeBudgetRemaining(budgetState, config.budget);
+                    messages = [
+                      ...messages,
+                      createUserMessage(
+                        `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+                        "chat-agent",
+                      ),
+                    ];
+                    warningIssued = true;
+                    config.eventEmitter?.emit("agent.budget.warning", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      remaining,
+                      threshold: config.budget?.warningThreshold ?? 0.8,
+                    });
                   }
 
                   budgetState = recordTurn(budgetState);
@@ -247,13 +412,31 @@ export namespace ChatAgent {
                     }
                   }
 
+                  const baseExecutor =
+                    config.toolExecutor && config.permissions
+                      ? createGuardedToolExecutor(
+                          config.toolExecutor,
+                          config.permissions,
+                          config.eventEmitter,
+                          config.stepGuard,
+                        )
+                      : config.toolExecutor;
+
+                  const hookedExecutor = baseExecutor
+                    ? createHookedToolExecutor(baseExecutor, config.hooks, () => ({
+                        steps,
+                        turnCount: budgetState.turns,
+                        elapsedMs: Date.now() - startTime,
+                      }))
+                    : undefined;
+
                   const runInput: RunInput = {
                     messages: effectiveMessages,
                     tools: config.tools ?? [],
-                    system: config.systemPrompt,
+                    system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
                     signal: config.signal,
                     model: providerModel,
-                    toolExecutor: config.toolExecutor,
+                    toolExecutor: hookedExecutor,
                     toolChoice: configuredToolChoice,
                     maxSteps: config.budget?.maxToolCalls ?? 24,
                   };
@@ -261,6 +444,18 @@ export namespace ChatAgent {
                   const outcome = await llmRun(runInput, trackingSink);
 
                   if (outcome.type === "stop") {
+                    config.eventEmitter?.emit("agent.turn.complete", {
+                      sessionId: "chat-agent",
+                      time: Date.now(),
+                      turnIndex: budgetState.turns,
+                      usage: {
+                        inputTokens: totalUsage.inputTokens,
+                        outputTokens: totalUsage.outputTokens,
+                        totalTokens: totalUsage.totalTokens,
+                        totalCost: totalUsage.totalCost,
+                      },
+                    });
+
                     const step: AgentStep = {
                       type: "text",
                       content: lastAssistantText,
@@ -271,7 +466,73 @@ export namespace ChatAgent {
                       await config.onStepFinish(step);
                     }
 
-                    if (config.stepGuard) {
+                    if (config.hooks?.postTurn) {
+                      if (config.stepGuard) {
+                        console.warn(
+                          "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
+                        );
+                      }
+
+                      const hookContext: HookContext = {
+                        steps,
+                        turnCount: budgetState.turns,
+                        elapsedMs: Date.now() - startTime,
+                      };
+
+                      let postTurnVerdict: HookVerdict;
+                      try {
+                        postTurnVerdict = await config.hooks.postTurn(hookContext);
+                      } catch (err) {
+                        console.warn("[hooks.postTurn] threw, treating as continue:", err);
+                        postTurnVerdict = { action: "continue" };
+                      }
+
+                      if (postTurnVerdict.action === "inject") {
+                        const parentID =
+                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                        messages = [
+                          ...messages,
+                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
+                          createUserMessage(postTurnVerdict.message, "chat-agent"),
+                        ];
+
+                        if (config.compaction) {
+                          const totalTokens =
+                            budgetState.totalInputTokens + budgetState.totalOutputTokens;
+                          if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
+                            const result = await InMemoryCompactor.compact(
+                              messages,
+                              config.compaction,
+                            );
+                            if (result.compacted) {
+                              const messagesBefore = messages.length;
+                              messages = result.messages;
+                              compactionCount += 1;
+                              config.eventEmitter?.emit("agent.compaction", {
+                                sessionId: "chat-agent",
+                                time: Date.now(),
+                                messagesBefore,
+                                messagesAfter: result.messages.length,
+                              });
+                            }
+                          }
+                        }
+
+                        continuationCount++;
+                        continue;
+                      }
+
+                      if (postTurnVerdict.action === "abort") {
+                        return {
+                          text: lastAssistantText,
+                          steps,
+                          usage: totalUsage,
+                          finishReason: "stop",
+                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                          guardAborted: true,
+                        };
+                      }
+                    } else if (config.stepGuard) {
                       const verdict = await config.stepGuard(step, {
                         steps,
                         usage: totalUsage,
@@ -286,8 +547,8 @@ export namespace ChatAgent {
                           messages.length > 0 ? messages[messages.length - 1].info.id : "";
                         messages = [
                           ...messages,
-                          createAssistantMessage(lastAssistantText, parentID),
-                          createUserMessage(verdict.message),
+                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
+                          createUserMessage(verdict.message, "chat-agent"),
                         ];
 
                         if (config.compaction) {
@@ -299,8 +560,15 @@ export namespace ChatAgent {
                               config.compaction,
                             );
                             if (result.compacted) {
+                              const messagesBefore = messages.length;
                               messages = result.messages;
                               compactionCount += 1;
+                              config.eventEmitter?.emit("agent.compaction", {
+                                sessionId: "chat-agent",
+                                time: Date.now(),
+                                messagesBefore,
+                                messagesAfter: result.messages.length,
+                              });
                             }
                           }
                         }
@@ -346,6 +614,13 @@ export namespace ChatAgent {
 
                 if (shouldRetry(retryPolicy, retryReason, attempt)) {
                   const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+                  config.eventEmitter?.emit("agent.error.retry", {
+                    sessionId: "chat-agent",
+                    time: Date.now(),
+                    attempt,
+                    maxAttempts: retryPolicy.maxAttempts,
+                    error: lastError,
+                  });
                   await sleep(backoffMs);
                   attempt += 1;
                   continue;

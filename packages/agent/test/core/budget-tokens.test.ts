@@ -22,7 +22,7 @@ describe("BudgetState token tracking", () => {
     let state = createBudgetState();
     state = recordTokenUsage(state, 1000, 0, 0);
     expect(checkBudget(state, { maxInputTokens: 999 })).toBe("exceeded");
-    expect(checkBudget(state, { maxInputTokens: 1001 })).toBe("ok");
+    expect(checkBudget(state, { maxInputTokens: 1001 })).toBe("warning");
   });
 
   it("checkBudget exceeds when maxOutputTokens reached", () => {
@@ -35,13 +35,13 @@ describe("BudgetState token tracking", () => {
     let state = createBudgetState();
     state = recordTokenUsage(state, 300, 200, 0);
     expect(checkBudget(state, { maxTotalTokens: 499 })).toBe("exceeded");
-    expect(checkBudget(state, { maxTotalTokens: 501 })).toBe("ok");
+    expect(checkBudget(state, { maxTotalTokens: 501 })).toBe("warning");
   });
 
   it("checkBudget exceeds when maxCost reached", () => {
     let state = createBudgetState();
     state = recordTokenUsage(state, 0, 0, 1.5);
     expect(checkBudget(state, { maxCost: 1.0 })).toBe("exceeded");
-    expect(checkBudget(state, { maxCost: 2.0 })).toBe("ok");
+    expect(checkBudget(state, { maxCost: 2.0 })).toBe("reassurance");
   });
 });

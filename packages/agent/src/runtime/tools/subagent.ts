@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
 import { ChatAgent } from "../../core/chat-agent";
-import { checkDelegation, type DelegationContext } from "../../core/delegation";
+import { allocateBudget, checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
 import { AgentMessenger } from "../messenger/messenger";
 import { BusTransport } from "../messenger/transport";
@@ -79,6 +79,18 @@ export namespace SubagentTool {
       }
 
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
+      const allocated = ctx?.parentBudgetState
+        ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
+        : definition.maxTurns
+          ? { maxTurns: definition.maxTurns }
+          : undefined;
+      const childBudget =
+        allocated && definition.maxTurns
+          ? {
+              ...allocated,
+              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.maxTurns),
+            }
+          : allocated;
 
       try {
         const childAgent = ChatAgent.create({
@@ -87,7 +99,7 @@ export namespace SubagentTool {
             id: "claude-3-haiku-20240307",
           },
           systemPrompt: definition.systemPrompt,
-          budget: definition.maxTurns ? { maxTurns: definition.maxTurns } : undefined,
+          budget: childBudget,
           permissions: definition.permissions,
           signal: childAbort,
         });
@@ -95,6 +107,14 @@ export namespace SubagentTool {
         const result = await childAgent.run({
           messages: [{ role: "user", content: prompt }],
         });
+
+        if (ctx?.onChildBudgetConsumed && result.usage) {
+          ctx.onChildBudgetConsumed(
+            result.usage.inputTokens,
+            result.usage.outputTokens,
+            result.usage.totalCost ?? 0,
+          );
+        }
 
         const messenger = AgentMessenger.create(new BusTransport(), {
           allowPatterns: options?.messengerAllowPatterns,
