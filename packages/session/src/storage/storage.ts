@@ -55,7 +55,6 @@ export class InMemoryStorage implements Storage.Adapter {
   private sessions = new Map<string, SessionInfo>();
   private messages = new Map<string, Message.Info[]>();
   private parts = new Map<string, Message.Part[]>();
-  private surfaceKeys = new Map<string, string>();
   private artifacts = new Map<string, { sessionId: string; meta: string; content: string }>();
   private eventLogs = new Map<
     string,
@@ -171,18 +170,6 @@ export class InMemoryStorage implements Storage.Adapter {
     },
   };
 
-  surfaceKey = {
-    register: (key: string, sessionId: string): void => {
-      this.surfaceKeys.set(key, sessionId);
-    },
-    lookup: (key: string): string | undefined => {
-      return this.surfaceKeys.get(key);
-    },
-    delete: (key: string): void => {
-      this.surfaceKeys.delete(key);
-    },
-  };
-
   artifact = {
     store: (id: string, sessionId: string, meta: string, content: string): void => {
       this.artifacts.set(id, { sessionId, meta, content });
@@ -247,7 +234,6 @@ export class InMemoryStorage implements Storage.Adapter {
     this.sessions.clear();
     this.messages.clear();
     this.parts.clear();
-    this.surfaceKeys.clear();
     this.artifacts.clear();
     this.eventLogs.clear();
     this.eventLogSeq = 0;

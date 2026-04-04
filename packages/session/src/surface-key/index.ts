@@ -14,7 +14,13 @@
  *
  * The `ChannelKind` type defines recognized channel/peer kinds.
  * Use `SurfaceKey.fromChannel()` for structured creation with explicit kind.
+ *
+ * Storage: uses Storage.Adapter.surfaceKey (SQLite) when available,
+ * falls back to in-memory Maps. In-memory reverse index is always
+ * maintained for listBySession() support.
  */
+
+import { Storage } from "../storage/storage";
 
 export namespace SurfaceKey {
   /**
@@ -119,6 +125,10 @@ export namespace SurfaceKey {
     return { surface, namespace, kind, id, threadId };
   }
   export function lookup(key: string): string | undefined {
+    const sk = Storage.get().surfaceKey;
+    if (sk) {
+      return sk.lookup(key) ?? keyToSession.get(key);
+    }
     return keyToSession.get(key);
   }
 
@@ -147,6 +157,11 @@ export namespace SurfaceKey {
       }
     }
 
+    const sk = Storage.get().surfaceKey;
+    if (sk) {
+      sk.register(key, sessionId);
+    }
+
     keyToSession.set(key, sessionId);
 
     if (!sessionToKeys.has(sessionId)) {
@@ -161,11 +176,13 @@ export namespace SurfaceKey {
    * @returns true if key was found and removed, false otherwise
    */
   export function unregister(key: string): boolean {
-    const sessionId = keyToSession.get(key);
+    const sk = Storage.get().surfaceKey;
+    const sessionId = keyToSession.get(key) ?? sk?.lookup(key);
     if (!sessionId) {
       return false;
     }
 
+    sk?.delete(key);
     keyToSession.delete(key);
 
     const keys = sessionToKeys.get(sessionId);
