@@ -12,7 +12,7 @@ import { AuthCommand } from "./cmd/auth";
 import { ConfigCommand } from "./cmd/config";
 
 ModelsDev.init();
-Storage.initialize({ cwd: homedir() });
+Storage.initialize({ dbPath: join(homedir(), ".openomni", "storage.db") });
 
 const taskDir = join(homedir(), ".openomni", "tasks");
 mkdirSync(taskDir, { recursive: true });

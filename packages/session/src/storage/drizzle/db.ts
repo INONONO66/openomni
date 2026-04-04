@@ -21,10 +21,19 @@ function applyMigrations(sqlite: Database): void {
   for (const migration of migrations) {
     const applied = sqlite.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration);
     if (applied) continue;
+    if (migration === "0004_message_status/migration.sql" && hasMessageStatusColumn(sqlite)) {
+      sqlite.exec(`INSERT INTO _migrations (name) VALUES ('${migration}')`);
+      continue;
+    }
     const migrationSql = readFileSync(join(MIGRATION_DIR, migration), "utf-8");
     sqlite.exec(migrationSql);
     sqlite.exec(`INSERT INTO _migrations (name) VALUES ('${migration}')`);
   }
+}
+
+function hasMessageStatusColumn(sqlite: Database): boolean {
+  const rows = sqlite.query("PRAGMA table_info(message)").all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === "status");
 }
 
 export function createDb(dbPath: string): { db: DrizzleDb; sqlite: Database } {

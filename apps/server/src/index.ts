@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { Auth, Provider } from "@openomni/llm";
 import { Storage, initialize } from "@openomni/session";
 import type { Adapter } from "@openomni/protocol";
@@ -82,12 +82,7 @@ async function main(): Promise<void> {
   const dbPath = process.env.OPENOMNI_DB_PATH ?? join(homedir(), ".openomni", "storage.db");
   mkdirSync(dirname(dbPath), { recursive: true });
 
-  const storageRoot = dirname(dbPath);
-  initialize({
-    backend: "sqlite",
-    cwd: dirname(storageRoot),
-    dir: relative(dirname(storageRoot), storageRoot),
-  });
+  initialize({ dbPath });
 
   const sqliteAdapter = Storage.get() as unknown as {
     transaction(fn: () => void): void;

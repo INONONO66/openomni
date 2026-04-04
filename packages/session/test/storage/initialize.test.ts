@@ -1,10 +1,8 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Storage, InMemoryStorage } from "../../src/storage/storage";
-import { CachedStorageAdapter } from "../../src/storage/cache";
-import { FileStorageAdapter } from "../../src/storage/file-storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initialize } from "../../src/storage/initialize";
 
@@ -22,35 +20,23 @@ afterEach(() => {
 
 describe("Storage.initialize", () => {
   test("creates storage directory", () => {
-    initialize({ cwd: tmpDir });
+    initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
     expect(existsSync(join(tmpDir, ".openomni"))).toBe(true);
   });
 
-  test("creates subdirectories for file storage backend", () => {
-    initialize({ cwd: tmpDir, backend: "file" });
-    const base = join(tmpDir, ".openomni");
-    expect(existsSync(join(base, "sessions"))).toBe(true);
-    expect(existsSync(join(base, "messages"))).toBe(true);
-    expect(existsSync(join(base, "parts"))).toBe(true);
-  });
-
   test("default backend is sqlite", () => {
-    initialize({ cwd: tmpDir });
+    initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
     expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
-  test("file backend configures CachedStorageAdapter", () => {
-    initialize({ cwd: tmpDir, backend: "file" });
-    expect(Storage.getAdapter()).toBeInstanceOf(CachedStorageAdapter);
-  });
-
   test("adapter is not InMemoryStorage after initialize", () => {
-    initialize({ cwd: tmpDir });
+    initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
     expect(Storage.getAdapter()).not.toBeInstanceOf(InMemoryStorage);
   });
 
   test("sessions persist to disk with sqlite backend", () => {
-    initialize({ cwd: tmpDir });
+    const dbPath = join(tmpDir, ".openomni", "storage.db");
+    initialize({ dbPath });
 
     const session = {
       id: "s1",
@@ -61,7 +47,6 @@ describe("Storage.initialize", () => {
     Storage.getAdapter().session.set("s1", session);
 
     // Verify by opening a second adapter to the same DB
-    const dbPath = join(tmpDir, ".openomni", "storage.db");
     const verifyAdapter = new SqliteStorageAdapter(dbPath);
     const recovered = verifyAdapter.session.get("s1");
     verifyAdapter.close();
@@ -69,57 +54,27 @@ describe("Storage.initialize", () => {
     expect(recovered?.title).toBe("Persisted");
   });
 
-  test("sessions persist to disk with file backend", () => {
-    initialize({ cwd: tmpDir, backend: "file" });
-
-    const session = {
-      id: "s1",
-      title: "Persisted",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: Date.now(), updated: Date.now() },
-    };
-    Storage.getAdapter().session.set("s1", session);
-
-    const verifyAdapter = new FileStorageAdapter(join(tmpDir, ".openomni"));
-    const recovered = verifyAdapter.session.get("s1");
-    expect(recovered).toBeDefined();
-    expect(recovered?.title).toBe("Persisted");
-  });
-
-  test("updates .gitignore with storage directory pattern", () => {
-    initialize({ cwd: tmpDir });
-    const content = readFileSync(join(tmpDir, ".gitignore"), "utf-8");
-    expect(content).toContain(".openomni/");
-  });
-
   test("is idempotent — no error on second call", () => {
-    initialize({ cwd: tmpDir });
-    expect(() => initialize({ cwd: tmpDir })).not.toThrow();
+    const dbPath = join(tmpDir, ".openomni", "storage.db");
+    initialize({ dbPath });
+    expect(() => initialize({ dbPath })).not.toThrow();
   });
 
-  test("is idempotent — no duplicate gitignore entries", () => {
-    initialize({ cwd: tmpDir });
-    initialize({ cwd: tmpDir });
-    const content = readFileSync(join(tmpDir, ".gitignore"), "utf-8");
-    const matches = content.split("\n").filter((line) => line.trim() === ".openomni/");
-    expect(matches).toHaveLength(1);
+  test("dbPath option creates parent directory", () => {
+    const dbPath = join(tmpDir, "custom", "session.db");
+    initialize({ dbPath });
+    expect(existsSync(join(tmpDir, "custom"))).toBe(true);
   });
 
-  test("custom dir option works", () => {
-    initialize({ dir: ".custom-data", cwd: tmpDir });
-    expect(existsSync(join(tmpDir, ".custom-data"))).toBe(true);
-    const content = readFileSync(join(tmpDir, ".gitignore"), "utf-8");
-    expect(content).toContain(".custom-data/");
-  });
-
-  test("defaults dir to .openomni when not specified", () => {
-    initialize({ cwd: tmpDir });
-    expect(existsSync(join(tmpDir, ".openomni"))).toBe(true);
+  test("custom dbPath works", () => {
+    const dbPath = join(tmpDir, "custom", "session.db");
+    initialize({ dbPath });
+    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
   test("Storage.initialize is callable on the namespace", () => {
     expect(typeof Storage.initialize).toBe("function");
-    Storage.initialize({ cwd: tmpDir });
+    Storage.initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
     expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 });
