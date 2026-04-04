@@ -1,6 +1,6 @@
-import { Message } from "@openomni/protocol";
-import { SessionInfo } from "../session/info";
-import { Storage } from "./storage";
+import type { Message } from "@openomni/protocol";
+import type { SessionInfo } from "../session/info";
+import type { Storage } from "./storage";
 
 export class CachedStorageAdapter implements Storage.Adapter {
   private sessionCache = new Map<string, SessionInfo>();
@@ -70,6 +70,38 @@ export class CachedStorageAdapter implements Storage.Adapter {
       return result;
     },
 
+    listPage: (
+      sessionID: string,
+      options: { limit: number; before?: string },
+    ): Storage.MessagePage => {
+      if (this.underlying.message.listPage) {
+        return this.underlying.message.listPage(sessionID, options);
+      }
+
+      const all = this.message.list(sessionID);
+      const candidates = options.before
+        ? (() => {
+            const cursor = decodeCursor(options.before);
+            return all.filter(
+              (m) =>
+                m.time.created < cursor.time ||
+                (m.time.created === cursor.time && m.id.localeCompare(cursor.id) < 0),
+            );
+          })()
+        : all;
+
+      const tailWithExtra = candidates.slice(Math.max(0, candidates.length - (options.limit + 1)));
+      const more = tailWithExtra.length > options.limit;
+      const items = more ? tailWithExtra.slice(1) : tailWithExtra;
+      const head = items[0];
+
+      return {
+        items,
+        more,
+        nextCursor: more && head ? encodeCursor(head.id, head.time.created) : null,
+      };
+    },
+
     remove: (sessionID: string, messageID: string): boolean => {
       const result = this.underlying.message.remove(sessionID, messageID);
       this.messageCache.delete(sessionID);
@@ -105,6 +137,18 @@ export class CachedStorageAdapter implements Storage.Adapter {
       return result;
     },
 
+    listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
+      if (this.underlying.part.listByMessageIDs) {
+        return this.underlying.part.listByMessageIDs(messageIDs);
+      }
+
+      const result: Message.Part[] = [];
+      for (const messageID of messageIDs) {
+        result.push(...this.part.list(messageID));
+      }
+      return result;
+    },
+
     remove: (messageID: string, partID: string): boolean => {
       const result = this.underlying.part.remove(messageID, partID);
       this.partCache.delete(messageID);
@@ -121,4 +165,15 @@ export class CachedStorageAdapter implements Storage.Adapter {
       this.underlying.clear();
     }
   }
+}
+
+function encodeCursor(id: string, time: number): string {
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { id: string; time: number } {
+  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as {
+    id: string;
+    time: number;
+  };
 }

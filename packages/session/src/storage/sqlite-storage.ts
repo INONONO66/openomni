@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { eq, and, ne, asc, sql } from "drizzle-orm";
+import { eq, and, ne, asc, desc, lt, or, inArray, sql } from "drizzle-orm";
 import type { Message } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
@@ -116,6 +116,45 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       return rows.map((row) => JSON.parse(row.data) as Message.Info);
     },
 
+    listPage: (
+      sessionID: string,
+      options: { limit: number; before?: string },
+    ): Storage.MessagePage => {
+      const cursor = options.before ? decodeCursor(options.before) : undefined;
+      const where = cursor
+        ? and(
+            eq(messageTable.session_id, sessionID),
+            or(
+              lt(messageTable.time_created, cursor.time),
+              and(eq(messageTable.time_created, cursor.time), lt(messageTable.id, cursor.id)),
+            ),
+          )
+        : eq(messageTable.session_id, sessionID);
+
+      const rows = this.db
+        .select({
+          id: messageTable.id,
+          time_created: messageTable.time_created,
+          data: messageTable.data,
+        })
+        .from(messageTable)
+        .where(where)
+        .orderBy(desc(messageTable.time_created), desc(messageTable.id))
+        .limit(options.limit + 1)
+        .all();
+
+      const more = rows.length > options.limit;
+      const page = more ? rows.slice(0, options.limit) : rows;
+      const items = page.map((row) => JSON.parse(row.data) as Message.Info).reverse();
+      const tail = page.at(-1);
+
+      return {
+        items,
+        more,
+        nextCursor: more && tail ? encodeCursor(tail.id, tail.time_created) : null,
+      };
+    },
+
     remove: (sessionID: string, messageID: string): boolean => {
       const deleted = this.db
         .delete(messageTable)
@@ -170,6 +209,26 @@ export class SqliteStorageAdapter implements Storage.Adapter {
           asc(partTable.id),
         )
         .all();
+      return rows.map((row) => JSON.parse(row.data) as Message.Part);
+    },
+
+    listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
+      if (messageIDs.length === 0) {
+        return [];
+      }
+
+      const rows = this.db
+        .select({ data: partTable.data })
+        .from(partTable)
+        .where(inArray(partTable.message_id, messageIDs))
+        .orderBy(
+          asc(partTable.message_id),
+          sql`CASE WHEN ${partTable.time_start} IS NOT NULL THEN 0 ELSE 1 END`,
+          asc(partTable.time_start),
+          asc(partTable.id),
+        )
+        .all();
+
       return rows.map((row) => JSON.parse(row.data) as Message.Part);
     },
 
@@ -307,6 +366,15 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         .where(eq(eventLogTable.id, eventId))
         .run();
     },
+
+    listIncompleteSessions: (): string[] => {
+      const rows = this.db
+        .selectDistinct({ session_id: eventLogTable.session_id })
+        .from(eventLogTable)
+        .where(ne(eventLogTable.status, "completed"))
+        .all();
+      return rows.map((r) => r.session_id);
+    },
   };
 
   clear(): void {
@@ -325,4 +393,15 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   close(): void {
     this.sqlite.close();
   }
+}
+
+function encodeCursor(id: string, time: number): string {
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { id: string; time: number } {
+  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as {
+    id: string;
+    time: number;
+  };
 }

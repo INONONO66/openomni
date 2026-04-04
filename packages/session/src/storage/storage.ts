@@ -2,6 +2,12 @@ import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../session/info";
 
 export namespace Storage {
+  export type MessagePage = {
+    items: Message.Info[];
+    nextCursor: string | null;
+    more: boolean;
+  };
+
   export interface Adapter {
     session: {
       get(id: string): SessionInfo | undefined;
@@ -13,12 +19,14 @@ export namespace Storage {
       get(sessionID: string, messageID: string): Message.Info | undefined;
       set(sessionID: string, message: Message.Info): void;
       list(sessionID: string): Message.Info[];
+      listPage?(sessionID: string, options: { limit: number; before?: string }): MessagePage;
       remove(sessionID: string, messageID: string): boolean;
     };
     part: {
       get(messageID: string, partID: string): Message.Part | undefined;
       set(messageID: string, part: Message.Part): void;
       list(messageID: string): Message.Part[];
+      listByMessageIDs?(messageIDs: string[]): Message.Part[];
       remove(messageID: string, partID: string): boolean;
     };
 
@@ -38,6 +46,7 @@ export namespace Storage {
       replay(sessionId: string): Array<{ id: number; type: string; status: string; data: string }>;
       listIncomplete(sessionId: string): Array<{ id: number; type: string; data: string }>;
       markComplete(sessionId: string, eventId: number): void;
+      listIncompleteSessions(): string[];
     };
   }
 }
@@ -87,6 +96,36 @@ export class InMemoryStorage implements Storage.Adapter {
     list: (sessionID: string): Message.Info[] => {
       return this.messages.get(sessionID) ?? [];
     },
+    listPage: (
+      sessionID: string,
+      options: { limit: number; before?: string },
+    ): Storage.MessagePage => {
+      const all = [...(this.messages.get(sessionID) ?? [])].sort(
+        (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id),
+      );
+
+      const candidates = options.before
+        ? (() => {
+            const cursor = decodeCursor(options.before);
+            return all.filter(
+              (m) =>
+                m.time.created < cursor.time ||
+                (m.time.created === cursor.time && m.id.localeCompare(cursor.id) < 0),
+            );
+          })()
+        : all;
+
+      const tailWithExtra = candidates.slice(Math.max(0, candidates.length - (options.limit + 1)));
+      const more = tailWithExtra.length > options.limit;
+      const items = more ? tailWithExtra.slice(1) : tailWithExtra;
+      const head = items[0];
+
+      return {
+        items,
+        more,
+        nextCursor: more && head ? encodeCursor(head.id, head.time.created) : null,
+      };
+    },
     remove: (sessionID: string, messageID: string): boolean => {
       const msgs = this.messages.get(sessionID);
       if (!msgs) return false;
@@ -114,6 +153,13 @@ export class InMemoryStorage implements Storage.Adapter {
     },
     list: (messageID: string): Message.Part[] => {
       return this.parts.get(messageID) ?? [];
+    },
+    listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
+      const result: Message.Part[] = [];
+      for (const messageID of messageIDs) {
+        result.push(...(this.parts.get(messageID) ?? []));
+      }
+      return result;
     },
     remove: (messageID: string, partID: string): boolean => {
       const pts = this.parts.get(messageID);
@@ -186,6 +232,15 @@ export class InMemoryStorage implements Storage.Adapter {
         }
       }
     },
+    listIncompleteSessions: (): string[] => {
+      const result: string[] = [];
+      for (const [sessionId, logs] of this.eventLogs) {
+        if (logs.some((e) => e.status !== "completed")) {
+          result.push(sessionId);
+        }
+      }
+      return result;
+    },
   };
 
   clear(): void {
@@ -217,4 +272,15 @@ export namespace Storage {
   export function reset(): void {
     adapter = new InMemoryStorage();
   }
+}
+
+function encodeCursor(id: string, time: number): string {
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { id: string; time: number } {
+  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as {
+    id: string;
+    time: number;
+  };
 }
