@@ -24,10 +24,6 @@ describe("SurfaceKey SQLite persistence", () => {
     await rm(tmpDir, { recursive: true });
   });
 
-  function createSession(id: string): void {
-    Session.create({ title: `test-${id}` });
-  }
-
   test("persists across Storage re-init", () => {
     const session = Session.create({ title: "persist-test" });
     SurfaceKey.register("telegram:bot:chat:123", session.id);

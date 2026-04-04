@@ -20,35 +20,73 @@ function resolveDefaultEventLogDir(): string {
 }
 
 let backend = new FileEventLog(resolveDefaultEventLogDir());
+let explicitlyConfigured = false;
+
+function getAdapter(): Storage.Adapter["eventLog"] | undefined {
+  if (explicitlyConfigured) return undefined;
+  return Storage.get().eventLog;
+}
 
 export namespace EventLog {
   export function configure(baseDir: string): void {
     backend = new FileEventLog(baseDir);
+    explicitlyConfigured = true;
   }
 
   export async function append(sessionId: string, event: ExecutionEvent.T): Promise<void> {
-    backend.append(sessionId, event);
+    const adapter = getAdapter();
+    if (adapter) {
+      adapter.append(sessionId, event.type, JSON.stringify(event));
+    } else {
+      backend.append(sessionId, event);
+    }
   }
 
   export async function* replay(sessionId: string): AsyncGenerator<ExecutionEvent.T> {
-    for (const event of backend.replay(sessionId)) {
-      yield event;
+    const adapter = getAdapter();
+    if (adapter) {
+      for (const row of adapter.replay(sessionId)) {
+        const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
+        if (parsed.success) {
+          yield parsed.data;
+        }
+      }
+    } else {
+      for (const event of backend.replay(sessionId)) {
+        yield event;
+      }
     }
   }
 
   export async function listIncomplete(): Promise<string[]> {
+    const adapter = getAdapter();
+    if (adapter) {
+      return adapter.listIncompleteSessions();
+    }
     return backend.listIncomplete();
   }
 
   export async function markComplete(sessionId: string): Promise<void> {
-    backend.markComplete(sessionId);
+    const adapter = getAdapter();
+    if (adapter) {
+      const incomplete = adapter.listIncomplete(sessionId);
+      for (const event of incomplete) {
+        adapter.markComplete(sessionId, event.id);
+      }
+    } else {
+      backend.markComplete(sessionId);
+    }
   }
 
   export async function remove(sessionId: string): Promise<void> {
-    backend.clear(sessionId);
+    const adapter = getAdapter();
+    if (!adapter) {
+      backend.clear(sessionId);
+    }
   }
 
   export function _reset(): void {
     backend.clearAll();
+    explicitlyConfigured = false;
   }
 }

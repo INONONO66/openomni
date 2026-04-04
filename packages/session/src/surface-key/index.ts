@@ -167,7 +167,7 @@ export namespace SurfaceKey {
     if (!sessionToKeys.has(sessionId)) {
       sessionToKeys.set(sessionId, new Set());
     }
-    sessionToKeys.get(sessionId)!.add(key);
+    sessionToKeys.get(sessionId)?.add(key);
   }
 
   /**

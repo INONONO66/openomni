@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { ExecutionEvent } from "@openomni/protocol";
 
+/** @deprecated Use Storage.Adapter.eventLog instead. Will be removed in a future version. */
 export class FileEventLog {
   private readonly eventsDir: string;
   private readonly completeDir: string;
