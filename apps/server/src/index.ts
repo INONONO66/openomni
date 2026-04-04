@@ -7,7 +7,7 @@ import type { Adapter } from "@openomni/protocol";
 import { createRouter } from "./routes";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
-import { recoverInterruptedMessages } from "./recovery";
+import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 
 interface AdapterConfig {
   telegram?: {
@@ -79,12 +79,31 @@ async function resolveModel(
   return models[0];
 }
 
+async function processRetryQueue(
+  queue: RecoveryItem[],
+  handler: Adapter.MessageHandler,
+): Promise<void> {
+  console.log(`[recovery] Processing ${queue.length} retry item(s)...`);
+  for (const item of queue) {
+    try {
+      await handler({
+        id: `recovery-${item.messageId}`,
+        surfaceKey: item.surfaceKey,
+        text: item.text,
+        sender: { id: "recovery", name: "Recovery" },
+      });
+    } catch (err) {
+      console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
+    }
+  }
+  console.log("[recovery] Retry processing complete");
+}
+
 async function main(): Promise<void> {
   const dbPath = process.env.OPENOMNI_DB_PATH ?? join(homedir(), ".openomni", "storage.db");
   mkdirSync(dirname(dbPath), { recursive: true });
 
   initialize({ dbPath });
-  await recoverInterruptedMessages();
 
   const sqliteAdapter = Storage.get() as unknown as {
     transaction(fn: () => void): void;
@@ -184,6 +203,13 @@ async function main(): Promise<void> {
 
   console.log(`[server] listening on http://${host}:${server.port}`);
 
+  const retryQueue = await recoverInterruptedMessages();
+  if (handler && retryQueue.length > 0) {
+    await processRetryQueue(retryQueue, handler);
+  } else if (retryQueue.length > 0) {
+    console.warn(`[recovery] ${retryQueue.length} message(s) need retry but no handler available`);
+  }
+
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) return;
@@ -194,7 +220,9 @@ async function main(): Promise<void> {
       channel.stop();
     }
 
-    server.stop();
+    server.stop(true);
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+
     sqliteAdapter.transaction(() => {
       (sqliteAdapter as unknown as { sqlite: { exec(sql: string): void } }).sqlite.exec(
         "PRAGMA wal_checkpoint(TRUNCATE)",

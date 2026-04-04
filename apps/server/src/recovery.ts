@@ -1,7 +1,17 @@
+import type { Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 
+export interface RecoveryItem {
+  sessionId: string;
+  messageId: string;
+  surfaceKey: string;
+  text: string;
+}
+
 /** Never throws — server boot must not fail due to recovery errors. */
-export async function recoverInterruptedMessages(): Promise<void> {
+export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
+  const retryQueue: RecoveryItem[] = [];
+
   console.log("[recovery] Checking for interrupted messages...");
 
   try {
@@ -10,13 +20,12 @@ export async function recoverInterruptedMessages(): Promise<void> {
 
     if (processing.length === 0) {
       console.log("[recovery] No interrupted messages found.");
-      return;
+      return retryQueue;
     }
 
     console.log(`[recovery] Found ${processing.length} message(s) with status=processing`);
 
     let recovered = 0;
-    let needsRetry = 0;
 
     for (const { id: messageId, sessionId } of processing) {
       try {
@@ -32,22 +41,44 @@ export async function recoverInterruptedMessages(): Promise<void> {
           console.log(
             `[recovery] Marked message ${messageId} as completed (assistant response exists)`,
           );
-        } else {
-          Session.updateMessageStatus(messageId, "received");
-          needsRetry++;
-          console.warn(
-            `[recovery] Message ${messageId} in session ${sessionId} needs retry (no response found)`,
-          );
+          continue;
         }
+
+        const session = Session.get(sessionId);
+        if (!session) {
+          console.warn(`[recovery] Session ${sessionId} not found, skipping message ${messageId}`);
+          Session.updateMessageStatus(messageId, "received");
+          continue;
+        }
+
+        const parts = Session.getParts(messageId);
+        const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
+
+        if (!textPart?.text) {
+          console.warn(`[recovery] No text found for message ${messageId}, skipping retry`);
+          Session.updateMessageStatus(messageId, "received");
+          continue;
+        }
+
+        Session.updateMessageStatus(messageId, "received");
+        retryQueue.push({
+          sessionId,
+          messageId,
+          surfaceKey: session.title,
+          text: textPart.text,
+        });
+        console.log(`[recovery] Queued message ${messageId} for retry`);
       } catch (err) {
         console.error(`[recovery] Error processing message ${messageId}:`, err);
       }
     }
 
     console.log(
-      `[recovery] Done: ${recovered} recovered, ${needsRetry} need retry, ${processing.length} total`,
+      `[recovery] Done: ${recovered} recovered, ${retryQueue.length} queued for retry, ${processing.length} total`,
     );
   } catch (err) {
     console.error("[recovery] Recovery failed:", err);
   }
+
+  return retryQueue;
 }
