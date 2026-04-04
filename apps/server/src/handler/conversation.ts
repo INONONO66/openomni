@@ -2,6 +2,7 @@ import { Session } from "@openomni/session";
 import { run, type Provider } from "@openomni/llm";
 import type { Message, Sink } from "@openomni/protocol";
 import { sessionCache } from "../cache/session-cache";
+import { StreamingBuffer } from "../cache/streaming-buffer";
 import { SurfaceStore } from "./surface-store";
 import type { Adapter } from "@openomni/protocol";
 
@@ -115,10 +116,34 @@ async function processMessage(
   // 4. Call LLM with timeout
   Session.updateMessageStatus(userMessage.info.id, "processing");
   let assistantMessage: Message.WithParts | undefined;
+  const streaming: { buffer: StreamingBuffer | null; textLength: number } = {
+    buffer: null,
+    textLength: 0,
+  };
 
   const sink: Sink = {
     onMessage(message) {
       assistantMessage = message;
+
+      if (!streaming.buffer) {
+        const textPart = message.parts.find((p): p is Message.TextPart => p.type === "text");
+        if (textPart) {
+          streaming.buffer = new StreamingBuffer(sessionId, message.info.id, textPart.id);
+          streaming.buffer.startFlushInterval();
+        }
+      }
+
+      if (streaming.buffer) {
+        const textContent = message.parts
+          .filter((p): p is Message.TextPart => p.type === "text")
+          .map((p) => p.text)
+          .join("");
+        const delta = textContent.slice(streaming.textLength);
+        if (delta) {
+          streaming.buffer.append(delta);
+          streaming.textLength = textContent.length;
+        }
+      }
     },
     onToolCall() {},
     onToolResult() {},
@@ -143,7 +168,11 @@ async function processMessage(
     );
   } finally {
     clearTimeout(timeout);
-    sessionCache.setStreaming(sessionId, false);
+    if (streaming.buffer) {
+      streaming.buffer.complete();
+    } else {
+      sessionCache.setStreaming(sessionId, false);
+    }
   }
 
   // 5. Persist assistant response and extract text
