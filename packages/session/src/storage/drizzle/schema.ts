@@ -11,22 +11,26 @@ export const messageTable = sqliteTable(
   "message",
   {
     id: text("id").primaryKey(),
-    session_id: text("session_id").notNull(),
+    session_id: text("session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
     data: text("data").notNull(),
     role: text("role"),
     time_created: integer("time_created").notNull(),
   },
-  (t) => [index("idx_message_session").on(t.session_id)],
+  (t) => [index("idx_message_session_time").on(t.session_id, t.time_created, t.id)],
 );
 
 export const partTable = sqliteTable(
   "part",
   {
     id: text("id").primaryKey(),
-    message_id: text("message_id").notNull(),
+    message_id: text("message_id")
+      .notNull()
+      .references(() => messageTable.id, { onDelete: "cascade" }),
     data: text("data").notNull(),
     type: text("type"),
     time_start: integer("time_start"),
   },
-  (t) => [index("idx_part_message").on(t.message_id)],
+  (t) => [index("idx_part_message_id").on(t.message_id, t.id)],
 );
