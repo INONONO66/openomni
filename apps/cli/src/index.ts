@@ -10,10 +10,9 @@ import { Storage } from "@openomni/session";
 import pkg from "../package.json";
 import { AuthCommand } from "./cmd/auth";
 import { ConfigCommand } from "./cmd/config";
-import { ServeCommand } from "./cmd/serve";
 
 ModelsDev.init();
-Storage.initialize({ cwd: homedir() });
+Storage.initialize({ dbPath: join(homedir(), ".openomni", "storage.db") });
 
 const taskDir = join(homedir(), ".openomni", "tasks");
 mkdirSync(taskDir, { recursive: true });
@@ -27,7 +26,6 @@ await yargs(hideBin(process.argv))
   .alias("version", "v")
   .command(AuthCommand)
   .command(ConfigCommand)
-  .command(ServeCommand)
   .demandCommand(1, "Run a command. Try --help for usage.")
   .strict()
   .parseAsync();

@@ -1,0 +1,21 @@
+{
+  "name": "@openomni/server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "tsc",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@openomni/protocol": "workspace:*",
+    "@openomni/session": "workspace:*",
+    "@openomni/llm": "workspace:*",
+    "@openomni/agent": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

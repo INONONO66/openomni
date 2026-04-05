@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { SessionInfo } from "./info";
 import { Storage } from "../storage/storage";
 import { Bus, BusEvent } from "../bus";
@@ -168,10 +168,20 @@ export namespace Session {
     return exists;
   }
 
-  export function addMessage(sessionID: string, message: Message.Info): void {
-    Storage.getAdapter().message.set(sessionID, message);
+  export function addMessage(
+    sessionID: string,
+    message: Message.Info,
+    options?: { status?: "received" | "processing" | "completed" },
+  ): void {
+    const adapter = Storage.getAdapter();
+    adapter.message.set(sessionID, message);
 
-    const session = Storage.getAdapter().session.get(sessionID);
+    const status = options?.status ?? "completed";
+    if (status !== "completed" && adapter.message.setStatus) {
+      adapter.message.setStatus(message.id, status);
+    }
+
+    const session = adapter.session.get(sessionID);
     if (!session) return;
 
     const updated: Info = {
@@ -190,12 +200,91 @@ export namespace Session {
       }),
     };
 
-    Storage.getAdapter().session.set(sessionID, updated);
+    adapter.session.set(sessionID, updated);
     Bus.publish(Event.Updated, { info: updated });
+  }
+
+  export function updateMessageStatus(
+    messageID: string,
+    status: "received" | "processing" | "completed",
+  ): void {
+    const adapter = Storage.getAdapter();
+    if (adapter.message.setStatus) {
+      adapter.message.setStatus(messageID, status);
+    }
   }
 
   export function getMessages(sessionID: string): Message.Info[] {
     return Storage.getAdapter().message.list(sessionID);
+  }
+
+  export function listMessagesPage(
+    sessionID: string,
+    options: { limit: number; before?: string },
+  ): { items: Message.Info[]; nextCursor: string | null; more: boolean } {
+    const adapter = Storage.getAdapter();
+    if (adapter.message.listPage) {
+      return adapter.message.listPage(sessionID, options);
+    }
+
+    const all = [...adapter.message.list(sessionID)].sort(
+      (a, b) => a.time.created - b.time.created || a.id.localeCompare(b.id),
+    );
+
+    const candidates = options.before
+      ? (() => {
+          let cursor: { id: string; time: number };
+          try {
+            cursor = decodeCursor(options.before);
+          } catch {
+            return all;
+          }
+          return all.filter(
+            (m) =>
+              m.time.created < cursor.time ||
+              (m.time.created === cursor.time && m.id.localeCompare(cursor.id) < 0),
+          );
+        })()
+      : all;
+
+    const tailWithExtra = candidates.slice(Math.max(0, candidates.length - (options.limit + 1)));
+    const more = tailWithExtra.length > options.limit;
+    const items = more ? tailWithExtra.slice(1) : tailWithExtra;
+    const head = items[0];
+
+    return {
+      items,
+      more,
+      nextCursor: more && head ? encodeCursor(head.id, head.time.created) : null,
+    };
+  }
+
+  export async function hydrateMessages(messages: Message.Info[]): Promise<Message.WithParts[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const adapter = Storage.getAdapter();
+    const messageIDs = messages.map((message) => message.id);
+
+    const parts = adapter.part.listByMessageIDs
+      ? adapter.part.listByMessageIDs(messageIDs)
+      : messageIDs.flatMap((messageID) => adapter.part.list(messageID));
+
+    const partsByMessageID = new Map<string, Message.Part[]>();
+    for (const part of parts) {
+      const existing = partsByMessageID.get(part.messageID);
+      if (existing) {
+        existing.push(part);
+      } else {
+        partsByMessageID.set(part.messageID, [part]);
+      }
+    }
+
+    return messages.map((info) => ({
+      info,
+      parts: partsByMessageID.get(info.id) ?? [],
+    }));
   }
 
   export function addPart(messageID: string, part: Message.Part): void {
@@ -257,4 +346,15 @@ export namespace Session {
     await EventLog.remove(id);
     return removed;
   }
+}
+
+function encodeCursor(id: string, time: number): string {
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { id: string; time: number } {
+  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as {
+    id: string;
+    time: number;
+  };
 }

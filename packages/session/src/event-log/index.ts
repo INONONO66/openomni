@@ -1,54 +1,57 @@
 import { ExecutionEvent } from "@openomni/protocol";
-import { join } from "node:path";
 import { Storage } from "../storage/storage";
-import { FileEventLog } from "./file-event-log";
 
-function resolveDefaultEventLogDir(): string {
-  const adapter = Storage.get();
-  const maybeWrapped = adapter as Storage.Adapter & {
-    underlying?: unknown;
-  };
-  const maybeUnderlying = maybeWrapped.underlying as { baseDir?: string } | undefined;
-
-  const maybeDirect = adapter as Storage.Adapter & { baseDir?: string };
-  const baseDir = maybeDirect.baseDir ?? maybeUnderlying?.baseDir;
-  if (baseDir) {
-    return join(baseDir, "event-log");
-  }
-
-  return join(process.cwd(), ".openomni", "event-log");
+function getAdapter(): Storage.Adapter["eventLog"] | undefined {
+  return Storage.get().eventLog;
 }
 
-let backend = new FileEventLog(resolveDefaultEventLogDir());
-
 export namespace EventLog {
-  export function configure(baseDir: string): void {
-    backend = new FileEventLog(baseDir);
-  }
-
   export async function append(sessionId: string, event: ExecutionEvent.T): Promise<void> {
-    backend.append(sessionId, event);
+    const adapter = getAdapter();
+    if (adapter) {
+      adapter.append(sessionId, event.type, JSON.stringify(event));
+    }
   }
 
   export async function* replay(sessionId: string): AsyncGenerator<ExecutionEvent.T> {
-    for (const event of backend.replay(sessionId)) {
-      yield event;
+    const adapter = getAdapter();
+    if (adapter) {
+      for (const row of adapter.replay(sessionId)) {
+        try {
+          const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
+          if (parsed.success) {
+            yield parsed.data;
+          }
+        } catch (_) {
+          /* malformed event row — skip */
+        }
+      }
     }
   }
 
   export async function listIncomplete(): Promise<string[]> {
-    return backend.listIncomplete();
+    const adapter = getAdapter();
+    if (adapter) {
+      return adapter.listIncompleteSessions();
+    }
+    return [];
   }
 
   export async function markComplete(sessionId: string): Promise<void> {
-    backend.markComplete(sessionId);
+    const adapter = getAdapter();
+    if (adapter) {
+      const incomplete = adapter.listIncomplete(sessionId);
+      for (const event of incomplete) {
+        adapter.markComplete(sessionId, event.id);
+      }
+    }
   }
 
-  export async function remove(sessionId: string): Promise<void> {
-    backend.clear(sessionId);
+  export async function remove(_sessionId: string): Promise<void> {
+    // no-op — SQLite handles cascade deletion via FK
   }
 
   export function _reset(): void {
-    backend.clearAll();
+    // no-op — SQLite adapter reset handled by Storage.configure()
   }
 }

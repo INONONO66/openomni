@@ -1,8 +1,8 @@
 import { SurfaceKey } from "@openomni/session";
-import { Dedupe } from "../serve/dedupe";
-import { sleep, splitText, fetchWithRetry } from "../serve/utils";
-import { evaluateTriggers, normalizeContent } from "../serve/trigger";
-import type { Adapter } from "./types";
+import { Dedupe } from "../shared/dedupe";
+import { sleep, splitText, fetchWithRetry } from "../shared/http-helpers";
+import { evaluateTriggers, normalizeContent } from "../shared/trigger";
+import type { Adapter } from "@openomni/protocol";
 
 // ---------------------------------------------------------------------------
 // Telegram Bot API types (minimal subset)

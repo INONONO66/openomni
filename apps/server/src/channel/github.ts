@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { SurfaceKey } from "@openomni/session";
-import { Dedupe } from "../serve/dedupe";
-import { evaluateTriggers, normalizeContent } from "../serve/trigger";
-import { fetchWithRetry } from "../serve/utils";
-import type { Adapter } from "./types";
+import { Dedupe } from "../shared/dedupe";
+import { evaluateTriggers, normalizeContent } from "../shared/trigger";
+import { fetchWithRetry } from "../shared/http-helpers";
+import type { Adapter } from "@openomni/protocol";
 
 // ---------------------------------------------------------------------------
 // GitHub webhook payload types (minimal subset)

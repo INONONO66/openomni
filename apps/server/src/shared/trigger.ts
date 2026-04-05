@@ -1,4 +1,4 @@
-import type { Adapter } from "../adapter/types";
+import type { Adapter } from "@openomni/protocol";
 
 /**
  * Evaluate all trigger rules against a context.

@@ -2,10 +2,7 @@ export { Bus, BusEvent } from "./bus";
 export {
   Storage,
   InMemoryStorage,
-  FileStorageAdapter,
-  FileLock,
-  CachedStorageAdapter,
-  ensureGitignore,
+  SqliteStorageAdapter,
   initialize,
 } from "./storage";
 export type { InitializeOptions } from "./storage";

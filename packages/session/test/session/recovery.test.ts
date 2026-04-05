@@ -6,19 +6,18 @@ import type { ExecutionEvent } from "@openomni/protocol";
 import { Session } from "../../src/session";
 import { EventLog } from "../../src/event-log/index";
 import { Storage } from "../../src/storage/storage";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 
-let eventLogDir: string;
+let tmpDir: string;
 
 beforeEach(() => {
-  Storage.reset();
-  eventLogDir = mkdtempSync(join(tmpdir(), "openomni-session-recovery-test-"));
-  EventLog.configure(eventLogDir);
+  tmpDir = mkdtempSync(join(tmpdir(), "openomni-session-recovery-test-"));
+  Storage.configure(new SqliteStorageAdapter(join(tmpDir, "test.db")));
 });
 
 afterEach(() => {
-  EventLog._reset();
-  rmSync(eventLogDir, { recursive: true, force: true });
   Storage.reset();
+  rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe("Session recovery lifecycle", () => {
