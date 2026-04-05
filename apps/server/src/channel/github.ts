@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../shared/dedupe";
 import { evaluateTriggers, normalizeContent } from "../shared/trigger";
-import { fetchWithRetry } from "../shared/utils";
+import { fetchWithRetry } from "../shared/http-helpers";
 import type { Adapter } from "@openomni/protocol";
 
 // ---------------------------------------------------------------------------

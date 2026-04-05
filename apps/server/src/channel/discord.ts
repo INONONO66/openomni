@@ -1,6 +1,6 @@
 import { SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../shared/dedupe";
-import { sleep, splitText, fetchWithRetry } from "../shared/utils";
+import { sleep, splitText, fetchWithRetry } from "../shared/http-helpers";
 import { evaluateTriggers, normalizeContent } from "../shared/trigger";
 import type { Adapter } from "@openomni/protocol";
 
