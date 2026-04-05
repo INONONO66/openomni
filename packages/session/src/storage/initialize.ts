@@ -1,14 +1,14 @@
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { Storage } from "./storage";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
 export interface InitializeOptions {
-  dbPath?: string;
+  dbPath: string;
 }
 
-export function initialize(options: InitializeOptions = {}): void {
-  const dbPath = options.dbPath ?? join(process.env.HOME ?? "~", ".openomni", "storage.db");
+export function initialize(options: InitializeOptions): void {
+  const dbPath = options.dbPath;
 
   mkdirSync(dirname(dbPath), { recursive: true });
   Storage.configure(new SqliteStorageAdapter(dbPath));

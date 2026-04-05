@@ -1,52 +1,16 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { Auth, Provider } from "@openomni/llm";
 import { Storage, initialize } from "@openomni/session";
 import type { Adapter } from "@openomni/protocol";
+import { loadConfig, getConfig } from "./config";
 import { createRouter } from "./routes";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 
-interface AdapterConfig {
-  telegram?: {
-    token?: string;
-    allowedUsers?: string[];
-  };
-  github?: {
-    secret?: string;
-    token?: string;
-    botUsername?: string;
-    allowedUsers?: string[];
-  };
-  discord?: {
-    token?: string;
-    allowedUsers?: string[];
-  };
-}
-
-const CONFIG_PATH = join(homedir(), ".openomni", "config.json");
-
-function loadAdapterConfig(): AdapterConfig {
-  if (!existsSync(CONFIG_PATH)) return {};
-
-  try {
-    const parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as AdapterConfig;
-    return parsed ?? {};
-  } catch (error) {
-    console.warn(
-      "[server] failed to read config.json:",
-      error instanceof Error ? error.message : error,
-    );
-    return {};
-  }
-}
-
-async function resolveModel(
-  requestedProviderID?: string,
-  requestedModelID?: string,
-): Promise<Provider.Model> {
+async function resolveModel(): Promise<Provider.Model> {
+  const { provider: requestedProviderID, model: requestedModelID } = getConfig().model;
   const credentials = await Auth.all();
   const entries = Object.entries(credentials);
 
@@ -100,10 +64,10 @@ async function processRetryQueue(
 }
 
 async function main(): Promise<void> {
-  const dbPath = process.env.OPENOMNI_DB_PATH ?? join(homedir(), ".openomni", "storage.db");
-  mkdirSync(dirname(dbPath), { recursive: true });
+  const config = loadConfig();
 
-  initialize({ dbPath });
+  mkdirSync(dirname(config.storage.dbPath), { recursive: true });
+  initialize({ dbPath: config.storage.dbPath });
 
   const sqliteAdapter = Storage.get() as unknown as {
     transaction(fn: () => void): void;
@@ -111,33 +75,25 @@ async function main(): Promise<void> {
     sqlite: { exec(sql: string): void };
   };
 
-  const adapterConfig = loadAdapterConfig();
-
-  const telegramToken = process.env.OPENOMNI_TELEGRAM_TOKEN ?? adapterConfig.telegram?.token;
-  const githubSecret = process.env.OPENOMNI_GITHUB_SECRET ?? adapterConfig.github?.secret;
-  const githubToken = process.env.OPENOMNI_GITHUB_TOKEN ?? adapterConfig.github?.token;
-  const discordToken = process.env.OPENOMNI_DISCORD_TOKEN ?? adapterConfig.discord?.token;
-
-  const hasAnyChannelCredential = Boolean(telegramToken || githubSecret || discordToken);
+  const hasAnyChannel = Boolean(
+    config.telegram.token || config.github.secret || config.discord.token,
+  );
 
   let conversationConfig: ConversationConfig | undefined;
-  if (hasAnyChannelCredential) {
-    const model = await resolveModel(process.env.OPENOMNI_PROVIDER, process.env.OPENOMNI_MODEL);
-    conversationConfig = {
-      model,
-      system: process.env.OPENOMNI_SYSTEM,
-    };
+  if (hasAnyChannel) {
+    const model = await resolveModel();
+    conversationConfig = { model, system: config.model.system };
     console.log(`[server] Using model: ${model.providerID}/${model.id}`);
   }
 
   const handler = conversationConfig ? createMessageHandler(conversationConfig) : undefined;
   const channels: Adapter.Surface[] = [];
 
-  if (telegramToken && handler) {
-    const telegram = new TelegramAdapter(telegramToken, {
+  if (config.telegram.token && handler) {
+    const telegram = new TelegramAdapter(config.telegram.token, {
       triggers: [
-        ...(adapterConfig.telegram?.allowedUsers
-          ? [{ type: "sender" as const, allow: adapterConfig.telegram.allowedUsers }]
+        ...(config.telegram.allowedUsers.length > 0
+          ? [{ type: "sender" as const, allow: config.telegram.allowedUsers }]
           : []),
       ],
       deliveryPolicy: "final",
@@ -147,32 +103,32 @@ async function main(): Promise<void> {
   }
 
   let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
-  if (githubSecret && handler) {
+  if (config.github.secret && handler) {
     const github = new GitHubAdapter(
-      githubSecret,
+      config.github.secret,
       {
         triggers: [
           { type: "event", events: ["issue_comment.created", "issues.opened"] },
-          ...(adapterConfig.github?.allowedUsers
-            ? [{ type: "sender" as const, allow: adapterConfig.github.allowedUsers }]
+          ...(config.github.allowedUsers.length > 0
+            ? [{ type: "sender" as const, allow: config.github.allowedUsers }]
             : []),
         ],
         deliveryPolicy: "final",
       },
-      githubToken,
-      adapterConfig.github?.botUsername,
+      config.github.token,
+      config.github.botUsername,
     );
     github.onMessage(handler);
     githubWebhookHandler = (req) => github.handleWebhook(req);
     channels.push(github);
   }
 
-  if (discordToken && handler) {
-    const discord = new DiscordAdapter(discordToken, {
+  if (config.discord.token && handler) {
+    const discord = new DiscordAdapter(config.discord.token, {
       triggers: [
         { type: "mention" },
-        ...(adapterConfig.discord?.allowedUsers
-          ? [{ type: "sender" as const, allow: adapterConfig.discord.allowedUsers }]
+        ...(config.discord.allowedUsers.length > 0
+          ? [{ type: "sender" as const, allow: config.discord.allowedUsers }]
           : []),
       ],
       deliveryPolicy: "final",
@@ -181,7 +137,7 @@ async function main(): Promise<void> {
     channels.push(discord);
   }
 
-  if (hasAnyChannelCredential && !handler) {
+  if (hasAnyChannel && !handler) {
     console.warn("[server] channel credentials found but no model credentials; channels disabled");
   }
 
@@ -190,18 +146,15 @@ async function main(): Promise<void> {
   }
 
   const app = createRouter(githubWebhookHandler);
-
   await Promise.all(channels.map((channel) => channel.start()));
 
-  const port = Number(process.env.PORT ?? 3000);
-  const host = process.env.HOST ?? "127.0.0.1";
   const server = Bun.serve({
-    port,
-    hostname: host,
+    port: config.server.port,
+    hostname: config.server.host,
     fetch: app.fetch,
   });
 
-  console.log(`[server] listening on http://${host}:${server.port}`);
+  console.log(`[server] listening on http://${config.server.host}:${server.port}`);
 
   const retryQueue = await recoverInterruptedMessages();
   if (handler && retryQueue.length > 0) {
