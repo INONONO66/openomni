@@ -254,13 +254,7 @@ const KNOWN_CATCHALL_FILES = new Set(["apps/cli/src/serve/utils.ts"]);
 
 // Known empty catch blocks (pre-existing tech debt — do not extend)
 // Keyed by "file:line" to track exact locations.
-const KNOWN_EMPTY_CATCHES = new Set([
-  "apps/cli/src/serve/surface-store.ts:80",
-  "packages/session/src/storage/lock.ts:65",
-  "packages/session/src/storage/lock.ts:113",
-  "packages/session/src/storage/lock.ts:127",
-  "packages/session/src/event-log/file-event-log.ts:49",
-]);
+const KNOWN_EMPTY_CATCHES = new Set([]);
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
