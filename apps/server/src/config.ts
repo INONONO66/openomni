@@ -12,11 +12,6 @@ interface RawConfig {
   storage?: {
     dbPath?: string;
   };
-  model?: {
-    provider?: string;
-    model?: string;
-    system?: string;
-  };
   telegram?: {
     token?: string;
     allowedUsers?: string[];
@@ -36,7 +31,6 @@ interface RawConfig {
 export interface ServerConfig {
   server: { port: number; host: string };
   storage: { dbPath: string };
-  model: { provider?: string; model?: string; system?: string };
   telegram: { token?: string; allowedUsers: string[] };
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
   discord: { token?: string; allowedUsers: string[] };
@@ -64,11 +58,6 @@ function resolve(raw: RawConfig): ServerConfig {
     },
     storage: {
       dbPath: raw.storage?.dbPath ?? defaultDbPath,
-    },
-    model: {
-      provider: raw.model?.provider,
-      model: raw.model?.model,
-      system: raw.model?.system,
     },
     telegram: {
       token: raw.telegram?.token,

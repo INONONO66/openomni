@@ -3,14 +3,13 @@ import { dirname } from "node:path";
 import { Auth, Provider } from "@openomni/llm";
 import { Storage, initialize } from "@openomni/session";
 import type { Adapter } from "@openomni/protocol";
-import { loadConfig, getConfig } from "./config";
+import { loadConfig } from "./config";
 import { createRouter } from "./routes";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 
 async function resolveModel(): Promise<Provider.Model> {
-  const { provider: requestedProviderID, model: requestedModelID } = getConfig().model;
   const credentials = await Auth.all();
   const entries = Object.entries(credentials);
 
@@ -18,7 +17,7 @@ async function resolveModel(): Promise<Provider.Model> {
     throw new Error("No credentials found. Run 'openomni auth login' first.");
   }
 
-  const providerID = requestedProviderID ?? entries[0][0];
+  const providerID = entries[0][0];
   const auth = credentials[providerID];
 
   if (!auth) {
@@ -30,14 +29,6 @@ async function resolveModel(): Promise<Provider.Model> {
 
   if (models.length === 0) {
     throw new Error(`No models found for provider '${providerID}'.`);
-  }
-
-  if (requestedModelID) {
-    const model = models.find((m) => m.id === requestedModelID);
-    if (!model) {
-      throw new Error(`Model '${requestedModelID}' not found for '${providerID}'.`);
-    }
-    return model;
   }
 
   return models[0];
@@ -82,7 +73,7 @@ async function main(): Promise<void> {
   let conversationConfig: ConversationConfig | undefined;
   if (hasAnyChannel) {
     const model = await resolveModel();
-    conversationConfig = { model, system: config.model.system };
+    conversationConfig = { model };
     console.log(`[server] Using model: ${model.providerID}/${model.id}`);
   }
 
