@@ -47,8 +47,11 @@ export class StreamingBuffer {
       clearInterval(this.flushInterval);
       this.flushInterval = null;
     }
-    this.flushToDb();
-    sessionCache.setStreaming(this.sessionId, false);
+    try {
+      this.flushToDb();
+    } finally {
+      sessionCache.setStreaming(this.sessionId, false);
+    }
   }
 
   reset(): void {

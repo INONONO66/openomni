@@ -125,11 +125,19 @@ export namespace SurfaceKey {
     return { surface, namespace, kind, id, threadId };
   }
   export function lookup(key: string): string | undefined {
+    const cached = keyToSession.get(key);
+    if (cached) return cached;
     const sk = Storage.get().surfaceKey;
     if (sk) {
-      return sk.lookup(key) ?? keyToSession.get(key);
+      const persisted = sk.lookup(key);
+      if (persisted) {
+        keyToSession.set(key, persisted);
+        if (!sessionToKeys.has(persisted)) sessionToKeys.set(persisted, new Set());
+        sessionToKeys.get(persisted)?.add(key);
+      }
+      return persisted;
     }
-    return keyToSession.get(key);
+    return undefined;
   }
 
   /**

@@ -29,8 +29,16 @@ export function createMessageHandler(config: ConversationConfig): Adapter.Messag
 
   return async (message) => {
     // TODO: respect Adapter.Config.deliveryPolicy - currently always delivers final response only
+    const resumeId = (message as { _resumeMessageId?: string })._resumeMessageId;
     const prev = queues.get(message.surfaceKey) ?? Promise.resolve();
-    const current = prev.then(() => processMessage(message.surfaceKey, message.text, config));
+    const current = prev.then(() =>
+      processMessage(
+        message.surfaceKey,
+        message.text,
+        config,
+        resumeId ? { existingMessageId: resumeId } : undefined,
+      ),
+    );
     const tail = current.catch(() => {});
     queues.set(message.surfaceKey, tail);
 
@@ -88,6 +96,7 @@ async function processMessage(
   surfaceKey: string,
   text: string,
   config: ConversationConfig,
+  options?: { existingMessageId?: string },
 ): Promise<string> {
   // 1. Resolve or create session
   let sessionId = SurfaceStore.lookup(surfaceKey);
@@ -104,17 +113,24 @@ async function processMessage(
   sessionCache.touch(sessionId);
 
   // 2. Create and persist user message (saved BEFORE LLM call for crash safety)
-  const userMessage = createUserMessage(sessionId, config.model, text);
-  Session.addMessage(sessionId, userMessage.info, { status: "received" });
-  for (const part of userMessage.parts) {
-    Session.addPart(userMessage.info.id, part);
+  //    If existingMessageId is provided (recovery), skip creation — message already in DB.
+  let userMessageId: string;
+  if (options?.existingMessageId) {
+    userMessageId = options.existingMessageId;
+  } else {
+    const userMessage = createUserMessage(sessionId, config.model, text);
+    Session.addMessage(sessionId, userMessage.info, { status: "received" });
+    for (const part of userMessage.parts) {
+      Session.addPart(userMessage.info.id, part);
+    }
+    userMessageId = userMessage.info.id;
   }
 
   // 3. Load full conversation history
   const history = loadHistory(sessionId);
 
   // 4. Call LLM with timeout
-  Session.updateMessageStatus(userMessage.info.id, "processing");
+  Session.updateMessageStatus(userMessageId, "processing");
   let assistantMessage: Message.WithParts | undefined;
   const streaming: { buffer: StreamingBuffer | null; textLength: number } = {
     buffer: null,
@@ -190,7 +206,7 @@ async function processMessage(
       .join("");
   }
 
-  Session.updateMessageStatus(userMessage.info.id, "completed");
+  Session.updateMessageStatus(userMessageId, "completed");
 
   if (outcome.type === "error") {
     const msg = outcome.error?.message ?? "Unknown error";

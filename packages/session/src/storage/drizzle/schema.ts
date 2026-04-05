@@ -75,8 +75,5 @@ export const eventLogTable = sqliteTable(
     data: text("data").notNull(),
     time_created: integer("time_created").notNull(),
   },
-  (t) => [
-    index("idx_event_log_session").on(t.session_id),
-    index("idx_event_log_session_id").on(t.session_id, t.id),
-  ],
+  (t) => [index("idx_event_log_session_id").on(t.session_id, t.id)],
 );

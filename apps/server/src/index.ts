@@ -9,29 +9,23 @@ import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 
-async function resolveModel(): Promise<Provider.Model> {
-  const credentials = await Auth.all();
-  const entries = Object.entries(credentials);
+async function resolveModel(): Promise<Provider.Model | undefined> {
+  try {
+    const credentials = await Auth.all();
+    const entries = Object.entries(credentials);
+    if (entries.length === 0) return undefined;
 
-  if (entries.length === 0) {
-    throw new Error("No credentials found. Run 'openomni auth login' first.");
+    const providerID = entries[0][0];
+    const auth = credentials[providerID];
+    if (!auth) return undefined;
+
+    const authType = auth.type === "oauth" ? "api" : auth.type;
+    const models = await Provider.listModels(providerID, authType);
+    return models[0];
+  } catch (err) {
+    console.warn("[server] failed to resolve model:", err instanceof Error ? err.message : err);
+    return undefined;
   }
-
-  const providerID = entries[0][0];
-  const auth = credentials[providerID];
-
-  if (!auth) {
-    throw new Error(`No credentials found for '${providerID}'.`);
-  }
-
-  const authType = auth.type === "oauth" ? "api" : auth.type;
-  const models = await Provider.listModels(providerID, authType);
-
-  if (models.length === 0) {
-    throw new Error(`No models found for provider '${providerID}'.`);
-  }
-
-  return models[0];
 }
 
 async function processRetryQueue(
@@ -46,7 +40,8 @@ async function processRetryQueue(
         surfaceKey: item.surfaceKey,
         text: item.text,
         sender: { id: "recovery", name: "Recovery" },
-      });
+        _resumeMessageId: item.messageId,
+      } as Adapter.InboundMessage & { _resumeMessageId: string });
     } catch (err) {
       console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
     }
@@ -73,8 +68,10 @@ async function main(): Promise<void> {
   let conversationConfig: ConversationConfig | undefined;
   if (hasAnyChannel) {
     const model = await resolveModel();
-    conversationConfig = { model };
-    console.log(`[server] Using model: ${model.providerID}/${model.id}`);
+    if (model) {
+      conversationConfig = { model };
+      console.log(`[server] Using model: ${model.providerID}/${model.id}`);
+    }
   }
 
   const handler = conversationConfig ? createMessageHandler(conversationConfig) : undefined;

@@ -37,6 +37,7 @@ export interface ServerConfig {
 }
 
 let _config: ServerConfig | null = null;
+let _configPath: string | null = null;
 
 function loadRaw(configPath: string): RawConfig {
   if (!existsSync(configPath)) return {};
@@ -77,8 +78,9 @@ function resolve(raw: RawConfig): ServerConfig {
 }
 
 export function loadConfig(configPath = DEFAULT_CONFIG_PATH): ServerConfig {
-  if (_config) return _config;
+  if (_config && _configPath === configPath) return _config;
   _config = resolve(loadRaw(configPath));
+  _configPath = configPath;
   return _config;
 }
 
@@ -89,4 +91,5 @@ export function getConfig(): ServerConfig {
 
 export function resetConfig(): void {
   _config = null;
+  _configPath = null;
 }

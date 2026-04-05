@@ -81,12 +81,15 @@ describe("StreamingBuffer", () => {
 
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        expect(addPartSpy).toHaveBeenCalledTimes(1);
-        expect(addPartSpy).toHaveBeenCalledWith(
-          "m1",
-          expect.objectContaining({ type: "text", text: "token1" }),
-        );
-        buffer.complete();
+        try {
+          expect(addPartSpy).toHaveBeenCalledTimes(1);
+          expect(addPartSpy).toHaveBeenCalledWith(
+            "m1",
+            expect.objectContaining({ type: "text", text: "token1" }),
+          );
+        } finally {
+          buffer.complete();
+        }
         resolve();
       }, 80);
     });
@@ -102,9 +105,12 @@ describe("StreamingBuffer", () => {
 
     return new Promise<void>((resolve) => {
       setTimeout(() => {
-        expect(addPartSpy).toHaveBeenCalledTimes(1);
-        expect(addPartSpy).toHaveBeenCalledWith("m1", expect.objectContaining({ text: "abc" }));
-        buffer.complete();
+        try {
+          expect(addPartSpy).toHaveBeenCalledTimes(1);
+          expect(addPartSpy).toHaveBeenCalledWith("m1", expect.objectContaining({ text: "abc" }));
+        } finally {
+          buffer.complete();
+        }
         resolve();
       }, 80);
     });

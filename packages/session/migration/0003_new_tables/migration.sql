@@ -26,5 +26,4 @@ CREATE TABLE IF NOT EXISTS event_log (
   time_created INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_log_session ON event_log(session_id);
 CREATE INDEX IF NOT EXISTS idx_event_log_session_id ON event_log(session_id, id);

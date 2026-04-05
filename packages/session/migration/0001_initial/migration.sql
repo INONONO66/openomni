@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS message (
   time_created INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_message_session ON message(session_id);
-
 CREATE TABLE IF NOT EXISTS part (
   id TEXT PRIMARY KEY,
   message_id TEXT NOT NULL,

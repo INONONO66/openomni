@@ -233,7 +233,12 @@ export namespace Session {
 
     const candidates = options.before
       ? (() => {
-          const cursor = decodeCursor(options.before);
+          let cursor: { id: string; time: number };
+          try {
+            cursor = decodeCursor(options.before);
+          } catch {
+            return all;
+          }
           return all.filter(
             (m) =>
               m.time.created < cursor.time ||

@@ -27,19 +27,18 @@ export class SessionCache {
     }
   }
 
-  touch(sessionId: string, streaming = false): void {
+  touch(sessionId: string): void {
     const entry = this.cache.get(sessionId);
 
     if (entry) {
       entry.lastAccess = Date.now();
-      entry.streaming = streaming;
       return;
     }
 
     this.cache.set(sessionId, {
       sessionId,
       lastAccess: Date.now(),
-      streaming,
+      streaming: false,
     });
 
     this.evictIfNeeded();

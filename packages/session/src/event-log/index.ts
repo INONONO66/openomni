@@ -17,9 +17,13 @@ export namespace EventLog {
     const adapter = getAdapter();
     if (adapter) {
       for (const row of adapter.replay(sessionId)) {
-        const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
-        if (parsed.success) {
-          yield parsed.data;
+        try {
+          const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
+          if (parsed.success) {
+            yield parsed.data;
+          }
+        } catch (_) {
+          /* malformed event row — skip */
         }
       }
     }
