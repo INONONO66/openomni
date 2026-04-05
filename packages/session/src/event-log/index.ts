@@ -19,8 +19,15 @@ function resolveDefaultEventLogDir(): string {
   return join(process.cwd(), ".openomni", "event-log");
 }
 
-let backend = new FileEventLog(resolveDefaultEventLogDir());
+let backend: FileEventLog | null = null;
 let explicitlyConfigured = false;
+
+function getBackend(): FileEventLog {
+  if (!backend) {
+    backend = new FileEventLog(resolveDefaultEventLogDir());
+  }
+  return backend;
+}
 
 function getAdapter(): Storage.Adapter["eventLog"] | undefined {
   if (explicitlyConfigured) return undefined;
@@ -29,7 +36,7 @@ function getAdapter(): Storage.Adapter["eventLog"] | undefined {
 
 export namespace EventLog {
   export function configure(baseDir: string): void {
-    backend = new FileEventLog(baseDir);
+    backend = new FileEventLog(baseDir) as FileEventLog;
     explicitlyConfigured = true;
   }
 
@@ -38,7 +45,7 @@ export namespace EventLog {
     if (adapter) {
       adapter.append(sessionId, event.type, JSON.stringify(event));
     } else {
-      backend.append(sessionId, event);
+      getBackend().append(sessionId, event);
     }
   }
 
@@ -52,7 +59,7 @@ export namespace EventLog {
         }
       }
     } else {
-      for (const event of backend.replay(sessionId)) {
+      for (const event of getBackend().replay(sessionId)) {
         yield event;
       }
     }
@@ -63,7 +70,7 @@ export namespace EventLog {
     if (adapter) {
       return adapter.listIncompleteSessions();
     }
-    return backend.listIncomplete();
+    return getBackend().listIncomplete();
   }
 
   export async function markComplete(sessionId: string): Promise<void> {
@@ -74,19 +81,20 @@ export namespace EventLog {
         adapter.markComplete(sessionId, event.id);
       }
     } else {
-      backend.markComplete(sessionId);
+      getBackend().markComplete(sessionId);
     }
   }
 
   export async function remove(sessionId: string): Promise<void> {
     const adapter = getAdapter();
     if (!adapter) {
-      backend.clear(sessionId);
+      getBackend().clear(sessionId);
     }
   }
 
   export function _reset(): void {
-    backend.clearAll();
+    backend?.clearAll();
+    backend = null;
     explicitlyConfigured = false;
   }
 }
