@@ -8,6 +8,9 @@ import { createRouter } from "./routes";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
 import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
+import { SystemToolProvider } from "./tool/system";
+import { AgentToolProvider } from "./tool/agent";
+import { McpToolProvider } from "./tool/mcp";
 
 async function resolveModel(): Promise<Provider.Model | undefined> {
   try {
@@ -69,7 +72,13 @@ async function main(): Promise<void> {
   if (hasAnyChannel) {
     const model = await resolveModel();
     if (model) {
-      conversationConfig = { model };
+      conversationConfig = {
+        agentName: "dev",
+        systemProvider: new SystemToolProvider(),
+        agentProvider: new AgentToolProvider(),
+        mcpProvider: new McpToolProvider(),
+        defaultModel: { provider: model.providerID, id: model.id },
+      };
       console.log(`[server] Using model: ${model.providerID}/${model.id}`);
     }
   }

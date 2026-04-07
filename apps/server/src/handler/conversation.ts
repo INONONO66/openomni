@@ -1,29 +1,25 @@
 import { Session } from "@openomni/session";
-import { run, type Provider } from "@openomni/llm";
-import type { Message, Sink } from "@openomni/protocol";
+import { ChatAgent } from "@openomni/agent";
+import type { ChatAgentConfig, AgentResult } from "@openomni/agent";
+import type { Message, Adapter, Tool } from "@openomni/protocol";
 import { sessionCache } from "../cache/session-cache";
-import { StreamingBuffer } from "../cache/streaming-buffer";
 import { SurfaceStore } from "./surface-store";
-import type { Adapter } from "@openomni/protocol";
+import { getAgentDefinition } from "../agents/registry";
+import type { AgentDefinition } from "../agents/types";
+import { createToolExecutor } from "../tool/executor";
+import type { ToolProvider } from "../tool/types";
+import type { SystemToolProvider } from "../tool/system";
+import type { AgentToolProvider } from "../tool/agent";
+import type { McpToolProvider } from "../tool/mcp";
 
 export interface ConversationConfig {
-  model: Provider.Model;
-  system?: string;
+  agentName: string;
+  systemProvider: SystemToolProvider;
+  agentProvider: AgentToolProvider;
+  mcpProvider: McpToolProvider;
+  defaultModel?: { provider: string; id: string };
 }
 
-const LLM_TIMEOUT_MS = 120_000; // 2 minutes
-
-// ---------------------------------------------------------------------------
-// Message handler factory
-// ---------------------------------------------------------------------------
-
-/**
- * Create a message handler that routes inbound messages through the
- * conversation pipeline: session resolution -> LLM -> response.
- *
- * Each handler instance maintains its own per-surface serialization queue
- * to prevent history race conditions.
- */
 export function createMessageHandler(config: ConversationConfig): Adapter.MessageHandler {
   const queues = new Map<string, Promise<unknown>>();
 
@@ -39,10 +35,9 @@ export function createMessageHandler(config: ConversationConfig): Adapter.Messag
         resumeId ? { existingMessageId: resumeId } : undefined,
       ),
     );
-    const tail = current.catch(() => {});
+    const tail = current.catch(() => undefined);
     queues.set(message.surfaceKey, tail);
 
-    // Cleanup: remove queue entry when no more messages are pending
     tail.then(() => {
       if (queues.get(message.surfaceKey) === tail) queues.delete(message.surfaceKey);
     });
@@ -52,13 +47,60 @@ export function createMessageHandler(config: ConversationConfig): Adapter.Messag
   };
 }
 
-// ---------------------------------------------------------------------------
-// Message processing (runs inside per-surface queue)
-// ---------------------------------------------------------------------------
+function buildToolsForAgent(
+  definition: AgentDefinition,
+  systemProvider: ToolProvider,
+  agentProvider: ToolProvider,
+  mcpProvider: ToolProvider,
+): { specs: Tool.Spec[]; providers: ToolProvider[] } {
+  const providers: ToolProvider[] = [];
+  const specs: Tool.Spec[] = [];
+
+  function addFromProvider(provider: ToolProvider, selection: boolean | string[] | undefined) {
+    if (!selection) return;
+    providers.push(provider);
+    const tools = provider.listTools();
+    if (selection === true) {
+      specs.push(...tools.map((t) => t.spec));
+    } else {
+      const allowed = new Set(selection);
+      specs.push(...tools.filter((t) => allowed.has(t.spec.name)).map((t) => t.spec));
+    }
+  }
+
+  addFromProvider(systemProvider, definition.tools.system);
+  addFromProvider(agentProvider, definition.tools.agent);
+  addFromProvider(mcpProvider, definition.tools.mcp);
+
+  return { specs, providers };
+}
+
+function toChatInput(
+  history: Message.WithParts[],
+): Array<{ role: "user" | "assistant"; content: string }> {
+  return history.map((msg) => ({
+    role: msg.info.role === "user" ? ("user" as const) : ("assistant" as const),
+    content: msg.parts
+      .filter((p): p is Message.TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join(""),
+  }));
+}
+
+function createFallbackDefinition(config: ConversationConfig): AgentDefinition {
+  return {
+    name: config.agentName,
+    description: "fallback agent",
+    model: config.defaultModel ?? { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    systemPrompt: "You are a helpful assistant.",
+    tools: { system: false, agent: false, mcp: false },
+    budget: { maxTurns: 10 },
+  };
+}
 
 function createUserMessage(
   sessionID: string,
-  model: Provider.Model,
+  model: ChatAgentConfig["model"],
   text: string,
 ): Message.WithParts {
   const messageID = `msg-${crypto.randomUUID()}`;
@@ -70,7 +112,7 @@ function createUserMessage(
       role: "user" as const,
       time: { created: Date.now() },
       agent: "serve",
-      model: { providerID: model.providerID, modelID: model.id },
+      model: { providerID: model.provider, modelID: model.id },
     },
     parts: [
       {
@@ -92,33 +134,74 @@ function loadHistory(sessionID: string): Message.WithParts[] {
   }));
 }
 
+function buildAssistantMessage(
+  sessionID: string,
+  parentMessageID: string,
+  definition: AgentDefinition,
+  result: AgentResult,
+): Message.WithParts {
+  const messageID = `msg-${crypto.randomUUID()}`;
+  const now = Date.now();
+
+  const info: Message.AssistantMessage = {
+    id: messageID,
+    sessionID,
+    role: "assistant",
+    time: { created: now, completed: now },
+    parentID: parentMessageID,
+    modelID: definition.model.id,
+    providerID: definition.model.provider,
+    agent: definition.name,
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: result.usage.totalCost ?? 0,
+    tokens: {
+      input: result.usage.inputTokens,
+      output: result.usage.outputTokens,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+    finish: result.finishReason,
+  };
+
+  const parts: Message.Part[] = [];
+  if (result.text) {
+    parts.push({
+      id: `part-${crypto.randomUUID()}`,
+      sessionID,
+      messageID,
+      type: "text" as const,
+      text: result.text,
+    });
+  }
+
+  return { info, parts };
+}
+
 async function processMessage(
   surfaceKey: string,
   text: string,
   config: ConversationConfig,
   options?: { existingMessageId?: string },
 ): Promise<string> {
-  // 1. Resolve or create session
-  let sessionId = SurfaceStore.lookup(surfaceKey);
+  const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
 
+  let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {
     const session = Session.create({
       title: surfaceKey,
-      model: { providerID: config.model.providerID, modelID: config.model.id },
+      model: { providerID: definition.model.provider, modelID: definition.model.id },
     });
     sessionId = session.id;
     SurfaceStore.register(surfaceKey, sessionId);
   }
-
   sessionCache.touch(sessionId);
 
-  // 2. Create and persist user message (saved BEFORE LLM call for crash safety)
-  //    If existingMessageId is provided (recovery), skip creation — message already in DB.
+  // Persist user message before agent call (crash safety)
   let userMessageId: string;
   if (options?.existingMessageId) {
     userMessageId = options.existingMessageId;
   } else {
-    const userMessage = createUserMessage(sessionId, config.model, text);
+    const userMessage = createUserMessage(sessionId, definition.model, text);
     Session.addMessage(sessionId, userMessage.info, { status: "received" });
     for (const part of userMessage.parts) {
       Session.addPart(userMessage.info.id, part);
@@ -126,98 +209,46 @@ async function processMessage(
     userMessageId = userMessage.info.id;
   }
 
-  // 3. Load full conversation history
   const history = loadHistory(sessionId);
 
-  // 4. Call LLM with timeout
+  const { specs, providers } = buildToolsForAgent(
+    definition,
+    config.systemProvider,
+    config.agentProvider,
+    config.mcpProvider,
+  );
+  const toolExecutor = createToolExecutor({
+    providers,
+    config: { permissions: definition.permissions },
+  });
+
   Session.updateMessageStatus(userMessageId, "processing");
-  let assistantMessage: Message.WithParts | undefined;
-  const streaming: { buffer: StreamingBuffer | null; textLength: number } = {
-    buffer: null,
-    textLength: 0,
-  };
 
-  const sink: Sink = {
-    onMessage(message) {
-      assistantMessage = message;
+  const agent = ChatAgent.create({
+    model: definition.model,
+    systemPrompt: definition.systemPrompt,
+    tools: specs,
+    toolExecutor,
+    budget: definition.budget,
+  });
 
-      if (!streaming.buffer) {
-        const textPart = message.parts.find((p): p is Message.TextPart => p.type === "text");
-        if (textPart) {
-          streaming.buffer = new StreamingBuffer(sessionId, message.info.id, textPart.id);
-          streaming.buffer.startFlushInterval();
-        }
-      }
-
-      if (streaming.buffer) {
-        const textContent = message.parts
-          .filter((p): p is Message.TextPart => p.type === "text")
-          .map((p) => p.text)
-          .join("");
-        const delta = textContent.slice(streaming.textLength);
-        if (delta) {
-          streaming.buffer.append(delta);
-          streaming.textLength = textContent.length;
-        }
-      }
-    },
-    onToolCall() {},
-    onToolResult() {},
-    onSnapshot() {},
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-
-  let outcome;
-  sessionCache.setStreaming(sessionId, true);
+  let result: AgentResult;
   try {
-    outcome = await run(
-      {
-        messages: history,
-        tools: [],
-        model: config.model,
-        system: config.system,
-        signal: controller.signal,
-      },
-      sink,
-    );
-  } finally {
-    clearTimeout(timeout);
-    if (streaming.buffer) {
-      streaming.buffer.complete();
-    } else {
-      sessionCache.setStreaming(sessionId, false);
-    }
+    result = await agent.run({ messages: toChatInput(history) });
+  } catch (error) {
+    Session.updateMessageStatus(userMessageId, "completed");
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[conversation] agent error: ${msg}`);
+    return `Error: ${msg}`;
   }
 
-  // 5. Persist assistant response and extract text
-  let responseText = "";
-
-  if (assistantMessage) {
-    Session.addMessage(sessionId, assistantMessage.info);
-    for (const part of assistantMessage.parts) {
-      Session.addPart(assistantMessage.info.id, part);
-    }
-
-    responseText = assistantMessage.parts
-      .filter((p): p is Message.TextPart => p.type === "text")
-      .map((p) => p.text)
-      .join("");
+  const assistantMessage = buildAssistantMessage(sessionId, userMessageId, definition, result);
+  Session.addMessage(sessionId, assistantMessage.info);
+  for (const part of assistantMessage.parts) {
+    Session.addPart(assistantMessage.info.id, part);
   }
 
   Session.updateMessageStatus(userMessageId, "completed");
 
-  if (outcome.type === "error") {
-    const msg = outcome.error?.message ?? "Unknown error";
-    console.error(`[conversation] LLM error: ${msg}`);
-    return `Error: ${msg}`;
-  }
-
-  if (outcome.type === "aborted") {
-    console.error("[conversation] LLM call timed out");
-    return "Sorry, the request timed out. Please try again.";
-  }
-
-  return responseText || "(no response)";
+  return result.text || "(no response)";
 }
