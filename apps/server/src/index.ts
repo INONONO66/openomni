@@ -28,11 +28,16 @@ type Surface = {
   stop(): void;
 };
 
-type SqliteStorageAdapter = {
+interface ClosableStorage {
   transaction(fn: () => void): void;
   close(): void;
   sqlite: { exec(sql: string): void };
-};
+}
+
+function isClosableStorage(storage: unknown): storage is ClosableStorage {
+  const s = storage as Record<string, unknown>;
+  return typeof s.close === "function" && typeof s.transaction === "function" && s.sqlite != null;
+}
 
 async function resolveModel(): Promise<Provider.Model | undefined> {
   try {
@@ -117,7 +122,6 @@ async function main(): Promise<void> {
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
 
-  const sqliteAdapter = Storage.get() as unknown as SqliteStorageAdapter;
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
@@ -253,10 +257,13 @@ async function main(): Promise<void> {
     await mcpProvider.disconnectAll();
     await new Promise((resolve) => setTimeout(resolve, 5_000));
 
-    sqliteAdapter.transaction(() => {
-      sqliteAdapter.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    });
-    sqliteAdapter.close();
+    const storage = Storage.get();
+    if (isClosableStorage(storage)) {
+      storage.transaction(() => {
+        storage.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      });
+      storage.close();
+    }
 
     process.exit(0);
   };
