@@ -1,16 +1,7 @@
-// ---------------------------------------------------------------------------
-// Shared adapter utilities
-// ---------------------------------------------------------------------------
-
-/** Promise-based sleep. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Split text into chunks respecting a max length, preferring line boundaries.
- * Falls back to hard-split when no suitable newline is found.
- */
 export function splitText(text: string, maxLength: number): string[] {
   if (text.length <= maxLength) return [text];
 
@@ -37,15 +28,11 @@ export function splitText(text: string, maxLength: number): string[] {
 
 const MAX_API_RETRIES = 3;
 
-/**
- * Fetch with automatic 429 retry and bounded retries.
- * Throws after MAX_API_RETRIES consecutive rate-limit responses.
- */
 export async function fetchWithRetry(
   url: string,
   init: RequestInit,
   options?: {
-    /** Extract retry-after seconds from the 429 response body. Default: 5s. */
+    /** retry-after seconds from 429 body; defaults to 5s */
     parseRetryAfter?: (body: unknown) => number;
     retries?: number;
     label?: string;
@@ -66,9 +53,7 @@ export async function fetchWithRetry(
       try {
         const body = await response.json();
         retryAfter = options.parseRetryAfter(body);
-      } catch {
-        // fallback to default
-      }
+      } catch {}
     }
 
     console.warn(
