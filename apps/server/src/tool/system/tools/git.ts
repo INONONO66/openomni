@@ -39,14 +39,26 @@ function getOptionalBoolean(input: InputRecord, key: string): boolean | undefine
   return value;
 }
 
-function resolveWorkingDirectory(requestedWorkdir?: string): string {
-  return requestedWorkdir ? resolve(requestedWorkdir) : process.cwd();
+function resolveWorkingDirectory(workspaceRoot: string, requestedWorkdir?: string): string {
+  const root = resolve(workspaceRoot);
+  const cwd = requestedWorkdir ? resolve(root, requestedWorkdir) : root;
+
+  if (cwd !== root && !cwd.startsWith(`${root}/`)) {
+    throw new Error(`Working directory must stay within workspace root: ${root}`);
+  }
+
+  return cwd;
 }
 
-async function runGit(call: Tool.Call, args: string[], workdir?: string): Promise<Tool.Result> {
+async function runGit(
+  call: Tool.Call,
+  args: string[],
+  workspaceRoot: string,
+  workdir?: string,
+): Promise<Tool.Result> {
   try {
     const proc = Bun.spawn(["git", ...args], {
-      cwd: resolveWorkingDirectory(workdir),
+      cwd: resolveWorkingDirectory(workspaceRoot, workdir),
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -70,110 +82,114 @@ async function runGit(call: Tool.Call, args: string[], workdir?: string): Promis
   }
 }
 
-const gitToolDefinitions: Array<{
-  name: string;
-  description: string;
-  riskTier: 0 | 1 | 2;
-  inputSchema: Record<string, unknown>;
-  execute(call: Tool.Call): Promise<Tool.Result>;
-}> = [
-  {
-    name: "git.status",
-    description: "Show git working tree status",
-    riskTier: 0,
-    inputSchema: {
-      type: "object",
-      properties: {
-        workdir: { type: "string", description: "Repository working directory" },
+export function createGitTools(workspaceRoot: string): NativeTool[] {
+  return [
+    {
+      spec: {
+        name: "git.status",
+        description: "Show git working tree status",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workdir: { type: "string", description: "Repository working directory" },
+          },
+        },
+        safe: true,
+      },
+      riskTier: 0,
+      execute(call) {
+        return runGit(
+          call,
+          ["status", "--short", "--branch"],
+          workspaceRoot,
+          getOptionalString(call.input, "workdir"),
+        );
       },
     },
-    execute(call) {
-      return runGit(
-        call,
-        ["status", "--short", "--branch"],
-        getOptionalString(call.input, "workdir"),
-      );
-    },
-  },
-  {
-    name: "git.diff",
-    description: "Show git diff",
-    riskTier: 0,
-    inputSchema: {
-      type: "object",
-      properties: {
-        workdir: { type: "string", description: "Repository working directory" },
-        staged: { type: "boolean", description: "Show staged diff" },
+    {
+      spec: {
+        name: "git.diff",
+        description: "Show git diff",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workdir: { type: "string", description: "Repository working directory" },
+            staged: { type: "boolean", description: "Show staged diff" },
+          },
+        },
+        safe: true,
+      },
+      riskTier: 0,
+      execute(call) {
+        const staged = getOptionalBoolean(call.input, "staged") ?? false;
+        const args = staged ? ["diff", "--cached"] : ["diff"];
+        return runGit(call, args, workspaceRoot, getOptionalString(call.input, "workdir"));
       },
     },
-    execute(call) {
-      const staged = getOptionalBoolean(call.input, "staged") ?? false;
-      const args = staged ? ["diff", "--cached"] : ["diff"];
-      return runGit(call, args, getOptionalString(call.input, "workdir"));
-    },
-  },
-  {
-    name: "git.commit",
-    description: "Create a git commit",
-    riskTier: 1,
-    inputSchema: {
-      type: "object",
-      properties: {
-        message: { type: "string", description: "Commit message" },
-        workdir: { type: "string", description: "Repository working directory" },
+    {
+      spec: {
+        name: "git.commit",
+        description: "Create a git commit",
+        inputSchema: {
+          type: "object",
+          properties: {
+            message: { type: "string", description: "Commit message" },
+            workdir: { type: "string", description: "Repository working directory" },
+          },
+          required: ["message"],
+        },
       },
-      required: ["message"],
-    },
-    execute(call) {
-      const message = getString(call.input, "message");
-      return runGit(call, ["commit", "-m", message], getOptionalString(call.input, "workdir"));
-    },
-  },
-  {
-    name: "git.branch",
-    description: "List or create git branches",
-    riskTier: 0,
-    inputSchema: {
-      type: "object",
-      properties: {
-        workdir: { type: "string", description: "Repository working directory" },
-        create: { type: "string", description: "Branch name to create" },
+      riskTier: 1,
+      execute(call) {
+        const message = getString(call.input, "message");
+        return runGit(
+          call,
+          ["commit", "-m", message],
+          workspaceRoot,
+          getOptionalString(call.input, "workdir"),
+        );
       },
     },
-    async execute(call) {
-      const branchName = getOptionalString(call.input, "create");
-      const args = branchName ? ["branch", branchName] : ["branch", "--list"];
-      return runGit(call, args, getOptionalString(call.input, "workdir"));
-    },
-  },
-  {
-    name: "git.push",
-    description: "Push git branch to remote",
-    riskTier: 2,
-    inputSchema: {
-      type: "object",
-      properties: {
-        workdir: { type: "string", description: "Repository working directory" },
-        remote: { type: "string", description: "Remote name" },
-        branch: { type: "string", description: "Branch name" },
+    {
+      spec: {
+        name: "git.branch",
+        description: "List or create git branches",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workdir: { type: "string", description: "Repository working directory" },
+            create: { type: "string", description: "Branch name to create" },
+          },
+        },
+        safe: true,
+      },
+      riskTier: 0,
+      execute(call) {
+        const branchName = getOptionalString(call.input, "create");
+        const args = branchName ? ["branch", branchName] : ["branch", "--list"];
+        return runGit(call, args, workspaceRoot, getOptionalString(call.input, "workdir"));
       },
     },
-    execute(call) {
-      const remote = getOptionalString(call.input, "remote") ?? "origin";
-      const branch = getOptionalString(call.input, "branch");
-      const args = ["push", remote, ...(branch ? [branch] : [])];
-      return runGit(call, args, getOptionalString(call.input, "workdir"));
+    {
+      spec: {
+        name: "git.push",
+        description: "Push git branch to remote",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workdir: { type: "string", description: "Repository working directory" },
+            remote: { type: "string", description: "Remote name" },
+            branch: { type: "string", description: "Branch name" },
+          },
+        },
+      },
+      riskTier: 2,
+      execute(call) {
+        const remote = getOptionalString(call.input, "remote") ?? "origin";
+        const branch = getOptionalString(call.input, "branch");
+        const args = ["push", remote, ...(branch ? [branch] : [])];
+        return runGit(call, args, workspaceRoot, getOptionalString(call.input, "workdir"));
+      },
     },
-  },
-];
-
-export const gitTools: NativeTool[] = gitToolDefinitions.map((definition) => ({
-  spec: {
-    name: definition.name,
-    description: definition.description,
-    inputSchema: definition.inputSchema,
-    safe: definition.riskTier === 0,
-  },
-  riskTier: definition.riskTier,
-  execute: definition.execute,
-}));
+  ];
+}

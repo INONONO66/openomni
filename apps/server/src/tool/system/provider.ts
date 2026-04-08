@@ -1,7 +1,7 @@
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
-import { filesystemTools } from "./tools/filesystem";
-import { gitTools } from "./tools/git";
+import { createFilesystemTools } from "./tools/filesystem";
+import { createGitTools } from "./tools/git";
 import { createShellTool } from "./tools/shell";
 
 export class SystemToolProvider implements ToolProvider {
@@ -11,7 +11,15 @@ export class SystemToolProvider implements ToolProvider {
   constructor(private readonly workspaceRoot?: string) {}
 
   listTools(): NativeTool[] {
-    return [...filesystemTools, createShellTool(this.workspaceRoot), ...gitTools];
+    const tools: NativeTool[] = [];
+    if (this.workspaceRoot) {
+      tools.push(...createFilesystemTools(this.workspaceRoot));
+    }
+    tools.push(createShellTool(this.workspaceRoot));
+    if (this.workspaceRoot) {
+      tools.push(...createGitTools(this.workspaceRoot));
+    }
+    return tools;
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {
