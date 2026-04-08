@@ -36,12 +36,14 @@ export class GitHubAdapter implements Adapter.Surface {
     console.log("[github] Webhook handler ready");
   }
 
-  stop(): void {}
+  stop(): void {
+    // no-op: GitHub adapter is webhook-based, no persistent connection to close
+  }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
-    const issueNumber = parseInt(parsed.id!.split("-")[1]);
+    const issueNumber = parseInt((parsed.id ?? "").split("-")[1]);
 
     if (message.text && this.githubToken) {
       await this.postComment(repo, issueNumber, message.text);

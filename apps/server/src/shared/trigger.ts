@@ -22,7 +22,7 @@ function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): b
 
     case "label":
       if (!ctx.labels || ctx.labels.length === 0) return false;
-      return rule.values.some((v) => ctx.labels!.includes(v));
+      return rule.values.some((v) => ctx.labels?.includes(v) ?? false);
 
     case "channel":
       if (!ctx.channelId) return ctx.isDM === true;

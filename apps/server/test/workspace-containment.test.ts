@@ -30,9 +30,10 @@ afterAll(() => {
 
 describe("filesystem containment", () => {
   const tools = createFilesystemTools(workspace);
-  const read = tools.find((t) => t.spec.name === "fs.read")!;
-  const write = tools.find((t) => t.spec.name === "fs.write")!;
-  const list = tools.find((t) => t.spec.name === "fs.list")!;
+  const read = tools.find((t) => t.spec.name === "fs.read");
+  const write = tools.find((t) => t.spec.name === "fs.write");
+  const list = tools.find((t) => t.spec.name === "fs.list");
+  if (!read || !write || !list) throw new Error("expected fs tools not found");
 
   it("allows reading files inside workspace", async () => {
     const result = await read.execute(makeCall("fs.read", { path: "test.txt" }));
@@ -75,7 +76,8 @@ describe("filesystem containment", () => {
 
 describe("git containment", () => {
   const tools = createGitTools(workspace);
-  const status = tools.find((t) => t.spec.name === "git.status")!;
+  const status = tools.find((t) => t.spec.name === "git.status");
+  if (!status) throw new Error("expected git.status tool not found");
 
   it("blocks workdir outside workspace", async () => {
     const result = await status.execute(makeCall("git.status", { workdir: "/tmp" }));

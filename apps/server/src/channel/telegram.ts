@@ -91,7 +91,7 @@ export class TelegramAdapter implements Adapter.Surface {
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
-    const chatId = parsed.id!;
+    const chatId = parsed.id ?? "";
     await this.sendOutbound(chatId, message);
   }
 

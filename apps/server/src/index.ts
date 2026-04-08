@@ -141,11 +141,6 @@ async function main(): Promise<void> {
   const wsHandler = routingHandler
     ? new WebSocketHandler(routingHandler, { token: config.server.wsToken })
     : undefined;
-  const websocket = wsHandler?.ws ?? {
-    open() {},
-    message() {},
-  };
-
   if (model) {
     console.log(`[server] Using model: ${model.providerID}/${model.id}`);
   } else {
@@ -210,7 +205,8 @@ async function main(): Promise<void> {
   const server = Bun.serve({
     port: config.server.port,
     hostname: config.server.host,
-    websocket,
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: Bun.serve requires a websocket object; these are intentional no-ops when WS is disabled
+    websocket: wsHandler?.ws ?? { open() {}, message() {} },
     fetch(req, serverInstance) {
       const url = new URL(req.url);
       if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {

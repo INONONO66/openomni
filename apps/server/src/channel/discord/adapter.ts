@@ -66,11 +66,11 @@ export class DiscordAdapter implements Adapter.Surface {
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
-    let channelId = parsed.id!;
+    let channelId = parsed.id ?? "";
 
     if (parsed.kind === "dm") {
       const dmChannel = (await this.api("/users/@me/channels", {
-        recipient_id: parsed.id!,
+        recipient_id: parsed.id ?? "",
       })) as { id: string };
       channelId = dmChannel.id;
     }
@@ -195,8 +195,9 @@ export class DiscordAdapter implements Adapter.Surface {
       }
 
       case GatewayOp.DISPATCH:
+        if (!payload.t) return false;
         try {
-          return this.handleDispatch(payload.t!, payload.d);
+          return this.handleDispatch(payload.t, payload.d);
         } catch (err) {
           console.error("[discord] Error handling dispatch:", err);
           return false;
