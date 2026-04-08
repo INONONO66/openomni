@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage, SurfaceKey } from "@openomni/session";
 
 export interface RecoveryItem {
   sessionId: string;
@@ -65,10 +65,15 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
           continue;
         }
 
+        // Prefer the registered surfaceKey mapping (in-memory). Fall back to
+        // session.title which conversation.ts always sets to the surfaceKey.
+        const registeredKeys = SurfaceKey.listBySession(sessionId);
+        const surfaceKey = registeredKeys[0] ?? session.title;
+
         retryQueue.push({
           sessionId,
           messageId,
-          surfaceKey: session.title,
+          surfaceKey,
           text: textPart.text,
           resumeExisting: true,
         });
