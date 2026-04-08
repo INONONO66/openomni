@@ -1,5 +1,5 @@
-import { McpClient } from "@openomni/agent/src/runtime/mcp";
-import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
+import { McpClient } from "@openomni/agent";
+import type { McpServerConfig } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
 
@@ -72,17 +72,29 @@ export class McpToolProvider implements ToolProvider {
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {
-    const dotIndex = call.tool.indexOf(".");
-    if (dotIndex === -1) {
+    const tool = this.listTools().find(
+      (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
+    );
+    if (!tool) {
       return Promise.resolve({
         id: crypto.randomUUID(),
         toolCallId: call.id,
-        output: `MCP tool name must be prefixed with server name: ${call.tool}`,
+        output: `Unknown tool: ${call.tool}`,
         isError: true,
       });
     }
 
-    const serverName = call.tool.slice(0, dotIndex);
+    const dotIndex = tool.spec.name.indexOf(".");
+    if (dotIndex === -1) {
+      return Promise.resolve({
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `MCP tool name must be prefixed with server name: ${tool.spec.name}`,
+        isError: true,
+      });
+    }
+
+    const serverName = tool.spec.name.slice(0, dotIndex);
     const client = this.clients.get(serverName);
     if (!client) {
       return Promise.resolve({
@@ -93,7 +105,7 @@ export class McpToolProvider implements ToolProvider {
       });
     }
 
-    return client.callTool(call.tool, call.input, call.id);
+    return tool.execute({ ...call, tool: tool.spec.name });
   }
 
   get serverCount(): number {

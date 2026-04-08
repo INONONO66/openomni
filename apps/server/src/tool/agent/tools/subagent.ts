@@ -6,8 +6,9 @@ export function createSubagentTool(): NativeTool {
   return {
     spec: tool.spec,
     riskTier: 1,
-    execute(call) {
-      return tool.execute(call.input);
+    async execute(call) {
+      const result = await tool.execute(call.input);
+      return { ...result, toolCallId: call.id };
     },
   };
 }

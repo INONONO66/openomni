@@ -84,6 +84,21 @@ function buildToolsForAgent(
   return { specs, providers };
 }
 
+function needsResolution(modelId: string): boolean {
+  return !/\d{8}$/.test(modelId);
+}
+
+function resolveConversationModel(
+  definition: AgentDefinition,
+  defaultModel?: ConversationConfig["defaultModel"],
+): ChatAgentConfig["model"] {
+  if (needsResolution(definition.model.id)) {
+    return defaultModel ?? definition.model;
+  }
+
+  return definition.model;
+}
+
 function toChatInput(
   history: Message.WithParts[],
 ): Array<{ role: "user" | "assistant"; content: string }> {
@@ -146,7 +161,8 @@ function loadHistory(sessionID: string): Message.WithParts[] {
 function buildAssistantMessage(
   sessionID: string,
   parentMessageID: string,
-  definition: AgentDefinition,
+  agentName: string,
+  model: ChatAgentConfig["model"],
   result: AgentResult,
 ): Message.WithParts {
   const messageID = `msg-${crypto.randomUUID()}`;
@@ -158,9 +174,9 @@ function buildAssistantMessage(
     role: "assistant",
     time: { created: now, completed: now },
     parentID: parentMessageID,
-    modelID: definition.model.id,
-    providerID: definition.model.provider,
-    agent: definition.name,
+    modelID: model.id,
+    providerID: model.provider,
+    agent: agentName,
     path: { cwd: process.cwd(), root: process.cwd() },
     cost: result.usage.totalCost ?? 0,
     tokens: {
@@ -193,7 +209,7 @@ async function processMessage(
   options?: { existingMessageId?: string },
 ): Promise<string> {
   const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
-  const model = config.defaultModel ?? definition.model;
+  const model = resolveConversationModel(definition, config.defaultModel);
 
   let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {
@@ -252,7 +268,13 @@ async function processMessage(
     return `Error: ${msg}`;
   }
 
-  const assistantMessage = buildAssistantMessage(sessionId, userMessageId, definition, result);
+  const assistantMessage = buildAssistantMessage(
+    sessionId,
+    userMessageId,
+    definition.name,
+    model,
+    result,
+  );
   Session.addMessage(sessionId, assistantMessage.info);
   for (const part of assistantMessage.parts) {
     Session.addPart(assistantMessage.info.id, part);

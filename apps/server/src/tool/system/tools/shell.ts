@@ -46,7 +46,9 @@ function resolveWorkingDirectory(
   requestedWorkdir?: string,
 ): string {
   const root = workspaceRoot ? resolve(workspaceRoot) : undefined;
-  const cwd = requestedWorkdir ? resolve(requestedWorkdir) : (root ?? process.cwd());
+  const cwd = requestedWorkdir
+    ? resolve(root ?? process.cwd(), requestedWorkdir)
+    : (root ?? process.cwd());
 
   if (!root) {
     return cwd;

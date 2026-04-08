@@ -58,7 +58,7 @@ export class WebSocketHandler {
         return;
       }
 
-      const surfaceKey = parsed.surfaceKey ?? ws.data.surfaceKey;
+      const surfaceKey = ws.data.surfaceKey;
 
       const result = await this.handler({
         id: crypto.randomUUID(),

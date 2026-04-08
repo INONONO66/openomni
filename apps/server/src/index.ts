@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { McpServerConfig } from "@openomni/agent";
 import { Auth, Provider } from "@openomni/llm";
 import type { Adapter } from "@openomni/protocol";
 import { Storage, initialize } from "@openomni/session";
-import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";

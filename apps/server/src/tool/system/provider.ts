@@ -15,7 +15,9 @@ export class SystemToolProvider implements ToolProvider {
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {
-    const tool = this.listTools().find((entry) => entry.spec.name === call.tool);
+    const tool = this.listTools().find(
+      (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
+    );
     if (!tool) {
       return Promise.resolve({
         id: crypto.randomUUID(),
@@ -24,6 +26,6 @@ export class SystemToolProvider implements ToolProvider {
         isError: true,
       });
     }
-    return tool.execute(call);
+    return tool.execute({ ...call, tool: tool.spec.name });
   }
 }

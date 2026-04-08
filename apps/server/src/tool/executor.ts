@@ -116,25 +116,27 @@ export function createToolExecutor(
       return createErrorResult(call, `Unknown tool: ${call.tool}`);
     }
 
-    const verdict = checkPermission(call.tool, config.permissions);
+    const originalName = entry.tool.spec.name;
+    const verdict = checkPermission(originalName, config.permissions);
     if (verdict === "deny") {
-      return createErrorResult(call, `[Blocked] Tool "${call.tool}" denied by policy`);
+      return createErrorResult(call, `[Blocked] Tool "${originalName}" denied by policy`);
     }
 
     if (verdict === "require_approval") {
       console.warn(
-        `[executor] tool "${call.tool}" requires approval (proceeding until approval flow exists)`,
+        `[executor] tool "${originalName}" requires approval (proceeding until approval flow exists)`,
       );
     }
 
     if (entry.tool.riskTier >= 2) {
-      console.warn(`[executor] executing tier-${entry.tool.riskTier} tool: ${call.tool}`);
+      console.warn(`[executor] executing tier-${entry.tool.riskTier} tool: ${originalName}`);
     }
 
     const timeoutMs = getTimeoutMs(entry.tool.riskTier, config);
+    const dispatchedCall = originalName === call.tool ? call : { ...call, tool: originalName };
 
     try {
-      return await withTimeout(entry.provider.execute(call), timeoutMs);
+      return await withTimeout(entry.tool.execute(dispatchedCall), timeoutMs);
     } catch (error) {
       return createErrorResult(call, error instanceof Error ? error.message : String(error));
     }
