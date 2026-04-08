@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { createToolExecutor } from "../src/tool/executor";
-import type { NativeTool, ToolProvider, ToolRiskTier } from "../src/tool/types";
+import type { NativeTool, ToolRiskTier } from "../src/tool/types";
 import type { Tool } from "@openomni/protocol";
 
 function createMockTool(name: string, riskTier: ToolRiskTier, output: string): NativeTool {
@@ -15,26 +15,6 @@ function createMockTool(name: string, riskTier: ToolRiskTier, output: string): N
   };
 }
 
-function createMockProvider(tools: NativeTool[]): ToolProvider {
-  return {
-    name: "mock",
-    category: "system",
-    listTools: () => tools,
-    execute: (call) => {
-      const tool = tools.find((t) => t.spec.name === call.tool);
-      if (!tool) {
-        return Promise.resolve({
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: "not found",
-          isError: true,
-        });
-      }
-      return tool.execute(call);
-    },
-  };
-}
-
 function makeCall(tool: string): Tool.Call {
   return { id: crypto.randomUUID(), tool, input: {} };
 }
@@ -42,7 +22,7 @@ function makeCall(tool: string): Tool.Call {
 describe("createToolExecutor", () => {
   it("dispatches to correct tool and returns output", async () => {
     const tool = createMockTool("test.read", 0, "file contents");
-    const executor = createToolExecutor({ providers: [createMockProvider([tool])] });
+    const executor = createToolExecutor({ tools: [tool] });
 
     const result = await executor(makeCall("test.read"));
 
@@ -51,7 +31,7 @@ describe("createToolExecutor", () => {
   });
 
   it("returns error for unknown tool", async () => {
-    const executor = createToolExecutor({ providers: [] });
+    const executor = createToolExecutor({ tools: [] });
 
     const result = await executor(makeCall("unknown.tool"));
 
@@ -59,12 +39,10 @@ describe("createToolExecutor", () => {
     expect(result.output).toContain("Unknown tool");
   });
 
-  it("dispatches across multiple providers", async () => {
+  it("dispatches across multiple tools", async () => {
     const fsTool = createMockTool("fs.read", 0, "fs output");
     const gitTool = createMockTool("git.status", 0, "git output");
-    const executor = createToolExecutor({
-      providers: [createMockProvider([fsTool]), createMockProvider([gitTool])],
-    });
+    const executor = createToolExecutor({ tools: [fsTool, gitTool] });
 
     const fsResult = await executor(makeCall("fs.read"));
     const gitResult = await executor(makeCall("git.status"));
@@ -76,7 +54,7 @@ describe("createToolExecutor", () => {
   it("blocks tool on denylist", async () => {
     const tool = createMockTool("shell.exec", 2, "output");
     const executor = createToolExecutor({
-      providers: [createMockProvider([tool])],
+      tools: [tool],
       config: { permissions: { denylist: ["shell.exec"] } },
     });
 
@@ -90,7 +68,7 @@ describe("createToolExecutor", () => {
     const readTool = createMockTool("fs.read", 0, "ok");
     const writeTool = createMockTool("fs.write", 1, "ok");
     const executor = createToolExecutor({
-      providers: [createMockProvider([readTool, writeTool])],
+      tools: [readTool, writeTool],
       config: { permissions: { allowlist: ["fs.read"] } },
     });
 
@@ -107,7 +85,7 @@ describe("createToolExecutor", () => {
     const gitStatus = createMockTool("git.status", 0, "status");
     const fsTool = createMockTool("fs.read", 0, "file");
     const executor = createToolExecutor({
-      providers: [createMockProvider([gitPush, gitStatus, fsTool])],
+      tools: [gitPush, gitStatus, fsTool],
       config: { permissions: { denylist: ["git.*"] } },
     });
 
@@ -121,7 +99,7 @@ describe("createToolExecutor", () => {
     const fsWrite = createMockTool("fs.write", 1, "ok");
     const shellExec = createMockTool("shell.exec", 2, "nope");
     const executor = createToolExecutor({
-      providers: [createMockProvider([fsRead, fsWrite, shellExec])],
+      tools: [fsRead, fsWrite, shellExec],
       config: { permissions: { allowlist: ["fs.*"] } },
     });
 
@@ -133,7 +111,7 @@ describe("createToolExecutor", () => {
   it("denylist takes priority over allowlist", async () => {
     const tool = createMockTool("fs.write", 1, "ok");
     const executor = createToolExecutor({
-      providers: [createMockProvider([tool])],
+      tools: [tool],
       config: { permissions: { allowlist: ["fs.*"], denylist: ["fs.write"] } },
     });
 
@@ -142,15 +120,26 @@ describe("createToolExecutor", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("blocks tool requiring approval", async () => {
+    const tool = createMockTool("shell.exec", 2, "output");
+    const executor = createToolExecutor({
+      tools: [tool],
+      config: { permissions: { requireApproval: ["shell.exec"] } },
+    });
+
+    const result = await executor(makeCall("shell.exec"));
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("requires approval");
+  });
+
   it("returns error when tool execution throws", async () => {
     const failTool: NativeTool = {
       spec: { name: "fail.tool", inputSchema: { type: "object" } },
       riskTier: 0,
       execute: () => Promise.reject(new Error("boom")),
     };
-    const executor = createToolExecutor({
-      providers: [createMockProvider([failTool])],
-    });
+    const executor = createToolExecutor({ tools: [failTool] });
 
     const result = await executor(makeCall("fail.tool"));
 
@@ -165,7 +154,7 @@ describe("createToolExecutor", () => {
       execute: () => new Promise((resolve) => setTimeout(resolve, 5000)),
     };
     const executor = createToolExecutor({
-      providers: [createMockProvider([slowTool])],
+      tools: [slowTool],
       config: { timeoutMs: { tier0: 50 } },
     });
 
