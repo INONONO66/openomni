@@ -1,12 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
 
-/**
- * Evaluate all trigger rules against a context.
- * Returns true if the message should be processed.
- *
- * - Empty rules array = always pass (no filtering).
- * - AND logic: every rule must pass.
- */
 export function evaluateTriggers(
   rules: Adapter.TriggerRule[],
   ctx: Adapter.TriggerContext,
@@ -29,7 +22,7 @@ function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): b
 
     case "label":
       if (!ctx.labels || ctx.labels.length === 0) return false;
-      return rule.values.some((v) => ctx.labels!.includes(v));
+      return rule.values.some((v) => ctx.labels?.includes(v) ?? false);
 
     case "channel":
       if (!ctx.channelId) return ctx.isDM === true;
@@ -44,10 +37,6 @@ function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): b
   }
 }
 
-/**
- * Strip trigger-related prefixes from message text.
- * Call after trigger evaluation passes.
- */
 export function stripTriggerPrefix(text: string, rules: Adapter.TriggerRule[]): string {
   const prefix = rules.find(
     (r): r is Extract<Adapter.TriggerRule, { type: "prefix" }> => r.type === "prefix",

@@ -1,12 +1,8 @@
+import type { Adapter } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../shared/dedupe";
-import { sleep, splitText, fetchWithRetry } from "../shared/http-helpers";
+import { fetchWithRetry, sleep, splitText } from "../shared/http-helpers";
 import { evaluateTriggers, normalizeContent } from "../shared/trigger";
-import type { Adapter } from "@openomni/protocol";
-
-// ---------------------------------------------------------------------------
-// Telegram Bot API types (minimal subset)
-// ---------------------------------------------------------------------------
 
 interface TelegramUser {
   id: number;
@@ -43,10 +39,6 @@ interface TelegramResponse<T> {
   error_code?: number;
   parameters?: { retry_after?: number };
 }
-
-// ---------------------------------------------------------------------------
-// Adapter
-// ---------------------------------------------------------------------------
 
 export class TelegramAdapter implements Adapter.Surface {
   readonly id = "telegram";
@@ -99,11 +91,9 @@ export class TelegramAdapter implements Adapter.Surface {
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
-    const chatId = parsed.id!;
+    const chatId = parsed.id ?? "";
     await this.sendOutbound(chatId, message);
   }
-
-  // -- Long polling loop ----------------------------------------------------
 
   private async poll(): Promise<void> {
     while (this.running) {
@@ -138,8 +128,6 @@ export class TelegramAdapter implements Adapter.Surface {
     }
   }
 
-  // -- Message handling -----------------------------------------------------
-
   private async handleUpdate(message: TelegramMessage): Promise<void> {
     const text = message.text;
     if (!text) return;
@@ -147,11 +135,8 @@ export class TelegramAdapter implements Adapter.Surface {
     const userId = message.from?.id;
     const chatId = String(message.chat.id);
     const isDM = message.chat.type === "private";
-
-    // Check for @mention in text
     const mentioned = this.botUsername !== "" && text.includes(`@${this.botUsername}`);
 
-    // Build trigger context and evaluate
     const ctx: Adapter.TriggerContext = {
       event: "message",
       mentioned,
@@ -163,7 +148,6 @@ export class TelegramAdapter implements Adapter.Surface {
 
     if (!evaluateTriggers(this.config.triggers, ctx)) return;
 
-    // Strip prefix if a prefix rule matched
     const content = normalizeContent(text, this.config.triggers, this.botUsername);
     if (!content) return;
 
@@ -176,7 +160,6 @@ export class TelegramAdapter implements Adapter.Surface {
 
     console.log(`[telegram] ${chatId}: ${content.slice(0, 80)}`);
 
-    // Typing indicator (repeat every 4s until done)
     const typingInterval = setInterval(() => {
       this.api("sendChatAction", { chat_id: chatId, action: "typing" }).catch((e) =>
         console.error("[telegram] typing indicator error:", e),
@@ -227,8 +210,6 @@ export class TelegramAdapter implements Adapter.Surface {
     }
     // TODO: handle message.media when capabilities.media.send is enabled
   }
-
-  // -- Telegram API helper --------------------------------------------------
 
   private async api<T>(
     method: string,

@@ -1,74 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
-import { SurfaceKey } from "@openomni/session";
-import { Dedupe } from "../shared/dedupe";
-import { evaluateTriggers, normalizeContent } from "../shared/trigger";
-import { fetchWithRetry } from "../shared/http-helpers";
 import type { Adapter } from "@openomni/protocol";
-
-// ---------------------------------------------------------------------------
-// GitHub webhook payload types (minimal subset)
-// ---------------------------------------------------------------------------
-
-interface GitHubUser {
-  login: string;
-  type: string;
-}
-
-interface GitHubLabel {
-  name: string;
-}
-
-interface GitHubRepository {
-  full_name: string;
-  owner: { login: string };
-  name: string;
-}
-
-interface GitHubIssueCommentPayload {
-  action: string;
-  issue: {
-    number: number;
-    title: string;
-    body?: string;
-    pull_request?: unknown;
-    labels?: GitHubLabel[];
-    user: GitHubUser;
-  };
-  comment: {
-    id: number;
-    body: string;
-    user: GitHubUser;
-  };
-  repository: GitHubRepository;
-}
-
-interface GitHubIssuesPayload {
-  action: string;
-  issue: {
-    number: number;
-    title: string;
-    body?: string;
-    pull_request?: unknown;
-    labels?: GitHubLabel[];
-    user: GitHubUser;
-  };
-  repository: GitHubRepository;
-}
-
-/** Normalized content extracted from any supported GitHub event. */
-interface GitHubEventContent {
-  text: string;
-  sender: string;
-  senderType: string;
-  repo: string;
-  issueNumber: number;
-  issueKind: "issue" | "pr";
-  labels: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Adapter
-// ---------------------------------------------------------------------------
+import { SurfaceKey } from "@openomni/session";
+import { Dedupe } from "../../shared/dedupe";
+import { fetchWithRetry } from "../../shared/http-helpers";
+import { evaluateTriggers, normalizeContent } from "../../shared/trigger";
+import type { GitHubEventContent, GitHubIssueCommentPayload, GitHubIssuesPayload } from "./types";
 
 export class GitHubAdapter implements Adapter.Surface {
   readonly id = "github";
@@ -101,13 +37,18 @@ export class GitHubAdapter implements Adapter.Surface {
   }
 
   stop(): void {
-    // Webhook-based — no persistent connection to tear down
+    // no-op: GitHub adapter is webhook-based, no persistent connection to close
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
-    const issueNumber = parseInt(parsed.id!.split("-")[1]);
+    const issueNumber = parseInt((parsed.id ?? "").split("-")[1]);
+
+    if (Number.isNaN(issueNumber)) {
+      console.error(`[github] Invalid surfaceKey: malformed issue id in "${surfaceKey}"`);
+      return;
+    }
 
     if (message.text && this.githubToken) {
       await this.postComment(repo, issueNumber, message.text);
@@ -115,12 +56,7 @@ export class GitHubAdapter implements Adapter.Surface {
     // TODO: handle message.media when capabilities.media.send is enabled
   }
 
-  /**
-   * Handle an incoming GitHub webhook request.
-   * Verifies signature, deduplicates, evaluates triggers, routes the event.
-   */
   async handleWebhook(request: Request): Promise<Response> {
-    // 1. Verify signature
     const signature = request.headers.get("x-hub-signature-256");
     if (!signature) {
       return new Response("Missing signature", { status: 401 });
@@ -132,25 +68,26 @@ export class GitHubAdapter implements Adapter.Surface {
       return new Response("Invalid signature", { status: 401 });
     }
 
-    // 2. Dedupe by delivery ID
     const deliveryId = request.headers.get("x-github-delivery");
     if (deliveryId && this.dedupe.isDuplicate(deliveryId)) {
       return new Response("Already processed", { status: 200 });
     }
 
-    // 3. Extract content from event
     const event = request.headers.get("x-github-event");
-    const payload = JSON.parse(body);
+    if (!event) {
+      return new Response("Missing event", { status: 400 });
+    }
+
+    const payload = JSON.parse(body) as Record<string, unknown>;
     const eventKey = `${event}.${payload.action}`;
 
     console.log(`[github] Event: ${eventKey}`);
 
-    const content = this.extractContent(event!, payload);
+    const content = this.extractContent(event, payload);
     if (!content) {
       return new Response("Unsupported event", { status: 200 });
     }
 
-    // 4. Evaluate triggers
     const ctx: Adapter.TriggerContext = {
       event: eventKey,
       mentioned: this.checkMention(content.text),
@@ -164,37 +101,19 @@ export class GitHubAdapter implements Adapter.Surface {
       return new Response("Filtered", { status: 200 });
     }
 
-    // 5. Process
-    const surfaceKey = SurfaceKey.fromChannel({
-      surface: "github",
-      namespace: content.repo,
-      kind: "channel",
-      id: `${content.issueKind}-${content.issueNumber}`,
-    });
-
-    this.processEvent(content, eventKey).catch((err) => {
-      console.error(
-        `[github] async processing failed (event=${eventKey}, surface=${surfaceKey}):`,
-        err,
-      );
-    });
+    try {
+      await this.processEvent(content, eventKey);
+    } catch (err) {
+      console.error(`[github] processing failed (event=${eventKey}):`, err);
+    }
 
     return new Response("OK", { status: 200 });
   }
 
-  // -- Content extraction ---------------------------------------------------
-
-  /**
-   * Extract normalized content from a webhook payload.
-   * Returns null for unsupported event types or bot-authored events.
-   */
-  private extractContent(
-    event: string,
-    payload: Record<string, unknown>,
-  ): GitHubEventContent | null {
+  private extractContent(event: string, payload: unknown): GitHubEventContent | null {
     switch (event) {
       case "issue_comment": {
-        const p = payload as unknown as GitHubIssueCommentPayload;
+        const p = payload as GitHubIssueCommentPayload;
         if (p.action !== "created") return null;
         if (p.comment.user.type === "Bot") return null;
         return {
@@ -209,7 +128,7 @@ export class GitHubAdapter implements Adapter.Surface {
       }
 
       case "issues": {
-        const p = payload as unknown as GitHubIssuesPayload;
+        const p = payload as GitHubIssuesPayload;
         if (p.action !== "opened") return null;
         if (p.issue.user.type === "Bot") return null;
         return {
@@ -227,8 +146,6 @@ export class GitHubAdapter implements Adapter.Surface {
         return null;
     }
   }
-
-  // -- Event processing -----------------------------------------------------
 
   private async processEvent(content: GitHubEventContent, eventKey: string): Promise<void> {
     const surfaceKey = SurfaceKey.fromChannel({
@@ -276,14 +193,10 @@ export class GitHubAdapter implements Adapter.Surface {
     return this.handler;
   }
 
-  // -- Mention detection ----------------------------------------------------
-
   private checkMention(text: string): boolean {
     if (!this.botUsername) return false;
     return text.includes(`@${this.botUsername}`);
   }
-
-  // -- GitHub API -----------------------------------------------------------
 
   private async postComment(repo: string, issueNumber: number, body: string): Promise<void> {
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
@@ -311,8 +224,7 @@ export class GitHubAdapter implements Adapter.Surface {
     console.log(`[github] Posted comment to ${repo}#${issueNumber}`);
   }
 
-  // -- Signature verification -----------------------------------------------
-
+  // constant-time comparison to prevent timing attacks
   private async verifySignature(payload: string, signature: string): Promise<boolean> {
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -328,7 +240,6 @@ export class GitHubAdapter implements Adapter.Surface {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")}`;
 
-    // Constant-time comparison to prevent timing attacks
     if (signature.length !== digest.length) return false;
     return timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
   }

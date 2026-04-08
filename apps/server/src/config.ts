@@ -2,12 +2,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+type McpServerConfig = {
+  name: string;
+  transport: "stdio" | "sse" | "streamable-http";
+  command?: string;
+  args?: string[];
+  url?: string;
+};
+
 const DEFAULT_CONFIG_PATH = join(homedir(), ".openomni", "config.json");
 
 interface RawConfig {
+  workspace?: {
+    root?: string;
+  };
+  mcp?: {
+    servers?: McpServerConfig[];
+  };
   server?: {
     port?: number;
     host?: string;
+    wsToken?: string;
   };
   storage?: {
     dbPath?: string;
@@ -29,7 +44,9 @@ interface RawConfig {
 }
 
 export interface ServerConfig {
-  server: { port: number; host: string };
+  workspace?: { root: string };
+  mcp: { servers: McpServerConfig[] };
+  server: { port: number; host: string; wsToken?: string };
   storage: { dbPath: string };
   telegram: { token?: string; allowedUsers: string[] };
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
@@ -51,11 +68,21 @@ function loadRaw(configPath: string): RawConfig {
 
 function resolve(raw: RawConfig): ServerConfig {
   const defaultDbPath = join(homedir(), ".openomni", "storage.db");
+  const workspaceRoot = raw.workspace?.root;
+
+  if (workspaceRoot && !existsSync(workspaceRoot)) {
+    console.warn(`[config] workspace root not found: ${workspaceRoot}`);
+  }
 
   return {
+    workspace: workspaceRoot ? { root: workspaceRoot } : undefined,
+    mcp: {
+      servers: raw.mcp?.servers ?? [],
+    },
     server: {
       port: raw.server?.port ?? 3000,
       host: raw.server?.host ?? "127.0.0.1",
+      wsToken: raw.server?.wsToken,
     },
     storage: {
       dbPath: raw.storage?.dbPath ?? defaultDbPath,

@@ -1,10 +1,3 @@
-/**
- * Time-windowed message deduplication.
- *
- * Tracks seen message/event IDs and rejects duplicates within the
- * configured time window. Used by adapters to handle platform retries
- * (Telegram re-delivery, Discord RESUME replays, GitHub webhook resends).
- */
 export class Dedupe {
   private readonly seen = new Map<string, number>();
   private readonly maxAge: number;
@@ -16,9 +9,8 @@ export class Dedupe {
     this.maxSize = maxSize;
   }
 
-  /** Returns true if this ID was already seen (skip processing). */
   isDuplicate(id: string): boolean {
-    // Prune every 100 operations to amortize cost
+    // prune every 100 operations to amortize cost
     if (++this.ops >= 100) {
       this.ops = 0;
       this.prune();
@@ -26,7 +18,7 @@ export class Dedupe {
 
     const existing = this.seen.get(id);
     if (existing !== undefined) {
-      // Allow re-processing if the previous entry has expired
+      // allow re-processing if the previous entry has expired
       if (Date.now() - existing > this.maxAge) {
         this.seen.set(id, Date.now());
         return false;

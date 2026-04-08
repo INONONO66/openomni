@@ -1,6 +1,5 @@
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
-import { notificationTool } from "./tools/notification";
 import { createSubagentTool } from "./tools/subagent";
 
 export class AgentToolProvider implements ToolProvider {
@@ -14,7 +13,7 @@ export class AgentToolProvider implements ToolProvider {
   }
 
   listTools(): NativeTool[] {
-    return [createSubagentTool(), notificationTool, ...this.extraTools];
+    return [createSubagentTool(), ...this.extraTools];
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {

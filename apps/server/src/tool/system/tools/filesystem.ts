@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool } from "../../types";
@@ -46,6 +46,33 @@ function getEncoding(input: InputRecord): "utf8" | "base64" {
   throw new Error('Invalid input: encoding must be "utf8" or "base64"');
 }
 
+function resolveContainedPath(workspaceRoot: string, inputPath: string): string {
+  const root = resolve(workspaceRoot);
+  const resolved = resolve(root, inputPath);
+
+  if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+    throw new Error(`Path must stay within workspace root: ${root}`);
+  }
+
+  try {
+    const realResolved = realpathSync(resolved);
+    const realRoot = realpathSync(root);
+    if (realResolved !== realRoot && !realResolved.startsWith(`${realRoot}/`)) {
+      throw new Error(`Path escapes workspace root via symlink: ${root}`);
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    // target doesn't exist yet — validate parent to catch symlinks in intermediate dirs
+    const realParent = realpathSync(dirname(resolved));
+    const realRoot = realpathSync(root);
+    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}/`)) {
+      throw new Error(`Path escapes workspace root via symlink: ${root}`);
+    }
+  }
+
+  return resolved;
+}
+
 async function searchFiles(rootPath: string, recursive: boolean): Promise<string[]> {
   const resolvedRoot = resolve(rootPath);
   const rootStat = statSync(resolvedRoot);
@@ -61,11 +88,12 @@ async function searchFiles(rootPath: string, recursive: boolean): Promise<string
   );
 }
 
-async function executeRead(call: Tool.Call): Promise<Tool.Result> {
+async function executeRead(call: Tool.Call, workspaceRoot: string): Promise<Tool.Result> {
   try {
     const filePath = getNonEmptyString(call.input, "path");
     const encoding = getEncoding(call.input);
-    const file = Bun.file(resolve(filePath));
+    const resolved = resolveContainedPath(workspaceRoot, filePath);
+    const file = Bun.file(resolved);
 
     if (!(await file.exists())) {
       throw new Error(`Path does not exist: ${filePath}`);
@@ -82,25 +110,27 @@ async function executeRead(call: Tool.Call): Promise<Tool.Result> {
   }
 }
 
-async function executeWrite(call: Tool.Call): Promise<Tool.Result> {
+async function executeWrite(call: Tool.Call, workspaceRoot: string): Promise<Tool.Result> {
   try {
-    const filePath = resolve(getNonEmptyString(call.input, "path"));
+    const filePath = getNonEmptyString(call.input, "path");
     const content = getString(call.input, "content");
+    const resolved = resolveContainedPath(workspaceRoot, filePath);
 
-    mkdirSync(dirname(filePath), { recursive: true });
-    await Bun.write(filePath, content);
+    mkdirSync(dirname(resolved), { recursive: true });
+    await Bun.write(resolved, content);
 
-    return createResult(call, `Wrote ${content.length} bytes to ${filePath}`);
+    return createResult(call, `Wrote ${content.length} bytes to ${resolved}`);
   } catch (err) {
     return createResult(call, err instanceof Error ? err.message : String(err), true);
   }
 }
 
-async function executeList(call: Tool.Call): Promise<Tool.Result> {
+async function executeList(call: Tool.Call, workspaceRoot: string): Promise<Tool.Result> {
   try {
-    const targetPath = resolve(getNonEmptyString(call.input, "path"));
-    const entries = readdirSync(targetPath).map((entry) => {
-      const entryPath = resolve(targetPath, entry);
+    const targetPath = getNonEmptyString(call.input, "path");
+    const resolved = resolveContainedPath(workspaceRoot, targetPath);
+    const entries = readdirSync(resolved).map((entry) => {
+      const entryPath = resolve(resolved, entry);
       const stats = statSync(entryPath);
       return {
         name: entry,
@@ -115,13 +145,14 @@ async function executeList(call: Tool.Call): Promise<Tool.Result> {
   }
 }
 
-async function executeSearch(call: Tool.Call): Promise<Tool.Result> {
+async function executeSearch(call: Tool.Call, workspaceRoot: string): Promise<Tool.Result> {
   try {
     const targetPath = getNonEmptyString(call.input, "path");
     const pattern = getNonEmptyString(call.input, "pattern");
     const recursive = getOptionalBoolean(call.input, "recursive") ?? true;
+    const resolved = resolveContainedPath(workspaceRoot, targetPath);
     const regex = new RegExp(pattern, "gm");
-    const filePaths = await searchFiles(targetPath, recursive);
+    const filePaths = await searchFiles(resolved, recursive);
     const matches: Array<{ path: string; matches: string[] }> = [];
 
     for (const filePath of filePaths) {
@@ -144,76 +175,78 @@ async function executeSearch(call: Tool.Call): Promise<Tool.Result> {
   }
 }
 
-export const filesystemTools: NativeTool[] = [
-  {
-    spec: {
-      name: "fs.read",
-      description: "Read a file from disk",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "File path" },
-          encoding: {
-            type: "string",
-            enum: ["utf8", "base64"],
-            description: "Response encoding",
+export function createFilesystemTools(workspaceRoot: string): NativeTool[] {
+  return [
+    {
+      spec: {
+        name: "fs.read",
+        description: "Read a file from disk",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path" },
+            encoding: {
+              type: "string",
+              enum: ["utf8", "base64"],
+              description: "Response encoding",
+            },
           },
+          required: ["path"],
         },
-        required: ["path"],
+        safe: true,
       },
-      safe: true,
+      riskTier: 0,
+      execute: (call) => executeRead(call, workspaceRoot),
     },
-    riskTier: 0,
-    execute: executeRead,
-  },
-  {
-    spec: {
-      name: "fs.write",
-      description: "Write a file to disk",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "File path" },
-          content: { type: "string", description: "File contents" },
+    {
+      spec: {
+        name: "fs.write",
+        description: "Write a file to disk",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path" },
+            content: { type: "string", description: "File contents" },
+          },
+          required: ["path", "content"],
         },
-        required: ["path", "content"],
       },
+      riskTier: 1,
+      execute: (call) => executeWrite(call, workspaceRoot),
     },
-    riskTier: 1,
-    execute: executeWrite,
-  },
-  {
-    spec: {
-      name: "fs.list",
-      description: "List directory contents",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "Directory path" },
+    {
+      spec: {
+        name: "fs.list",
+        description: "List directory contents",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Directory path" },
+          },
+          required: ["path"],
         },
-        required: ["path"],
+        safe: true,
       },
-      safe: true,
+      riskTier: 0,
+      execute: (call) => executeList(call, workspaceRoot),
     },
-    riskTier: 0,
-    execute: executeList,
-  },
-  {
-    spec: {
-      name: "fs.search",
-      description: "Search file contents with a regex",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "File or directory path" },
-          pattern: { type: "string", description: "Regular expression pattern" },
-          recursive: { type: "boolean", description: "Recurse into subdirectories" },
+    {
+      spec: {
+        name: "fs.search",
+        description: "Search file contents with a regex",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File or directory path" },
+            pattern: { type: "string", description: "Regular expression pattern" },
+            recursive: { type: "boolean", description: "Recurse into subdirectories" },
+          },
+          required: ["path", "pattern"],
         },
-        required: ["path", "pattern"],
+        safe: true,
       },
-      safe: true,
+      riskTier: 0,
+      execute: (call) => executeSearch(call, workspaceRoot),
     },
-    riskTier: 0,
-    execute: executeSearch,
-  },
-];
+  ];
+}

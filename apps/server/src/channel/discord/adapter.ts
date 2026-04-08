@@ -1,60 +1,15 @@
-import { SurfaceKey } from "@openomni/session";
-import { Dedupe } from "../shared/dedupe";
-import { sleep, splitText, fetchWithRetry } from "../shared/http-helpers";
-import { evaluateTriggers, normalizeContent } from "../shared/trigger";
 import type { Adapter } from "@openomni/protocol";
-
-// ---------------------------------------------------------------------------
-// Discord Gateway opcodes & intents
-// ---------------------------------------------------------------------------
-
-const GatewayOp = {
-  DISPATCH: 0,
-  HEARTBEAT: 1,
-  IDENTIFY: 2,
-  RESUME: 6,
-  RECONNECT: 7,
-  INVALID_SESSION: 9,
-  HELLO: 10,
-  HEARTBEAT_ACK: 11,
-} as const;
-
-const Intents = {
-  GUILDS: 1 << 0,
-  GUILD_MESSAGES: 1 << 9,
-  DIRECT_MESSAGES: 1 << 12,
-  MESSAGE_CONTENT: 1 << 15,
-} as const;
-
-// ---------------------------------------------------------------------------
-// Discord API types (minimal subset)
-// ---------------------------------------------------------------------------
-
-interface DiscordUser {
-  id: string;
-  username: string;
-  bot?: boolean;
-}
-
-interface DiscordMessage {
-  id: string;
-  channel_id: string;
-  guild_id?: string;
-  author: DiscordUser;
-  content: string;
-  mentions?: DiscordUser[];
-}
-
-interface GatewayPayload {
-  op: number;
-  d: unknown;
-  s: number | null;
-  t: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Adapter
-// ---------------------------------------------------------------------------
+import { SurfaceKey } from "@openomni/session";
+import { Dedupe } from "../../shared/dedupe";
+import { fetchWithRetry, sleep, splitText } from "../../shared/http-helpers";
+import { evaluateTriggers, normalizeContent } from "../../shared/trigger";
+import {
+  GatewayOp,
+  Intents,
+  type DiscordMessage,
+  type DiscordUser,
+  type GatewayPayload,
+} from "./types";
 
 export class DiscordAdapter implements Adapter.Surface {
   readonly id = "discord";
@@ -111,19 +66,17 @@ export class DiscordAdapter implements Adapter.Surface {
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
-    let channelId = parsed.id!;
+    let channelId = parsed.id ?? "";
 
     if (parsed.kind === "dm") {
       const dmChannel = (await this.api("/users/@me/channels", {
-        recipient_id: parsed.id!,
+        recipient_id: parsed.id ?? "",
       })) as { id: string };
       channelId = dmChannel.id;
     }
 
     await this.sendOutbound(channelId, message);
   }
-
-  // -- Gateway connection ---------------------------------------------------
 
   private async connect(): Promise<void> {
     const res = await fetch(`${this.baseUrl}/gateway/bot`, {
@@ -196,8 +149,6 @@ export class DiscordAdapter implements Adapter.Surface {
     });
   }
 
-  // -- Gateway event handling -----------------------------------------------
-
   private handleGateway(payload: GatewayPayload): boolean {
     if (payload.s !== null) {
       this.sequence = payload.s;
@@ -244,8 +195,9 @@ export class DiscordAdapter implements Adapter.Surface {
       }
 
       case GatewayOp.DISPATCH:
+        if (!payload.t) return false;
         try {
-          return this.handleDispatch(payload.t!, payload.d);
+          return this.handleDispatch(payload.t, payload.d);
         } catch (err) {
           console.error("[discord] Error handling dispatch:", err);
           return false;
@@ -282,11 +234,8 @@ export class DiscordAdapter implements Adapter.Surface {
         const message = data as DiscordMessage;
         if (message.author.bot) return false;
         if (!message.content) return false;
-
-        // Dedupe
         if (this.dedupe.isDuplicate(message.id)) return false;
 
-        // Build trigger context and evaluate
         const isDM = !message.guild_id;
         const mentioned = message.mentions?.some((u) => u.id === this.botId) ?? false;
 
@@ -312,19 +261,16 @@ export class DiscordAdapter implements Adapter.Surface {
     }
   }
 
-  // -- Message handling -----------------------------------------------------
-
   private async handleIncoming(message: DiscordMessage, mentioned: boolean): Promise<void> {
     const channelId = message.channel_id;
     const isDM = !message.guild_id;
 
-    // Strip @mention from content for cleaner LLM input
     let content = message.content;
     if (mentioned && !isDM) {
       content = content.replace(new RegExp(`<@!?${this.botId}>\\s*`), "").trim();
     }
 
-    // Strip prefix via normalizeContent (no botUsername — Discord uses ID-based mentions)
+    // Discord uses ID-based mentions, no botUsername needed
     content = normalizeContent(content, this.config.triggers);
     if (!content) return;
 
@@ -337,7 +283,6 @@ export class DiscordAdapter implements Adapter.Surface {
 
     console.log(`[discord] ${isDM ? "dm" : channelId}: ${content.slice(0, 80)}`);
 
-    // Typing indicator (repeat every 8s until done)
     this.sendTyping(channelId);
     const typingInterval = setInterval(() => {
       this.sendTyping(channelId);
@@ -393,8 +338,6 @@ export class DiscordAdapter implements Adapter.Surface {
     }).catch((e) => console.error("[discord] typing indicator error:", e));
   }
 
-  // -- Discord REST helper --------------------------------------------------
-
   private async api(path: string, body: Record<string, unknown>): Promise<unknown> {
     const res = await fetchWithRetry(
       `${this.baseUrl}${path}`,
@@ -422,8 +365,6 @@ export class DiscordAdapter implements Adapter.Surface {
 
     return res.json();
   }
-
-  // -- Gateway helpers ------------------------------------------------------
 
   private calculateBackoff(): number {
     return Math.min(1000 * 2 ** this.reconnectAttempt, this.maxBackoff) + Math.random() * 1000;

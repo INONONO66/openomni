@@ -7,7 +7,7 @@ import { SurfaceStore } from "./surface-store";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import { createToolExecutor } from "../tool/executor";
-import type { ToolProvider } from "../tool/types";
+import type { NativeTool, ToolProvider } from "../tool/types";
 import type { SystemToolProvider } from "../tool/system";
 import type { AgentToolProvider } from "../tool/agent";
 import type { McpToolProvider } from "../tool/mcp";
@@ -57,23 +57,21 @@ function buildToolsForAgent(
   systemProvider: ToolProvider,
   agentProvider: ToolProvider,
   mcpProvider: ToolProvider,
-): { specs: Tool.Spec[]; providers: ToolProvider[] } {
-  const providers: ToolProvider[] = [];
+): { specs: Tool.Spec[]; tools: NativeTool[] } {
+  const tools: NativeTool[] = [];
   const specs: Tool.Spec[] = [];
 
   function addFromProvider(provider: ToolProvider, selection: boolean | string[] | undefined) {
     if (!selection) return;
-    providers.push(provider);
-    const tools = provider.listTools();
+    const providerTools = provider.listTools();
     if (selection === true) {
-      specs.push(...tools.map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })));
+      tools.push(...providerTools);
+      specs.push(...providerTools.map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })));
     } else {
       const allowed = new Set(selection);
-      specs.push(
-        ...tools
-          .filter((t) => allowed.has(t.spec.name))
-          .map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })),
-      );
+      const selected = providerTools.filter((t) => allowed.has(t.spec.name));
+      tools.push(...selected);
+      specs.push(...selected.map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })));
     }
   }
 
@@ -81,22 +79,7 @@ function buildToolsForAgent(
   addFromProvider(agentProvider, definition.tools.agent);
   addFromProvider(mcpProvider, definition.tools.mcp);
 
-  return { specs, providers };
-}
-
-function needsResolution(modelId: string): boolean {
-  return !/\d{8}$/.test(modelId);
-}
-
-function resolveConversationModel(
-  definition: AgentDefinition,
-  defaultModel?: ConversationConfig["defaultModel"],
-): ChatAgentConfig["model"] {
-  if (needsResolution(definition.model.id)) {
-    return defaultModel ?? definition.model;
-  }
-
-  return definition.model;
+  return { specs, tools };
 }
 
 function toChatInput(
@@ -209,7 +192,7 @@ async function processMessage(
   options?: { existingMessageId?: string },
 ): Promise<string> {
   const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
-  const model = resolveConversationModel(definition, config.defaultModel);
+  const model = config.defaultModel ?? definition.model;
 
   let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {
@@ -237,14 +220,14 @@ async function processMessage(
 
   const history = loadHistory(sessionId);
 
-  const { specs, providers } = buildToolsForAgent(
+  const { specs, tools } = buildToolsForAgent(
     definition,
     config.systemProvider,
     config.agentProvider,
     config.mcpProvider,
   );
   const toolExecutor = createToolExecutor({
-    providers,
+    tools,
     config: { permissions: definition.permissions },
   });
 

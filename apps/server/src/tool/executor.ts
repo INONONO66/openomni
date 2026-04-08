@@ -1,5 +1,5 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
-import type { NativeTool, ToolExecutorConfig, ToolProvider } from "./types";
+import type { NativeTool, ToolExecutorConfig } from "./types";
 
 const tierTimeouts: Record<number, number> = {
   0: 30_000,
@@ -8,30 +8,18 @@ const tierTimeouts: Record<number, number> = {
   3: 120_000,
 };
 
-interface DispatchEntry {
-  provider: ToolProvider;
-  tool: NativeTool;
-}
-
 export interface ToolExecutorContext {
-  providers: ToolProvider[];
+  tools: NativeTool[];
   config?: ToolExecutorConfig;
 }
 
-function buildDispatchTable(providers: ToolProvider[]): Map<string, DispatchEntry> {
-  const dispatch = new Map<string, DispatchEntry>();
-
-  for (const provider of providers) {
-    for (const tool of provider.listTools()) {
-      const entry = { provider, tool };
-      dispatch.set(tool.spec.name, entry);
-      const sanitized = tool.spec.name.replace(/\./g, "_");
-      if (sanitized !== tool.spec.name) {
-        dispatch.set(sanitized, entry);
-      }
-    }
+function buildDispatchTable(tools: NativeTool[]): Map<string, NativeTool> {
+  const dispatch = new Map<string, NativeTool>();
+  for (const tool of tools) {
+    dispatch.set(tool.spec.name, tool);
+    const sanitized = tool.spec.name.replace(/\./g, "_");
+    if (sanitized !== tool.spec.name) dispatch.set(sanitized, tool);
   }
-
   return dispatch;
 }
 
@@ -107,36 +95,34 @@ function createErrorResult(call: Tool.Call, message: string): Tool.Result {
 export function createToolExecutor(
   ctx: ToolExecutorContext,
 ): (call: Tool.Call) => Promise<Tool.Result> {
-  const dispatch = buildDispatchTable(ctx.providers);
+  const dispatch = buildDispatchTable(ctx.tools);
   const config = ctx.config ?? {};
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
-    const entry = dispatch.get(call.tool);
-    if (!entry) {
+    const tool = dispatch.get(call.tool);
+    if (!tool) {
       return createErrorResult(call, `Unknown tool: ${call.tool}`);
     }
 
-    const originalName = entry.tool.spec.name;
+    const originalName = tool.spec.name;
     const verdict = checkPermission(originalName, config.permissions);
     if (verdict === "deny") {
       return createErrorResult(call, `[Blocked] Tool "${originalName}" denied by policy`);
     }
 
     if (verdict === "require_approval") {
-      console.warn(
-        `[executor] tool "${originalName}" requires approval (proceeding until approval flow exists)`,
-      );
+      return createErrorResult(call, `[Blocked] Tool "${originalName}" requires approval`);
     }
 
-    if (entry.tool.riskTier >= 2) {
-      console.warn(`[executor] executing tier-${entry.tool.riskTier} tool: ${originalName}`);
+    if (tool.riskTier >= 2) {
+      console.warn(`[executor] executing tier-${tool.riskTier} tool: ${originalName}`);
     }
 
-    const timeoutMs = getTimeoutMs(entry.tool.riskTier, config);
+    const timeoutMs = getTimeoutMs(tool.riskTier, config);
     const dispatchedCall = originalName === call.tool ? call : { ...call, tool: originalName };
 
     try {
-      return await withTimeout(entry.tool.execute(dispatchedCall), timeoutMs);
+      return await withTimeout(tool.execute(dispatchedCall), timeoutMs);
     } catch (error) {
       return createErrorResult(call, error instanceof Error ? error.message : String(error));
     }

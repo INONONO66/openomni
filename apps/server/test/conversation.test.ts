@@ -152,7 +152,7 @@ describe("agent permissions applied to executor", () => {
     const provider = createMockProvider("system", "system", [gitPush, gitStatus]);
 
     const executor = createToolExecutor({
-      providers: [provider],
+      tools: provider.listTools(),
       config: { permissions: def?.permissions },
     });
 
@@ -179,10 +179,9 @@ describe("agent permissions applied to executor", () => {
       riskTier: 0,
       execute: () => new Promise((resolve) => setTimeout(resolve, 5000)),
     };
-    const provider = createMockProvider("system", "system", [slowTool]);
 
     const executor = createToolExecutor({
-      providers: [provider],
+      tools: [slowTool],
       config: { timeoutMs: { tier0: 30 } },
     });
 
