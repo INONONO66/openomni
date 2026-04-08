@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { McpServerConfig } from "@openomni/agent";
+import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
 import { Auth, Provider } from "@openomni/llm";
 import type { Adapter } from "@openomni/protocol";
 import { Storage, initialize } from "@openomni/session";
