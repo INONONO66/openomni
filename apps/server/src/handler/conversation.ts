@@ -47,6 +47,11 @@ export function createMessageHandler(config: ConversationConfig): Adapter.Messag
   };
 }
 
+// Anthropic requires tool names matching ^[a-zA-Z0-9_-]{1,128}$
+function sanitizeToolName(name: string): string {
+  return name.replace(/\./g, "_");
+}
+
 function buildToolsForAgent(
   definition: AgentDefinition,
   systemProvider: ToolProvider,
@@ -61,10 +66,14 @@ function buildToolsForAgent(
     providers.push(provider);
     const tools = provider.listTools();
     if (selection === true) {
-      specs.push(...tools.map((t) => t.spec));
+      specs.push(...tools.map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })));
     } else {
       const allowed = new Set(selection);
-      specs.push(...tools.filter((t) => allowed.has(t.spec.name)).map((t) => t.spec));
+      specs.push(
+        ...tools
+          .filter((t) => allowed.has(t.spec.name))
+          .map((t) => ({ ...t.spec, name: sanitizeToolName(t.spec.name) })),
+      );
     }
   }
 
@@ -184,12 +193,13 @@ async function processMessage(
   options?: { existingMessageId?: string },
 ): Promise<string> {
   const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
+  const model = config.defaultModel ?? definition.model;
 
   let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {
     const session = Session.create({
       title: surfaceKey,
-      model: { providerID: definition.model.provider, modelID: definition.model.id },
+      model: { providerID: model.provider, modelID: model.id },
     });
     sessionId = session.id;
     SurfaceStore.register(surfaceKey, sessionId);
@@ -201,7 +211,7 @@ async function processMessage(
   if (options?.existingMessageId) {
     userMessageId = options.existingMessageId;
   } else {
-    const userMessage = createUserMessage(sessionId, definition.model, text);
+    const userMessage = createUserMessage(sessionId, model, text);
     Session.addMessage(sessionId, userMessage.info, { status: "received" });
     for (const part of userMessage.parts) {
       Session.addPart(userMessage.info.id, part);
@@ -225,7 +235,7 @@ async function processMessage(
   Session.updateMessageStatus(userMessageId, "processing");
 
   const agent = ChatAgent.create({
-    model: definition.model,
+    model,
     systemPrompt: definition.systemPrompt,
     tools: specs,
     toolExecutor,

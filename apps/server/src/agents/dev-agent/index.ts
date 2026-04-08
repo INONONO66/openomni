@@ -13,7 +13,7 @@ export const devAgentMeta: AgentPromptMetadata = {
 export const createDevAgent: AgentFactory = (): AgentDefinition => ({
   name: "dev",
   description: devAgentMeta.description,
-  model: { provider: "anthropic", id: "claude-opus-4-5" },
+  model: { provider: "anthropic", id: "claude-sonnet-4-6" },
   systemPrompt: DEV_AGENT_PROMPT,
   tools: {
     system: true,

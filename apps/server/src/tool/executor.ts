@@ -23,7 +23,12 @@ function buildDispatchTable(providers: ToolProvider[]): Map<string, DispatchEntr
 
   for (const provider of providers) {
     for (const tool of provider.listTools()) {
-      dispatch.set(tool.spec.name, { provider, tool });
+      const entry = { provider, tool };
+      dispatch.set(tool.spec.name, entry);
+      const sanitized = tool.spec.name.replace(/\./g, "_");
+      if (sanitized !== tool.spec.name) {
+        dispatch.set(sanitized, entry);
+      }
     }
   }
 
