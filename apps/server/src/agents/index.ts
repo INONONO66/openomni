@@ -3,6 +3,7 @@ export {
   getAllAgentNames,
   createAllAgents,
   agentMetadata,
+  registerAgent,
 } from "./registry";
 export type {
   AgentDefinition,

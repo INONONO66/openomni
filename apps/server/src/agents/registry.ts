@@ -1,9 +1,15 @@
 import type { AgentFactory, AgentDefinition, AgentPromptMetadata } from "./types";
 import { createDevAgent, devAgentMeta } from "./dev-agent/index";
 
-const agentSources: Map<string, AgentFactory> = new Map([["dev", createDevAgent]]);
+const agentSources = new Map<string, AgentFactory>([["dev", createDevAgent]]);
+const metadata = new Map<string, AgentPromptMetadata>([["dev", devAgentMeta]]);
 
-export const agentMetadata: Map<string, AgentPromptMetadata> = new Map([["dev", devAgentMeta]]);
+export function registerAgent(factory: AgentFactory, meta: AgentPromptMetadata): void {
+  agentSources.set(meta.name, factory);
+  metadata.set(meta.name, meta);
+}
+
+export { metadata as agentMetadata };
 
 export function getAgentDefinition(name: string): AgentDefinition | undefined {
   const factory = agentSources.get(name);

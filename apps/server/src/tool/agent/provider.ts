@@ -2,14 +2,19 @@ import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
 import { notificationTool } from "./tools/notification";
 import { createSubagentTool } from "./tools/subagent";
-import { stubTools } from "./tools/stubs";
 
 export class AgentToolProvider implements ToolProvider {
   readonly name = "agent";
   readonly category: ToolCategory = "agent";
 
+  private extraTools: NativeTool[] = [];
+
+  register(tool: NativeTool): void {
+    this.extraTools.push(tool);
+  }
+
   listTools(): NativeTool[] {
-    return [createSubagentTool(), notificationTool, ...stubTools];
+    return [createSubagentTool(), notificationTool, ...this.extraTools];
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {
