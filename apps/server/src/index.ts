@@ -1,13 +1,32 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
 import { Auth, Provider } from "@openomni/llm";
-import { Storage, initialize } from "@openomni/session";
 import type { Adapter } from "@openomni/protocol";
+import { Storage, initialize } from "@openomni/session";
+import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
-import { createRouter } from "./routes";
-import { DiscordAdapter, GitHubAdapter, TelegramAdapter } from "./channel";
-import { createMessageHandler, type ConversationConfig } from "./handler/conversation";
+import { createMessageHandler } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
+import { resolveAgentName } from "./router";
+import { createRouter } from "./routes";
+import { AgentToolProvider } from "./tool/agent";
+import { McpToolProvider } from "./tool/mcp";
+import { SystemToolProvider } from "./tool/system";
+
+type LoadedConfig = ReturnType<typeof loadConfig>;
+
+type RuntimeConfig = LoadedConfig & {
+  workspace?: { root?: string };
+  mcp?: { servers?: McpServerConfig[] };
+  server: LoadedConfig["server"] & { wsToken?: string };
+};
+
+type SqliteStorageAdapter = {
+  transaction(fn: () => void): void;
+  close(): void;
+  sqlite: { exec(sql: string): void };
+};
 
 async function resolveModel(): Promise<Provider.Model | undefined> {
   try {
@@ -28,11 +47,51 @@ async function resolveModel(): Promise<Provider.Model | undefined> {
   }
 }
 
+function createRoutingHandler(
+  systemProvider: SystemToolProvider,
+  agentProvider: AgentToolProvider,
+  mcpProvider: McpToolProvider,
+  defaultModel?: { provider: string; id: string },
+): Adapter.MessageHandler {
+  const handlerCache = new Map<string, Adapter.MessageHandler>();
+
+  return async (message) => {
+    const agentName = resolveAgentName({ message, defaultAgent: "dev" });
+    let handler = handlerCache.get(agentName);
+
+    if (!handler) {
+      handler = createMessageHandler({
+        agentName,
+        systemProvider,
+        agentProvider,
+        mcpProvider,
+        defaultModel,
+      });
+      handlerCache.set(agentName, handler);
+    }
+
+    return handler(message);
+  };
+}
+
+async function connectMcpServers(config: RuntimeConfig, provider: McpToolProvider): Promise<void> {
+  const servers = config.mcp?.servers ?? [];
+  if (servers.length === 0) return;
+
+  for (const server of servers) {
+    await provider.addServer(server);
+  }
+
+  await provider.refreshTools();
+  console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
+}
+
 async function processRetryQueue(
   queue: RecoveryItem[],
   handler: Adapter.MessageHandler,
 ): Promise<void> {
   console.log(`[recovery] Processing ${queue.length} retry item(s)...`);
+
   for (const item of queue) {
     try {
       await handler({
@@ -46,38 +105,51 @@ async function processRetryQueue(
       console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
     }
   }
+
   console.log("[recovery] Retry processing complete");
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = loadConfig() as RuntimeConfig;
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
 
-  const sqliteAdapter = Storage.get() as unknown as {
-    transaction(fn: () => void): void;
-    close(): void;
-    sqlite: { exec(sql: string): void };
-  };
+  const sqliteAdapter = Storage.get() as unknown as SqliteStorageAdapter;
+  const systemProvider = new SystemToolProvider(config.workspace?.root);
+  const agentProvider = new AgentToolProvider();
+  const mcpProvider = new McpToolProvider();
+
+  await connectMcpServers(config, mcpProvider);
 
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
   );
+  const model = await resolveModel();
+  const routingHandler = model
+    ? createRoutingHandler(systemProvider, agentProvider, mcpProvider, {
+        provider: model.providerID,
+        id: model.id,
+      })
+    : undefined;
+  const wsHandler = routingHandler
+    ? new WebSocketHandler(routingHandler, { token: config.server.wsToken })
+    : undefined;
+  const websocket = wsHandler?.ws ?? {
+    open() {},
+    message() {},
+  };
 
-  let conversationConfig: ConversationConfig | undefined;
-  if (hasAnyChannel) {
-    const model = await resolveModel();
-    if (model) {
-      conversationConfig = { model };
-      console.log(`[server] Using model: ${model.providerID}/${model.id}`);
-    }
+  if (model) {
+    console.log(`[server] Using model: ${model.providerID}/${model.id}`);
+  } else {
+    console.warn("[server] no model credentials found; realtime surfaces disabled");
   }
 
-  const handler = conversationConfig ? createMessageHandler(conversationConfig) : undefined;
   const channels: Adapter.Surface[] = [];
+  let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
 
-  if (config.telegram.token && handler) {
+  if (config.telegram.token && routingHandler) {
     const telegram = new TelegramAdapter(config.telegram.token, {
       triggers: [
         ...(config.telegram.allowedUsers.length > 0
@@ -86,12 +158,11 @@ async function main(): Promise<void> {
       ],
       deliveryPolicy: "final",
     });
-    telegram.onMessage(handler);
+    telegram.onMessage(routingHandler);
     channels.push(telegram);
   }
 
-  let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
-  if (config.github.secret && handler) {
+  if (config.github.secret && routingHandler) {
     const github = new GitHubAdapter(
       config.github.secret,
       {
@@ -106,12 +177,12 @@ async function main(): Promise<void> {
       config.github.token,
       config.github.botUsername,
     );
-    github.onMessage(handler);
+    github.onMessage(routingHandler);
     githubWebhookHandler = (req) => github.handleWebhook(req);
     channels.push(github);
   }
 
-  if (config.discord.token && handler) {
+  if (config.discord.token && routingHandler) {
     const discord = new DiscordAdapter(config.discord.token, {
       triggers: [
         { type: "mention" },
@@ -121,32 +192,46 @@ async function main(): Promise<void> {
       ],
       deliveryPolicy: "final",
     });
-    discord.onMessage(handler);
+    discord.onMessage(routingHandler);
     channels.push(discord);
   }
 
-  if (hasAnyChannel && !handler) {
+  if (hasAnyChannel && !routingHandler) {
     console.warn("[server] channel credentials found but no model credentials; channels disabled");
   }
 
-  if (channels.length === 0) {
-    console.log("[server] No channels configured. Starting HTTP-only mode.");
-  }
-
   const app = createRouter(githubWebhookHandler);
-  await Promise.all(channels.map((channel) => channel.start()));
-
   const server = Bun.serve({
     port: config.server.port,
     hostname: config.server.host,
-    fetch: app.fetch,
+    websocket,
+    fetch(req, serverInstance) {
+      const url = new URL(req.url);
+      if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+        if (!wsHandler) {
+          return new Response("WebSocket unavailable", { status: 503 });
+        }
+
+        const response = wsHandler.handleUpgrade(req, serverInstance);
+        return response ?? new Response(null, { status: 101 });
+      }
+
+      return app.fetch(req, serverInstance);
+    },
   });
 
+  await Promise.all(channels.map((channel) => channel.start()));
+
+  if (channels.length === 0) {
+    console.log("[server] No external channels configured. Web and WebSocket endpoints only.");
+  }
+
   console.log(`[server] listening on http://${config.server.host}:${server.port}`);
+  console.log(`[server] websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`);
 
   const retryQueue = await recoverInterruptedMessages();
-  if (handler && retryQueue.length > 0) {
-    await processRetryQueue(retryQueue, handler);
+  if (routingHandler && retryQueue.length > 0) {
+    await processRetryQueue(retryQueue, routingHandler);
   } else if (retryQueue.length > 0) {
     console.warn(`[recovery] ${retryQueue.length} message(s) need retry but no handler available`);
   }
@@ -157,17 +242,17 @@ async function main(): Promise<void> {
     shuttingDown = true;
 
     console.log("[server] shutting down...");
+
     for (const channel of channels) {
       channel.stop();
     }
 
     server.stop(true);
+    await mcpProvider.disconnectAll();
     await new Promise((resolve) => setTimeout(resolve, 5_000));
 
     sqliteAdapter.transaction(() => {
-      (sqliteAdapter as unknown as { sqlite: { exec(sql: string): void } }).sqlite.exec(
-        "PRAGMA wal_checkpoint(TRUNCATE)",
-      );
+      sqliteAdapter.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     });
     sqliteAdapter.close();
 

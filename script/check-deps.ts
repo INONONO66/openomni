@@ -43,6 +43,8 @@ const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 const KNOWN_DEEP_IMPORTS = new Set([
   "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/registry",
   "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/storage",
+  "apps/server/src/tool/mcp/provider.ts:@openomni/agent/src/runtime/mcp",
+  "apps/server/src/index.ts:@openomni/agent/src/runtime/mcp",
 ]);
 
 const RULES: Record<PackageKey, PackageRule> = {
