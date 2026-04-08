@@ -50,10 +50,10 @@ export async function fetchWithRetry(
 
     let retryAfter = 5;
     if (options?.parseRetryAfter) {
-      try {
-        const body = await response.json();
+      const body = await response.json().catch(() => null);
+      if (body !== null) {
         retryAfter = options.parseRetryAfter(body);
-      } catch {}
+      }
     }
 
     console.warn(
