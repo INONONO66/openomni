@@ -82,21 +82,6 @@ function buildToolsForAgent(
   return { specs, tools };
 }
 
-function needsResolution(modelId: string): boolean {
-  return !/\d{8}$/.test(modelId);
-}
-
-function resolveConversationModel(
-  definition: AgentDefinition,
-  defaultModel?: ConversationConfig["defaultModel"],
-): ChatAgentConfig["model"] {
-  if (needsResolution(definition.model.id)) {
-    return defaultModel ?? definition.model;
-  }
-
-  return definition.model;
-}
-
 function toChatInput(
   history: Message.WithParts[],
 ): Array<{ role: "user" | "assistant"; content: string }> {
@@ -207,7 +192,7 @@ async function processMessage(
   options?: { existingMessageId?: string },
 ): Promise<string> {
   const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
-  const model = resolveConversationModel(definition, config.defaultModel);
+  const model = definition.model;
 
   let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {
