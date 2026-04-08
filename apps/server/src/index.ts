@@ -1,8 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
 import { Auth, Provider } from "@openomni/llm";
-import type { Adapter } from "@openomni/protocol";
 import { Storage, initialize } from "@openomni/session";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
@@ -13,13 +11,21 @@ import { createRouter } from "./routes";
 import { AgentToolProvider } from "./tool/agent";
 import { McpToolProvider } from "./tool/mcp";
 import { SystemToolProvider } from "./tool/system";
+import type { ServerConfig } from "./config";
 
-type LoadedConfig = ReturnType<typeof loadConfig>;
+type InboundMessage = {
+  id: string;
+  surfaceKey: string;
+  text: string;
+  sender: { id: string; name?: string };
+  _resumeMessageId?: string;
+};
 
-type RuntimeConfig = LoadedConfig & {
-  workspace?: { root?: string };
-  mcp?: { servers?: McpServerConfig[] };
-  server: LoadedConfig["server"] & { wsToken?: string };
+type MessageHandler = (message: InboundMessage) => Promise<{ text: string } | null>;
+
+type Surface = {
+  start(): Promise<void> | void;
+  stop(): void;
 };
 
 type SqliteStorageAdapter = {
@@ -52,30 +58,29 @@ function createRoutingHandler(
   agentProvider: AgentToolProvider,
   mcpProvider: McpToolProvider,
   defaultModel?: { provider: string; id: string },
-): Adapter.MessageHandler {
-  const handlerCache = new Map<string, Adapter.MessageHandler>();
+): MessageHandler {
+  const handlerCache = new Map<string, MessageHandler>();
 
   return async (message) => {
     const agentName = resolveAgentName({ message, defaultAgent: "dev" });
-    let handler = handlerCache.get(agentName);
-
-    if (!handler) {
-      handler = createMessageHandler({
+    const handler =
+      handlerCache.get(agentName) ??
+      (createMessageHandler({
         agentName,
         systemProvider,
         agentProvider,
         mcpProvider,
         defaultModel,
-      });
-      handlerCache.set(agentName, handler);
-    }
+      }) as MessageHandler);
+
+    handlerCache.set(agentName, handler);
 
     return handler(message);
   };
 }
 
-async function connectMcpServers(config: RuntimeConfig, provider: McpToolProvider): Promise<void> {
-  const servers = config.mcp?.servers ?? [];
+async function connectMcpServers(config: ServerConfig, provider: McpToolProvider): Promise<void> {
+  const servers = config.mcp.servers;
   if (servers.length === 0) return;
 
   for (const server of servers) {
@@ -86,10 +91,7 @@ async function connectMcpServers(config: RuntimeConfig, provider: McpToolProvide
   console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
 }
 
-async function processRetryQueue(
-  queue: RecoveryItem[],
-  handler: Adapter.MessageHandler,
-): Promise<void> {
+async function processRetryQueue(queue: RecoveryItem[], handler: MessageHandler): Promise<void> {
   console.log(`[recovery] Processing ${queue.length} retry item(s)...`);
 
   for (const item of queue) {
@@ -100,7 +102,7 @@ async function processRetryQueue(
         text: item.text,
         sender: { id: "recovery", name: "Recovery" },
         _resumeMessageId: item.messageId,
-      } as Adapter.InboundMessage & { _resumeMessageId: string });
+      });
     } catch (err) {
       console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
     }
@@ -110,7 +112,7 @@ async function processRetryQueue(
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig() as RuntimeConfig;
+  const config = loadConfig();
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
@@ -146,7 +148,7 @@ async function main(): Promise<void> {
     console.warn("[server] no model credentials found; realtime surfaces disabled");
   }
 
-  const channels: Adapter.Surface[] = [];
+  const channels: Surface[] = [];
   let githubWebhookHandler: ((req: Request) => Promise<Response>) | undefined;
 
   if (config.telegram.token && routingHandler) {
