@@ -93,7 +93,7 @@ describe("git containment", () => {
 
   it("allows workdir inside workspace", async () => {
     const result = await status.execute(makeCall("git.status", { workdir: "subdir" }));
-    expect(result.output).toBeDefined();
+    expect(result.isError).toBeFalsy();
   });
 });
 

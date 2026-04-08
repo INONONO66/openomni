@@ -52,7 +52,11 @@ export async function fetchWithRetry(
     if (options?.parseRetryAfter) {
       const body = await response.json().catch(() => null);
       if (body !== null) {
-        retryAfter = options.parseRetryAfter(body);
+        try {
+          retryAfter = options.parseRetryAfter(body);
+        } catch {
+          // parser failed — fall back to default delay
+        }
       }
     }
 

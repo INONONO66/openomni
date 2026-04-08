@@ -61,8 +61,13 @@ function resolveContainedPath(workspaceRoot: string, inputPath: string): string 
       throw new Error(`Path escapes workspace root via symlink: ${root}`);
     }
   } catch (err) {
-    // target doesn't exist yet (e.g. write) — pre-symlink check is sufficient
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    // target doesn't exist yet — validate parent to catch symlinks in intermediate dirs
+    const realParent = realpathSync(dirname(resolved));
+    const realRoot = realpathSync(root);
+    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}/`)) {
+      throw new Error(`Path escapes workspace root via symlink: ${root}`);
+    }
   }
 
   return resolved;

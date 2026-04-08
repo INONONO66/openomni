@@ -45,6 +45,11 @@ export class GitHubAdapter implements Adapter.Surface {
     const repo = parsed.namespace;
     const issueNumber = parseInt((parsed.id ?? "").split("-")[1]);
 
+    if (Number.isNaN(issueNumber)) {
+      console.error(`[github] Invalid surfaceKey: malformed issue id in "${surfaceKey}"`);
+      return;
+    }
+
     if (message.text && this.githubToken) {
       await this.postComment(repo, issueNumber, message.text);
     }

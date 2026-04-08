@@ -192,7 +192,7 @@ async function processMessage(
   options?: { existingMessageId?: string },
 ): Promise<string> {
   const definition = getAgentDefinition(config.agentName) ?? createFallbackDefinition(config);
-  const model = definition.model;
+  const model = config.defaultModel ?? definition.model;
 
   let sessionId = SurfaceStore.lookup(surfaceKey);
   if (!sessionId) {

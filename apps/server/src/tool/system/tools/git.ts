@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool } from "../../types";
 
@@ -43,7 +43,7 @@ function resolveWorkingDirectory(workspaceRoot: string, requestedWorkdir?: strin
   const root = resolve(workspaceRoot);
   const cwd = requestedWorkdir ? resolve(root, requestedWorkdir) : root;
 
-  if (cwd !== root && !cwd.startsWith(`${root}/`)) {
+  if (cwd !== root && !cwd.startsWith(`${root}${sep}`)) {
     throw new Error(`Working directory must stay within workspace root: ${root}`);
   }
 
