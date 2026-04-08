@@ -45,7 +45,12 @@ function findAgentByChannel(surfaceKey: string): string | undefined {
   const key = surfaceKey.toLowerCase();
 
   for (const [name, meta] of agentMetadata) {
-    if (meta.triggers?.channels?.some((ch) => key.includes(ch.toLowerCase()))) {
+    if (
+      meta.triggers?.channels?.some((ch) => {
+        const pattern = ch.toLowerCase();
+        return key === pattern || key.startsWith(`${pattern}:`);
+      })
+    ) {
       return name;
     }
   }
