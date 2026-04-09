@@ -9,7 +9,7 @@
     "check-types": "tsc --noEmit",
     "lint": "bunx biome check ./src",
     "test": "bun test",
-    "test:ci": "bun test test/ingress/engine.test.ts test/ingress/integration.test.ts test/ingress/handlers.test.ts test/ingress/event-projector.test.ts test/ingress/session-bridge.test.ts test/ingress/session-resolver.test.ts test/team test/dag"
+    "test:ci": "bun test test/team test/dag test/ingress"
   },
   "dependencies": {
     "@openomni/agent": "workspace:*",

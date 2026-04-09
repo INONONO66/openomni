@@ -1,48 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { InboundEvent, Message, Run, Sink } from "@openomni/protocol";
+import type { InboundEvent } from "@openomni/protocol";
 import { ZodError } from "zod";
-
-const responseQueue: string[] = [];
-const llmInputs: unknown[] = [];
-
-type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
-
-let mockRunFn: MockLlmFn = async (_input: unknown, sink: Sink) => {
-  const text = responseQueue.shift() ?? "{}";
-  sink.onMessage(createAssistantMessage(text));
-  return { type: "stop" } as Run.Outcome;
-};
-
-const mockModelsGet = mock(async () => ({
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    models: {
-      "claude-3-haiku-20240307": {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
-      },
-    },
-  },
-}));
-
-const mockProviderFromModelsDevModel = mock(() => ({
-  id: "claude-3-haiku-20240307",
-  providerID: "anthropic",
-}));
-
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mockModelsGet },
-  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: (input: unknown, sink: Sink) => {
-    llmInputs.push(input);
-    return mockRunFn(input, sink);
-  },
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
-  },
-}));
+import {
+  defaultRunFn,
+  mockModelsGet,
+  mockProviderFromModelsDevModel,
+  resetTestState,
+  testState,
+} from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
@@ -57,55 +22,15 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  responseQueue.length = 0;
-  llmInputs.length = 0;
+  resetTestState();
+  testState.runFn = defaultRunFn("integration-test");
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
-  mockRunFn = async (_input: unknown, sink: Sink) => {
-    const text = responseQueue.shift() ?? "{}";
-    sink.onMessage(createAssistantMessage(text));
-    return { type: "stop" } as Run.Outcome;
-  };
   IngressEngine.reset();
 });
 
-function createAssistantMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "integration-test";
-  const now = Date.now();
-
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID: "",
-    modelID: "claude-3-haiku-20240307",
-    providerID: "anthropic",
-    agent: "chat-agent",
-    path: { cwd: "", root: "" },
-    cost: 0,
-    tokens: {
-      input: 1,
-      output: 1,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-
-  return { info, parts: [textPart] };
-}
-
 function enqueuePlan(planId: string, goal: string, stepId: string): void {
-  responseQueue.push(
+  testState.responseQueue.push(
     JSON.stringify({
       planId,
       goal,
@@ -156,8 +81,8 @@ describe("IngressEngine integration pipeline", () => {
     it("reuses session and executes latest stored plan", async () => {
       enqueuePlan("plan-1", "Build a REST API", "step-1");
       enqueuePlan("plan-2", "Add auth to step 2", "step-2");
-      responseQueue.push("executor output");
-      responseQueue.push(JSON.stringify({ decision: "accept" }));
+      testState.responseQueue.push("executor output");
+      testState.responseQueue.push(JSON.stringify({ decision: "accept" }));
 
       const first = await IngressEngine.ingest({
         id: "evt-plan-1",
@@ -193,7 +118,7 @@ describe("IngressEngine integration pipeline", () => {
         throw new Error("Expected plan mode result");
       }
 
-      const replanInput = llmInputs[1];
+      const replanInput = testState.llmInputs[1];
       const replanMessages = extractTextMessages(replanInput);
       const replanGoal = replanMessages.map((message) => message.content).join("\n");
       expect(replanGoal).toContain("Previous plan:");
@@ -231,8 +156,8 @@ describe("IngressEngine integration pipeline", () => {
 
   describe("direct mode conversation history", () => {
     it("sends accumulated user history on second turn", async () => {
-      responseQueue.push("Hi there");
-      responseQueue.push("Sure, what do you need?");
+      testState.responseQueue.push("Hi there");
+      testState.responseQueue.push("Sure, what do you need?");
 
       const first = await IngressEngine.ingest({
         id: "evt-direct-1",
@@ -258,7 +183,7 @@ describe("IngressEngine integration pipeline", () => {
         },
       });
 
-      const secondInput = llmInputs[1];
+      const secondInput = testState.llmInputs[1];
       const secondMessages = extractTextMessages(secondInput);
       const secondUserMessages = secondMessages.filter((message) => message.role === "user");
 
@@ -302,7 +227,7 @@ describe("IngressEngine integration pipeline", () => {
       expect(planA.goal).toBe("Plan A");
       expect(planB.goal).toBe("Plan B");
 
-      const replanInputForProjectB = llmInputs[1];
+      const replanInputForProjectB = testState.llmInputs[1];
       const replanMessagesForProjectB = extractTextMessages(replanInputForProjectB)
         .map((message) => message.content)
         .join("\n");
