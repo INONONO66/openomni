@@ -1,3 +1,4 @@
+// server → openomni → agent → llm (direct agent imports forbidden)
 import { IngressEngine } from "@openomni/openomni";
 import type { Adapter, IngressResult } from "@openomni/protocol";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";

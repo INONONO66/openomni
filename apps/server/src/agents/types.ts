@@ -1,4 +1,4 @@
-import type { ChatAgentConfig, AgentBudget } from "@openomni/agent";
+import type { ChatAgentConfig, AgentBudget } from "@openomni/openomni";
 import type { Guardrail } from "@openomni/protocol";
 
 export interface AgentToolSelection {

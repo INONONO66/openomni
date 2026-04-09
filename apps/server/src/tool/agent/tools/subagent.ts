@@ -1,4 +1,4 @@
-import { SubagentTool } from "@openomni/agent";
+import { SubagentTool } from "@openomni/openomni";
 import type { NativeTool } from "../../types";
 
 export function createSubagentTool(): NativeTool {
