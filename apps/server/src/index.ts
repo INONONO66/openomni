@@ -1,26 +1,18 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Auth, Provider } from "@openomni/llm";
+import type { Adapter } from "@openomni/protocol";
 import { Storage, initialize } from "@openomni/session";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";
+import { detectMode } from "./ingress/mode";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 import { createRouter } from "./routes";
 import { AgentToolProvider } from "./tool/agent";
 import { McpToolProvider } from "./tool/mcp";
 import { SystemToolProvider } from "./tool/system";
 import type { ServerConfig } from "./config";
-
-type InboundMessage = {
-  id: string;
-  surfaceKey: string;
-  text: string;
-  sender: { id: string; name?: string };
-  _resumeMessageId?: string;
-};
-
-type MessageHandler = (message: InboundMessage) => Promise<{ text: string } | null>;
 
 type Surface = {
   start(): Promise<void> | void;
@@ -63,14 +55,14 @@ function createRoutingHandler(
   mcpProvider: McpToolProvider,
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
-): MessageHandler {
+): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
     defaultModel,
     workspaceRoot,
-  }) as MessageHandler;
+  });
 }
 
 async function connectMcpServers(config: ServerConfig, provider: McpToolProvider): Promise<void> {
@@ -85,18 +77,28 @@ async function connectMcpServers(config: ServerConfig, provider: McpToolProvider
   console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
 }
 
-async function processRetryQueue(queue: RecoveryItem[], handler: MessageHandler): Promise<void> {
+function stripPlanTeamPrefix(raw: string): string {
+  return detectMode(raw).text;
+}
+
+function toRecoveryInboundMessage(item: RecoveryItem): Adapter.InboundMessage {
+  return {
+    id: item.messageId,
+    surfaceKey: item.surfaceKey,
+    text: stripPlanTeamPrefix(item.text),
+    sender: { id: "recovery", name: "recovery" },
+  };
+}
+
+async function processRetryQueue(
+  queue: RecoveryItem[],
+  handler: Adapter.MessageHandler,
+): Promise<void> {
   console.log(`[recovery] Processing ${queue.length} retry item(s)...`);
 
   for (const item of queue) {
     try {
-      await handler({
-        id: `recovery-${item.messageId}`,
-        surfaceKey: item.surfaceKey,
-        text: item.text,
-        sender: { id: "recovery", name: "Recovery" },
-        _resumeMessageId: item.messageId,
-      });
+      await handler(toRecoveryInboundMessage(item));
     } catch (err) {
       console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
     }
