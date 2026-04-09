@@ -5,7 +5,12 @@ export function createSubagentTool(): NativeTool {
   const tool = SubagentTool.create();
   return {
     spec: tool.spec,
+    prompt: tool.spec.prompt,
     riskTier: 1,
+    isReadOnly: false,
+    isDestructive: false,
+    isConcurrencySafe: false,
+    source: "agent",
     async execute(call) {
       const result = await tool.execute(call.input);
       return { ...result, toolCallId: call.id };

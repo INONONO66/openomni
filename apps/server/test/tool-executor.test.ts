@@ -10,7 +10,12 @@ function createMockTool(name: string, riskTier: ToolRiskTier, output: string): N
       description: `Test tool ${name}`,
       inputSchema: { type: "object", properties: {} },
     },
+    prompt: `Use ${name}`,
     riskTier,
+    isReadOnly: riskTier === 0,
+    isDestructive: false,
+    isConcurrencySafe: riskTier === 0,
+    source: "system",
     execute: (call) => Promise.resolve({ id: crypto.randomUUID(), toolCallId: call.id, output }),
   };
 }
@@ -136,7 +141,12 @@ describe("createToolExecutor", () => {
   it("returns error when tool execution throws", async () => {
     const failTool: NativeTool = {
       spec: { name: "fail.tool", inputSchema: { type: "object" } },
+      prompt: "Use fail.tool",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: true,
+      source: "system",
       execute: () => Promise.reject(new Error("boom")),
     };
     const executor = createToolExecutor({ tools: [failTool] });
@@ -150,7 +160,12 @@ describe("createToolExecutor", () => {
   it("times out slow tool execution", async () => {
     const slowTool: NativeTool = {
       spec: { name: "slow.tool", inputSchema: { type: "object" } },
+      prompt: "Use slow.tool",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute: () => new Promise((resolve) => setTimeout(resolve, 5000)),
     };
     const executor = createToolExecutor({

@@ -76,7 +76,13 @@ export function createShellTool(workspaceRoot?: string): NativeTool {
         required: ["command"],
       },
     },
+    prompt:
+      "Use this to run a shell command inside the workspace when file tools are insufficient.",
     riskTier: 2,
+    isReadOnly: false,
+    isDestructive: false,
+    isConcurrencySafe: false,
+    source: "system",
     async execute(call: Tool.Call): Promise<Tool.Result> {
       let timedOut = false;
 

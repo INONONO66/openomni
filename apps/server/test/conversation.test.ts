@@ -7,7 +7,12 @@ import type { AgentDefinition, AgentToolSelection } from "../src/agents/types";
 function createMockTool(name: string, riskTier: ToolRiskTier = 0): NativeTool {
   return {
     spec: { name, inputSchema: { type: "object" } },
+    prompt: `Use ${name}`,
     riskTier,
+    isReadOnly: riskTier === 0,
+    isDestructive: false,
+    isConcurrencySafe: riskTier === 0,
+    source: "system",
     execute: (call) =>
       Promise.resolve({ id: crypto.randomUUID(), toolCallId: call.id, output: `${name} result` }),
   };
@@ -176,7 +181,12 @@ describe("agent permissions applied to executor", () => {
   it("executor with agent budget config respects timeout overrides", async () => {
     const slowTool: NativeTool = {
       spec: { name: "slow.analysis", inputSchema: { type: "object" } },
+      prompt: "Use slow.analysis",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute: () => new Promise((resolve) => setTimeout(resolve, 5000)),
     };
 

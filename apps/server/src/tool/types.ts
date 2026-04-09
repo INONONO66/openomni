@@ -1,6 +1,8 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
 
 export type ToolCategory = "system" | "agent" | "mcp";
+export type ToolMetaValue = boolean | ((input: unknown) => boolean);
+export type ToolSource = "system" | "mcp" | "agent";
 
 export type ToolRiskTier = 0 | 1 | 2 | 3;
 // Tier 0: read-only (fs.read, fs.list)
@@ -10,7 +12,12 @@ export type ToolRiskTier = 0 | 1 | 2 | 3;
 
 export interface NativeTool {
   spec: Tool.Spec;
+  prompt?: string;
   riskTier: ToolRiskTier;
+  isReadOnly: ToolMetaValue;
+  isDestructive: ToolMetaValue;
+  isConcurrencySafe: ToolMetaValue;
+  source?: ToolSource;
   execute(call: Tool.Call): Promise<Tool.Result>;
 }
 

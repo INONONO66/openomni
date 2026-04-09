@@ -96,7 +96,12 @@ export function createGitTools(workspaceRoot: string): NativeTool[] {
         },
         safe: true,
       },
+      prompt: "Use this to inspect the repository working tree state.",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: true,
+      source: "system",
       execute(call) {
         return runGit(
           call,
@@ -119,7 +124,12 @@ export function createGitTools(workspaceRoot: string): NativeTool[] {
         },
         safe: true,
       },
+      prompt: "Use this to inspect unstaged or staged repository changes.",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: true,
+      source: "system",
       execute(call) {
         const staged = getOptionalBoolean(call.input, "staged") ?? false;
         const args = staged ? ["diff", "--cached"] : ["diff"];
@@ -139,7 +149,12 @@ export function createGitTools(workspaceRoot: string): NativeTool[] {
           required: ["message"],
         },
       },
+      prompt: "Use this to create a commit in the current repository.",
       riskTier: 1,
+      isReadOnly: false,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute(call) {
         const message = getString(call.input, "message");
         return runGit(
@@ -163,7 +178,12 @@ export function createGitTools(workspaceRoot: string): NativeTool[] {
         },
         safe: true,
       },
+      prompt: "Use this to list branches or create a new local branch.",
       riskTier: 0,
+      isReadOnly: false,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute(call) {
         const branchName = getOptionalString(call.input, "create");
         const args = branchName ? ["branch", branchName] : ["branch", "--list"];
@@ -183,7 +203,12 @@ export function createGitTools(workspaceRoot: string): NativeTool[] {
           },
         },
       },
+      prompt: "Use this to push repository changes to a remote.",
       riskTier: 2,
+      isReadOnly: false,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute(call) {
         const remote = getOptionalString(call.input, "remote") ?? "origin";
         const branch = getOptionalString(call.input, "branch");
