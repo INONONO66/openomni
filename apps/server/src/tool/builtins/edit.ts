@@ -1,61 +1,8 @@
-import { dirname, resolve } from "node:path";
-import { realpathSync } from "node:fs";
-import type { Tool } from "@openomni/protocol";
 import { defineTool } from "../define";
-
-type InputRecord = Record<string, unknown>;
-
-function createResult(call: Tool.Call, output: string, isError?: boolean): Tool.Result {
-  return {
-    id: crypto.randomUUID(),
-    toolCallId: call.id,
-    output,
-    ...(isError ? { isError } : {}),
-  };
-}
-
-function getString(input: InputRecord, key: string): string {
-  const value = input[key];
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`Invalid input: ${key} must be a non-empty string`);
-  }
-  return value;
-}
-
-function getOptionalBoolean(input: InputRecord, key: string): boolean | undefined {
-  const value = input[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "boolean") {
-    throw new Error(`Invalid input: ${key} must be a boolean`);
-  }
-  return value;
-}
-
-function resolveContainedPath(workspaceRoot: string, inputPath: string): string {
-  const root = resolve(workspaceRoot);
-  const resolved = resolve(root, inputPath);
-
-  if (resolved !== root && !resolved.startsWith(`${root}/`)) {
-    throw new Error(`Path must stay within workspace root: ${root}`);
-  }
-
-  try {
-    const realResolved = realpathSync(resolved);
-    const realRoot = realpathSync(root);
-    if (realResolved !== realRoot && !realResolved.startsWith(`${realRoot}/`)) {
-      throw new Error(`Path escapes workspace root via symlink: ${root}`);
-    }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    const realParent = realpathSync(dirname(resolved));
-    const realRoot = realpathSync(root);
-    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}/`)) {
-      throw new Error(`Path escapes workspace root via symlink: ${root}`);
-    }
-  }
-
-  return resolved;
-}
+import { optionalBoolean, requireString } from "../shared/input";
+import { errorResult, fromError, successResult } from "../shared/result";
+import { resolveContainedPath } from "../shared/workspace-path";
+import { EDIT_PROMPT } from "./edit-prompt";
 
 function replaceOnce(
   text: string,
@@ -70,9 +17,14 @@ function replaceOnce(
   };
 }
 
-const EDIT_PROMPT = `Replace an exact substring in a file within the workspace.
-oldString must already exist in the file and must differ from newString.
-Default behavior replaces the first occurrence; set replaceAll=true to replace every match.`;
+function replaceMany(
+  text: string,
+  search: string,
+  replacement: string,
+): { text: string; count: number } {
+  const parts = text.split(search);
+  return { text: parts.join(replacement), count: parts.length - 1 };
+}
 
 export function createEditTool(workspaceRoot: string) {
   return defineTool<{ path: string; oldString: string; newString: string; replaceAll?: boolean }>({
@@ -95,42 +47,39 @@ export function createEditTool(workspaceRoot: string) {
     source: "system",
     async execute(call) {
       try {
-        const filePath = getString(call.input, "path");
-        const oldString = getString(call.input, "oldString");
-        const newString = getString(call.input, "newString");
-        const replaceAll = getOptionalBoolean(call.input, "replaceAll") ?? false;
+        const filePath = requireString(call.input, "path");
+        const oldString = requireString(call.input, "oldString");
+        const newString = requireString(call.input, "newString");
+        const replaceAll = optionalBoolean(call.input, "replaceAll") ?? false;
 
         if (oldString === newString) {
-          throw new Error("Invalid input: oldString and newString must be different");
+          return errorResult(call, "Invalid input: oldString and newString must be different");
         }
 
         const resolved = resolveContainedPath(workspaceRoot, filePath);
         const file = Bun.file(resolved);
 
         if (!(await file.exists())) {
-          throw new Error(`Path does not exist: ${filePath}`);
+          return errorResult(call, `Path does not exist: ${filePath}`);
         }
 
         const original = await file.text();
         if (!original.includes(oldString)) {
-          throw new Error(`oldString not found in file: ${filePath}`);
+          return errorResult(call, `oldString not found in file: ${filePath}`);
         }
 
         const { text, count } = replaceAll
-          ? {
-              text: original.split(oldString).join(newString),
-              count: original.split(oldString).length - 1,
-            }
+          ? replaceMany(original, oldString, newString)
           : replaceOnce(original, oldString, newString);
 
         await Bun.write(resolved, text);
 
-        return createResult(
+        return successResult(
           call,
           `Replaced ${count} occurrence${count === 1 ? "" : "s"} in ${resolved}`,
         );
       } catch (err) {
-        return createResult(call, err instanceof Error ? err.message : String(err), true);
+        return fromError(call, err);
       }
     },
   });

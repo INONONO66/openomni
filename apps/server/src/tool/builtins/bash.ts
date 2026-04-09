@@ -1,91 +1,20 @@
 import { resolve } from "node:path";
-import type { Tool } from "@openomni/protocol";
 import { defineTool } from "../define";
+import { optionalPositiveNumber, optionalString, requireString } from "../shared/input";
+import { errorResult, fromError, successResult } from "../shared/result";
 import type { NativeTool } from "../types";
 import { BASH_PROMPT } from "./bash-prompt";
+import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./bash-classify";
+
+export { isReadOnlyCommand, isDestructiveCommand };
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
-
-const READ_ONLY_COMMANDS = new Set([
-  "ls",
-  "cat",
-  "pwd",
-  "which",
-  "head",
-  "tail",
-  "wc",
-  "echo",
-  "find",
-]);
-
-const READ_ONLY_GIT_SUBCOMMANDS = new Set([
-  "status",
-  "log",
-  "diff",
-  "show",
-  "branch",
-  "remote",
-  "describe",
-  "tag",
-  "ls-files",
-]);
-
-const DESTRUCTIVE_PATTERNS: readonly RegExp[] = [
-  /^rm\s+-rf?(\s|$)/,
-  /^git\s+push(\s|$)/,
-  /^git\s+reset\s+--hard(\s|$)/,
-  /^git\s+clean\s+-f/,
-  /^mv(\s|$)/,
-  /^chmod(\s|$)/,
-];
-
-export function isReadOnlyCommand(command: string): boolean {
-  const tokens = command.trim().split(/\s+/);
-  const head = tokens[0];
-  if (!head) return false;
-  if (head === "git") {
-    const sub = tokens[1];
-    return sub !== undefined && READ_ONLY_GIT_SUBCOMMANDS.has(sub);
-  }
-  return READ_ONLY_COMMANDS.has(head);
-}
-
-export function isDestructiveCommand(command: string): boolean {
-  const trimmed = command.trim();
-  return DESTRUCTIVE_PATTERNS.some((pattern) => pattern.test(trimmed));
-}
 
 interface BashInput {
   command: string;
   workdir?: string;
   timeoutMs?: number;
-}
-
-function getCommand(input: Record<string, unknown>): string {
-  const value = input.command;
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error("Invalid input: command must be a non-empty string");
-  }
-  return value;
-}
-
-function getOptionalString(input: Record<string, unknown>, key: string): string | undefined {
-  const value = input[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`Invalid input: ${key} must be a non-empty string`);
-  }
-  return value;
-}
-
-function getTimeout(input: Record<string, unknown>): number {
-  const value = input.timeoutMs;
-  if (value === undefined) return DEFAULT_TIMEOUT_MS;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new Error("Invalid input: timeoutMs must be a positive number");
-  }
-  return Math.min(value, MAX_TIMEOUT_MS);
 }
 
 function resolveWorkingDirectory(
@@ -106,21 +35,10 @@ function resolveWorkingDirectory(
   return cwd;
 }
 
-function createResult(call: Tool.Call, output: string, isError?: boolean): Tool.Result {
-  return {
-    id: crypto.randomUUID(),
-    toolCallId: call.id,
-    output,
-    ...(isError ? { isError } : {}),
-  };
-}
-
-function readCommandFromMeta(input: unknown): string {
-  if (input && typeof input === "object" && "command" in input) {
-    const value = (input as { command?: unknown }).command;
-    if (typeof value === "string") return value;
-  }
-  return "";
+function resolveTimeout(input: Record<string, unknown>): number {
+  const value = optionalPositiveNumber(input, "timeoutMs");
+  if (value === undefined) return DEFAULT_TIMEOUT_MS;
+  return Math.min(value, MAX_TIMEOUT_MS);
 }
 
 export function bashTool(workspaceRoot?: string): NativeTool {
@@ -152,12 +70,9 @@ export function bashTool(workspaceRoot?: string): NativeTool {
       let timedOut = false;
 
       try {
-        const command = getCommand(call.input);
-        const cwd = resolveWorkingDirectory(
-          workspaceRoot,
-          getOptionalString(call.input, "workdir"),
-        );
-        const timeoutMs = getTimeout(call.input);
+        const command = requireString(call.input, "command");
+        const cwd = resolveWorkingDirectory(workspaceRoot, optionalString(call.input, "workdir"));
+        const timeoutMs = resolveTimeout(call.input);
 
         const proc = Bun.spawn(["bash", "-lc", command], {
           cwd,
@@ -184,16 +99,16 @@ export function bashTool(workspaceRoot?: string): NativeTool {
           .trim();
 
         if (timedOut) {
-          return createResult(call, output || `Command timed out after ${timeoutMs}ms`, true);
+          return errorResult(call, output || `Command timed out after ${timeoutMs}ms`);
         }
 
         if (exitCode !== 0) {
-          return createResult(call, output || `Command exited with code ${exitCode}`, true);
+          return errorResult(call, output || `Command exited with code ${exitCode}`);
         }
 
-        return createResult(call, output);
+        return successResult(call, output);
       } catch (err) {
-        return createResult(call, err instanceof Error ? err.message : String(err), true);
+        return fromError(call, err);
       }
     },
   });
