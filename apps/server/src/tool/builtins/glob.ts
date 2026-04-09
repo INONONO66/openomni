@@ -22,7 +22,13 @@ async function executeGlob(call: Tool.Call, workspaceRoot: string): Promise<Tool
 
     const glob = new Bun.Glob(pattern);
     const matches = await Array.fromAsync(glob.scan({ cwd: searchDir, absolute: true }));
-    const ranked = matches.map((filePath) => ({ filePath, mtime: statSync(filePath).mtimeMs }));
+    const ranked = matches.flatMap((filePath) => {
+      try {
+        return [{ filePath, mtime: statSync(filePath).mtimeMs }];
+      } catch {
+        return [];
+      }
+    });
 
     ranked.sort(
       (left, right) => right.mtime - left.mtime || left.filePath.localeCompare(right.filePath),
