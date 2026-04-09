@@ -5,54 +5,42 @@ import type { NativeTool } from "../types";
 import type { Tool } from "@openomni/protocol";
 
 type InputRecord = Record<string, unknown>;
-
 type MatchResult = { file: string; line: number; text: string };
 
 function createResult(call: Tool.Call, output: string, isError?: boolean): Tool.Result {
-  return {
-    id: crypto.randomUUID(),
-    toolCallId: call.id,
-    output,
-    ...(isError ? { isError } : {}),
-  };
+  return { id: crypto.randomUUID(), toolCallId: call.id, output, ...(isError ? { isError } : {}) };
 }
 
 function getString(input: InputRecord, key: string): string {
-  const value = input[key];
-  if (typeof value !== "string" || value.length === 0) {
+  const v = input[key];
+  if (typeof v !== "string" || v.length === 0)
     throw new Error(`Invalid input: ${key} must be a non-empty string`);
-  }
-  return value;
+  return v;
 }
 
 function getOptionalString(input: InputRecord, key: string): string | undefined {
-  const value = input[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.length === 0) {
+  const v = input[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== "string" || v.length === 0)
     throw new Error(`Invalid input: ${key} must be a non-empty string`);
-  }
-  return value;
+  return v;
 }
 
 function getOptionalBoolean(input: InputRecord, key: string): boolean | undefined {
-  const value = input[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "boolean") {
-    throw new Error(`Invalid input: ${key} must be a boolean`);
-  }
-  return value;
+  const v = input[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== "boolean") throw new Error(`Invalid input: ${key} must be a boolean`);
+  return v;
 }
 
 function normalizeIncludePattern(include?: string): string | undefined {
   if (!include) return undefined;
-  if (include.includes("/") || include.startsWith("**/")) return include;
-  return `**/${include}`;
+  return include.includes("/") || include.startsWith("**/") ? include : `**/${include}`;
 }
 
 function resolveContainedPath(workspaceRoot: string, inputPath: string): string {
   const root = resolve(workspaceRoot);
   const resolved = resolve(root, inputPath);
-
   if (resolved !== root && !resolved.startsWith(`${root}/`)) {
     throw new Error(`Path must stay within workspace root: ${root}`);
   }
@@ -76,11 +64,7 @@ function resolveContainedPath(workspaceRoot: string, inputPath: string): string 
 }
 
 async function collectFiles(rootPath: string, include?: string): Promise<string[]> {
-  const stats = statSync(rootPath);
-  if (stats.isFile()) {
-    return [rootPath];
-  }
-
+  if (statSync(rootPath).isFile()) return [rootPath];
   const glob = new Bun.Glob(normalizeIncludePattern(include) ?? "**/*");
   return Array.fromAsync(glob.scan({ cwd: rootPath, absolute: true, onlyFiles: true, dot: true }));
 }
