@@ -30,9 +30,9 @@ export function createWriteTool(workspaceRoot: string) {
         const resolved = resolveContainedPathForCreate(workspaceRoot, targetPath);
 
         mkdirSync(dirname(resolved), { recursive: true });
-        await Bun.write(resolved, content);
+        const bytes = await Bun.write(resolved, content);
 
-        return successResult(call, `Wrote ${content.length} bytes to ${resolved}`);
+        return successResult(call, `Wrote ${bytes} bytes to ${resolved}`);
       } catch (err) {
         return fromError(call, err);
       }
