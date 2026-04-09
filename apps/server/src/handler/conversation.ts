@@ -32,19 +32,19 @@ async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps)
 export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
   return async (message) => {
     const key = message.surfaceKey;
+    const prev = queues.get(key) ?? Promise.resolve();
     let text: string | null = null;
-    let current!: Promise<void>;
-    current = (queues.get(key) ?? Promise.resolve())
+    const current: Promise<void> = prev
       .catch(() => undefined)
       .then(async () => {
         text = await processMessage(message, deps);
-      })
-      .finally(() => {
-        if (queues.get(key) === current) queues.delete(key);
       });
-
     queues.set(key, current);
-    await current;
+    try {
+      await current;
+    } finally {
+      if (queues.get(key) === current) queues.delete(key);
+    }
     return text ? { text } : null;
   };
 }
