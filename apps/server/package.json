@@ -13,7 +13,8 @@
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
     "@openomni/llm": "workspace:*",
-    "@openomni/agent": "workspace:*"
+    "@openomni/agent": "workspace:*",
+    "@openomni/openomni": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest"

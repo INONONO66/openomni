@@ -6,7 +6,6 @@ import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
-import { resolveAgentName } from "./router";
 import { createRouter } from "./routes";
 import { AgentToolProvider } from "./tool/agent";
 import { McpToolProvider } from "./tool/mcp";
@@ -62,26 +61,16 @@ function createRoutingHandler(
   systemProvider: SystemToolProvider,
   agentProvider: AgentToolProvider,
   mcpProvider: McpToolProvider,
+  workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
 ): MessageHandler {
-  const handlerCache = new Map<string, MessageHandler>();
-
-  return async (message) => {
-    const agentName = resolveAgentName({ message, defaultAgent: "dev" });
-    const handler =
-      handlerCache.get(agentName) ??
-      (createMessageHandler({
-        agentName,
-        systemProvider,
-        agentProvider,
-        mcpProvider,
-        defaultModel,
-      }) as MessageHandler);
-
-    handlerCache.set(agentName, handler);
-
-    return handler(message);
-  };
+  return createMessageHandler({
+    systemProvider,
+    agentProvider,
+    mcpProvider,
+    defaultModel,
+    workspaceRoot,
+  }) as MessageHandler;
 }
 
 async function connectMcpServers(config: ServerConfig, provider: McpToolProvider): Promise<void> {
@@ -133,10 +122,16 @@ async function main(): Promise<void> {
   );
   const model = await resolveModel();
   const routingHandler = model
-    ? createRoutingHandler(systemProvider, agentProvider, mcpProvider, {
-        provider: model.providerID,
-        id: model.id,
-      })
+    ? createRoutingHandler(
+        systemProvider,
+        agentProvider,
+        mcpProvider,
+        config.workspace?.root ?? process.cwd(),
+        {
+          provider: model.providerID,
+          id: model.id,
+        },
+      )
     : undefined;
   const wsHandler = routingHandler
     ? new WebSocketHandler(routingHandler, { token: config.server.wsToken })

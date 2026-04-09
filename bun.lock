@@ -39,6 +39,7 @@
       "dependencies": {
         "@openomni/agent": "workspace:*",
         "@openomni/llm": "workspace:*",
+        "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
         "hono": "^4.0.0",
