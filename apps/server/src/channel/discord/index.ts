@@ -1,1 +1,1 @@
-export { DiscordAdapter } from "./adapter";
+export { DiscordAdapter } from "./surface";
