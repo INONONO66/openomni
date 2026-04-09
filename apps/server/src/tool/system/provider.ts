@@ -1,9 +1,9 @@
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
 import { createEditTool } from "../builtins/edit";
+import { createGlobTool } from "../builtins/glob";
 import { createFilesystemTools } from "./tools/filesystem";
 import { createGitTools } from "./tools/git";
-import { createGlobTool } from "./tools/glob";
 import { createShellTool } from "./tools/shell";
 
 export class SystemToolProvider implements ToolProvider {
