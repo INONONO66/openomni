@@ -1,10 +1,11 @@
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
+import { bashTool } from "../builtins/bash";
 import { createEditTool } from "../builtins/edit";
 import { createGlobTool } from "../builtins/glob";
-import { createFilesystemTools } from "./tools/filesystem";
-import { createGitTools } from "./tools/git";
-import { createShellTool } from "./tools/shell";
+import { createGrepTool } from "../builtins/grep";
+import { createReadTool } from "../builtins/read";
+import { createWriteTool } from "../builtins/write";
 
 export class SystemToolProvider implements ToolProvider {
   readonly name = "system";
@@ -13,15 +14,15 @@ export class SystemToolProvider implements ToolProvider {
   constructor(private readonly workspaceRoot?: string) {}
 
   listTools(): NativeTool[] {
-    const tools: NativeTool[] = [];
+    const tools: NativeTool[] = [bashTool(this.workspaceRoot)];
     if (this.workspaceRoot) {
-      tools.push(...createFilesystemTools(this.workspaceRoot));
-      tools.push(createEditTool(this.workspaceRoot));
-      tools.push(createGlobTool(this.workspaceRoot));
-    }
-    tools.push(createShellTool(this.workspaceRoot));
-    if (this.workspaceRoot) {
-      tools.push(...createGitTools(this.workspaceRoot));
+      tools.push(
+        createReadTool(this.workspaceRoot),
+        createWriteTool(this.workspaceRoot),
+        createEditTool(this.workspaceRoot),
+        createGrepTool(this.workspaceRoot),
+        createGlobTool(this.workspaceRoot),
+      );
     }
     return tools;
   }

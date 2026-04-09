@@ -86,9 +86,9 @@ describe("agent registry", () => {
 
 describe("tool selection by agent definition", () => {
   const systemTools = [
-    createMockTool("fs.read"),
-    createMockTool("fs.write", 1),
-    createMockTool("shell.exec", 2),
+    createMockTool("read"),
+    createMockTool("write", 1),
+    createMockTool("bash", 2),
   ];
   const agentTools = [createMockTool("subagent"), createMockTool("delegate")];
   const mcpTools = [createMockTool("mcp.search")];
@@ -111,9 +111,9 @@ describe("tool selection by agent definition", () => {
     const tools = buildToolsForAgent(def, providers);
     const names = tools.map((t) => t.spec.name);
 
-    expect(names).toContain("fs.read");
-    expect(names).toContain("fs.write");
-    expect(names).toContain("shell.exec");
+    expect(names).toContain("read");
+    expect(names).toContain("write");
+    expect(names).toContain("bash");
     expect(names).not.toContain("subagent");
     expect(names).not.toContain("mcp.search");
   });
@@ -149,39 +149,10 @@ describe("tool selection by agent definition", () => {
 });
 
 describe("agent permissions applied to executor", () => {
-  it("dev agent denies git.push via executor", async () => {
-    const def = getAgentDefinition("dev");
-    expect(def).toBeDefined();
-    const gitPush = createMockTool("git.push", 2);
-    const gitStatus = createMockTool("git.status", 0);
-    const provider = createMockProvider("system", "system", [gitPush, gitStatus]);
-
-    const executor = createToolExecutor({
-      tools: provider.listTools(),
-      config: { permissions: def?.permissions },
-    });
-
-    const pushResult = await executor({
-      id: crypto.randomUUID(),
-      tool: "git.push",
-      input: {},
-    });
-    const statusResult = await executor({
-      id: crypto.randomUUID(),
-      tool: "git.status",
-      input: {},
-    });
-
-    expect(pushResult.isError).toBe(true);
-    expect(pushResult.output).toContain("denied");
-    expect(statusResult.isError).toBeFalsy();
-    expect(statusResult.output).toBe("git.status result");
-  });
-
   it("executor with agent budget config respects timeout overrides", async () => {
     const slowTool: NativeTool = {
-      spec: { name: "slow.analysis", inputSchema: { type: "object" } },
-      prompt: "Use slow.analysis",
+      spec: { name: "slow", inputSchema: { type: "object" } },
+      prompt: "Use slow",
       riskTier: 0,
       isReadOnly: true,
       isDestructive: false,
@@ -197,7 +168,7 @@ describe("agent permissions applied to executor", () => {
 
     const result = await executor({
       id: crypto.randomUUID(),
-      tool: "slow.analysis",
+      tool: "slow",
       input: {},
     });
 

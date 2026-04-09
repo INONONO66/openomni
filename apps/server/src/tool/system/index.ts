@@ -1,6 +1,7 @@
 export { SystemToolProvider } from "./provider";
+export { bashTool } from "../builtins/bash";
 export { createEditTool } from "../builtins/edit";
 export { createGlobTool } from "../builtins/glob";
-export { createFilesystemTools } from "./tools/filesystem";
-export { createGitTools } from "./tools/git";
-export { createShellTool } from "./tools/shell";
+export { createGrepTool } from "../builtins/grep";
+export { createReadTool } from "../builtins/read";
+export { createWriteTool } from "../builtins/write";
