@@ -1,7 +1,9 @@
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
+import { createEditTool } from "../builtins/edit";
 import { createFilesystemTools } from "./tools/filesystem";
 import { createGitTools } from "./tools/git";
+import { createGlobTool } from "./tools/glob";
 import { createShellTool } from "./tools/shell";
 
 export class SystemToolProvider implements ToolProvider {
@@ -14,6 +16,8 @@ export class SystemToolProvider implements ToolProvider {
     const tools: NativeTool[] = [];
     if (this.workspaceRoot) {
       tools.push(...createFilesystemTools(this.workspaceRoot));
+      tools.push(createEditTool(this.workspaceRoot));
+      tools.push(createGlobTool(this.workspaceRoot));
     }
     tools.push(createShellTool(this.workspaceRoot));
     if (this.workspaceRoot) {
