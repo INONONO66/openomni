@@ -37,7 +37,6 @@
       "name": "@openomni/server",
       "version": "0.1.0",
       "dependencies": {
-        "@openomni/agent": "workspace:*",
         "@openomni/llm": "workspace:*",
         "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
