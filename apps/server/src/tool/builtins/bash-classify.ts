@@ -15,12 +15,11 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "log",
   "diff",
   "show",
-  "branch",
-  "remote",
   "describe",
-  "tag",
   "ls-files",
 ]);
+
+const SHELL_OPERATORS = /[;&|><`$()]|\|\||&&/;
 
 const DESTRUCTIVE_PATTERNS: readonly RegExp[] = [
   /^rm\s+-rf?(\s|$)/,
@@ -32,7 +31,11 @@ const DESTRUCTIVE_PATTERNS: readonly RegExp[] = [
 ];
 
 export function isReadOnlyCommand(command: string): boolean {
-  const tokens = command.trim().split(/\s+/);
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+  if (SHELL_OPERATORS.test(trimmed)) return false;
+
+  const tokens = trimmed.split(/\s+/);
   const head = tokens[0];
   if (!head) return false;
   if (head === "git") {

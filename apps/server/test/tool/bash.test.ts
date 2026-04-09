@@ -96,6 +96,40 @@ describe("isReadOnlyCommand", () => {
   it("classifies empty string as not read-only", () => {
     expect(isReadOnlyCommand("")).toBe(false);
   });
+
+  it("classifies git branch as not read-only because -D/-m can mutate", () => {
+    expect(isReadOnlyCommand("git branch -D feature")).toBe(false);
+    expect(isReadOnlyCommand("git branch")).toBe(false);
+  });
+
+  it("classifies git remote add as not read-only", () => {
+    expect(isReadOnlyCommand("git remote add origin https://example.com/repo")).toBe(false);
+  });
+
+  it("classifies git tag -d as not read-only", () => {
+    expect(isReadOnlyCommand("git tag -d v1.0")).toBe(false);
+  });
+
+  it("rejects read-only classification when chained with && rm", () => {
+    expect(isReadOnlyCommand("ls && rm -rf /")).toBe(false);
+  });
+
+  it("rejects read-only classification when piped to destructive command", () => {
+    expect(isReadOnlyCommand("ls | xargs rm")).toBe(false);
+  });
+
+  it("rejects read-only classification with redirect", () => {
+    expect(isReadOnlyCommand("cat file > /etc/passwd")).toBe(false);
+  });
+
+  it("rejects read-only classification with command substitution", () => {
+    expect(isReadOnlyCommand("echo `rm -rf /`")).toBe(false);
+    expect(isReadOnlyCommand("echo $(rm -rf /)")).toBe(false);
+  });
+
+  it("rejects read-only classification with semicolon chain", () => {
+    expect(isReadOnlyCommand("ls; rm foo")).toBe(false);
+  });
 });
 
 describe("isDestructiveCommand", () => {
