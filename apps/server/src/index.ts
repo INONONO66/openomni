@@ -6,7 +6,6 @@ import { Storage, initialize } from "@openomni/session";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";
-import { detectMode } from "./ingress/mode";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
 import { createRouter } from "./routes";
 import { AgentToolProvider } from "./tool/agent";
@@ -77,15 +76,11 @@ async function connectMcpServers(config: ServerConfig, provider: McpToolProvider
   console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
 }
 
-function stripPlanTeamPrefix(raw: string): string {
-  return detectMode(raw).text;
-}
-
 function toRecoveryInboundMessage(item: RecoveryItem): Adapter.InboundMessage {
   return {
     id: item.messageId,
     surfaceKey: item.surfaceKey,
-    text: stripPlanTeamPrefix(item.text),
+    text: item.text,
     sender: { id: "recovery", name: "recovery" },
   };
 }
