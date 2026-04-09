@@ -61,7 +61,6 @@ export class DiscordGateway {
         if (!resolved) {
           resolved = true;
           reject(new Error(`WebSocket closed before ready: ${event.code}`));
-          return;
         }
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
