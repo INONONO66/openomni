@@ -60,10 +60,11 @@ export class DiscordAdapter implements Adapter.Surface {
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
-    let channelId = parsed.id ?? "";
-    if (parsed.kind === "dm") {
-      channelId = await this.client.createDmChannel(parsed.id ?? "");
+    if (!parsed.id) {
+      throw new Error(`[discord] surface key missing id: ${surfaceKey}`);
     }
+    const channelId =
+      parsed.kind === "dm" ? await this.client.createDmChannel(parsed.id) : parsed.id;
     await sendDiscordMessage(this.client, channelId, message);
   }
 
