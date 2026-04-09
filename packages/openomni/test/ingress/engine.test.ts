@@ -1,44 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Run, Sink } from "@openomni/protocol";
 import type { InboundEvent } from "@openomni/protocol";
-
-const responseQueue: string[] = [];
-
-type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
-
-let mockRunFn: MockLlmFn = async (_input: unknown, sink: Sink) => {
-  const text = responseQueue.shift() ?? "{}";
-  sink.onMessage(createAssistantMessage(text));
-  return { type: "stop" } as Run.Outcome;
-};
-
-const mockModelsGet = mock(async () => ({
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    models: {
-      "claude-3-haiku-20240307": {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
-      },
-    },
-  },
-}));
-
-const mockProviderFromModelsDevModel = mock(() => ({
-  id: "claude-3-haiku-20240307",
-  providerID: "anthropic",
-}));
-
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mockModelsGet },
-  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
-  },
-}));
+import {
+  defaultRunFn,
+  mockModelsGet,
+  mockProviderFromModelsDevModel,
+  resetTestState,
+  testState,
+} from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
 
@@ -51,54 +19,15 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  responseQueue.length = 0;
+  resetTestState();
+  testState.runFn = defaultRunFn("engine-test");
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
-  mockRunFn = async (_input: unknown, sink: Sink) => {
-    const text = responseQueue.shift() ?? "{}";
-    sink.onMessage(createAssistantMessage(text));
-    return { type: "stop" } as Run.Outcome;
-  };
   IngressEngine.reset();
 });
 
-function createAssistantMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "engine-test";
-  const now = Date.now();
-
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID: "",
-    modelID: "claude-3-haiku-20240307",
-    providerID: "anthropic",
-    agent: "chat-agent",
-    path: { cwd: "", root: "" },
-    cost: 0,
-    tokens: {
-      input: 1,
-      output: 1,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-
-  const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "text",
-    text,
-  };
-
-  return { info, parts: [textPart] };
-}
-
 function enqueuePlan(goal: string): void {
-  responseQueue.push(
+  testState.responseQueue.push(
     JSON.stringify({
       planId: crypto.randomUUID(),
       goal,
@@ -143,8 +72,8 @@ describe("IngressEngine", () => {
 
   it("ingest() with team mode returns team result", async () => {
     enqueuePlan("Execute release checks");
-    responseQueue.push("executor output");
-    responseQueue.push(JSON.stringify({ decision: "accept" }));
+    testState.responseQueue.push("executor output");
+    testState.responseQueue.push(JSON.stringify({ decision: "accept" }));
 
     const planEvent: InboundEvent = {
       id: "event-team-plan",
@@ -187,7 +116,7 @@ describe("IngressEngine", () => {
   });
 
   it("ingest() with direct mode returns direct result", async () => {
-    responseQueue.push("direct response");
+    testState.responseQueue.push("direct response");
 
     const event: InboundEvent = {
       id: "event-direct-1",

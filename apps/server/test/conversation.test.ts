@@ -1,4 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { IngressEngine } from "@openomni/openomni";
+import type { Adapter } from "@openomni/protocol";
+import { createMessageHandler } from "../src/handler/conversation";
+import { AgentToolProvider } from "../src/tool/agent/provider";
+import { McpToolProvider } from "../src/tool/mcp/provider";
+import { SystemToolProvider } from "../src/tool/system/provider";
 import { createToolExecutor } from "../src/tool/executor";
 import { getAgentDefinition, getAllAgentNames } from "../src/agents/registry";
 import type { NativeTool, ToolProvider, ToolRiskTier } from "../src/tool/types";
@@ -7,7 +13,12 @@ import type { AgentDefinition, AgentToolSelection } from "../src/agents/types";
 function createMockTool(name: string, riskTier: ToolRiskTier = 0): NativeTool {
   return {
     spec: { name, inputSchema: { type: "object" } },
+    prompt: `Use ${name}`,
     riskTier,
+    isReadOnly: riskTier === 0,
+    isDestructive: false,
+    isConcurrencySafe: riskTier === 0,
+    source: "system",
     execute: (call) =>
       Promise.resolve({ id: crypto.randomUUID(), toolCallId: call.id, output: `${name} result` }),
   };
@@ -81,9 +92,9 @@ describe("agent registry", () => {
 
 describe("tool selection by agent definition", () => {
   const systemTools = [
-    createMockTool("fs.read"),
-    createMockTool("fs.write", 1),
-    createMockTool("shell.exec", 2),
+    createMockTool("read"),
+    createMockTool("write", 1),
+    createMockTool("bash", 2),
   ];
   const agentTools = [createMockTool("subagent"), createMockTool("delegate")];
   const mcpTools = [createMockTool("mcp.search")];
@@ -106,9 +117,9 @@ describe("tool selection by agent definition", () => {
     const tools = buildToolsForAgent(def, providers);
     const names = tools.map((t) => t.spec.name);
 
-    expect(names).toContain("fs.read");
-    expect(names).toContain("fs.write");
-    expect(names).toContain("shell.exec");
+    expect(names).toContain("read");
+    expect(names).toContain("write");
+    expect(names).toContain("bash");
     expect(names).not.toContain("subagent");
     expect(names).not.toContain("mcp.search");
   });
@@ -144,39 +155,15 @@ describe("tool selection by agent definition", () => {
 });
 
 describe("agent permissions applied to executor", () => {
-  it("dev agent denies git.push via executor", async () => {
-    const def = getAgentDefinition("dev");
-    expect(def).toBeDefined();
-    const gitPush = createMockTool("git.push", 2);
-    const gitStatus = createMockTool("git.status", 0);
-    const provider = createMockProvider("system", "system", [gitPush, gitStatus]);
-
-    const executor = createToolExecutor({
-      tools: provider.listTools(),
-      config: { permissions: def?.permissions },
-    });
-
-    const pushResult = await executor({
-      id: crypto.randomUUID(),
-      tool: "git.push",
-      input: {},
-    });
-    const statusResult = await executor({
-      id: crypto.randomUUID(),
-      tool: "git.status",
-      input: {},
-    });
-
-    expect(pushResult.isError).toBe(true);
-    expect(pushResult.output).toContain("denied");
-    expect(statusResult.isError).toBeFalsy();
-    expect(statusResult.output).toBe("git.status result");
-  });
-
   it("executor with agent budget config respects timeout overrides", async () => {
     const slowTool: NativeTool = {
-      spec: { name: "slow.analysis", inputSchema: { type: "object" } },
+      spec: { name: "slow", inputSchema: { type: "object" } },
+      prompt: "Use slow",
       riskTier: 0,
+      isReadOnly: true,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "system",
       execute: () => new Promise((resolve) => setTimeout(resolve, 5000)),
     };
 
@@ -187,11 +174,142 @@ describe("agent permissions applied to executor", () => {
 
     const result = await executor({
       id: crypto.randomUUID(),
-      tool: "slow.analysis",
+      tool: "slow",
       input: {},
     });
 
     expect(result.isError).toBe(true);
     expect(result.output).toContain("timeout");
+  });
+});
+
+describe("createMessageHandler", () => {
+  const originalIngest = IngressEngine.ingest;
+  const deps = {
+    systemProvider: new SystemToolProvider("/workspace/openomni"),
+    agentProvider: new AgentToolProvider(),
+    mcpProvider: new McpToolProvider(),
+    workspaceRoot: "/workspace/openomni",
+    defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+  };
+
+  function createMessage(
+    text: string,
+    surfaceKey = "discord:guild-1:channel:general",
+  ): Adapter.InboundMessage {
+    return {
+      id: crypto.randomUUID(),
+      surfaceKey,
+      text,
+      sender: { id: "user-1", name: "Test User" },
+    };
+  }
+
+  beforeEach(() => {
+    IngressEngine.ingest = originalIngest;
+  });
+
+  afterEach(() => {
+    IngressEngine.ingest = originalIngest;
+  });
+
+  it("returns direct output from IngressEngine", async () => {
+    const handler = createMessageHandler(deps);
+    const events: Array<Parameters<typeof IngressEngine.ingest>[0]> = [];
+
+    IngressEngine.ingest = async (event) => {
+      events.push(event);
+      return {
+        mode: "direct",
+        sessionId: "session-1",
+        result: { output: "hello from ingress", finishReason: "stop" },
+      };
+    };
+
+    expect(await handler(createMessage("hello"))).toEqual({ text: "hello from ingress" });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.mode).toBe("direct");
+  });
+
+  it("acknowledges plan and team ingress results", async () => {
+    const handler = createMessageHandler(deps);
+
+    IngressEngine.ingest = async (event) =>
+      event.mode === "plan"
+        ? {
+            mode: "plan",
+            sessionId: "session-plan",
+            result: {
+              plan: {
+                planId: "plan-1",
+                goal: "build auth",
+                steps: [],
+                createdAt: new Date(),
+                version: 1,
+              },
+            },
+          }
+        : {
+            mode: "team",
+            sessionId: "session-team",
+            result: {
+              status: "completed",
+              completedSteps: [],
+              failedSteps: [],
+              skippedSteps: [],
+              results: {},
+            },
+          };
+
+    expect(await handler(createMessage("/plan build auth"))).toEqual({
+      text: "Plan generated: build auth",
+    });
+    expect(await handler(createMessage("/team run"))).toEqual({
+      text: "Team execution started...",
+    });
+  });
+
+  it("serializes concurrent messages per surface key", async () => {
+    const handler = createMessageHandler(deps);
+    const order: string[] = [];
+    let active = 0;
+    let signalFirstStart!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      signalFirstStart = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    IngressEngine.ingest = async (event) => {
+      const payload = String(event.payload);
+      active += 1;
+      order.push(`start:${payload}`);
+      expect(active).toBe(1);
+      if (payload === "first") {
+        signalFirstStart();
+        await firstGate;
+      }
+      order.push(`end:${payload}`);
+      active -= 1;
+      return {
+        mode: "direct",
+        sessionId: `session-${payload}`,
+        result: { output: payload, finishReason: "stop" },
+      };
+    };
+
+    const first = handler(createMessage("first", "discord:guild-1:channel:queue"));
+    const second = handler(createMessage("second", "discord:guild-1:channel:queue"));
+
+    await firstStarted;
+    expect(order).toEqual(["start:first"]);
+
+    releaseFirst();
+
+    expect(await first).toEqual({ text: "first" });
+    expect(await second).toEqual({ text: "second" });
+    expect(order).toEqual(["start:first", "end:first", "start:second", "end:second"]);
   });
 });

@@ -1,14 +1,15 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import type { AgentResult } from "@openomni/agent";
+import { afterAll, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { ChatAgent, type AgentResult } from "@openomni/agent";
 import type { Plan, PlanStep } from "@openomni/protocol";
 import type { Teammate } from "../../src/team/teammate";
+import { TeamOrchestrator } from "../../src/team/team-orchestrator";
 
 const responseQueue: string[] = [];
 const executedTasks: string[] = [];
 
-mock.module("@openomni/agent", () => ({
-  ChatAgent: {
-    create: () => ({
+const createSpy = spyOn(ChatAgent, "create").mockImplementation(
+  () =>
+    ({
       run: async (input: { messages: Array<{ role: string; content: string }> }) => {
         const userPrompt = input.messages[0]?.content ?? "";
         if (userPrompt.includes("Execute the following task:")) {
@@ -30,11 +31,12 @@ mock.module("@openomni/agent", () => ({
           finishReason: "stop",
         } as AgentResult;
       },
-    }),
-  },
-}));
+    }) as unknown as ReturnType<typeof ChatAgent.create>,
+);
 
-const { TeamOrchestrator } = await import("../../src/team/team-orchestrator");
+afterAll(() => {
+  createSpy.mockRestore();
+});
 
 beforeEach(() => {
   responseQueue.length = 0;

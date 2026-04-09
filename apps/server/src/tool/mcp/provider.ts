@@ -1,5 +1,4 @@
-import { McpClient } from "@openomni/agent/src/runtime/mcp";
-import type { McpServerConfig } from "@openomni/agent/src/runtime/mcp";
+import { McpClient, type McpServerConfig } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
 
@@ -58,6 +57,10 @@ export class McpToolProvider implements ToolProvider {
           tools.push({
             spec,
             riskTier: 1,
+            isReadOnly: false,
+            isDestructive: false,
+            isConcurrencySafe: false,
+            source: "mcp",
             execute: (call) => client.callTool(call.tool, call.input, call.id),
           });
         }

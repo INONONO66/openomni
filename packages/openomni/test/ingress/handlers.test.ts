@@ -1,37 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import type { InboundEvent, Plan } from "@openomni/protocol";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
-
-const mockModelsGet = mock(async () => ({
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    models: {
-      "claude-3-haiku-20240307": {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
-      },
-    },
-  },
-}));
-
-const mockProviderFromModelsDevModel = mock(() => ({
-  id: "claude-3-haiku-20240307",
-  providerID: "anthropic",
-}));
-
-const mockLlmRun = mock(async () => ({ type: "stop" as const }));
-
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mockModelsGet },
-  Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
-  run: mockLlmRun,
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-    calculateCost: () => ({ inputCost: 0, outputCost: 0, totalCost: 0 }),
-  },
-}));
+import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
 let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
@@ -69,9 +40,9 @@ beforeEach(() => {
   SurfaceKey.clear();
   Storage.reset();
   Bus.reset();
+  resetTestState();
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
-  mockLlmRun.mockClear();
 });
 
 afterEach(() => {

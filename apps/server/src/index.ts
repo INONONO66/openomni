@@ -1,27 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Auth, Provider } from "@openomni/llm";
+import type { Adapter } from "@openomni/protocol";
 import { Storage, initialize } from "@openomni/session";
 import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from "./channel";
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
-import { resolveAgentName } from "./router";
 import { createRouter } from "./routes";
 import { AgentToolProvider } from "./tool/agent";
 import { McpToolProvider } from "./tool/mcp";
 import { SystemToolProvider } from "./tool/system";
 import type { ServerConfig } from "./config";
-
-type InboundMessage = {
-  id: string;
-  surfaceKey: string;
-  text: string;
-  sender: { id: string; name?: string };
-  _resumeMessageId?: string;
-};
-
-type MessageHandler = (message: InboundMessage) => Promise<{ text: string } | null>;
 
 type Surface = {
   start(): Promise<void> | void;
@@ -62,26 +52,16 @@ function createRoutingHandler(
   systemProvider: SystemToolProvider,
   agentProvider: AgentToolProvider,
   mcpProvider: McpToolProvider,
+  workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
-): MessageHandler {
-  const handlerCache = new Map<string, MessageHandler>();
-
-  return async (message) => {
-    const agentName = resolveAgentName({ message, defaultAgent: "dev" });
-    const handler =
-      handlerCache.get(agentName) ??
-      (createMessageHandler({
-        agentName,
-        systemProvider,
-        agentProvider,
-        mcpProvider,
-        defaultModel,
-      }) as MessageHandler);
-
-    handlerCache.set(agentName, handler);
-
-    return handler(message);
-  };
+): Adapter.MessageHandler {
+  return createMessageHandler({
+    systemProvider,
+    agentProvider,
+    mcpProvider,
+    defaultModel,
+    workspaceRoot,
+  });
 }
 
 async function connectMcpServers(config: ServerConfig, provider: McpToolProvider): Promise<void> {
@@ -96,18 +76,24 @@ async function connectMcpServers(config: ServerConfig, provider: McpToolProvider
   console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
 }
 
-async function processRetryQueue(queue: RecoveryItem[], handler: MessageHandler): Promise<void> {
+function toRecoveryInboundMessage(item: RecoveryItem): Adapter.InboundMessage {
+  return {
+    id: item.messageId,
+    surfaceKey: item.surfaceKey,
+    text: item.text,
+    sender: { id: "recovery", name: "recovery" },
+  };
+}
+
+async function processRetryQueue(
+  queue: RecoveryItem[],
+  handler: Adapter.MessageHandler,
+): Promise<void> {
   console.log(`[recovery] Processing ${queue.length} retry item(s)...`);
 
   for (const item of queue) {
     try {
-      await handler({
-        id: `recovery-${item.messageId}`,
-        surfaceKey: item.surfaceKey,
-        text: item.text,
-        sender: { id: "recovery", name: "Recovery" },
-        _resumeMessageId: item.messageId,
-      });
+      await handler(toRecoveryInboundMessage(item));
     } catch (err) {
       console.error(`[recovery] Retry failed for ${item.messageId}:`, err);
     }
@@ -133,10 +119,16 @@ async function main(): Promise<void> {
   );
   const model = await resolveModel();
   const routingHandler = model
-    ? createRoutingHandler(systemProvider, agentProvider, mcpProvider, {
-        provider: model.providerID,
-        id: model.id,
-      })
+    ? createRoutingHandler(
+        systemProvider,
+        agentProvider,
+        mcpProvider,
+        config.workspace?.root ?? process.cwd(),
+        {
+          provider: model.providerID,
+          id: model.id,
+        },
+      )
     : undefined;
   const wsHandler = routingHandler
     ? new WebSocketHandler(routingHandler, { token: config.server.wsToken })

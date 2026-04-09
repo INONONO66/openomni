@@ -24,7 +24,4 @@ export const createDevAgent: AgentFactory = (): AgentDefinition => ({
     maxTurns: 24,
     maxToolCalls: 80,
   },
-  permissions: {
-    denylist: ["git.push"],
-  },
 });

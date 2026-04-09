@@ -8,7 +8,10 @@ export * from "./plan/structural-gate.js";
 export * from "./plan/plan-pipeline.js";
 export * from "./team/index.js";
 export * from "./dag/index.js";
+export * from "./ingress/index.js";
 export { FileTaskStore, TaskStorage } from "./legacy/index.js";
+
+export * from "@openomni/agent";
 
 /** @deprecated Legacy orchestration modules — CLI depends on these, do not delete */
 export * as _DEPRECATED_legacy from "./legacy/index.js";
