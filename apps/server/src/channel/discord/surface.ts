@@ -2,7 +2,7 @@ import type { Adapter } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { DiscordClient } from "./client";
-import { DiscordFormatter } from "./formatter";
+import { sendDiscordMessage } from "./formatter";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import type { DiscordMessage } from "./types";
@@ -18,12 +18,9 @@ export class DiscordAdapter implements Adapter.Surface {
 
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
-  private readonly formatter = new DiscordFormatter();
   private readonly dedupe = new Dedupe();
   private normalizer: DiscordNormalizer | null = null;
   private handler: Adapter.MessageHandler | null = null;
-  private botId = "";
-  private botUsername = "";
 
   constructor(
     token: string,
@@ -32,13 +29,11 @@ export class DiscordAdapter implements Adapter.Surface {
     this.client = new DiscordClient(token);
     this.gateway = new DiscordGateway(token, () => this.client.fetchGatewayUrl(), {
       onReady: ({ botId, botUsername }) => {
-        this.botId = botId;
-        this.botUsername = botUsername;
         this.normalizer = new DiscordNormalizer({
-          botId: this.botId,
+          botId,
           triggers: this.config.triggers,
         });
-        console.log(`[discord] Bot started: @${this.botUsername} (${this.botId})`);
+        console.log(`[discord] Bot started: @${botUsername} (${botId})`);
       },
       onDispatch: (event, data) => {
         if (event !== "MESSAGE_CREATE") return;
@@ -69,7 +64,7 @@ export class DiscordAdapter implements Adapter.Surface {
     if (parsed.kind === "dm") {
       channelId = await this.client.createDmChannel(parsed.id ?? "");
     }
-    await this.formatter.send(this.client, channelId, message);
+    await sendDiscordMessage(this.client, channelId, message);
   }
 
   private handleMessageCreate(message: DiscordMessage): void {
@@ -97,10 +92,10 @@ export class DiscordAdapter implements Adapter.Surface {
 
     try {
       const outbound = await handler(inbound);
-      if (outbound) await this.formatter.send(this.client, channelId, outbound);
+      if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
     } catch (err) {
       console.error(`[discord] Error in ${channelId}:`, err);
-      await this.formatter.send(this.client, channelId, { text: "Sorry, an error occurred." });
+      await sendDiscordMessage(this.client, channelId, { text: "Sorry, an error occurred." });
     } finally {
       clearInterval(typingInterval);
     }
