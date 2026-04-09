@@ -40,7 +40,9 @@ async function searchWithRg(
     "never",
     ...(ignoreCase ? ["-i"] : []),
     ...(include ? ["-g", include] : []),
+    "-e",
     pattern,
+    "--",
     rootPath,
   ];
   const proc = Bun.spawn([binary, ...args], { stdout: "pipe", stderr: "pipe" });
@@ -90,7 +92,7 @@ async function searchWithGrep(
 
   const matches: MatchResult[] = [];
   const files = await collectFiles(rootPath, include);
-  const command = [binary, "-rnH", "-E", ...(ignoreCase ? ["-i"] : []), pattern];
+  const command = [binary, "-rnH", "-E", ...(ignoreCase ? ["-i"] : []), "-e", pattern, "--"];
 
   for (const filePath of files) {
     if (matches.length >= MAX_MATCHES) break;

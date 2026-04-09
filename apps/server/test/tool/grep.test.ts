@@ -81,4 +81,16 @@ describe("createGrepTool", () => {
     expect(result.isError).toBe(true);
     expect(result.output).toContain("workspace root");
   });
+
+  it("treats a pattern starting with dash as a literal pattern, not a flag", async () => {
+    writeFileSync(join(workspace, "flag.txt"), "--version\nother\n");
+
+    const tool = createGrepTool(workspace);
+    const result = await tool.execute(makeCall({ pattern: "--version" }));
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.output)).toEqual([
+      { file: join(workspace, "flag.txt"), line: 1, text: "--version" },
+    ]);
+  });
 });
