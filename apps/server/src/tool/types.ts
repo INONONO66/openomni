@@ -12,7 +12,6 @@ export type ToolRiskTier = 0 | 1 | 2 | 3;
 
 export interface NativeTool {
   spec: Tool.Spec;
-  prompt?: string;
   riskTier: ToolRiskTier;
   isReadOnly: ToolMetaValue;
   isDestructive: ToolMetaValue;

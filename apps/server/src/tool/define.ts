@@ -43,7 +43,6 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
       ...(safe !== undefined ? { safe } : {}),
       ...(def.prompt ? { prompt: def.prompt } : {}),
     },
-    ...(def.prompt ? { prompt: def.prompt } : {}),
     riskTier: def.riskTier ?? defaultRiskTier,
     isReadOnly,
     isDestructive,

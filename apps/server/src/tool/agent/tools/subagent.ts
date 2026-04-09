@@ -5,7 +5,6 @@ export function createSubagentTool(): NativeTool {
   const tool = SubagentTool.create();
   return {
     spec: tool.spec,
-    prompt: tool.spec.prompt,
     riskTier: 1,
     isReadOnly: false,
     isDestructive: false,

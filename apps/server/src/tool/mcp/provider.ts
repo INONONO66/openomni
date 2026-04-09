@@ -56,7 +56,6 @@ export class McpToolProvider implements ToolProvider {
         for (const spec of specs) {
           tools.push({
             spec,
-            prompt: spec.prompt,
             riskTier: 1,
             isReadOnly: false,
             isDestructive: false,

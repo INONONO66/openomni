@@ -166,9 +166,9 @@ describe("bashTool metadata callbacks", () => {
     expect(tool.spec.safe).toBeUndefined();
   });
 
-  it("exposes the prompt via the tool instance", () => {
+  it("exposes the prompt via the tool spec", () => {
     const tool = bashTool(workspace);
-    expect(tool.prompt).toBeDefined();
-    expect(typeof tool.prompt).toBe("string");
+    expect(tool.spec.prompt).toBeDefined();
+    expect(typeof tool.spec.prompt).toBe("string");
   });
 });
