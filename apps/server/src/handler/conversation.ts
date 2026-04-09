@@ -4,8 +4,6 @@ import type { Adapter, IngressResult } from "@openomni/protocol";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
 
-const queues = new Map<string, Promise<void>>();
-
 function toResponseText(result: IngressResult): string {
   switch (result.mode) {
     case "direct":
@@ -30,6 +28,7 @@ async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps)
 }
 
 export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
+  const queues = new Map<string, Promise<void>>();
   return async (message) => {
     const key = message.surfaceKey;
     const prev = queues.get(key) ?? Promise.resolve();
