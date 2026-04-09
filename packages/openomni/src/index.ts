@@ -11,32 +11,7 @@ export * from "./dag/index.js";
 export * from "./ingress/index.js";
 export { FileTaskStore, TaskStorage } from "./legacy/index.js";
 
-export {
-  ChatAgent,
-  AgentMessenger,
-  BusTransport,
-  AgentRegistry,
-  SubagentTool,
-  McpClient,
-} from "@openomni/agent";
-export type {
-  ChatAgentInstance,
-  ChatAgentConfig,
-  ChatAgentInput,
-  AgentResult,
-  AgentStep,
-  AgentEvent,
-  AgentBudget,
-  TokenUsage,
-  Sink,
-  StepGuardVerdict,
-  StepGuardContext,
-  AgentEventEmitter,
-  Transport,
-  AgentMessengerOptions,
-  SubagentToolOptions,
-  McpServerConfig,
-} from "@openomni/agent";
+export * from "@openomni/agent";
 
 /** @deprecated Legacy orchestration modules — CLI depends on these, do not delete */
 export * as _DEPRECATED_legacy from "./legacy/index.js";
