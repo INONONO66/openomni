@@ -1,26 +1,22 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import type { AgentResult } from "@openomni/agent";
+import { afterAll, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { ChatAgent, type AgentResult } from "@openomni/agent";
 import type { Plan, PlanStep, Team } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { Teammate } from "../../src/team/teammate";
+import { TeamOrchestrator } from "../../src/team/team-orchestrator";
 
 const responseQueue: string[] = [];
 const publishedEvents: Array<{ eventName: string; data: unknown }> = [];
 
-// Mock Bus.publish to capture events
-mock.module("@openomni/session", () => ({
-  Bus: {
-    publish: (event: { name: string }, data: unknown) => {
-      publishedEvents.push({ eventName: event.name, data });
-    },
-    subscribe: () => () => {},
-    reset: () => {},
+const publishSpy = spyOn(Bus, "publish").mockImplementation(
+  (event: { name: string }, data: unknown) => {
+    publishedEvents.push({ eventName: event.name, data });
   },
-}));
+);
 
-// Mock ChatAgent for deterministic responses
-mock.module("@openomni/agent", () => ({
-  ChatAgent: {
-    create: () => ({
+const createSpy = spyOn(ChatAgent, "create").mockImplementation(
+  () =>
+    ({
       run: async () => {
         const text = responseQueue.shift() ?? "{}";
         return {
@@ -34,11 +30,13 @@ mock.module("@openomni/agent", () => ({
           finishReason: "stop",
         } as AgentResult;
       },
-    }),
-  },
-}));
+    }) as unknown as ReturnType<typeof ChatAgent.create>,
+);
 
-const { TeamOrchestrator } = await import("../../src/team/team-orchestrator");
+afterAll(() => {
+  publishSpy.mockRestore();
+  createSpy.mockRestore();
+});
 
 beforeEach(() => {
   responseQueue.length = 0;

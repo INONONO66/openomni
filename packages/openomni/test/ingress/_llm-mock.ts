@@ -84,12 +84,10 @@ mock.module("@openomni/llm", () => ({
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
   run: (input: unknown, sink: Sink) => {
     testState.llmInputs.push(input);
-    if (!testState.runFn) {
-      throw new Error(
-        "[test/_llm-mock] testState.runFn is not set; call it from beforeEach before dispatching an ingest event",
-      );
+    if (testState.runFn) {
+      return testState.runFn(input, sink);
     }
-    return testState.runFn(input, sink);
+    return Promise.resolve({ type: "stop" } as Run.Outcome);
   },
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),

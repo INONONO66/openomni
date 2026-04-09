@@ -1,37 +1,36 @@
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
 import type { PlanStep, Tool } from "@openomni/protocol";
-import type { AgentResult, TokenUsage } from "@openomni/agent";
 import { Teammate } from "../../src/team/teammate";
 
-// Mock ChatAgent module
 const mockChatAgentConfigs: unknown[] = [];
 const mockChatAgentInstances: Array<{
-  run: (input: unknown) => Promise<AgentResult>;
+  run: (input: ChatAgentInput) => Promise<AgentResult>;
 }> = [];
 
-mock.module("@openomni/agent", () => ({
-  ChatAgent: {
-    create: (config: unknown) => {
-      mockChatAgentConfigs.push(config);
-      const instance = {
-        run: mock(async (input: unknown): Promise<AgentResult> => {
-          return {
-            text: "Mock agent output",
-            steps: [],
-            usage: {
-              inputTokens: 10,
-              outputTokens: 20,
-              totalTokens: 30,
-            },
-            finishReason: "stop",
-          };
-        }),
-      };
-      mockChatAgentInstances.push(instance);
-      return instance;
-    },
+const defaultRunImpl = async (_input: ChatAgentInput): Promise<AgentResult> => ({
+  text: "Mock agent output",
+  steps: [],
+  usage: {
+    inputTokens: 10,
+    outputTokens: 20,
+    totalTokens: 30,
   },
-}));
+  finishReason: "stop",
+});
+
+const createSpy = spyOn(ChatAgent, "create").mockImplementation((config) => {
+  mockChatAgentConfigs.push(config);
+  const instance = {
+    run: mock(defaultRunImpl),
+  } as unknown as ReturnType<typeof ChatAgent.create>;
+  mockChatAgentInstances.push(instance as unknown as { run: typeof defaultRunImpl });
+  return instance;
+});
+
+afterAll(() => {
+  createSpy.mockRestore();
+});
 
 describe("Teammate", () => {
   beforeEach(() => {
