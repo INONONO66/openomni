@@ -70,10 +70,15 @@ function readDirectory(resolved: string): string {
     .join("\n");
 }
 
+const READ_PROMPT = `Read file contents or list a directory inside the workspace.
+Files return line-prefixed text (1-indexed); directories return sorted entries with trailing slash for subdirectories.
+Use offset and limit for paginated reads of large files. Paths must stay within the workspace root.`;
+
 export function createReadTool(workspaceRoot: string) {
   return defineTool<{ path: string; offset?: number; limit?: number }>({
     name: "read",
     description: "Read a file or directory within the workspace",
+    prompt: READ_PROMPT,
     inputSchema: {
       type: "object",
       properties: {

@@ -11,27 +11,24 @@ function createResult(call: Tool.Call, output: string, isError?: boolean): Tool.
   return { id: crypto.randomUUID(), toolCallId: call.id, output, ...(isError ? { isError } : {}) };
 }
 
-function getString(input: InputRecord, key: string): string {
-  const v = input[key];
+function mustString(v: unknown, key: string): string {
   if (typeof v !== "string" || v.length === 0)
     throw new Error(`Invalid input: ${key} must be a non-empty string`);
   return v;
 }
-
-function getOptionalString(input: InputRecord, key: string): string | undefined {
-  const v = input[key];
+const getString = (i: InputRecord, k: string) => mustString(i[k], k);
+const getOptionalString = (i: InputRecord, k: string) =>
+  i[k] === undefined ? undefined : mustString(i[k], k);
+function getOptionalBoolean(i: InputRecord, k: string): boolean | undefined {
+  const v = i[k];
   if (v === undefined) return undefined;
-  if (typeof v !== "string" || v.length === 0)
-    throw new Error(`Invalid input: ${key} must be a non-empty string`);
+  if (typeof v !== "boolean") throw new Error(`Invalid input: ${k} must be a boolean`);
   return v;
 }
 
-function getOptionalBoolean(input: InputRecord, key: string): boolean | undefined {
-  const v = input[key];
-  if (v === undefined) return undefined;
-  if (typeof v !== "boolean") throw new Error(`Invalid input: ${key} must be a boolean`);
-  return v;
-}
+const GREP_PROMPT = `Search file contents for a regex pattern across the workspace.
+Use include (glob) to narrow the files searched and ignoreCase for case-insensitive matches.
+Returns up to 100 entries as {file, line, text}. Paths must stay within the workspace root.`;
 
 function normalizeIncludePattern(include?: string): string | undefined {
   if (!include) return undefined;
@@ -170,6 +167,7 @@ export function createGrepTool(workspaceRoot: string): NativeTool {
   return defineTool({
     name: "grep.search",
     description: "Search file contents with a regex",
+    prompt: GREP_PROMPT,
     inputSchema: {
       type: "object",
       properties: {

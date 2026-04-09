@@ -49,10 +49,15 @@ function resolveContainedPath(workspaceRoot: string, inputPath: string): string 
   return resolved;
 }
 
+const WRITE_PROMPT = `Write content to a file inside the workspace.
+Creates parent directories as needed and overwrites any existing file at the path.
+The path must stay within the workspace root; symlink escapes are rejected.`;
+
 export function createWriteTool(workspaceRoot: string) {
   return defineTool<{ path: string; content: string }>({
     name: "write",
     description: "Write a file within the workspace",
+    prompt: WRITE_PROMPT,
     inputSchema: {
       type: "object",
       properties: {
@@ -62,7 +67,7 @@ export function createWriteTool(workspaceRoot: string) {
       required: ["path", "content"],
     },
     isReadOnly: false,
-    isDestructive: false,
+    isDestructive: true,
     isConcurrencySafe: false,
     source: "system",
     async execute(call) {
