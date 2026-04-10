@@ -7,7 +7,7 @@ import { DiscordAdapter, GitHubAdapter, TelegramAdapter, WebSocketHandler } from
 import { loadConfig } from "./config";
 import { createMessageHandler } from "./handler/conversation";
 import { recoverInterruptedMessages, type RecoveryItem } from "./recovery";
-import { createRouter } from "./routes";
+import { createRouter } from "./server/routes";
 import { AgentToolProvider } from "./tool/agent";
 import { McpToolProvider } from "./tool/mcp";
 import { SystemToolProvider } from "./tool/system";

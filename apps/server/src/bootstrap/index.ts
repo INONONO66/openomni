@@ -4,7 +4,7 @@ import type { Adapter } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import { loadConfig } from "../config";
 import { createMessageHandler } from "../handler/conversation";
-import { createRouter } from "../routes";
+import { createRouter } from "../server/routes";
 import { AgentToolProvider } from "../tool/agent";
 import { McpToolProvider } from "../tool/mcp";
 import { SystemToolProvider } from "../tool/system";
