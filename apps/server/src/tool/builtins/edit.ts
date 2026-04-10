@@ -1,7 +1,7 @@
 import { defineTool } from "../define";
 import { optionalBoolean, requireString } from "../shared/input";
 import { errorResult, fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../shared/workspace-path";
+import { resolveContainedPath } from "../../filesystem/workspace-path";
 import { EDIT_PROMPT } from "./edit-prompt";
 
 function replaceOnce(

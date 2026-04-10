@@ -1,1 +1,1 @@
-export { GitHubAdapter } from "./adapter";
+export { GitHubAdapter } from "./surface";
