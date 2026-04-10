@@ -86,7 +86,7 @@ export class GitHubAdapter implements Adapter.Surface {
     const content = this.extractContent(event, payload);
     if (!content) return new Response("Unsupported event", { status: 200 });
 
-    const inbound = this.normalizer.normalize(content, eventKey);
+    const inbound = this.normalizer.normalize(content, eventKey, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });
 
     console.log(

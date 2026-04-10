@@ -11,7 +11,11 @@ export interface GitHubNormalizerContext {
 export class GitHubNormalizer {
   constructor(private readonly ctx: GitHubNormalizerContext) {}
 
-  normalize(content: GitHubEventContent, eventKey: string): Adapter.InboundMessage | null {
+  normalize(
+    content: GitHubEventContent,
+    eventKey: string,
+    deliveryId?: string,
+  ): Adapter.InboundMessage | null {
     const triggerCtx: Adapter.TriggerContext = {
       event: eventKey,
       mentioned: this.checkMention(content.text),
@@ -33,7 +37,7 @@ export class GitHubNormalizer {
     const normalizedText = normalizeContent(content.text, this.ctx.triggers, this.ctx.botUsername);
 
     return {
-      id: `${eventKey}-${content.issueNumber}-${Date.now()}`,
+      id: deliveryId ?? `${eventKey}-${content.issueNumber}`,
       surfaceKey,
       text: normalizedText,
       sender: { id: content.sender, name: content.sender },
