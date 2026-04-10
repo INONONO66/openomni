@@ -37,7 +37,8 @@ export class GitHubNormalizer {
     const normalizedText = normalizeContent(content.text, this.ctx.triggers, this.ctx.botUsername);
 
     return {
-      id: deliveryId ?? `${eventKey}-${content.issueNumber}`,
+      id:
+        deliveryId ?? `${eventKey}-${content.issueNumber}-${content.sender}-${content.text.length}`,
       surfaceKey,
       text: normalizedText,
       sender: { id: content.sender, name: content.sender },
