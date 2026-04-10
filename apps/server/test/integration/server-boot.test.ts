@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { createRouter } from "../../src/routes";
+import { createRouter } from "../../src/server/routes";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
 
