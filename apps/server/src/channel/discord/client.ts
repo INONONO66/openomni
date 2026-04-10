@@ -1,4 +1,4 @@
-import { fetchWithRetry } from "../../shared/http-helpers";
+import { fetchWithRetry } from "../../shared/fetch-retry";
 import type { ChannelClient } from "../types";
 
 const BASE_URL = "https://discord.com/api/v10";
