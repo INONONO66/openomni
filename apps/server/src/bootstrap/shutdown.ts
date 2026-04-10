@@ -28,20 +28,24 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
 
     console.log("[server] shutting down...");
 
-    for (const channel of deps.channels) {
-      channel.stop();
-    }
+    try {
+      for (const channel of deps.channels) {
+        channel.stop();
+      }
 
-    deps.server.stop(true);
-    await deps.mcpProvider.disconnectAll();
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+      deps.server.stop(true);
+      await deps.mcpProvider.disconnectAll();
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
 
-    const storage = Storage.get();
-    if (isClosableStorage(storage)) {
-      storage.transaction(() => {
-        storage.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-      });
-      storage.close();
+      const storage = Storage.get();
+      if (isClosableStorage(storage)) {
+        storage.transaction(() => {
+          storage.sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        });
+        storage.close();
+      }
+    } catch (err) {
+      console.error("[server] error during shutdown:", err);
     }
 
     process.exit(0);
