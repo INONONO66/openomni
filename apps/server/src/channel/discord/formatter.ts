@@ -1,5 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
-import { splitText } from "../../shared/http-helpers";
+import { splitText } from "../../shared/chunk-text";
 import type { ChannelClient } from "../types";
 
 const DISCORD_MESSAGE_LIMIT = 2000;
