@@ -8,6 +8,7 @@ interface ClosableStorage {
 }
 
 function isClosableStorage(storage: unknown): storage is ClosableStorage {
+  if (storage == null || typeof storage !== "object") return false;
   const s = storage as Record<string, unknown>;
   return typeof s.close === "function" && typeof s.transaction === "function" && s.sqlite != null;
 }
