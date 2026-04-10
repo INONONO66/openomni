@@ -1,4 +1,5 @@
 export function splitText(text: string, maxLength: number): string[] {
+  if (maxLength < 1) throw new Error("maxLength must be at least 1");
   if (text.length <= maxLength) return [text];
 
   const chunks: string[] = [];
