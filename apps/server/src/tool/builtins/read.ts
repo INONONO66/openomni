@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { defineTool } from "../define";
 import { optionalPositiveInteger, requireString } from "../shared/input";
 import { fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../shared/workspace-path";
+import { resolveContainedPath } from "../../filesystem/workspace-path";
 import { READ_PROMPT } from "./read-prompt";
 
 async function readFile(path: string, offset?: number, limit?: number): Promise<string> {

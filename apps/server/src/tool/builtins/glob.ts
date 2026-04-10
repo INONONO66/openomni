@@ -3,7 +3,7 @@ import type { Tool } from "@openomni/protocol";
 import { defineTool } from "../define";
 import { optionalString, requireString } from "../shared/input";
 import { errorResult, fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../shared/workspace-path";
+import { resolveContainedPath } from "../../filesystem/workspace-path";
 import { GLOB_PROMPT } from "./glob-prompt";
 
 const MAX_RESULTS = 100;

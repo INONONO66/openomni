@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { defineTool } from "../define";
 import { requireString } from "../shared/input";
 import { fromError, successResult } from "../shared/result";
-import { resolveContainedPathForCreate } from "../shared/workspace-path";
+import { resolveContainedPathForCreate } from "../../filesystem/workspace-path";
 import { WRITE_PROMPT } from "./write-prompt";
 
 export function createWriteTool(workspaceRoot: string) {
