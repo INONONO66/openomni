@@ -16,8 +16,9 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
   normalize(message: TelegramMessage): Adapter.InboundMessage | null {
     const text = message.text;
     if (!text) return null;
+    if (!message.from) return null;
 
-    const userId = message.from?.id;
+    const userId = message.from.id;
     const chatId = String(message.chat.id);
     const isDM = message.chat.type === "private";
     const mentioned = this.ctx.botUsername !== "" && text.includes(`@${this.ctx.botUsername}`);
@@ -26,7 +27,7 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
       event: "message",
       mentioned,
       channelId: chatId,
-      senderId: String(userId ?? 0),
+      senderId: String(userId),
       isDM,
       text,
     };
@@ -48,7 +49,7 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
       surfaceKey,
       text: content,
       sender: {
-        id: String(userId ?? 0),
+        id: String(userId),
         name: message.from?.username ?? message.from?.first_name,
       },
       raw: message,
