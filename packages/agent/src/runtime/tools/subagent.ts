@@ -8,6 +8,22 @@ import { BusTransport } from "../messenger/transport";
 export interface SubagentToolOptions {
   delegationContext?: DelegationContext;
   messengerAllowPatterns?: Array<{ from: string; to: string }>;
+  subagentRuntime?: {
+    spawn: (config: {
+      agentName: string;
+      prompt: string;
+      parentSessionId?: string;
+      title: string;
+      model: { provider: string; id: string };
+      systemPrompt?: string;
+    }) => Promise<{ sessionId: string; runId: string; output: string }>;
+    send: (config: {
+      sessionId: string;
+      prompt: string;
+      model: { provider: string; id: string };
+      systemPrompt?: string;
+    }) => Promise<{ sessionId: string; runId: string; output: string }>;
+  };
 }
 
 export interface SubagentToolSpec {
@@ -16,6 +32,11 @@ export interface SubagentToolSpec {
 }
 
 export namespace SubagentTool {
+  const fallbackModel = {
+    provider: "anthropic",
+    id: "claude-3-haiku-20240307",
+  };
+
   export function create(options?: SubagentToolOptions): SubagentToolSpec {
     const spec: Tool.Spec = {
       name: "subagent",
@@ -34,7 +55,7 @@ export namespace SubagentTool {
           },
           sessionId: {
             type: "string",
-            description: "Optional session ID for context continuity",
+            description: "Optional session ID to continue an existing subagent session",
           },
         },
         required: ["agentName", "prompt"],
@@ -42,9 +63,10 @@ export namespace SubagentTool {
     };
 
     const execute = async (args: unknown): Promise<Tool.Result> => {
-      const { agentName, prompt } = args as {
+      const { agentName, prompt, sessionId } = args as {
         agentName: string;
         prompt: string;
+        sessionId?: string;
       };
 
       const ctx = options?.delegationContext;
@@ -92,12 +114,44 @@ export namespace SubagentTool {
             }
           : allocated;
 
+      const model = definition.model ?? fallbackModel;
+
+      if (options?.subagentRuntime) {
+        try {
+          const result = sessionId
+            ? await options.subagentRuntime.send({
+                sessionId,
+                prompt,
+                model,
+                systemPrompt: definition.systemPrompt,
+              })
+            : await options.subagentRuntime.spawn({
+                agentName,
+                prompt,
+                title: prompt.slice(0, 50),
+                model,
+                systemPrompt: definition.systemPrompt,
+              });
+
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: `${result.output}\n[session:${result.sessionId}]`,
+            isError: false,
+          };
+        } catch (error) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: error instanceof Error ? error.message : String(error),
+            isError: true,
+          };
+        }
+      }
+
       try {
         const childAgent = ChatAgent.create({
-          model: definition.model ?? {
-            provider: "anthropic",
-            id: "claude-3-haiku-20240307",
-          },
+          model,
           systemPrompt: definition.systemPrompt,
           budget: childBudget,
           permissions: definition.permissions,
