@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
-import { Session, Storage } from "@openomni/session";
+import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const runCalls: ChatAgentInput[] = [];
@@ -144,5 +144,111 @@ describe("SubagentRuntime", () => {
     expect(session).toBeDefined();
     expect(session?.parentSessionId).toBeUndefined();
     expect(session?.spawnDepth).toBe(0);
+  });
+
+  describe("resume", () => {
+    const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+
+    it("creates a new run on an idle session and returns output", async () => {
+      queueResult("first");
+      const spawned = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "task",
+        prompt: "do work",
+        model,
+      });
+
+      queueResult("resumed output");
+      const result = await SubagentRuntime.resume({
+        sessionId: spawned.sessionId,
+        model,
+      });
+
+      expect(result.resumed).toBe(true);
+      expect(result.sessionId).toBe(spawned.sessionId);
+      expect(result.runId).toBeDefined();
+      expect(result.output).toBe("resumed output");
+      expect(result.finishReason).toBe("stop");
+    });
+
+    it("throws when session has an active run", async () => {
+      const session = Session.create({
+        title: "busy",
+        model: { providerID: "anthropic", modelID: "claude-3-haiku-20240307" },
+      });
+
+      const runId = crypto.randomUUID();
+      await WorkerRun.create(session.id, {
+        runId,
+        title: "active",
+        prompt: "working",
+      });
+      await WorkerRun.updateStatus(session.id, runId, "starting");
+      await WorkerRun.updateStatus(session.id, runId, "running");
+
+      await expect(SubagentRuntime.resume({ sessionId: session.id, model })).rejects.toThrow(
+        "Session already has an active run",
+      );
+    });
+
+    it("returns resumed false for non-existent session", async () => {
+      const result = await SubagentRuntime.resume({
+        sessionId: "nonexistent",
+        model,
+      });
+
+      expect(result.resumed).toBe(false);
+      expect(result.runId).toBeUndefined();
+    });
+  });
+
+  describe("cancel", () => {
+    const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+
+    it("cancels a specific run by runId", async () => {
+      const session = Session.create({
+        title: "to-cancel",
+        model: { providerID: "anthropic", modelID: "claude-3-haiku-20240307" },
+      });
+
+      const runId = crypto.randomUUID();
+      await WorkerRun.create(session.id, {
+        runId,
+        title: "active",
+        prompt: "working",
+      });
+      await WorkerRun.updateStatus(session.id, runId, "starting");
+      await WorkerRun.updateStatus(session.id, runId, "running");
+
+      await SubagentRuntime.cancel({ sessionId: session.id, runId });
+
+      const run = await WorkerRun.get(session.id, runId);
+      expect(run?.status).toBe("cancelled");
+    });
+
+    it("cancels the active run when no runId provided", async () => {
+      const session = Session.create({
+        title: "to-cancel",
+        model: { providerID: "anthropic", modelID: "claude-3-haiku-20240307" },
+      });
+
+      const runId = crypto.randomUUID();
+      await WorkerRun.create(session.id, {
+        runId,
+        title: "active",
+        prompt: "working",
+      });
+      await WorkerRun.updateStatus(session.id, runId, "starting");
+      await WorkerRun.updateStatus(session.id, runId, "running");
+
+      await SubagentRuntime.cancel({ sessionId: session.id });
+
+      const run = await WorkerRun.get(session.id, runId);
+      expect(run?.status).toBe("cancelled");
+    });
+
+    it("is a no-op for non-existent session", async () => {
+      await SubagentRuntime.cancel({ sessionId: "nonexistent" });
+    });
   });
 });

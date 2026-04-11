@@ -299,6 +299,127 @@ export namespace SubagentRuntime {
     }
   }
 
+  export interface ResumeConfig extends RuntimeConfig {
+    sessionId: string;
+  }
+
+  export interface ResumeResult {
+    resumed: boolean;
+    sessionId: string;
+    runId: string | undefined;
+    output?: string;
+    finishReason?: RunResult["finishReason"];
+  }
+
+  export interface CancelConfig {
+    sessionId: string;
+    runId?: string;
+  }
+
+  export async function resume(config: ResumeConfig): Promise<ResumeResult> {
+    const session = Session.get(config.sessionId);
+    if (!session) {
+      return { resumed: false, sessionId: config.sessionId, runId: undefined };
+    }
+
+    const runs = await WorkerRun.listBySession(config.sessionId);
+    const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
+
+    if (latestRun?.status === "running" || latestRun?.status === "starting") {
+      throw new Error("Session already has an active run");
+    }
+
+    const runId = crypto.randomUUID();
+    const title = latestRun?.title ?? "resumed";
+    const prompt = latestRun?.prompt ?? "resume";
+
+    await WorkerRun.create(config.sessionId, { runId, title, prompt });
+    await WorkerRun.updateStatus(config.sessionId, runId, "starting");
+
+    publishEvent(Subagent.Events.WorkerSessionResumed, {
+      sessionId: config.sessionId,
+      runId,
+    });
+
+    try {
+      await WorkerRun.updateStatus(config.sessionId, runId, "running");
+      const result = await runWithTranscript(config.sessionId, config);
+
+      const assistantMessage = createAssistantMessage(config.sessionId, config.model);
+      Session.addMessage(config.sessionId, assistantMessage);
+      addTextPart(config.sessionId, assistantMessage.id, result.text);
+
+      await WorkerRun.updateStatus(config.sessionId, runId, "succeeded", {
+        endedAt: Date.now(),
+        lastMessageId: assistantMessage.id,
+      });
+
+      publishEvent(Subagent.Events.WorkerRunCompleted, {
+        sessionId: config.sessionId,
+        runId,
+        status: "succeeded",
+      });
+
+      return {
+        resumed: true,
+        sessionId: config.sessionId,
+        runId,
+        output: result.text,
+        finishReason: result.finishReason,
+      };
+    } catch (error) {
+      await WorkerRun.updateStatus(config.sessionId, runId, "failed", {
+        endedAt: Date.now(),
+      });
+      publishEvent(Subagent.Events.WorkerRunFailed, {
+        sessionId: config.sessionId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  export async function cancel(config: CancelConfig): Promise<void> {
+    const session = Session.get(config.sessionId);
+    if (!session) return;
+
+    if (config.runId) {
+      const run = await WorkerRun.get(config.sessionId, config.runId);
+      if (
+        run &&
+        run.status !== "cancelled" &&
+        run.status !== "succeeded" &&
+        run.status !== "failed" &&
+        run.status !== "interrupted"
+      ) {
+        await WorkerRun.updateStatus(config.sessionId, config.runId, "cancelled", {
+          endedAt: Date.now(),
+        });
+      }
+
+      publishEvent(Subagent.Events.WorkerSessionCancelled, {
+        sessionId: config.sessionId,
+        runId: config.runId,
+      });
+      return;
+    }
+
+    const runs = await WorkerRun.listBySession(config.sessionId);
+    const activeRun = runs.find((r) => r.status === "running" || r.status === "starting");
+
+    if (activeRun) {
+      await WorkerRun.updateStatus(config.sessionId, activeRun.runId, "cancelled", {
+        endedAt: Date.now(),
+      });
+    }
+
+    publishEvent(Subagent.Events.WorkerSessionCancelled, {
+      sessionId: config.sessionId,
+      runId: activeRun?.runId,
+    });
+  }
+
   export async function wait(config: WaitConfig): Promise<WaitResult> {
     const run = await WorkerRun.get(config.sessionId, config.runId);
     if (!run) {
