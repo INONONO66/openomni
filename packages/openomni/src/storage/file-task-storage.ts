@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { TaskStore, TaskListFilter, RunListOptions } from "./task-storage";
-import type { Task } from "../legacy/task/types";
+import type { Task } from "./task-types";
 
 export class FileTaskStore implements TaskStore {
   private tasks = new Map<string, Task.Info>();

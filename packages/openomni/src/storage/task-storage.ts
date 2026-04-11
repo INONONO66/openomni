@@ -1,4 +1,4 @@
-import type { Task } from "../legacy/task/types";
+import type { Task } from "./task-types";
 
 /**
  * TaskStore interface - storage adapter for task automation system
