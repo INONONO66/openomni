@@ -193,4 +193,40 @@ describe("TeamOrchestrator.execute", () => {
     expect(result.skippedSteps).toEqual([]);
     expect(result.results.size).toBe(0);
   });
+
+  it("enriches system prompt when suggestedAgent matches a builtin category", async () => {
+    responseQueue.push("deep-output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1", [], "deep")]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual(["s1"]);
+
+    const agentConfig = createSpy.mock.calls.find((call) => {
+      const config = call[0] as { systemPrompt?: string };
+      return config.systemPrompt?.includes("broad codebase exploration");
+    });
+    expect(agentConfig).toBeDefined();
+  });
+
+  it("does not enrich prompt when suggestedAgent is not a known category", async () => {
+    const callsBefore = createSpy.mock.calls.length;
+
+    responseQueue.push("custom-output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1", [], "unknown-agent")]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+
+    const newCalls = createSpy.mock.calls.slice(callsBefore);
+    const enrichedCall = newCalls.find((call) => {
+      const config = call[0] as { systemPrompt?: string };
+      return config.systemPrompt?.includes("Recommended tools:");
+    });
+    expect(enrichedCall).toBeUndefined();
+  });
 });

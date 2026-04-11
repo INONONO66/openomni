@@ -8,6 +8,7 @@ import { ReviewLoop } from "./review-loop";
 import { RunLedger } from "./run-ledger";
 import { StallDetector } from "./stall-detector";
 import { resolveTeamAgent } from "./team-agents";
+import { resolveCategory } from "../category/category-resolver";
 import { Teammate } from "./teammate";
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
@@ -321,11 +322,38 @@ function resolveTeammate(
 ): Teammate.TeammateConfig {
   if (!step.suggestedAgent) return config.defaultTeammateConfig;
 
-  return {
+  const base = {
     ...config.defaultTeammateConfig,
     ...resolveTeamAgent(step.suggestedAgent),
     ...(config.teammates.get(step.suggestedAgent) ?? {}),
   };
+
+  return applyCategoryEnrichment(base, step.suggestedAgent);
+}
+
+function applyCategoryEnrichment(
+  config: Teammate.TeammateConfig,
+  name: string,
+): Teammate.TeammateConfig {
+  const resolution = resolveCategory(name);
+  if (resolution.source === "fallback") return config;
+
+  const { promptAppend, toolHints } = resolution.config;
+  if (!promptAppend && (!toolHints || toolHints.length === 0)) return config;
+
+  const additions: string[] = [];
+  if (toolHints && toolHints.length > 0) {
+    additions.push(`Recommended tools: ${toolHints.join(", ")}`);
+  }
+  if (promptAppend) {
+    additions.push(promptAppend);
+  }
+
+  const enrichedPrompt = config.systemPrompt
+    ? `${config.systemPrompt}\n${additions.join("\n")}`
+    : additions.join("\n");
+
+  return { ...config, systemPrompt: enrichedPrompt };
 }
 function buildContext(step: PlanStep, results: Map<string, string>): string | undefined {
   if (step.dependsOn.length === 0) return undefined;
