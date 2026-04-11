@@ -109,11 +109,7 @@ export namespace RunLedger {
       },
 
       getState(): Map<string, RunLedgerEntry> {
-        const copy = new Map<string, RunLedgerEntry>();
-        for (const [id, entry] of entries) {
-          copy.set(id, cloneEntry(entry));
-        }
-        return copy;
+        return new Map([...entries].map(([id, entry]) => [id, cloneEntry(entry)]));
       },
 
       getStepState(stepId: string): RunLedgerEntry | undefined {
@@ -122,23 +118,13 @@ export namespace RunLedger {
       },
 
       getRunning(): RunLedgerEntry[] {
-        const result: RunLedgerEntry[] = [];
-        for (const entry of entries.values()) {
-          if (entry.state === "running") {
-            result.push(cloneEntry(entry));
-          }
-        }
-        return result;
+        return [...entries.values()].filter((e) => e.state === "running").map(cloneEntry);
       },
 
       getCompleted(): RunLedgerEntry[] {
-        const result: RunLedgerEntry[] = [];
-        for (const entry of entries.values()) {
-          if (COMPLETED_STATES.includes(entry.state)) {
-            result.push(cloneEntry(entry));
-          }
-        }
-        return result;
+        return [...entries.values()]
+          .filter((e) => COMPLETED_STATES.includes(e.state))
+          .map(cloneEntry);
       },
     };
   }
