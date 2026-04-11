@@ -56,7 +56,7 @@ src/
 
 ## ANTI-PATTERNS
 
-- Do NOT import from `src/legacy/` directly — use the package barrel (`@openomni/openomni`).
+- Do NOT import internal package source paths directly — use the package barrel (`@openomni/openomni`).
 - No persistence: `RunLedger` is in-memory only. No checkpointing or recovery in V1.
 - No dynamic step insertion: Plan is fixed at `execute()` call time. No mid-execution replanning.
 
@@ -64,7 +64,7 @@ src/
 
 - LLM is used ONLY in `ReviewLoop` for Team Mode accept/reject decisions.
 - Plan Mode and Team Mode are V1 implementations — sequential, in-memory, no persistence.
-- Legacy code in `src/legacy/` was moved as-is from `packages/agent`.
+- The removed legacy orchestration implementation originally came from `packages/agent`.
 
 ## NOTES
 
