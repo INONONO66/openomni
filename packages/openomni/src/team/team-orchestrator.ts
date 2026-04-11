@@ -7,6 +7,7 @@ import type { ApprovalGate } from "./approval-gate";
 import { ReviewLoop } from "./review-loop";
 import { RunLedger } from "./run-ledger";
 import { StallDetector } from "./stall-detector";
+import { resolveTeamAgent } from "./team-agents";
 import { Teammate } from "./teammate";
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
@@ -318,10 +319,13 @@ function resolveTeammate(
   step: PlanStep,
   config: TeamOrchestrator.OrchestratorConfig,
 ): Teammate.TeammateConfig {
-  if (step.suggestedAgent && config.teammates.has(step.suggestedAgent)) {
-    return config.teammates.get(step.suggestedAgent) ?? config.defaultTeammateConfig;
-  }
-  return config.defaultTeammateConfig;
+  if (!step.suggestedAgent) return config.defaultTeammateConfig;
+
+  return {
+    ...config.defaultTeammateConfig,
+    ...resolveTeamAgent(step.suggestedAgent),
+    ...(config.teammates.get(step.suggestedAgent) ?? {}),
+  };
 }
 function buildContext(step: PlanStep, results: Map<string, string>): string | undefined {
   if (step.dependsOn.length === 0) return undefined;
