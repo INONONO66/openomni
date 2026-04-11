@@ -1,25 +1,43 @@
+// Rule 5: approval, execution, review, retry, stall detection, and event emission share one run ledger, so the dispatch loop stays together here.
 import type { Plan, PlanStep } from "@openomni/protocol";
 import { Team } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus, type BusEvent } from "@openomni/session";
 import { DAG } from "../dag/index";
+import type { ApprovalGate } from "./approval-gate";
+import { ReviewLoop } from "./review-loop";
 import { RunLedger } from "./run-ledger";
 import { StallDetector } from "./stall-detector";
-import { ReviewLoop } from "./review-loop";
 import { Teammate } from "./teammate";
-import { ApprovalGate } from "./approval-gate";
-
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
   maxNoProgressTurns: 5,
 };
-
-/** Publish a bus event, swallowing any synchronous errors. */
+type RetryMeta = { handoffDocument?: string };
+interface ExecutionState {
+  ledger: ReturnType<typeof RunLedger.create>;
+  completed: Set<string>;
+  failed: Set<string>;
+  skipped: Set<string>;
+  results: Map<string, string>;
+  pendingRetry: Map<string, RetryMeta>;
+}
+type TeamEventPayload<TEvent> = TEvent extends { payload: infer TPayload } ? TPayload : never;
 function safePublish<T>(...args: Parameters<typeof Bus.publish<T>>): void {
   try {
     Bus.publish(...args);
   } catch {
-    // fire-and-forget: event errors must never crash the orchestrator
+    // fire-and-forget: event handlers are observability hooks, not control flow
   }
+}
+function publishTeamEvent<TEvent extends { traceId: string; time: number; payload: unknown }>(
+  event: BusEvent.Descriptor<TEvent>,
+  payload: TeamEventPayload<TEvent>,
+): void {
+  safePublish(event, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    payload,
+  } as TEvent);
 }
 export namespace TeamOrchestrator {
   export interface OrchestratorConfig {
@@ -51,304 +69,251 @@ export namespace TeamOrchestrator {
         results: new Map<string, string>(),
       };
     }
-
     const dag = DAG.build(plan.steps);
     const acyclic = DAG.validateAcyclic(dag);
     if (!acyclic.valid) {
       const cycleText = acyclic.cycle.length > 0 ? `: ${acyclic.cycle.join(" -> ")}` : "";
       throw new Error(`Plan contains cycle${cycleText}`);
     }
-
-    // Publish plan.created event (fire-and-forget)
-    safePublish(Team.Events.PlanCreated, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      payload: {
-        planId: plan.planId,
-        goal: plan.goal,
-        stepCount: plan.steps.length,
-      },
+    publishTeamEvent(Team.Events.PlanCreated, {
+      planId: plan.planId,
+      goal: plan.goal,
+      stepCount: plan.steps.length,
     });
-
-    const ledger = RunLedger.create(plan.steps);
-    const completed = new Set<string>();
-    const failed = new Set<string>();
-    const skipped = new Set<string>();
-    const results = new Map<string, string>();
-    const pendingRetry = new Map<string, { handoffDocument?: string }>();
+    const state = createExecutionState(plan.steps);
     const stepById = new Map(plan.steps.map((step) => [step.stepId, step]));
-
     const maxAttemptsPerStep = config.maxAttemptsPerStep ?? 3;
     const stallConfig = config.stallConfig ?? DEFAULT_STALL_CONFIG;
     let noProgressTurns = 0;
-
     while (true) {
       let progressed = false;
-
-      const readyFromDag = DAG.getReady(dag, completed);
-      const readySteps = readyFromDag.filter((stepId) => {
-        if (failed.has(stepId) || skipped.has(stepId)) {
-          return false;
-        }
-
-        const state = ledger.getStepState(stepId)?.state;
-        return state === "ready" || pendingRetry.has(stepId);
-      });
-
-      for (const stepId of readySteps) {
-        if (failed.has(stepId) || skipped.has(stepId)) {
-          continue;
-        }
-
-        const step = stepById.get(stepId);
-        const current = ledger.getStepState(stepId);
-        if (!step || !current) {
-          continue;
-        }
-
-        const retryMeta = pendingRetry.get(stepId);
-        pendingRetry.delete(stepId);
-
-        if (current.state === "ready") {
-          ledger.transition(stepId, "running");
-        }
-
-        if (step.requiresApproval && config.approvalGate) {
-          const approvalResult = await config.approvalGate.requestApproval({
-            stepId: step.stepId,
-            stepTitle: step.description,
-            stepDescription: step.expectedOutput,
-            plan,
-          });
-
-          if (approvalResult === "rejected") {
-            ledger.transition(stepId, "failed");
-            failed.add(stepId);
-
-            safePublish(Team.Events.StepFailed, {
-              traceId: crypto.randomUUID(),
-              time: Date.now(),
-              payload: {
-                planId: plan.planId,
-                stepId,
-                error: "approval_rejected",
-              },
-            });
-            skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
-            progressed = true;
-            continue;
-          }
-        }
-
-        ledger.recordAttempt(stepId);
-        const attemptNumber = ledger.getStepState(stepId)?.attempts ?? 1;
-        const teammateConfig = resolveTeammate(step, config);
-
-        safePublish(Team.Events.StepAssigned, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          payload: {
-            planId: plan.planId,
-            stepId,
-            agentId: teammateConfig.agentId,
-          },
-        });
-
-        // Publish step.started event (fire-and-forget)
-        safePublish(Team.Events.StepStarted, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          payload: {
-            planId: plan.planId,
-            stepId,
-            agentId: teammateConfig.agentId,
-            attempt: attemptNumber,
-          },
-        });
-
-        try {
-          const execution = await Teammate.execute(
-            {
-              step,
-              context: buildContext(step, results),
-              handoffDocument: retryMeta?.handoffDocument,
-            },
-            teammateConfig,
-          );
-
-          const review = await ReviewLoop.review(
-            {
-              step,
-              result: execution.output,
-              agentId: execution.agentId,
-              attemptNumber,
-            },
-            {
-              model: config.reviewModel,
-              systemPrompt: config.reviewSystemPrompt,
-            },
-          );
-
-          // Publish review.decision event (fire-and-forget)
-          safePublish(Team.Events.ReviewDecision, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            payload: {
-              planId: plan.planId,
-              stepId,
-              decision: review.decision,
-              feedback: review.feedback,
-            },
-          });
-
-          if (review.decision === "accept") {
-            ledger.transition(stepId, "succeeded");
-            ledger.resetRejectionStreak(stepId);
-            completed.add(stepId);
-            results.set(stepId, execution.output);
-            DAG.complete(dag, stepId, completed);
-
-            // Publish step.completed event (fire-and-forget)
-            safePublish(Team.Events.StepCompleted, {
-              traceId: crypto.randomUUID(),
-              time: Date.now(),
-              payload: {
-                planId: plan.planId,
-                stepId,
-                result: execution.output,
-              },
-            });
-            progressed = true;
-            continue;
-          }
-
-          ledger.recordRejection(stepId);
-          const attempts = ledger.getStepState(stepId)?.attempts ?? attemptNumber;
-
-          if (attempts >= maxAttemptsPerStep) {
-            ledger.transition(stepId, "failed");
-            failed.add(stepId);
-            ledger.resetRejectionStreak(stepId);
-
-            // Publish step.failed event (fire-and-forget)
-            safePublish(Team.Events.StepFailed, {
-              traceId: crypto.randomUUID(),
-              time: Date.now(),
-              payload: {
-                planId: plan.planId,
-                stepId,
-                error: `Max attempts (${maxAttemptsPerStep}) reached`,
-              },
-            });
-            skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
-            progressed = true;
-            continue;
-          }
-
-          let handoffDocument = retryMeta?.handoffDocument;
-          if (review.feedback) {
-            handoffDocument = review.feedback;
-          }
-
-          if (ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep) && review.feedback) {
-            handoffDocument = await ReviewLoop.generateHandoff(
-              {
-                step,
-                result: execution.output,
-                agentId: execution.agentId,
-                attemptNumber: attempts,
-              },
-              review.feedback,
-              {
-                model: config.reviewModel,
-                systemPrompt: config.reviewSystemPrompt,
-              },
-            );
-
-            // Publish step.handoff event (fire-and-forget)
-            safePublish(Team.Events.StepHandoff, {
-              traceId: crypto.randomUUID(),
-              time: Date.now(),
-              payload: {
-                planId: plan.planId,
-                stepId,
-                from: execution.agentId,
-                to: execution.agentId,
-                handoffDocument,
-              },
-            });
-          }
-
-          pendingRetry.set(stepId, { handoffDocument });
-        } catch {
-          ledger.transition(stepId, "failed");
-          failed.add(stepId);
-
-          // Publish step.failed event (fire-and-forget)
-          safePublish(Team.Events.StepFailed, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            payload: {
-              planId: plan.planId,
-              stepId,
-              error: "Execution error",
-            },
-          });
-          skipDependents(stepId, dag, ledger, failed, skipped, completed, pendingRetry);
+      for (const stepId of getReadySteps(dag, state)) {
+        if (
+          await processReadyStep(stepId, plan, stepById, dag, state, config, maxAttemptsPerStep)
+        ) {
           progressed = true;
         }
       }
-
-      const stall = StallDetector.check(ledger, dag, stallConfig, noProgressTurns);
+      const stall = StallDetector.check(state.ledger, dag, stallConfig, noProgressTurns);
       if (stall.stalled && stall.reason) {
-        // Publish stall.detected event (fire-and-forget)
-        safePublish(Team.Events.StallDetected, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          payload: {
-            planId: plan.planId,
-            reason: stall.reason,
-            details: `Stall detected: ${stall.reason}`,
-          },
+        publishTeamEvent(Team.Events.StallDetected, {
+          planId: plan.planId,
+          reason: stall.reason,
+          details: `Stall detected: ${stall.reason}`,
         });
-
-        return buildResult(plan.steps, ledger, results, "stalled", stall.reason);
+        return buildResult(plan.steps, state, "stalled", stall.reason);
       }
-
-      if (isExecutionFinished(plan.steps, ledger)) {
+      if (isExecutionFinished(plan.steps, state)) {
         break;
       }
-
-      if (progressed) {
-        noProgressTurns = 0;
-      } else {
-        noProgressTurns += 1;
-      }
+      noProgressTurns = progressed ? 0 : noProgressTurns + 1;
     }
-
-    const final = buildResult(plan.steps, ledger, results);
-
-    // Publish execution.complete event (fire-and-forget)
-    safePublish(Team.Events.ExecutionComplete, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      payload: {
-        planId: plan.planId,
-        status: final.status,
-        completedSteps: final.completedSteps.length,
-        failedSteps: final.failedSteps.length,
-        skippedSteps: final.skippedSteps.length,
-      },
+    const final = buildResult(plan.steps, state);
+    publishTeamEvent(Team.Events.ExecutionComplete, {
+      planId: plan.planId,
+      status: final.status,
+      completedSteps: final.completedSteps.length,
+      failedSteps: final.failedSteps.length,
+      skippedSteps: final.skippedSteps.length,
     });
-
-    if (final.failedSteps.length > 0) {
-      return { ...final, status: "failed" };
-    }
-
-    return final;
+    return final.failedSteps.length > 0 ? { ...final, status: "failed" } : final;
   }
 }
+function createExecutionState(steps: PlanStep[]): ExecutionState {
+  return {
+    ledger: RunLedger.create(steps),
+    completed: new Set(),
+    failed: new Set(),
+    skipped: new Set(),
+    results: new Map(),
+    pendingRetry: new Map(),
+  };
+}
+function getReadySteps(dag: ReturnType<typeof DAG.build>, state: ExecutionState): string[] {
+  return DAG.getReady(dag, state.completed).filter((stepId) => {
+    if (state.failed.has(stepId) || state.skipped.has(stepId)) return false;
+    const stepState = state.ledger.getStepState(stepId)?.state;
+    return stepState === "ready" || state.pendingRetry.has(stepId);
+  });
+}
+async function processReadyStep(
+  stepId: string,
+  plan: Plan,
+  stepById: Map<string, PlanStep>,
+  dag: ReturnType<typeof DAG.build>,
+  state: ExecutionState,
+  config: TeamOrchestrator.OrchestratorConfig,
+  maxAttemptsPerStep: number,
+): Promise<boolean> {
+  if (state.failed.has(stepId) || state.skipped.has(stepId)) return false;
+  const step = stepById.get(stepId);
+  const current = state.ledger.getStepState(stepId);
+  if (!step || !current) return false;
+  const retryMeta = state.pendingRetry.get(stepId);
+  state.pendingRetry.delete(stepId);
+  if (!(await requestApproval(plan, step, current.state, dag, state, config))) return true;
+  if (current.state === "ready") state.ledger.transition(stepId, "running");
+  state.ledger.recordAttempt(stepId);
+  const attemptNumber = state.ledger.getStepState(stepId)?.attempts ?? 1;
+  const teammateConfig = resolveTeammate(step, config);
+  publishTeamEvent(Team.Events.StepAssigned, {
+    planId: plan.planId,
+    stepId,
+    agentId: teammateConfig.agentId,
+  });
+  publishTeamEvent(Team.Events.StepStarted, {
+    planId: plan.planId,
+    stepId,
+    agentId: teammateConfig.agentId,
+    attempt: attemptNumber,
+  });
+  try {
+    const execution = await Teammate.execute(
+      {
+        step,
+        context: buildContext(step, state.results),
+        handoffDocument: retryMeta?.handoffDocument,
+      },
+      teammateConfig,
+    );
+    const review = await ReviewLoop.review(
+      { step, result: execution.output, agentId: execution.agentId, attemptNumber },
+      { model: config.reviewModel, systemPrompt: config.reviewSystemPrompt },
+    );
+    publishTeamEvent(Team.Events.ReviewDecision, {
+      planId: plan.planId,
+      stepId,
+      decision: review.decision,
+      feedback: review.feedback,
+    });
+    if (review.decision === "accept") {
+      completeStep(plan.planId, stepId, execution.output, dag, state);
+      return true;
+    }
+    return handleRejectedReview(
+      plan,
+      step,
+      execution,
+      review.feedback,
+      attemptNumber,
+      retryMeta,
+      dag,
+      state,
+      config,
+      maxAttemptsPerStep,
+    );
+  } catch (error) {
+    failRunningStep(plan.planId, stepId, dag, state, describeStepFailure(error));
+    return true;
+  }
+}
+async function requestApproval(
+  plan: Plan,
+  step: PlanStep,
+  stepState: Team.StepState,
+  dag: ReturnType<typeof DAG.build>,
+  state: ExecutionState,
+  config: TeamOrchestrator.OrchestratorConfig,
+): Promise<boolean> {
+  if (stepState !== "ready" || !step.requiresApproval || !config.approvalGate) return true;
+  const approvalResult = await config.approvalGate.requestApproval({
+    stepId: step.stepId,
+    stepTitle: step.description,
+    stepDescription: step.expectedOutput,
+    plan,
+  });
+  if (approvalResult === "approved") return true;
+  state.ledger.transition(step.stepId, "skipped");
+  state.failed.add(step.stepId);
+  publishTeamEvent(Team.Events.StepFailed, {
+    planId: plan.planId,
+    stepId: step.stepId,
+    error: "Step rejected by approval gate",
+  });
+  skipDependents(step.stepId, dag, state);
+  return false;
+}
+function completeStep(
+  planId: string,
+  stepId: string,
+  output: string,
+  dag: ReturnType<typeof DAG.build>,
+  state: ExecutionState,
+): void {
+  state.ledger.transition(stepId, "succeeded");
+  state.ledger.resetRejectionStreak(stepId);
+  state.completed.add(stepId);
+  state.results.set(stepId, output);
+  void DAG.complete(dag, stepId, state.completed);
+  // DAG.complete only previews newly-ready nodes; the next loop recomputes readiness from completed.
+  publishTeamEvent(Team.Events.StepCompleted, { planId, stepId, result: output });
+}
+async function handleRejectedReview(
+  plan: Plan,
+  step: PlanStep,
+  execution: { output: string; agentId: string },
+  feedback: string | undefined,
+  attemptNumber: number,
+  retryMeta: RetryMeta | undefined,
+  dag: ReturnType<typeof DAG.build>,
+  state: ExecutionState,
+  config: TeamOrchestrator.OrchestratorConfig,
+  maxAttemptsPerStep: number,
+): Promise<boolean> {
+  state.ledger.recordRejection(step.stepId);
+  const attempts = state.ledger.getStepState(step.stepId)?.attempts ?? attemptNumber;
+  if (attempts >= maxAttemptsPerStep) {
+    failRunningStep(
+      plan.planId,
+      step.stepId,
+      dag,
+      state,
+      `Max attempts (${maxAttemptsPerStep}) reached`,
+    );
+    state.ledger.resetRejectionStreak(step.stepId);
+    return true;
+  }
+  let handoffDocument = feedback ?? retryMeta?.handoffDocument;
+  if (feedback && ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep)) {
+    handoffDocument = await ReviewLoop.generateHandoff(
+      { step, result: execution.output, agentId: execution.agentId, attemptNumber: attempts },
+      feedback,
+      { model: config.reviewModel, systemPrompt: config.reviewSystemPrompt },
+    );
+    publishTeamEvent(Team.Events.StepHandoff, {
+      planId: plan.planId,
+      stepId: step.stepId,
+      from: execution.agentId,
+      to: execution.agentId,
+      handoffDocument,
+    });
+  }
+  state.pendingRetry.set(step.stepId, { handoffDocument });
+  return false;
+}
+function failRunningStep(
+  planId: string,
+  stepId: string,
+  dag: ReturnType<typeof DAG.build>,
+  state: ExecutionState,
+  error: string,
+): void {
+  state.ledger.transition(stepId, "failed");
+  state.failed.add(stepId);
+  publishTeamEvent(Team.Events.StepFailed, { planId, stepId, error });
+  skipDependents(stepId, dag, state);
+}
+function describeStepFailure(error: unknown): string {
+  if (!(error instanceof Error) || error.message.length === 0) return "Execution error";
+  if (
+    error.message.startsWith("Failed to parse review response as JSON:") ||
+    error.message.startsWith("Invalid review decision:")
+  ) {
+    return "Review response malformed";
+  }
 
+  return error.message;
+}
 function resolveTeammate(
   step: PlanStep,
   config: TeamOrchestrator.OrchestratorConfig,
@@ -356,104 +321,73 @@ function resolveTeammate(
   if (step.suggestedAgent && config.teammates.has(step.suggestedAgent)) {
     return config.teammates.get(step.suggestedAgent) ?? config.defaultTeammateConfig;
   }
-
   return config.defaultTeammateConfig;
 }
-
 function buildContext(step: PlanStep, results: Map<string, string>): string | undefined {
-  if (step.dependsOn.length === 0) {
-    return undefined;
-  }
-
+  if (step.dependsOn.length === 0) return undefined;
   const contextBlocks: string[] = [];
   for (const dependencyId of step.dependsOn) {
     const text = results.get(dependencyId);
-    if (!text) {
-      continue;
+    if (text) {
+      contextBlocks.push(`[${dependencyId}]\n${text}`);
     }
-
-    contextBlocks.push(`[${dependencyId}]\n${text}`);
   }
-
-  if (contextBlocks.length === 0) {
-    return undefined;
-  }
-
-  return contextBlocks.join("\n\n");
+  return contextBlocks.length > 0 ? contextBlocks.join("\n\n") : undefined;
 }
-
 function skipDependents(
   failedStepId: string,
   dag: ReturnType<typeof DAG.build>,
-  ledger: ReturnType<typeof RunLedger.create>,
-  failed: Set<string>,
-  skipped: Set<string>,
-  completed: Set<string>,
-  pendingRetry: Map<string, { handoffDocument?: string }>,
+  state: ExecutionState,
 ): void {
   const queue = [...(dag.reverseEdges.get(failedStepId) ?? new Set<string>())];
-
   while (queue.length > 0) {
     const stepId = queue.shift();
-    if (!stepId) {
+    if (
+      !stepId ||
+      state.failed.has(stepId) ||
+      state.skipped.has(stepId) ||
+      state.completed.has(stepId)
+    ) {
       continue;
     }
-
-    if (failed.has(stepId) || skipped.has(stepId) || completed.has(stepId)) {
-      continue;
-    }
-
-    const state = ledger.getStepState(stepId);
-    if (!state || state.state === "succeeded") {
-      continue;
-    }
-
-    ledger.transition(stepId, "skipped");
-    skipped.add(stepId);
-    pendingRetry.delete(stepId);
-
+    const stepState = state.ledger.getStepState(stepId)?.state;
+    if (!stepState || stepState === "succeeded") continue;
+    state.ledger.transition(stepId, "skipped");
+    state.skipped.add(stepId);
+    state.pendingRetry.delete(stepId);
     const descendants = dag.reverseEdges.get(stepId);
     if (descendants) {
       queue.push(...descendants);
     }
   }
 }
-
-function isExecutionFinished(
-  steps: PlanStep[],
-  ledger: ReturnType<typeof RunLedger.create>,
-): boolean {
-  return ledger.getCompleted().length === steps.length;
+function isExecutionFinished(steps: PlanStep[], state: ExecutionState): boolean {
+  return state.completed.size + state.failed.size + state.skipped.size === steps.length;
 }
-
 function buildResult(
   steps: PlanStep[],
-  ledger: ReturnType<typeof RunLedger.create>,
-  results: Map<string, string>,
+  state: ExecutionState,
   status: TeamOrchestrator.TeamResult["status"] = "completed",
   stallReason?: Team.StallReason,
 ): TeamOrchestrator.TeamResult {
   const completedSteps: string[] = [];
   const failedSteps: string[] = [];
   const skippedSteps: string[] = [];
-
   for (const step of steps) {
-    const state = ledger.getStepState(step.stepId)?.state;
-    if (state === "succeeded") {
+    if (state.completed.has(step.stepId)) {
       completedSteps.push(step.stepId);
-    } else if (state === "failed") {
+    } else if (state.failed.has(step.stepId)) {
       failedSteps.push(step.stepId);
-    } else if (state === "skipped") {
+    } else if (state.skipped.has(step.stepId)) {
       skippedSteps.push(step.stepId);
     }
   }
-
   return {
     status,
     completedSteps,
     failedSteps,
     skippedSteps,
     stallReason,
-    results,
+    results: state.results,
   };
 }
