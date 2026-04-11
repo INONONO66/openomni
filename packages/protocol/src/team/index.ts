@@ -17,7 +17,15 @@ export namespace Team {
   /**
    * Step execution state enum
    */
-  export const StepState = z.enum(["ready", "running", "succeeded", "failed", "skipped"]);
+  export const StepState = z.enum([
+    "ready",
+    "running",
+    "succeeded",
+    "failed",
+    "skipped",
+    "retrying",
+    "handed_off",
+  ]);
   export type StepState = z.infer<typeof StepState>;
 
   /**
@@ -27,9 +35,17 @@ export namespace Team {
     stepId: z.string(),
     state: StepState,
     assignedAgent: z.string().optional(),
+    workerSessionId: z.string().optional(),
+    workerRunId: z.string().optional(),
     attempts: z.number().int().min(0).default(0),
     rejectionStreak: z.number().int().min(0).default(0),
     totalRejections: z.number().int().min(0).default(0),
+    sessionGeneration: z.number().int().min(0).default(0),
+    sessionRejections: z.number().int().min(0).default(0),
+    totalAttempts: z.number().int().min(0).default(0),
+    handoffCount: z.number().int().min(0).default(0),
+    handoffDocument: z.string().optional(),
+    terminalReason: z.enum(["accepted", "failed_terminal", "skipped"]).optional(),
     error: z.string().optional(),
     result: z.string().optional(),
     startedAt: z.date().optional(),
@@ -158,6 +174,67 @@ export namespace Team {
           from: z.string(),
           to: z.string(),
           handoffDocument: z.string(),
+        }),
+      }),
+    );
+
+    export const StepAssignedToWorker = BusEvent.define(
+      "team.step.assigned_to_worker",
+      BaseEvent.extend({
+        payload: z.object({
+          stepId: z.string(),
+          workerSessionId: z.string(),
+          workerRunId: z.string(),
+          agentName: z.string(),
+        }),
+      }),
+    );
+
+    export const StepRejected = BusEvent.define(
+      "team.step.rejected",
+      BaseEvent.extend({
+        payload: z.object({
+          stepId: z.string(),
+          workerSessionId: z.string(),
+          workerRunId: z.string(),
+          sessionRejections: z.number().int().min(0),
+          totalAttempts: z.number().int().min(0),
+          feedback: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const StepHandoffRequested = BusEvent.define(
+      "team.step.handoff_requested",
+      BaseEvent.extend({
+        payload: z.object({
+          stepId: z.string(),
+          workerSessionId: z.string(),
+          sessionGeneration: z.number().int().min(0),
+        }),
+      }),
+    );
+
+    export const StepHandoffCompleted = BusEvent.define(
+      "team.step.handoff_completed",
+      BaseEvent.extend({
+        payload: z.object({
+          stepId: z.string(),
+          newWorkerSessionId: z.string(),
+          sessionGeneration: z.number().int().min(0),
+          handoffDocument: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const StepSessionRotated = BusEvent.define(
+      "team.step.session_rotated",
+      BaseEvent.extend({
+        payload: z.object({
+          stepId: z.string(),
+          oldSessionId: z.string(),
+          newSessionId: z.string(),
+          sessionGeneration: z.number().int().min(0),
         }),
       }),
     );
