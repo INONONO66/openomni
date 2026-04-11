@@ -25,10 +25,6 @@ export class FileTaskStore implements TaskStore {
     this.loadFromDisk();
   }
 
-  // ===========================================================
-  // task sub-object
-  // ===========================================================
-
   task = {
     get: (id: string): Task.Info | undefined => {
       return this.tasks.get(id);
@@ -81,10 +77,6 @@ export class FileTaskStore implements TaskStore {
     },
   };
 
-  // ===========================================================
-  // run sub-object
-  // ===========================================================
-
   run = {
     get: (runId: string): Task.Run | undefined => {
       return this.runs.get(runId);
@@ -122,52 +114,34 @@ export class FileTaskStore implements TaskStore {
         .filter((r): r is Task.Run => r !== undefined);
 
       if (opts?.sortBy) {
-        const sortBy = opts.sortBy;
-        const sortOrder = opts.sortOrder ?? "desc";
-        runs.sort((a, b) => {
-          const aVal = a[sortBy] ?? 0;
-          const bVal = b[sortBy] ?? 0;
-          return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
-        });
+        const dir = opts.sortOrder === "asc" ? 1 : -1;
+        runs.sort((a, b) => dir * ((a[opts.sortBy!] ?? 0) - (b[opts.sortBy!] ?? 0)));
       }
-
-      if (opts?.offset !== undefined || opts?.limit !== undefined) {
-        const offset = opts.offset ?? 0;
-        const limit = opts.limit ?? runs.length;
-        runs = runs.slice(offset, offset + limit);
+      if (opts?.offset || opts?.limit) {
+        const start = opts.offset ?? 0;
+        runs = runs.slice(start, start + (opts.limit ?? runs.length));
       }
 
       return runs;
     },
-    listByStatus: (status: Task.Run["status"][]): Task.Run[] => {
-      const runIds = new Set<string>();
-      for (const s of status) {
-        const ids = this.statusIndex.get(s);
-        if (ids) {
-          for (const id of ids) {
-            runIds.add(id);
-          }
-        }
-      }
-      return Array.from(runIds)
+    listByStatus: (statuses: Task.Run["status"][]): Task.Run[] => {
+      const collected = new Set<string>();
+      for (const s of statuses) this.statusIndex.get(s)?.forEach((id) => collected.add(id));
+      return [...collected]
         .map((id) => this.runs.get(id))
         .filter((r): r is Task.Run => r !== undefined);
     },
     remove: (runId: string): boolean => {
       const run = this.runs.get(runId);
       if (!run) return false;
-
       this.statusIndex.get(run.status)?.delete(runId);
       this.idempotencyIndex.delete(run.idempotencyKey);
-
       const runIds = this.taskRuns.get(run.taskId);
-      if (runIds) {
-        const idx = runIds.indexOf(runId);
-        if (idx >= 0) {
-          runIds.splice(idx, 1);
-        }
-      }
-
+      if (runIds)
+        this.taskRuns.set(
+          run.taskId,
+          runIds.filter((id) => id !== runId),
+        );
       const deleted = this.runs.delete(runId);
       this.flushRuns();
       this.flushTaskRuns();
@@ -180,10 +154,6 @@ export class FileTaskStore implements TaskStore {
       return runId ? this.runs.get(runId) : undefined;
     },
   };
-
-  // ===========================================================
-  // Disk I/O — load
-  // ===========================================================
 
   private loadFromDisk(): void {
     this.tasks = this.readMapFile<Task.Info>("tasks.json");
@@ -227,10 +197,6 @@ export class FileTaskStore implements TaskStore {
       return new Map();
     }
   }
-
-  // ===========================================================
-  // Disk I/O — flush (atomic write: tmp → rename)
-  // ===========================================================
 
   private atomicWrite(filename: string, data: string): void {
     const target = join(this.dir, filename);
