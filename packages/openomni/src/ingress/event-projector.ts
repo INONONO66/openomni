@@ -28,7 +28,9 @@ export namespace IngressEventProjector {
         created: Date.now(),
       },
       agent: event.surface,
-      model: undefined as any, // Will be set by caller if needed
+      // model is set by the caller after projection; undefined here is intentional
+      // biome-ignore lint/suspicious/noExplicitAny: Message.UserMessage.model is required by protocol schema but not available at ingress time
+      model: undefined as any,
     };
 
     Session.addMessage(sessionId, message);
