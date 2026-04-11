@@ -10,7 +10,7 @@ Last updated: 2026-03-27
 | session  | ⭐⭐⭐ (10 test files) | ⭐⭐ (Biome) | ⭐⭐⭐ (strict)            | ⭐⭐⭐ (stable)         | ⭐⭐⭐ (AGENTS.md 47L)         | **A-**  |
 | llm      | ⭐⭐⭐ (19 test files) | ⭐⭐ (Biome) | ⭐⭐ (noEmit)              | ⭐⭐ (evolving)         | ⭐⭐⭐ (AGENTS.md 52L)         | **B+**  |
 | agent    | ⭐⭐ (2 test files)    | ⭐⭐ (Biome) | ⭐⭐⭐ (strict)            | ⭐⭐ (stream() stub)    | ⭐⭐⭐ (AGENTS.md 95L)         | **B**   |
-| openomni | ⭐⭐⭐ (67 test files) | ⭐⭐ (Biome) | ⭐⭐ (legacy has some any) | ⭐⭐ (legacy + new)     | ⭐⭐⭐ (AGENTS.md 72L + docs/) | **B**   |
+| openomni | ⭐⭐⭐ (67 test files) | ⭐⭐ (Biome) | ⭐⭐ (some any remain)    | ⭐⭐ (active orchestration) | ⭐⭐⭐ (AGENTS.md 72L + docs/) | **B**   |
 | cli      | ⭐ (0 test files)      | ⭐⭐ (Biome) | ⭐⭐ (strict)              | ⭐ (demo/hardcoded)     | ⭐⭐ (AGENTS.md 37L)           | **C**   |
 
 ## Rating Criteria
@@ -26,6 +26,6 @@ Last updated: 2026-03-27
 
 - CLI deep imports into `@openomni/llm/src/` internals (2 violations)
 - CLI has zero test files
-- openomni legacy code has broader `any` usage than other packages
+- openomni still has broader `any` usage than other packages
 - agent `stream()` is a stub (Phase 2 planned)
 - Biome configured (replaces ESLint + Prettier)

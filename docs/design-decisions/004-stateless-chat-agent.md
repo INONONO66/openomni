@@ -11,7 +11,7 @@ Originally, `packages/agent` contained both the LLM ReAct loop and all orchestra
 Split into two packages:
 
 - **`packages/agent`** — Pure `ChatAgent` primitive. Stateless LLM + Tool ReAct loop. No session dependency.
-- **`packages/openomni`** — All orchestration: `RunWorker`, `TaskManager`, `IngressEngine`, `PlanAgent`, `TeamOrchestrator`, legacy agent code.
+- **`packages/openomni`** — All orchestration: `RunWorker`, `TaskManager`, `IngressEngine`, `PlanAgent`, `TeamOrchestrator`, refactored orchestration code.
 
 `ChatAgent` is a function: takes messages + tools, runs an LLM loop, returns results. It holds no session state, manages no lifecycle, and knows nothing about multi-agent coordination.
 
@@ -26,5 +26,5 @@ Split into two packages:
 
 - Fresh `ChatAgent` instance per step in `TeamOrchestrator` — no cross-step session state.
 - `openomni` depends on `agent` for `ChatAgent`, but `agent` knows nothing about `openomni`.
-- Legacy orchestration code moved as-is to `packages/openomni/src/legacy/` (Phase 1). Refactoring is separate from migration.
+- The old orchestration layer was removed in the refactor, so this package now owns only the active orchestration path.
 - `stream()` on `ChatAgent` is a stub (planned for future implementation).
