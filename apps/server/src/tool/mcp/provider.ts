@@ -1,4 +1,4 @@
-import { McpClient, type McpServerConfig } from "@openomni/openomni";
+import { McpClient, type McpServerConfig } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types";
 

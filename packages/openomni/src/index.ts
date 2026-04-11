@@ -10,5 +10,3 @@ export * from "./team/index.js";
 export * from "./dag/index.js";
 export * from "./ingress/index.js";
 export { TaskStorage, FileTaskStore } from "./storage";
-
-export * from "@openomni/agent";
