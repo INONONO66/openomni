@@ -40,7 +40,8 @@ export function computeMaxDepth(dag: ReturnType<typeof DAG.build>): number {
   }
 
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) continue;
     const currentDepth = depthByNode.get(current) ?? 0;
 
     for (const dependent of dag.reverseEdges.get(current) ?? new Set<string>()) {
