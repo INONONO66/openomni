@@ -52,7 +52,7 @@ export class FileTaskStore implements TaskStore {
       }
 
       if (filter.tags && filter.tags.length > 0) {
-        tasks = tasks.filter((t) => filter.tags!.every((tag: string) => t.tags?.includes(tag)));
+        tasks = tasks.filter((t) => filter.tags?.every((tag: string) => t.tags?.includes(tag)));
       }
 
       return tasks;
@@ -91,7 +91,7 @@ export class FileTaskStore implements TaskStore {
       if (!this.statusIndex.has(run.status)) {
         this.statusIndex.set(run.status, new Set());
       }
-      this.statusIndex.get(run.status)!.add(run.runId);
+      this.statusIndex.get(run.status)?.add(run.runId);
 
       this.idempotencyIndex.set(run.idempotencyKey, run.runId);
       this.runs.set(run.runId, run);
@@ -114,8 +114,9 @@ export class FileTaskStore implements TaskStore {
         .filter((r): r is Task.Run => r !== undefined);
 
       if (opts?.sortBy) {
+        const { sortBy } = opts;
         const dir = opts.sortOrder === "asc" ? 1 : -1;
-        runs.sort((a, b) => dir * ((a[opts.sortBy!] ?? 0) - (b[opts.sortBy!] ?? 0)));
+        runs.sort((a, b) => dir * ((a[sortBy] ?? 0) - (b[sortBy] ?? 0)));
       }
       if (opts?.offset || opts?.limit) {
         const start = opts.offset ?? 0;
@@ -183,7 +184,7 @@ export class FileTaskStore implements TaskStore {
       if (!this.statusIndex.has(run.status)) {
         this.statusIndex.set(run.status, new Set());
       }
-      this.statusIndex.get(run.status)!.add(run.runId);
+      this.statusIndex.get(run.status)?.add(run.runId);
     }
   }
 
@@ -200,7 +201,7 @@ export class FileTaskStore implements TaskStore {
 
   private atomicWrite(filename: string, data: string): void {
     const target = join(this.dir, filename);
-    const tmp = target + ".tmp";
+    const tmp = `${target}.tmp`;
     try {
       writeFileSync(tmp, data, "utf-8");
       renameSync(tmp, target);
