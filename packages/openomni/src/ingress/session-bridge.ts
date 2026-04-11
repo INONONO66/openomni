@@ -1,32 +1,10 @@
-import { Message, PlanSchema } from "@openomni/protocol";
+import { type Message, PlanSchema } from "@openomni/protocol";
 import type { Plan, PlanResult } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import type { TeamOrchestrator } from "../team/team-orchestrator";
+import { normalizePlanPayload } from "../plan/plan-json";
 
 const PLAN_PREFIX = "__OPENOMNI_PLAN__";
-
-/**
- * Normalize Plan payload from JSON round-trip.
- * JSON.stringify converts Date → string, so we convert it back.
- * Duplicated from plan-agent.ts (private function) to avoid modifying that module.
- */
-function normalizePlanPayload(payload: unknown): unknown {
-  if (!payload || typeof payload !== "object") {
-    return payload;
-  }
-
-  const candidate = payload as Record<string, unknown>;
-  if (typeof candidate.createdAt !== "string") {
-    return payload;
-  }
-
-  const parsedDate = new Date(candidate.createdAt);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return payload;
-  }
-
-  return { ...candidate, createdAt: parsedDate };
-}
 
 function createAssistantMessage(
   sessionId: string,
@@ -52,18 +30,7 @@ function createAssistantMessage(
   };
 }
 
-/**
- * SessionBridge — converts between session messages and agent inputs/outputs.
- *
- * Handles Plan storage/extraction using the `__OPENOMNI_PLAN__` prefix convention,
- * and message format conversion for direct/plan/team modes.
- */
 export namespace SessionBridge {
-  /**
-   * Build a goal string for PlanAgent from session messages.
-   * - If no previous Plan exists: returns the latest user message text.
-   * - If a previous Plan exists: returns "Previous plan:\n{plan}\n\nUser feedback:\n{latest user text}".
-   */
   export function buildPlanGoal(sessionId: string): string {
     const messages = Session.getMessages(sessionId);
 
@@ -99,13 +66,6 @@ export namespace SessionBridge {
     return `Previous plan:\n${lastPlanJson}\n\nUser feedback:\n${latestUserText}`;
   }
 
-  /**
-   * Extract the latest Plan from session messages.
-   * Scans all TextParts for the `__OPENOMNI_PLAN__` prefix, takes the last one,
-   * parses and validates via PlanSchema with Date normalization.
-   *
-   * @throws Error if no plan found in session
-   */
   export function extractPlan(sessionId: string): Plan {
     const messages = Session.getMessages(sessionId);
 
@@ -129,13 +89,11 @@ export namespace SessionBridge {
     return PlanSchema.parse(normalized);
   }
 
-  /**
-   * Build a simple message array for ChatAgent.run() from session messages.
-   * Each message with a TextPart becomes { role, content }.
-   */
-  export function buildDirectMessages(sessionId: string): Array<{ role: string; content: string }> {
+  export function buildDirectMessages(
+    sessionId: string,
+  ): Array<{ role: "user" | "assistant"; content: string }> {
     const messages = Session.getMessages(sessionId);
-    const result: Array<{ role: string; content: string }> = [];
+    const result: Array<{ role: "user" | "assistant"; content: string }> = [];
 
     for (const message of messages) {
       const parts = Session.getParts(message.id);
@@ -149,10 +107,6 @@ export namespace SessionBridge {
     return result;
   }
 
-  /**
-   * Store a PlanResult in the session as an AssistantMessage + TextPart
-   * with the `__OPENOMNI_PLAN__` prefix for later extraction.
-   */
   export function storePlanResult(
     sessionId: string,
     result: PlanResult,
@@ -171,10 +125,6 @@ export namespace SessionBridge {
     Session.addPart(message.id, part);
   }
 
-  /**
-   * Store a TeamResult in the session as an AssistantMessage + TextPart.
-   * Converts Map fields to plain objects for JSON serialization.
-   */
   export function storeTeamResult(
     sessionId: string,
     result: TeamOrchestrator.TeamResult,
@@ -198,9 +148,6 @@ export namespace SessionBridge {
     Session.addPart(message.id, part);
   }
 
-  /**
-   * Store a direct agent text output in the session as an AssistantMessage + TextPart.
-   */
   export function storeDirectResult(
     sessionId: string,
     output: string,
