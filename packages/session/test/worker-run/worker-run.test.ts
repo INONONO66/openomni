@@ -21,14 +21,14 @@ describe("WorkerRun", () => {
 
     const run = await WorkerRun.get("sess-1", "run-1");
     expect(run).not.toBeUndefined();
-    expect(run!.runId).toBe("run-1");
-    expect(run!.sessionId).toBe("sess-1");
-    expect(run!.title).toBe("worker task");
-    expect(run!.prompt).toBe("do the thing");
-    expect(run!.assignedStepId).toBe("step-1");
-    expect(run!.status).toBe("queued");
-    expect(run!.resumeCount).toBe(0);
-    expect(run!.startedAt).toBeGreaterThan(0);
+    expect(run?.runId).toBe("run-1");
+    expect(run?.sessionId).toBe("sess-1");
+    expect(run?.title).toBe("worker task");
+    expect(run?.prompt).toBe("do the thing");
+    expect(run?.assignedStepId).toBe("step-1");
+    expect(run?.status).toBe("queued");
+    expect(run?.resumeCount).toBe(0);
+    expect(run?.startedAt).toBeGreaterThan(0);
   });
 
   test("listBySession returns all runs", async () => {
@@ -58,9 +58,9 @@ describe("WorkerRun", () => {
 
     const run = await WorkerRun.get("sess-1", "run-1");
     expect(run).not.toBeUndefined();
-    expect(run!.status).toBe("succeeded");
-    expect(run!.resumeCount).toBe(1);
-    expect(run!.lastMessageId).toBe("msg-1");
-    expect(run!.endedAt).toBe(1234);
+    expect(run?.status).toBe("succeeded");
+    expect(run?.resumeCount).toBe(1);
+    expect(run?.lastMessageId).toBe("msg-1");
+    expect(run?.endedAt).toBe(1234);
   });
 });
