@@ -1,4 +1,13 @@
 import { z } from "zod";
+import { BusEvent } from "../bus/index.js";
+
+const BaseEvent = z.object({
+  traceId: z.string(),
+  runId: z.string().optional(),
+  taskId: z.string().optional(),
+  sessionId: z.string().optional(),
+  time: z.number(),
+});
 
 export namespace Subagent {
   export const ChildSessionKind = z.enum(["subagent", "team-worker", "consultation"]);
@@ -92,4 +101,95 @@ export namespace Subagent {
     mode: ConsultationMode,
   });
   export type ConsultationResult = z.infer<typeof ConsultationResult>;
+
+  export namespace Events {
+    export const WorkerSessionSpawned = BusEvent.define(
+      "worker.session.spawned",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          parentSessionId: z.string().optional(),
+          agentName: z.string(),
+          spawnDepth: z.number().int().min(0),
+          kind: ChildSessionKind,
+        }),
+      }),
+    );
+
+    export const WorkerRunStarted = BusEvent.define(
+      "worker.run.started",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+          title: z.string(),
+        }),
+      }),
+    );
+
+    export const WorkerRunCompleted = BusEvent.define(
+      "worker.run.completed",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+          status: WorkerRunStatus,
+        }),
+      }),
+    );
+
+    export const WorkerRunFailed = BusEvent.define(
+      "worker.run.failed",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+          error: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const WorkerSessionResumed = BusEvent.define(
+      "worker.session.resumed",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+        }),
+      }),
+    );
+
+    export const WorkerSessionCancelled = BusEvent.define(
+      "worker.session.cancelled",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const WorkerConsultationRequested = BusEvent.define(
+      "worker.consultation.requested",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+          targetAgent: z.string(),
+          mode: ConsultationMode,
+        }),
+      }),
+    );
+
+    export const WorkerConsultationCompleted = BusEvent.define(
+      "worker.consultation.completed",
+      BaseEvent.extend({
+        payload: z.object({
+          sessionId: z.string(),
+          runId: z.string(),
+          consultationId: z.string(),
+        }),
+      }),
+    );
+  }
 }
