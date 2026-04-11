@@ -48,3 +48,6 @@ export { FileTaskStore, TaskStorage } from "./storage";
 // Category System
 export { BUILTIN_CATEGORIES, resolveCategory } from "./category";
 export type { CategoryConfig, CategoryResolution } from "./category";
+
+// Subagent runtime
+export { SubagentRuntime } from "./subagent";

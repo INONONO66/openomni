@@ -1,0 +1,319 @@
+import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
+import { type Message, Subagent } from "@openomni/protocol";
+import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
+
+type RuntimeModel = { provider: string; id: string };
+
+type RuntimeMessage = { role: "user" | "assistant"; content: string };
+
+type RuntimeConfig = {
+  model: RuntimeModel;
+  systemPrompt?: string;
+  tools?: ChatAgentConfig["tools"];
+  toolExecutor?: ChatAgentConfig["toolExecutor"];
+  budget?: ChatAgentConfig["budget"];
+};
+
+function toSessionModel(model: RuntimeModel): { providerID: string; modelID: string } {
+  return {
+    providerID: model.provider,
+    modelID: model.id,
+  };
+}
+
+function createUserMessage(sessionId: string, model: RuntimeModel): Message.UserMessage {
+  return {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "subagent-runtime",
+    model: toSessionModel(model),
+  };
+}
+
+function createAssistantMessage(sessionId: string, model: RuntimeModel): Message.AssistantMessage {
+  return {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    role: "assistant",
+    time: { created: Date.now() },
+    parentID: "",
+    modelID: model.id,
+    providerID: model.provider,
+    agent: "subagent-runtime",
+    path: { cwd: process.cwd(), root: process.cwd() },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+}
+
+function addTextPart(sessionId: string, messageId: string, text: string): void {
+  const part: Message.TextPart = {
+    id: crypto.randomUUID(),
+    sessionID: sessionId,
+    messageID: messageId,
+    type: "text",
+    text,
+  };
+  Session.addPart(messageId, part);
+}
+
+function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
+  event: BusEvent.Descriptor<{
+    traceId: string;
+    sessionId?: string;
+    runId?: string;
+    time: number;
+    payload: TPayload;
+  }>,
+  payload: TPayload,
+): void {
+  Bus.publish(event, {
+    traceId: crypto.randomUUID(),
+    sessionId: payload.sessionId,
+    runId: payload.runId,
+    time: Date.now(),
+    payload,
+  });
+}
+
+async function runWithTranscript(
+  sessionId: string,
+  config: RuntimeConfig,
+): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
+  const messages = buildChildMessages(sessionId);
+  const agent = ChatAgent.create({
+    model: config.model,
+    systemPrompt: config.systemPrompt,
+    tools: config.tools,
+    budget: config.budget,
+    toolExecutor: config.toolExecutor,
+  });
+
+  return agent.run({ messages });
+}
+
+function buildChildMessages(sessionId: string): RuntimeMessage[] {
+  const messages = Session.getMessages(sessionId);
+  const result: RuntimeMessage[] = [];
+
+  for (const message of messages) {
+    if (message.role !== "user" && message.role !== "assistant") {
+      continue;
+    }
+
+    const parts = Session.getParts(message.id);
+    for (const part of parts) {
+      if (part.type === "text") {
+        result.push({ role: message.role, content: part.text });
+      }
+    }
+  }
+
+  return result;
+}
+
+export namespace SubagentRuntime {
+  export interface SpawnConfig extends RuntimeConfig {
+    parentSessionId?: string;
+    agentName: string;
+    title: string;
+    prompt: string;
+    category?: string;
+  }
+
+  export interface SendConfig extends RuntimeConfig {
+    sessionId: string;
+    prompt: string;
+  }
+
+  export interface WaitConfig {
+    sessionId: string;
+    runId: string;
+    timeoutMs?: number;
+  }
+
+  export interface RunResult {
+    sessionId: string;
+    runId: string;
+    output: string;
+    finishReason: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>["finishReason"];
+  }
+
+  export interface WaitResult {
+    status: Awaited<ReturnType<typeof WorkerRun.get>> extends infer T
+      ? T extends { status: infer S }
+        ? S
+        : never
+      : never;
+    output?: string;
+  }
+
+  export async function spawn(config: SpawnConfig): Promise<RunResult> {
+    const workerMeta = Subagent.ChildSessionMeta.parse({
+      kind: "subagent",
+      parentSessionId: config.parentSessionId,
+      agentName: config.agentName,
+      spawnDepth: config.parentSessionId ? undefined : 0,
+      status: "idle",
+    });
+
+    const session = config.parentSessionId
+      ? Session.createChild({
+          parentSessionId: config.parentSessionId,
+          title: config.title,
+          model: toSessionModel(config.model),
+          workerMeta,
+        })
+      : Session.create({
+          title: config.title,
+          model: toSessionModel(config.model),
+        });
+
+    if (!config.parentSessionId) {
+      Session.updateWorkerMeta(session.id, workerMeta);
+    }
+
+    publishEvent(Subagent.Events.WorkerSessionSpawned, {
+      sessionId: session.id,
+      parentSessionId: config.parentSessionId,
+      agentName: config.agentName,
+      spawnDepth: session.spawnDepth,
+      kind: "subagent",
+    });
+
+    const userMessage = createUserMessage(session.id, config.model);
+    Session.addMessage(session.id, userMessage);
+    addTextPart(session.id, userMessage.id, config.prompt);
+
+    const runId = crypto.randomUUID();
+    await WorkerRun.create(session.id, {
+      runId,
+      title: config.title,
+      prompt: config.prompt,
+    });
+    await WorkerRun.updateStatus(session.id, runId, "starting");
+    publishEvent(Subagent.Events.WorkerRunStarted, {
+      sessionId: session.id,
+      runId,
+      title: config.title,
+    });
+
+    try {
+      await WorkerRun.updateStatus(session.id, runId, "running");
+      const result = await runWithTranscript(session.id, config);
+
+      const assistantMessage = createAssistantMessage(session.id, config.model);
+      Session.addMessage(session.id, assistantMessage);
+      addTextPart(session.id, assistantMessage.id, result.text);
+
+      await WorkerRun.updateStatus(session.id, runId, "succeeded", {
+        endedAt: Date.now(),
+        lastMessageId: assistantMessage.id,
+      });
+
+      publishEvent(Subagent.Events.WorkerRunCompleted, {
+        sessionId: session.id,
+        runId,
+        status: "succeeded",
+      });
+
+      return {
+        sessionId: session.id,
+        runId,
+        output: result.text,
+        finishReason: result.finishReason,
+      };
+    } catch (error) {
+      await WorkerRun.updateStatus(session.id, runId, "failed", {
+        endedAt: Date.now(),
+      });
+      publishEvent(Subagent.Events.WorkerRunFailed, {
+        sessionId: session.id,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  export async function send(config: SendConfig): Promise<RunResult> {
+    const session = Session.get(config.sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${config.sessionId}`);
+    }
+
+    const userMessage = createUserMessage(session.id, config.model);
+    Session.addMessage(session.id, userMessage);
+    addTextPart(session.id, userMessage.id, config.prompt);
+
+    const runId = crypto.randomUUID();
+    await WorkerRun.create(session.id, {
+      runId,
+      title: "retry",
+      prompt: config.prompt,
+    });
+    await WorkerRun.updateStatus(session.id, runId, "starting");
+    await WorkerRun.updateStatus(session.id, runId, "running");
+
+    try {
+      const result = await runWithTranscript(session.id, config);
+
+      const assistantMessage = createAssistantMessage(session.id, config.model);
+      Session.addMessage(session.id, assistantMessage);
+      addTextPart(session.id, assistantMessage.id, result.text);
+
+      await WorkerRun.updateStatus(session.id, runId, "succeeded", {
+        endedAt: Date.now(),
+        lastMessageId: assistantMessage.id,
+      });
+
+      publishEvent(Subagent.Events.WorkerRunCompleted, {
+        sessionId: session.id,
+        runId,
+        status: "succeeded",
+      });
+
+      return {
+        sessionId: session.id,
+        runId,
+        output: result.text,
+        finishReason: result.finishReason,
+      };
+    } catch (error) {
+      await WorkerRun.updateStatus(session.id, runId, "failed", {
+        endedAt: Date.now(),
+      });
+      publishEvent(Subagent.Events.WorkerRunFailed, {
+        sessionId: session.id,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  export async function wait(config: WaitConfig): Promise<WaitResult> {
+    const run = await WorkerRun.get(config.sessionId, config.runId);
+    if (!run) {
+      throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);
+    }
+
+    let output: string | undefined;
+    if (run.lastMessageId) {
+      const parts = Session.getParts(run.lastMessageId);
+      output = parts.find((part): part is Message.TextPart => part.type === "text")?.text;
+    }
+
+    return {
+      status: run.status,
+      output,
+    };
+  }
+}
