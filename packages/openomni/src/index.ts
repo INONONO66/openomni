@@ -12,6 +12,3 @@ export * from "./ingress/index.js";
 export { TaskStorage, FileTaskStore } from "./storage";
 
 export * from "@openomni/agent";
-
-/** @deprecated Legacy orchestration modules — CLI depends on these, do not delete */
-export * as _DEPRECATED_legacy from "./legacy/index.js";
