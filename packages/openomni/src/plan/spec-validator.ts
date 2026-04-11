@@ -19,60 +19,49 @@ export interface SpecValidationResult {
   issues: SpecIssue[];
 }
 
-/**
- * @deprecated Use StructuralGate from "./structural-gate.js" instead.
- * SpecValidator is kept for backward compatibility only.
- */
+/** @deprecated Use StructuralGate from "./structural-gate.js" instead. */
 export namespace SpecValidator {
   export function validate(
     plan: Plan,
     options?: { strictness?: SpecStrictness },
   ): SpecValidationResult {
     const strictness = options?.strictness ?? "lenient";
-
-    if (strictness === "off") {
-      return { valid: true, issues: [] };
-    }
+    if (strictness === "off") return { valid: true, issues: [] };
 
     const issues: SpecIssue[] = [];
-
     const stepIds = plan.steps.map((s) => s.stepId);
     const stepIdSet = new Set(stepIds);
-
     const seen = new Set<string>();
-    for (const stepId of stepIds) {
-      if (seen.has(stepId)) {
+    for (const id of stepIds) {
+      if (seen.has(id))
         issues.push({
           code: "duplicate_step_id",
-          stepId,
-          message: `Duplicate step ID: "${stepId}"`,
+          stepId: id,
+          message: `Duplicate step ID: "${id}"`,
         });
-      }
-      seen.add(stepId);
+      seen.add(id);
     }
 
     for (const step of plan.steps) {
       for (const dep of step.dependsOn) {
-        if (!stepIdSet.has(dep)) {
+        if (!stepIdSet.has(dep))
           issues.push({
             code: "dangling_dependency",
             stepId: step.stepId,
             message: `Step "${step.stepId}" depends on non-existent step "${dep}"`,
           });
-        }
       }
     }
 
     if (issues.length === 0) {
       try {
         const dag = DAG.build(plan.steps);
-        const acyclicResult = DAG.validateAcyclic(dag);
-        if (!acyclicResult.valid) {
+        const acyclic = DAG.validateAcyclic(dag);
+        if (!acyclic.valid)
           issues.push({
             code: "circular_dependency",
-            message: `Circular dependency detected: ${acyclicResult.cycle.join(" → ")}`,
+            message: `Circular dependency detected: ${acyclic.cycle.join(" → ")}`,
           });
-        }
       } catch {
         issues.push({
           code: "circular_dependency",
@@ -90,7 +79,6 @@ export namespace SpecValidator {
             message: `Step "${step.stepId}" is missing expectedOutput (required in strict mode)`,
           });
         }
-
         if (!step.guardrail || step.guardrail.trim() === "") {
           issues.push({
             code: "missing_guardrail",
@@ -101,9 +89,6 @@ export namespace SpecValidator {
       }
     }
 
-    return {
-      valid: issues.length === 0,
-      issues,
-    };
+    return { valid: issues.length === 0, issues };
   }
 }

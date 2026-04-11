@@ -15,60 +15,41 @@ export namespace PlanPipeline {
     gateName: string;
     verdict: Gate.Verdict;
   }
-
   export interface EnricherRunResult {
     enricherName: string;
     actions: string[];
   }
 
+  interface ResultBase {
+    attempts: number;
+    gateResults: GateRunResult[];
+    enricherResults?: EnricherRunResult[];
+  }
   export type RunResult =
-    | {
-        ok: true;
-        plan: Plan;
-        attempts: number;
-        gateResults: GateRunResult[];
-        enricherResults?: EnricherRunResult[];
-      }
-    | {
-        ok: false;
-        lastPlan?: Plan;
-        attempts: number;
-        gateResults: GateRunResult[];
-        enricherResults?: EnricherRunResult[];
-        reason: string;
-      };
+    | (ResultBase & { ok: true; plan: Plan })
+    | (ResultBase & { ok: false; lastPlan?: Plan; reason: string });
 
   export async function run(goal: string, config: Config): Promise<RunResult> {
     const maxRetries = Math.max(1, config.maxRetries ?? DEFAULT_MAX_RETRIES);
     const gateResults: GateRunResult[] = [];
     const enricherResults: EnricherRunResult[] = [];
-
     let attempt = 1;
     let previousFeedback: string | undefined;
     let lastPlan: Plan | undefined;
-
     while (attempt <= maxRetries) {
       const enrichedGoal = previousFeedback
         ? `${goal}\n\n[Previous plan was rejected. Address this feedback:\n${previousFeedback}]`
         : goal;
-      const planResult = await PlanAgent.generate(enrichedGoal, config.generator);
-      lastPlan = planResult.plan;
-
+      lastPlan = (await PlanAgent.generate(enrichedGoal, config.generator)).plan;
       if (config.enrichers && config.enrichers.length > 0) {
         for (const enricher of config.enrichers) {
           try {
-            const enrichResult = await enricher.enrich(lastPlan, {
-              goal,
-              attempt,
-              previousFeedback,
-            });
+            const r = await enricher.enrich(lastPlan, { goal, attempt, previousFeedback });
             enricherResults.push({
               enricherName: enricher.name,
-              actions: enrichResult.applied.map((a) => a.type),
+              actions: r.applied.map((a) => a.type),
             });
-            if (enrichResult.applied.length > 0) {
-              lastPlan = enrichResult.plan;
-            }
+            if (r.applied.length > 0) lastPlan = r.plan;
           } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
             return {
@@ -81,7 +62,6 @@ export namespace PlanPipeline {
             };
           }
         }
-
         const revalidation = PlanSchema.safeParse(lastPlan);
         if (!revalidation.success) {
           return {
@@ -95,55 +75,32 @@ export namespace PlanPipeline {
         }
         lastPlan = revalidation.data;
       }
-
       const failedFeedback: string[] = [];
       let hasFailedGate = false;
-
       for (const gate of config.gates) {
-        const verdict = await gate.check(lastPlan, {
-          goal,
-          attempt,
-          previousFeedback,
-        });
-
+        const verdict = await gate.check(lastPlan, { goal, attempt, previousFeedback });
         gateResults.push({ gateName: gate.name, verdict });
-
-        const hasErrorIssue = verdict.issues.some((issue) => issue.severity === "error");
-        const failed = !verdict.passed || hasErrorIssue;
-
-        if (failed && verdict.feedback) {
-          failedFeedback.push(verdict.feedback);
-        }
-
-        if (failed) {
-          hasFailedGate = true;
-        }
-
-        if (hasErrorIssue) {
-          break;
-        }
+        const hasError = verdict.issues.some((i) => i.severity === "error");
+        const failed = !verdict.passed || hasError;
+        if (failed && verdict.feedback) failedFeedback.push(verdict.feedback);
+        if (failed) hasFailedGate = true;
+        if (hasError) break;
       }
 
       if (!hasFailedGate) {
-        return {
-          ok: true,
-          plan: lastPlan,
-          attempts: attempt,
-          gateResults,
-          enricherResults: enricherResults.length > 0 ? enricherResults : undefined,
-        };
+        const er = enricherResults.length > 0 ? enricherResults : undefined;
+        return { ok: true, plan: lastPlan, attempts: attempt, gateResults, enricherResults: er };
       }
-
       previousFeedback = failedFeedback.length > 0 ? failedFeedback.join("\n") : undefined;
       attempt += 1;
     }
-
+    const er = enricherResults.length > 0 ? enricherResults : undefined;
     return {
       ok: false,
       lastPlan,
       attempts: maxRetries,
       gateResults,
-      enricherResults: enricherResults.length > 0 ? enricherResults : undefined,
+      enricherResults: er,
       reason: "Max retries exceeded",
     };
   }
