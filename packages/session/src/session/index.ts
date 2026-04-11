@@ -92,6 +92,7 @@ export namespace Session {
         created: now,
         updated: now,
       },
+      spawnDepth: 0,
       ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
     };
 
@@ -99,6 +100,38 @@ export namespace Session {
     Bus.publish(Event.Created, { info: session });
 
     return session;
+  }
+
+  export function createChild(input: {
+    parentSessionId: string;
+    title: string;
+    model: { providerID: string; modelID: string };
+    workerMeta?: Record<string, unknown>;
+  }): Info {
+    const parent = get(input.parentSessionId);
+    if (!parent) {
+      throw new Error(`Parent session not found: ${input.parentSessionId}`);
+    }
+
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const child: Info = {
+      id,
+      title: input.title,
+      model: input.model,
+      parentSessionId: input.parentSessionId,
+      spawnDepth: parent.spawnDepth + 1,
+      time: {
+        created: now,
+        updated: now,
+      },
+      ...(input.workerMeta !== undefined && { workerMeta: input.workerMeta }),
+    };
+
+    Storage.getAdapter().session.set(id, child);
+    Bus.publish(Event.Created, { info: child });
+
+    return child;
   }
 
   export function get(id: string): Info | undefined {
@@ -124,6 +157,18 @@ export namespace Session {
       }
       return true;
     });
+  }
+
+  export function listChildren(parentSessionId: string): Info[] {
+    return list().filter((session) => session.parentSessionId === parentSessionId);
+  }
+
+  export function getWorkerMeta(sessionId: string): Record<string, unknown> | undefined {
+    return get(sessionId)?.workerMeta;
+  }
+
+  export function updateWorkerMeta(sessionId: string, meta: Record<string, unknown>): void {
+    update(sessionId, { workerMeta: meta });
   }
 
   export function update(

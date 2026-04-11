@@ -12,6 +12,8 @@ export const SessionInfo = z.object({
     updated: z.number(),
     archived: z.number().optional(),
   }),
+  parentSessionId: z.string().optional(),
+  spawnDepth: z.number().int().nonnegative().default(0),
   expiresAt: z.number().optional(),
   agent: z
     .object({
@@ -29,6 +31,7 @@ export const SessionInfo = z.object({
   messageCount: z.number().optional(),
   summary: z.string().optional(),
   projectId: z.string().optional(),
+  workerMeta: z.record(z.unknown()).optional(),
 });
 
 export type SessionInfo = z.infer<typeof SessionInfo>;
