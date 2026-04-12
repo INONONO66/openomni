@@ -251,6 +251,40 @@ function isTerminalStatus(status: string): boolean {
   );
 }
 
+function resolveMetaStatus(runStatus: string | undefined): string {
+  switch (runStatus) {
+    case "succeeded":
+      return "idle";
+    case "failed":
+    case "cancelled":
+    case "interrupted":
+      return runStatus;
+    default:
+      return "idle";
+  }
+}
+
+async function finalizeRun(sessionId: string, runId: string): Promise<void> {
+  const run = await WorkerRun.get(sessionId, runId);
+  if (run && !isTerminalStatus(run.status) && !(await shouldSkipFailureUpdate(sessionId, runId))) {
+    await WorkerRun.updateStatus(sessionId, runId, "failed", { endedAt: Date.now() });
+    publishEvent(Subagent.Events.WorkerRunFailed, {
+      sessionId,
+      runId,
+      error: "non-terminal status at finally cleanup",
+    });
+  }
+
+  const finalRun = await WorkerRun.get(sessionId, runId);
+  const meta = Session.getWorkerMeta(sessionId);
+  if (meta && typeof meta === "object") {
+    Session.updateWorkerMeta(sessionId, {
+      ...meta,
+      status: resolveMetaStatus(finalRun?.status),
+    });
+  }
+}
+
 async function waitForAbortEntryRemoval(sessionId: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
     if (getAbortEntry(sessionId) === undefined) return;
@@ -426,6 +460,11 @@ export namespace SubagentRuntime {
         });
         throw error;
       } finally {
+        try {
+          await finalizeRun(session.id, runId);
+        } catch {
+          // cleanup must not mask the original error
+        }
         removeAbortController(session.id);
       }
     });
@@ -492,6 +531,11 @@ export namespace SubagentRuntime {
         });
         throw error;
       } finally {
+        try {
+          await finalizeRun(session.id, runId);
+        } catch {
+          // cleanup must not mask the original error
+        }
         removeAbortController(session.id);
       }
     });
@@ -581,6 +625,11 @@ export namespace SubagentRuntime {
       });
       throw error;
     } finally {
+      try {
+        await finalizeRun(config.sessionId, runId);
+      } catch {
+        // cleanup must not mask the original error
+      }
       removeAbortController(config.sessionId);
     }
   }
