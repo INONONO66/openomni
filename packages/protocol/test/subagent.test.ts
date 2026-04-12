@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Subagent } from "./index.js";
+import { Subagent } from "../src/index.js";
 
 describe("Subagent schemas", () => {
   test("ChildSessionMeta accepts valid data", () => {
