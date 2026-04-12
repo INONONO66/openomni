@@ -1,6 +1,6 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import { type Message, Subagent, type Tool } from "@openomni/protocol";
-import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
+import { Bus, type BusEvent, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import {
   get as getAbortEntry,
   register as registerAbortController,
@@ -693,6 +693,73 @@ export namespace SubagentRuntime {
       throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);
     }
 
+    const terminalStatuses = ["succeeded", "failed", "cancelled", "interrupted"] as const;
+    if (terminalStatuses.includes(run.status as (typeof terminalStatuses)[number])) {
+      return getWaitResult(run);
+    }
+
+    return new Promise<WaitResult>((resolve, reject) => {
+      let unsubscribeCompleted: (() => void) | undefined;
+      let unsubscribeFailed: (() => void) | undefined;
+      let pollingInterval: NodeJS.Timeout | undefined;
+      let timeoutHandle: NodeJS.Timeout | undefined;
+
+      const cleanup = () => {
+        unsubscribeCompleted?.();
+        unsubscribeFailed?.();
+        if (pollingInterval) clearInterval(pollingInterval);
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+
+      const handleCompletion = async () => {
+        cleanup();
+        const finalRun = await WorkerRun.get(config.sessionId, config.runId);
+        if (finalRun) {
+          resolve(getWaitResult(finalRun));
+        }
+      };
+
+      const handleFailure = async () => {
+        cleanup();
+        const finalRun = await WorkerRun.get(config.sessionId, config.runId);
+        if (finalRun) {
+          resolve(getWaitResult(finalRun));
+        }
+      };
+
+      unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+        if (data.sessionId === config.sessionId && data.runId === config.runId) {
+          handleCompletion();
+        }
+      });
+
+      unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+        if (data.sessionId === config.sessionId && data.runId === config.runId) {
+          handleFailure();
+        }
+      });
+
+      pollingInterval = setInterval(async () => {
+        const currentRun = await WorkerRun.get(config.sessionId, config.runId);
+        if (
+          currentRun &&
+          terminalStatuses.includes(currentRun.status as (typeof terminalStatuses)[number])
+        ) {
+          cleanup();
+          resolve(getWaitResult(currentRun));
+        }
+      }, 100);
+
+      if (config.timeoutMs) {
+        timeoutHandle = setTimeout(() => {
+          cleanup();
+          reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
+        }, config.timeoutMs);
+      }
+    });
+  }
+
+  function getWaitResult(run: WorkerRunRecord): WaitResult {
     let output: string | undefined;
     if (run.lastMessageId) {
       const parts = Session.getParts(run.lastMessageId);
