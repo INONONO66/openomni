@@ -2,6 +2,7 @@ import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import { type Message, Subagent, type Tool } from "@openomni/protocol";
 import { Bus, type BusEvent, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import {
+  abort as abortSession,
   get as getAbortEntry,
   register as registerAbortController,
   remove as removeAbortController,
@@ -329,6 +330,53 @@ async function raceAbortCompletion(
   }
 }
 
+type TimeoutTimers = {
+  soft?: ReturnType<typeof setTimeout>;
+  hard?: ReturnType<typeof setTimeout>;
+};
+
+function setupRunTimeouts(
+  sessionId: string,
+  runId: string,
+  softTimeoutMs?: number,
+  hardTimeoutMs?: number,
+): TimeoutTimers {
+  const timers: TimeoutTimers = {};
+
+  if (softTimeoutMs !== undefined) {
+    timers.soft = setTimeout(() => {
+      publishEvent(Subagent.Events.WorkerRunFailed, {
+        sessionId,
+        runId,
+        error: "soft timeout exceeded",
+      });
+    }, softTimeoutMs);
+  }
+
+  if (hardTimeoutMs !== undefined) {
+    timers.hard = setTimeout(async () => {
+      try {
+        await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
+      } catch {
+        return;
+      }
+      publishEvent(Subagent.Events.WorkerRunFailed, {
+        sessionId,
+        runId,
+        error: "hard timeout exceeded",
+      });
+      abortSession(sessionId);
+    }, hardTimeoutMs);
+  }
+
+  return timers;
+}
+
+function clearRunTimeouts(timers: TimeoutTimers): void {
+  if (timers.soft) clearTimeout(timers.soft);
+  if (timers.hard) clearTimeout(timers.hard);
+}
+
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
     parentSessionId?: string;
@@ -337,12 +385,16 @@ export namespace SubagentRuntime {
     prompt: string;
     category?: string;
     signal?: AbortSignal;
+    softTimeoutMs?: number;
+    hardTimeoutMs?: number;
   }
 
   export interface SendConfig extends RuntimeConfig {
     sessionId: string;
     prompt: string;
     signal?: AbortSignal;
+    softTimeoutMs?: number;
+    hardTimeoutMs?: number;
   }
 
   export interface WaitConfig {
@@ -413,6 +465,12 @@ export namespace SubagentRuntime {
       });
       const abortEntry = registerAbortController(session.id, runId);
       const signal = buildAbortSignal(abortEntry.controller, config.signal);
+      const timers = setupRunTimeouts(
+        session.id,
+        runId,
+        config.softTimeoutMs,
+        config.hardTimeoutMs,
+      );
       await WorkerRun.updateStatus(session.id, runId, "starting");
       publishEvent(Subagent.Events.WorkerRunStarted, {
         sessionId: session.id,
@@ -460,6 +518,7 @@ export namespace SubagentRuntime {
         });
         throw error;
       } finally {
+        clearRunTimeouts(timers);
         try {
           await finalizeRun(session.id, runId);
         } catch {
@@ -489,6 +548,12 @@ export namespace SubagentRuntime {
       });
       const abortEntry = registerAbortController(session.id, runId);
       const signal = buildAbortSignal(abortEntry.controller, config.signal);
+      const timers = setupRunTimeouts(
+        session.id,
+        runId,
+        config.softTimeoutMs,
+        config.hardTimeoutMs,
+      );
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
@@ -531,6 +596,7 @@ export namespace SubagentRuntime {
         });
         throw error;
       } finally {
+        clearRunTimeouts(timers);
         try {
           await finalizeRun(session.id, runId);
         } catch {
