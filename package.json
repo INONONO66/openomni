@@ -4,6 +4,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "server": "bun run --cwd apps/server src/index.ts",
+    "server:dev": "bun --watch run --cwd apps/server src/index.ts",
     "prepare": "lefthook install",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",

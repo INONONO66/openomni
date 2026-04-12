@@ -1,17 +1,53 @@
-// @openomni/openomni — Orchestration package
+// Public API for @openomni/openomni — see AGENTS.md for the module map.
+// Plan Mode
+export {
+  Hashline,
+  InMemoryPlanStore,
+  PLAN_TOOL_SPECS,
+  PlanAgent,
+  PlanPipeline,
+  SpecValidator,
+  StructuralGate,
+  createPlanToolExecutor,
+  normalizePlanPayload,
+  structuralGateCheck,
+} from "./plan";
+export type { EditResult, PlanDocument, PlanStore } from "./plan";
 
-export * from "./plan/plan-agent.js";
-export * from "./plan/hashline.js";
-export * from "./plan/plan-store.js";
-export * from "./plan/plan-tools.js";
-export * from "./plan/structural-gate.js";
-export * from "./plan/plan-pipeline.js";
-export * from "./team/index.js";
-export * from "./dag/index.js";
-export * from "./ingress/index.js";
-export { FileTaskStore, TaskStorage } from "./legacy/index.js";
+// Team Mode
+export {
+  ApprovalGate,
+  EvaluationGate,
+  ReviewLoop,
+  RunLedger,
+  StallDetector,
+  TEAM_AGENTS,
+  TeamOrchestrator,
+  Teammate,
+  getAgentMetadata,
+  resolveTeamAgent,
+} from "./team";
+export type { TeamAgentDefinition } from "./team";
 
-export * from "@openomni/agent";
+// DAG utilities
+export { DAG } from "./dag";
+export type { DAGStructure } from "./dag";
 
-/** @deprecated Legacy orchestration modules — CLI depends on these, do not delete */
-export * as _DEPRECATED_legacy from "./legacy/index.js";
+// Ingress
+export {
+  IngressEngine,
+  IngressEventProjector,
+  IngressHandlers,
+  IngressSessionResolver,
+  SessionBridge,
+} from "./ingress";
+
+// Task Storage
+export { FileTaskStore, TaskStorage } from "./storage";
+
+// Category System
+export { BUILTIN_CATEGORIES, resolveCategory } from "./category";
+export type { CategoryConfig, CategoryResolution } from "./category";
+
+// Subagent runtime
+export { SubagentRuntime, SubagentConsultation } from "./subagent";

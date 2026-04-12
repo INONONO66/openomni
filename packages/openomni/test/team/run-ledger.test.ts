@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type { PlanStep } from "@openomni/protocol";
+import { Storage } from "@openomni/session";
 import { RunLedger } from "../../src/team/run-ledger";
 
 function makeSteps(ids: string[]): PlanStep[] {
@@ -220,5 +221,136 @@ describe("RunLedger", () => {
   it("throws on resetRejectionStreak for unknown step", () => {
     const ledger = RunLedger.create(makeSteps(["s1"]));
     expect(() => ledger.resetRejectionStreak("nope")).toThrow(/step not found/i);
+  });
+
+  it("transitions from running to retrying", () => {
+    const ledger = RunLedger.create(makeSteps(["step-1"]));
+    ledger.transition("step-1", "running");
+    ledger.transition("step-1", "retrying");
+
+    expect(ledger.getStepState("step-1")!.state).toBe("retrying");
+  });
+
+  it("transitions from retrying back to running", () => {
+    const ledger = RunLedger.create(makeSteps(["step-1"]));
+    ledger.transition("step-1", "running");
+    ledger.transition("step-1", "retrying");
+    ledger.transition("step-1", "running");
+
+    expect(ledger.getStepState("step-1")!.state).toBe("running");
+  });
+
+  it("transitions from running to handed_off then back to running", () => {
+    const ledger = RunLedger.create(makeSteps(["step-1"]));
+    ledger.transition("step-1", "running");
+    ledger.transition("step-1", "handed_off");
+
+    expect(ledger.getStepState("step-1")!.state).toBe("handed_off");
+
+    ledger.transition("step-1", "running");
+    expect(ledger.getStepState("step-1")!.state).toBe("running");
+  });
+});
+
+describe("RunLedger persistence and recovery", () => {
+  const SESSION_ID = "test-session-ledger";
+
+  beforeEach(() => {
+    Storage.reset();
+  });
+
+  it("persists state and recovers across restart", () => {
+    const steps = makeSteps(["s1", "s2"]);
+
+    const ledger = RunLedger.create(steps, { sessionId: SESSION_ID });
+    ledger.transition("s1", "running");
+    ledger.recordAttempt("s1");
+    ledger.transition("s1", "succeeded");
+    ledger.recordRejection("s2");
+    ledger.recordRejection("s2");
+    ledger.resetRejectionStreak("s2");
+
+    const recovered = RunLedger.recover(SESSION_ID, steps);
+
+    const s1 = recovered.getStepState("s1")!;
+    expect(s1.state).toBe("succeeded");
+    expect(s1.attempts).toBe(1);
+    expect(s1.startedAt).toBeInstanceOf(Date);
+    expect(s1.completedAt).toBeInstanceOf(Date);
+
+    const s2 = recovered.getStepState("s2")!;
+    expect(s2.state).toBe("ready");
+    expect(s2.rejectionStreak).toBe(0);
+    expect(s2.totalRejections).toBe(2);
+  });
+
+  it("idempotent replay produces identical state", () => {
+    const steps = makeSteps(["s1"]);
+
+    const ledger = RunLedger.create(steps, { sessionId: SESSION_ID });
+    ledger.transition("s1", "running");
+    ledger.recordAttempt("s1");
+    ledger.recordRejection("s1");
+    ledger.transition("s1", "retrying");
+    ledger.transition("s1", "running");
+    ledger.recordAttempt("s1");
+    ledger.transition("s1", "succeeded");
+
+    const first = RunLedger.recover(SESSION_ID, steps);
+    const second = RunLedger.recover(SESSION_ID, steps);
+
+    const e1 = first.getStepState("s1")!;
+    const e2 = second.getStepState("s1")!;
+
+    expect(e1.state).toBe(e2.state);
+    expect(e1.attempts).toBe(e2.attempts);
+    expect(e1.rejectionStreak).toBe(e2.rejectionStreak);
+    expect(e1.totalRejections).toBe(e2.totalRejections);
+    expect(e1.startedAt!.getTime()).toBe(e2.startedAt!.getTime());
+    expect(e1.completedAt!.getTime()).toBe(e2.completedAt!.getTime());
+  });
+
+  it("recovered instance continues persisting new events", () => {
+    const steps = makeSteps(["s1"]);
+
+    const ledger = RunLedger.create(steps, { sessionId: SESSION_ID });
+    ledger.transition("s1", "running");
+
+    const recovered = RunLedger.recover(SESSION_ID, steps);
+    recovered.transition("s1", "succeeded");
+
+    const again = RunLedger.recover(SESSION_ID, steps);
+    expect(again.getStepState("s1")!.state).toBe("succeeded");
+  });
+
+  it("works without sessionId (no persistence, no crash)", () => {
+    const steps = makeSteps(["s1"]);
+    const ledger = RunLedger.create(steps);
+    ledger.transition("s1", "running");
+    ledger.transition("s1", "succeeded");
+
+    expect(ledger.getStepState("s1")!.state).toBe("succeeded");
+
+    const events = Storage.get().eventLog!.replay(SESSION_ID);
+    expect(events).toHaveLength(0);
+  });
+
+  it("recover with no events returns fresh ledger", () => {
+    const steps = makeSteps(["s1"]);
+    const recovered = RunLedger.recover("nonexistent-session", steps);
+
+    expect(recovered.getStepState("s1")!.state).toBe("ready");
+    expect(recovered.getStepState("s1")!.attempts).toBe(0);
+  });
+
+  it("transition validation unchanged after recovery", () => {
+    const steps = makeSteps(["s1"]);
+
+    const ledger = RunLedger.create(steps, { sessionId: SESSION_ID });
+    ledger.transition("s1", "running");
+    ledger.transition("s1", "succeeded");
+
+    const recovered = RunLedger.recover(SESSION_ID, steps);
+    expect(() => recovered.transition("s1", "running")).toThrow(/invalid.*transition/i);
   });
 });

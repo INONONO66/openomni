@@ -2,14 +2,51 @@ import { ChatAgent } from "@openomni/agent";
 import type { ChatAgentConfig, AgentResult, TokenUsage } from "@openomni/agent";
 import type { PlanStep, Tool } from "@openomni/protocol";
 
-/**
- * Teammate namespace — wraps ChatAgent for step execution
- * Each execute() call creates a fresh ChatAgent instance (no cross-step state)
- */
 export namespace Teammate {
-  /**
-   * Configuration for Teammate execution
-   */
+  export interface RuntimeTokenUsage {
+    input: number;
+    output: number;
+    total: number;
+    reasoning: number;
+    cache: {
+      read: number;
+      write: number;
+    };
+  }
+
+  export interface SubagentRuntimeRunResult {
+    sessionId: string;
+    runId: string;
+    output: string;
+    finishReason: string;
+  }
+
+  export interface SubagentRuntimeSpawnConfig {
+    agentName: string;
+    title: string;
+    prompt: string;
+    model: TeammateConfig["model"];
+    systemPrompt?: string;
+    tools?: Tool.Spec[];
+    budget?: ChatAgentConfig["budget"];
+    toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  }
+
+  export interface SubagentRuntimeSendConfig {
+    sessionId: string;
+    prompt: string;
+    model: TeammateConfig["model"];
+    systemPrompt?: string;
+    tools?: Tool.Spec[];
+    budget?: ChatAgentConfig["budget"];
+    toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  }
+
+  export interface SubagentRuntime {
+    spawn: (config: SubagentRuntimeSpawnConfig) => Promise<SubagentRuntimeRunResult>;
+    send: (config: SubagentRuntimeSendConfig) => Promise<SubagentRuntimeRunResult>;
+  }
+
   export interface TeammateConfig {
     agentId: string;
     model: { provider: string; id: string };
@@ -17,31 +54,36 @@ export namespace Teammate {
     tools?: Tool.Spec[];
     budget?: ChatAgentConfig["budget"];
     toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+    subagentRuntime?: SubagentRuntime;
   }
 
-  /**
-   * Input to Teammate.execute()
-   */
   export interface ExecuteInput {
     step: PlanStep;
-    context?: string; // Optional context from previous steps
-    handoffDocument?: string; // Optional handoff from previous attempt
+    context?: string;
+    handoffDocument?: string;
+    workerSessionId?: string;
   }
 
-  /**
-   * Result of Teammate.execute()
-   */
   export interface ExecuteResult {
     agentId: string;
     stepId: string;
     output: string;
-    usage: TokenUsage;
+    usage: TokenUsage | RuntimeTokenUsage;
     finishReason: string;
+    workerSessionId?: string;
+    workerRunId?: string;
   }
 
-  /**
-   * Build user message from ExecuteInput
-   */
+  function createRuntimeTokenUsage(): RuntimeTokenUsage {
+    return {
+      input: 0,
+      output: 0,
+      total: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    };
+  }
+
   function buildUserMessage(input: ExecuteInput): string {
     const { step, context, handoffDocument } = input;
 
@@ -58,10 +100,7 @@ export namespace Teammate {
     return message;
   }
 
-  /**
-   * Merge config-level and step-level tools, deduplicating by name.
-   * Step tools take precedence over config tools with the same name.
-   */
+  // step tools take precedence over config tools with the same name
   function mergeTools(configTools?: Tool.Spec[], stepTools?: Tool.Spec[]): Tool.Spec[] | undefined {
     if (!configTools && !stepTools) return undefined;
     if (!configTools) return stepTools;
@@ -77,35 +116,60 @@ export namespace Teammate {
     return [...merged.values()];
   }
 
-  /**
-   * Execute a single step using a fresh ChatAgent instance
-   * Each call creates a NEW ChatAgent (no cross-step state)
-   */
   export async function execute(
     input: ExecuteInput,
     config: TeammateConfig,
   ): Promise<ExecuteResult> {
-    // Build ChatAgent config
+    const userMessage = buildUserMessage(input);
+    const tools = mergeTools(config.tools, input.step.tools);
+
+    if (config.subagentRuntime) {
+      const result = input.workerSessionId
+        ? await config.subagentRuntime.send({
+            sessionId: input.workerSessionId,
+            prompt: userMessage,
+            model: config.model,
+            systemPrompt: config.systemPrompt,
+            tools,
+            budget: config.budget,
+            toolExecutor: config.toolExecutor,
+          })
+        : await config.subagentRuntime.spawn({
+            agentName: config.agentId,
+            title: input.step.description.slice(0, 60),
+            prompt: userMessage,
+            model: config.model,
+            systemPrompt: config.systemPrompt,
+            tools,
+            budget: config.budget,
+            toolExecutor: config.toolExecutor,
+          });
+
+      return {
+        agentId: config.agentId,
+        stepId: input.step.stepId,
+        output: result.output,
+        usage: createRuntimeTokenUsage(),
+        finishReason: result.finishReason,
+        workerSessionId: result.sessionId,
+        workerRunId: result.runId,
+      };
+    }
+
     const agentConfig: ChatAgentConfig = {
       model: config.model,
       systemPrompt: config.systemPrompt,
-      tools: mergeTools(config.tools, input.step.tools),
+      tools,
       budget: config.budget,
       toolExecutor: config.toolExecutor,
     };
 
-    // Create fresh ChatAgent instance
     const agent = ChatAgent.create(agentConfig);
 
-    // Build user message
-    const userMessage = buildUserMessage(input);
-
-    // Run agent
     const result: AgentResult = await agent.run({
       messages: [{ role: "user", content: userMessage }],
     });
 
-    // Return ExecuteResult
     return {
       agentId: config.agentId,
       stepId: input.step.stepId,

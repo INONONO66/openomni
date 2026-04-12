@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult } from "@openomni/agent";
 import type { Plan, PlanStep } from "@openomni/protocol";
 import type { Teammate } from "../../src/team/teammate";
+import { ReviewLoop } from "../../src/team/review-loop";
 import { TeamOrchestrator } from "../../src/team/team-orchestrator";
 
 const responseQueue: string[] = [];
@@ -71,6 +72,9 @@ const defaultTeammateConfig: Teammate.TeammateConfig = {
 function makeConfig(overrides?: {
   teammates?: Map<string, Teammate.TeammateConfig>;
   maxAttemptsPerStep?: number;
+  subagentRuntime?: Teammate.SubagentRuntime;
+  maxSessionRejections?: number;
+  maxTotalAttempts?: number;
   stallConfig?: {
     maxConsecutiveRejections: number;
     maxNoProgressTurns: number;
@@ -80,9 +84,43 @@ function makeConfig(overrides?: {
     reviewModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     teammates: overrides?.teammates ?? new Map<string, Teammate.TeammateConfig>(),
     defaultTeammateConfig,
+    subagentRuntime: overrides?.subagentRuntime,
     maxAttemptsPerStep: overrides?.maxAttemptsPerStep,
+    maxSessionRejections: overrides?.maxSessionRejections,
+    maxTotalAttempts: overrides?.maxTotalAttempts,
     stallConfig: overrides?.stallConfig,
   };
+}
+
+function makeRuntime(outputs: string[]) {
+  const spawnCalls: Array<{ prompt: string; sessionId: string }> = [];
+  const sendCalls: Array<{ prompt: string; sessionId: string }> = [];
+  let nextSession = 1;
+  let nextRun = 1;
+
+  const runtime: Teammate.SubagentRuntime = {
+    async spawn(config) {
+      const sessionId = `worker-session-${nextSession++}`;
+      spawnCalls.push({ prompt: config.prompt, sessionId });
+      return {
+        sessionId,
+        runId: `worker-run-${nextRun++}`,
+        output: outputs.shift() ?? "runtime-output",
+        finishReason: "stop",
+      };
+    },
+    async send(config) {
+      sendCalls.push({ prompt: config.prompt, sessionId: config.sessionId });
+      return {
+        sessionId: config.sessionId,
+        runId: `worker-run-${nextRun++}`,
+        output: outputs.shift() ?? "runtime-output",
+        finishReason: "stop",
+      };
+    },
+  };
+
+  return { runtime, spawnCalls, sendCalls };
 }
 
 describe("TeamOrchestrator.execute", () => {
@@ -143,6 +181,112 @@ describe("TeamOrchestrator.execute", () => {
     expect(result.completedSteps).toEqual([]);
   });
 
+  it("retries rejected worker steps in the same session before handoff", async () => {
+    const { runtime, spawnCalls, sendCalls } = makeRuntime(["attempt 1", "attempt 2"]);
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "tighten it" }));
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({
+        subagentRuntime: runtime,
+        maxSessionRejections: 3,
+        maxTotalAttempts: 6,
+      }),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(spawnCalls).toHaveLength(1);
+    expect(sendCalls).toHaveLength(1);
+    expect(sendCalls[0]?.sessionId).toBe(spawnCalls[0]?.sessionId);
+    expect(sendCalls[0]?.prompt).toContain("Handoff from previous attempt:");
+    expect(sendCalls[0]?.prompt).toContain("tighten it");
+  });
+
+  it("rotates to a new worker session after the rejection threshold", async () => {
+    const { runtime, spawnCalls, sendCalls } = makeRuntime(["attempt 1", "attempt 2", "attempt 3"]);
+    const handoffSpy = spyOn(ReviewLoop, "generateHandoff").mockResolvedValue("handoff doc");
+
+    try {
+      responseQueue.push(JSON.stringify({ decision: "reject", feedback: "first reject" }));
+      responseQueue.push(JSON.stringify({ decision: "reject", feedback: "rotate now" }));
+      responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+      const plan = makePlan([makeStep("s1")]);
+      const result = await TeamOrchestrator.execute(
+        plan,
+        makeConfig({
+          subagentRuntime: runtime,
+          maxSessionRejections: 2,
+          maxTotalAttempts: 6,
+        }),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(spawnCalls).toHaveLength(2);
+      expect(sendCalls).toHaveLength(1);
+      expect(sendCalls[0]?.sessionId).toBe(spawnCalls[0]?.sessionId);
+      expect(spawnCalls[1]?.sessionId).not.toBe(spawnCalls[0]?.sessionId);
+      expect(spawnCalls[1]?.prompt).toContain("handoff doc");
+    } finally {
+      handoffSpy.mockRestore();
+    }
+  });
+
+  it("fails worker execution when total attempt budget is exhausted", async () => {
+    const { runtime, spawnCalls, sendCalls } = makeRuntime(["attempt 1", "attempt 2"]);
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "bad" }));
+    responseQueue.push(JSON.stringify({ decision: "reject", feedback: "still bad" }));
+
+    const plan = makePlan([makeStep("s1")]);
+    const result = await TeamOrchestrator.execute(
+      plan,
+      makeConfig({
+        subagentRuntime: runtime,
+        maxSessionRejections: 5,
+        maxTotalAttempts: 2,
+      }),
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.failedSteps).toEqual(["s1"]);
+    expect(spawnCalls).toHaveLength(1);
+    expect(sendCalls).toHaveLength(1);
+  });
+
+  it("falls back to synthesized handoff text when handoff generation fails", async () => {
+    const { runtime, spawnCalls } = makeRuntime(["attempt 1", "attempt 2", "attempt 3"]);
+    const handoffSpy = spyOn(ReviewLoop, "generateHandoff").mockRejectedValue(
+      new Error("handoff unavailable"),
+    );
+
+    try {
+      responseQueue.push(JSON.stringify({ decision: "reject", feedback: "first reject" }));
+      responseQueue.push(JSON.stringify({ decision: "reject", feedback: "need a new approach" }));
+      responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+      const plan = makePlan([makeStep("s1")]);
+      const result = await TeamOrchestrator.execute(
+        plan,
+        makeConfig({
+          subagentRuntime: runtime,
+          maxSessionRejections: 2,
+          maxTotalAttempts: 6,
+        }),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(spawnCalls).toHaveLength(2);
+      expect(spawnCalls[1]?.prompt).toContain("Rejection Feedback:");
+      expect(spawnCalls[1]?.prompt).toContain("need a new approach");
+      expect(spawnCalls[1]?.prompt).toContain("Last Result:");
+      expect(spawnCalls[1]?.prompt).toContain("attempt 2");
+    } finally {
+      handoffSpy.mockRestore();
+    }
+  });
+
   it("skips dependents when a prerequisite step fails", async () => {
     responseQueue.push("attempt output");
     responseQueue.push(JSON.stringify({ decision: "reject", feedback: "fatal" }));
@@ -192,5 +336,41 @@ describe("TeamOrchestrator.execute", () => {
     expect(result.failedSteps).toEqual([]);
     expect(result.skippedSteps).toEqual([]);
     expect(result.results.size).toBe(0);
+  });
+
+  it("enriches system prompt when suggestedAgent matches a builtin category", async () => {
+    responseQueue.push("deep-output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1", [], "deep")]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+    expect(result.completedSteps).toEqual(["s1"]);
+
+    const agentConfig = createSpy.mock.calls.find((call) => {
+      const config = call[0] as { systemPrompt?: string };
+      return config.systemPrompt?.includes("broad codebase exploration");
+    });
+    expect(agentConfig).toBeDefined();
+  });
+
+  it("does not enrich prompt when suggestedAgent is not a known category", async () => {
+    const callsBefore = createSpy.mock.calls.length;
+
+    responseQueue.push("custom-output");
+    responseQueue.push(JSON.stringify({ decision: "accept" }));
+
+    const plan = makePlan([makeStep("s1", [], "unknown-agent")]);
+    const result = await TeamOrchestrator.execute(plan, makeConfig());
+
+    expect(result.status).toBe("completed");
+
+    const newCalls = createSpy.mock.calls.slice(callsBefore);
+    const enrichedCall = newCalls.find((call) => {
+      const config = call[0] as { systemPrompt?: string };
+      return config.systemPrompt?.includes("Recommended tools:");
+    });
+    expect(enrichedCall).toBeUndefined();
   });
 });

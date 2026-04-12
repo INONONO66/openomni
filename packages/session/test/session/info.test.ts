@@ -20,6 +20,9 @@ describe("SessionInfo schema", () => {
       expect(result.data.messageCount).toBeUndefined();
       expect(result.data.summary).toBeUndefined();
       expect(result.data.projectId).toBeUndefined();
+      expect(result.data.parentSessionId).toBeUndefined();
+      expect(result.data.spawnDepth).toBe(0);
+      expect(result.data.workerMeta).toBeUndefined();
       expect(result.data.time.archived).toBeUndefined();
     }
   });
@@ -35,11 +38,14 @@ describe("SessionInfo schema", () => {
         archived: 3000,
       },
       expiresAt: 4000,
+      parentSessionId: "parent-1",
+      spawnDepth: 2,
       agent: { id: "agent-1", name: "Research Agent" },
       tokens: { input: 100, output: 50, total: 150 },
       messageCount: 5,
       summary: "Session summary text",
       projectId: "proj-123",
+      workerMeta: { kind: "worker", lane: "analysis" },
     };
 
     const result = SessionInfo.safeParse(fullFormat);
@@ -54,6 +60,9 @@ describe("SessionInfo schema", () => {
       expect(result.data.messageCount).toBe(5);
       expect(result.data.summary).toBe("Session summary text");
       expect(result.data.projectId).toBe("proj-123");
+      expect(result.data.parentSessionId).toBe("parent-1");
+      expect(result.data.spawnDepth).toBe(2);
+      expect(result.data.workerMeta).toEqual({ kind: "worker", lane: "analysis" });
       expect(result.data.time.archived).toBe(3000);
     }
   });
@@ -77,6 +86,9 @@ describe("SessionInfo schema", () => {
       expect(result.data.tokens).toBeUndefined();
       expect(result.data.summary).toBeUndefined();
       expect(result.data.projectId).toBeUndefined();
+      expect(result.data.parentSessionId).toBeUndefined();
+      expect(result.data.spawnDepth).toBe(0);
+      expect(result.data.workerMeta).toBeUndefined();
     }
   });
 
@@ -86,11 +98,13 @@ describe("SessionInfo schema", () => {
       title: "Type Test",
       model: { providerID: "test", modelID: "test-model" },
       time: { created: 1000, updated: 2000 },
+      spawnDepth: 0,
     };
 
     expect(session.id).toBe("session-4");
     expect(session.agent).toBeUndefined();
     expect(session.tokens).toBeUndefined();
+    expect(session.spawnDepth).toBe(0);
   });
 
   test("validates agent object structure", () => {
