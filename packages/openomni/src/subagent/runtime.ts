@@ -1,6 +1,12 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import { type Message, Subagent, type Tool } from "@openomni/protocol";
 import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
+import {
+  abort as abortSessionController,
+  get as getAbortEntry,
+  register as registerAbortController,
+  remove as removeAbortController,
+} from "./abort-registry";
 
 type RuntimeModel = { provider: string; id: string };
 
@@ -188,6 +194,7 @@ function buildChildMessagesInternal(sessionId: string, repair?: boolean): Runtim
 async function runWithTranscript(
   sessionId: string,
   config: RuntimeConfig,
+  signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const messages = buildChildMessagesInternal(sessionId);
   const agent = ChatAgent.create({
@@ -196,9 +203,23 @@ async function runWithTranscript(
     tools: config.tools,
     budget: config.budget,
     toolExecutor: config.toolExecutor,
+    signal,
   });
 
   return agent.run({ messages });
+}
+
+function buildAbortSignal(controller: AbortController, signal?: AbortSignal): AbortSignal {
+  return AbortSignal.any(
+    [controller.signal, signal].filter(
+      (candidate): candidate is AbortSignal => candidate !== undefined,
+    ),
+  );
+}
+
+async function shouldSkipFailureUpdate(sessionId: string, runId: string): Promise<boolean> {
+  const run = await WorkerRun.get(sessionId, runId);
+  return run?.status === "cancelled";
 }
 
 export namespace SubagentRuntime {
@@ -208,11 +229,13 @@ export namespace SubagentRuntime {
     title: string;
     prompt: string;
     category?: string;
+    signal?: AbortSignal;
   }
 
   export interface SendConfig extends RuntimeConfig {
     sessionId: string;
     prompt: string;
+    signal?: AbortSignal;
   }
 
   export interface WaitConfig {
@@ -280,6 +303,8 @@ export namespace SubagentRuntime {
       title: config.title,
       prompt: config.prompt,
     });
+    const abortEntry = registerAbortController(session.id, runId);
+    const signal = buildAbortSignal(abortEntry.controller, config.signal);
     await WorkerRun.updateStatus(session.id, runId, "starting");
     publishEvent(Subagent.Events.WorkerRunStarted, {
       sessionId: session.id,
@@ -289,7 +314,7 @@ export namespace SubagentRuntime {
 
     try {
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const result = await runWithTranscript(session.id, config);
+      const result = await runWithTranscript(session.id, config, signal);
 
       const assistantMessage = createAssistantMessage(session.id, config.model);
       Session.addMessage(session.id, assistantMessage);
@@ -313,6 +338,10 @@ export namespace SubagentRuntime {
         finishReason: result.finishReason,
       };
     } catch (error) {
+      if (await shouldSkipFailureUpdate(session.id, runId)) {
+        throw error;
+      }
+
       await WorkerRun.updateStatus(session.id, runId, "failed", {
         endedAt: Date.now(),
       });
@@ -322,6 +351,8 @@ export namespace SubagentRuntime {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      removeAbortController(session.id);
     }
   }
 
@@ -341,11 +372,13 @@ export namespace SubagentRuntime {
       title: "retry",
       prompt: config.prompt,
     });
+    const abortEntry = registerAbortController(session.id, runId);
+    const signal = buildAbortSignal(abortEntry.controller, config.signal);
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
 
     try {
-      const result = await runWithTranscript(session.id, config);
+      const result = await runWithTranscript(session.id, config, signal);
 
       const assistantMessage = createAssistantMessage(session.id, config.model);
       Session.addMessage(session.id, assistantMessage);
@@ -369,6 +402,10 @@ export namespace SubagentRuntime {
         finishReason: result.finishReason,
       };
     } catch (error) {
+      if (await shouldSkipFailureUpdate(session.id, runId)) {
+        throw error;
+      }
+
       await WorkerRun.updateStatus(session.id, runId, "failed", {
         endedAt: Date.now(),
       });
@@ -378,6 +415,8 @@ export namespace SubagentRuntime {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      removeAbortController(session.id);
     }
   }
 
@@ -450,6 +489,10 @@ export namespace SubagentRuntime {
         finishReason: result.finishReason,
       };
     } catch (error) {
+      if (await shouldSkipFailureUpdate(config.sessionId, runId)) {
+        throw error;
+      }
+
       await WorkerRun.updateStatus(config.sessionId, runId, "failed", {
         endedAt: Date.now(),
       });
@@ -459,6 +502,8 @@ export namespace SubagentRuntime {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      removeAbortController(config.sessionId);
     }
   }
 
@@ -467,6 +512,11 @@ export namespace SubagentRuntime {
     if (!session) return;
 
     if (config.runId) {
+      const entry = getAbortEntry(config.sessionId);
+      if (!entry || entry.activeRunId === config.runId) {
+        abortSessionController(config.sessionId);
+      }
+
       const run = await WorkerRun.get(config.sessionId, config.runId);
       if (
         run &&
@@ -489,6 +539,8 @@ export namespace SubagentRuntime {
 
     const runs = await WorkerRun.listBySession(config.sessionId);
     const activeRun = runs.find((r) => r.status === "running" || r.status === "starting");
+
+    abortSessionController(config.sessionId);
 
     if (activeRun) {
       await WorkerRun.updateStatus(config.sessionId, activeRun.runId, "cancelled", {
