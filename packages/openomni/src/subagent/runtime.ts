@@ -2,7 +2,6 @@ import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import { type Message, Subagent, type Tool } from "@openomni/protocol";
 import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
 import {
-  abort as abortSessionController,
   get as getAbortEntry,
   register as registerAbortController,
   remove as removeAbortController,
@@ -219,7 +218,63 @@ function buildAbortSignal(controller: AbortController, signal?: AbortSignal): Ab
 
 async function shouldSkipFailureUpdate(sessionId: string, runId: string): Promise<boolean> {
   const run = await WorkerRun.get(sessionId, runId);
-  return run?.status === "cancelled";
+  if (run?.status === "cancelled" || run?.status === "interrupted") return true;
+  // Cancel in progress: controller aborted but entry kept for completion tracking
+  const entry = getAbortEntry(sessionId);
+  return !!entry && entry.controller.signal.aborted;
+}
+
+function isTerminalStatus(status: string): boolean {
+  return (
+    status === "succeeded" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "interrupted"
+  );
+}
+
+async function waitForAbortEntryRemoval(sessionId: string): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    if (getAbortEntry(sessionId) === undefined) return;
+    await Promise.resolve();
+  }
+  while (getAbortEntry(sessionId) !== undefined) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+async function raceAbortCompletion(
+  sessionId: string,
+  runId: string,
+  hardTimeoutMs: number,
+): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const abortWait = waitForAbortEntryRemoval(sessionId).then(() => "settled" as const);
+  const timeout = new Promise<"timeout">((resolve) => {
+    timeoutId = setTimeout(() => resolve("timeout"), hardTimeoutMs);
+  });
+
+  const winner = await Promise.race([abortWait, timeout]);
+
+  if (winner === "timeout") {
+    removeAbortController(sessionId);
+    const run = await WorkerRun.get(sessionId, runId);
+    if (run && !isTerminalStatus(run.status)) {
+      await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
+    }
+    publishEvent(Subagent.Events.WorkerRunFailed, {
+      sessionId,
+      runId,
+      error: "cancel timeout exceeded",
+    });
+  } else {
+    clearTimeout(timeoutId);
+    const run = await WorkerRun.get(sessionId, runId);
+    if (run && !isTerminalStatus(run.status)) {
+      await WorkerRun.updateStatus(sessionId, runId, "cancelled", { endedAt: Date.now() });
+    }
+  }
 }
 
 export namespace SubagentRuntime {
@@ -435,6 +490,7 @@ export namespace SubagentRuntime {
   export interface CancelConfig {
     sessionId: string;
     runId?: string;
+    hardTimeoutMs?: number;
   }
 
   export async function resume(config: ResumeConfig): Promise<ResumeResult> {
@@ -511,23 +567,22 @@ export namespace SubagentRuntime {
     const session = Session.get(config.sessionId);
     if (!session) return;
 
+    const hardTimeoutMs = config.hardTimeoutMs ?? 10_000;
+
     if (config.runId) {
       const entry = getAbortEntry(config.sessionId);
-      if (!entry || entry.activeRunId === config.runId) {
-        abortSessionController(config.sessionId);
-      }
+      const hasInFlightOp = !!entry && entry.activeRunId === config.runId;
 
-      const run = await WorkerRun.get(config.sessionId, config.runId);
-      if (
-        run &&
-        run.status !== "cancelled" &&
-        run.status !== "succeeded" &&
-        run.status !== "failed" &&
-        run.status !== "interrupted"
-      ) {
-        await WorkerRun.updateStatus(config.sessionId, config.runId, "cancelled", {
-          endedAt: Date.now(),
-        });
+      if (hasInFlightOp) {
+        entry.controller.abort();
+        await raceAbortCompletion(config.sessionId, config.runId, hardTimeoutMs);
+      } else {
+        const run = await WorkerRun.get(config.sessionId, config.runId);
+        if (run && !isTerminalStatus(run.status)) {
+          await WorkerRun.updateStatus(config.sessionId, config.runId, "cancelled", {
+            endedAt: Date.now(),
+          });
+        }
       }
 
       publishEvent(Subagent.Events.WorkerSessionCancelled, {
@@ -539,13 +594,20 @@ export namespace SubagentRuntime {
 
     const runs = await WorkerRun.listBySession(config.sessionId);
     const activeRun = runs.find((r) => r.status === "running" || r.status === "starting");
+    const abortEntry = getAbortEntry(config.sessionId);
 
-    abortSessionController(config.sessionId);
+    if (abortEntry) {
+      abortEntry.controller.abort();
+    }
 
     if (activeRun) {
-      await WorkerRun.updateStatus(config.sessionId, activeRun.runId, "cancelled", {
-        endedAt: Date.now(),
-      });
+      if (abortEntry) {
+        await raceAbortCompletion(config.sessionId, activeRun.runId, hardTimeoutMs);
+      } else {
+        await WorkerRun.updateStatus(config.sessionId, activeRun.runId, "cancelled", {
+          endedAt: Date.now(),
+        });
+      }
     }
 
     publishEvent(Subagent.Events.WorkerSessionCancelled, {
