@@ -875,73 +875,75 @@ export namespace SubagentRuntime {
       return { resumed: false, sessionId: config.sessionId, runId: undefined };
     }
 
-    const runs = await WorkerRun.listBySession(config.sessionId);
-    const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
+    return withSessionLock(config.sessionId, async () => {
+      const runs = await WorkerRun.listBySession(config.sessionId);
+      const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
 
-    if (latestRun?.status === "running" || latestRun?.status === "starting") {
-      throw new Error("Session already has an active run");
-    }
-
-    const runId = crypto.randomUUID();
-    const title = latestRun?.title ?? "resumed";
-    const prompt = latestRun?.prompt ?? "resume";
-
-    await WorkerRun.create(config.sessionId, { runId, title, prompt });
-    await WorkerRun.updateStatus(config.sessionId, runId, "starting");
-
-    publishEvent(Subagent.Events.WorkerSessionResumed, {
-      sessionId: config.sessionId,
-      runId,
-    });
-
-    try {
-      await WorkerRun.updateStatus(config.sessionId, runId, "running");
-      const result = await runWithTranscript(config.sessionId, config);
-
-      const assistantMessage = createAssistantMessage(config.sessionId, config.model);
-      Session.addMessage(config.sessionId, assistantMessage);
-      addAssistantResultParts(config.sessionId, assistantMessage.id, result);
-
-      await WorkerRun.updateStatus(config.sessionId, runId, "succeeded", {
-        endedAt: Date.now(),
-        lastMessageId: assistantMessage.id,
-      });
-
-      publishEvent(Subagent.Events.WorkerRunCompleted, {
-        sessionId: config.sessionId,
-        runId,
-        status: "succeeded",
-      });
-
-      return {
-        resumed: true,
-        sessionId: config.sessionId,
-        runId,
-        output: result.text,
-        finishReason: result.finishReason,
-      };
-    } catch (error) {
-      if (await shouldSkipFailureUpdate(config.sessionId, runId)) {
-        throw error;
+      if (latestRun?.status === "running" || latestRun?.status === "starting") {
+        throw new Error("Session already has an active run");
       }
 
-      await WorkerRun.updateStatus(config.sessionId, runId, "failed", {
-        endedAt: Date.now(),
-      });
-      publishEvent(Subagent.Events.WorkerRunFailed, {
+      const runId = crypto.randomUUID();
+      const title = latestRun?.title ?? "resumed";
+      const prompt = latestRun?.prompt ?? "resume";
+
+      await WorkerRun.create(config.sessionId, { runId, title, prompt });
+      await WorkerRun.updateStatus(config.sessionId, runId, "starting");
+
+      publishEvent(Subagent.Events.WorkerSessionResumed, {
         sessionId: config.sessionId,
         runId,
-        error: error instanceof Error ? error.message : String(error),
       });
-      throw error;
-    } finally {
+
       try {
-        await finalizeRun(config.sessionId, runId);
-      } catch {
-        // cleanup must not mask the original error
+        await WorkerRun.updateStatus(config.sessionId, runId, "running");
+        const result = await runWithTranscript(config.sessionId, config);
+
+        const assistantMessage = createAssistantMessage(config.sessionId, config.model);
+        Session.addMessage(config.sessionId, assistantMessage);
+        addAssistantResultParts(config.sessionId, assistantMessage.id, result);
+
+        await WorkerRun.updateStatus(config.sessionId, runId, "succeeded", {
+          endedAt: Date.now(),
+          lastMessageId: assistantMessage.id,
+        });
+
+        publishEvent(Subagent.Events.WorkerRunCompleted, {
+          sessionId: config.sessionId,
+          runId,
+          status: "succeeded",
+        });
+
+        return {
+          resumed: true,
+          sessionId: config.sessionId,
+          runId,
+          output: result.text,
+          finishReason: result.finishReason,
+        };
+      } catch (error) {
+        if (await shouldSkipFailureUpdate(config.sessionId, runId)) {
+          throw error;
+        }
+
+        await WorkerRun.updateStatus(config.sessionId, runId, "failed", {
+          endedAt: Date.now(),
+        });
+        publishEvent(Subagent.Events.WorkerRunFailed, {
+          sessionId: config.sessionId,
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      } finally {
+        try {
+          await finalizeRun(config.sessionId, runId);
+        } catch {
+          // cleanup must not mask the original error
+        }
+        removeAbortController(config.sessionId);
       }
-      removeAbortController(config.sessionId);
-    }
+    });
   }
 
   export async function cancel(config: CancelConfig): Promise<void> {
