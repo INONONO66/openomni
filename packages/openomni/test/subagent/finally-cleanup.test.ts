@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
+import { ChatAgent, type AgentResult } from "@openomni/agent";
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 import { get as getAbortEntry } from "../../src/subagent/abort-registry";
@@ -72,9 +72,10 @@ describe("finally cleanup — spawn", () => {
 
     const children = Session.listChildren(parentId);
     expect(children).toHaveLength(1);
-    const runs = await WorkerRun.listBySession(children[0]!.id);
+    const childId = children[0]?.id ?? "";
+    const runs = await WorkerRun.listBySession(childId);
     expect(runs).toHaveLength(1);
-    expect(runs[0]!.status).toBe("failed");
+    expect(runs[0]?.status).toBe("failed");
   });
 
   it("preserves user message after failure (never deletes)", async () => {
@@ -92,11 +93,11 @@ describe("finally cleanup — spawn", () => {
     ).rejects.toThrow("crash");
 
     const children = Session.listChildren(parentId);
-    const messages = Session.getMessages(children[0]!.id);
+    const messages = Session.getMessages(children[0]?.id ?? "");
     const userMessages = messages.filter((m) => m.role === "user");
     expect(userMessages).toHaveLength(1);
 
-    const parts = Session.getParts(userMessages[0]!.id);
+    const parts = Session.getParts(userMessages[0]?.id ?? "");
     const textPart = parts.find((p) => p.type === "text");
     expect(textPart).toBeDefined();
     expect((textPart as { text: string }).text).toBe("my prompt");
@@ -117,7 +118,7 @@ describe("finally cleanup — spawn", () => {
     ).rejects.toThrow("boom");
 
     const children = Session.listChildren(parentId);
-    expect(getAbortEntry(children[0]!.id)).toBeUndefined();
+    expect(getAbortEntry(children[0]?.id ?? "")).toBeUndefined();
   });
 
   it("updates workerMeta status to failed after agent failure", async () => {
@@ -135,7 +136,7 @@ describe("finally cleanup — spawn", () => {
     ).rejects.toThrow("fatal");
 
     const children = Session.listChildren(parentId);
-    const meta = Session.getWorkerMeta(children[0]!.id);
+    const meta = Session.getWorkerMeta(children[0]?.id ?? "");
     expect(meta).toBeDefined();
     expect((meta as Record<string, unknown>).status).toBe("failed");
   });
@@ -174,8 +175,8 @@ describe("finally cleanup — send", () => {
     ).rejects.toThrow("send failed");
 
     const runs = await WorkerRun.listBySession(spawned.sessionId);
-    const lastRun = runs[runs.length - 1]!;
-    expect(lastRun.status).toBe("failed");
+    const lastRun = runs[runs.length - 1];
+    expect(lastRun?.status).toBe("failed");
 
     expect(getAbortEntry(spawned.sessionId)).toBeUndefined();
 
@@ -220,8 +221,8 @@ describe("finally cleanup — resume", () => {
     );
 
     const runs = await WorkerRun.listBySession(spawned.sessionId);
-    const lastRun = runs[runs.length - 1]!;
-    expect(lastRun.status).toBe("failed");
+    const lastRun = runs[runs.length - 1];
+    expect(lastRun?.status).toBe("failed");
 
     expect(getAbortEntry(spawned.sessionId)).toBeUndefined();
 
