@@ -110,7 +110,7 @@ function addToolParts(
   }
 }
 
-function serializeToolPart(part: Message.ToolPart): string {
+function serializeToolPart(part: Message.ToolPart, repair?: boolean): string {
   const input = JSON.stringify(part.state.input);
 
   switch (part.state.status) {
@@ -120,6 +120,9 @@ function serializeToolPart(part: Message.ToolPart): string {
       return `[Tool: ${part.tool}] Input: ${input} Output: ${part.state.error}`;
     case "pending":
     case "running":
+      if (repair) {
+        return `[Tool: ${part.tool}] Error: tool execution interrupted (synthetic)`;
+      }
       return `[Tool: ${part.tool}] Input: ${input} Output: (${part.state.status})`;
   }
 }
@@ -152,23 +155,7 @@ function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
   });
 }
 
-async function runWithTranscript(
-  sessionId: string,
-  config: RuntimeConfig,
-): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
-  const messages = buildChildMessages(sessionId);
-  const agent = ChatAgent.create({
-    model: config.model,
-    systemPrompt: config.systemPrompt,
-    tools: config.tools,
-    budget: config.budget,
-    toolExecutor: config.toolExecutor,
-  });
-
-  return agent.run({ messages });
-}
-
-function buildChildMessages(sessionId: string): RuntimeMessage[] {
+function buildChildMessagesInternal(sessionId: string, repair?: boolean): RuntimeMessage[] {
   const messages = Session.getMessages(sessionId);
   const result: RuntimeMessage[] = [];
 
@@ -186,7 +173,7 @@ function buildChildMessages(sessionId: string): RuntimeMessage[] {
       }
 
       if (part.type === "tool") {
-        content.push(serializeToolPart(part));
+        content.push(serializeToolPart(part, repair));
       }
     }
 
@@ -196,6 +183,22 @@ function buildChildMessages(sessionId: string): RuntimeMessage[] {
   }
 
   return result;
+}
+
+async function runWithTranscript(
+  sessionId: string,
+  config: RuntimeConfig,
+): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
+  const messages = buildChildMessagesInternal(sessionId);
+  const agent = ChatAgent.create({
+    model: config.model,
+    systemPrompt: config.systemPrompt,
+    tools: config.tools,
+    budget: config.budget,
+    toolExecutor: config.toolExecutor,
+  });
+
+  return agent.run({ messages });
 }
 
 export namespace SubagentRuntime {
@@ -515,5 +518,9 @@ export namespace SubagentRuntime {
       status: run.status,
       output,
     };
+  }
+
+  export function buildChildMessages(sessionId: string, repair?: boolean): RuntimeMessage[] {
+    return buildChildMessagesInternal(sessionId, repair);
   }
 }
