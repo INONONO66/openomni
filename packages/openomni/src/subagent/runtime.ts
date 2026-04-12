@@ -900,7 +900,7 @@ export namespace SubagentRuntime {
 
       const assistantMessage = createAssistantMessage(config.sessionId, config.model);
       Session.addMessage(config.sessionId, assistantMessage);
-      addTextPart(config.sessionId, assistantMessage.id, result.text);
+      addAssistantResultParts(config.sessionId, assistantMessage.id, result);
 
       await WorkerRun.updateStatus(config.sessionId, runId, "succeeded", {
         endedAt: Date.now(),
