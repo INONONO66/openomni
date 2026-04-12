@@ -1,5 +1,5 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
-import { type Message, Subagent } from "@openomni/protocol";
+import { type Message, Subagent, type Tool } from "@openomni/protocol";
 import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
 
 type RuntimeModel = { provider: string; id: string };
@@ -64,6 +64,75 @@ function addTextPart(sessionId: string, messageId: string, text: string): void {
   Session.addPart(messageId, part);
 }
 
+function createCompletedToolState(call: Tool.Call, output: string): Tool.StateCompleted {
+  const now = Date.now();
+  return {
+    status: "completed",
+    input: call.input,
+    output,
+    title: call.tool,
+    metadata: {},
+    time: {
+      start: now,
+      end: now,
+    },
+  };
+}
+
+function addToolParts(
+  sessionId: string,
+  messageId: string,
+  steps: { toolCalls?: Tool.Call[]; toolResults?: Tool.Result[] }[],
+): void {
+  for (const step of steps) {
+    if (!step.toolCalls || !step.toolResults) {
+      continue;
+    }
+
+    const resultsByCallId = new Map(step.toolResults.map((result) => [result.toolCallId, result]));
+    for (const call of step.toolCalls) {
+      const result = resultsByCallId.get(call.id);
+      if (!result) {
+        continue;
+      }
+
+      const part: Message.ToolPart = {
+        id: crypto.randomUUID(),
+        sessionID: sessionId,
+        messageID: messageId,
+        type: "tool",
+        callID: call.id,
+        tool: call.tool,
+        state: createCompletedToolState(call, result.output),
+      };
+      Session.addPart(messageId, part);
+    }
+  }
+}
+
+function serializeToolPart(part: Message.ToolPart): string {
+  const input = JSON.stringify(part.state.input);
+
+  switch (part.state.status) {
+    case "completed":
+      return `[Tool: ${part.tool}] Input: ${input} Output: ${part.state.output}`;
+    case "error":
+      return `[Tool: ${part.tool}] Input: ${input} Output: ${part.state.error}`;
+    case "pending":
+    case "running":
+      return `[Tool: ${part.tool}] Input: ${input} Output: (${part.state.status})`;
+  }
+}
+
+function addAssistantResultParts(
+  sessionId: string,
+  messageId: string,
+  result: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>,
+): void {
+  addTextPart(sessionId, messageId, result.text);
+  addToolParts(sessionId, messageId, result.steps);
+}
+
 function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
   event: BusEvent.Descriptor<{
     traceId: string;
@@ -109,10 +178,20 @@ function buildChildMessages(sessionId: string): RuntimeMessage[] {
     }
 
     const parts = Session.getParts(message.id);
+    const content: string[] = [];
     for (const part of parts) {
       if (part.type === "text") {
-        result.push({ role: message.role, content: part.text });
+        content.push(part.text);
+        continue;
       }
+
+      if (part.type === "tool") {
+        content.push(serializeToolPart(part));
+      }
+    }
+
+    if (content.length > 0) {
+      result.push({ role: message.role, content: content.join("\n") });
     }
   }
 
@@ -211,7 +290,7 @@ export namespace SubagentRuntime {
 
       const assistantMessage = createAssistantMessage(session.id, config.model);
       Session.addMessage(session.id, assistantMessage);
-      addTextPart(session.id, assistantMessage.id, result.text);
+      addAssistantResultParts(session.id, assistantMessage.id, result);
 
       await WorkerRun.updateStatus(session.id, runId, "succeeded", {
         endedAt: Date.now(),
@@ -267,7 +346,7 @@ export namespace SubagentRuntime {
 
       const assistantMessage = createAssistantMessage(session.id, config.model);
       Session.addMessage(session.id, assistantMessage);
-      addTextPart(session.id, assistantMessage.id, result.text);
+      addAssistantResultParts(session.id, assistantMessage.id, result);
 
       await WorkerRun.updateStatus(session.id, runId, "succeeded", {
         endedAt: Date.now(),
