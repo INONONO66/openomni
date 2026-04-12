@@ -7,7 +7,7 @@ import type { AgentProfile } from "@openomni/protocol";
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 let mockChatAgentCreate: any;
 
-mock.module("/Users/ino/Develop/openomni/packages/agent/src/core/chat-agent.ts", () => ({
+mock.module("../../../src/core/chat-agent", () => ({
   ChatAgent: {
     create: (...args: unknown[]) => mockChatAgentCreate(...args),
   },
