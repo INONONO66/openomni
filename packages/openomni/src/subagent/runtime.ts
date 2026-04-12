@@ -9,13 +9,13 @@ import {
 
 const sessionLocks = new Map<string, Promise<void>>();
 
+// biome-ignore lint/suspicious/noEmptyBlockStatements: intentional noop for promise chain error swallowing
+const noop = () => {};
+
 function withSessionLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
   const prev = sessionLocks.get(sessionId) ?? Promise.resolve();
   const next = prev.then(fn);
-  const tail = next.then(
-    () => {},
-    () => {},
-  );
+  const tail = next.then(noop, noop);
   sessionLocks.set(sessionId, tail);
   tail.then(() => {
     if (sessionLocks.get(sessionId) === tail) {
