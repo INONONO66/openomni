@@ -532,6 +532,11 @@ export namespace SubagentRuntime {
     finishReason: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>["finishReason"];
   }
 
+  export interface SpawnBackgroundResult {
+    sessionId: string;
+    runId: string;
+  }
+
   export interface WaitResult {
     status: Awaited<ReturnType<typeof WorkerRun.get>> extends infer T
       ? T extends { status: infer S }
@@ -650,6 +655,116 @@ export namespace SubagentRuntime {
         removeAbortController(session.id);
       }
     });
+  }
+
+  export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
+    const workerMeta = Subagent.ChildSessionMeta.parse({
+      kind: "subagent",
+      parentSessionId: config.parentSessionId,
+      agentName: config.agentName,
+      spawnDepth: config.parentSessionId ? undefined : 0,
+      status: "idle",
+    });
+
+    const session = config.parentSessionId
+      ? Session.createChild({
+          parentSessionId: config.parentSessionId,
+          title: config.title,
+          model: toSessionModel(config.model),
+          workerMeta,
+        })
+      : Session.create({
+          title: config.title,
+          model: toSessionModel(config.model),
+        });
+
+    if (!config.parentSessionId) {
+      Session.updateWorkerMeta(session.id, workerMeta);
+    }
+
+    publishEvent(Subagent.Events.WorkerSessionSpawned, {
+      sessionId: session.id,
+      parentSessionId: config.parentSessionId,
+      agentName: config.agentName,
+      spawnDepth: session.spawnDepth,
+      kind: "subagent",
+    });
+
+    const userMessage = createUserMessage(session.id, config.model);
+    Session.addMessage(session.id, userMessage);
+    addTextPart(session.id, userMessage.id, config.prompt);
+
+    const runId = crypto.randomUUID();
+    await WorkerRun.create(session.id, {
+      runId,
+      title: config.title,
+      prompt: config.prompt,
+    });
+
+    const abortEntry = registerAbortController(session.id, runId);
+    const signal = buildAbortSignal(abortEntry.controller, config.signal);
+    const timers = setupRunTimeouts(session.id, runId, config.softTimeoutMs, config.hardTimeoutMs);
+
+    await WorkerRun.updateStatus(session.id, runId, "starting");
+    publishEvent(Subagent.Events.WorkerRunStarted, {
+      sessionId: session.id,
+      runId,
+      title: config.title,
+    });
+    await WorkerRun.updateStatus(session.id, runId, "running");
+
+    const backgroundRun = withSessionLock(session.id, () =>
+      Promise.resolve().then(async () => {
+        try {
+          const permissions = config.permissions ?? { denylist: ["subagent"] };
+          const result = await runWithTranscript(session.id, config, signal, permissions);
+
+          const assistantMessage = createAssistantMessage(session.id, config.model);
+          Session.addMessage(session.id, assistantMessage);
+          addAssistantResultParts(session.id, assistantMessage.id, result);
+
+          await WorkerRun.updateStatus(session.id, runId, "succeeded", {
+            endedAt: Date.now(),
+            lastMessageId: assistantMessage.id,
+          });
+
+          publishEvent(Subagent.Events.WorkerRunCompleted, {
+            sessionId: session.id,
+            runId,
+            status: "succeeded",
+          });
+        } catch (error) {
+          if (await shouldSkipFailureUpdate(session.id, runId)) {
+            throw error;
+          }
+
+          await WorkerRun.updateStatus(session.id, runId, "failed", {
+            endedAt: Date.now(),
+          });
+          publishEvent(Subagent.Events.WorkerRunFailed, {
+            sessionId: session.id,
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        } finally {
+          clearRunTimeouts(timers);
+          try {
+            await finalizeRun(session.id, runId);
+          } catch {
+            // cleanup must not mask the original error
+          }
+          removeAbortController(session.id);
+        }
+      }),
+    );
+
+    backgroundRun.catch(noop);
+
+    return {
+      sessionId: session.id,
+      runId,
+    };
   }
 
   export function send(config: SendConfig): Promise<RunResult> {
