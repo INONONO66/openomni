@@ -38,6 +38,34 @@ type RuntimeConfig = {
   budget?: ChatAgentConfig["budget"];
 };
 
+type SendCompactionConfig = {
+  contextWindowTokens: number;
+  thresholdRatio?: number;
+  onSummarize?: (messages: RuntimeMessage[]) => Promise<string>;
+};
+
+type InMemoryCompactorLike = {
+  shouldCompact(
+    totalTokens: number,
+    options: {
+      contextWindowTokens: number;
+      thresholdRatio?: number;
+    },
+  ): boolean;
+  compact(
+    messages: Message.WithParts[],
+    options: {
+      contextWindowTokens: number;
+      thresholdRatio?: number;
+      onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+    },
+  ): Promise<{
+    messages: Message.WithParts[];
+    compacted: boolean;
+    removedCount: number;
+  }>;
+};
+
 function toSessionModel(model: RuntimeModel): { providerID: string; modelID: string } {
   return {
     providerID: model.provider,
@@ -179,34 +207,123 @@ function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
   });
 }
 
-function buildChildMessagesInternal(sessionId: string, repair?: boolean): RuntimeMessage[] {
-  const messages = Session.getMessages(sessionId);
-  const result: RuntimeMessage[] = [];
+function toRuntimeMessage(
+  message: Message.WithParts,
+  repair?: boolean,
+): RuntimeMessage | undefined {
+  if (message.info.role !== "user" && message.info.role !== "assistant") {
+    return undefined;
+  }
 
-  for (const message of messages) {
+  const content: string[] = [];
+  for (const part of message.parts) {
+    if (part.type === "text") {
+      content.push(part.text);
+      continue;
+    }
+
+    if (part.type === "tool") {
+      content.push(serializeToolPart(part, repair));
+    }
+  }
+
+  if (content.length === 0) {
+    return undefined;
+  }
+
+  return { role: message.info.role, content: content.join("\n") };
+}
+
+function buildSessionMessagesWithParts(sessionId: string): Message.WithParts[] {
+  const result: Message.WithParts[] = [];
+
+  for (const message of Session.getMessages(sessionId)) {
     if (message.role !== "user" && message.role !== "assistant") {
       continue;
     }
 
-    const parts = Session.getParts(message.id);
-    const content: string[] = [];
-    for (const part of parts) {
-      if (part.type === "text") {
-        content.push(part.text);
-        continue;
-      }
+    const withParts: Message.WithParts = {
+      info: message,
+      parts: Session.getParts(message.id),
+    };
 
-      if (part.type === "tool") {
-        content.push(serializeToolPart(part, repair));
-      }
-    }
-
-    if (content.length > 0) {
-      result.push({ role: message.role, content: content.join("\n") });
+    if (toRuntimeMessage(withParts) !== undefined) {
+      result.push(withParts);
     }
   }
 
   return result;
+}
+
+function buildRuntimeMessages(messages: Message.WithParts[], repair?: boolean): RuntimeMessage[] {
+  const result: RuntimeMessage[] = [];
+
+  for (const message of messages) {
+    const runtimeMessage = toRuntimeMessage(message, repair);
+    if (runtimeMessage) {
+      result.push(runtimeMessage);
+    }
+  }
+
+  return result;
+}
+
+function estimateRuntimeTokens(messages: RuntimeMessage[]): number {
+  return messages.reduce((total, message) => total + Math.ceil(message.content.length / 4), 0);
+}
+
+async function loadInMemoryCompactor(): Promise<InMemoryCompactorLike> {
+  const module = (await import(
+    new URL("../../../agent/src/core/execution/compaction.ts", import.meta.url).href
+  )) as { InMemoryCompactor: InMemoryCompactorLike };
+
+  return module.InMemoryCompactor;
+}
+
+function buildChildMessagesInternal(sessionId: string, repair?: boolean): RuntimeMessage[] {
+  return buildRuntimeMessages(buildSessionMessagesWithParts(sessionId), repair);
+}
+
+async function maybeCompactSendTranscript(
+  sessionId: string,
+  messages: RuntimeMessage[],
+  compaction?: SendCompactionConfig,
+): Promise<RuntimeMessage[]> {
+  if (!compaction) {
+    return messages;
+  }
+
+  const compactor = await loadInMemoryCompactor();
+  const totalTokens = estimateRuntimeTokens(messages);
+  if (
+    !compactor.shouldCompact(totalTokens, {
+      contextWindowTokens: compaction.contextWindowTokens,
+      thresholdRatio: compaction.thresholdRatio,
+    })
+  ) {
+    return messages;
+  }
+
+  const anchor = messages.find((message) => message.role === "user")?.content;
+  const result = await compactor.compact(buildSessionMessagesWithParts(sessionId), {
+    contextWindowTokens: compaction.contextWindowTokens,
+    thresholdRatio: compaction.thresholdRatio,
+    onSummarize: compaction.onSummarize
+      ? async (messagesToSummarize) =>
+          compaction.onSummarize!(buildRuntimeMessages(messagesToSummarize))
+      : undefined,
+  });
+
+  if (!result.compacted) {
+    return messages;
+  }
+
+  const compactedMessages = buildRuntimeMessages(result.messages);
+  if (!anchor) {
+    return compactedMessages;
+  }
+
+  return [{ role: "user", content: `Original goal: ${anchor}` }, ...compactedMessages];
 }
 
 async function runWithTranscript(
@@ -214,8 +331,8 @@ async function runWithTranscript(
   config: RuntimeConfig,
   signal?: AbortSignal,
   permissions?: Guardrail.ToolPermission,
+  messages = buildChildMessagesInternal(sessionId),
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
-  const messages = buildChildMessagesInternal(sessionId);
   const agent = ChatAgent.create({
     model: config.model,
     systemPrompt: config.systemPrompt,
@@ -399,6 +516,7 @@ export namespace SubagentRuntime {
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
     permissions?: Guardrail.ToolPermission;
+    compaction?: SendCompactionConfig;
   }
 
   export interface WaitConfig {
@@ -564,7 +682,12 @@ export namespace SubagentRuntime {
 
       try {
         const permissions = config.permissions ?? { denylist: ["subagent"] };
-        const result = await runWithTranscript(session.id, config, signal, permissions);
+        const messages = await maybeCompactSendTranscript(
+          session.id,
+          buildChildMessagesInternal(session.id),
+          config.compaction,
+        );
+        const result = await runWithTranscript(session.id, config, signal, permissions, messages);
 
         const assistantMessage = createAssistantMessage(session.id, config.model);
         Session.addMessage(session.id, assistantMessage);
