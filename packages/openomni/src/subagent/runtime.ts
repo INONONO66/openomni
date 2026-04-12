@@ -1,5 +1,5 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
-import { type Message, Subagent, type Tool } from "@openomni/protocol";
+import { type Guardrail, type Message, Subagent, type Tool } from "@openomni/protocol";
 import { Bus, type BusEvent, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import {
   abort as abortSession,
@@ -213,6 +213,7 @@ async function runWithTranscript(
   sessionId: string,
   config: RuntimeConfig,
   signal?: AbortSignal,
+  permissions?: Guardrail.ToolPermission,
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const messages = buildChildMessagesInternal(sessionId);
   const agent = ChatAgent.create({
@@ -222,6 +223,7 @@ async function runWithTranscript(
     budget: config.budget,
     toolExecutor: config.toolExecutor,
     signal,
+    permissions,
   });
 
   return agent.run({ messages });
@@ -387,6 +389,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
+    permissions?: Guardrail.ToolPermission;
   }
 
   export interface SendConfig extends RuntimeConfig {
@@ -395,6 +398,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
+    permissions?: Guardrail.ToolPermission;
   }
 
   export interface WaitConfig {
@@ -480,7 +484,8 @@ export namespace SubagentRuntime {
 
       try {
         await WorkerRun.updateStatus(session.id, runId, "running");
-        const result = await runWithTranscript(session.id, config, signal);
+        const permissions = config.permissions ?? { denylist: ["subagent"] };
+        const result = await runWithTranscript(session.id, config, signal, permissions);
 
         const assistantMessage = createAssistantMessage(session.id, config.model);
         Session.addMessage(session.id, assistantMessage);
@@ -558,7 +563,8 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "running");
 
       try {
-        const result = await runWithTranscript(session.id, config, signal);
+        const permissions = config.permissions ?? { denylist: ["subagent"] };
+        const result = await runWithTranscript(session.id, config, signal, permissions);
 
         const assistantMessage = createAssistantMessage(session.id, config.model);
         Session.addMessage(session.id, assistantMessage);
