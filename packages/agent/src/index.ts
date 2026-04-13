@@ -13,7 +13,17 @@ export type {
   StepGuardVerdict,
   StepGuardContext,
   AgentEventEmitter,
+  ExecutionHooks,
+  HookContext,
+  HookVerdict,
 } from "./core/types";
+export { MiddlewareEngine } from "./core/middleware";
+export type {
+  MiddlewareContext,
+  MiddlewareFn,
+  MiddlewareRegistration,
+  MiddlewareEngineInstance,
+} from "./core/middleware";
 export { AgentMessenger, BusTransport } from "./runtime/index";
 export type { Transport, AgentMessengerOptions } from "./runtime/index";
 export { AgentRegistry } from "./runtime/index";
