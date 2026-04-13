@@ -417,8 +417,8 @@ export async function* streamAgent(
               totalUsage.totalTokens += tokens.input + tokens.output;
             }
             const text = message.parts
-              .filter((part: Message.Part): part is Message.TextPart => part.type === "text")
-              .map((part: Message.TextPart) => part.text)
+              .filter((part): part is Message.TextPart => part.type === "text")
+              .map((part) => part.text)
               .join("");
             if (text) lastAssistantText = text;
             sink?.onMessage(message);
@@ -516,7 +516,7 @@ export async function* streamAgent(
               eventEmitter: config.eventEmitter,
             });
             if (compactionVerdict.action === "transform") {
-              const payload = compactionVerdict.input as { messages?: unknown };
+              const payload = compactionVerdict.input as Record<string, unknown>;
               if (Array.isArray(payload.messages)) {
                 messages = payload.messages as Message.WithParts[];
               }
@@ -555,7 +555,7 @@ export async function* streamAgent(
 
         if (outcome.type === "aborted") throw new Error("aborted");
         if (outcome.type === "error") throw new Error(outcome.error.message);
-        throw new Error("Unreachable outcome in SDK-driven path");
+        throw new Error("unreachable");
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

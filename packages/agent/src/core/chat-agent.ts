@@ -258,9 +258,6 @@ function createHookedToolExecutor(
   };
 }
 
-/**
- * ChatAgent namespace — stateless agent for single-turn or multi-turn conversations
- */
 export namespace ChatAgent {
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
