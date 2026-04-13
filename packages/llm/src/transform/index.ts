@@ -129,6 +129,7 @@ export namespace ProviderTransform {
       id: (model as { provider: string; id: string }).id,
       api: { npm },
       capabilities: { reasoning: true },
+      limit: { output: 64_000 },
     } as unknown as Provider.Model;
     return variants(syntheticModel)[variant] ?? {};
   }
