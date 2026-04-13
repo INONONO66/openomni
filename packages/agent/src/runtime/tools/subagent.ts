@@ -101,7 +101,7 @@ export namespace SubagentTool {
         };
       }
 
-      const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
+      const childAbort = ctx?.parentAbort;
       const childBudget = definition.budget;
       const model = definition.model ?? fallbackModel;
       const variantOptions = ProviderTransform.resolveVariant(model, definition.variant);

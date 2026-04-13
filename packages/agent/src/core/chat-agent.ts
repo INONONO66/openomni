@@ -43,9 +43,6 @@ function summarizeInput(input: Record<string, unknown>): string {
   }
 }
 
-/**
- * ChatAgent instance interface
- */
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
   stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentEvent>;
@@ -171,8 +168,8 @@ function createGuardedToolExecutor(
             });
             return toolExecutor(call);
           }
-        } catch (_error) {
-          void _error;
+        } catch {
+          // stepGuard threw; treat as denial
         }
       }
       eventEmitter?.emit("agent.tool.blocked", {
@@ -266,9 +263,6 @@ function createHookedToolExecutor(
  * ChatAgent namespace — stateless agent for single-turn or multi-turn conversations
  */
 export namespace ChatAgent {
-  /**
-   * Create a new ChatAgent instance
-   */
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
       async run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult> {
@@ -460,9 +454,7 @@ export namespace ChatAgent {
 
                     if (config.hooks?.postTurn) {
                       if (config.stepGuard) {
-                        console.warn(
-                          "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
-                        );
+                        console.warn("[hooks] hooks.postTurn takes precedence over stepGuard");
                       }
 
                       const hookContext: HookContext = {

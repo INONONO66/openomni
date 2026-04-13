@@ -24,11 +24,10 @@ export function checkBudget(
   state: BudgetState,
   budget?: AgentBudget,
 ): "ok" | "reassurance" | "warning" | "exceeded" {
-  const maxWallTimeMs = budget?.maxWallTimeMs !== undefined ? budget.maxWallTimeMs : 5 * 60 * 1000;
-  const maxTurns = budget?.maxTurns !== undefined ? budget.maxTurns : 24;
-  const maxToolCalls = budget?.maxToolCalls !== undefined ? budget.maxToolCalls : 40;
-  const maxToolRuntimeMs =
-    budget?.maxToolRuntimeMs !== undefined ? budget.maxToolRuntimeMs : 2 * 60 * 1000;
+  const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
+  const maxTurns = budget?.maxTurns ?? 24;
+  const maxToolCalls = budget?.maxToolCalls ?? 40;
+  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
   const warningRatio = budget?.warningThreshold ?? 0.8;
   const reassuranceRatio = budget?.reassuranceThreshold ?? 0.6;
 
@@ -56,7 +55,7 @@ export function checkBudget(
 
 export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {
   const parts: string[] = [];
-  const maxTurns = budget?.maxTurns !== undefined ? budget.maxTurns : 24;
+  const maxTurns = budget?.maxTurns ?? 24;
   if (maxTurns === -1) {
     parts.push("unlimited turns remaining");
   } else {

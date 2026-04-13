@@ -113,8 +113,8 @@ function createGuardedToolExecutor(
             });
             return toolExecutor(call);
           }
-        } catch (_error) {
-          void _error;
+        } catch {
+          // stepGuard threw; fall through to approval-denied response
         }
       }
       eventEmitter?.emit("agent.tool.blocked", {
@@ -191,16 +191,8 @@ function createHookedToolExecutor(
       return toolExecutor(transformed);
     }
 
-    if (verdict.action === "retry") {
-      console.warn(
-        '[hooks.preToolUse] "retry" verdict is not supported for preToolUse, treating as continue',
-      );
-    }
-
-    if (verdict.action === "inject") {
-      console.warn(
-        '[hooks.preToolUse] "inject" verdict is not supported for preToolUse, treating as continue',
-      );
+    if (verdict.action === "retry" || verdict.action === "inject") {
+      console.warn(`[hooks.preToolUse] "${verdict.action}" not supported, treating as continue`);
     }
 
     return toolExecutor(call);

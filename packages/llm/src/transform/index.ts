@@ -67,7 +67,6 @@ export namespace ProviderTransform {
     const npm = model.api?.npm;
     const id = model.id.toLowerCase();
 
-    // For anthropic models
     if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       return {
         high: {
@@ -85,7 +84,6 @@ export namespace ProviderTransform {
       };
     }
 
-    // For OpenAI models
     if (npm === "@ai-sdk/openai") {
       return {
         low: {
@@ -184,7 +182,6 @@ export namespace ProviderTransform {
     return applyAnthropicCaching(result);
   }
 
-  /** Inject ephemeral cacheControl on system msgs and last 2 user/assistant msgs. */
   export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
     if (msgs.length === 0) return msgs;
 
