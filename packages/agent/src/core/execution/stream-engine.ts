@@ -287,11 +287,7 @@ export async function* streamAgent(
           continuationCount,
           elapsedMs: Date.now() - startTime,
           messages,
-          budgetState: {
-            turns: budgetState.turns,
-            totalInputTokens: budgetState.totalInputTokens,
-            totalOutputTokens: budgetState.totalOutputTokens,
-          },
+          budgetState,
           budget: config.budget,
           eventEmitter: config.eventEmitter,
         });
@@ -457,11 +453,7 @@ export async function* streamAgent(
             continuationCount,
             elapsedMs: Date.now() - startTime,
             messages,
-            budgetState: {
-              turns: budgetState.turns,
-              totalInputTokens: budgetState.totalInputTokens,
-              totalOutputTokens: budgetState.totalOutputTokens,
-            },
+            budgetState,
             budget: config.budget,
             eventEmitter: config.eventEmitter,
           });

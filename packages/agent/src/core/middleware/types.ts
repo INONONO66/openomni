@@ -1,5 +1,6 @@
 import type { Hook, Middleware, Message } from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
+import type { BudgetState } from "../budget";
 
 export interface MiddlewareContext {
   timing: Hook.Timing;
@@ -15,7 +16,7 @@ export interface MiddlewareContext {
   toolOutput?: string;
   messages?: Message.WithParts[];
   agentType?: string;
-  budgetState?: { turns: number; totalInputTokens: number; totalOutputTokens: number };
+  budgetState?: BudgetState;
   eventEmitter?: AgentEventEmitter;
   budget?: AgentBudget;
 }

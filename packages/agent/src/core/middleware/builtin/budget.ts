@@ -1,10 +1,7 @@
 import { checkBudget, describeBudgetRemaining } from "../../budget";
-import type { BudgetState } from "../../budget";
 import type { MiddlewareRegistration } from "../types";
 
-export function createBudgetReassuranceMiddleware(_budget?: {
-  reassuranceThreshold?: number;
-}): MiddlewareRegistration {
+export function createBudgetReassuranceMiddleware(): MiddlewareRegistration {
   let issued = false;
   return {
     name: "builtin:budget-reassurance",
@@ -12,10 +9,10 @@ export function createBudgetReassuranceMiddleware(_budget?: {
     priority: 10,
     fn: (ctx) => {
       if (issued || !ctx.budgetState) return { action: "continue" };
-      const status = checkBudget(ctx.budgetState as BudgetState, ctx.budget);
+      const status = checkBudget(ctx.budgetState, ctx.budget);
       if (status === "reassurance") {
         issued = true;
-        const remaining = describeBudgetRemaining(ctx.budgetState as BudgetState, ctx.budget);
+        const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         ctx.eventEmitter?.emit("agent.budget.reassurance", {
           sessionId: "chat-agent",
           time: Date.now(),
@@ -32,9 +29,7 @@ export function createBudgetReassuranceMiddleware(_budget?: {
   };
 }
 
-export function createBudgetWarningMiddleware(_budget?: {
-  warningThreshold?: number;
-}): MiddlewareRegistration {
+export function createBudgetWarningMiddleware(): MiddlewareRegistration {
   let issued = false;
   return {
     name: "builtin:budget-warning",
@@ -42,10 +37,10 @@ export function createBudgetWarningMiddleware(_budget?: {
     priority: 20,
     fn: (ctx) => {
       if (issued || !ctx.budgetState) return { action: "continue" };
-      const status = checkBudget(ctx.budgetState as BudgetState, ctx.budget);
+      const status = checkBudget(ctx.budgetState, ctx.budget);
       if (status === "warning") {
         issued = true;
-        const remaining = describeBudgetRemaining(ctx.budgetState as BudgetState, ctx.budget);
+        const remaining = describeBudgetRemaining(ctx.budgetState, ctx.budget);
         ctx.eventEmitter?.emit("agent.budget.warning", {
           sessionId: "chat-agent",
           time: Date.now(),
