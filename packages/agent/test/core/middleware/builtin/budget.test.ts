@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import type { Hook } from "@openomni/protocol";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
@@ -44,10 +43,12 @@ describe("createBudgetReassuranceMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("inject");
-    expect((verdict as any).message).toContain("[Budget Status]");
-    expect((verdict as any).message).toContain("You have plenty of budget remaining");
-    expect((verdict as any).message).toContain("Do NOT rush or skip tasks");
-    expect((verdict as any).message).toContain("Complete your work thoroughly");
+    if (verdict.action === "inject") {
+      expect(verdict.message).toContain("[Budget Status]");
+      expect(verdict.message).toContain("You have plenty of budget remaining");
+      expect(verdict.message).toContain("Do NOT rush or skip tasks");
+      expect(verdict.message).toContain("Complete your work thoroughly");
+    }
   });
 
   it("fires exactly once (closure state)", async () => {
@@ -110,9 +111,11 @@ describe("createBudgetWarningMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("inject");
-    expect((verdict as any).message).toContain("[Budget Warning]");
-    expect((verdict as any).message).toContain("Wrap up your current task");
-    expect((verdict as any).message).toContain("provide a summary");
+    if (verdict.action === "inject") {
+      expect(verdict.message).toContain("[Budget Warning]");
+      expect(verdict.message).toContain("Wrap up your current task");
+      expect(verdict.message).toContain("provide a summary");
+    }
   });
 
   it("fires exactly once (closure state)", async () => {

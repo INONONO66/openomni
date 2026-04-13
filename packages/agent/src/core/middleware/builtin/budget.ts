@@ -2,7 +2,7 @@ import { checkBudget, describeBudgetRemaining } from "../../budget";
 import type { BudgetState } from "../../budget";
 import type { MiddlewareRegistration } from "../types";
 
-export function createBudgetReassuranceMiddleware(budget?: {
+export function createBudgetReassuranceMiddleware(_budget?: {
   reassuranceThreshold?: number;
 }): MiddlewareRegistration {
   let issued = false;
@@ -32,7 +32,7 @@ export function createBudgetReassuranceMiddleware(budget?: {
   };
 }
 
-export function createBudgetWarningMiddleware(budget?: {
+export function createBudgetWarningMiddleware(_budget?: {
   warningThreshold?: number;
 }): MiddlewareRegistration {
   let issued = false;
