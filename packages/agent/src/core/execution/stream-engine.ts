@@ -22,12 +22,12 @@ import {
   sleep,
 } from "../retry";
 import { buildSystemPrompt } from "../prompt-builder";
-import { InMemoryCompactor } from "./compaction";
-import { MiddlewareEngine, fromExecutionHooks } from "../middleware";
+import { MiddlewareEngine, fromConfig } from "../middleware";
+import type { MemoryResult } from "../memory";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
-  createMemoryMiddleware,
+  createCompactionMiddleware,
 } from "../middleware/builtin";
 
 function summarizeInput(input: Record<string, unknown>): string {
@@ -62,6 +62,30 @@ function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.With
     );
   }
   return output;
+}
+
+function getLastUserMessageText(messages: Message.WithParts[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].info.role === "user") {
+      return messages[i].parts
+        .filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    }
+  }
+  return null;
+}
+
+function formatMemoryContext(results: MemoryResult[]): string {
+  const entries = results.map((r) => `- ${r.content}`).join("\n");
+  return `[Memory Context]\n${entries}`;
+}
+
+function prependContextMessage(
+  messages: Message.WithParts[],
+  contextText: string,
+): Message.WithParts[] {
+  return [createUserMessage(contextText, "stream-engine"), ...messages];
 }
 
 function createGuardedToolExecutor(
@@ -240,22 +264,14 @@ export async function* streamAgent(
       const engine = MiddlewareEngine.create();
       engine.register(createBudgetReassuranceMiddleware());
       engine.register(createBudgetWarningMiddleware());
-      if (config.memory) {
-        engine.register(createMemoryMiddleware(config.memory));
+      for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
+        engine.register(reg);
       }
-      if (config.hooks) {
-        for (const reg of fromExecutionHooks(config.hooks)) {
-          engine.register(reg);
-        }
+      if (config.compaction) {
+        engine.register(createCompactionMiddleware(config.compaction));
       }
       for (const reg of config.middleware ?? []) {
         engine.register(reg);
-      }
-
-      if (config.hooks?.postTurn && config.stepGuard) {
-        console.warn(
-          "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
-        );
       }
 
       while (true) {
@@ -323,6 +339,20 @@ export async function* streamAgent(
 
         if (config.signal?.aborted) throw new Error("aborted");
 
+        let effectiveMessages = messages;
+        if (config.memory) {
+          const lastUserText = getLastUserMessageText(messages);
+          if (lastUserText) {
+            const memoryResults = await config.memory.retrieve(lastUserText);
+            if (memoryResults.length > 0) {
+              effectiveMessages = prependContextMessage(
+                messages,
+                formatMemoryContext(memoryResults),
+              );
+            }
+          }
+        }
+
         const preToolUseVerdicts: HookVerdict[] = [];
 
         const baseExecutor =
@@ -349,7 +379,7 @@ export async function* streamAgent(
           : undefined;
 
         const runInput: RunInput = {
-          messages,
+          messages: effectiveMessages,
           tools: config.tools ?? [],
           system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
           signal: config.signal,
@@ -458,14 +488,12 @@ export async function* streamAgent(
             eventEmitter: config.eventEmitter,
           });
 
-          if (config.hooks?.postTurn || (!config.hooks?.postTurn && !config.stepGuard)) {
-            yield {
-              type: "hook_verdict",
-              timing: "post_turn",
-              action: postTurnVerdict.action,
-              reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
-            };
-          }
+          yield {
+            type: "hook_verdict",
+            timing: "post_turn",
+            action: postTurnVerdict.action,
+            reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
+          };
 
           if (postTurnVerdict.action === "inject") {
             const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
@@ -475,20 +503,22 @@ export async function* streamAgent(
               createUserMessage(postTurnVerdict.message, "stream-engine"),
             ];
 
-            if (config.compaction) {
-              const totalTokens = budgetState.totalInputTokens + budgetState.totalOutputTokens;
-              if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
-                const result = await InMemoryCompactor.compact(messages, config.compaction);
-                if (result.compacted) {
-                  const messagesBefore = messages.length;
-                  messages = result.messages;
-                  config.eventEmitter?.emit("agent.compaction", {
-                    sessionId: "stream-engine",
-                    time: Date.now(),
-                    messagesBefore,
-                    messagesAfter: result.messages.length,
-                  });
-                }
+            const compactionVerdict = await engine.dispatch("post_compaction", {
+              steps,
+              usage: totalUsage,
+              turnCount: budgetState.turns,
+              isCompletion: true,
+              continuationCount,
+              elapsedMs: Date.now() - startTime,
+              messages,
+              budgetState,
+              budget: config.budget,
+              eventEmitter: config.eventEmitter,
+            });
+            if (compactionVerdict.action === "transform") {
+              const payload = compactionVerdict.input as { messages?: unknown };
+              if (Array.isArray(payload.messages)) {
+                messages = payload.messages as Message.WithParts[];
               }
             }
 
@@ -509,43 +539,6 @@ export async function* streamAgent(
               },
             };
             return;
-          }
-
-          if (!config.hooks?.postTurn && config.stepGuard) {
-            const verdict = await config.stepGuard(step, {
-              steps,
-              usage: totalUsage,
-              turnCount: turnIndex,
-              isCompletion: true,
-              continuationCount,
-              elapsedMs: Date.now() - startTime,
-            });
-
-            if (verdict.action === "inject") {
-              const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
-              messages = [
-                ...messages,
-                createAssistantMessage(lastAssistantText, parentID, "stream-engine"),
-                createUserMessage(verdict.message, "stream-engine"),
-              ];
-              continuationCount++;
-              turnIndex++;
-              continue;
-            }
-
-            if (verdict.action === "abort") {
-              yield {
-                type: "complete",
-                result: {
-                  text: lastAssistantText,
-                  steps,
-                  usage: totalUsage,
-                  finishReason: verdict.reason === "stalled" ? "stalled" : "stop",
-                  guardAborted: verdict.reason !== "stalled",
-                },
-              };
-              return;
-            }
           }
 
           yield {

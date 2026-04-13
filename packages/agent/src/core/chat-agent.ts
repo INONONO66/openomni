@@ -20,11 +20,11 @@ import {
   sleep,
 } from "./retry";
 import { streamAgent } from "./execution/stream-engine";
-import { InMemoryCompactor } from "./execution/compaction";
-import { MiddlewareEngine, fromExecutionHooks } from "./middleware";
+import { MiddlewareEngine, fromConfig } from "./middleware";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
+  createCompactionMiddleware,
 } from "./middleware/builtin";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
@@ -324,19 +324,17 @@ export namespace ChatAgent {
                 const engine = MiddlewareEngine.create();
                 engine.register(createBudgetReassuranceMiddleware());
                 engine.register(createBudgetWarningMiddleware());
-                if (config.hooks) {
-                  for (const reg of fromExecutionHooks(config.hooks)) {
-                    engine.register(reg);
-                  }
+                for (const reg of fromConfig({
+                  hooks: config.hooks,
+                  stepGuard: config.stepGuard,
+                })) {
+                  engine.register(reg);
+                }
+                if (config.compaction) {
+                  engine.register(createCompactionMiddleware(config.compaction));
                 }
                 for (const reg of config.middleware ?? []) {
                   engine.register(reg);
-                }
-
-                if (config.hooks?.postTurn && config.stepGuard) {
-                  console.warn(
-                    "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
-                  );
                 }
 
                 while (true) {
@@ -482,25 +480,23 @@ export namespace ChatAgent {
                         createUserMessage(postTurnVerdict.message, "chat-agent"),
                       ];
 
-                      if (config.compaction) {
-                        const totalTokens =
-                          budgetState.totalInputTokens + budgetState.totalOutputTokens;
-                        if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
-                          const result = await InMemoryCompactor.compact(
-                            messages,
-                            config.compaction,
-                          );
-                          if (result.compacted) {
-                            const messagesBefore = messages.length;
-                            messages = result.messages;
-                            compactionCount += 1;
-                            config.eventEmitter?.emit("agent.compaction", {
-                              sessionId: "chat-agent",
-                              time: Date.now(),
-                              messagesBefore,
-                              messagesAfter: result.messages.length,
-                            });
-                          }
+                      const compactionVerdict = await engine.dispatch("post_compaction", {
+                        steps,
+                        usage: totalUsage,
+                        turnCount: budgetState.turns,
+                        isCompletion: true,
+                        continuationCount,
+                        elapsedMs: Date.now() - startTime,
+                        messages,
+                        budgetState,
+                        budget: config.budget,
+                        eventEmitter: config.eventEmitter,
+                      });
+                      if (compactionVerdict.action === "transform") {
+                        const payload = compactionVerdict.input as { messages?: unknown };
+                        if (Array.isArray(payload.messages)) {
+                          messages = payload.messages as Message.WithParts[];
+                          compactionCount += 1;
                         }
                       }
 
@@ -513,67 +509,10 @@ export namespace ChatAgent {
                         text: lastAssistantText,
                         steps,
                         usage: totalUsage,
-                        finishReason: "stop",
+                        finishReason: postTurnVerdict.reason === "stalled" ? "stalled" : "stop",
                         compactionCount: compactionCount > 0 ? compactionCount : undefined,
-                        guardAborted: true,
+                        guardAborted: postTurnVerdict.reason !== "stalled",
                       };
-                    }
-
-                    if (!config.hooks?.postTurn && config.stepGuard) {
-                      const verdict = await config.stepGuard(step, {
-                        steps,
-                        usage: totalUsage,
-                        turnCount: budgetState.turns,
-                        isCompletion: true,
-                        continuationCount,
-                        elapsedMs: Date.now() - startTime,
-                      });
-
-                      if (verdict.action === "inject") {
-                        const parentID =
-                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
-                        messages = [
-                          ...messages,
-                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
-                          createUserMessage(verdict.message, "chat-agent"),
-                        ];
-
-                        if (config.compaction) {
-                          const totalTokens =
-                            budgetState.totalInputTokens + budgetState.totalOutputTokens;
-                          if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
-                            const result = await InMemoryCompactor.compact(
-                              messages,
-                              config.compaction,
-                            );
-                            if (result.compacted) {
-                              const messagesBefore = messages.length;
-                              messages = result.messages;
-                              compactionCount += 1;
-                              config.eventEmitter?.emit("agent.compaction", {
-                                sessionId: "chat-agent",
-                                time: Date.now(),
-                                messagesBefore,
-                                messagesAfter: result.messages.length,
-                              });
-                            }
-                          }
-                        }
-
-                        continuationCount++;
-                        continue;
-                      }
-
-                      if (verdict.action === "abort") {
-                        return {
-                          text: lastAssistantText,
-                          steps,
-                          usage: totalUsage,
-                          finishReason: verdict.reason === "stalled" ? "stalled" : "stop",
-                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
-                          guardAborted: verdict.reason !== "stalled",
-                        };
-                      }
                     }
 
                     return {

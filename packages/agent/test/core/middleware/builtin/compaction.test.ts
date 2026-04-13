@@ -173,11 +173,11 @@ describe("createCompactionMiddleware", () => {
     expect(middleware.name).toBe("builtin:compaction");
   });
 
-  it("has timing post_turn", () => {
+  it("has timing post_compaction", () => {
     const middleware = createCompactionMiddleware({
       contextWindowTokens: 1000,
     });
 
-    expect(middleware.timing).toBe("post_turn");
+    expect(middleware.timing).toBe("post_compaction");
   });
 });
