@@ -1,5 +1,6 @@
 import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
 import type { Memory } from "./memory";
+import type { MiddlewareRegistration } from "./middleware/types";
 
 export type ParallelToolsMode = "off" | "safe-only" | "all";
 
@@ -83,6 +84,7 @@ export interface ChatAgentConfig {
   hooks?: ExecutionHooks;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
+  middleware?: MiddlewareRegistration[];
 }
 
 export interface ChatAgentInput {
@@ -101,7 +103,7 @@ export interface AgentResult {
   text: string;
   steps: AgentStep[];
   usage: TokenUsage;
-  finishReason: "stop" | "tool-calls" | "max-steps" | "handoff";
+  finishReason: "stop" | "tool-calls" | "max-steps" | "handoff" | "stalled";
   handoffTarget?: string;
   compactionCount?: number;
   guardAborted?: boolean;

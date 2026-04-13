@@ -7,6 +7,8 @@ export namespace Hook {
     "pre_turn",
     "post_turn",
     "on_error",
+    "post_compaction",
+    "on_system_prompt",
   ]);
   export type Timing = z.infer<typeof Timing>;
 
@@ -25,4 +27,30 @@ export namespace Hook {
     }),
   ]);
   export type Verdict = z.infer<typeof Verdict>;
+}
+
+export namespace Middleware {
+  export const FailPolicy = z.enum(["fail-open", "fail-closed"]);
+  export type FailPolicy = z.infer<typeof FailPolicy>;
+
+  export const Scope = z.object({
+    agentType: z.array(z.string()).optional(),
+  });
+  export type Scope = z.infer<typeof Scope>;
+
+  export const Definition = z.object({
+    name: z.string().min(1),
+    timing: z.union([Hook.Timing, z.array(Hook.Timing)]),
+    priority: z.number().int().min(0),
+    scope: Scope.optional(),
+    failPolicy: FailPolicy.optional(),
+  });
+  export type Definition = z.infer<typeof Definition>;
+
+  export const SystemPromptVerdict = z.object({
+    systemPrompt: z.string().optional(),
+    prependContext: z.string().optional(),
+    appendContext: z.string().optional(),
+  });
+  export type SystemPromptVerdict = z.infer<typeof SystemPromptVerdict>;
 }

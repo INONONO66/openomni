@@ -137,15 +137,16 @@ describe("StepGuard (run path)", () => {
     expect(capturedCounts).toEqual([0, 1, 2]);
   });
 
-  it("propagates error when guard throws", async () => {
+  it("continues normally when guard throws (fail-open)", async () => {
+    // Guard errors are now handled by middleware engine with fail-open policy:
+    // the error is logged and execution continues rather than propagating.
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       stepGuard: async () => {
         throw new Error("guard error");
       },
     });
-    await expect(agent.run({ messages: [{ role: "user", content: "hello" }] })).rejects.toThrow(
-      "guard error",
-    );
+    const result = await agent.run({ messages: [{ role: "user", content: "hello" }] });
+    expect(result.finishReason).toBe("stop");
   });
 });

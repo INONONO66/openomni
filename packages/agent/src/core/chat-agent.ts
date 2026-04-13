@@ -11,13 +11,7 @@ import type {
   HookVerdict,
   TokenUsage,
 } from "./types";
-import {
-  createBudgetState,
-  checkBudget,
-  recordTurn,
-  recordTokenUsage,
-  describeBudgetRemaining,
-} from "./budget";
+import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -26,7 +20,12 @@ import {
   sleep,
 } from "./retry";
 import { streamAgent } from "./execution/stream-engine";
-import { InMemoryCompactor } from "./execution/compaction";
+import { MiddlewareEngine, fromConfig } from "./middleware";
+import {
+  createBudgetReassuranceMiddleware,
+  createBudgetWarningMiddleware,
+  createCompactionMiddleware,
+} from "./middleware/builtin";
 import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
 import type { MemoryResult } from "./memory";
@@ -259,9 +258,6 @@ function createHookedToolExecutor(
   };
 }
 
-/**
- * ChatAgent namespace — stateless agent for single-turn or multi-turn conversations
- */
 export namespace ChatAgent {
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
@@ -322,8 +318,21 @@ export namespace ChatAgent {
                   throw new Error("toolExecutor is required when tools are provided");
                 }
 
-                let reassuranceIssued = false;
-                let warningIssued = false;
+                const engine = MiddlewareEngine.create();
+                engine.register(createBudgetReassuranceMiddleware());
+                engine.register(createBudgetWarningMiddleware());
+                for (const reg of fromConfig({
+                  hooks: config.hooks,
+                  stepGuard: config.stepGuard,
+                })) {
+                  engine.register(reg);
+                }
+                if (config.compaction) {
+                  engine.register(createCompactionMiddleware(config.compaction));
+                }
+                for (const reg of config.middleware ?? []) {
+                  engine.register(reg);
+                }
 
                 while (true) {
                   const budgetStatus = checkBudget(budgetState, config.budget);
@@ -343,39 +352,33 @@ export namespace ChatAgent {
                     turnIndex: budgetState.turns,
                   });
 
-                  if (budgetStatus === "reassurance" && !reassuranceIssued) {
-                    const remaining = describeBudgetRemaining(budgetState, config.budget);
+                  const preTurnVerdict = await engine.dispatch("pre_turn", {
+                    steps,
+                    usage: totalUsage,
+                    turnCount: budgetState.turns,
+                    isCompletion: false,
+                    continuationCount,
+                    elapsedMs: Date.now() - startTime,
+                    messages,
+                    budgetState,
+                    budget: config.budget,
+                    eventEmitter: config.eventEmitter,
+                  });
+
+                  if (preTurnVerdict.action === "inject") {
                     messages = [
                       ...messages,
-                      createUserMessage(
-                        `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
-                        "chat-agent",
-                      ),
+                      createUserMessage(preTurnVerdict.message, "chat-agent"),
                     ];
-                    reassuranceIssued = true;
-                    config.eventEmitter?.emit("agent.budget.reassurance", {
-                      sessionId: "chat-agent",
-                      time: Date.now(),
-                      remaining,
-                      threshold: config.budget?.reassuranceThreshold ?? 0.6,
-                    });
-                  }
-                  if (budgetStatus === "warning" && !warningIssued) {
-                    const remaining = describeBudgetRemaining(budgetState, config.budget);
-                    messages = [
-                      ...messages,
-                      createUserMessage(
-                        `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
-                        "chat-agent",
-                      ),
-                    ];
-                    warningIssued = true;
-                    config.eventEmitter?.emit("agent.budget.warning", {
-                      sessionId: "chat-agent",
-                      time: Date.now(),
-                      remaining,
-                      threshold: config.budget?.warningThreshold ?? 0.8,
-                    });
+                  } else if (preTurnVerdict.action === "abort") {
+                    return {
+                      text: lastAssistantText,
+                      steps,
+                      usage: totalUsage,
+                      finishReason: preTurnVerdict.reason === "stalled" ? "stalled" : "stop",
+                      compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                      guardAborted: preTurnVerdict.reason !== "stalled",
+                    };
                   }
 
                   budgetState = recordTurn(budgetState);
@@ -452,125 +455,61 @@ export namespace ChatAgent {
                       await config.onStepFinish(step);
                     }
 
-                    if (config.hooks?.postTurn) {
-                      if (config.stepGuard) {
-                        console.warn("[hooks] hooks.postTurn takes precedence over stepGuard");
-                      }
+                    const postTurnVerdict = await engine.dispatch("post_turn", {
+                      steps,
+                      usage: totalUsage,
+                      turnCount: budgetState.turns,
+                      isCompletion: true,
+                      continuationCount,
+                      elapsedMs: Date.now() - startTime,
+                      messages,
+                      budgetState,
+                      budget: config.budget,
+                      eventEmitter: config.eventEmitter,
+                    });
 
-                      const hookContext: HookContext = {
-                        steps,
-                        turnCount: budgetState.turns,
-                        elapsedMs: Date.now() - startTime,
-                      };
+                    if (postTurnVerdict.action === "inject") {
+                      const parentID =
+                        messages.length > 0 ? messages[messages.length - 1].info.id : "";
+                      messages = [
+                        ...messages,
+                        createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
+                        createUserMessage(postTurnVerdict.message, "chat-agent"),
+                      ];
 
-                      let postTurnVerdict: HookVerdict;
-                      try {
-                        postTurnVerdict = await config.hooks.postTurn(hookContext);
-                      } catch (err) {
-                        console.warn("[hooks.postTurn] threw, treating as continue:", err);
-                        postTurnVerdict = { action: "continue" };
-                      }
-
-                      if (postTurnVerdict.action === "inject") {
-                        const parentID =
-                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
-                        messages = [
-                          ...messages,
-                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
-                          createUserMessage(postTurnVerdict.message, "chat-agent"),
-                        ];
-
-                        if (config.compaction) {
-                          const totalTokens =
-                            budgetState.totalInputTokens + budgetState.totalOutputTokens;
-                          if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
-                            const result = await InMemoryCompactor.compact(
-                              messages,
-                              config.compaction,
-                            );
-                            if (result.compacted) {
-                              const messagesBefore = messages.length;
-                              messages = result.messages;
-                              compactionCount += 1;
-                              config.eventEmitter?.emit("agent.compaction", {
-                                sessionId: "chat-agent",
-                                time: Date.now(),
-                                messagesBefore,
-                                messagesAfter: result.messages.length,
-                              });
-                            }
-                          }
-                        }
-
-                        continuationCount++;
-                        continue;
-                      }
-
-                      if (postTurnVerdict.action === "abort") {
-                        return {
-                          text: lastAssistantText,
-                          steps,
-                          usage: totalUsage,
-                          finishReason: "stop",
-                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
-                          guardAborted: true,
-                        };
-                      }
-                    } else if (config.stepGuard) {
-                      const verdict = await config.stepGuard(step, {
+                      const compactionVerdict = await engine.dispatch("post_compaction", {
                         steps,
                         usage: totalUsage,
                         turnCount: budgetState.turns,
                         isCompletion: true,
                         continuationCount,
                         elapsedMs: Date.now() - startTime,
+                        messages,
+                        budgetState,
+                        budget: config.budget,
+                        eventEmitter: config.eventEmitter,
                       });
-
-                      if (verdict.action === "inject") {
-                        const parentID =
-                          messages.length > 0 ? messages[messages.length - 1].info.id : "";
-                        messages = [
-                          ...messages,
-                          createAssistantMessage(lastAssistantText, parentID, "chat-agent"),
-                          createUserMessage(verdict.message, "chat-agent"),
-                        ];
-
-                        if (config.compaction) {
-                          const totalTokens =
-                            budgetState.totalInputTokens + budgetState.totalOutputTokens;
-                          if (InMemoryCompactor.shouldCompact(totalTokens, config.compaction)) {
-                            const result = await InMemoryCompactor.compact(
-                              messages,
-                              config.compaction,
-                            );
-                            if (result.compacted) {
-                              const messagesBefore = messages.length;
-                              messages = result.messages;
-                              compactionCount += 1;
-                              config.eventEmitter?.emit("agent.compaction", {
-                                sessionId: "chat-agent",
-                                time: Date.now(),
-                                messagesBefore,
-                                messagesAfter: result.messages.length,
-                              });
-                            }
-                          }
+                      if (compactionVerdict.action === "transform") {
+                        const payload = compactionVerdict.input as { messages?: unknown };
+                        if (Array.isArray(payload.messages)) {
+                          messages = payload.messages as Message.WithParts[];
+                          compactionCount += 1;
                         }
-
-                        continuationCount++;
-                        continue;
                       }
 
-                      if (verdict.action === "abort") {
-                        return {
-                          text: lastAssistantText,
-                          steps,
-                          usage: totalUsage,
-                          finishReason: "stop",
-                          compactionCount: compactionCount > 0 ? compactionCount : undefined,
-                          guardAborted: true,
-                        };
-                      }
+                      continuationCount++;
+                      continue;
+                    }
+
+                    if (postTurnVerdict.action === "abort") {
+                      return {
+                        text: lastAssistantText,
+                        steps,
+                        usage: totalUsage,
+                        finishReason: postTurnVerdict.reason === "stalled" ? "stalled" : "stop",
+                        compactionCount: compactionCount > 0 ? compactionCount : undefined,
+                        guardAborted: postTurnVerdict.reason !== "stalled",
+                      };
                     }
 
                     return {
