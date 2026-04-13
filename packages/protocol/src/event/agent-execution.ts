@@ -23,7 +23,6 @@ export namespace AgentExecution {
         inputTokens: z.number(),
         outputTokens: z.number(),
         totalTokens: z.number(),
-        totalCost: z.number().optional(),
       }),
     }),
   );
