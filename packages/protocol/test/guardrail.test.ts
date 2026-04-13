@@ -118,94 +118,44 @@ describe("Guardrail schemas", () => {
   describe("DelegationPolicy", () => {
     it("parses with defaults", () => {
       const result = Guardrail.DelegationPolicy.parse({
-        budgetPolicy: "inherit",
         abortPropagation: true,
       });
       expect(result.maxDepth).toBe(3);
-      expect(result.budgetPolicy).toBe("inherit");
       expect(result.abortPropagation).toBe(true);
-      expect(result.budgetAllocation).toBe(0.5);
-      expect(result.reserveForParent).toBe(0.2);
     });
 
     it("parses with explicit maxDepth", () => {
       const result = Guardrail.DelegationPolicy.parse({
         maxDepth: 5,
-        budgetPolicy: "independent",
         abortPropagation: false,
       });
       expect(result.maxDepth).toBe(5);
+      expect(result.abortPropagation).toBe(false);
     });
 
-    it("rejects invalid budgetPolicy", () => {
+    it("accepts float maxDepth", () =>
       expect(() =>
         Guardrail.DelegationPolicy.parse({
-          budgetPolicy: "shared",
+          maxDepth: 1.5,
           abortPropagation: true,
         }),
-      ).toThrow();
-    });
+      ).not.toThrow());
 
-    it("parses split policy", () => {
-      expect(
-        Guardrail.DelegationPolicy.parse({
-          budgetPolicy: "split",
-          budgetAllocation: 0.5,
-          reserveForParent: 0.2,
-          maxDepth: 3,
-          abortPropagation: false,
-        }),
-      ).toBeTruthy();
-    });
-
-    it("keeps backward compatibility for inherit without allocation fields", () => {
-      const result = Guardrail.DelegationPolicy.parse({
-        budgetPolicy: "inherit",
-        maxDepth: 3,
-        abortPropagation: false,
-      });
-
-      expect(result.budgetAllocation).toBe(0.5);
-      expect(result.reserveForParent).toBe(0.2);
-    });
-
-    it("rejects budgetAllocation greater than 1", () => {
+    it("accepts negative maxDepth", () =>
       expect(() =>
         Guardrail.DelegationPolicy.parse({
-          budgetPolicy: "split",
-          budgetAllocation: 1.5,
-          maxDepth: 3,
-          abortPropagation: false,
+          maxDepth: -1,
+          abortPropagation: true,
         }),
-      ).toThrow();
-    });
+      ).not.toThrow());
 
-    describe("DelegationPolicy.maxDepth (bare z.number())", () => {
-      it("accepts float maxDepth", () =>
-        expect(() =>
-          Guardrail.DelegationPolicy.parse({
-            maxDepth: 1.5,
-            budgetPolicy: "inherit",
-            abortPropagation: true,
-          }),
-        ).not.toThrow());
-      it("accepts negative maxDepth", () =>
-        expect(() =>
-          Guardrail.DelegationPolicy.parse({
-            maxDepth: -1,
-            budgetPolicy: "inherit",
-            abortPropagation: true,
-          }),
-        ).not.toThrow());
-      it("accepts zero maxDepth", () =>
-        expect(() =>
-          Guardrail.DelegationPolicy.parse({
-            maxDepth: 0,
-            budgetPolicy: "inherit",
-            abortPropagation: true,
-          }),
-        ).not.toThrow());
-    });
+    it("accepts zero maxDepth", () =>
+      expect(() =>
+        Guardrail.DelegationPolicy.parse({
+          maxDepth: 0,
+          abortPropagation: true,
+        }),
+      ).not.toThrow());
 
     describe("action enum completeness", () => {
       ["reject", "retry", "warn", "escalate"].forEach((action) => {

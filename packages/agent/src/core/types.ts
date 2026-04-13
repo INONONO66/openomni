@@ -45,7 +45,6 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  totalCost?: number;
 }
 
 export interface AgentBudget {
@@ -53,10 +52,6 @@ export interface AgentBudget {
   maxToolCalls?: number;
   maxWallTimeMs?: number;
   maxToolRuntimeMs?: number;
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  maxTotalTokens?: number;
-  maxCost?: number;
   warningThreshold?: number; // 0.0-1.0, default 0.8
   reassuranceThreshold?: number; // 0.0-1.0, default 0.6
 }
@@ -87,6 +82,7 @@ export interface ChatAgentConfig {
   ) => Promise<StepGuardVerdict> | StepGuardVerdict;
   hooks?: ExecutionHooks;
   eventEmitter?: AgentEventEmitter;
+  providerOptions?: Record<string, unknown>;
 }
 
 export interface ChatAgentInput {

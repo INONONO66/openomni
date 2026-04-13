@@ -21,11 +21,15 @@ describe("AgentProfile.Definition", () => {
       tools: ["read_file", "write_file"],
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       permissions: { allowlist: ["read_file"] },
-      maxTurns: 10,
+      variant: "high",
+      temperature: 0.7,
+      budget: { maxTurns: 10 },
     });
     expect(result.model?.provider).toBe("anthropic");
     expect(result.permissions?.allowlist).toEqual(["read_file"]);
-    expect(result.maxTurns).toBe(10);
+    expect(result.variant).toBe("high");
+    expect(result.temperature).toBe(0.7);
+    expect(result.budget?.maxTurns).toBe(10);
   });
 
   it("rejects missing required fields", () => {
@@ -34,39 +38,55 @@ describe("AgentProfile.Definition", () => {
 });
 
 describe("rejection (schema-enforced)", () => {
-  it("rejects maxTurns = 0", () =>
+  it("rejects temperature < 0", () =>
     expect(() =>
       AgentProfile.Definition.parse({
         name: "x",
         description: "x",
-        maxTurns: 0,
+        temperature: -0.1,
       }),
     ).toThrow());
-  it("rejects maxTurns = -1", () =>
+  it("rejects temperature > 2", () =>
     expect(() =>
       AgentProfile.Definition.parse({
         name: "x",
         description: "x",
-        maxTurns: -1,
-      }),
-    ).toThrow());
-  it("rejects maxTurns = 1.5", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
-        name: "x",
-        description: "x",
-        maxTurns: 1.5,
+        temperature: 2.1,
       }),
     ).toThrow());
 });
 
 describe("acceptance (documents current behavior)", () => {
-  it("accepts maxTurns = 1", () =>
+  it("accepts variant string", () =>
     expect(() =>
       AgentProfile.Definition.parse({
         name: "x",
         description: "x",
-        maxTurns: 1,
+        variant: "high",
+      }),
+    ).not.toThrow());
+  it("accepts temperature = 0", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        temperature: 0,
+      }),
+    ).not.toThrow());
+  it("accepts temperature = 2", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        temperature: 2,
+      }),
+    ).not.toThrow());
+  it("accepts budget with maxTurns", () =>
+    expect(() =>
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        budget: { maxTurns: 10 },
       }),
     ).not.toThrow());
   it("accepts empty name string", () =>

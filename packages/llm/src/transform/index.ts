@@ -67,7 +67,6 @@ export namespace ProviderTransform {
     const npm = model.api?.npm;
     const id = model.id.toLowerCase();
 
-    // For anthropic models
     if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       return {
         high: {
@@ -85,7 +84,6 @@ export namespace ProviderTransform {
       };
     }
 
-    // For OpenAI models
     if (npm === "@ai-sdk/openai") {
       return {
         low: {
@@ -104,6 +102,36 @@ export namespace ProviderTransform {
     }
 
     return {};
+  }
+
+  export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown>;
+  export function resolveVariant(
+    model: { provider: string; id: string },
+    variant?: string,
+  ): Record<string, unknown>;
+  export function resolveVariant(
+    model: Provider.Model | { provider: string; id: string },
+    variant?: string,
+  ): Record<string, unknown> {
+    if (!variant) return {};
+    if ("providerID" in model || "capabilities" in model) {
+      return variants(model as Provider.Model)[variant] ?? {};
+    }
+    const providerName = (model as { provider: string; id: string }).provider;
+    const npm =
+      providerName === "anthropic"
+        ? "@ai-sdk/anthropic"
+        : providerName === "openai"
+          ? "@ai-sdk/openai"
+          : undefined;
+    if (!npm) return {};
+    const syntheticModel = {
+      id: (model as { provider: string; id: string }).id,
+      api: { npm },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    } as unknown as Provider.Model;
+    return variants(syntheticModel)[variant] ?? {};
   }
 
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
@@ -155,7 +183,6 @@ export namespace ProviderTransform {
     return applyAnthropicCaching(result);
   }
 
-  /** Inject ephemeral cacheControl on system msgs and last 2 user/assistant msgs. */
   export function applyAnthropicCaching(msgs: SDKMessage[]): SDKMessage[] {
     if (msgs.length === 0) return msgs;
 

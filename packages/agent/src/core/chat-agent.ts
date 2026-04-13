@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEventEmitter,
@@ -43,9 +43,6 @@ function summarizeInput(input: Record<string, unknown>): string {
   }
 }
 
-/**
- * ChatAgent instance interface
- */
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
   stream(input: ChatAgentInput, sink?: Sink): AsyncIterable<AgentEvent>;
@@ -171,8 +168,8 @@ function createGuardedToolExecutor(
             });
             return toolExecutor(call);
           }
-        } catch (_error) {
-          void _error;
+        } catch {
+          // stepGuard threw; treat as denial
         }
       }
       eventEmitter?.emit("agent.tool.blocked", {
@@ -266,9 +263,6 @@ function createHookedToolExecutor(
  * ChatAgent namespace — stateless agent for single-turn or multi-turn conversations
  */
 export namespace ChatAgent {
-  /**
-   * Create a new ChatAgent instance
-   */
   export function create(config: ChatAgentConfig): ChatAgentInstance {
     return {
       async run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult> {
@@ -304,20 +298,7 @@ export namespace ChatAgent {
                       totalUsage.inputTokens += tokens.input;
                       totalUsage.outputTokens += tokens.output;
                       totalUsage.totalTokens += tokens.input + tokens.output;
-                      const cost = TokenTracker.calculateCost(
-                        {
-                          inputTokens: tokens.input,
-                          outputTokens: tokens.output,
-                        },
-                        config.model.id,
-                      );
-                      budgetState = recordTokenUsage(
-                        budgetState,
-                        tokens.input,
-                        tokens.output,
-                        cost.totalCost,
-                      );
-                      totalUsage.totalCost = (totalUsage.totalCost ?? 0) + cost.totalCost;
+                      budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
                     }
                     const text = message.parts
                       .filter((part): part is Message.TextPart => part.type === "text")
@@ -444,6 +425,7 @@ export namespace ChatAgent {
                     toolExecutor: hookedExecutor,
                     toolChoice: configuredToolChoice,
                     maxSteps: config.budget?.maxToolCalls ?? 24,
+                    providerOptions: config.providerOptions,
                   };
 
                   const outcome = await llmRun(runInput, trackingSink);
@@ -457,7 +439,6 @@ export namespace ChatAgent {
                         inputTokens: totalUsage.inputTokens,
                         outputTokens: totalUsage.outputTokens,
                         totalTokens: totalUsage.totalTokens,
-                        totalCost: totalUsage.totalCost,
                       },
                     });
 
@@ -473,9 +454,7 @@ export namespace ChatAgent {
 
                     if (config.hooks?.postTurn) {
                       if (config.stepGuard) {
-                        console.warn(
-                          "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
-                        );
+                        console.warn("[hooks] hooks.postTurn takes precedence over stepGuard");
                       }
 
                       const hookContext: HookContext = {

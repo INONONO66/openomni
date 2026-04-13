@@ -1,6 +1,7 @@
 import type { Tool } from "@openomni/protocol";
+import { ProviderTransform } from "@openomni/llm";
 import { ChatAgent } from "../../core/chat-agent";
-import { allocateBudget, checkDelegation, type DelegationContext } from "../../core/delegation";
+import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
 import { AgentMessenger } from "../messenger/messenger";
 import { BusTransport } from "../messenger/transport";
@@ -100,21 +101,14 @@ export namespace SubagentTool {
         };
       }
 
-      const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
-      const allocated = ctx?.parentBudgetState
-        ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
-        : definition.maxTurns
-          ? { maxTurns: definition.maxTurns }
-          : undefined;
-      const childBudget =
-        allocated && definition.maxTurns
-          ? {
-              ...allocated,
-              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.maxTurns),
-            }
-          : allocated;
-
+      const childAbort = ctx?.parentAbort;
+      const childBudget = definition.budget;
       const model = definition.model ?? fallbackModel;
+      const variantOptions = ProviderTransform.resolveVariant(model, definition.variant);
+      const providerOptions: Record<string, unknown> = {
+        ...variantOptions,
+        ...(definition.temperature !== undefined && { temperature: definition.temperature }),
+      };
 
       if (options?.subagentRuntime) {
         try {
@@ -156,18 +150,15 @@ export namespace SubagentTool {
           budget: childBudget,
           permissions: definition.permissions,
           signal: childAbort,
+          providerOptions: Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
         });
 
         const result = await childAgent.run({
           messages: [{ role: "user", content: prompt }],
         });
 
-        if (ctx?.onChildBudgetConsumed && result.usage) {
-          ctx.onChildBudgetConsumed(
-            result.usage.inputTokens,
-            result.usage.outputTokens,
-            result.usage.totalCost ?? 0,
-          );
+        if (ctx?.onChildTokensConsumed && result.usage) {
+          ctx.onChildTokensConsumed(result.usage.inputTokens, result.usage.outputTokens);
         }
 
         const messenger = AgentMessenger.create(new BusTransport(), {
