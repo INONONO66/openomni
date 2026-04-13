@@ -2,11 +2,28 @@ import { z } from "zod";
 import { Guardrail } from "../guardrail/index.js";
 
 export namespace AgentProfile {
+  const budgetLimit = z
+    .number()
+    .int()
+    .refine((n) => n === -1 || n > 0, {
+      message: "must be a positive integer or -1 (unlimited)",
+    });
+
   export const AgentBudget = z.object({
-    maxTurns: z.number().optional(),
-    maxToolCalls: z.number().optional(),
-    maxWallTimeMs: z.number().optional(),
-    maxToolRuntimeMs: z.number().optional(),
+    maxTurns: budgetLimit.optional(),
+    maxToolCalls: budgetLimit.optional(),
+    maxWallTimeMs: z
+      .number()
+      .refine((n) => n === -1 || n > 0, {
+        message: "must be a positive number or -1 (unlimited)",
+      })
+      .optional(),
+    maxToolRuntimeMs: z
+      .number()
+      .refine((n) => n === -1 || n > 0, {
+        message: "must be a positive number or -1 (unlimited)",
+      })
+      .optional(),
   });
   export type AgentBudget = z.infer<typeof AgentBudget>;
 
