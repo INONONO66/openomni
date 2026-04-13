@@ -1,4 +1,5 @@
 import type { Tool } from "@openomni/protocol";
+import { ProviderTransform } from "@openomni/llm";
 import { ChatAgent } from "../../core/chat-agent";
 import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
@@ -29,20 +30,6 @@ export interface SubagentToolOptions {
 export interface SubagentToolSpec {
   spec: Tool.Spec;
   execute: (args: unknown) => Promise<Tool.Result>;
-}
-
-function resolveVariantOptions(provider: string, variant?: string): Record<string, unknown> {
-  if (!variant) return {};
-  if (provider === "anthropic") {
-    if (variant === "high") return { thinking: { type: "enabled", budgetTokens: 16000 } };
-    if (variant === "max") return { thinking: { type: "enabled", budgetTokens: 31999 } };
-  }
-  if (provider === "openai") {
-    if (variant === "low") return { reasoningEffort: "low", reasoningSummary: "auto" };
-    if (variant === "medium") return { reasoningEffort: "medium", reasoningSummary: "auto" };
-    if (variant === "high") return { reasoningEffort: "high", reasoningSummary: "auto" };
-  }
-  return {};
 }
 
 export namespace SubagentTool {
@@ -117,7 +104,7 @@ export namespace SubagentTool {
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
       const childBudget = definition.budget;
       const model = definition.model ?? fallbackModel;
-      const variantOptions = resolveVariantOptions(model.provider, definition.variant);
+      const variantOptions = ProviderTransform.resolveVariant(model, definition.variant);
       const providerOptions: Record<string, unknown> = {
         ...variantOptions,
         ...(definition.temperature !== undefined && { temperature: definition.temperature }),

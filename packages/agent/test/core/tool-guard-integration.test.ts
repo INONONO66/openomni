@@ -23,6 +23,9 @@ mock.module("@openomni/llm", () => ({
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
   },
+  ProviderTransform: {
+    resolveVariant: () => ({}),
+  },
 }));
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
