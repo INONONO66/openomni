@@ -117,6 +117,7 @@ const workerEvents = Team.Events as typeof Team.Events & {
 
 export namespace TeamOrchestrator {
   export interface OrchestratorConfig {
+    orchestrationSessionId?: string;
     reviewModel: { provider: string; id: string };
     reviewSystemPrompt?: string;
     teammates: Map<string, Teammate.TeammateConfig>;
@@ -159,7 +160,7 @@ export namespace TeamOrchestrator {
       goal: plan.goal,
       stepCount: plan.steps.length,
     });
-    const state = createExecutionState(plan.steps);
+    const state = createExecutionState(plan.steps, config.orchestrationSessionId);
     const stepById = new Map(plan.steps.map((step) => [step.stepId, step]));
     const maxAttemptsPerStep = config.maxAttemptsPerStep ?? 3;
     const stallConfig = config.stallConfig ?? DEFAULT_STALL_CONFIG;
@@ -198,9 +199,9 @@ export namespace TeamOrchestrator {
     return final.failedSteps.length > 0 ? { ...final, status: "failed" } : final;
   }
 }
-function createExecutionState(steps: PlanStep[]): ExecutionState {
+function createExecutionState(steps: PlanStep[], orchestrationSessionId?: string): ExecutionState {
   return {
-    ledger: RunLedger.create(steps),
+    ledger: RunLedger.create(steps, { sessionId: orchestrationSessionId }),
     completed: new Set(),
     failed: new Set(),
     skipped: new Set(),

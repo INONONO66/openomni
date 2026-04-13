@@ -123,7 +123,12 @@ function createGuardedToolExecutor(
   stepGuard?: ChatAgentConfig["stepGuard"],
 ): (call: Tool.Call) => Promise<Tool.Result> {
   return async (call: Tool.Call): Promise<Tool.Result> => {
-    const verdict = ToolGuard.check(call.tool, call.input, permission);
+    let verdict: "allow" | "deny" | "require_approval";
+    try {
+      verdict = ToolGuard.check(call.tool, call.input, permission);
+    } catch {
+      verdict = "deny";
+    }
     if (verdict === "deny") {
       eventEmitter?.emit("agent.tool.blocked", {
         sessionId: "chat-agent",
