@@ -11,7 +11,13 @@ import type {
   HookVerdict,
   TokenUsage,
 } from "../types";
-import { createBudgetState, checkBudget, recordTurn, describeBudgetRemaining } from "../budget";
+import {
+  createBudgetState,
+  checkBudget,
+  recordTurn,
+  recordTokenUsage,
+  describeBudgetRemaining,
+} from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import { ToolGuard } from "../tool-guard";
 import {
@@ -310,12 +316,12 @@ export async function* streamAgent(
 
         if (preTurnVerdict.action === "inject") {
           messages = [...messages, createUserMessage(preTurnVerdict.message, "stream-engine")];
-          if (budgetStatus === "reassurance") {
+          if (preTurnVerdict.message.startsWith("[Budget Status]")) {
             yield {
               type: "budget_reassurance",
               remaining: describeBudgetRemaining(budgetState, config.budget),
             };
-          } else if (budgetStatus === "warning") {
+          } else if (preTurnVerdict.message.startsWith("[Budget Warning]")) {
             yield {
               type: "budget_warning",
               remaining: describeBudgetRemaining(budgetState, config.budget),
@@ -415,6 +421,7 @@ export async function* streamAgent(
               totalUsage.inputTokens += tokens.input;
               totalUsage.outputTokens += tokens.output;
               totalUsage.totalTokens += tokens.input + tokens.output;
+              budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
             }
             const text = message.parts
               .filter((part): part is Message.TextPart => part.type === "text")

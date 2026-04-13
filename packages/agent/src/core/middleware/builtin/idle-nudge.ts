@@ -11,6 +11,7 @@ export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): Middlew
 
   let lastProgressAt = Date.now();
   let nudgeCount = 0;
+  let lastTurnCount = -1;
 
   return {
     name: "builtin:idle-nudge",
@@ -21,6 +22,13 @@ export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): Middlew
         lastProgressAt = Date.now();
         return { action: "continue" };
       }
+
+      // detect new agent run: turnCount resets to 0
+      if (ctx.turnCount === 0 && lastTurnCount > 0) {
+        lastProgressAt = Date.now();
+        nudgeCount = 0;
+      }
+      lastTurnCount = ctx.turnCount;
 
       if (idleThresholdMs === -1) return { action: "continue" };
 
