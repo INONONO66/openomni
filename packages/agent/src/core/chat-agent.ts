@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, TokenTracker, type RunInput } from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEventEmitter,
@@ -304,13 +304,6 @@ export namespace ChatAgent {
                       totalUsage.inputTokens += tokens.input;
                       totalUsage.outputTokens += tokens.output;
                       totalUsage.totalTokens += tokens.input + tokens.output;
-                      const cost = TokenTracker.calculateCost(
-                        {
-                          inputTokens: tokens.input,
-                          outputTokens: tokens.output,
-                        },
-                        config.model.id,
-                      );
                       budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
                     }
                     const text = message.parts

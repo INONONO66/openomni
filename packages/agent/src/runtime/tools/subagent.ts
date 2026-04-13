@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
 import { ChatAgent } from "../../core/chat-agent";
-import { allocateBudget, checkDelegation, type DelegationContext } from "../../core/delegation";
+import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
 import { AgentMessenger } from "../messenger/messenger";
 import { BusTransport } from "../messenger/transport";
@@ -101,19 +101,7 @@ export namespace SubagentTool {
       }
 
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
-      const allocated = ctx?.parentBudgetState
-        ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
-        : definition.budget?.maxTurns
-          ? { maxTurns: definition.budget.maxTurns }
-          : undefined;
-      const childBudget =
-        allocated && definition.budget?.maxTurns
-          ? {
-              ...allocated,
-              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.budget.maxTurns),
-            }
-          : allocated;
-
+      const childBudget = definition.budget;
       const model = definition.model ?? fallbackModel;
 
       if (options?.subagentRuntime) {
@@ -162,8 +150,8 @@ export namespace SubagentTool {
           messages: [{ role: "user", content: prompt }],
         });
 
-        if (ctx?.onChildBudgetConsumed && result.usage) {
-          ctx.onChildBudgetConsumed(result.usage.inputTokens, result.usage.outputTokens);
+        if (ctx?.onChildTokensConsumed && result.usage) {
+          ctx.onChildTokensConsumed(result.usage.inputTokens, result.usage.outputTokens);
         }
 
         const messenger = AgentMessenger.create(new BusTransport(), {

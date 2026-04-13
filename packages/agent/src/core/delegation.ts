@@ -1,50 +1,10 @@
-import type { BudgetState } from "./budget";
-import type { AgentBudget } from "./types";
-import type { Guardrail } from "@openomni/protocol";
-
 export type DelegationContext = {
   depth: number;
   maxDepth: number;
   visitedAgents: Set<string>;
   parentAbort: AbortSignal;
-  budgetPolicy: Guardrail.DelegationPolicy["budgetPolicy"];
-  budgetAllocation?: number;
-  reserveForParent?: number;
-  parentBudgetState?: BudgetState;
-  parentBudget?: AgentBudget;
-  onChildBudgetConsumed?: (inputTokens: number, outputTokens: number) => void;
+  onChildTokensConsumed?: (inputTokens: number, outputTokens: number) => void;
 };
-
-export function allocateBudget(
-  parentState: BudgetState,
-  parentBudget: AgentBudget | undefined,
-  context: Pick<DelegationContext, "budgetPolicy" | "budgetAllocation" | "reserveForParent">,
-): AgentBudget {
-  const policy = context.budgetPolicy;
-
-  if (policy === "independent") {
-    return { maxTurns: 10, maxToolCalls: 20 };
-  }
-
-  const maxTurns = parentBudget?.maxTurns ?? 24;
-  const remainingTurns = maxTurns - parentState.turns;
-
-  if (policy === "inherit") {
-    return {
-      ...parentBudget,
-      maxTurns: Math.max(1, remainingTurns),
-    };
-  }
-
-  const allocation = context.budgetAllocation ?? 0.5;
-  const reserve = context.reserveForParent ?? 0.2;
-  const factor = (1 - reserve) * allocation;
-
-  return {
-    ...parentBudget,
-    maxTurns: Math.max(1, Math.floor(remainingTurns * factor)),
-  };
-}
 
 export function checkDelegation(
   agentName: string,
