@@ -10,6 +10,9 @@ import {
   type FetchInput,
 } from "./anthropic-transform";
 
+// Single Anthropic credential per process. Module-level singleton prevents
+// concurrent refresh races — all factory invocations share this promise.
+// Multi-profile support would require keying by refresh token.
 let refreshPromise: Promise<string> | null = null;
 
 export function createAnthropicOAuthFetch(options: {
