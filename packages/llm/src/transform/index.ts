@@ -128,6 +128,7 @@ export namespace ProviderTransform {
           : undefined;
     if (!npm) return {};
     const syntheticModel = {
+      id: (model as { provider: string; id: string }).id,
       api: { npm },
       capabilities: { reasoning: true },
     } as unknown as Provider.Model;
