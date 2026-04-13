@@ -7,7 +7,6 @@ export interface BudgetState {
   toolRuntimeMs: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-  totalCost: number;
 }
 
 export function createBudgetState(): BudgetState {
@@ -18,7 +17,6 @@ export function createBudgetState(): BudgetState {
     toolRuntimeMs: 0,
     totalInputTokens: 0,
     totalOutputTokens: 0,
-    totalCost: 0,
   };
 }
 
@@ -35,35 +33,18 @@ export function checkBudget(
 
   const elapsed = Date.now() - state.startTime;
 
-  if (elapsed >= maxWallTimeMs) return "exceeded";
-  if (state.turns >= maxTurns) return "exceeded";
-  if (state.toolCalls >= maxToolCalls) return "exceeded";
-  if (state.toolRuntimeMs >= maxToolRuntimeMs) return "exceeded";
+  if (maxWallTimeMs !== -1 && elapsed >= maxWallTimeMs) return "exceeded";
+  if (maxTurns !== -1 && state.turns >= maxTurns) return "exceeded";
+  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) return "exceeded";
+  if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) return "exceeded";
 
-  if (budget?.maxInputTokens !== undefined && state.totalInputTokens >= budget.maxInputTokens)
-    return "exceeded";
-  if (budget?.maxOutputTokens !== undefined && state.totalOutputTokens >= budget.maxOutputTokens)
-    return "exceeded";
-  if (
-    budget?.maxTotalTokens !== undefined &&
-    state.totalInputTokens + state.totalOutputTokens >= budget.maxTotalTokens
-  )
-    return "exceeded";
-  if (budget?.maxCost !== undefined && state.totalCost >= budget.maxCost) return "exceeded";
+  const ratios: number[] = [];
+  if (maxWallTimeMs !== -1) ratios.push(elapsed / maxWallTimeMs);
+  if (maxTurns !== -1) ratios.push(state.turns / maxTurns);
+  if (maxToolCalls !== -1) ratios.push(state.toolCalls / maxToolCalls);
+  if (maxToolRuntimeMs !== -1) ratios.push(state.toolRuntimeMs / maxToolRuntimeMs);
 
-  const ratios: number[] = [
-    elapsed / maxWallTimeMs,
-    state.turns / maxTurns,
-    state.toolCalls / maxToolCalls,
-    state.toolRuntimeMs / maxToolRuntimeMs,
-  ];
-  if (budget?.maxCost !== undefined) ratios.push(state.totalCost / budget.maxCost);
-  if (budget?.maxTotalTokens !== undefined)
-    ratios.push((state.totalInputTokens + state.totalOutputTokens) / budget.maxTotalTokens);
-  if (budget?.maxInputTokens !== undefined)
-    ratios.push(state.totalInputTokens / budget.maxInputTokens);
-  if (budget?.maxOutputTokens !== undefined)
-    ratios.push(state.totalOutputTokens / budget.maxOutputTokens);
+  if (ratios.length === 0) return "ok";
 
   const maxRatio = Math.max(...ratios);
 
@@ -75,11 +56,11 @@ export function checkBudget(
 export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {
   const parts: string[] = [];
   const maxTurns = budget?.maxTurns ?? 24;
-  const remainingTurns = maxTurns - state.turns;
-  parts.push(`${remainingTurns} turn${remainingTurns !== 1 ? "s" : ""} remaining`);
-  if (budget?.maxCost !== undefined) {
-    const remaining = (budget.maxCost - state.totalCost).toFixed(4);
-    parts.push(`$${remaining} budget remaining`);
+  if (maxTurns === -1) {
+    parts.push("unlimited turns remaining");
+  } else {
+    const remainingTurns = maxTurns - state.turns;
+    parts.push(`${remainingTurns} turn${remainingTurns !== 1 ? "s" : ""} remaining`);
   }
   return parts.join(", ");
 }
@@ -100,12 +81,10 @@ export function recordTokenUsage(
   state: BudgetState,
   inputTokens: number,
   outputTokens: number,
-  cost: number,
 ): BudgetState {
   return {
     ...state,
     totalInputTokens: state.totalInputTokens + inputTokens,
     totalOutputTokens: state.totalOutputTokens + outputTokens,
-    totalCost: state.totalCost + cost,
   };
 }

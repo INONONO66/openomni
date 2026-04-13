@@ -12,7 +12,7 @@ export type DelegationContext = {
   reserveForParent?: number;
   parentBudgetState?: BudgetState;
   parentBudget?: AgentBudget;
-  onChildBudgetConsumed?: (inputTokens: number, outputTokens: number, cost: number) => void;
+  onChildBudgetConsumed?: (inputTokens: number, outputTokens: number) => void;
 };
 
 export function allocateBudget(
@@ -33,10 +33,6 @@ export function allocateBudget(
     return {
       ...parentBudget,
       maxTurns: Math.max(1, remainingTurns),
-      maxCost:
-        parentBudget?.maxCost !== undefined
-          ? Math.max(0, parentBudget.maxCost - parentState.totalCost)
-          : undefined,
     };
   }
 
@@ -47,10 +43,6 @@ export function allocateBudget(
   return {
     ...parentBudget,
     maxTurns: Math.max(1, Math.floor(remainingTurns * factor)),
-    maxCost:
-      parentBudget?.maxCost !== undefined
-        ? Math.max(0, (parentBudget.maxCost - parentState.totalCost) * factor)
-        : undefined,
   };
 }
 

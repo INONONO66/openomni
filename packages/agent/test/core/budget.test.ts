@@ -22,9 +22,26 @@ describe("checkBudget 4-state", () => {
     expect(checkBudget(s, { maxTurns: 24 })).toBe("exceeded");
   });
 
-  it("highest ratio wins (cost at 85%, turns at 21%)", () => {
-    const s = { ...createBudgetState(), totalCost: 0.85 };
-    expect(checkBudget(s, { maxTurns: 24, maxCost: 1.0 })).toBe("warning");
+  it("maxTurns -1 allows unlimited turns", () => {
+    const s = { ...createBudgetState(), turns: 1000 };
+    expect(checkBudget(s, { maxTurns: -1 })).toBe("ok");
+  });
+
+  it("maxTurns -1 with maxToolCalls limit uses only toolCalls ratio", () => {
+    const s = { ...createBudgetState(), turns: 1000, toolCalls: 9 };
+    expect(checkBudget(s, { maxTurns: -1, maxToolCalls: 10 })).toBe("warning");
+  });
+
+  it("all limits -1 always returns ok", () => {
+    const s = { ...createBudgetState(), turns: 1000, toolCalls: 1000, toolRuntimeMs: 1000000 };
+    expect(
+      checkBudget(s, {
+        maxTurns: -1,
+        maxToolCalls: -1,
+        maxWallTimeMs: -1,
+        maxToolRuntimeMs: -1,
+      }),
+    ).toBe("ok");
   });
 
   it("backward compat: undefined budget uses defaults", () => {
@@ -46,10 +63,10 @@ describe("describeBudgetRemaining", () => {
     expect(desc).toContain("19 turns remaining");
   });
 
-  it("includes cost when maxCost provided", () => {
-    const s = { ...createBudgetState(), totalCost: 0.5 };
-    const desc = describeBudgetRemaining(s, { maxCost: 1.0 });
-    expect(desc).toContain("$0.5000 budget remaining");
+  it("displays unlimited when maxTurns is -1", () => {
+    const s = { ...createBudgetState(), turns: 5 };
+    const desc = describeBudgetRemaining(s, { maxTurns: -1 });
+    expect(desc).toContain("unlimited turns remaining");
   });
 
   it("singular turn when 1 remaining", () => {

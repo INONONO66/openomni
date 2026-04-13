@@ -103,14 +103,14 @@ export namespace SubagentTool {
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
       const allocated = ctx?.parentBudgetState
         ? allocateBudget(ctx.parentBudgetState, ctx.parentBudget, ctx)
-        : definition.maxTurns
-          ? { maxTurns: definition.maxTurns }
+        : definition.budget?.maxTurns
+          ? { maxTurns: definition.budget.maxTurns }
           : undefined;
       const childBudget =
-        allocated && definition.maxTurns
+        allocated && definition.budget?.maxTurns
           ? {
               ...allocated,
-              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.maxTurns),
+              maxTurns: Math.min(allocated.maxTurns ?? Infinity, definition.budget.maxTurns),
             }
           : allocated;
 
@@ -163,11 +163,7 @@ export namespace SubagentTool {
         });
 
         if (ctx?.onChildBudgetConsumed && result.usage) {
-          ctx.onChildBudgetConsumed(
-            result.usage.inputTokens,
-            result.usage.outputTokens,
-            result.usage.totalCost ?? 0,
-          );
+          ctx.onChildBudgetConsumed(result.usage.inputTokens, result.usage.outputTokens);
         }
 
         const messenger = AgentMessenger.create(new BusTransport(), {

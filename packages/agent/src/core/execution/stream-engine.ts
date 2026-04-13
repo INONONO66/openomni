@@ -400,7 +400,6 @@ export async function* streamAgent(
               inputTokens: totalUsage.inputTokens,
               outputTokens: totalUsage.outputTokens,
               totalTokens: totalUsage.totalTokens,
-              totalCost: totalUsage.totalCost,
             },
           });
 

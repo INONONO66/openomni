@@ -311,13 +311,7 @@ export namespace ChatAgent {
                         },
                         config.model.id,
                       );
-                      budgetState = recordTokenUsage(
-                        budgetState,
-                        tokens.input,
-                        tokens.output,
-                        cost.totalCost,
-                      );
-                      totalUsage.totalCost = (totalUsage.totalCost ?? 0) + cost.totalCost;
+                      budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
                     }
                     const text = message.parts
                       .filter((part): part is Message.TextPart => part.type === "text")
@@ -458,7 +452,6 @@ export namespace ChatAgent {
                         inputTokens: totalUsage.inputTokens,
                         outputTokens: totalUsage.outputTokens,
                         totalTokens: totalUsage.totalTokens,
-                        totalCost: totalUsage.totalCost,
                       },
                     });
 
