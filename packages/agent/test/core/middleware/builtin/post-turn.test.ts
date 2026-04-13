@@ -24,7 +24,9 @@ describe("createPostTurnMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("inject");
-    expect((verdict as any).message).toBe("injected message");
+    if (verdict.action === "inject") {
+      expect(verdict.message).toBe("injected message");
+    }
   });
 
   it("handler returning abort → middleware returns abort verdict", async () => {
@@ -35,7 +37,9 @@ describe("createPostTurnMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("abort");
-    expect((verdict as any).reason).toBe("custom abort reason");
+    if (verdict.action === "abort") {
+      expect(verdict.reason).toBe("custom abort reason");
+    }
   });
 
   it("handler returning continue → middleware returns continue verdict", async () => {
@@ -91,10 +95,10 @@ describe("createPostTurnMiddleware", () => {
 
     await middleware.fn(ctx);
 
-    expect(receivedCtx!.turnCount).toBe(5);
-    expect(receivedCtx!.isCompletion).toBe(true);
-    expect(receivedCtx!.continuationCount).toBe(2);
-    expect(receivedCtx!.elapsedMs).toBe(1000);
+    expect(receivedCtx?.turnCount).toBe(5);
+    expect(receivedCtx?.isCompletion).toBe(true);
+    expect(receivedCtx?.continuationCount).toBe(2);
+    expect(receivedCtx?.elapsedMs).toBe(1000);
   });
 
   it("handler can be async", async () => {
