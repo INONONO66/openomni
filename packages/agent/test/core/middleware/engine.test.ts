@@ -205,4 +205,57 @@ describe("MiddlewareEngine", () => {
     expect(result.prependContext).toBe("prepend-b");
     expect(result.appendContext).toBe("append-a\n\nappend-b\n\nappend-c");
   });
+
+  it("dispatchSystemPrompt propagates fail-closed errors", async () => {
+    const engine = MiddlewareEngine.create();
+    const testError = new Error("system-prompt-error");
+    engine.register({
+      name: "boom",
+      timing: "on_system_prompt",
+      priority: 100,
+      failPolicy: "fail-closed",
+      fn: () => {
+        throw testError;
+      },
+    });
+    engine.register({
+      name: "after",
+      timing: "on_system_prompt",
+      priority: 200,
+      fn: () => ({ action: "inject", message: "should-not-run" }),
+    });
+
+    await expect(engine.dispatchSystemPrompt(baseCtx())).rejects.toThrow("system-prompt-error");
+  });
+
+  it("dispatchSystemPrompt isolates fail-open errors and continues", async () => {
+    const globalObj = globalThis as unknown as {
+      console: { warn: (...args: unknown[]) => void };
+    };
+    const originalWarn = globalObj.console.warn;
+    globalObj.console.warn = mock(() => undefined);
+    try {
+      const engine = MiddlewareEngine.create();
+      engine.register({
+        name: "boom",
+        timing: "on_system_prompt",
+        priority: 100,
+        failPolicy: "fail-open",
+        fn: () => {
+          throw new Error("fail-open-error");
+        },
+      });
+      engine.register({
+        name: "after",
+        timing: "on_system_prompt",
+        priority: 200,
+        fn: () => ({ action: "inject", message: "append-after" }),
+      });
+
+      const result = await engine.dispatchSystemPrompt(baseCtx());
+      expect(result.appendContext).toBe("append-after");
+    } finally {
+      globalObj.console.warn = originalWarn;
+    }
+  });
 });

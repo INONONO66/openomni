@@ -82,7 +82,7 @@ function create(): MiddlewareEngineInstance {
       } catch (err) {
         const failPolicy = reg.failPolicy ?? "fail-open";
         if (failPolicy === "fail-closed") {
-          return {};
+          throw err;
         }
         console.warn(
           `[middleware:${reg.name}] threw error (fail-open, continuing): ${(err as Error).message}`,
