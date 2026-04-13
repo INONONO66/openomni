@@ -31,6 +31,20 @@ export interface SubagentToolSpec {
   execute: (args: unknown) => Promise<Tool.Result>;
 }
 
+function resolveVariantOptions(provider: string, variant?: string): Record<string, unknown> {
+  if (!variant) return {};
+  if (provider === "anthropic") {
+    if (variant === "high") return { thinking: { type: "enabled", budgetTokens: 16000 } };
+    if (variant === "max") return { thinking: { type: "enabled", budgetTokens: 31999 } };
+  }
+  if (provider === "openai") {
+    if (variant === "low") return { reasoningEffort: "low", reasoningSummary: "auto" };
+    if (variant === "medium") return { reasoningEffort: "medium", reasoningSummary: "auto" };
+    if (variant === "high") return { reasoningEffort: "high", reasoningSummary: "auto" };
+  }
+  return {};
+}
+
 export namespace SubagentTool {
   const fallbackModel = {
     provider: "anthropic",
@@ -103,6 +117,11 @@ export namespace SubagentTool {
       const childAbort = ctx?.parentAbort ? AbortSignal.any([ctx.parentAbort]) : undefined;
       const childBudget = definition.budget;
       const model = definition.model ?? fallbackModel;
+      const variantOptions = resolveVariantOptions(model.provider, definition.variant);
+      const providerOptions: Record<string, unknown> = {
+        ...variantOptions,
+        ...(definition.temperature !== undefined && { temperature: definition.temperature }),
+      };
 
       if (options?.subagentRuntime) {
         try {
@@ -144,6 +163,7 @@ export namespace SubagentTool {
           budget: childBudget,
           permissions: definition.permissions,
           signal: childAbort,
+          providerOptions: Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
         });
 
         const result = await childAgent.run({

@@ -106,9 +106,32 @@ export namespace ProviderTransform {
     return {};
   }
 
-  export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown> {
+  export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown>;
+  export function resolveVariant(
+    model: { provider: string; id: string },
+    variant?: string,
+  ): Record<string, unknown>;
+  export function resolveVariant(
+    model: Provider.Model | { provider: string; id: string },
+    variant?: string,
+  ): Record<string, unknown> {
     if (!variant) return {};
-    return variants(model)[variant] ?? {};
+    if ("providerID" in model || "capabilities" in model) {
+      return variants(model as Provider.Model)[variant] ?? {};
+    }
+    const providerName = (model as { provider: string; id: string }).provider;
+    const npm =
+      providerName === "anthropic"
+        ? "@ai-sdk/anthropic"
+        : providerName === "openai"
+          ? "@ai-sdk/openai"
+          : undefined;
+    if (!npm) return {};
+    const syntheticModel = {
+      api: { npm },
+      capabilities: { reasoning: true },
+    } as unknown as Provider.Model;
+    return variants(syntheticModel)[variant] ?? {};
   }
 
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {

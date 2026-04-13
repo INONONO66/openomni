@@ -54,14 +54,13 @@ describe("SubagentTool", () => {
     resetState();
     AgentRegistry.define(makeDefinition("agent-a"));
     const visited = new Set(["agent-a"]);
-    const parentAbort = {} as any;
+    const parentAbort = {} as AbortSignal;
     const { execute } = SubagentTool.create({
       delegationContext: {
         depth: 1,
         maxDepth: 3,
         visitedAgents: visited,
         parentAbort,
-        budgetPolicy: "inherit",
       },
     });
 
@@ -73,20 +72,65 @@ describe("SubagentTool", () => {
   it("denies when depth limit exceeded", async () => {
     resetState();
     AgentRegistry.define(makeDefinition("agent-b"));
-    const parentAbort = {} as any;
+    const parentAbort = {} as AbortSignal;
     const { execute } = SubagentTool.create({
       delegationContext: {
         depth: 3,
         maxDepth: 3,
         visitedAgents: new Set(),
         parentAbort,
-        budgetPolicy: "inherit",
       },
     });
 
     const result = await execute({ agentName: "agent-b", prompt: "hi" });
     expect(result.isError).toBe(true);
     expect(result.output).toContain("depth");
+  });
+
+  it("passes definition budget directly to child agent", async () => {
+    resetState();
+    mockChatAgentCreate = mock(() => ({
+      run: mock(async () => ({ text: "ok", usage: undefined })),
+    }));
+    AgentRegistry.define(makeDefinition("budget-agent", { budget: { maxTurns: 10 } }));
+    const { execute } = SubagentTool.create();
+    await execute({ agentName: "budget-agent", prompt: "hi" });
+    expect(mockChatAgentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ budget: { maxTurns: 10 } }),
+    );
+  });
+
+  it("passes temperature as providerOptions to child agent", async () => {
+    resetState();
+    mockChatAgentCreate = mock(() => ({
+      run: mock(async () => ({ text: "ok", usage: undefined })),
+    }));
+    AgentRegistry.define(
+      makeDefinition("temp-agent", {
+        temperature: 0.5,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      }),
+    );
+    const { execute } = SubagentTool.create();
+    await execute({ agentName: "temp-agent", prompt: "hi" });
+    expect(mockChatAgentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: expect.objectContaining({ temperature: 0.5 }),
+      }),
+    );
+  });
+
+  it("passes no providerOptions when no variant or temperature", async () => {
+    resetState();
+    mockChatAgentCreate = mock(() => ({
+      run: mock(async () => ({ text: "ok", usage: undefined })),
+    }));
+    AgentRegistry.define(makeDefinition("plain-agent"));
+    const { execute } = SubagentTool.create();
+    await execute({ agentName: "plain-agent", prompt: "hi" });
+    expect(mockChatAgentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ providerOptions: undefined }),
+    );
   });
 
   it("spec has correct name and inputSchema", () => {
