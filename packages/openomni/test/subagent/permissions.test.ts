@@ -45,7 +45,7 @@ describe("SubagentRuntime permissions", () => {
     expect(verdict).toBe("require_approval");
   });
 
-  test("fail-closed: ToolGuard.check error returns deny", () => {
+  test("invalid regex in inputRule does not match, falls through to default allow", () => {
     const permissions: Guardrail.ToolPermission = {
       inputRules: [
         {
@@ -57,12 +57,25 @@ describe("SubagentRuntime permissions", () => {
       ],
     };
 
-    try {
-      const verdict = ToolGuard.check("test_tool", { input_field: "value" }, permissions);
-      expect(verdict).toBe("deny");
-    } catch {
-      expect(true).toBe(true);
-    }
+    const verdict = ToolGuard.check("test_tool", { input_field: "value" }, permissions);
+    expect(verdict).toBe("allow");
+  });
+
+  test("invalid regex with denylist fallback still denies", () => {
+    const permissions: Guardrail.ToolPermission = {
+      denylist: ["test_tool"],
+      inputRules: [
+        {
+          toolPattern: "test_tool",
+          field: "input_field",
+          pattern: "[invalid regex",
+          action: "allow",
+        },
+      ],
+    };
+
+    const verdict = ToolGuard.check("test_tool", { input_field: "value" }, permissions);
+    expect(verdict).toBe("deny");
   });
 
   test("wildcard allowlist permits all tools", () => {

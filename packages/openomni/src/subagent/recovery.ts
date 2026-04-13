@@ -41,6 +41,11 @@ export async function recoverSubagentSessions(
     if (getWorkerStatus(childSession.workerMeta) === "running") {
       await SubagentRuntime.cancel({ sessionId: childSession.id });
     }
+
+    const status = getWorkerStatus(childSession.workerMeta);
+    if (status === "running" || status === "starting") {
+      Session.updateWorkerMeta(childSession.id, { ...childSession.workerMeta, status: "idle" });
+    }
   }
 
   return ledger;

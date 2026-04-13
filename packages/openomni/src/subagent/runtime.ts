@@ -1028,6 +1028,8 @@ export namespace SubagentRuntime {
         const finalRun = await WorkerRun.get(config.sessionId, config.runId);
         if (finalRun) {
           resolve(getWaitResult(finalRun));
+        } else {
+          reject(new Error(`Worker run ${config.runId} disappeared during wait`));
         }
       };
 
@@ -1036,6 +1038,8 @@ export namespace SubagentRuntime {
         const finalRun = await WorkerRun.get(config.sessionId, config.runId);
         if (finalRun) {
           resolve(getWaitResult(finalRun));
+        } else {
+          reject(new Error(`Worker run ${config.runId} disappeared during wait`));
         }
       };
 
