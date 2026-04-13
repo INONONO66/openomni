@@ -10,11 +10,29 @@ import { StallDetector } from "./stall-detector";
 import { resolveTeamAgent } from "./team-agents";
 import { resolveCategory } from "../category/category-resolver";
 import { Teammate } from "./teammate";
+
 const DEFAULT_STALL_CONFIG: StallDetector.StallConfig = {
   maxConsecutiveRejections: 3,
   maxNoProgressTurns: 5,
 };
-type RetryMeta = { handoffDocument?: string };
+
+const DEFAULT_MAX_SESSION_REJECTIONS = 3;
+const DEFAULT_MAX_TOTAL_ATTEMPTS = 6;
+
+interface WorkerSessionState {
+  sessionId: string;
+  sessionRejections: number;
+  sessionGeneration: number;
+  totalAttempts: number;
+}
+
+type RetryMeta = {
+  handoffDocument?: string;
+  rotateSession?: boolean;
+  previousSessionId?: string;
+  sessionGeneration?: number;
+};
+
 interface ExecutionState {
   ledger: ReturnType<typeof RunLedger.create>;
   completed: Set<string>;
@@ -22,6 +40,7 @@ interface ExecutionState {
   skipped: Set<string>;
   results: Map<string, string>;
   pendingRetry: Map<string, RetryMeta>;
+  workerSessions: Map<string, WorkerSessionState>;
 }
 type TeamEventPayload<TEvent> = TEvent extends { payload: infer TPayload } ? TPayload : never;
 function safePublish<T>(...args: Parameters<typeof Bus.publish<T>>): void {
@@ -41,14 +60,73 @@ function publishTeamEvent<TEvent extends { traceId: string; time: number; payloa
     payload,
   } as TEvent);
 }
+
+const workerEvents = Team.Events as typeof Team.Events & {
+  StepAssignedToWorker: BusEvent.Descriptor<{
+    traceId: string;
+    time: number;
+    payload: {
+      stepId: string;
+      workerSessionId: string;
+      workerRunId: string;
+      agentName: string;
+    };
+  }>;
+  StepRejected: BusEvent.Descriptor<{
+    traceId: string;
+    time: number;
+    payload: {
+      stepId: string;
+      workerSessionId: string;
+      workerRunId: string;
+      sessionRejections: number;
+      totalAttempts: number;
+      feedback?: string;
+    };
+  }>;
+  StepHandoffRequested: BusEvent.Descriptor<{
+    traceId: string;
+    time: number;
+    payload: {
+      stepId: string;
+      workerSessionId: string;
+      sessionGeneration: number;
+    };
+  }>;
+  StepHandoffCompleted: BusEvent.Descriptor<{
+    traceId: string;
+    time: number;
+    payload: {
+      stepId: string;
+      newWorkerSessionId: string;
+      sessionGeneration: number;
+      handoffDocument?: string;
+    };
+  }>;
+  StepSessionRotated: BusEvent.Descriptor<{
+    traceId: string;
+    time: number;
+    payload: {
+      stepId: string;
+      oldSessionId: string;
+      newSessionId: string;
+      sessionGeneration: number;
+    };
+  }>;
+};
+
 export namespace TeamOrchestrator {
   export interface OrchestratorConfig {
+    orchestrationSessionId?: string;
     reviewModel: { provider: string; id: string };
     reviewSystemPrompt?: string;
     teammates: Map<string, Teammate.TeammateConfig>;
     defaultTeammateConfig: Teammate.TeammateConfig;
+    subagentRuntime?: Teammate.SubagentRuntime;
     stallConfig?: StallDetector.StallConfig;
     maxAttemptsPerStep?: number;
+    maxSessionRejections?: number;
+    maxTotalAttempts?: number;
     approvalGate?: ApprovalGate.Gate;
   }
 
@@ -82,7 +160,7 @@ export namespace TeamOrchestrator {
       goal: plan.goal,
       stepCount: plan.steps.length,
     });
-    const state = createExecutionState(plan.steps);
+    const state = createExecutionState(plan.steps, config.orchestrationSessionId);
     const stepById = new Map(plan.steps.map((step) => [step.stepId, step]));
     const maxAttemptsPerStep = config.maxAttemptsPerStep ?? 3;
     const stallConfig = config.stallConfig ?? DEFAULT_STALL_CONFIG;
@@ -121,14 +199,15 @@ export namespace TeamOrchestrator {
     return final.failedSteps.length > 0 ? { ...final, status: "failed" } : final;
   }
 }
-function createExecutionState(steps: PlanStep[]): ExecutionState {
+function createExecutionState(steps: PlanStep[], orchestrationSessionId?: string): ExecutionState {
   return {
-    ledger: RunLedger.create(steps),
+    ledger: RunLedger.create(steps, { sessionId: orchestrationSessionId }),
     completed: new Set(),
     failed: new Set(),
     skipped: new Set(),
     results: new Map(),
     pendingRetry: new Map(),
+    workerSessions: new Map(),
   };
 }
 function getReadySteps(dag: ReturnType<typeof DAG.build>, state: ExecutionState): string[] {
@@ -158,6 +237,20 @@ async function processReadyStep(
   state.ledger.recordAttempt(stepId);
   const attemptNumber = state.ledger.getStepState(stepId)?.attempts ?? 1;
   const teammateConfig = resolveTeammate(step, config);
+  const workerEnabled = config.subagentRuntime !== undefined;
+  const executionConfig = workerEnabled
+    ? { ...teammateConfig, subagentRuntime: config.subagentRuntime }
+    : teammateConfig;
+  const workerSession = state.workerSessions.get(stepId);
+  const shouldReuseWorkerSession =
+    workerEnabled && workerSession && !retryMeta?.rotateSession
+      ? workerSession.sessionId
+      : undefined;
+  const workerGeneration = retryMeta?.rotateSession
+    ? (retryMeta.sessionGeneration ?? (workerSession?.sessionGeneration ?? 0) + 1)
+    : (workerSession?.sessionGeneration ?? 0);
+  const totalAttempts = workerEnabled ? (workerSession?.totalAttempts ?? 0) + 1 : attemptNumber;
+
   publishTeamEvent(Team.Events.StepAssigned, {
     planId: plan.planId,
     stepId,
@@ -175,9 +268,38 @@ async function processReadyStep(
         step,
         context: buildContext(step, state.results),
         handoffDocument: retryMeta?.handoffDocument,
+        workerSessionId: shouldReuseWorkerSession,
       },
-      teammateConfig,
+      executionConfig,
     );
+    if (workerEnabled && execution.workerSessionId) {
+      state.workerSessions.set(stepId, {
+        sessionId: execution.workerSessionId,
+        sessionRejections: retryMeta?.rotateSession ? 0 : (workerSession?.sessionRejections ?? 0),
+        sessionGeneration: workerGeneration,
+        totalAttempts,
+      });
+      publishTeamEvent(workerEvents.StepAssignedToWorker, {
+        stepId,
+        workerSessionId: execution.workerSessionId,
+        workerRunId: execution.workerRunId ?? "",
+        agentName: execution.agentId,
+      });
+      if (retryMeta?.rotateSession && retryMeta.previousSessionId) {
+        publishTeamEvent(workerEvents.StepHandoffCompleted, {
+          stepId,
+          newWorkerSessionId: execution.workerSessionId,
+          sessionGeneration: workerGeneration,
+          handoffDocument: retryMeta.handoffDocument,
+        });
+        publishTeamEvent(workerEvents.StepSessionRotated, {
+          stepId,
+          oldSessionId: retryMeta.previousSessionId,
+          newSessionId: execution.workerSessionId,
+          sessionGeneration: workerGeneration,
+        });
+      }
+    }
     const review = await ReviewLoop.review(
       { step, result: execution.output, agentId: execution.agentId, attemptNumber },
       { model: config.reviewModel, systemPrompt: config.reviewSystemPrompt },
@@ -203,6 +325,7 @@ async function processReadyStep(
       state,
       config,
       maxAttemptsPerStep,
+      workerEnabled,
     );
   } catch (error) {
     failRunningStep(plan.planId, stepId, dag, state, describeStepFailure(error));
@@ -242,6 +365,8 @@ function completeStep(
   dag: ReturnType<typeof DAG.build>,
   state: ExecutionState,
 ): void {
+  state.pendingRetry.delete(stepId);
+  state.workerSessions.delete(stepId);
   state.ledger.transition(stepId, "succeeded");
   state.ledger.resetRejectionStreak(stepId);
   state.completed.add(stepId);
@@ -253,7 +378,12 @@ function completeStep(
 async function handleRejectedReview(
   plan: Plan,
   step: PlanStep,
-  execution: { output: string; agentId: string },
+  execution: {
+    output: string;
+    agentId: string;
+    workerSessionId?: string;
+    workerRunId?: string;
+  },
   feedback: string | undefined,
   attemptNumber: number,
   retryMeta: RetryMeta | undefined,
@@ -261,38 +391,145 @@ async function handleRejectedReview(
   state: ExecutionState,
   config: TeamOrchestrator.OrchestratorConfig,
   maxAttemptsPerStep: number,
+  workerEnabled: boolean,
 ): Promise<boolean> {
   state.ledger.recordRejection(step.stepId);
-  const attempts = state.ledger.getStepState(step.stepId)?.attempts ?? attemptNumber;
-  if (attempts >= maxAttemptsPerStep) {
+  if (!workerEnabled || !execution.workerSessionId) {
+    const attempts = state.ledger.getStepState(step.stepId)?.attempts ?? attemptNumber;
+    if (attempts >= maxAttemptsPerStep) {
+      failRunningStep(
+        plan.planId,
+        step.stepId,
+        dag,
+        state,
+        `Max attempts (${maxAttemptsPerStep}) reached`,
+      );
+      state.ledger.resetRejectionStreak(step.stepId);
+      return true;
+    }
+
+    let handoffDocument = feedback ?? retryMeta?.handoffDocument;
+    if (feedback && ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep)) {
+      handoffDocument = await ReviewLoop.generateHandoff(
+        { step, result: execution.output, agentId: execution.agentId, attemptNumber: attempts },
+        feedback,
+        { model: config.reviewModel, systemPrompt: config.reviewSystemPrompt },
+      );
+      publishTeamEvent(Team.Events.StepHandoff, {
+        planId: plan.planId,
+        stepId: step.stepId,
+        from: execution.agentId,
+        to: execution.agentId,
+        handoffDocument,
+      });
+    }
+    state.pendingRetry.set(step.stepId, { handoffDocument });
+    return false;
+  }
+
+  const workerSession = state.workerSessions.get(step.stepId) ?? {
+    sessionId: execution.workerSessionId,
+    sessionRejections: 0,
+    sessionGeneration: 0,
+    totalAttempts: attemptNumber,
+  };
+  const maxSessionRejections = config.maxSessionRejections ?? DEFAULT_MAX_SESSION_REJECTIONS;
+  const maxTotalAttempts = config.maxTotalAttempts ?? DEFAULT_MAX_TOTAL_ATTEMPTS;
+  const nextWorkerSession: WorkerSessionState = {
+    ...workerSession,
+    sessionRejections: workerSession.sessionRejections + 1,
+    totalAttempts: workerSession.totalAttempts,
+  };
+  state.workerSessions.set(step.stepId, nextWorkerSession);
+  publishTeamEvent(workerEvents.StepRejected, {
+    stepId: step.stepId,
+    workerSessionId: execution.workerSessionId,
+    workerRunId: execution.workerRunId ?? "",
+    sessionRejections: nextWorkerSession.sessionRejections,
+    totalAttempts: nextWorkerSession.totalAttempts,
+    feedback,
+  });
+
+  if (nextWorkerSession.totalAttempts >= maxTotalAttempts) {
     failRunningStep(
       plan.planId,
       step.stepId,
       dag,
       state,
-      `Max attempts (${maxAttemptsPerStep}) reached`,
+      `Max total attempts (${maxTotalAttempts}) reached`,
     );
     state.ledger.resetRejectionStreak(step.stepId);
     return true;
   }
+
+  const shouldRotateSession = nextWorkerSession.sessionRejections >= maxSessionRejections;
+  const shouldGenerateHandoff =
+    Boolean(feedback) &&
+    (shouldRotateSession ||
+      ReviewLoop.shouldHandoff(nextWorkerSession.sessionRejections, maxSessionRejections));
+
   let handoffDocument = feedback ?? retryMeta?.handoffDocument;
-  if (feedback && ReviewLoop.shouldHandoff(attempts, maxAttemptsPerStep)) {
-    handoffDocument = await ReviewLoop.generateHandoff(
-      { step, result: execution.output, agentId: execution.agentId, attemptNumber: attempts },
+  if (feedback && shouldGenerateHandoff) {
+    handoffDocument = await generateHandoffDocument(
+      step,
+      execution,
+      feedback,
+      nextWorkerSession.totalAttempts,
+      config,
+    );
+  }
+
+  if (!shouldRotateSession) {
+    state.pendingRetry.set(step.stepId, { handoffDocument });
+    return false;
+  }
+
+  publishTeamEvent(workerEvents.StepHandoffRequested, {
+    stepId: step.stepId,
+    workerSessionId: execution.workerSessionId,
+    sessionGeneration: nextWorkerSession.sessionGeneration,
+  });
+  state.pendingRetry.set(step.stepId, {
+    handoffDocument,
+    rotateSession: true,
+    previousSessionId: execution.workerSessionId,
+    sessionGeneration: nextWorkerSession.sessionGeneration + 1,
+  });
+  return false;
+}
+
+async function generateHandoffDocument(
+  step: PlanStep,
+  execution: { output: string; agentId: string },
+  feedback: string,
+  attemptNumber: number,
+  config: TeamOrchestrator.OrchestratorConfig,
+): Promise<string> {
+  try {
+    const handoffDocument = await ReviewLoop.generateHandoff(
+      { step, result: execution.output, agentId: execution.agentId, attemptNumber },
       feedback,
       { model: config.reviewModel, systemPrompt: config.reviewSystemPrompt },
     );
-    publishTeamEvent(Team.Events.StepHandoff, {
-      planId: plan.planId,
-      stepId: step.stepId,
-      from: execution.agentId,
-      to: execution.agentId,
-      handoffDocument,
-    });
+    if (handoffDocument.trim().length > 0) {
+      return handoffDocument;
+    }
+  } catch {
+    // handoff still needs to proceed even if the reviewer cannot synthesize one
   }
-  state.pendingRetry.set(step.stepId, { handoffDocument });
-  return false;
+
+  return [
+    `Step: ${step.description}`,
+    `Expected Output: ${step.expectedOutput}`,
+    `Last Agent: ${execution.agentId}`,
+    `Attempt: ${attemptNumber}`,
+    "Rejection Feedback:",
+    feedback,
+    "Last Result:",
+    execution.output,
+  ].join("\n\n");
 }
+
 function failRunningStep(
   planId: string,
   stepId: string,
@@ -300,6 +537,8 @@ function failRunningStep(
   state: ExecutionState,
   error: string,
 ): void {
+  state.pendingRetry.delete(stepId);
+  state.workerSessions.delete(stepId);
   state.ledger.transition(stepId, "failed");
   state.failed.add(stepId);
   publishTeamEvent(Team.Events.StepFailed, { planId, stepId, error });
@@ -387,6 +626,7 @@ function skipDependents(
     state.ledger.transition(stepId, "skipped");
     state.skipped.add(stepId);
     state.pendingRetry.delete(stepId);
+    state.workerSessions.delete(stepId);
     const descendants = dag.reverseEdges.get(stepId);
     if (descendants) {
       queue.push(...descendants);
