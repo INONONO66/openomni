@@ -338,6 +338,7 @@ export async function* streamAgent(
           toolExecutor: hookedExecutor,
           toolChoice: configuredToolChoice,
           maxSteps: config.budget?.maxToolCalls ?? 24,
+          providerOptions: config.providerOptions,
         };
 
         const turnUsage: TokenUsage = {

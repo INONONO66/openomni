@@ -444,6 +444,7 @@ export namespace ChatAgent {
                     toolExecutor: hookedExecutor,
                     toolChoice: configuredToolChoice,
                     maxSteps: config.budget?.maxToolCalls ?? 24,
+                    providerOptions: config.providerOptions,
                   };
 
                   const outcome = await llmRun(runInput, trackingSink);
