@@ -379,3 +379,71 @@ describe("ProviderTransform.topP", () => {
     expect(ProviderTransform.topP(model)).toBeUndefined();
   });
 });
+
+describe("ProviderTransform.resolveVariant", () => {
+  test("resolveVariant with anthropic reasoning model and high variant", () => {
+    const model: Provider.Model = {
+      id: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4",
+      api: { npm: "@ai-sdk/anthropic" },
+      capabilities: { reasoning: true },
+      limit: { context: 200000, output: 32000 },
+    };
+    const result = ProviderTransform.resolveVariant(model, "high");
+    expect(result).toBeDefined();
+    expect(result.thinking).toBeDefined();
+    expect(result.thinking.type).toBe("enabled");
+  });
+
+  test("resolveVariant with openai reasoning model and low variant", () => {
+    const model: Provider.Model = {
+      id: "o4-mini",
+      providerID: "openai",
+      name: "o4-mini",
+      api: { npm: "@ai-sdk/openai" },
+      capabilities: { reasoning: true },
+    };
+    const result = ProviderTransform.resolveVariant(model, "low");
+    expect(result).toBeDefined();
+    expect(result.reasoningEffort).toBe("low");
+    expect(result.reasoningSummary).toBe("auto");
+  });
+
+  test("resolveVariant with non-reasoning model returns empty object", () => {
+    const model: Provider.Model = {
+      id: "gpt-4o",
+      providerID: "openai",
+      name: "GPT-4o",
+      api: { npm: "@ai-sdk/openai" },
+      capabilities: { reasoning: false },
+    };
+    const result = ProviderTransform.resolveVariant(model, "high");
+    expect(result).toEqual({});
+  });
+
+  test("resolveVariant with undefined variant returns empty object", () => {
+    const model: Provider.Model = {
+      id: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4",
+      api: { npm: "@ai-sdk/anthropic" },
+      capabilities: { reasoning: true },
+      limit: { context: 200000, output: 32000 },
+    };
+    const result = ProviderTransform.resolveVariant(model, undefined);
+    expect(result).toEqual({});
+  });
+
+  test("resolveVariant with unknown variant returns empty object", () => {
+    const model: Provider.Model = {
+      id: "o4-mini",
+      providerID: "openai",
+      name: "o4-mini",
+      api: { npm: "@ai-sdk/openai" },
+      capabilities: { reasoning: true },
+    };
+    const result = ProviderTransform.resolveVariant(model, "unknownVariant");
+    expect(result).toEqual({});
+  });
+});

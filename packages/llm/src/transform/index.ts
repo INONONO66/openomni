@@ -106,6 +106,11 @@ export namespace ProviderTransform {
     return {};
   }
 
+  export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown> {
+    if (!variant) return {};
+    return variants(model)[variant] ?? {};
+  }
+
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
     let result = msgs
       .map((msg) => {
