@@ -178,10 +178,27 @@ export async function* streamAgent(
             })
           : undefined;
 
+        let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
+        const spVerdict = await engine.dispatchSystemPrompt({
+          steps,
+          usage: totalUsage,
+          turnCount: budgetState.turns,
+          isCompletion: false,
+          continuationCount,
+          elapsedMs: Date.now() - startTime,
+          messages,
+          budgetState,
+          budget: config.budget,
+          eventEmitter: config.eventEmitter,
+        });
+        if (spVerdict.systemPrompt) system = spVerdict.systemPrompt;
+        if (spVerdict.prependContext) system = `${spVerdict.prependContext}\n\n${system}`;
+        if (spVerdict.appendContext) system = `${system}\n\n${spVerdict.appendContext}`;
+
         const runInput: RunInput = {
           messages: effectiveMessages,
           tools: config.tools ?? [],
-          system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
+          system,
           signal: config.signal,
           model: providerModel,
           toolExecutor: hookedExecutor,
