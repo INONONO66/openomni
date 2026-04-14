@@ -32,7 +32,7 @@ function createMockManager(): {
         id: "bg_test123",
         agentName: "test-agent",
         prompt: "test prompt",
-        status: "pending",
+        status: "running",
         parentSessionId: "parent-123",
         queuedAt: Date.now(),
         depth: 0,
