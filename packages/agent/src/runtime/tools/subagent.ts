@@ -1,4 +1,4 @@
-import type { Tool } from "@openomni/protocol";
+import type { Tool, Subagent } from "@openomni/protocol";
 import { ProviderTransform } from "@openomni/llm";
 import { ChatAgent } from "../../core/chat-agent";
 import { checkDelegation, type DelegationContext } from "../../core/delegation";
@@ -26,6 +26,18 @@ export interface SubagentToolOptions {
       model: { provider: string; id: string };
       systemPrompt?: string;
     }) => Promise<{ sessionId: string; runId: string; output: string }>;
+  };
+  backgroundManager?: {
+    launch: (input: {
+      agentName: string;
+      prompt: string;
+      model: { provider: string; id: string };
+      parentSessionId: string;
+      depth?: number;
+    }) => Promise<Subagent.BackgroundTask>;
+    getTask: (taskId: string) => Subagent.BackgroundTask | undefined;
+    getResult: (taskId: string) => Subagent.BackgroundTaskResult | undefined;
+    cancel: (taskId: string) => Promise<boolean> | boolean;
   };
 }
 
@@ -60,16 +72,21 @@ export namespace SubagentTool {
             type: "string",
             description: "Optional session ID to continue an existing subagent session",
           },
+          background: {
+            type: "boolean",
+            description: "Run in background (returns task_id immediately)",
+          },
         },
         required: ["agentName", "prompt"],
       },
     };
 
     const execute = async (args: unknown): Promise<Tool.Result> => {
-      const { agentName, prompt, sessionId } = args as {
+      const { agentName, prompt, sessionId, background } = args as {
         agentName: string;
         prompt: string;
         sessionId?: string;
+        background?: boolean;
       };
 
       const ctx = options?.delegationContext;
@@ -91,6 +108,29 @@ export namespace SubagentTool {
             isError: true,
           };
         }
+      }
+
+      if (background) {
+        if (!options?.backgroundManager) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: "background execution not available: no BackgroundManager configured",
+            isError: true,
+          };
+        }
+        const task = await options.backgroundManager.launch({
+          agentName,
+          prompt,
+          model: fallbackModel,
+          parentSessionId: sessionId ?? "unknown",
+        });
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: "",
+          output: `Background task launched.\n\nTask ID: ${task.id}\nStatus: ${task.status}`,
+          isError: false,
+        };
       }
 
       const definition = AgentRegistry.get(agentName);

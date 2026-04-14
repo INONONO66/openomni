@@ -50,4 +50,4 @@ export { BUILTIN_CATEGORIES, resolveCategory } from "./category";
 export type { CategoryConfig, CategoryResolution } from "./category";
 
 // Subagent runtime
-export { SubagentRuntime, SubagentConsultation } from "./subagent";
+export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";

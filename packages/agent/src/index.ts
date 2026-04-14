@@ -29,5 +29,7 @@ export type { Transport, AgentMessengerOptions } from "./runtime/index";
 export { AgentRegistry } from "./runtime/index";
 export { SubagentTool } from "./runtime/index";
 export type { SubagentToolOptions } from "./runtime/index";
+export { BackgroundOutputTool, BackgroundCancelTool } from "./runtime/index";
+export type { BackgroundOutputToolOptions, BackgroundCancelToolOptions } from "./runtime/index";
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
