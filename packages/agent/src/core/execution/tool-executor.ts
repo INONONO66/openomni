@@ -7,6 +7,7 @@ import type {
   HookContext,
   HookVerdict,
 } from "../types";
+import type { MiddlewareEngineInstance } from "../middleware";
 import { ToolGuard } from "../tool-guard";
 import { summarizeInput } from "./shared";
 
@@ -19,6 +20,7 @@ export interface ToolExecutorOptions {
   onVerdict?: (verdict: HookVerdict) => void;
   getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input">;
   source?: string;
+  engine?: MiddlewareEngineInstance;
 }
 
 /**
@@ -37,6 +39,7 @@ export function createToolExecutor(
     onVerdict,
     getContext,
     source = "agent",
+    engine,
   } = options;
 
   const guardedExecutor = permission
@@ -46,6 +49,10 @@ export function createToolExecutor(
   const hookedExecutor = hooks?.preToolUse
     ? createHookedLayer(guardedExecutor, hooks, getContext, onVerdict)
     : guardedExecutor;
+
+  if (engine) {
+    return createPostToolLayer(hookedExecutor, engine, getContext);
+  }
 
   return hookedExecutor;
 }
@@ -136,6 +143,37 @@ function createGuardedLayer(
       inputSummary: summarizeInput(call.input),
     });
     return toolExecutor(call);
+  };
+}
+
+function createPostToolLayer(
+  executor: (call: Tool.Call) => Promise<Tool.Result>,
+  engine: MiddlewareEngineInstance,
+  getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input">,
+): (call: Tool.Call) => Promise<Tool.Result> {
+  return async (call: Tool.Call): Promise<Tool.Result> => {
+    const result = await executor(call);
+    const ctx = getContext?.();
+    const verdict = await engine.dispatch("post_tool_use", {
+      steps: ctx?.steps ?? [],
+      turnCount: ctx?.turnCount ?? 0,
+      elapsedMs: ctx?.elapsedMs ?? 0,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      isCompletion: false,
+      continuationCount: 0,
+      toolName: call.tool,
+      toolCallId: call.id,
+      toolOutput: result.output,
+    });
+
+    if (verdict.action === "transform") {
+      const input = verdict.input as Record<string, unknown>;
+      if (typeof input.output === "string") {
+        return { ...result, output: input.output };
+      }
+    }
+
+    return result;
   };
 }
 

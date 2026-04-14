@@ -48,6 +48,19 @@ export async function* streamAgent(
   let attempt = 1;
   let lastError = "";
 
+  const engine = MiddlewareEngine.create();
+  engine.register(createBudgetReassuranceMiddleware());
+  engine.register(createBudgetWarningMiddleware());
+  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
+    engine.register(reg);
+  }
+  if (config.compaction) {
+    engine.register(createCompactionMiddleware(config.compaction));
+  }
+  for (const reg of config.middleware ?? []) {
+    engine.register(reg);
+  }
+
   while (attempt <= retryPolicy.maxAttempts) {
     try {
       const providerModel = await resolveProviderModel(config.model);
@@ -70,19 +83,6 @@ export async function* streamAgent(
 
       if ((config.tools?.length ?? 0) > 0 && !config.toolExecutor) {
         throw new Error("toolExecutor is required when tools are provided");
-      }
-
-      const engine = MiddlewareEngine.create();
-      engine.register(createBudgetReassuranceMiddleware());
-      engine.register(createBudgetWarningMiddleware());
-      for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-        engine.register(reg);
-      }
-      if (config.compaction) {
-        engine.register(createCompactionMiddleware(config.compaction));
-      }
-      for (const reg of config.middleware ?? []) {
-        engine.register(reg);
       }
 
       while (true) {
@@ -183,6 +183,7 @@ export async function* streamAgent(
               }),
               onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
               source: "stream-engine",
+              engine,
             })
           : undefined;
 
@@ -370,6 +371,30 @@ export async function* streamAgent(
         throw new Error("unreachable");
       }
     } catch (error) {
+      const onErrorVerdict = await engine.dispatch("on_error", {
+        toolInput: { error: error instanceof Error ? error : new Error(String(error)) },
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 0,
+        isCompletion: false,
+        continuationCount: 0,
+        elapsedMs: 0,
+      });
+
+      if (onErrorVerdict.action === "abort") {
+        yield {
+          type: "complete",
+          result: {
+            text: "",
+            steps: [],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            finishReason: "stop",
+            guardAborted: true,
+          },
+        };
+        return;
+      }
+
       lastError = error instanceof Error ? error.message : String(error);
       const retryReason = classifyRetryReason(lastError);
 
