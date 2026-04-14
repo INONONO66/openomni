@@ -30,4 +30,5 @@ export interface MiddlewareRegistration {
   scope?: Middleware.Scope;
   failPolicy?: Middleware.FailPolicy;
   fn: MiddlewareFn;
+  propagate?: boolean;
 }

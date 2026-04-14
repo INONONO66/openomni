@@ -1,0 +1,76 @@
+import { ModelsDev, Provider } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
+import type { ChatAgentInput } from "../types";
+import type { MemoryResult } from "../memory";
+import { createUserMessage, createAssistantMessage } from "../message-factory";
+
+export async function resolveProviderModel(model: {
+  provider: string;
+  id: string;
+}): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
+  const providerData = data[model.provider];
+
+  if (!providerData) {
+    throw new Error(`Provider not found: ${model.provider}`);
+  }
+
+  const rawModel = providerData.models?.[model.id];
+  if (!rawModel) {
+    throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
+  }
+
+  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+}
+
+export function getLastUserMessageText(messages: Message.WithParts[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].info.role === "user") {
+      return messages[i].parts
+        .filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    }
+  }
+  return null;
+}
+
+export function formatMemoryContext(results: MemoryResult[]): string {
+  const entries = results.map((r) => `- ${r.content}`).join("\n");
+  return `[Memory Context]\n${entries}`;
+}
+
+export function prependContextMessage(
+  messages: Message.WithParts[],
+  contextText: string,
+  source: string,
+): Message.WithParts[] {
+  return [createUserMessage(contextText, source), ...messages];
+}
+
+export function toMessagesWithParts(
+  messages: ChatAgentInput["messages"],
+  source: string,
+): Message.WithParts[] {
+  const output: Message.WithParts[] = [];
+
+  for (const message of messages) {
+    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
+    output.push(
+      message.role === "user"
+        ? createUserMessage(message.content, source)
+        : createAssistantMessage(message.content, parentID, source),
+    );
+  }
+
+  return output;
+}
+
+export function summarizeInput(input: Record<string, unknown>): string {
+  try {
+    const str = JSON.stringify(input);
+    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+  } catch {
+    return "[unserializable]";
+  }
+}

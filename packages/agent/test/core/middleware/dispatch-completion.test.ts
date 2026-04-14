@@ -1,0 +1,220 @@
+import { describe, expect, it, mock } from "bun:test";
+import type { Tool } from "@openomni/protocol";
+import type { MiddlewareRegistration, MiddlewareContext } from "../../../src/core/middleware";
+import { MiddlewareEngine } from "../../../src/core/middleware";
+import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+
+function newID(prefix: string): string {
+  return `${prefix}-${Math.random().toString(16).slice(2)}`;
+}
+
+describe("post_tool_use middleware dispatch", () => {
+  it("fires the middleware fn after tool execution with correct context", async () => {
+    const toolOutput = "tool-output-value";
+    const postToolFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:post_tool_use",
+      timing: "post_tool_use",
+      priority: 100,
+      fn: postToolFn,
+    });
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: toolOutput,
+        isError: false,
+      }),
+      engine,
+    });
+
+    const call: Tool.Call = { id: "call-post-tool", tool: "bash", input: { command: "ls" } };
+    await executor(call);
+
+    expect(postToolFn).toHaveBeenCalledTimes(1);
+    const calledCtx = postToolFn.mock.calls[0][0] as MiddlewareContext;
+    expect(calledCtx.timing).toBe("post_tool_use");
+    expect(calledCtx.toolName).toBe("bash");
+    expect(calledCtx.toolOutput).toBe(toolOutput);
+  });
+
+  it("transform verdict modifies the tool output", async () => {
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:transform",
+      timing: "post_tool_use",
+      priority: 100,
+      fn: () => ({ action: "transform", input: { output: "modified-output" } }),
+    });
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "original-output",
+        isError: false,
+      }),
+      engine,
+    });
+
+    const call: Tool.Call = { id: "call-transform", tool: "bash", input: { command: "ls" } };
+    const result = await executor(call);
+
+    expect(result.output).toBe("modified-output");
+  });
+});
+
+describe("pre_tool_use middleware dispatch", () => {
+  it("skip verdict prevents tool execution", async () => {
+    const baseExecutor = mock(
+      async (call: Tool.Call): Promise<Tool.Result> => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "executed",
+        isError: false,
+      }),
+    );
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:skip",
+      timing: "pre_tool_use",
+      priority: 100,
+      fn: () => ({ action: "skip", reason: "test-skip" }),
+    });
+
+    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+
+    const call: Tool.Call = { id: "call-skip", tool: "bash", input: { command: "ls" } };
+    const result = await executor(call);
+
+    expect(baseExecutor).toHaveBeenCalledTimes(0);
+    expect(result.output).toContain("Skipped");
+    expect(result.isError).toBe(false);
+  });
+
+  it("abort verdict prevents tool execution with isError", async () => {
+    const baseExecutor = mock(
+      async (call: Tool.Call): Promise<Tool.Result> => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "executed",
+        isError: false,
+      }),
+    );
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:abort",
+      timing: "pre_tool_use",
+      priority: 100,
+      fn: () => ({ action: "abort", reason: "Blocked: test-deny" }),
+    });
+
+    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+
+    const call: Tool.Call = { id: "call-abort", tool: "bash", input: { command: "rm -rf /" } };
+    const result = await executor(call);
+
+    expect(baseExecutor).toHaveBeenCalledTimes(0);
+    expect(result.output).toContain("Blocked");
+    expect(result.isError).toBe(true);
+  });
+
+  it("transform verdict modifies tool input", async () => {
+    let receivedInput: Record<string, unknown> | undefined;
+    const baseExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
+      receivedInput = call.input;
+      return { id: newID("result"), toolCallId: call.id, output: "ok", isError: false };
+    };
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:transform-input",
+      timing: "pre_tool_use",
+      priority: 100,
+      fn: () => ({
+        action: "transform",
+        input: { command: "echo safe" },
+      }),
+    });
+
+    const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
+
+    const call: Tool.Call = { id: "call-xform", tool: "bash", input: { command: "rm -rf /" } };
+    await executor(call);
+
+    expect(receivedInput).toEqual({ command: "echo safe" });
+  });
+});
+
+describe("on_error middleware dispatch (stream-engine level)", () => {
+  it("on_error middleware is registered and dispatchable", async () => {
+    const onErrorFn = mock((_ctx: MiddlewareContext) => ({ action: "abort" as const }));
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:on_error",
+      timing: "on_error",
+      priority: 100,
+      fn: onErrorFn,
+    });
+
+    const error = new Error("test-error");
+    const verdict = await engine.dispatch("on_error", {
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolInput: { error },
+    });
+
+    expect(onErrorFn).toHaveBeenCalledTimes(1);
+    expect(verdict.action).toBe("abort");
+    const calledCtx = onErrorFn.mock.calls[0][0] as MiddlewareContext;
+    expect(calledCtx.timing).toBe("on_error");
+    expect(calledCtx.toolInput?.error).toBe(error);
+  });
+});
+
+describe("idle-nudge post_tool_use integration", () => {
+  it("idle-nudge fn is dispatched for post_tool_use timing", async () => {
+    const { createIdleNudgeMiddleware } = await import(
+      "../../../src/core/middleware/builtin/idle-nudge"
+    );
+
+    const idleNudge = createIdleNudgeMiddleware({ idleThresholdMs: -1 });
+    let postToolUseCallCount = 0;
+    const originalFn = idleNudge.fn;
+    const spiedIdleNudge: MiddlewareRegistration = {
+      ...idleNudge,
+      fn: (ctx: MiddlewareContext) => {
+        if (ctx.timing === "post_tool_use") postToolUseCallCount++;
+        return originalFn(ctx);
+      },
+    };
+
+    const engine = MiddlewareEngine.create();
+    engine.register(spiedIdleNudge);
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      engine,
+    });
+
+    const call: Tool.Call = { id: "call-idle", tool: "bash", input: { command: "ls" } };
+    await executor(call);
+
+    expect(postToolUseCallCount).toBe(1);
+  });
+});
