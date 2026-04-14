@@ -5,10 +5,12 @@ import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
 import { AgentMessenger } from "../messenger/messenger";
 import { BusTransport } from "../messenger/transport";
+import type { MiddlewareRegistration } from "../../core/middleware/types";
 
 export interface SubagentToolOptions {
   delegationContext?: DelegationContext;
   messengerAllowPatterns?: Array<{ from: string; to: string }>;
+  middleware?: MiddlewareRegistration[];
   subagentRuntime?: {
     spawn: (config: {
       agentName: string;
@@ -144,6 +146,7 @@ export namespace SubagentTool {
       }
 
       try {
+        const propagated = options?.middleware?.filter((m) => m.propagate === true) ?? [];
         const childAgent = ChatAgent.create({
           model,
           systemPrompt: definition.systemPrompt,
@@ -151,6 +154,7 @@ export namespace SubagentTool {
           permissions: definition.permissions,
           signal: childAbort,
           providerOptions: Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
+          middleware: propagated.length > 0 ? propagated : undefined,
         });
 
         const result = await childAgent.run({

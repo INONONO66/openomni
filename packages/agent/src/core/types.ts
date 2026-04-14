@@ -18,6 +18,10 @@ export interface StepGuardContext {
   elapsedMs: number;
 }
 
+/**
+ * @deprecated Use {@link MiddlewareContext} from `./middleware/types` instead.
+ * Register middleware via `ChatAgentConfig.middleware` array.
+ */
 export interface HookContext {
   toolName?: string;
   toolCallId?: string;
@@ -28,8 +32,16 @@ export interface HookContext {
   elapsedMs: number;
 }
 
+/**
+ * @deprecated Use {@link Hook.Verdict} from `@openomni/protocol` instead.
+ * Register middleware via `ChatAgentConfig.middleware` array.
+ */
 export type HookVerdict = Hook.Verdict;
 
+/**
+ * @deprecated Use {@link MiddlewareRegistration} from `./middleware/types` instead.
+ * Register middleware via `ChatAgentConfig.middleware` array.
+ */
 export interface ExecutionHooks {
   preToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
   postToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
@@ -77,10 +89,18 @@ export interface ChatAgentConfig {
   };
   parallelTools?: ParallelToolsMode;
   memory?: Memory;
+  /**
+   * @deprecated Use `middleware` array with `post_turn` timing instead.
+   * Register a middleware with `timing: "post_turn"` to replace stepGuard behavior.
+   */
   stepGuard?: (
     step: AgentStep,
     context: StepGuardContext,
   ) => Promise<StepGuardVerdict> | StepGuardVerdict;
+  /**
+   * @deprecated Use `middleware` array instead.
+   * Register middleware via `ChatAgentConfig.middleware` for all hook behaviors.
+   */
   hooks?: ExecutionHooks;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
