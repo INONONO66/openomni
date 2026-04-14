@@ -1,13 +1,9 @@
 import { run as llmRun, type RunInput } from "@openomni/llm";
-import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
+import type { Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEvent,
-  AgentEventEmitter,
-  AgentStep,
   ChatAgentConfig,
   ChatAgentInput,
-  ExecutionHooks,
-  HookContext,
   HookVerdict,
   TokenUsage,
 } from "../types";
@@ -19,7 +15,6 @@ import {
   describeBudgetRemaining,
 } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { ToolGuard } from "../tool-guard";
 import {
   DEFAULT_RETRY_POLICY,
   calculateBackoffMs,
@@ -40,149 +35,8 @@ import {
   formatMemoryContext,
   prependContextMessage,
   toMessagesWithParts,
-  summarizeInput,
 } from "./shared";
-
-function createGuardedToolExecutor(
-  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
-  permission: Guardrail.ToolPermission,
-  eventEmitter?: AgentEventEmitter,
-  stepGuard?: ChatAgentConfig["stepGuard"],
-): (call: Tool.Call) => Promise<Tool.Result> {
-  return async (call: Tool.Call): Promise<Tool.Result> => {
-    let verdict: "allow" | "deny" | "require_approval";
-    try {
-      verdict = ToolGuard.check(call.tool, call.input, permission);
-    } catch {
-      verdict = "deny";
-    }
-    if (verdict === "deny") {
-      eventEmitter?.emit("agent.tool.blocked", {
-        sessionId: "stream-engine",
-        time: Date.now(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        reason: "denied by policy",
-      });
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Blocked: Tool "${call.tool}" is not permitted by policy]`,
-        isError: true,
-      };
-    }
-    if (verdict === "require_approval") {
-      if (stepGuard) {
-        const syntheticStep: AgentStep = {
-          type: "tool-call",
-          content: `Tool "${call.tool}" requires approval`,
-          toolCalls: [call],
-        };
-        const guardContext = {
-          steps: [],
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          turnCount: 0,
-          isCompletion: false,
-          continuationCount: 0,
-          elapsedMs: 0,
-        };
-        try {
-          const guardVerdict = await stepGuard(syntheticStep, guardContext);
-          if (guardVerdict.action === "continue") {
-            eventEmitter?.emit("agent.tool.invoked", {
-              sessionId: "stream-engine",
-              time: Date.now(),
-              toolCallId: call.id,
-              toolName: call.tool,
-              inputSummary: summarizeInput(call.input),
-            });
-            return toolExecutor(call);
-          }
-        } catch {
-          // stepGuard threw; fall through to approval-denied response
-        }
-      }
-      eventEmitter?.emit("agent.tool.blocked", {
-        sessionId: "stream-engine",
-        time: Date.now(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        reason: "requires approval",
-      });
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Blocked: Tool "${call.tool}" requires approval]`,
-        isError: true,
-      };
-    }
-    eventEmitter?.emit("agent.tool.invoked", {
-      sessionId: "stream-engine",
-      time: Date.now(),
-      toolCallId: call.id,
-      toolName: call.tool,
-      inputSummary: summarizeInput(call.input),
-    });
-    return toolExecutor(call);
-  };
-}
-
-function createHookedToolExecutor(
-  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
-  hooks: ExecutionHooks | undefined,
-  getContext: () => Omit<HookContext, "toolName" | "toolCallId" | "input">,
-  onVerdict?: (verdict: HookVerdict) => void,
-): (call: Tool.Call) => Promise<Tool.Result> {
-  if (!hooks?.preToolUse) return toolExecutor;
-
-  return async (call: Tool.Call): Promise<Tool.Result> => {
-    const context: HookContext = {
-      ...getContext(),
-      toolName: call.tool,
-      toolCallId: call.id,
-      input: call.input,
-    };
-
-    let verdict: HookVerdict;
-    try {
-      verdict = await hooks.preToolUse!(context);
-    } catch (err) {
-      console.warn("[hooks.preToolUse] threw, treating as continue:", err);
-      verdict = { action: "continue" };
-    }
-
-    onVerdict?.(verdict);
-
-    if (verdict.action === "skip") {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Skipped: ${verdict.reason ?? "hook"}]`,
-        isError: false,
-      };
-    }
-
-    if (verdict.action === "abort") {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Aborted: ${verdict.reason ?? "hook"}]`,
-        isError: true,
-      };
-    }
-
-    if (verdict.action === "transform") {
-      const transformed: Tool.Call = { ...call, input: verdict.input };
-      return toolExecutor(transformed);
-    }
-
-    if (verdict.action === "retry" || verdict.action === "inject") {
-      console.warn(`[hooks.preToolUse] "${verdict.action}" not supported, treating as continue`);
-    }
-
-    return toolExecutor(call);
-  };
-}
+import { createToolExecutor } from "./tool-executor";
 
 export async function* streamAgent(
   input: ChatAgentInput,
@@ -311,27 +165,21 @@ export async function* streamAgent(
 
         const preToolUseVerdicts: HookVerdict[] = [];
 
-        const baseExecutor =
-          config.toolExecutor && config.permissions
-            ? createGuardedToolExecutor(
-                config.toolExecutor,
-                config.permissions,
-                config.eventEmitter,
-                config.stepGuard,
-              )
-            : config.toolExecutor;
-
-        const hookedExecutor = baseExecutor
-          ? createHookedToolExecutor(
-              baseExecutor,
-              config.hooks,
-              () => ({
+        const hookedExecutor = config.toolExecutor
+          ? createToolExecutor({
+              toolExecutor: config.toolExecutor,
+              permission: config.permissions,
+              hooks: config.hooks,
+              stepGuard: config.stepGuard,
+              eventEmitter: config.eventEmitter,
+              getContext: () => ({
                 steps,
                 turnCount: budgetState.turns,
                 elapsedMs: Date.now() - startTime,
               }),
-              (verdict) => preToolUseVerdicts.push(verdict),
-            )
+              onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
+              source: "stream-engine",
+            })
           : undefined;
 
         const runInput: RunInput = {

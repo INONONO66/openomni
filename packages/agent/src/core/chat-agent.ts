@@ -1,16 +1,6 @@
 import { run as llmRun, type RunInput } from "@openomni/llm";
-import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
-import type {
-  AgentEventEmitter,
-  ChatAgentConfig,
-  ChatAgentInput,
-  AgentResult,
-  AgentStep,
-  ExecutionHooks,
-  HookContext,
-  HookVerdict,
-  TokenUsage,
-} from "./types";
+import type { Message, Sink, Tool } from "@openomni/protocol";
+import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, TokenUsage } from "./types";
 import { createBudgetState, checkBudget, recordTurn, recordTokenUsage } from "./budget";
 import {
   DEFAULT_RETRY_POLICY,
@@ -29,7 +19,6 @@ import {
 import type { AgentEvent } from "./types";
 import { Telemetry } from "./telemetry";
 import { createAssistantMessage, createUserMessage } from "./message-factory";
-import { ToolGuard } from "./tool-guard";
 import { buildSystemPrompt } from "./prompt-builder";
 import {
   resolveProviderModel,
@@ -37,8 +26,8 @@ import {
   formatMemoryContext,
   prependContextMessage,
   toMessagesWithParts,
-  summarizeInput,
 } from "./execution/shared";
+import { createToolExecutor } from "./execution/tool-executor";
 
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
@@ -51,152 +40,6 @@ const noopSink: Sink = {
   onToolResult: () => undefined,
   onSnapshot: () => undefined,
 };
-
-function createGuardedToolExecutor(
-  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
-  permission: Guardrail.ToolPermission,
-  eventEmitter?: AgentEventEmitter,
-  stepGuard?: ChatAgentConfig["stepGuard"],
-): (call: Tool.Call) => Promise<Tool.Result> {
-  return async (call: Tool.Call): Promise<Tool.Result> => {
-    let verdict: "allow" | "deny" | "require_approval";
-    try {
-      verdict = ToolGuard.check(call.tool, call.input, permission);
-    } catch {
-      verdict = "deny";
-    }
-    if (verdict === "deny") {
-      eventEmitter?.emit("agent.tool.blocked", {
-        sessionId: "chat-agent",
-        time: Date.now(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        reason: "denied by policy",
-      });
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Blocked: Tool "${call.tool}" is not permitted by policy]`,
-        isError: true,
-      };
-    }
-    if (verdict === "require_approval") {
-      if (stepGuard) {
-        const syntheticStep: AgentStep = {
-          type: "tool-call",
-          content: `Tool "${call.tool}" requires approval`,
-          toolCalls: [call],
-        };
-        const guardContext = {
-          steps: [],
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          turnCount: 0,
-          isCompletion: false,
-          continuationCount: 0,
-          elapsedMs: 0,
-        };
-        try {
-          const guardVerdict = await stepGuard(syntheticStep, guardContext);
-          if (guardVerdict.action === "continue") {
-            eventEmitter?.emit("agent.tool.invoked", {
-              sessionId: "chat-agent",
-              time: Date.now(),
-              toolCallId: call.id,
-              toolName: call.tool,
-              inputSummary: summarizeInput(call.input),
-            });
-            return toolExecutor(call);
-          }
-        } catch {
-          // stepGuard threw; treat as denial
-        }
-      }
-      eventEmitter?.emit("agent.tool.blocked", {
-        sessionId: "chat-agent",
-        time: Date.now(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        reason: "requires approval",
-      });
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Blocked: Tool "${call.tool}" requires approval]`,
-        isError: true,
-      };
-    }
-    eventEmitter?.emit("agent.tool.invoked", {
-      sessionId: "chat-agent",
-      time: Date.now(),
-      toolCallId: call.id,
-      toolName: call.tool,
-      inputSummary: summarizeInput(call.input),
-    });
-    return toolExecutor(call);
-  };
-}
-
-function createHookedToolExecutor(
-  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
-  hooks: ExecutionHooks | undefined,
-  getContext: () => Omit<HookContext, "toolName" | "toolCallId" | "input">,
-): (call: Tool.Call) => Promise<Tool.Result> {
-  if (!hooks?.preToolUse) return toolExecutor;
-
-  return async (call: Tool.Call): Promise<Tool.Result> => {
-    const context: HookContext = {
-      ...getContext(),
-      toolName: call.tool,
-      toolCallId: call.id,
-      input: call.input,
-    };
-
-    let verdict: HookVerdict;
-    try {
-      verdict = await hooks.preToolUse!(context);
-    } catch (err) {
-      console.warn("[hooks.preToolUse] threw, treating as continue:", err);
-      verdict = { action: "continue" };
-    }
-
-    if (verdict.action === "skip") {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Skipped: ${verdict.reason ?? "hook"}]`,
-        isError: false,
-      };
-    }
-
-    if (verdict.action === "abort") {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Aborted: ${verdict.reason ?? "hook"}]`,
-        isError: true,
-      };
-    }
-
-    if (verdict.action === "transform") {
-      const transformed: Tool.Call = { ...call, input: verdict.input };
-      return toolExecutor(transformed);
-    }
-
-    if (verdict.action === "retry") {
-      console.warn(
-        '[hooks.preToolUse] "retry" verdict is not supported for preToolUse, treating as continue',
-      );
-    }
-
-    if (verdict.action === "inject") {
-      console.warn(
-        '[hooks.preToolUse] "inject" verdict is not supported for preToolUse, treating as continue',
-      );
-    }
-
-    return toolExecutor(call);
-  };
-}
 
 export namespace ChatAgent {
   export function create(config: ChatAgentConfig): ChatAgentInstance {
@@ -342,22 +185,20 @@ export namespace ChatAgent {
                     }
                   }
 
-                  const baseExecutor =
-                    config.toolExecutor && config.permissions
-                      ? createGuardedToolExecutor(
-                          config.toolExecutor,
-                          config.permissions,
-                          config.eventEmitter,
-                          config.stepGuard,
-                        )
-                      : config.toolExecutor;
-
-                  const hookedExecutor = baseExecutor
-                    ? createHookedToolExecutor(baseExecutor, config.hooks, () => ({
-                        steps,
-                        turnCount: budgetState.turns,
-                        elapsedMs: Date.now() - startTime,
-                      }))
+                  const hookedExecutor = config.toolExecutor
+                    ? createToolExecutor({
+                        toolExecutor: config.toolExecutor,
+                        permission: config.permissions,
+                        hooks: config.hooks,
+                        stepGuard: config.stepGuard,
+                        eventEmitter: config.eventEmitter,
+                        getContext: () => ({
+                          steps,
+                          turnCount: budgetState.turns,
+                          elapsedMs: Date.now() - startTime,
+                        }),
+                        source: "chat-agent",
+                      })
                     : undefined;
 
                   const runInput: RunInput = {
