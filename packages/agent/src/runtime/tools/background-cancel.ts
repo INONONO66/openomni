@@ -1,4 +1,4 @@
-import type { Tool, Subagent } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 
 export interface BackgroundCancelToolOptions {
   backgroundManager?: {

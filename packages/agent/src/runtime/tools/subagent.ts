@@ -102,7 +102,7 @@ export namespace SubagentTool {
           agentName,
           prompt,
           model: fallbackModel,
-          parentSessionId: "unknown",
+          parentSessionId: sessionId ?? "unknown",
         });
         return {
           id: crypto.randomUUID(),
