@@ -1,5 +1,5 @@
-import { Subagent } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { type Message, Subagent } from "@openomni/protocol";
+import { Bus, Session } from "@openomni/session";
 import { SubagentRuntime } from "./runtime.js";
 
 type LaunchInput = {
@@ -116,13 +116,34 @@ export const BackgroundManager = {
       };
       tasks.set(id, task);
 
-      const { sessionId, runId } = await SubagentRuntime.spawnBackground({
-        agentName: input.agentName,
-        prompt: input.prompt,
-        title: input.prompt.slice(0, 50),
-        model: input.model,
-        signal: controller.signal,
-      });
+      let sessionId: string;
+      let runId: string;
+      try {
+        const result = await SubagentRuntime.spawnBackground({
+          agentName: input.agentName,
+          prompt: input.prompt,
+          title: input.prompt.slice(0, 50),
+          model: input.model,
+          signal: controller.signal,
+        });
+        sessionId = result.sessionId;
+        runId = result.runId;
+      } catch (err) {
+        controllers.delete(id);
+        const failed: Subagent.BackgroundTask = {
+          ...task,
+          status: "failed",
+          completedAt: Date.now(),
+          error: err instanceof Error ? err.message : String(err),
+        };
+        tasks.set(id, failed);
+        Bus.publish(Subagent.Events.BackgroundTaskFailed, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          payload: { taskId: id, error: failed.error },
+        });
+        return failed;
+      }
 
       const running: Subagent.BackgroundTask = {
         ...task,
@@ -151,7 +172,23 @@ export const BackgroundManager = {
           };
           tasks.set(id, completed);
 
-          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "completed" };
+          let output: string | undefined;
+          try {
+            const msgs = Session.getMessages(sessionId);
+            const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
+            if (lastAssistant) {
+              const parts = Session.getParts(lastAssistant.id);
+              output =
+                parts
+                  .filter((p): p is Message.TextPart => p.type === "text")
+                  .map((p) => p.text)
+                  .filter(Boolean)
+                  .join("\n") || undefined;
+            }
+          } catch {
+            // session may have been cleaned up
+          }
+          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "completed", output };
           results.set(id, result);
           onTaskComplete?.(result);
 
@@ -208,6 +245,8 @@ export const BackgroundManager = {
     async function cancel(taskId: string): Promise<boolean> {
       const task = tasks.get(taskId);
       if (!task) return false;
+      if (task.status === "completed" || task.status === "failed" || task.status === "cancelled")
+        return false;
 
       controllers.get(taskId)?.abort();
       tasks.set(taskId, { ...task, status: "cancelled", completedAt: Date.now() });

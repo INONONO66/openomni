@@ -138,7 +138,7 @@ export namespace Subagent {
 
   export const BackgroundTaskResult = z.object({
     taskId: z.string(),
-    status: z.string(),
+    status: BackgroundTaskStatus,
     output: z.string().optional(),
   });
   export type BackgroundTaskResult = z.infer<typeof BackgroundTaskResult>;

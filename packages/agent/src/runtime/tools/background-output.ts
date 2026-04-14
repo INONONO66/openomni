@@ -75,11 +75,14 @@ export namespace BackgroundOutputTool {
       }
 
       const current = options?.backgroundManager?.getTask(taskId);
+      const isFailed = current?.status === "failed" || current?.status === "cancelled";
       return {
         id: crypto.randomUUID(),
         toolCallId: "",
-        output: `Task ${taskId} status: ${current?.status ?? "unknown"}`,
-        isError: false,
+        output: isFailed
+          ? `Task ${taskId} ${current!.status}${current?.error ? `: ${current.error}` : ""}`
+          : `Task ${taskId} status: ${current?.status ?? "unknown"}`,
+        isError: isFailed,
       };
     };
 

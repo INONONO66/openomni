@@ -89,6 +89,27 @@ export namespace SubagentTool {
         background?: boolean;
       };
 
+      const ctx = options?.delegationContext;
+      if (ctx) {
+        const verdict = checkDelegation(agentName, ctx);
+        if (verdict === "circular_detected") {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: `Delegation denied: circular delegation detected for agent '${agentName}'`,
+            isError: true,
+          };
+        }
+        if (verdict === "depth_exceeded") {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: `Delegation denied: max delegation depth (${ctx.maxDepth}) exceeded`,
+            isError: true,
+          };
+        }
+      }
+
       if (background) {
         if (!options?.backgroundManager) {
           return {
@@ -110,27 +131,6 @@ export namespace SubagentTool {
           output: `Background task launched.\n\nTask ID: ${task.id}\nStatus: ${task.status}`,
           isError: false,
         };
-      }
-
-      const ctx = options?.delegationContext;
-      if (ctx) {
-        const verdict = checkDelegation(agentName, ctx);
-        if (verdict === "circular_detected") {
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: "",
-            output: `Delegation denied: circular delegation detected for agent '${agentName}'`,
-            isError: true,
-          };
-        }
-        if (verdict === "depth_exceeded") {
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: "",
-            output: `Delegation denied: max delegation depth (${ctx.maxDepth}) exceeded`,
-            isError: true,
-          };
-        }
       }
 
       const definition = AgentRegistry.get(agentName);

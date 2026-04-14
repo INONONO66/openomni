@@ -40,7 +40,17 @@ export namespace BackgroundCancelTool {
         };
       }
 
-      const cancelled = await options.backgroundManager.cancel(taskId);
+      let cancelled: boolean;
+      try {
+        cancelled = await options.backgroundManager.cancel(taskId);
+      } catch (err) {
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: "",
+          output: `Failed to cancel task ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+        };
+      }
       if (cancelled) {
         return {
           id: crypto.randomUUID(),
