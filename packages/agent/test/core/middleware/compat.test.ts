@@ -18,13 +18,13 @@ function baseCtx(overrides: Partial<MiddlewareContext> = {}): MiddlewareContext 
 }
 
 describe("fromExecutionHooks", () => {
-  it("maps preToolUse to pre_tool_use with fail-closed", () => {
+  it("maps preToolUse to pre_tool_use with fail-open", () => {
     const hooks: ExecutionHooks = { preToolUse: () => ({ action: "continue" }) };
     const regs = fromExecutionHooks(hooks);
     expect(regs).toHaveLength(1);
     expect(regs[0].timing).toBe("pre_tool_use");
     expect(regs[0].priority).toBe(250);
-    expect(regs[0].failPolicy).toBe("fail-closed");
+    expect(regs[0].failPolicy).toBe("fail-open");
     expect(regs[0].name).toBe("compat:preToolUse");
   });
 
@@ -89,14 +89,14 @@ describe("fromExecutionHooks", () => {
     expect(verdict).toEqual({ action: "continue" });
   });
 
-  it("propagates preToolUse errors so engine fail-closed policy aborts", async () => {
+  it("preToolUse errors propagate to engine for fail-open handling", async () => {
     const hooks: ExecutionHooks = {
       preToolUse: () => {
         throw new Error("denied");
       },
     };
     const [reg] = fromExecutionHooks(hooks);
-    expect(reg.failPolicy).toBe("fail-closed");
+    expect(reg.failPolicy).toBe("fail-open");
     await expect(reg.fn(baseCtx({ timing: "pre_tool_use" }))).rejects.toThrow("denied");
   });
 

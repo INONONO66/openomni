@@ -29,14 +29,10 @@ import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
+  createMemoryMiddleware,
+  createToolGuardMiddleware,
 } from "../middleware/builtin";
-import {
-  resolveProviderModel,
-  getLastUserMessageText,
-  formatMemoryContext,
-  prependContextMessage,
-  toMessagesWithParts,
-} from "./shared";
+import { resolveProviderModel, toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
 
 export async function* streamAgent(
@@ -48,20 +44,32 @@ export async function* streamAgent(
   let attempt = 1;
   let lastError = "";
 
-  const engine = MiddlewareEngine.create();
-  engine.register(createBudgetReassuranceMiddleware());
-  engine.register(createBudgetWarningMiddleware());
-  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-    engine.register(reg);
-  }
-  if (config.compaction) {
-    engine.register(createCompactionMiddleware(config.compaction));
-  }
-  for (const reg of config.middleware ?? []) {
-    engine.register(reg);
-  }
-
   while (attempt <= retryPolicy.maxAttempts) {
+    const engine = MiddlewareEngine.create();
+    engine.register(createBudgetReassuranceMiddleware());
+    engine.register(createBudgetWarningMiddleware());
+    for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
+      engine.register(reg);
+    }
+    if (config.permissions) {
+      engine.register(
+        createToolGuardMiddleware({
+          permission: config.permissions,
+          stepGuard: config.stepGuard,
+          eventEmitter: config.eventEmitter,
+          source: "stream-engine",
+        }),
+      );
+    }
+    if (config.memory) {
+      engine.register(createMemoryMiddleware(config.memory));
+    }
+    if (config.compaction) {
+      engine.register(createCompactionMiddleware(config.compaction));
+    }
+    for (const reg of config.middleware ?? []) {
+      engine.register(reg);
+    }
     try {
       const providerModel = await resolveProviderModel(config.model);
       let budgetState = createBudgetState();
@@ -152,45 +160,44 @@ export async function* streamAgent(
 
         if (config.signal?.aborted) throw new Error("aborted");
 
-        let effectiveMessages = messages;
-        if (config.memory) {
-          const lastUserText = getLastUserMessageText(messages);
-          if (lastUserText) {
-            const memoryResults = await config.memory.retrieve(lastUserText);
-            if (memoryResults.length > 0) {
-              effectiveMessages = prependContextMessage(
-                messages,
-                formatMemoryContext(memoryResults),
-                "stream-engine",
-              );
-            }
-          }
-        }
+        const effectiveMessages = messages;
 
         const preToolUseVerdicts: HookVerdict[] = [];
 
         const hookedExecutor = config.toolExecutor
           ? createToolExecutor({
               toolExecutor: config.toolExecutor,
-              permission: config.permissions,
-              hooks: config.hooks,
-              stepGuard: config.stepGuard,
-              eventEmitter: config.eventEmitter,
+              engine,
               getContext: () => ({
                 steps,
                 turnCount: budgetState.turns,
                 elapsedMs: Date.now() - startTime,
               }),
               onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
-              source: "stream-engine",
-              engine,
             })
           : undefined;
+
+        let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
+        const spVerdict = await engine.dispatchSystemPrompt({
+          steps,
+          usage: totalUsage,
+          turnCount: budgetState.turns,
+          isCompletion: false,
+          continuationCount,
+          elapsedMs: Date.now() - startTime,
+          messages,
+          budgetState,
+          budget: config.budget,
+          eventEmitter: config.eventEmitter,
+        });
+        if (spVerdict.systemPrompt) system = spVerdict.systemPrompt;
+        if (spVerdict.prependContext) system = `${spVerdict.prependContext}\n\n${system}`;
+        if (spVerdict.appendContext) system = `${system}\n\n${spVerdict.appendContext}`;
 
         const runInput: RunInput = {
           messages: effectiveMessages,
           tools: config.tools ?? [],
-          system: buildSystemPrompt(config.systemPrompt, config.tools ?? []),
+          system,
           signal: config.signal,
           model: providerModel,
           toolExecutor: hookedExecutor,

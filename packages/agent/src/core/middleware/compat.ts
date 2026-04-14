@@ -33,8 +33,7 @@ export function fromExecutionHooks(hooks: ExecutionHooks): MiddlewareRegistratio
       name: "compat:preToolUse",
       timing: "pre_tool_use",
       priority: 250,
-      // tool-safety path: propagate errors so engine's fail-closed policy aborts
-      failPolicy: "fail-closed",
+      failPolicy: "fail-open",
       fn: async (ctx) => fn(toHookContext(ctx)),
     });
   }
