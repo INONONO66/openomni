@@ -62,6 +62,7 @@ export async function* streamAgent(
       };
       let turnIndex = 0;
       let continuationCount = 0;
+      let compactionCount = 0;
       const startTime = Date.now();
       const configuredToolChoice = (
         config as ChatAgentConfig & { toolChoice?: "auto" | "required" | "none" }
@@ -94,6 +95,7 @@ export async function* streamAgent(
               steps,
               usage: totalUsage,
               finishReason: "max-steps",
+              compactionCount: compactionCount > 0 ? compactionCount : undefined,
             },
           };
           return;
@@ -140,6 +142,7 @@ export async function* streamAgent(
               usage: totalUsage,
               finishReason: preTurnVerdict.reason === "stalled" ? "stalled" : "stop",
               guardAborted: preTurnVerdict.reason !== "stalled",
+              compactionCount: compactionCount > 0 ? compactionCount : undefined,
             },
           };
           return;
@@ -325,6 +328,7 @@ export async function* streamAgent(
               const payload = compactionVerdict.input as Record<string, unknown>;
               if (Array.isArray(payload.messages)) {
                 messages = payload.messages as Message.WithParts[];
+                compactionCount += 1;
               }
             }
 
@@ -342,6 +346,7 @@ export async function* streamAgent(
                 usage: totalUsage,
                 finishReason: postTurnVerdict.reason === "stalled" ? "stalled" : "stop",
                 guardAborted: postTurnVerdict.reason !== "stalled",
+                compactionCount: compactionCount > 0 ? compactionCount : undefined,
               },
             };
             return;
@@ -354,6 +359,7 @@ export async function* streamAgent(
               steps,
               usage: totalUsage,
               finishReason: "stop",
+              compactionCount: compactionCount > 0 ? compactionCount : undefined,
             },
           };
           return;
