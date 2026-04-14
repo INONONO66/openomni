@@ -34,7 +34,7 @@ export const BackgroundManager = {
     const maxConcurrentTotal = config?.maxConcurrentTotal ?? 10;
     const maxDepth = config?.maxDepth ?? 5;
     const maxDescendants = config?.maxDescendants ?? 10;
-    const taskTtlMs = config?.taskTtlMs ?? 60_000;
+    const taskTtlMs = config?.taskTtlMs ?? 1_800_000;
     const onTaskComplete = config?.onTaskComplete;
 
     const tasks = new Map<string, Subagent.BackgroundTask>();
