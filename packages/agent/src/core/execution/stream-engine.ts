@@ -2,6 +2,7 @@ import { run as llmRun, type RunInput } from "@openomni/llm";
 import type { Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEvent,
+  AgentStep,
   ChatAgentConfig,
   ChatAgentInput,
   HookVerdict,
