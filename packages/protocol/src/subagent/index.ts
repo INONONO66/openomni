@@ -102,6 +102,47 @@ export namespace Subagent {
   });
   export type ConsultationResult = z.infer<typeof ConsultationResult>;
 
+  export const BackgroundTaskStatus = z.enum([
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+  ]);
+  export type BackgroundTaskStatus = z.infer<typeof BackgroundTaskStatus>;
+
+  export const BackgroundTaskConfig = z.object({
+    maxConcurrentPerAgent: z.number().int().positive().optional(),
+    maxConcurrentTotal: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxDescendants: z.number().int().positive().optional(),
+    taskTtlMs: z.number().int().positive().optional(),
+  });
+  export type BackgroundTaskConfig = z.infer<typeof BackgroundTaskConfig>;
+
+  export const BackgroundTask = z.object({
+    id: z.string(),
+    agentName: z.string(),
+    prompt: z.string(),
+    status: BackgroundTaskStatus,
+    parentSessionId: z.string(),
+    sessionId: z.string().optional(),
+    runId: z.string().optional(),
+    queuedAt: z.number(),
+    startedAt: z.number().optional(),
+    completedAt: z.number().optional(),
+    error: z.string().optional(),
+    depth: z.number(),
+  });
+  export type BackgroundTask = z.infer<typeof BackgroundTask>;
+
+  export const BackgroundTaskResult = z.object({
+    taskId: z.string(),
+    status: z.string(),
+    output: z.string().optional(),
+  });
+  export type BackgroundTaskResult = z.infer<typeof BackgroundTaskResult>;
+
   export namespace Events {
     export const WorkerSessionSpawned = BusEvent.define(
       "worker.session.spawned",
@@ -188,6 +229,48 @@ export namespace Subagent {
           sessionId: z.string(),
           runId: z.string(),
           consultationId: z.string(),
+        }),
+      }),
+    );
+
+    export const BackgroundTaskLaunched = BusEvent.define(
+      "background.task.launched",
+      BaseEvent.extend({
+        payload: z.object({
+          taskId: z.string(),
+          agentName: z.string(),
+          parentSessionId: z.string(),
+          status: BackgroundTaskStatus,
+        }),
+      }),
+    );
+
+    export const BackgroundTaskCompleted = BusEvent.define(
+      "background.task.completed",
+      BaseEvent.extend({
+        payload: z.object({
+          taskId: z.string(),
+          status: BackgroundTaskStatus,
+          sessionId: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const BackgroundTaskFailed = BusEvent.define(
+      "background.task.failed",
+      BaseEvent.extend({
+        payload: z.object({
+          taskId: z.string(),
+          error: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const BackgroundTaskCancelled = BusEvent.define(
+      "background.task.cancelled",
+      BaseEvent.extend({
+        payload: z.object({
+          taskId: z.string(),
         }),
       }),
     );
