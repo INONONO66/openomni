@@ -27,7 +27,7 @@ function createMockManager(): {
       tasks.set(taskId, { ...task, status: "cancelled" });
       return true;
     },
-    launch: async (input) => {
+    launch: async (_input) => {
       const task: Subagent.BackgroundTask = {
         id: "bg_test123",
         agentName: "test-agent",

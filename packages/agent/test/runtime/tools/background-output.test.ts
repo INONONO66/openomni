@@ -27,7 +27,7 @@ function createMockManager(): {
       tasks.set(taskId, { ...task, status: "cancelled" });
       return true;
     },
-    launch: async (input) => {
+    launch: async (_input) => {
       const task: Subagent.BackgroundTask = {
         id: "bg_test123",
         agentName: "test-agent",
@@ -81,7 +81,7 @@ describe("BackgroundOutputTool", () => {
   it("returns result output when task is completed", async () => {
     const manager = createMockManager();
     const task = await manager.launch({});
-    const result: Subagent.BackgroundTaskResult = {
+    const _result: Subagent.BackgroundTaskResult = {
       taskId: task.id,
       status: "completed",
       output: "task output",
