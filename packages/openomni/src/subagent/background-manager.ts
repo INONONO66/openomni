@@ -40,6 +40,7 @@ export const BackgroundManager = {
     const tasks = new Map<string, Subagent.BackgroundTask>();
     const results = new Map<string, Subagent.BackgroundTaskResult>();
     const controllers = new Map<string, AbortController>();
+    const taskUnsubs = new Map<string, () => void>();
 
     function activeTasks(): Subagent.BackgroundTask[] {
       return [...tasks.values()].filter((t) => t.status === "running" || t.status === "pending");
@@ -65,6 +66,7 @@ export const BackgroundManager = {
           tasks.delete(id);
           results.delete(id);
           controllers.delete(id);
+          taskUnsubs.delete(id);
         }
       }
     }
@@ -91,7 +93,7 @@ export const BackgroundManager = {
         return makeFailedTask(input, `max depth (${maxDepth}) exceeded`);
       }
 
-      const descendantCount = [...tasks.values()].filter(
+      const descendantCount = active.filter(
         (t) => t.parentSessionId === input.parentSessionId,
       ).length;
       if (descendantCount >= maxDescendants) {
@@ -156,11 +158,13 @@ export const BackgroundManager = {
 
       const runUnsubs: Array<() => void> = [];
       const cleanupRunSubs = () => runUnsubs.forEach((u) => u());
+      taskUnsubs.set(id, cleanupRunSubs);
 
       runUnsubs.push(
         Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
           if (data.payload.sessionId !== sessionId) return;
           cleanupRunSubs();
+          taskUnsubs.delete(id);
 
           const current = tasks.get(id);
           if (!current || current.status === "cancelled") return;
@@ -204,6 +208,7 @@ export const BackgroundManager = {
         Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
           if (data.payload.sessionId !== sessionId) return;
           cleanupRunSubs();
+          taskUnsubs.delete(id);
 
           const current = tasks.get(id);
           if (!current || current.status === "cancelled") return;
@@ -212,7 +217,7 @@ export const BackgroundManager = {
             ...current,
             status: "failed",
             completedAt: Date.now(),
-            error: data.payload.error,
+            error: data.payload.error ?? "unknown error",
           };
           tasks.set(id, failed);
 
@@ -223,7 +228,7 @@ export const BackgroundManager = {
           Bus.publish(Subagent.Events.BackgroundTaskFailed, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
-            payload: { taskId: id, error: data.payload.error },
+            payload: { taskId: id, error: data.payload.error ?? "unknown error" },
           });
         }),
       );
@@ -249,6 +254,8 @@ export const BackgroundManager = {
         return false;
 
       controllers.get(taskId)?.abort();
+      taskUnsubs.get(taskId)?.();
+      taskUnsubs.delete(taskId);
       tasks.set(taskId, { ...task, status: "cancelled", completedAt: Date.now() });
 
       Bus.publish(Subagent.Events.BackgroundTaskCancelled, {
