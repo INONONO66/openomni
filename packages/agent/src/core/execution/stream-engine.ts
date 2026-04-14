@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
+import { run as llmRun, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEvent,
@@ -29,70 +29,19 @@ import {
 } from "../retry";
 import { buildSystemPrompt } from "../prompt-builder";
 import { MiddlewareEngine, fromConfig } from "../middleware";
-import type { MemoryResult } from "../memory";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
 } from "../middleware/builtin";
-
-function summarizeInput(input: Record<string, unknown>): string {
-  try {
-    const str = JSON.stringify(input);
-    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
-  } catch {
-    return "[unserializable]";
-  }
-}
-
-async function resolveProviderModel(model: {
-  provider: string;
-  id: string;
-}): Promise<Provider.Model> {
-  const data = await ModelsDev.get();
-  const providerData = data[model.provider];
-  if (!providerData) throw new Error(`Provider not found: ${model.provider}`);
-  const rawModel = providerData.models?.[model.id];
-  if (!rawModel) throw new Error(`Model not found: ${model.id}`);
-  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
-}
-
-function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
-  const output: Message.WithParts[] = [];
-  for (const message of messages) {
-    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
-    output.push(
-      message.role === "user"
-        ? createUserMessage(message.content, "stream-engine")
-        : createAssistantMessage(message.content, parentID, "stream-engine"),
-    );
-  }
-  return output;
-}
-
-function getLastUserMessageText(messages: Message.WithParts[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].info.role === "user") {
-      return messages[i].parts
-        .filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("");
-    }
-  }
-  return null;
-}
-
-function formatMemoryContext(results: MemoryResult[]): string {
-  const entries = results.map((r) => `- ${r.content}`).join("\n");
-  return `[Memory Context]\n${entries}`;
-}
-
-function prependContextMessage(
-  messages: Message.WithParts[],
-  contextText: string,
-): Message.WithParts[] {
-  return [createUserMessage(contextText, "stream-engine"), ...messages];
-}
+import {
+  resolveProviderModel,
+  getLastUserMessageText,
+  formatMemoryContext,
+  prependContextMessage,
+  toMessagesWithParts,
+  summarizeInput,
+} from "./shared";
 
 function createGuardedToolExecutor(
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
@@ -248,7 +197,7 @@ export async function* streamAgent(
     try {
       const providerModel = await resolveProviderModel(config.model);
       let budgetState = createBudgetState();
-      let messages = toMessagesWithParts(input.messages);
+      let messages = toMessagesWithParts(input.messages, "stream-engine");
       let lastAssistantText = "";
       const steps: AgentStep[] = [];
       const totalUsage: TokenUsage = {
@@ -354,6 +303,7 @@ export async function* streamAgent(
               effectiveMessages = prependContextMessage(
                 messages,
                 formatMemoryContext(memoryResults),
+                "stream-engine",
               );
             }
           }

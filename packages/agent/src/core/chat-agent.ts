@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, type RunInput } from "@openomni/llm";
+import { run as llmRun, type RunInput } from "@openomni/llm";
 import type { Guardrail, Message, Sink, Tool } from "@openomni/protocol";
 import type {
   AgentEventEmitter,
@@ -26,21 +26,19 @@ import {
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
 } from "./middleware/builtin";
-import { Telemetry } from "./telemetry";
 import type { AgentEvent } from "./types";
-import type { MemoryResult } from "./memory";
+import { Telemetry } from "./telemetry";
 import { createAssistantMessage, createUserMessage } from "./message-factory";
 import { ToolGuard } from "./tool-guard";
 import { buildSystemPrompt } from "./prompt-builder";
-
-function summarizeInput(input: Record<string, unknown>): string {
-  try {
-    const str = JSON.stringify(input);
-    return str.length > 100 ? `${str.slice(0, 97)}...` : str;
-  } catch {
-    return "[unserializable]";
-  }
-}
+import {
+  resolveProviderModel,
+  getLastUserMessageText,
+  formatMemoryContext,
+  prependContextMessage,
+  toMessagesWithParts,
+  summarizeInput,
+} from "./execution/shared";
 
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;
@@ -53,64 +51,6 @@ const noopSink: Sink = {
   onToolResult: () => undefined,
   onSnapshot: () => undefined,
 };
-
-async function resolveProviderModel(model: {
-  provider: string;
-  id: string;
-}): Promise<Provider.Model> {
-  const data = await ModelsDev.get();
-  const providerData = data[model.provider];
-
-  if (!providerData) {
-    throw new Error(`Provider not found: ${model.provider}`);
-  }
-
-  const rawModel = providerData.models?.[model.id];
-  if (!rawModel) {
-    throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
-  }
-
-  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
-}
-
-function getLastUserMessageText(messages: Message.WithParts[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].info.role === "user") {
-      return messages[i].parts
-        .filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("");
-    }
-  }
-  return null;
-}
-
-function formatMemoryContext(results: MemoryResult[]): string {
-  const entries = results.map((r) => `- ${r.content}`).join("\n");
-  return `[Memory Context]\n${entries}`;
-}
-
-function prependContextMessage(
-  messages: Message.WithParts[],
-  contextText: string,
-): Message.WithParts[] {
-  return [createUserMessage(contextText, "chat-agent"), ...messages];
-}
-
-function toMessagesWithParts(messages: ChatAgentInput["messages"]): Message.WithParts[] {
-  const output: Message.WithParts[] = [];
-
-  for (const message of messages) {
-    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
-    output.push(
-      message.role === "user"
-        ? createUserMessage(message.content, "chat-agent")
-        : createAssistantMessage(message.content, parentID, "chat-agent"),
-    );
-  }
-
-  return output;
-}
 
 function createGuardedToolExecutor(
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>,
@@ -275,7 +215,7 @@ export namespace ChatAgent {
               try {
                 const providerModel = await resolveProviderModel(config.model);
                 let budgetState = createBudgetState();
-                let messages = toMessagesWithParts(input.messages);
+                let messages = toMessagesWithParts(input.messages, "chat-agent");
                 let lastAssistantText = "";
                 const steps: AgentStep[] = [];
                 let compactionCount = 0;
@@ -396,6 +336,7 @@ export namespace ChatAgent {
                         effectiveMessages = prependContextMessage(
                           messages,
                           formatMemoryContext(memoryResults),
+                          "chat-agent",
                         );
                       }
                     }
