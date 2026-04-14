@@ -1,0 +1,234 @@
+import { Subagent } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+import { SubagentRuntime } from "./runtime.js";
+
+type LaunchInput = {
+  agentName: string;
+  prompt: string;
+  model: { provider: string; id: string };
+  parentSessionId: string;
+  depth?: number;
+};
+
+type Config = {
+  maxConcurrentPerAgent?: number;
+  maxConcurrentTotal?: number;
+  maxDepth?: number;
+  maxDescendants?: number;
+  taskTtlMs?: number;
+  onTaskComplete?: (result: Subagent.BackgroundTaskResult) => void;
+};
+
+type BackgroundManagerInstance = {
+  launch(input: LaunchInput): Promise<Subagent.BackgroundTask>;
+  getTask(taskId: string): Subagent.BackgroundTask | undefined;
+  getResult(taskId: string): Subagent.BackgroundTaskResult | undefined;
+  cancel(taskId: string): Promise<boolean>;
+  listByParent(parentSessionId: string): Subagent.BackgroundTask[];
+  cleanup(): void;
+};
+
+export const BackgroundManager = {
+  create(config?: Config): BackgroundManagerInstance {
+    const maxConcurrentPerAgent = config?.maxConcurrentPerAgent ?? 3;
+    const maxConcurrentTotal = config?.maxConcurrentTotal ?? 10;
+    const maxDepth = config?.maxDepth ?? 5;
+    const maxDescendants = config?.maxDescendants ?? 10;
+    const taskTtlMs = config?.taskTtlMs ?? 60_000;
+    const onTaskComplete = config?.onTaskComplete;
+
+    const tasks = new Map<string, Subagent.BackgroundTask>();
+    const results = new Map<string, Subagent.BackgroundTaskResult>();
+    const controllers = new Map<string, AbortController>();
+
+    function activeTasks(): Subagent.BackgroundTask[] {
+      return [...tasks.values()].filter((t) => t.status === "running" || t.status === "pending");
+    }
+
+    function makeFailedTask(input: LaunchInput, error: string): Subagent.BackgroundTask {
+      return {
+        id: `bg_${crypto.randomUUID().slice(0, 8)}`,
+        agentName: input.agentName,
+        prompt: input.prompt,
+        status: "failed",
+        parentSessionId: input.parentSessionId,
+        queuedAt: Date.now(),
+        error,
+        depth: input.depth ?? 0,
+      };
+    }
+
+    function cleanup(): void {
+      const now = Date.now();
+      for (const [id, task] of tasks) {
+        if (task.completedAt !== undefined && now - task.completedAt > taskTtlMs) {
+          tasks.delete(id);
+          results.delete(id);
+          controllers.delete(id);
+        }
+      }
+    }
+
+    async function launch(input: LaunchInput): Promise<Subagent.BackgroundTask> {
+      cleanup();
+
+      const depth = input.depth ?? 0;
+      const active = activeTasks();
+
+      const perAgentCount = active.filter((t) => t.agentName === input.agentName).length;
+      if (perAgentCount >= maxConcurrentPerAgent) {
+        return makeFailedTask(
+          input,
+          `max concurrent tasks per agent (${maxConcurrentPerAgent}) exceeded`,
+        );
+      }
+
+      if (active.length >= maxConcurrentTotal) {
+        return makeFailedTask(input, `max concurrent total tasks (${maxConcurrentTotal}) exceeded`);
+      }
+
+      if (depth > maxDepth) {
+        return makeFailedTask(input, `max depth (${maxDepth}) exceeded`);
+      }
+
+      const descendantCount = [...tasks.values()].filter(
+        (t) => t.parentSessionId === input.parentSessionId,
+      ).length;
+      if (descendantCount >= maxDescendants) {
+        return makeFailedTask(
+          input,
+          `max descendants (${maxDescendants}) from same parent exceeded`,
+        );
+      }
+
+      const id = `bg_${crypto.randomUUID().slice(0, 8)}`;
+      const controller = new AbortController();
+      controllers.set(id, controller);
+
+      const task: Subagent.BackgroundTask = {
+        id,
+        agentName: input.agentName,
+        prompt: input.prompt,
+        status: "pending",
+        parentSessionId: input.parentSessionId,
+        queuedAt: Date.now(),
+        depth,
+      };
+      tasks.set(id, task);
+
+      const { sessionId, runId } = await SubagentRuntime.spawnBackground({
+        agentName: input.agentName,
+        prompt: input.prompt,
+        title: input.prompt.slice(0, 50),
+        model: input.model,
+        signal: controller.signal,
+      });
+
+      const running: Subagent.BackgroundTask = {
+        ...task,
+        status: "running",
+        sessionId,
+        runId,
+        startedAt: Date.now(),
+      };
+      tasks.set(id, running);
+
+      const runUnsubs: Array<() => void> = [];
+      const cleanupRunSubs = () => runUnsubs.forEach((u) => u());
+
+      runUnsubs.push(
+        Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+          if (data.payload.sessionId !== sessionId) return;
+          cleanupRunSubs();
+
+          const current = tasks.get(id);
+          if (!current || current.status === "cancelled") return;
+
+          const completed: Subagent.BackgroundTask = {
+            ...current,
+            status: "completed",
+            completedAt: Date.now(),
+          };
+          tasks.set(id, completed);
+
+          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "completed" };
+          results.set(id, result);
+          onTaskComplete?.(result);
+
+          Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: { taskId: id, status: "completed" as const, sessionId },
+          });
+        }),
+      );
+
+      runUnsubs.push(
+        Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+          if (data.payload.sessionId !== sessionId) return;
+          cleanupRunSubs();
+
+          const current = tasks.get(id);
+          if (!current || current.status === "cancelled") return;
+
+          const failed: Subagent.BackgroundTask = {
+            ...current,
+            status: "failed",
+            completedAt: Date.now(),
+            error: data.payload.error,
+          };
+          tasks.set(id, failed);
+
+          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
+          results.set(id, result);
+          onTaskComplete?.(result);
+
+          Bus.publish(Subagent.Events.BackgroundTaskFailed, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: { taskId: id, error: data.payload.error },
+          });
+        }),
+      );
+
+      Bus.publish(Subagent.Events.BackgroundTaskLaunched, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        payload: {
+          taskId: id,
+          agentName: input.agentName,
+          parentSessionId: input.parentSessionId,
+          status: "running" as const,
+        },
+      });
+
+      return running;
+    }
+
+    async function cancel(taskId: string): Promise<boolean> {
+      const task = tasks.get(taskId);
+      if (!task) return false;
+
+      controllers.get(taskId)?.abort();
+      tasks.set(taskId, { ...task, status: "cancelled", completedAt: Date.now() });
+
+      Bus.publish(Subagent.Events.BackgroundTaskCancelled, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        payload: { taskId },
+      });
+
+      return true;
+    }
+
+    return {
+      launch,
+      getTask: (taskId) => tasks.get(taskId),
+      getResult: (taskId) => results.get(taskId),
+      cancel,
+      listByParent: (parentSessionId) =>
+        [...tasks.values()].filter((t) => t.parentSessionId === parentSessionId),
+      cleanup,
+    };
+  },
+};
