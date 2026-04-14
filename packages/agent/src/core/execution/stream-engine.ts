@@ -30,6 +30,7 @@ import {
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
   createMemoryMiddleware,
+  createToolGuardMiddleware,
 } from "../middleware/builtin";
 import { resolveProviderModel, toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
@@ -48,6 +49,16 @@ export async function* streamAgent(
   engine.register(createBudgetWarningMiddleware());
   for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
     engine.register(reg);
+  }
+  if (config.permissions) {
+    engine.register(
+      createToolGuardMiddleware({
+        permission: config.permissions,
+        stepGuard: config.stepGuard,
+        eventEmitter: config.eventEmitter,
+        source: "stream-engine",
+      }),
+    );
   }
   if (config.memory) {
     engine.register(createMemoryMiddleware(config.memory));
@@ -157,18 +168,13 @@ export async function* streamAgent(
         const hookedExecutor = config.toolExecutor
           ? createToolExecutor({
               toolExecutor: config.toolExecutor,
-              permission: config.permissions,
-              hooks: config.hooks,
-              stepGuard: config.stepGuard,
-              eventEmitter: config.eventEmitter,
+              engine,
               getContext: () => ({
                 steps,
                 turnCount: budgetState.turns,
                 elapsedMs: Date.now() - startTime,
               }),
               onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
-              source: "stream-engine",
-              engine,
             })
           : undefined;
 
