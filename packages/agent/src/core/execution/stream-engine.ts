@@ -29,14 +29,9 @@ import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
+  createMemoryMiddleware,
 } from "../middleware/builtin";
-import {
-  resolveProviderModel,
-  getLastUserMessageText,
-  formatMemoryContext,
-  prependContextMessage,
-  toMessagesWithParts,
-} from "./shared";
+import { resolveProviderModel, toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
 
 export async function* streamAgent(
@@ -53,6 +48,9 @@ export async function* streamAgent(
   engine.register(createBudgetWarningMiddleware());
   for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
     engine.register(reg);
+  }
+  if (config.memory) {
+    engine.register(createMemoryMiddleware(config.memory));
   }
   if (config.compaction) {
     engine.register(createCompactionMiddleware(config.compaction));
@@ -152,20 +150,7 @@ export async function* streamAgent(
 
         if (config.signal?.aborted) throw new Error("aborted");
 
-        let effectiveMessages = messages;
-        if (config.memory) {
-          const lastUserText = getLastUserMessageText(messages);
-          if (lastUserText) {
-            const memoryResults = await config.memory.retrieve(lastUserText);
-            if (memoryResults.length > 0) {
-              effectiveMessages = prependContextMessage(
-                messages,
-                formatMemoryContext(memoryResults),
-                "stream-engine",
-              );
-            }
-          }
-        }
+        const effectiveMessages = messages;
 
         const preToolUseVerdicts: HookVerdict[] = [];
 
