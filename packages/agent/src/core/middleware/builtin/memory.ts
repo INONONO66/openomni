@@ -18,7 +18,7 @@ function getLastUserText(messages: Message.WithParts[] | undefined): string | nu
 export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
   return {
     name: "builtin:memory",
-    timing: "pre_turn",
+    timing: "on_system_prompt",
     priority: 100,
     fn: async (ctx) => {
       const text = getLastUserText(ctx.messages);
@@ -31,7 +31,10 @@ export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
       }
       if (!results || results.length === 0) return { action: "continue" };
       const entries = results.map((r) => `- ${r.content}`).join("\n");
-      return { action: "inject", message: `[Memory Context]\n${entries}` };
+      return {
+        action: "transform",
+        input: { appendContext: `[Memory Context]\n${entries}` },
+      };
     },
   };
 }

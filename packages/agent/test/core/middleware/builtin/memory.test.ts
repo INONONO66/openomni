@@ -40,10 +40,10 @@ describe("createMemoryMiddleware", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("inject");
-    expect(verdict.action === "inject" && verdict.message).toBe(
-      "[Memory Context]\n- first memory\n- second memory",
-    );
+    expect(verdict.action).toBe("transform");
+    expect(
+      verdict.action === "transform" && (verdict.input as Record<string, unknown>).appendContext,
+    ).toBe("[Memory Context]\n- first memory\n- second memory");
   });
 
   it("should continue when no memory results found", async () => {
@@ -98,7 +98,7 @@ describe("createMemoryMiddleware", () => {
     const middleware = createMemoryMiddleware(mockMemory);
 
     expect(middleware.name).toBe("builtin:memory");
-    expect(middleware.timing).toBe("pre_turn");
+    expect(middleware.timing).toBe("on_system_prompt");
     expect(middleware.priority).toBe(100);
     expect(typeof middleware.fn).toBe("function");
   });
@@ -120,6 +120,6 @@ describe("createMemoryMiddleware", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("inject");
+    expect(verdict.action).toBe("transform");
   });
 });

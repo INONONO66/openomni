@@ -44,33 +44,32 @@ export async function* streamAgent(
   let attempt = 1;
   let lastError = "";
 
-  const engine = MiddlewareEngine.create();
-  engine.register(createBudgetReassuranceMiddleware());
-  engine.register(createBudgetWarningMiddleware());
-  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-    engine.register(reg);
-  }
-  if (config.permissions) {
-    engine.register(
-      createToolGuardMiddleware({
-        permission: config.permissions,
-        stepGuard: config.stepGuard,
-        eventEmitter: config.eventEmitter,
-        source: "stream-engine",
-      }),
-    );
-  }
-  if (config.memory) {
-    engine.register(createMemoryMiddleware(config.memory));
-  }
-  if (config.compaction) {
-    engine.register(createCompactionMiddleware(config.compaction));
-  }
-  for (const reg of config.middleware ?? []) {
-    engine.register(reg);
-  }
-
   while (attempt <= retryPolicy.maxAttempts) {
+    const engine = MiddlewareEngine.create();
+    engine.register(createBudgetReassuranceMiddleware());
+    engine.register(createBudgetWarningMiddleware());
+    for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
+      engine.register(reg);
+    }
+    if (config.permissions) {
+      engine.register(
+        createToolGuardMiddleware({
+          permission: config.permissions,
+          stepGuard: config.stepGuard,
+          eventEmitter: config.eventEmitter,
+          source: "stream-engine",
+        }),
+      );
+    }
+    if (config.memory) {
+      engine.register(createMemoryMiddleware(config.memory));
+    }
+    if (config.compaction) {
+      engine.register(createCompactionMiddleware(config.compaction));
+    }
+    for (const reg of config.middleware ?? []) {
+      engine.register(reg);
+    }
     try {
       const providerModel = await resolveProviderModel(config.model);
       let budgetState = createBudgetState();
