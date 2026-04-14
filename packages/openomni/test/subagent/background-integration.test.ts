@@ -68,10 +68,13 @@ describe("BackgroundManager integration: launch + complete + retrieve", () => {
     expect(task.sessionId).toBeString();
     expect(task.runId).toBeString();
 
-    const session = Session.get(task.sessionId!);
+    const sessionId = task.sessionId as string;
+    const runId = task.runId as string;
+
+    const session = Session.get(sessionId);
     expect(session).toBeDefined();
 
-    const activeRun = await WorkerRun.get(task.sessionId!, task.runId!);
+    const activeRun = await WorkerRun.get(sessionId, runId);
     expect(activeRun).toBeDefined();
     expect(activeRun?.status).toBe("running");
 
@@ -89,7 +92,7 @@ describe("BackgroundManager integration: launch + complete + retrieve", () => {
     expect(finalTask?.status).toBe("completed");
     expect(finalTask?.completedAt).toBeDefined();
 
-    const finalRun = await WorkerRun.get(task.sessionId!, task.runId!);
+    const finalRun = await WorkerRun.get(sessionId, runId);
     expect(finalRun?.status).toBe("succeeded");
   });
 });
