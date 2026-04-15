@@ -32,6 +32,7 @@ const mockProviderFromModelsDevModel = mock(() => ({
 mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  ProviderTransform: { resolveVariant: () => ({}) },
   run: (input: MockRunInput, sink: Sink) => mockRunFn(input, sink),
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),

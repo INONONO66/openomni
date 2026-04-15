@@ -9,7 +9,7 @@
     "check-types": "tsc --noEmit",
     "lint": "bunx biome check ./src",
     "test": "bun test",
-    "test:ci": "bun test test/dag test/plan test/subagent test/ingress"
+    "test:ci": "bun test"
   },
   "dependencies": {
     "@openomni/agent": "workspace:*",
