@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export namespace Hook {
   export const Timing = z.enum([
+    "pre_run",
     "pre_tool_use",
     "post_tool_use",
     "pre_turn",
@@ -9,6 +10,7 @@ export namespace Hook {
     "on_error",
     "post_compaction",
     "on_system_prompt",
+    "post_run",
   ]);
   export type Timing = z.infer<typeof Timing>;
 
