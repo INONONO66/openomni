@@ -1,6 +1,6 @@
 # DAG Module
 
-Pure dependency-graph utilities for Plan/Team mode step scheduling.
+Pure dependency-graph utilities for plan step scheduling.
 Zero external deps beyond `PlanStep` from protocol. Single file, four functions.
 
 ## API
