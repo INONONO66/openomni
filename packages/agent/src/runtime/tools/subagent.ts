@@ -1,32 +1,39 @@
 import type { Tool, Subagent } from "@openomni/protocol";
-import { ProviderTransform } from "@openomni/llm";
-import { ChatAgent } from "../../core/chat-agent";
-import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import { AgentRegistry } from "../registry/registry";
-import { AgentMessenger } from "../messenger/messenger";
-import { BusTransport } from "../messenger/transport";
+import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import type { MiddlewareRegistration } from "../../core/middleware/types";
+
+export interface SubagentRuntimeSpawnConfig {
+  agentName: string;
+  title: string;
+  prompt: string;
+  model: { provider: string; id: string };
+  systemPrompt?: string;
+  middleware?: MiddlewareRegistration[];
+}
+
+export interface SubagentRuntimeSendConfig {
+  sessionId: string;
+  prompt: string;
+  model: { provider: string; id: string };
+  systemPrompt?: string;
+  middleware?: MiddlewareRegistration[];
+}
+
+export type SubagentRuntime = {
+  spawn: (
+    config: SubagentRuntimeSpawnConfig,
+  ) => Promise<{ sessionId: string; runId: string; output: string }>;
+  send: (
+    config: SubagentRuntimeSendConfig,
+  ) => Promise<{ sessionId: string; runId: string; output: string }>;
+};
 
 export interface SubagentToolOptions {
   delegationContext?: DelegationContext;
   messengerAllowPatterns?: Array<{ from: string; to: string }>;
   middleware?: MiddlewareRegistration[];
-  subagentRuntime?: {
-    spawn: (config: {
-      agentName: string;
-      prompt: string;
-      parentSessionId?: string;
-      title: string;
-      model: { provider: string; id: string };
-      systemPrompt?: string;
-    }) => Promise<{ sessionId: string; runId: string; output: string }>;
-    send: (config: {
-      sessionId: string;
-      prompt: string;
-      model: { provider: string; id: string };
-      systemPrompt?: string;
-    }) => Promise<{ sessionId: string; runId: string; output: string }>;
-  };
+  subagentRuntime: SubagentRuntime;
   backgroundManager?: {
     launch: (input: {
       agentName: string;
@@ -120,6 +127,8 @@ export namespace SubagentTool {
         };
       }
 
+      const model = definition.model ?? fallbackModel;
+
       if (background) {
         if (!options?.backgroundManager) {
           return {
@@ -132,7 +141,7 @@ export namespace SubagentTool {
         const task = await options.backgroundManager.launch({
           agentName,
           prompt,
-          model: definition.model ?? fallbackModel,
+          model,
           parentSessionId: sessionId ?? `anon_${crypto.randomUUID().slice(0, 8)}`,
         });
         if (task.status === "failed") {
@@ -151,90 +160,39 @@ export namespace SubagentTool {
         };
       }
 
-      const childAbort = ctx?.parentAbort;
-      const childBudget = definition.budget;
-      const model = definition.model ?? fallbackModel;
-      const variantOptions = ProviderTransform.resolveVariant(model, definition.variant);
-      const providerOptions: Record<string, unknown> = {
-        ...variantOptions,
-        ...(definition.temperature !== undefined && { temperature: definition.temperature }),
-      };
-
-      if (options?.subagentRuntime) {
-        try {
-          const result = sessionId
-            ? await options.subagentRuntime.send({
-                sessionId,
-                prompt,
-                model,
-                systemPrompt: definition.systemPrompt,
-              })
-            : await options.subagentRuntime.spawn({
-                agentName,
-                prompt,
-                title: prompt.slice(0, 50),
-                model,
-                systemPrompt: definition.systemPrompt,
-              });
-
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: "",
-            output: `${result.output}\n[session:${result.sessionId}]`,
-            isError: false,
-          };
-        } catch (error) {
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: "",
-            output: error instanceof Error ? error.message : String(error),
-            isError: true,
-          };
-        }
+      if (!options?.subagentRuntime) {
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: "",
+          output: "subagentRuntime is required but not configured",
+          isError: true,
+        };
       }
 
+      const propagated = options.middleware?.filter((m) => m.propagate === true) ?? [];
+
       try {
-        const propagated = options?.middleware?.filter((m) => m.propagate === true) ?? [];
-        const childAgent = ChatAgent.create({
-          model,
-          systemPrompt: definition.systemPrompt,
-          budget: childBudget,
-          permissions: definition.permissions,
-          signal: childAbort,
-          providerOptions: Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
-          middleware: propagated.length > 0 ? propagated : undefined,
-        });
-
-        const result = await childAgent.run({
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        if (ctx?.onChildTokensConsumed && result.usage) {
-          ctx.onChildTokensConsumed(result.usage.inputTokens, result.usage.outputTokens);
-        }
-
-        const messenger = AgentMessenger.create(new BusTransport(), {
-          allowPatterns: options?.messengerAllowPatterns,
-        });
-
-        await messenger.send({
-          id: crypto.randomUUID(),
-          traceId: crypto.randomUUID(),
-          correlationId: null,
-          sessionId: "subagent-tool",
-          runId: "subagent-tool",
-          fromAgentId: agentName,
-          toAgentId: "parent",
-          sentAt: new Date().toISOString(),
-          schemaRef: "completion",
-          payload: result.text,
-          persistencePolicy: "both",
-        });
+        const result = sessionId
+          ? await options.subagentRuntime.send({
+              sessionId,
+              prompt,
+              model,
+              systemPrompt: definition.systemPrompt,
+              middleware: propagated.length > 0 ? propagated : undefined,
+            })
+          : await options.subagentRuntime.spawn({
+              agentName,
+              prompt,
+              title: prompt.slice(0, 50),
+              model,
+              systemPrompt: definition.systemPrompt,
+              middleware: propagated.length > 0 ? propagated : undefined,
+            });
 
         return {
           id: crypto.randomUUID(),
           toolCallId: "",
-          output: result.text,
+          output: `${result.output}\n[session:${result.sessionId}]`,
           isError: false,
         };
       } catch (error) {

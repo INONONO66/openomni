@@ -5,18 +5,8 @@ import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import type { AgentProfile } from "@openomni/protocol";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
-let mockChatAgentCreate: any;
-
-mock.module("../../../src/core/chat-agent", () => ({
-  ChatAgent: {
-    create: (...args: unknown[]) => mockChatAgentCreate(...args),
-  },
-}));
 
 beforeAll(async () => {
-  mockChatAgentCreate = mock(() => ({
-    run: mock(async () => ({ text: "", usage: undefined })),
-  }));
   ({ SubagentTool } = await import("../../../src/runtime/tools/subagent"));
 });
 
@@ -32,13 +22,17 @@ function makeDefinition(
   };
 }
 
+function makeRuntime() {
+  return {
+    spawn: mock(async () => ({ sessionId: "s", runId: "r", output: "" })),
+    send: mock(async () => ({ sessionId: "s", runId: "r", output: "" })),
+  };
+}
+
 function resetState() {
   AgentRegistry.clear();
   Bus.reset();
   AgentMessenger._resetLog();
-  mockChatAgentCreate = mock(() => ({
-    run: mock(async () => ({ text: "", usage: undefined })),
-  }));
 }
 
 describe("SubagentTool", () => {
@@ -62,6 +56,7 @@ describe("SubagentTool", () => {
         visitedAgents: visited,
         parentAbort,
       },
+      subagentRuntime: makeRuntime(),
     });
 
     const result = await execute({ agentName: "agent-a", prompt: "hi" });
@@ -80,6 +75,7 @@ describe("SubagentTool", () => {
         visitedAgents: new Set(),
         parentAbort,
       },
+      subagentRuntime: makeRuntime(),
     });
 
     const result = await execute({ agentName: "agent-b", prompt: "hi" });
@@ -87,50 +83,14 @@ describe("SubagentTool", () => {
     expect(result.output).toContain("depth");
   });
 
-  it("passes definition budget directly to child agent", async () => {
+  it("returns error when subagentRuntime is not provided", async () => {
     resetState();
-    mockChatAgentCreate = mock(() => ({
-      run: mock(async () => ({ text: "ok", usage: undefined })),
-    }));
-    AgentRegistry.define(makeDefinition("budget-agent", { budget: { maxTurns: 10 } }));
+    AgentRegistry.define(makeDefinition("no-runtime-agent"));
     const { execute } = SubagentTool.create();
-    await execute({ agentName: "budget-agent", prompt: "hi" });
-    expect(mockChatAgentCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ budget: { maxTurns: 10 } }),
-    );
-  });
 
-  it("passes temperature as providerOptions to child agent", async () => {
-    resetState();
-    mockChatAgentCreate = mock(() => ({
-      run: mock(async () => ({ text: "ok", usage: undefined })),
-    }));
-    AgentRegistry.define(
-      makeDefinition("temp-agent", {
-        temperature: 0.5,
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      }),
-    );
-    const { execute } = SubagentTool.create();
-    await execute({ agentName: "temp-agent", prompt: "hi" });
-    expect(mockChatAgentCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providerOptions: expect.objectContaining({ temperature: 0.5 }),
-      }),
-    );
-  });
-
-  it("passes no providerOptions when no variant or temperature", async () => {
-    resetState();
-    mockChatAgentCreate = mock(() => ({
-      run: mock(async () => ({ text: "ok", usage: undefined })),
-    }));
-    AgentRegistry.define(makeDefinition("plain-agent"));
-    const { execute } = SubagentTool.create();
-    await execute({ agentName: "plain-agent", prompt: "hi" });
-    expect(mockChatAgentCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ providerOptions: undefined }),
-    );
+    const result = await execute({ agentName: "no-runtime-agent", prompt: "hello" });
+    expect(result.isError).toBe(true);
+    expect(result.output.toLowerCase()).toContain("runtime");
   });
 
   it("spec has correct name and inputSchema", () => {
@@ -147,22 +107,6 @@ describe("SubagentTool", () => {
     expect(schema.properties.sessionId.description).toContain(
       "continue an existing subagent session",
     );
-  });
-
-  it("uses ChatAgent when subagentRuntime is not provided", async () => {
-    resetState();
-    mockChatAgentCreate = mock(() => ({
-      run: mock(async () => ({ text: "legacy output", usage: undefined })),
-    }));
-
-    AgentRegistry.define(makeDefinition("legacy-agent"));
-    const { execute } = SubagentTool.create();
-
-    const result = await execute({ agentName: "legacy-agent", prompt: "hello" });
-
-    expect(mockChatAgentCreate).toHaveBeenCalledTimes(1);
-    expect(result.isError).toBe(false);
-    expect(result.output).toBe("legacy output");
   });
 
   it("spawns a new runtime session when sessionId is absent", async () => {
@@ -187,7 +131,6 @@ describe("SubagentTool", () => {
 
     const result = await execute({ agentName: "runtime-agent", prompt: "hello world" });
 
-    expect(mockChatAgentCreate).toHaveBeenCalledTimes(0);
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(result.isError).toBe(false);
     expect(result.output).toBe("spawned output\n[session:session-1]");
@@ -219,7 +162,6 @@ describe("SubagentTool", () => {
       sessionId: "existing-session",
     });
 
-    expect(mockChatAgentCreate).toHaveBeenCalledTimes(0);
     expect(send).toHaveBeenCalledTimes(1);
     expect(result.isError).toBe(false);
     expect(result.output).toBe("continued output\n[session:session-2]");
