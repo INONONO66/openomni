@@ -106,8 +106,8 @@ describe("pre_run middleware dispatch", () => {
 
     const result = getResult(events);
     expect(result).toBeDefined();
-    expect(result!.guardAborted).toBe(true);
-    expect(result!.steps).toHaveLength(0);
+    expect(result?.guardAborted).toBe(true);
+    expect(result?.steps).toHaveLength(0);
     expect(callOrder).not.toContain("llm_turn");
   });
 
