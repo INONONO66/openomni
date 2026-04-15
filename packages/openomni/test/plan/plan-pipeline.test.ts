@@ -1,23 +1,28 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Gate, Plan } from "@openomni/protocol";
 
-// Prevent module cache contamination from @openomni/llm missing exports
-mock.module("@openomni/agent", () => ({
-  ChatAgent: { create: () => ({ run: async () => ({ text: "{}" }) }) },
-}));
+type GenerateFn = Awaited<typeof import("../../src/plan/plan-agent")>["PlanAgent"]["generate"];
 
-const mockGenerate = mock(async () => ({ plan: createPlan("plan-default") }));
-
-mock.module("../../src/plan/plan-agent", () => ({
-  PlanAgent: {
-    generate: mockGenerate,
-  },
+const mockGenerate = mock<GenerateFn>(async (_goal, _config) => ({
+  plan: createPlan("plan-default"),
 }));
 
 let PlanPipeline: typeof import("../../src/plan/plan-pipeline").PlanPipeline;
+let originalGenerate: GenerateFn;
 
 beforeAll(async () => {
+  const { PlanAgent } = await import("../../src/plan/plan-agent");
+  originalGenerate = PlanAgent.generate;
+  PlanAgent.generate = mockGenerate;
   ({ PlanPipeline } = await import("../../src/plan/plan-pipeline"));
+});
+
+afterAll(() => {
+  if (originalGenerate) {
+    import("../../src/plan/plan-agent").then(({ PlanAgent }) => {
+      PlanAgent.generate = originalGenerate;
+    });
+  }
 });
 
 beforeEach(() => {
