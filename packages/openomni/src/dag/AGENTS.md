@@ -17,7 +17,7 @@ Zero external deps beyond `PlanStep` from protocol. Single file, four functions.
 ## When NOT to use
 
 DAG is structural — it knows step topology, not runtime state.
-For execution tracking (retries, stalls, step results), use `RunLedger` in `src/team/`.
+For execution tracking (retries, stalls, step results), implement state management in the consuming orchestration layer.
 
 ## Pattern
 

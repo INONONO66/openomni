@@ -22,7 +22,7 @@ openomni/
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool
 │   │       └── mcp/            # McpClient, type conversion
-│   └── openomni/        # Orchestration: Plan/Team mode, DAG, storage, category modules
+│   └── openomni/        # Orchestration: Plan mode, DAG, storage, subagent runtime
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
