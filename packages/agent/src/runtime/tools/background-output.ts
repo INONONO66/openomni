@@ -45,7 +45,16 @@ export namespace BackgroundOutputTool {
         timeout?: number;
       };
 
-      const task = options?.backgroundManager?.getTask(taskId);
+      if (!options?.backgroundManager) {
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: "",
+          output: "Background execution not available: no BackgroundManager configured",
+          isError: true,
+        };
+      }
+
+      const task = options.backgroundManager.getTask(taskId);
       if (!task) {
         return {
           id: crypto.randomUUID(),

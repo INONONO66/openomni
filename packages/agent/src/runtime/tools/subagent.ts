@@ -110,6 +110,16 @@ export namespace SubagentTool {
         }
       }
 
+      const definition = AgentRegistry.get(agentName);
+      if (!definition) {
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: "",
+          output: `Delegation failed: agent '${agentName}' is not registered`,
+          isError: true,
+        };
+      }
+
       if (background) {
         if (!options?.backgroundManager) {
           return {
@@ -122,24 +132,22 @@ export namespace SubagentTool {
         const task = await options.backgroundManager.launch({
           agentName,
           prompt,
-          model: fallbackModel,
-          parentSessionId: sessionId ?? "unknown",
+          model: definition.model ?? fallbackModel,
+          parentSessionId: sessionId ?? `anon_${crypto.randomUUID().slice(0, 8)}`,
         });
+        if (task.status === "failed") {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: `Background task failed: ${task.error ?? "unknown error"}`,
+            isError: true,
+          };
+        }
         return {
           id: crypto.randomUUID(),
           toolCallId: "",
           output: `Background task launched.\n\nTask ID: ${task.id}\nStatus: ${task.status}`,
           isError: false,
-        };
-      }
-
-      const definition = AgentRegistry.get(agentName);
-      if (!definition) {
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: "",
-          output: `Delegation failed: agent '${agentName}' is not registered`,
-          isError: true,
         };
       }
 
