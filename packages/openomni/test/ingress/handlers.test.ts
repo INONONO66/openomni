@@ -6,33 +6,27 @@ import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from ".
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
 let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
-let TeamOrchestrator: typeof import("../../src/team/team-orchestrator").TeamOrchestrator;
 let ChatAgent: typeof import("@openomni/agent").ChatAgent;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
 
 const originalFns: {
   planGenerate?: typeof import("../../src/plan/plan-agent").PlanAgent.generate;
-  teamExecute?: typeof import("../../src/team/team-orchestrator").TeamOrchestrator.execute;
   chatCreate?: typeof import("@openomni/agent").ChatAgent.create;
   buildPlanGoal?: typeof import("../../src/ingress/session-bridge").SessionBridge.buildPlanGoal;
   storePlanResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storePlanResult;
-  storeTeamResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storeTeamResult;
   storeDirectResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storeDirectResult;
 } = {};
 
 beforeAll(async () => {
   ({ IngressHandlers } = await import("../../src/ingress/handlers"));
   ({ PlanAgent } = await import("../../src/plan/plan-agent"));
-  ({ TeamOrchestrator } = await import("../../src/team/team-orchestrator"));
   ({ ChatAgent } = await import("@openomni/agent"));
   ({ SessionBridge } = await import("../../src/ingress/session-bridge"));
 
   originalFns.planGenerate = PlanAgent.generate;
-  originalFns.teamExecute = TeamOrchestrator.execute;
   originalFns.chatCreate = ChatAgent.create;
   originalFns.buildPlanGoal = SessionBridge.buildPlanGoal;
   originalFns.storePlanResult = SessionBridge.storePlanResult;
-  originalFns.storeTeamResult = SessionBridge.storeTeamResult;
   originalFns.storeDirectResult = SessionBridge.storeDirectResult;
 });
 
@@ -47,14 +41,10 @@ beforeEach(() => {
 
 afterEach(() => {
   if (originalFns.planGenerate) PlanAgent.generate = originalFns.planGenerate;
-  if (originalFns.teamExecute) TeamOrchestrator.execute = originalFns.teamExecute;
   if (originalFns.chatCreate) ChatAgent.create = originalFns.chatCreate;
   if (originalFns.buildPlanGoal) SessionBridge.buildPlanGoal = originalFns.buildPlanGoal;
   if (originalFns.storePlanResult) {
     SessionBridge.storePlanResult = originalFns.storePlanResult;
-  }
-  if (originalFns.storeTeamResult) {
-    SessionBridge.storeTeamResult = originalFns.storeTeamResult;
   }
   if (originalFns.storeDirectResult) {
     SessionBridge.storeDirectResult = originalFns.storeDirectResult;
@@ -200,102 +190,6 @@ describe("IngressHandlers", () => {
       budget: { maxTurns: 2 },
     });
     expect(storePlanResultMock).toHaveBeenCalledWith(sessionId, planResult, event.agent.model);
-  });
-
-  it("handleTeam executes extracted plan and returns team result", async () => {
-    const sessionId = createSession();
-    const reviewerModel = {
-      provider: "anthropic",
-      id: "claude-3-haiku-20240307",
-    };
-    const executorModel = {
-      provider: "anthropic",
-      id: "claude-3-haiku-20240307",
-    };
-    const plan = createPlan();
-    SessionBridge.storePlanResult(sessionId, { plan }, reviewerModel);
-
-    const teamResult: import("../../src/team/team-orchestrator").TeamOrchestrator.TeamResult = {
-      status: "completed",
-      completedSteps: ["s1"],
-      failedSteps: [],
-      skippedSteps: [],
-      results: new Map([["s1", "done"]]),
-    };
-
-    const executeMock = mock(async () => teamResult);
-    const storeTeamResultMock = mock(() => {});
-    TeamOrchestrator.execute = executeMock;
-    SessionBridge.storeTeamResult = storeTeamResultMock;
-
-    const event: InboundEvent = {
-      id: "event-team-1",
-      surface: "tui",
-      mode: "team",
-      payload: "payload",
-      agents: {
-        reviewer: {
-          model: reviewerModel,
-          systemPrompt: "review prompt",
-        },
-        executor: {
-          model: executorModel,
-          systemPrompt: "execute prompt",
-          tools: [],
-        },
-      },
-    };
-
-    const result = await IngressHandlers.handleTeam({ sessionId, event });
-
-    expect(executeMock).toHaveBeenCalledTimes(1);
-    expect(executeMock).toHaveBeenCalledWith(
-      plan,
-      expect.objectContaining({
-        reviewModel: reviewerModel,
-        reviewSystemPrompt: "review prompt",
-        defaultTeammateConfig: expect.objectContaining({
-          agentId: "executor",
-          model: executorModel,
-          systemPrompt: "execute prompt",
-          tools: [],
-        }),
-      }),
-    );
-    expect(storeTeamResultMock).toHaveBeenCalledWith(sessionId, teamResult, reviewerModel);
-    expect(result.mode).toBe("team");
-    expect(result.result).toEqual({
-      ...teamResult,
-      results: Object.fromEntries(teamResult.results),
-    });
-  });
-
-  it("handleTeam throws when no plan exists in session", async () => {
-    const sessionId = createSession();
-    const executeMock = mock(async () => {
-      throw new Error("should not be called");
-    });
-    TeamOrchestrator.execute = executeMock;
-
-    const event: InboundEvent = {
-      id: "event-team-2",
-      surface: "tui",
-      mode: "team",
-      payload: "payload",
-      agents: {
-        reviewer: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-        executor: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      },
-    };
-
-    await expect(IngressHandlers.handleTeam({ sessionId, event })).rejects.toThrow(
-      /No plan found in session/,
-    );
-    expect(executeMock).toHaveBeenCalledTimes(0);
   });
 
   it("handleDirect runs ChatAgent with session messages and stores output", async () => {

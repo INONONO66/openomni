@@ -14,7 +14,7 @@ export namespace IngressEngine {
   export async function ingest(event: InboundEvent): Promise<IngressResult> {
     InboundEventSchema.parse(event);
 
-    const agentModel = event.mode === "team" ? event.agents.executor.model : event.agent.model;
+    const agentModel = event.agent.model;
     const { session } = IngressSessionResolver.resolve(event, {
       providerID: agentModel.provider,
       modelID: agentModel.id,
@@ -25,8 +25,6 @@ export namespace IngressEngine {
     switch (event.mode) {
       case "plan":
         return IngressHandlers.handlePlan({ sessionId: session.id, event });
-      case "team":
-        return IngressHandlers.handleTeam({ sessionId: session.id, event });
       case "direct":
         return IngressHandlers.handleDirect({ sessionId: session.id, event });
     }

@@ -8,7 +8,6 @@ export * from "./event/index.js";
 export * from "./notification/index.js";
 export * from "./adapter/index.js";
 export * from "./plan/index.js";
-export * from "./team/index.js";
 export * from "./ingress/index.js";
 export * from "./messenger/index.js";
 export * from "./guardrail/index.js";

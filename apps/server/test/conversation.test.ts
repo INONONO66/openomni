@@ -231,41 +231,30 @@ describe("createMessageHandler", () => {
     expect(events[0]?.mode).toBe("direct");
   });
 
-  it("acknowledges plan and team ingress results", async () => {
+  it("acknowledges plan ingress results", async () => {
     const handler = createMessageHandler(deps);
 
-    IngressEngine.ingest = async (event) =>
-      event.mode === "plan"
-        ? {
-            mode: "plan",
-            sessionId: "session-plan",
-            result: {
-              plan: {
-                planId: "plan-1",
-                goal: "build auth",
-                steps: [],
-                createdAt: new Date(),
-                version: 1,
-              },
+    IngressEngine.ingest = async (event) => {
+      if (event.mode === "plan") {
+        return {
+          mode: "plan",
+          sessionId: "session-plan",
+          result: {
+            plan: {
+              planId: "plan-1",
+              goal: "build auth",
+              steps: [],
+              createdAt: new Date(),
+              version: 1,
             },
-          }
-        : {
-            mode: "team",
-            sessionId: "session-team",
-            result: {
-              status: "completed",
-              completedSteps: [],
-              failedSteps: [],
-              skippedSteps: [],
-              results: {},
-            },
-          };
+          },
+        };
+      }
+      throw new Error("unexpected mode");
+    };
 
     expect(await handler(createMessage("/plan build auth"))).toEqual({
       text: "Plan generated: build auth",
-    });
-    expect(await handler(createMessage("/team run"))).toEqual({
-      text: "Team execution started...",
     });
   });
 

@@ -1,7 +1,6 @@
 import { type Message, PlanSchema } from "@openomni/protocol";
 import type { Plan, PlanResult } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import type { TeamOrchestrator } from "../team/team-orchestrator";
 import { normalizePlanPayload } from "../plan/plan-json";
 
 const PLAN_PREFIX = "__OPENOMNI_PLAN__";
@@ -121,29 +120,6 @@ export namespace SessionBridge {
       messageID: message.id,
       type: "text",
       text: PLAN_PREFIX + JSON.stringify(result.plan),
-    };
-    Session.addPart(message.id, part);
-  }
-
-  export function storeTeamResult(
-    sessionId: string,
-    result: TeamOrchestrator.TeamResult,
-    model: { provider: string; id: string },
-  ): void {
-    const message = createAssistantMessage(sessionId, model);
-    Session.addMessage(sessionId, message);
-
-    const serializable = {
-      ...result,
-      results: Object.fromEntries(result.results),
-    };
-
-    const part: Message.TextPart = {
-      id: crypto.randomUUID(),
-      sessionID: sessionId,
-      messageID: message.id,
-      type: "text",
-      text: JSON.stringify(serializable),
     };
     Session.addPart(message.id, part);
   }

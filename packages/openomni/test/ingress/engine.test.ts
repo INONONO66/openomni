@@ -70,51 +70,6 @@ describe("IngressEngine", () => {
     expect(result.result.plan.goal).toBe("Create delivery plan");
   });
 
-  it("ingest() with team mode returns team result", async () => {
-    enqueuePlan("Execute release checks");
-    testState.responseQueue.push("executor output");
-    testState.responseQueue.push(JSON.stringify({ decision: "accept" }));
-
-    const planEvent: InboundEvent = {
-      id: "event-team-plan",
-      surface: "tui",
-      workspace: "/repo",
-      mode: "plan",
-      payload: "Execute release checks",
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const planResult = await IngressEngine.ingest(planEvent);
-
-    const teamEvent: InboundEvent = {
-      id: "event-team-run",
-      surface: "tui",
-      workspace: "/repo",
-      mode: "team",
-      payload: "run",
-      agents: {
-        reviewer: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-        executor: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      },
-    };
-
-    const result = await IngressEngine.ingest(teamEvent);
-
-    expect(planResult.sessionId).toBe(result.sessionId);
-    expect(result.mode).toBe("team");
-    if (result.mode !== "team") {
-      throw new Error("Expected team mode result");
-    }
-    expect(result.result.status).toBe("completed");
-    expect(result.result.completedSteps).toEqual(["s1"]);
-  });
-
   it("ingest() with direct mode returns direct result", async () => {
     testState.responseQueue.push("direct response");
 

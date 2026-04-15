@@ -77,12 +77,10 @@ function extractTextMessages(input: unknown): Array<{ role: string; content: str
 }
 
 describe("IngressEngine integration pipeline", () => {
-  describe("plan -> re-plan -> team lifecycle", () => {
-    it("reuses session and executes latest stored plan", async () => {
+  describe("plan -> re-plan lifecycle", () => {
+    it("reuses session and builds on previous plan", async () => {
       enqueuePlan("plan-1", "Build a REST API", "step-1");
       enqueuePlan("plan-2", "Add auth to step 2", "step-2");
-      testState.responseQueue.push("executor output");
-      testState.responseQueue.push(JSON.stringify({ decision: "accept" }));
 
       const first = await IngressEngine.ingest({
         id: "evt-plan-1",
@@ -126,31 +124,7 @@ describe("IngressEngine integration pipeline", () => {
       expect(replanGoal).toContain("User feedback:");
       expect(replanGoal).toContain("Add auth to step 2");
 
-      const team = await IngressEngine.ingest({
-        id: "evt-team-1",
-        mode: "team",
-        surface: "tui",
-        workspace: "/project",
-        payload: "execute",
-        agents: {
-          reviewer: {
-            model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-          },
-          executor: {
-            model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-          },
-        },
-      });
-
-      expect(team.mode).toBe("team");
-      if (team.mode !== "team") {
-        throw new Error("Expected team mode result");
-      }
-      expect(team.result.status).toBe("completed");
-      expect(team.result.completedSteps).toEqual(["step-2"]);
-
       expect(first.sessionId).toBe(second.sessionId);
-      expect(second.sessionId).toBe(team.sessionId);
     });
   });
 
@@ -237,26 +211,6 @@ describe("IngressEngine integration pipeline", () => {
   });
 
   describe("error cases", () => {
-    it("throws when team mode runs without stored plan", async () => {
-      await expect(
-        IngressEngine.ingest({
-          id: "evt-no-plan-team",
-          mode: "team",
-          surface: "tui",
-          workspace: "/project",
-          payload: "execute",
-          agents: {
-            reviewer: {
-              model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-            },
-            executor: {
-              model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-            },
-          },
-        }),
-      ).rejects.toThrow(/No plan/);
-    });
-
     it("throws zod error when mode is missing", async () => {
       const invalidEvent = {
         id: "evt-invalid-no-mode",

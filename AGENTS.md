@@ -22,7 +22,7 @@ openomni/
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool
 │   │       └── mcp/            # McpClient, type conversion
-│   └── openomni/        # Orchestration: Plan/Team mode, DAG, storage, category modules
+│   └── openomni/        # Orchestration: Plan mode, DAG, storage, subagent runtime
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -30,7 +30,7 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orchestration, storage, category)  ←  cli
+protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orchestration, storage)  ←  cli
     └──────────────────────┘              ↑
     └─────────────────────────────────────┘
     └──────────────────────┘         ↑
@@ -65,13 +65,9 @@ protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orches
 | MCP client                   | `packages/agent/src/runtime/mcp/`                     | McpClient, type conversion                                                                                              |
 | Plan Mode (PlanAgent)        | `packages/openomni/src/plan/`                         | PlanAgent.generate(goal, config) → PlanResult; LLM-based, no exec                                                       |
 | Spec validator               | `packages/openomni/src/plan/spec-validator.ts`        | SpecValidator for plan validation                                                                                       |
-| Team Mode (TeamOrchestrator) | `packages/openomni/src/team/`                         | TeamOrchestrator.execute(plan, config) → TeamResult; deterministic                                                      |
-| Approval gate                | `packages/openomni/src/team/approval-gate.ts`         | ApprovalGate for human-in-the-loop approval                                                                             |
-| Evaluation gate              | `packages/openomni/src/team/evaluation-gate.ts`       | EvaluationGate for step result quality checks                                                                           |
 | DAG utilities                | `packages/openomni/src/dag/`                          | Pure functions: build, validateAcyclic, getReady, complete                                                              |
 | Storage module               | `packages/openomni/src/storage/`                      | TaskStorage, FileTaskStore, task types, persistence helpers                                                             |
-| Category module              | `packages/openomni/src/category/`                     | Category resolution, built-in categories, metadata helpers                                                              |
-| Plan/Team schemas            | `packages/protocol/src/plan/` + `src/team/`           | Plan, PlanStep, PlanResult; Team.StepState, StallReason, 10 events                                                      |
+| Plan schemas                 | `packages/protocol/src/plan/`                         | Plan, PlanStep, PlanResult                                                                                              |
 | CLI commands                 | `apps/cli/src/cmd/`                                   | One file per command group                                                                                              |
 
 ## CONVENTIONS
@@ -121,6 +117,6 @@ openomni agent --mode orchestrated   # full pipeline
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
 - `packages/agent` contains ChatAgent core (`src/core/`) with budget, retry, tool-guard, delegation, telemetry, and execution engine (StreamEngine, ToolExecutor, compaction, parallel-tools). Also contains multi-agent runtime (`src/runtime/`) with messenger, registry, subagent tool, and MCP client.
-- `packages/openomni` contains orchestration (Plan/Team mode, DAG), storage, and category modules. Use `@openomni/openomni` for RunWorker, TaskManager, IngressEngine, and domain helpers.
-- **Plan Mode** (`PlanAgent`) and **Team Mode** (`TeamOrchestrator`) are now implemented in `packages/openomni/src/plan/` and `packages/openomni/src/team/`. Plan Mode generates a structured `Plan` via LLM; Team Mode executes it with a deterministic dispatch loop (LLM used only in ReviewLoop).
-- Plan/Team protocol types live in `packages/protocol/src/plan/` and `packages/protocol/src/team/` — 4 Plan schemas + 4 Team types + 10 BusEvents.
+- `packages/openomni` contains orchestration (Plan mode, DAG), storage, and ingress modules. Use `@openomni/openomni` for PlanAgent, IngressEngine, and domain helpers.
+- **Plan Mode** (`PlanAgent`) is implemented in `packages/openomni/src/plan/`. Plan Mode generates a structured `Plan` via LLM.
+- Plan protocol types live in `packages/protocol/src/plan/` — Plan, PlanStep, PlanResult schemas.

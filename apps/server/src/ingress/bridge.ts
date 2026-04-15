@@ -123,17 +123,6 @@ export function buildInboundEvent(
     };
   }
 
-  if (mode.mode === "team") {
-    return {
-      ...base,
-      mode: "team",
-      agents: {
-        reviewer: agent,
-        executor: agent,
-      },
-    };
-  }
-
   return {
     ...base,
     mode: "direct",
