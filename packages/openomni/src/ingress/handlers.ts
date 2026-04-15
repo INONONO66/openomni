@@ -2,7 +2,6 @@ import { ChatAgent } from "@openomni/agent";
 import type { InboundEvent, IngressResult } from "@openomni/protocol";
 import { SessionBridge } from "./session-bridge";
 import { PlanAgent } from "../plan/plan-agent";
-import { TeamOrchestrator } from "../team/team-orchestrator";
 
 export namespace IngressHandlers {
   export interface HandlerContext {
@@ -27,41 +26,6 @@ export namespace IngressHandlers {
     SessionBridge.storePlanResult(ctx.sessionId, result, ctx.event.agent.model);
 
     return { mode: "plan", sessionId: ctx.sessionId, result };
-  }
-
-  export async function handleTeam(
-    ctx: HandlerContext,
-  ): Promise<Extract<IngressResult, { mode: "team" }>> {
-    if (ctx.event.mode !== "team") {
-      throw new Error("handleTeam requires team mode event");
-    }
-
-    const plan = SessionBridge.extractPlan(ctx.sessionId);
-    const orchestratorConfig: TeamOrchestrator.OrchestratorConfig = {
-      reviewModel: ctx.event.agents.reviewer.model,
-      reviewSystemPrompt: ctx.event.agents.reviewer.systemPrompt,
-      defaultTeammateConfig: {
-        agentId: "executor",
-        model: ctx.event.agents.executor.model,
-        systemPrompt: ctx.event.agents.executor.systemPrompt,
-        tools: ctx.event.agents.executor.tools,
-        toolExecutor: ctx.event.agents.executor.toolExecutor,
-        budget: ctx.event.agents.executor.budget,
-      },
-      teammates: new Map(),
-    };
-
-    const result = await TeamOrchestrator.execute(plan, orchestratorConfig);
-    SessionBridge.storeTeamResult(ctx.sessionId, result, ctx.event.agents.reviewer.model);
-
-    return {
-      mode: "team",
-      sessionId: ctx.sessionId,
-      result: {
-        ...result,
-        results: Object.fromEntries(result.results),
-      },
-    };
   }
 
   export async function handleDirect(

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import type { Plan, PlanResult } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { SessionBridge } from "../../src/ingress/session-bridge";
-import type { TeamOrchestrator } from "../../src/team/team-orchestrator";
 
 const TEST_MODEL = { provider: "anthropic", id: "claude-3-haiku" };
 
@@ -211,37 +210,6 @@ describe("SessionBridge", () => {
       expect(messages).toHaveLength(2);
       expect(messages[0]).toEqual({ role: "user", content: "Hello" });
       expect(messages[1]).toEqual({ role: "user", content: "Continue chat" });
-    });
-  });
-
-  describe("storeTeamResult", () => {
-    it("should store TeamResult as JSON in session", () => {
-      const teamResult: TeamOrchestrator.TeamResult = {
-        status: "completed",
-        completedSteps: ["s1", "s2"],
-        failedSteps: [],
-        skippedSteps: [],
-        results: new Map([
-          ["s1", "Route map created"],
-          ["s2", "Handlers implemented"],
-        ]),
-      };
-
-      SessionBridge.storeTeamResult(sessionId, teamResult, TEST_MODEL);
-
-      const messages = Session.getMessages(sessionId);
-      expect(messages).toHaveLength(1);
-      expect(messages[0].role).toBe("assistant");
-
-      const parts = Session.getParts(messages[0].id);
-      expect(parts).toHaveLength(1);
-      expect(parts[0].type).toBe("text");
-
-      const stored = JSON.parse((parts[0] as Message.TextPart).text);
-      expect(stored.status).toBe("completed");
-      expect(stored.completedSteps).toEqual(["s1", "s2"]);
-      expect(stored.results.s1).toBe("Route map created");
-      expect(stored.results.s2).toBe("Handlers implemented");
     });
   });
 
