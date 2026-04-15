@@ -1,4 +1,4 @@
-export type IngressMode = "direct" | "plan" | "team";
+export type IngressMode = "direct" | "plan";
 
 export function detectMode(text: string): { mode: IngressMode; text: string } {
   const trimmed = text.trimStart();
@@ -8,7 +8,7 @@ export function detectMode(text: string): { mode: IngressMode; text: string } {
   }
 
   const command = trimmed.match(/^\/(\S+)/)?.[1];
-  if (command !== "plan" && command !== "team") {
+  if (command !== "plan") {
     return { mode: "direct", text };
   }
 

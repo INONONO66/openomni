@@ -64,22 +64,4 @@ describe("buildInboundEvent", () => {
     expect(event.payload).toBe("build auth");
     expect(event.agent.toolExecutor).toBeDefined();
   });
-
-  it("builds a team event and reuses the same agent config", () => {
-    const event = buildInboundEvent(
-      createMessage({
-        surfaceKey: "discord:guild-2:channel:channel-9",
-        text: "/team run",
-      }),
-      "dev",
-      createDeps(),
-    );
-
-    expect(event.mode).toBe("team");
-    if (event.mode !== "team") throw new Error("expected team event");
-
-    expect(event.payload).toBe("run");
-    expect(event.agents.reviewer).toEqual(event.agents.executor);
-    expect(event.agents.reviewer.toolExecutor).toBeDefined();
-  });
 });

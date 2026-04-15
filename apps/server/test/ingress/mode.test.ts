@@ -9,13 +9,6 @@ describe("detectMode", () => {
     });
   });
 
-  it("detects /team and strips the prefix", () => {
-    expect(detectMode("/team run")).toEqual({
-      mode: "team",
-      text: "run",
-    });
-  });
-
   it("defaults to direct mode for plain text", () => {
     expect(detectMode("hello")).toEqual({
       mode: "direct",
