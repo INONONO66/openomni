@@ -82,6 +82,16 @@ export const mockProviderFromModelsDevModel = mock(() => ({
 mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
+  ProviderTransform: {
+    resolveVariant: () => ({}),
+    variants: () => ({}),
+    temperature: () => undefined,
+    topP: () => undefined,
+    topK: () => undefined,
+    maxOutputTokens: () => undefined,
+    sdkKey: () => undefined,
+    normalizeMessages: (msgs: unknown[]) => msgs,
+  },
   run: (input: unknown, sink: Sink) => {
     testState.llmInputs.push(input);
     if (testState.runFn) {
