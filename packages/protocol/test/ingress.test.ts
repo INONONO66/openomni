@@ -2,7 +2,6 @@ import { describe, test, expect } from "bun:test";
 import {
   AgentDefSchema,
   PlanEventSchema,
-  TeamEventSchema,
   DirectEventSchema,
   InboundEventSchema,
 } from "../src/ingress/index.js";
@@ -135,72 +134,6 @@ describe("PlanEvent", () => {
   });
 });
 
-describe("TeamEvent", () => {
-  test("should parse valid team event with reviewer and executor agents", () => {
-    const event = TeamEventSchema.parse({
-      id: "event-1",
-      surface: "cli",
-      mode: "team",
-      payload: { goal: "Build and review API" },
-      agents: {
-        reviewer: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
-        executor: {
-          model: {
-            provider: "openai",
-            id: "gpt-4",
-          },
-        },
-      },
-    });
-    expect(event.mode).toBe("team");
-    expect(event.agents.reviewer.model.provider).toBe("anthropic");
-    expect(event.agents.executor.model.provider).toBe("openai");
-  });
-
-  test("should reject team event missing agents.reviewer", () => {
-    expect(() =>
-      TeamEventSchema.parse({
-        id: "event-1",
-        surface: "cli",
-        mode: "team",
-        payload: { goal: "Build and review API" },
-        agents: {
-          executor: {
-            model: {
-              provider: "openai",
-              id: "gpt-4",
-            },
-          },
-        },
-      }),
-    ).toThrow();
-  });
-
-  test("should reject team event missing agents.executor", () => {
-    expect(() =>
-      TeamEventSchema.parse({
-        id: "event-1",
-        surface: "cli",
-        mode: "team",
-        payload: { goal: "Build and review API" },
-        agents: {
-          reviewer: {
-            model: {
-              provider: "anthropic",
-              id: "claude-3-5-sonnet",
-            },
-          },
-        },
-      }),
-    ).toThrow();
-  });
-});
-
 describe("DirectEvent", () => {
   test("should parse valid direct event with agent", () => {
     const event = DirectEventSchema.parse({
@@ -235,30 +168,6 @@ describe("InboundEvent (discriminated union)", () => {
       },
     });
     expect(event.mode).toBe("plan");
-  });
-
-  test("should parse team event via discriminated union", () => {
-    const event = InboundEventSchema.parse({
-      id: "event-1",
-      surface: "cli",
-      mode: "team",
-      payload: { goal: "Build and review API" },
-      agents: {
-        reviewer: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
-        executor: {
-          model: {
-            provider: "openai",
-            id: "gpt-4",
-          },
-        },
-      },
-    });
-    expect(event.mode).toBe("team");
   });
 
   test("should parse direct event via discriminated union", () => {

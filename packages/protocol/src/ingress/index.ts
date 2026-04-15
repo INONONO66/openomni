@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Tool } from "../tool/index.js";
-import { PlanResult } from "../plan/index.js";
+import type { PlanResult } from "../plan/index.js";
 
 // AgentDef — agent configuration passed in by callers (CLI/CUI layer)
 export const AgentDefSchema = z.object({
@@ -33,18 +33,6 @@ export const PlanEventSchema = z.object({
 });
 export type PlanEvent = z.infer<typeof PlanEventSchema> & { agent: AgentDef };
 
-export const TeamEventSchema = z.object({
-  ...InboundEventBase,
-  mode: z.literal("team"),
-  agents: z.object({
-    reviewer: AgentDefSchema,
-    executor: AgentDefSchema,
-  }),
-});
-export type TeamEvent = z.infer<typeof TeamEventSchema> & {
-  agents: { reviewer: AgentDef; executor: AgentDef };
-};
-
 export const DirectEventSchema = z.object({
   ...InboundEventBase,
   mode: z.literal("direct"),
@@ -56,20 +44,9 @@ export type DirectEvent = z.infer<typeof DirectEventSchema> & {
 
 export const InboundEventSchema = z.discriminatedUnion("mode", [
   PlanEventSchema,
-  TeamEventSchema,
   DirectEventSchema,
 ]);
-export type InboundEvent = PlanEvent | TeamEvent | DirectEvent;
-
-// TeamResult — mirrors TeamOrchestrator.TeamResult (plain TS type, NOT Zod)
-export type TeamResult = {
-  status: "completed" | "stalled" | "failed";
-  completedSteps: string[];
-  failedSteps: string[];
-  skippedSteps: string[];
-  stallReason?: string;
-  results: Record<string, string>;
-};
+export type InboundEvent = PlanEvent | DirectEvent;
 
 // DirectResult
 export type DirectResult = {
@@ -80,5 +57,4 @@ export type DirectResult = {
 // IngressResult — discriminated union return type from IngressEngine.ingest()
 export type IngressResult =
   | { mode: "plan"; sessionId: string; result: PlanResult }
-  | { mode: "team"; sessionId: string; result: TeamResult }
   | { mode: "direct"; sessionId: string; result: DirectResult };
