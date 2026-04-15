@@ -17,11 +17,10 @@ beforeAll(async () => {
   ({ PlanPipeline } = await import("../../src/plan/plan-pipeline"));
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (originalGenerate) {
-    import("../../src/plan/plan-agent").then(({ PlanAgent }) => {
-      PlanAgent.generate = originalGenerate;
-    });
+    const { PlanAgent } = await import("../../src/plan/plan-agent");
+    PlanAgent.generate = originalGenerate;
   }
 });
 
