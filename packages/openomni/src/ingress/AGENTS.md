@@ -1,6 +1,6 @@
 # Ingress Module
 
-Single entry point that bridges inbound events to plan/team/direct execution modes.
+Single entry point that bridges inbound events to plan/direct execution modes.
 
 ## Pipeline
 
@@ -13,7 +13,6 @@ Every inbound event flows through three stages:
 | Mode     | Handler        | What it does                                                    |
 |----------|----------------|-----------------------------------------------------------------|
 | `plan`   | `handlePlan`   | Builds goal from session history, calls `PlanAgent.generate()`  |
-| `team`   | `handleTeam`   | Extracts plan from session, runs `TeamOrchestrator.execute()`   |
 | `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent`                 |
 
 ## Session Bridge
@@ -21,7 +20,6 @@ Every inbound event flows through three stages:
 `session-bridge.ts` manages session state per mode:
 
 - **Plan mode**: stores/extracts `Plan` objects using a `__OPENOMNI_PLAN__` prefix convention on `TextPart`. Handles iterative planning by combining previous plans with user feedback.
-- **Team mode**: serializes `TeamResult` (converting `Map` fields to plain objects) into session messages.
 - **Direct mode**: reads session messages into a flat `{ role, content }` array for `ChatAgent.run()`.
 
 Plan payload normalization (Date revival after JSON round-trip) is imported from `../plan/plan-json`.
@@ -29,5 +27,5 @@ Plan payload normalization (Date revival after JSON round-trip) is imported from
 ## Dependencies
 
 - **Upstream**: `@openomni/protocol` (schemas), `@openomni/session` (storage), `@openomni/agent` (ChatAgent)
-- **Sibling**: `../plan/` (PlanAgent, normalizePlanPayload), `../team/` (TeamOrchestrator)
+- **Sibling**: `../plan/` (PlanAgent, normalizePlanPayload)
 - **Downstream**: consumed by CLI and any surface adapter that submits `InboundEvent`s
