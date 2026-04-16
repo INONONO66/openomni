@@ -1,8 +1,11 @@
 import { SubagentTool } from "@openomni/agent";
 import type { NativeTool } from "../../types";
+import { createSubagentRuntime } from "./subagent-runtime";
 
 export function createSubagentTool(): NativeTool {
-  const tool = SubagentTool.create();
+  const tool = SubagentTool.create({
+    subagentRuntime: createSubagentRuntime(),
+  });
   return {
     spec: tool.spec,
     riskTier: 1,

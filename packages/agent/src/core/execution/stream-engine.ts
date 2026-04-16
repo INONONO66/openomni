@@ -93,9 +93,54 @@ export async function* streamAgent(
         throw new Error("toolExecutor is required when tools are provided");
       }
 
+      const preRunVerdict = await engine.dispatch("pre_run", {
+        steps,
+        usage: totalUsage,
+        turnCount: 0,
+        isCompletion: false,
+        continuationCount: 0,
+        elapsedMs: 0,
+        messages,
+        budgetState,
+        budget: config.budget,
+        eventEmitter: config.eventEmitter,
+      });
+      if (preRunVerdict.action === "abort") {
+        yield {
+          type: "complete",
+          result: {
+            text: "",
+            steps: [],
+            usage: totalUsage,
+            finishReason: "stop",
+            guardAborted: true,
+          },
+        };
+        return;
+      }
+      if (preRunVerdict.action === "inject") {
+        messages = [...messages, createUserMessage(preRunVerdict.message, "stream-engine")];
+      }
+
       while (true) {
         const budgetStatus = checkBudget(budgetState, config.budget);
         if (budgetStatus === "exceeded") {
+          const postRunVerdict = await engine.dispatch("post_run", {
+            steps,
+            usage: totalUsage,
+            turnCount: budgetState.turns,
+            isCompletion: true,
+            continuationCount,
+            elapsedMs: Date.now() - startTime,
+            messages,
+            budgetState,
+            budget: config.budget,
+            eventEmitter: config.eventEmitter,
+          });
+          if (postRunVerdict.action === "transform") {
+            const payload = postRunVerdict.input as { text?: unknown };
+            if (typeof payload.text === "string") lastAssistantText = payload.text;
+          }
           yield {
             type: "complete",
             result: {
@@ -358,6 +403,25 @@ export async function* streamAgent(
               },
             };
             return;
+          }
+
+          {
+            const postRunVerdict = await engine.dispatch("post_run", {
+              steps,
+              usage: totalUsage,
+              turnCount: budgetState.turns,
+              isCompletion: true,
+              continuationCount,
+              elapsedMs: Date.now() - startTime,
+              messages,
+              budgetState,
+              budget: config.budget,
+              eventEmitter: config.eventEmitter,
+            });
+            if (postRunVerdict.action === "transform") {
+              const payload = postRunVerdict.input as { text?: unknown };
+              if (typeof payload.text === "string") lastAssistantText = payload.text;
+            }
           }
 
           yield {
