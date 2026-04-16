@@ -1,10 +1,5 @@
 export { Bus, BusEvent } from "./bus";
-export {
-  Storage,
-  InMemoryStorage,
-  SqliteStorageAdapter,
-  initialize,
-} from "./storage";
+export { Storage, SqliteStorageAdapter, initialize } from "./storage";
 export type { InitializeOptions } from "./storage";
 export { Session } from "./session";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";

@@ -408,7 +408,7 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.part.list("unknown")).toEqual([]);
     });
 
-    test("list: returns parts sorted by time_start (nulls last), then id", () => {
+    test("list: returns parts in insertion order", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p4"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p2", 200));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p3", 200));
@@ -416,7 +416,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p0"));
 
       const list = adapter.part.list("m1");
-      expect(list.map((p) => p.id)).toEqual(["p1", "p2", "p3", "p0", "p4"]);
+      expect(list.map((p) => p.id)).toEqual(["p4", "p2", "p3", "p1", "p0"]);
     });
 
     test("list: only returns parts for the given message", () => {
@@ -470,36 +470,36 @@ describe("SqliteStorageAdapter", () => {
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
     });
 
-    test("parts with time_start come before parts without", () => {
+    test("parts are returned in insertion order regardless of time_start", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p-no-time"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p-with-time", 10));
 
       const list = adapter.part.list("m1");
-      expect(list.map((p) => p.id)).toEqual(["p-with-time", "p-no-time"]);
+      expect(list.map((p) => p.id)).toEqual(["p-no-time", "p-with-time"]);
     });
 
-    test("tool parts with non-pending state use state.time.start for sorting", () => {
+    test("tool parts are returned in insertion order", () => {
       adapter.part.set("m1", makeToolPart("s1", "m1", "tool-pending", "pending"));
       adapter.part.set("m1", makeToolPart("s1", "m1", "tool-running", "running", 300));
       adapter.part.set("m1", makeToolPart("s1", "m1", "tool-completed", "completed", 100));
-      adapter.part.set("m1", makeToolPart("s1", "m1", "text", "error", 200));
+      adapter.part.set("m1", makeToolPart("s1", "m1", "tool-error", "error", 200));
 
       const list = adapter.part.list("m1");
       expect(list.map((p) => p.id)).toEqual([
-        "tool-completed",
-        "text",
-        "tool-running",
         "tool-pending",
+        "tool-running",
+        "tool-completed",
+        "tool-error",
       ]);
     });
 
-    test("parts without time_start are sorted by id", () => {
-      adapter.part.set("m1", makeTextPart("s1", "m1", "z-no-time"));
-      adapter.part.set("m1", makeTextPart("s1", "m1", "a-no-time"));
-      adapter.part.set("m1", makeToolPart("s1", "m1", "m-pending", "pending"));
+    test("parts of different types are returned in insertion order", () => {
+      adapter.part.set("m1", makeTextPart("s1", "m1", "text-first"));
+      adapter.part.set("m1", makeToolPart("s1", "m1", "tool-second", "pending"));
+      adapter.part.set("m1", makeTextPart("s1", "m1", "text-third"));
 
       const list = adapter.part.list("m1");
-      expect(list.map((p) => p.id)).toEqual(["a-no-time", "m-pending", "z-no-time"]);
+      expect(list.map((p) => p.id)).toEqual(["text-first", "tool-second", "text-third"]);
     });
   });
 

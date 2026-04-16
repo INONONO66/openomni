@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { Bus, Session, WorkerRun } from "@openomni/session";
+import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { Subagent, type Message } from "@openomni/protocol";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
@@ -8,11 +8,18 @@ describe("SubagentRuntime.wait()", () => {
   let runId: string;
 
   beforeEach(async () => {
+    Storage.reset();
     Bus.reset();
     sessionId = crypto.randomUUID();
     runId = crypto.randomUUID();
 
-    await Session.create(sessionId);
+    Storage.getAdapter().session.set(sessionId, {
+      id: sessionId,
+      title: "Test",
+      model: { providerID: "test", modelID: "test" },
+      time: { created: Date.now(), updated: Date.now() },
+      spawnDepth: 0,
+    });
     await WorkerRun.create(sessionId, {
       runId,
       title: "Test Run",
@@ -21,6 +28,7 @@ describe("SubagentRuntime.wait()", () => {
   });
 
   afterEach(() => {
+    Storage.reset();
     Bus.reset();
   });
 

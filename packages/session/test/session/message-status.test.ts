@@ -92,7 +92,7 @@ describe("message status tracking", () => {
     expect(queryStatus("msg-3")).toBe("completed");
   });
 
-  test("updateMessageStatus is no-op with InMemoryStorage", () => {
+  test("updateMessageStatus does not throw with in-memory SQLite", () => {
     Storage.reset();
 
     const session = Session.create({
