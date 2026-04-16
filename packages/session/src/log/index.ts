@@ -16,7 +16,7 @@ function write(level: Level, msg: string, ctx?: Record<string, unknown>): void {
     msg,
     ...ctx,
   });
-  process.stdout.write(line + "\n");
+  process.stdout.write(`${line}\n`);
 }
 
 export namespace Log {

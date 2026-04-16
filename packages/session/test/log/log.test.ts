@@ -11,7 +11,7 @@ describe("Log", () => {
     process.stdout.write = ((chunk: string) => {
       capturedOutput.push(chunk);
       return true;
-    }) as any;
+    }) as unknown as typeof process.stdout.write;
   });
 
   afterEach(() => {
