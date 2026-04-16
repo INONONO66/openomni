@@ -253,13 +253,7 @@ describe("BackgroundManager integration: TTL cleanup", () => {
     // wait past TTL
     await new Promise((r) => setTimeout(r, 10));
 
-    // next launch triggers piggyback cleanup
-    await manager.launch({
-      agentName: "worker",
-      prompt: "second task to trigger cleanup",
-      model,
-      parentSessionId,
-    });
+    manager.cleanup();
 
     expect(manager.getTask(first.id)).toBeUndefined();
   });
