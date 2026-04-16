@@ -155,6 +155,20 @@ describe("tool selection by agent definition", () => {
 });
 
 describe("agent permissions applied to executor", () => {
+  it("executor accepts sanitized tool names and dispatches the original tool", async () => {
+    const dottedTool = createMockTool("fs.read");
+    const executor = createToolExecutor({ tools: [dottedTool] });
+
+    const result = await executor({
+      id: crypto.randomUUID(),
+      tool: "fs_read",
+      input: {},
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.output).toBe("fs.read result");
+  });
+
   it("executor with agent budget config respects timeout overrides", async () => {
     const slowTool: NativeTool = {
       spec: { name: "slow", inputSchema: { type: "object" } },

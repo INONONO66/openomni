@@ -10,6 +10,8 @@ export interface AgentToolSelection {
 export interface AgentDefinition {
   name: string;
   description: string;
+  // Agent definitions may use an alias/latest model ID. The server resolves it
+  // to a concrete provider model ID from models.dev before execution.
   model: ChatAgentConfig["model"];
   systemPrompt: string;
   tools: AgentToolSelection;
