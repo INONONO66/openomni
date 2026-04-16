@@ -992,29 +992,20 @@ export namespace SubagentRuntime {
     }
 
     return new Promise<WaitResult>((resolve, reject) => {
+      let settled = false;
       let unsubscribeCompleted: (() => void) | undefined;
       let unsubscribeFailed: (() => void) | undefined;
-      let pollingInterval: NodeJS.Timeout | undefined;
-      let timeoutHandle: NodeJS.Timeout | undefined;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
       const cleanup = () => {
         unsubscribeCompleted?.();
         unsubscribeFailed?.();
-        if (pollingInterval) clearInterval(pollingInterval);
         if (timeoutHandle) clearTimeout(timeoutHandle);
       };
 
-      const handleCompletion = async () => {
-        cleanup();
-        const finalRun = await WorkerRun.get(config.sessionId, config.runId);
-        if (finalRun) {
-          resolve(getWaitResult(finalRun));
-        } else {
-          reject(new Error(`Worker run ${config.runId} disappeared during wait`));
-        }
-      };
-
-      const handleFailure = async () => {
+      const settle = async () => {
+        if (settled) return;
+        settled = true;
         cleanup();
         const finalRun = await WorkerRun.get(config.sessionId, config.runId);
         if (finalRun) {
@@ -1025,32 +1016,24 @@ export namespace SubagentRuntime {
       };
 
       unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
-        if (data.sessionId === config.sessionId && data.runId === config.runId) {
-          handleCompletion();
+        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
+          settle();
         }
       });
 
       unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
-        if (data.sessionId === config.sessionId && data.runId === config.runId) {
-          handleFailure();
+        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
+          settle();
         }
       });
 
-      pollingInterval = setInterval(async () => {
-        const currentRun = await WorkerRun.get(config.sessionId, config.runId);
-        if (
-          currentRun &&
-          terminalStatuses.includes(currentRun.status as (typeof terminalStatuses)[number])
-        ) {
-          cleanup();
-          resolve(getWaitResult(currentRun));
-        }
-      }, 100);
-
       if (config.timeoutMs) {
         timeoutHandle = setTimeout(() => {
-          cleanup();
-          reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
+          if (!settled) {
+            settled = true;
+            cleanup();
+            reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
+          }
         }, config.timeoutMs);
       }
     });
