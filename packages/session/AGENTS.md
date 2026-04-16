@@ -20,8 +20,6 @@ src/
 │   └── index.ts          # SessionStatus tracking
 ├── snapshot/
 │   └── index.ts          # Snapshot.Provider, Snapshot.Diff + InMemorySnapshotProvider
-├── compaction/
-│   └── index.ts          # Message compaction logic
 └── surface-key/
     └── index.ts          # SurfaceKey: N:1 mapping from surface keys to session IDs
 ```
