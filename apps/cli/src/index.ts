@@ -4,7 +4,7 @@ import { join } from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { ModelsDev } from "@openomni/llm";
-import { FileTaskStore, TaskStorage } from "@openomni/openomni";
+import { SqliteTaskStore, TaskStorage } from "@openomni/openomni";
 import { Storage } from "@openomni/session";
 import pkg from "../package.json";
 import { AuthCommand } from "./cmd/auth";
@@ -15,7 +15,7 @@ Storage.initialize({ dbPath: join(homedir(), ".openomni", "storage.db") });
 
 const taskDir = join(homedir(), ".openomni", "tasks");
 mkdirSync(taskDir, { recursive: true });
-TaskStorage.configure(new FileTaskStore(taskDir));
+TaskStorage.configure(new SqliteTaskStore(join(taskDir, "tasks.db")));
 
 await yargs(hideBin(process.argv))
   .scriptName("openomni")
