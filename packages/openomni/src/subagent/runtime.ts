@@ -7,24 +7,7 @@ import {
   register as registerAbortController,
   remove as removeAbortController,
 } from "./abort-registry";
-
-const sessionLocks = new Map<string, Promise<void>>();
-
-// biome-ignore lint/suspicious/noEmptyBlockStatements: intentional noop for promise chain error swallowing
-const noop = () => {};
-
-function withSessionLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = sessionLocks.get(sessionId) ?? Promise.resolve();
-  const next = prev.then(fn);
-  const tail = next.then(noop, noop);
-  sessionLocks.set(sessionId, tail);
-  tail.then(() => {
-    if (sessionLocks.get(sessionId) === tail) {
-      sessionLocks.delete(sessionId);
-    }
-  });
-  return next;
-}
+import { sendToMailbox } from "./session-mailbox.js";
 
 type RuntimeModel = { provider: string; id: string };
 
@@ -579,7 +562,7 @@ export namespace SubagentRuntime {
       kind: "subagent",
     });
 
-    return withSessionLock(session.id, async () => {
+    return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
       Session.addMessage(session.id, userMessage);
       addTextPart(session.id, userMessage.id, config.prompt);
@@ -713,53 +696,51 @@ export namespace SubagentRuntime {
     });
     await WorkerRun.updateStatus(session.id, runId, "running");
 
-    const backgroundRun = withSessionLock(session.id, () =>
-      Promise.resolve().then(async () => {
-        try {
-          const permissions = config.permissions ?? { denylist: ["subagent"] };
-          const result = await runWithTranscript(session.id, config, signal, permissions);
+    const backgroundRun = sendToMailbox(session.id, async () => {
+      try {
+        const permissions = config.permissions ?? { denylist: ["subagent"] };
+        const result = await runWithTranscript(session.id, config, signal, permissions);
 
-          const assistantMessage = createAssistantMessage(session.id, config.model);
-          Session.addMessage(session.id, assistantMessage);
-          addAssistantResultParts(session.id, assistantMessage.id, result);
+        const assistantMessage = createAssistantMessage(session.id, config.model);
+        Session.addMessage(session.id, assistantMessage);
+        addAssistantResultParts(session.id, assistantMessage.id, result);
 
-          await WorkerRun.updateStatus(session.id, runId, "succeeded", {
-            endedAt: Date.now(),
-            lastMessageId: assistantMessage.id,
-          });
+        await WorkerRun.updateStatus(session.id, runId, "succeeded", {
+          endedAt: Date.now(),
+          lastMessageId: assistantMessage.id,
+        });
 
-          publishEvent(Subagent.Events.WorkerRunCompleted, {
-            sessionId: session.id,
-            runId,
-            status: "succeeded",
-          });
-        } catch (error) {
-          if (await shouldSkipFailureUpdate(session.id, runId)) {
-            throw error;
-          }
-
-          await WorkerRun.updateStatus(session.id, runId, "failed", {
-            endedAt: Date.now(),
-          });
-          publishEvent(Subagent.Events.WorkerRunFailed, {
-            sessionId: session.id,
-            runId,
-            error: error instanceof Error ? error.message : String(error),
-          });
+        publishEvent(Subagent.Events.WorkerRunCompleted, {
+          sessionId: session.id,
+          runId,
+          status: "succeeded",
+        });
+      } catch (error) {
+        if (await shouldSkipFailureUpdate(session.id, runId)) {
           throw error;
-        } finally {
-          clearRunTimeouts(timers);
-          try {
-            await finalizeRun(session.id, runId);
-          } catch {
-            // cleanup must not mask the original error
-          }
-          removeAbortController(session.id, runId);
         }
-      }),
-    );
 
-    backgroundRun.catch(noop);
+        await WorkerRun.updateStatus(session.id, runId, "failed", {
+          endedAt: Date.now(),
+        });
+        publishEvent(Subagent.Events.WorkerRunFailed, {
+          sessionId: session.id,
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      } finally {
+        clearRunTimeouts(timers);
+        try {
+          await finalizeRun(session.id, runId);
+        } catch {
+          // cleanup must not mask the original error
+        }
+        removeAbortController(session.id, runId);
+      }
+    });
+
+    backgroundRun.catch(() => undefined);
 
     return {
       sessionId: session.id,
@@ -773,7 +754,7 @@ export namespace SubagentRuntime {
       throw new Error(`Session not found: ${config.sessionId}`);
     }
 
-    return withSessionLock(session.id, async () => {
+    return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
       Session.addMessage(session.id, userMessage);
       addTextPart(session.id, userMessage.id, config.prompt);
@@ -875,7 +856,7 @@ export namespace SubagentRuntime {
       return { resumed: false, sessionId: config.sessionId, runId: undefined };
     }
 
-    return withSessionLock(config.sessionId, async () => {
+    return sendToMailbox(config.sessionId, async () => {
       const runs = await WorkerRun.listBySession(config.sessionId);
       const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
 
