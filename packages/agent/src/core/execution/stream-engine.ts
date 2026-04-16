@@ -45,6 +45,18 @@ export async function* streamAgent(
   let lastError = "";
 
   while (attempt <= retryPolicy.maxAttempts) {
+    let budgetState = createBudgetState();
+    let messages = toMessagesWithParts(input.messages, "stream-engine");
+    let lastAssistantText = "";
+    const steps: AgentStep[] = [];
+    const totalUsage: TokenUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    };
+    let continuationCount = 0;
+    let compactionCount = 0;
+    const startTime = Date.now();
     const engine = MiddlewareEngine.create();
     engine.register(createBudgetReassuranceMiddleware());
     engine.register(createBudgetWarningMiddleware());
@@ -72,19 +84,7 @@ export async function* streamAgent(
     }
     try {
       const providerModel = await resolveProviderModel(config.model);
-      let budgetState = createBudgetState();
-      let messages = toMessagesWithParts(input.messages, "stream-engine");
-      let lastAssistantText = "";
-      const steps: AgentStep[] = [];
-      const totalUsage: TokenUsage = {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-      };
       let turnIndex = 0;
-      let continuationCount = 0;
-      let compactionCount = 0;
-      const startTime = Date.now();
       const configuredToolChoice = (
         config as ChatAgentConfig & { toolChoice?: "auto" | "required" | "none" }
       ).toolChoice;
@@ -217,6 +217,7 @@ export async function* streamAgent(
                 steps,
                 turnCount: budgetState.turns,
                 elapsedMs: Date.now() - startTime,
+                usage: totalUsage,
               }),
               onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
             })
@@ -444,23 +445,28 @@ export async function* streamAgent(
     } catch (error) {
       const onErrorVerdict = await engine.dispatch("on_error", {
         toolInput: { error: error instanceof Error ? error : new Error(String(error)) },
-        steps: [],
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        turnCount: 0,
+        steps,
+        usage: totalUsage,
+        turnCount: budgetState.turns,
         isCompletion: false,
-        continuationCount: 0,
-        elapsedMs: 0,
+        continuationCount,
+        elapsedMs: Date.now() - startTime,
+        messages,
+        budgetState,
+        budget: config.budget,
+        eventEmitter: config.eventEmitter,
       });
 
       if (onErrorVerdict.action === "abort") {
         yield {
           type: "complete",
           result: {
-            text: "",
-            steps: [],
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            text: lastAssistantText,
+            steps,
+            usage: totalUsage,
             finishReason: "stop",
             guardAborted: true,
+            compactionCount: compactionCount > 0 ? compactionCount : undefined,
           },
         };
         return;

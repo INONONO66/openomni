@@ -174,6 +174,42 @@ describe("run() delegation contract", () => {
     await expect(agent.run(defaultInput)).rejects.toThrow("connection refused");
   });
 
+  it("preserves accumulated usage when on_error middleware aborts", async () => {
+    mockRunFn = async (_input, sink) => {
+      sink.onMessage(makeAssistantMessage("partial", 9, 4));
+      return createErrorOutcome("connection refused");
+    };
+
+    let seenUsage:
+      | {
+          inputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+        }
+      | undefined;
+
+    const agent = ChatAgent.create({
+      ...defaultConfig,
+      middleware: [
+        {
+          name: "test:on_error_abort",
+          timing: "on_error",
+          priority: 100,
+          fn: (ctx) => {
+            seenUsage = ctx.usage;
+            return { action: "abort" as const, reason: "stop" };
+          },
+        },
+      ],
+    });
+
+    const result = await agent.run(defaultInput);
+
+    expect(seenUsage).toEqual({ inputTokens: 9, outputTokens: 4, totalTokens: 13 });
+    expect(result.usage).toEqual({ inputTokens: 9, outputTokens: 4, totalTokens: 13 });
+    expect(result.text).toBe("partial");
+  });
+
   it("tracks compactionCount when a post_compaction middleware transforms messages", async () => {
     let turnCount = 0;
 

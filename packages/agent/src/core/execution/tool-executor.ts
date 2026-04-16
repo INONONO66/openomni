@@ -1,11 +1,13 @@
 import type { Tool } from "@openomni/protocol";
-import type { HookContext, HookVerdict } from "../types";
+import type { HookContext, HookVerdict, TokenUsage } from "../types";
 import type { MiddlewareEngineInstance } from "../middleware";
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
   engine: MiddlewareEngineInstance;
-  getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input">;
+  getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input"> & {
+    usage?: TokenUsage;
+  };
   onVerdict?: (verdict: HookVerdict) => void;
 }
 
@@ -16,11 +18,12 @@ export function createToolExecutor(
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const ctx = getContext?.();
+    const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const preVerdict = await engine.dispatch("pre_tool_use", {
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage,
       isCompletion: false,
       continuationCount: 0,
       toolName: call.tool,
@@ -60,7 +63,7 @@ export function createToolExecutor(
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage,
       isCompletion: false,
       continuationCount: 0,
       toolName: call.tool,

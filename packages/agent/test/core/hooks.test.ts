@@ -36,7 +36,8 @@ function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createAssistantMessage(text: string) {
+function createAssistantMessage(text: string, tokens?: { input: number; output: number }) {
+  const usage = tokens ?? { input: 0, output: 0 };
   return {
     info: {
       id: `msg-${Math.random().toString(16).slice(2)}`,
@@ -50,8 +51,8 @@ function createAssistantMessage(text: string) {
       path: { cwd: "", root: "" },
       cost: 0,
       tokens: {
-        input: 0,
-        output: 0,
+        input: usage.input,
+        output: usage.output,
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
@@ -161,6 +162,54 @@ describe("Execution hooks", () => {
 
     expect(executor).toHaveBeenCalledTimes(1);
     expect(receivedInput).toEqual({ command: "pwd" });
+  });
+
+  it("post_tool_use middleware receives accumulated usage from the stream engine", async () => {
+    resetMockRunFn();
+    let seenUsage:
+      | {
+          inputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+        }
+      | undefined;
+
+    mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
+      sink.onMessage(createAssistantMessage("thinking", { input: 11, output: 7 }));
+      const call: Tool.Call = { id: "call-usage", tool: "bash", input: { command: "ls" } };
+      sink.onToolCall(call);
+      const result = await runInput.toolExecutor!(call);
+      sink.onToolResult(result);
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
+      toolExecutor: async (call) => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      middleware: [
+        {
+          name: "test:usage-capture",
+          timing: "post_tool_use",
+          priority: 100,
+          fn: (ctx) => {
+            seenUsage = ctx.usage;
+            return { action: "continue" };
+          },
+        },
+      ],
+    });
+
+    await agent.run({ messages: [{ role: "user", content: "run tool" }] });
+
+    expect(seenUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
   });
 
   it("postTurn inject continues with injected message", async () => {
