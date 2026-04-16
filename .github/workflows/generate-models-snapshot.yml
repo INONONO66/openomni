@@ -1,0 +1,37 @@
+name: Refresh models snapshot
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.6"
+      - name: Regenerate snapshot
+        run: bun run script/generate-models-snapshot.ts
+      - name: Format
+        run: bun run format
+      - name: Open PR if snapshot changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(llm): refresh models-snapshot.json from models.dev"
+          branch: chore/refresh-models-snapshot
+          delete-branch: true
+          title: "chore(llm): refresh models-snapshot.json"
+          body: |
+            Automated weekly refresh of `packages/llm/src/provider/models-snapshot.json`
+            from https://models.dev/api.json.
+
+            Run locally: `bun run script/generate-models-snapshot.ts`
+          labels: dependencies
