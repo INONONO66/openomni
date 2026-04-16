@@ -16,11 +16,10 @@
     "rootDir": "..",
     "baseUrl": ".",
     "paths": {
-      "@openomni/protocol": ["../protocol/src/index.ts"],
-      "@openomni/session": ["./src/index.ts"]
+      "@openomni/coordinator": ["./src/index.ts"]
     },
     "types": ["bun"]
   },
-  "include": ["src"],
+  "include": ["src", "test"],
   "exclude": ["node_modules", "dist"]
 }
