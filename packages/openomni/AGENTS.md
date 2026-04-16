@@ -6,7 +6,7 @@ Orchestration layer for `@openomni/openomni`. It builds on `@openomni/agent` to 
 
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
-| `src/plan/` | LLM-driven plan generation and gating | `PlanAgent`, `PlanPipeline`, `PlanStore`, `Hashline`, `SpecValidator`, `StructuralGate` |
+| `src/plan/` | LLM-driven plan generation and gating | `PlanAgent`, `PlanPipeline`, `PlanStore`, `Hashline`, `StructuralGate` |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/ingress/` | Inbound event to mode dispatch | `IngressEngine` |
 | `src/storage/` | Task persistence adapter layer | `TaskStorage`, `FileTaskStore`, `TaskStore`, `InMemoryTaskStore` |

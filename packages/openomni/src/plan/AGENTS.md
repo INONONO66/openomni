@@ -11,7 +11,6 @@ LLM-driven plan generation: goal → structured `Plan` with steps, dependencies,
 | `plan-tools.ts` | Tool specs and executor for `plan_read`, `plan_write`, `plan_edit` |
 | `plan-store.ts` | `PlanStore` interface + `InMemoryPlanStore` implementation |
 | `hashline.ts` | Hash-anchored line references for precise plan editing (load-bearing algorithm) |
-| `spec-validator.ts` | Legacy validator (deprecated — use `StructuralGate`) |
 | `structural-gate.ts` | Gate policy: which checks to run, thresholds, accept/reject decisions |
 | `plan-checks.ts` | Pure helpers: word count, Jaccard similarity, dependency depth BFS |
 | `plan-json.ts` | Pure JSON helpers: Date normalization from JSON round-trip, fence stripping |

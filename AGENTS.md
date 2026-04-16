@@ -64,7 +64,6 @@ protocol  ←  session  ←  llm  ←  agent (pure ReAct)  ←  openomni (orches
 | Subagent tool                | `packages/agent/src/runtime/tools/`                   | SubagentTool for agent delegation                                                                                       |
 | MCP client                   | `packages/agent/src/runtime/mcp/`                     | McpClient, type conversion                                                                                              |
 | Plan Mode (PlanAgent)        | `packages/openomni/src/plan/`                         | PlanAgent.generate(goal, config) → PlanResult; LLM-based, no exec                                                       |
-| Spec validator               | `packages/openomni/src/plan/spec-validator.ts`        | SpecValidator for plan validation                                                                                       |
 | DAG utilities                | `packages/openomni/src/dag/`                          | Pure functions: build, validateAcyclic, getReady, complete                                                              |
 | Storage module               | `packages/openomni/src/storage/`                      | TaskStorage, FileTaskStore, task types, persistence helpers                                                             |
 | Plan schemas                 | `packages/protocol/src/plan/`                         | Plan, PlanStep, PlanResult                                                                                              |
