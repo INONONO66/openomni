@@ -119,7 +119,7 @@ export async function* streamAgent(
         return;
       }
       if (preRunVerdict.action === "inject") {
-        messages = [...messages, createUserMessage(preRunVerdict.message, "stream-engine")];
+        messages.push(createUserMessage(preRunVerdict.message, "stream-engine"));
       }
 
       while (true) {
@@ -174,7 +174,7 @@ export async function* streamAgent(
         });
 
         if (preTurnVerdict.action === "inject") {
-          messages = [...messages, createUserMessage(preTurnVerdict.message, "stream-engine")];
+          messages.push(createUserMessage(preTurnVerdict.message, "stream-engine"));
           if (preTurnVerdict.message.startsWith("[Budget Status]")) {
             yield {
               type: "budget_reassurance",
@@ -360,11 +360,10 @@ export async function* streamAgent(
 
           if (postTurnVerdict.action === "inject") {
             const parentID = messages.length > 0 ? messages[messages.length - 1].info.id : "";
-            messages = [
-              ...messages,
+            messages.push(
               createAssistantMessage(lastAssistantText, parentID, "stream-engine"),
               createUserMessage(postTurnVerdict.message, "stream-engine"),
-            ];
+            );
 
             const compactionVerdict = await engine.dispatch("post_compaction", {
               steps,
