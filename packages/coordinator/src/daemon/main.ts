@@ -2,6 +2,7 @@ import { createIpcServer } from "../ipc/server.js";
 import { createDaemonWsServer } from "./ws-server.js";
 import { createHealthServer } from "./health.js";
 import { writePid, removePid } from "./pid.js";
+import { recoverInterruptedRuns } from "../recovery/index.js";
 
 const IPC_SOCKET = process.env.OPENOMNI_IPC_SOCKET ?? "/tmp/openomni-coordinator.sock";
 const WS_PORT = parseInt(process.env.OPENOMNI_WS_PORT ?? "9999", 10);
@@ -27,6 +28,16 @@ const wsServer = createDaemonWsServer(WS_PORT, (cmd, send) => {
 const healthServer = createHealthServer(HEALTH_PORT);
 
 writePid(PID_PATH);
+
+recoverInterruptedRuns()
+  .then((result) => {
+    if (result.recovered > 0) {
+      console.log(
+        `Recovered ${result.recovered} interrupted runs from ${result.sessions.length} sessions`,
+      );
+    }
+  })
+  .catch(() => undefined);
 
 async function shutdown(): Promise<void> {
   const deadline = Date.now() + DRAIN_TIMEOUT_MS;
