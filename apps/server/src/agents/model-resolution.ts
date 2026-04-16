@@ -45,18 +45,6 @@ function matchConcreteSiblings(preferredID: string, models: CatalogModel[]): Cat
   );
 }
 
-function inferFamily(preferredID: string, models: CatalogModel[]): string | undefined {
-  return [
-    ...new Set(
-      models
-        .map((model) => model.family)
-        .filter((family): family is string => typeof family === "string" && family.length > 0),
-    ),
-  ]
-    .sort((a, b) => b.length - a.length)
-    .find((family) => preferredID === family || preferredID.startsWith(`${family}-`));
-}
-
 function findConcreteSibling(
   exact: CatalogModel,
   models: CatalogModel[],
@@ -85,6 +73,10 @@ function findConcreteSibling(
   return sortModels(candidates)[0];
 }
 
+// Catalog lookup: alias → concrete sibling → prefix match. No family-level
+// guess: if the requested ID is not in the catalog and has no concrete
+// sibling, surface the miss to the caller so a stale catalog does not silently
+// downgrade a newly-released model.
 export function resolveCatalogModel(
   preferredID: string,
   models: CatalogModel[],
@@ -95,15 +87,7 @@ export function resolveCatalogModel(
     return findConcreteSibling(exact, models) ?? exact;
   }
 
-  const prefixMatch = matchConcreteSiblings(preferredID, models)[0];
-  if (prefixMatch) return prefixMatch;
-
-  const family = inferFamily(preferredID, models);
-  if (!family) return undefined;
-
-  return sortModels(
-    models.filter((model) => model.family === family && isConcreteModelID(model.id)),
-  )[0];
+  return matchConcreteSiblings(preferredID, models)[0];
 }
 
 async function listProviderModels(providerID: string): Promise<CatalogModel[]> {
@@ -116,23 +100,30 @@ export async function resolveRuntimeModel(
   model: RuntimeModel,
   defaultModel?: RuntimeModel,
 ): Promise<RuntimeModel> {
+  let catalogError: string | undefined;
   try {
     const resolved = resolveCatalogModel(model.id, await listProviderModels(model.provider));
     if (resolved) {
       return { provider: model.provider, id: resolved.id };
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[server] failed to resolve agent model ${model.provider}/${model.id}: ${msg}`);
+    catalogError = error instanceof Error ? error.message : String(error);
   }
+
+  const reason = catalogError
+    ? `catalog lookup failed (${catalogError})`
+    : "model not in provider catalog";
 
   if (defaultModel && defaultModel.provider === model.provider) {
     console.warn(
-      `[server] falling back to default model for ${model.provider}/${model.id}: ${defaultModel.id}`,
+      `[server] ${reason} for ${model.provider}/${model.id} — falling back to default ${defaultModel.id}`,
     );
     return defaultModel;
   }
 
+  console.warn(
+    `[server] ${reason} for ${model.provider}/${model.id} — passing through unresolved; downstream will throw Model not found`,
+  );
   return model;
 }
 

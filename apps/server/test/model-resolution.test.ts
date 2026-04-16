@@ -50,13 +50,13 @@ describe("resolveCatalogModel", () => {
     expect(resolveCatalogModel("claude-opus-4-5", models)?.id).toBe("claude-opus-4-5-20251101");
   });
 
-  it("falls back to the newest concrete model in the same family for newer aliases", () => {
+  it("returns undefined when the requested model has no exact or prefix match", () => {
     const models = [
       makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
       makeModel("claude-sonnet-4-20250514", "Claude Sonnet 4", "2025-05-22"),
     ];
 
-    expect(resolveCatalogModel("claude-sonnet-4-6", models)?.id).toBe("claude-sonnet-4-5-20250929");
+    expect(resolveCatalogModel("claude-sonnet-4-6", models)).toBeUndefined();
   });
 });
 
@@ -79,16 +79,74 @@ describe("resolveRuntimeModel", () => {
   it("falls back to the server default model for the same provider when lookup misses", async () => {
     Auth.get = async () => ({ type: "api", key: "test-key" });
     Provider.listModels = async () => [];
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (msg: unknown) => warnings.push(String(msg));
 
-    await expect(
-      resolveRuntimeModel(
-        { provider: "anthropic", id: "claude-sonnet-4-6" },
-        { provider: "anthropic", id: "claude-opus-4-20250514" },
-      ),
-    ).resolves.toEqual({
-      provider: "anthropic",
-      id: "claude-opus-4-20250514",
-    });
+    try {
+      await expect(
+        resolveRuntimeModel(
+          { provider: "anthropic", id: "claude-sonnet-4-6" },
+          { provider: "anthropic", id: "claude-opus-4-20250514" },
+        ),
+      ).resolves.toEqual({
+        provider: "anthropic",
+        id: "claude-opus-4-20250514",
+      });
+      expect(
+        warnings.some(
+          (w) => w.includes("claude-sonnet-4-6") && w.includes("claude-opus-4-20250514"),
+        ),
+      ).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it("passes the requested model through when the catalog misses and no default is provided", async () => {
+    Auth.get = async () => ({ type: "api", key: "test-key" });
+    Provider.listModels = async () => [];
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (msg: unknown) => warnings.push(String(msg));
+
+    try {
+      await expect(
+        resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" }),
+      ).resolves.toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
+      expect(
+        warnings.some((w) => w.includes("claude-sonnet-4-6") && w.includes("Model not found")),
+      ).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it("warns with the underlying catalog error and falls back to the default model when listModels throws", async () => {
+    Auth.get = async () => ({ type: "api", key: "test-key" });
+    Provider.listModels = async () => {
+      throw new Error("network down");
+    };
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (msg: unknown) => warnings.push(String(msg));
+
+    try {
+      await expect(
+        resolveRuntimeModel(
+          { provider: "anthropic", id: "claude-sonnet-4-6" },
+          { provider: "anthropic", id: "claude-opus-4-20250514" },
+        ),
+      ).resolves.toEqual({
+        provider: "anthropic",
+        id: "claude-opus-4-20250514",
+      });
+      expect(
+        warnings.some((w) => w.includes("network down") && w.includes("claude-opus-4-20250514")),
+      ).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 });
 
