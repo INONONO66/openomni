@@ -79,7 +79,7 @@ describe("Integration", () => {
     expect((Session.getParts(userMsg.id)[0] as Message.TextPart).text).toBe("Hello, world!");
   });
 
-  it("should fire bus events on session changes", () => {
+  it("should fire bus events on session changes", async () => {
     const events: unknown[] = [];
     const unsub = Bus.subscribe(Session.Event.Created, (data) => {
       events.push(data);
@@ -90,6 +90,7 @@ describe("Integration", () => {
       model: { providerID: "openai", modelID: "gpt-4" },
     });
 
+    await new Promise((resolve) => queueMicrotask(resolve));
     expect(events).toHaveLength(1);
     unsub();
   });
