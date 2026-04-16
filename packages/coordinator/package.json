@@ -9,6 +9,9 @@
     "lint": "bunx biome check ./src",
     "test": "bun test"
   },
+  "dependencies": {
+    "@openomni/protocol": "workspace:*"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"

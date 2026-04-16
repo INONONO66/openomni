@@ -67,6 +67,9 @@
     "packages/coordinator": {
       "name": "@openomni/coordinator",
       "version": "0.0.1",
+      "dependencies": {
+        "@openomni/protocol": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5",
