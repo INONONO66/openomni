@@ -1,18 +1,37 @@
-# 009: Persistent Subagent Sessions for Team Orchestration (Draft)
+# 009: Persistent Subagent Sessions for Team Orchestration (Superseded)
 
 ## Status
 
-Draft
+Superseded. The persistent-subagent pieces of this draft shipped as `SubagentRuntime` + `BackgroundManager` + `SubagentConsultation` in `packages/openomni/src/subagent/`. The Team-orchestrator pieces (dispatcher, review loop, handoff FSM) did not ship — callers now compose subagent runs explicitly instead.
+
+### What shipped
+
+- `WorkerRunRecord` / `Subagent.WorkerRunStatus` + event-sourced persistence (`packages/session/src/worker-run/`)
+- `Session.createChild` / `Session.getWorkerMeta` / `updateWorkerMeta` for parent-child lineage
+- `SubagentRuntime.spawn / spawnBackground / send / resume / cancel / wait` with per-session locking, soft / hard timeouts, and abort registry
+- `BackgroundManager` with per-agent / total / depth / descendant concurrency limits and TTL-based result eviction
+- `SubagentConsultation.consult` — fresh-session and active-session consultation modes
+- Full set of `Subagent.Events.*` for observability
+
+### What did NOT ship
+
+- `TeamOrchestrator`, `ReviewLoop`, `StallDetector`, `RunLedger`, team-shaped event names
+- Category / lane-based routing at the orchestrator layer
+- Rejection / handoff state machine owned by the orchestrator
+
+The original draft is kept below for historical context. It does not reflect the current architecture.
+
+---
 
 ## Context
 
-OpenOmni currently executes Team Mode with ephemeral workers.
+OpenOmni previously planned a Team Mode with ephemeral workers.
 
-- `packages/openomni/src/team/teammate.ts` creates a fresh `ChatAgent` for every step execution.
-- `packages/openomni/src/team/review-loop.ts` also creates a fresh reviewer agent for every review.
+- A then-planned `packages/openomni/src/team/teammate.ts` would create a fresh `ChatAgent` for every step execution.
+- A companion `packages/openomni/src/team/review-loop.ts` would also create a fresh reviewer agent for every review.
 - `packages/agent/src/runtime/tools/subagent.ts` delegates by resolving an agent definition from `AgentRegistry`, creating a new `ChatAgent`, and returning final text.
 - `packages/agent/src/runtime/registry/registry.ts` is an in-memory definition map, not a runtime directory for persistent child workers.
-- `packages/session/src/session/index.ts` persists sessions and messages, but it does not yet model parent-child worker lineage, worker runs, or resumable child execution.
+- `packages/session/src/session/index.ts` persists sessions and messages, but it did not yet model parent-child worker lineage, worker runs, or resumable child execution.
 
 This keeps the execution model simple, but it does not satisfy the target interaction model for subagents and Team Mode:
 
@@ -24,8 +43,6 @@ This keeps the execution model simple, but it does not satisfy the target intera
 6. On approval, the orchestrator should move to the next step with a new subagent session.
 7. On rejection, the orchestrator should continue the same subagent session with feedback.
 8. After a configurable rejection threshold, the failing subagent must produce a handoff document, and the step must continue in a fresh subagent session.
-
-The target is closer to OpenCode's session-backed task workers and OpenClaw's explicit child-session runtime than to the current ephemeral delegation model.
 
 ## Decision
 

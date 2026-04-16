@@ -1,25 +1,28 @@
 # packages/session
 
-Session lifecycle, message/part storage, event bus, snapshots, and compaction. Depends only on `@openomni/protocol`.
+Session lifecycle, message/part storage, event bus, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`.
 
 ## STRUCTURE
 
 ```
 src/
-├── index.ts              # Package barrel (re-exports all domains)
-├── bus/
-│   └── index.ts          # Bus pub/sub + BusEvent descriptors
+├── index.ts              # Package barrel — re-exports all namespaces
+├── bus/                  # Bus pub/sub (Bus.publish / Bus.subscribe) + typed event descriptors
 ├── session/
-│   ├── index.ts          # Session namespace: CRUD, message/part ops, TTL support
-│   └── info.ts           # SessionInfo schema (leaf — no internal deps, breaks circular dep)
+│   ├── index.ts          # Session namespace: CRUD, messages/parts, child sessions, worker meta
+│   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
 ├── storage/
-│   ├── index.ts          # Barrel: re-exports storage + file-storage
+│   ├── index.ts          # Barrel
 │   ├── storage.ts        # Storage.Adapter interface + InMemoryStorage + Storage singleton
-│   └── file-storage.ts   # FileStorageAdapter: file-based persistence with atomic writes
-├── snapshot/
-│   └── index.ts          # Snapshot.Provider, Snapshot.Diff + InMemorySnapshotProvider
-└── surface-key/
-    └── index.ts          # SurfaceKey: N:1 mapping from surface keys to session IDs
+│   ├── sqlite-storage.ts # SqliteStorageAdapter (Drizzle-backed persistence)
+│   ├── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
+│   ├── part-time.ts      # Message-part timestamp helpers
+│   └── drizzle/          # Drizzle schema + migration artifacts
+├── snapshot/             # Snapshot.Provider + InMemorySnapshotProvider; Snapshot.Diff
+├── artifact/             # Artifact.store / get / list / versions with write-through caching
+├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
+├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
+└── worker-run/           # WorkerRun — event-sourced subagent execution records
 ```
 
 ### Circular Dependency Avoidance
@@ -28,16 +31,16 @@ src/
 
 ## KEY PATTERNS
 
-- **Namespace API**: `Session.create()`, `Session.get()`, `Session.addMessage()`, `Session.addPart()`. No class instances.
-- **Storage.Adapter injection**: Default is `InMemoryStorage`. Swap via `Storage.configure(adapter)`. Adapter has `.session`, `.message`, `.part` sub-objects.
-- **FileStorageAdapter**: Persistent storage with atomic write pattern. Writes to temp file, then renames to target (prevents corruption on crash).
-- **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`. `Session.get()` and `Session.list()` check expiry and auto-delete.
-- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` published on mutation.
-- **SurfaceKey routing**: N:1 mapping from surface-specific keys (DM, group, channel, thread, chat) to session IDs. Enables multi-surface session routing.
-- **Snapshot.Provider**: Interface for tracking and restoring session state. `Snapshot.Diff` tracks added/removed/modified messages.
-- **Backward compat**: `Session.storage` and `Session.messages` are Map-like shims for old tests. Use `Session.*` API for new code.
+- **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`. Unimplemented optional sub-objects gracefully degrade.
+- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) flow through the shared `Bus` too.
+- **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.
+- **Snapshot.Provider**: Interface for capturing and restoring session message state. `Snapshot.Diff` reports added / removed / modified message IDs.
+- **WorkerRun**: Event-sourced via `Storage.Adapter.eventLog`. `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.listBySession()`. State transitions (e.g. `waiting_input → running`) increment `resumeCount`. Used by `SubagentRuntime` / `BackgroundManager` to persist subagent runs.
+- **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
 
 ## ANTI-PATTERNS
 
-- Do NOT access `Storage.getAdapter()` directly from outside this package — go through `Session.*` namespace.
+- Do NOT access `Storage.getAdapter()` directly from outside this package — go through the `Session.*` / `WorkerRun.*` / `Artifact.*` / `EventLog.*` / `SurfaceKey.*` namespaces.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
+- Do NOT persist ad-hoc subagent state alongside `Session`; use `WorkerRun` so it is event-sourced and replayable.

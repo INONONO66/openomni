@@ -33,22 +33,31 @@ TypeScript monorepo powered by [Bun](https://bun.sh) and [Turborepo](https://tur
 
 ```
 openomni/
-├── apps/cli/            # CLI entry point
+├── apps/
+│   ├── cli/             # CLI entry point (auth + config)
+│   └── server/          # Hono server with Discord / Telegram / GitHub / WebSocket channels
 ├── packages/
-│   ├── protocol/        # Shared Zod schemas (Message, Tool, Run, Events)
-│   ├── session/         # Session CRUD, pub/sub bus, storage adapters
-│   ├── llm/             # LLM abstraction (providers, OAuth, streaming, retry)
-│   ├── agent/           # Stateless ChatAgent — pure ReAct loop
-│   └── openomni/        # Orchestration (Plan/Team mode, DAG, task lifecycle)
+│   ├── protocol/        # Shared Zod schemas (20 domains — message, tool, run, event, plan, subagent, hook, …)
+│   ├── session/         # Session CRUD, pub/sub bus, storage adapters, event log, worker runs
+│   ├── llm/             # LLM abstraction (providers, auth, streaming, retry, token tracking)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, MCP, subagent tools)
+│   └── openomni/        # Orchestration (Plan mode, DAG, task storage, SubagentRuntime, BackgroundManager, Ingress)
 ```
 
 ### Dependency Graph
 
 ```
-protocol  ←  session  ←  llm  ←  agent  ←  openomni  ←  cli
+protocol ← session ← llm ← agent ← openomni ← { cli, server }
 ```
 
-Each package depends only on packages to its left. `protocol` is the leaf with zero internal dependencies.
+Each package depends only on packages to its left. `protocol` is the leaf with zero internal dependencies. `cli` and `server` are sibling apps.
+
+### Execution Modes
+
+Ingress supports two modes:
+
+- **`direct`** — default. Runs `ChatAgent` against session history and returns the response.
+- **`plan`** — triggered by a `/plan` prefix. Runs `PlanAgent.generate()` to produce a structured plan.
 
 ## Getting Started
 

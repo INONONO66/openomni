@@ -28,4 +28,4 @@ Plan payload normalization (Date revival after JSON round-trip) is imported from
 
 - **Upstream**: `@openomni/protocol` (schemas), `@openomni/session` (storage), `@openomni/agent` (ChatAgent)
 - **Sibling**: `../plan/` (PlanAgent, normalizePlanPayload)
-- **Downstream**: consumed by CLI and any surface adapter that submits `InboundEvent`s
+- **Downstream**: consumed by `apps/server` (per-message `createMessageHandler` → `IngressEngine.ingest`) and any surface adapter that submits `InboundEvent`s
