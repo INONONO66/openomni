@@ -7,7 +7,6 @@ export {
 } from "./storage";
 export type { InitializeOptions } from "./storage";
 export { Session } from "./session";
-export { SessionStatus } from "./status";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
 export { SurfaceKey } from "./surface-key";
 export { EventLog } from "./event-log/index.js";

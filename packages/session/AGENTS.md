@@ -16,8 +16,6 @@ src/
 │   ├── index.ts          # Barrel: re-exports storage + file-storage
 │   ├── storage.ts        # Storage.Adapter interface + InMemoryStorage + Storage singleton
 │   └── file-storage.ts   # FileStorageAdapter: file-based persistence with atomic writes
-├── status/
-│   └── index.ts          # SessionStatus tracking
 ├── snapshot/
 │   └── index.ts          # Snapshot.Provider, Snapshot.Diff + InMemorySnapshotProvider
 └── surface-key/
