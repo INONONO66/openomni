@@ -41,6 +41,39 @@ describe("post_tool_use middleware dispatch", () => {
     expect(calledCtx.toolOutput).toBe(toolOutput);
   });
 
+  it("forwards usage from getContext to tool middleware", async () => {
+    const postToolFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+
+    const engine = MiddlewareEngine.create();
+    engine.register({
+      name: "test:post_tool_use",
+      timing: "post_tool_use",
+      priority: 100,
+      fn: postToolFn,
+    });
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      engine,
+      getContext: () => ({
+        steps: [],
+        turnCount: 1,
+        elapsedMs: 5,
+        usage: { inputTokens: 13, outputTokens: 8, totalTokens: 21 },
+      }),
+    });
+
+    await executor({ id: "call-usage", tool: "bash", input: { command: "ls" } });
+
+    const calledCtx = postToolFn.mock.calls[0][0] as MiddlewareContext;
+    expect(calledCtx.usage).toEqual({ inputTokens: 13, outputTokens: 8, totalTokens: 21 });
+  });
+
   it("transform verdict modifies the tool output", async () => {
     const engine = MiddlewareEngine.create();
     engine.register({
