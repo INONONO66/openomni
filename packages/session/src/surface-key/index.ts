@@ -15,9 +15,7 @@
  * The `ChannelKind` type defines recognized channel/peer kinds.
  * Use `SurfaceKey.fromChannel()` for structured creation with explicit kind.
  *
- * Storage: uses Storage.Adapter.surfaceKey (SQLite) when available,
- * falls back to in-memory Maps. In-memory reverse index is always
- * maintained for listBySession() support.
+ * Storage: uses Storage.Adapter.surfaceKey (SQLite) when available.
  */
 
 import { Storage } from "../storage/storage";
@@ -43,11 +41,6 @@ export namespace SurfaceKey {
     /** Optional thread identifier (creates a sub-key under the channel) */
     threadId?: string;
   }
-  // Forward index: surfaceKey → sessionId
-  const keyToSession = new Map<string, string>();
-
-  // Reverse index: sessionId → Set<surfaceKey>
-  const sessionToKeys = new Map<string, Set<string>>();
 
   function validateFormat(key: string): boolean {
     return key.includes(":");
@@ -124,20 +117,9 @@ export namespace SurfaceKey {
 
     return { surface, namespace, kind, id, threadId };
   }
+
   export function lookup(key: string): string | undefined {
-    const cached = keyToSession.get(key);
-    if (cached) return cached;
-    const sk = Storage.get().surfaceKey;
-    if (sk) {
-      const persisted = sk.lookup(key);
-      if (persisted) {
-        keyToSession.set(key, persisted);
-        if (!sessionToKeys.has(persisted)) sessionToKeys.set(persisted, new Set());
-        sessionToKeys.get(persisted)?.add(key);
-      }
-      return persisted;
-    }
-    return undefined;
+    return Storage.get().surfaceKey?.lookup(key);
   }
 
   /**
@@ -153,29 +135,7 @@ export namespace SurfaceKey {
       );
     }
 
-    // Remove old mapping if key was already registered
-    const oldSessionId = keyToSession.get(key);
-    if (oldSessionId && oldSessionId !== sessionId) {
-      const oldKeys = sessionToKeys.get(oldSessionId);
-      if (oldKeys) {
-        oldKeys.delete(key);
-        if (oldKeys.size === 0) {
-          sessionToKeys.delete(oldSessionId);
-        }
-      }
-    }
-
-    const sk = Storage.get().surfaceKey;
-    if (sk) {
-      sk.register(key, sessionId);
-    }
-
-    keyToSession.set(key, sessionId);
-
-    if (!sessionToKeys.has(sessionId)) {
-      sessionToKeys.set(sessionId, new Set());
-    }
-    sessionToKeys.get(sessionId)?.add(key);
+    Storage.get().surfaceKey?.register(key, sessionId);
   }
 
   /**
@@ -185,22 +145,10 @@ export namespace SurfaceKey {
    */
   export function unregister(key: string): boolean {
     const sk = Storage.get().surfaceKey;
-    const sessionId = keyToSession.get(key) ?? sk?.lookup(key);
-    if (!sessionId) {
-      return false;
-    }
-
-    sk?.delete(key);
-    keyToSession.delete(key);
-
-    const keys = sessionToKeys.get(sessionId);
-    if (keys) {
-      keys.delete(key);
-      if (keys.size === 0) {
-        sessionToKeys.delete(sessionId);
-      }
-    }
-
+    if (!sk) return false;
+    const sessionId = sk.lookup(key);
+    if (!sessionId) return false;
+    sk.delete(key);
     return true;
   }
 
@@ -210,15 +158,10 @@ export namespace SurfaceKey {
    * @returns Array of surfaceKeys for this session
    */
   export function listBySession(sessionId: string): string[] {
-    const keys = sessionToKeys.get(sessionId);
-    return keys ? Array.from(keys) : [];
+    return Storage.get().surfaceKey?.listBySession?.(sessionId) ?? [];
   }
 
-  /**
-   * Clear all mappings (for testing).
-   */
   export function clear(): void {
-    keyToSession.clear();
-    sessionToKeys.clear();
+    // Storage.reset() replaces the adapter with fresh state; nothing to clear here.
   }
 }

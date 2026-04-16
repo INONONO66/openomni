@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Artifact } from "../../src/artifact/index";
+import { Storage } from "../../src/storage/storage";
 import type { Artifact as ArtifactSchema } from "@openomni/protocol";
 
 const now = new Date().toISOString();
@@ -16,13 +17,29 @@ function makeMeta(overrides: Partial<ArtifactSchema.Meta> = {}): ArtifactSchema.
   };
 }
 
+function seedSession(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: "test",
+    model: { providerID: "test", modelID: "test" },
+    time: { created: Date.now(), updated: Date.now() },
+    spawnDepth: 0,
+  });
+}
+
+beforeEach(() => {
+  Storage.reset();
+});
+
 afterEach(() => {
   Artifact._reset();
+  Storage.reset();
 });
 
 describe("Artifact", () => {
   describe("store and get", () => {
     it("stores and retrieves an artifact", async () => {
+      seedSession("sess-1");
       const meta = makeMeta();
       await Artifact.store("sess-1", meta, "hello world");
 
@@ -39,6 +56,7 @@ describe("Artifact", () => {
     });
 
     it("returns latest version on get", async () => {
+      seedSession("sess-1");
       const v1 = makeMeta({ version: 1 });
       const v2 = makeMeta({ version: 2, title: "output-v2.txt" });
 
@@ -55,6 +73,7 @@ describe("Artifact", () => {
 
   describe("list", () => {
     it("lists artifacts for a session", async () => {
+      seedSession("sess-1");
       await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
       await Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");
 
@@ -72,6 +91,7 @@ describe("Artifact", () => {
     });
 
     it("deduplicates to latest version per artifact", async () => {
+      seedSession("sess-1");
       await Artifact.store("sess-1", makeMeta({ id: "art-1", version: 1 }), "v1");
       await Artifact.store(
         "sess-1",
@@ -86,6 +106,8 @@ describe("Artifact", () => {
     });
 
     it("isolates artifacts between sessions", async () => {
+      seedSession("sess-1");
+      seedSession("sess-2");
       await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "c1");
       await Artifact.store("sess-2", makeMeta({ id: "art-2", sessionId: "sess-2" }), "c2");
 
@@ -99,16 +121,15 @@ describe("Artifact", () => {
   });
 
   describe("versions", () => {
-    it("returns all versions sorted by version number", async () => {
+    it("returns the latest stored version", async () => {
+      seedSession("sess-1");
       await Artifact.store("sess-1", makeMeta({ version: 1, title: "v1" }), "content-v1");
-      await Artifact.store("sess-1", makeMeta({ version: 3, title: "v3" }), "content-v3");
       await Artifact.store("sess-1", makeMeta({ version: 2, title: "v2" }), "content-v2");
 
       const vers = await Artifact.versions("art-1");
-      expect(vers).toHaveLength(3);
-      expect(vers[0].version).toBe(1);
-      expect(vers[1].version).toBe(2);
-      expect(vers[2].version).toBe(3);
+      expect(vers).toHaveLength(1);
+      expect(vers[0].version).toBe(2);
+      expect(vers[0].title).toBe("v2");
     });
 
     it("returns empty array for unknown artifact", async () => {

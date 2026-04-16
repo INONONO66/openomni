@@ -122,7 +122,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     list: (sessionID: string): Message.Info[] => {
       const rows = this.db
-        .query("SELECT data FROM message WHERE session_id = ? ORDER BY time_created ASC, id ASC")
+        .query("SELECT data FROM message WHERE session_id = ? ORDER BY time_created ASC, rowid ASC")
         .all(sessionID) as Array<{ data: string }>;
       return rows.map((r) => JSON.parse(r.data) as Message.Info);
     },
@@ -212,11 +212,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     list: (messageID: string): Message.Part[] => {
       const rows = this.db
-        .query(
-          `SELECT data FROM part
-           WHERE message_id = ?
-           ORDER BY CASE WHEN time_start IS NOT NULL THEN 0 ELSE 1 END, time_start ASC, id ASC`,
-        )
+        .query("SELECT data FROM part WHERE message_id = ? ORDER BY rowid ASC")
         .all(messageID) as Array<{ data: string }>;
       return rows.map((r) => JSON.parse(r.data) as Message.Part);
     },
@@ -226,14 +222,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       const placeholders = messageIDs.map(() => "?").join(", ");
       // dynamic IN — can't cache this prepared statement
       const rows = this.db
-        .prepare(
-          `SELECT data FROM part
-           WHERE message_id IN (${placeholders})
-           ORDER BY message_id,
-                    CASE WHEN time_start IS NOT NULL THEN 0 ELSE 1 END,
-                    time_start ASC,
-                    id ASC`,
-        )
+        .prepare(`SELECT data FROM part WHERE message_id IN (${placeholders}) ORDER BY rowid ASC`)
         .all(...messageIDs) as Array<{ data: string }>;
       return rows.map((r) => JSON.parse(r.data) as Message.Part);
     },
@@ -268,6 +257,13 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     delete: (key: string): void => {
       this.db.query("DELETE FROM surface_key WHERE key = ?").run(key);
+    },
+
+    listBySession: (sessionId: string): string[] => {
+      const rows = this.db
+        .query("SELECT key FROM surface_key WHERE session_id = ?")
+        .all(sessionId) as Array<{ key: string }>;
+      return rows.map((r) => r.key);
     },
   };
 

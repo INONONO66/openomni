@@ -141,4 +141,17 @@ describe("AgentMessenger", () => {
 
     expect(received).toHaveLength(1);
   });
+
+  it("rotates log when MAX_LOG_SIZE is reached", async () => {
+    const transport = new BusTransport();
+    const messenger = AgentMessenger.create(transport);
+
+    for (let i = 0; i < 1001; i++) {
+      await messenger.send(makeEnvelope("agent-a", "agent-b"));
+    }
+
+    const log = AgentMessenger.getLog();
+    expect(log.length).toBeLessThan(1000);
+    expect(log.length).toBe(501);
+  });
 });
