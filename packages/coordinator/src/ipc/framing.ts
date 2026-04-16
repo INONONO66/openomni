@@ -2,7 +2,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 export function encode(msg: unknown): Uint8Array {
-  return encoder.encode(JSON.stringify(msg) + "\n");
+  return encoder.encode(`${JSON.stringify(msg)}\n`);
 }
 
 export class LineDecoder {

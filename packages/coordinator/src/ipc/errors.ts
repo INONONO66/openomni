@@ -8,14 +8,8 @@ export class IpcConnectionError extends Error {
 
 export class IpcTimeoutError extends Error {
   override name = "IpcTimeoutError";
-  constructor(message: string) {
-    super(message);
-  }
 }
 
 export class IpcProtocolError extends Error {
   override name = "IpcProtocolError";
-  constructor(message: string) {
-    super(message);
-  }
 }
