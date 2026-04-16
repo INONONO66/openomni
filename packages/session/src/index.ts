@@ -12,3 +12,4 @@ export { SurfaceKey } from "./surface-key";
 export { EventLog } from "./event-log/index.js";
 export { Artifact } from "./artifact/index";
 export * from "./worker-run/index.js";
+export { Log } from "./log/index";
