@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult, type ChatAgentConfig } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
-import { AbortControllerRegistry, get as getAbortEntry } from "../../src/subagent/abort-registry";
+import { get as getAbortEntry } from "../../src/subagent/abort-registry";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
