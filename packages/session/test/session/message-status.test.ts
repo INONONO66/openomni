@@ -39,7 +39,7 @@ describe("message status tracking", () => {
     adapter.close();
     try {
       unlinkSync(dbPath);
-    } catch {}
+    } catch (_) {}
     Storage.reset();
   });
 
@@ -51,7 +51,6 @@ describe("message status tracking", () => {
   }
 
   test("addMessage without status defaults to 'completed'", () => {
-    const sessionId = "s1";
     const session = Session.create({
       title: "test",
       model: { providerID: "test", modelID: "test-model" },
