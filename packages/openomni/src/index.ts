@@ -6,7 +6,6 @@ export {
   PLAN_TOOL_SPECS,
   PlanAgent,
   PlanPipeline,
-  SpecValidator,
   StructuralGate,
   createPlanToolExecutor,
   normalizePlanPayload,
