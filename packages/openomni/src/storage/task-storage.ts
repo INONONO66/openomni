@@ -1,3 +1,7 @@
+// Scheduled-task execution tracking: triggers (cron/interval/once/event/manual),
+// idempotency, retry attempts, and checkpoints. Separate from WorkerRun in
+// @openomni/session, which tracks subagent execution lifecycle per session.
+
 import type { Task } from "./task-types";
 
 export interface TaskStore {
