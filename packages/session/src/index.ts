@@ -13,3 +13,4 @@ export { EventLog } from "./event-log/index.js";
 export { Artifact } from "./artifact/index";
 export * from "./worker-run/index.js";
 export { Log } from "./log/index";
+export * from "./storage/wal-maintenance.js";
