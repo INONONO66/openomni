@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS session (
 
 CREATE TABLE IF NOT EXISTS message (
   id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
+  session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
   data TEXT NOT NULL,
   role TEXT,
   time_created INTEGER NOT NULL
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS message (
 
 CREATE TABLE IF NOT EXISTS part (
   id TEXT PRIMARY KEY,
-  message_id TEXT NOT NULL,
+  message_id TEXT NOT NULL REFERENCES message(id) ON DELETE CASCADE,
   data TEXT NOT NULL,
   type TEXT,
   time_start INTEGER
