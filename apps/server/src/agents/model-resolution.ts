@@ -142,7 +142,10 @@ export async function resolveDefaultProviderModel(): Promise<CatalogModel | unde
     const entries = Object.entries(credentials);
     if (entries.length === 0) return undefined;
 
-    const [providerID, auth] = entries[0]!;
+    const firstEntry = entries[0];
+    if (!firstEntry) return undefined;
+
+    const [providerID, auth] = firstEntry;
     const authType = auth.type === "proxy" ? "proxy" : "api";
     const models = await Provider.listModels(providerID, authType);
     const preferred = models[0];
