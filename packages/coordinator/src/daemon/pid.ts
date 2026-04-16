@@ -21,7 +21,7 @@ export function readPid(pidPath = DEFAULT_PID_PATH): number | undefined {
   try {
     const content = fs.readFileSync(pidPath, "utf-8").trim();
     const pid = parseInt(content, 10);
-    return isNaN(pid) ? undefined : pid;
+    return Number.isNaN(pid) ? undefined : pid;
   } catch {
     return undefined;
   }

@@ -16,8 +16,6 @@ export function createDaemonWsServer(port: number, handler: WsCommandHandler): D
       return new Response("Upgrade required", { status: 426 });
     },
     websocket: {
-      open(_ws) {},
-      close(_ws) {},
       message(ws, raw) {
         let cmd: Record<string, unknown>;
         try {
@@ -32,7 +30,7 @@ export function createDaemonWsServer(port: number, handler: WsCommandHandler): D
 
   return {
     get port() {
-      return server.port!;
+      return server.port ?? port;
     },
     stop() {
       server.stop();

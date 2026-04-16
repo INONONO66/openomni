@@ -16,7 +16,7 @@ export function createHealthServer(port: number): HealthServer {
 
   return {
     get port() {
-      return server.port!;
+      return server.port ?? port;
     },
     stop() {
       server.stop();
