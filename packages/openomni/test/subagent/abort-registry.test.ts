@@ -6,7 +6,13 @@ import {
   type ChatAgentInput,
 } from "@openomni/agent";
 import { Session, Storage, WorkerRun } from "@openomni/session";
-import { abort, get, register, remove } from "../../src/subagent/abort-registry";
+import {
+  AbortControllerRegistry,
+  abort,
+  get,
+  register,
+  remove,
+} from "../../src/subagent/abort-registry";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -34,27 +40,92 @@ beforeEach(() => {
 afterEach(() => {
   createSpy.mockRestore();
   Storage.reset();
+  AbortControllerRegistry.clear();
 });
 
-describe("AbortControllerRegistry", () => {
-  it("registers controllers, aborts them, and removes entries", () => {
+describe("AbortControllerRegistry — nested map structure", () => {
+  it("registers run-level entries under session map", () => {
     const sessionId = crypto.randomUUID();
-    const entry = register(sessionId, "run-1");
 
-    expect(get(sessionId)?.activeRunId).toBe("run-1");
-    expect(entry.controller.signal.aborted).toBe(false);
+    register(sessionId, "run-1");
+    register(sessionId, "run-2");
+
+    expect(get(sessionId, "run-1")).toBeDefined();
+    expect(get(sessionId, "run-2")).toBeDefined();
+    expect(AbortControllerRegistry.get(sessionId)?.size).toBe(2);
+  });
+
+  it("reuses existing entry when controller is not aborted", () => {
+    const sessionId = crypto.randomUUID();
+    const first = register(sessionId, "run-1");
+    const second = register(sessionId, "run-1");
+
+    expect(second).toBe(first);
+  });
+
+  it("creates fresh entry when existing controller is aborted", () => {
+    const sessionId = crypto.randomUUID();
+    const first = register(sessionId, "run-1");
+    first.controller.abort();
+    const second = register(sessionId, "run-1");
+
+    expect(second).not.toBe(first);
+    expect(second.controller.signal.aborted).toBe(false);
+  });
+
+  it("multi-run independent abort: aborting run-A does not affect run-B", () => {
+    const sessionId = crypto.randomUUID();
+    const entryA = register(sessionId, "run-A");
+    const entryB = register(sessionId, "run-B");
+
+    abort(sessionId, "run-A");
+
+    expect(entryA.controller.signal.aborted).toBe(true);
+    expect(get(sessionId, "run-A")).toBeUndefined();
+    expect(entryB.controller.signal.aborted).toBe(false);
+    expect(get(sessionId, "run-B")).toBeDefined();
+  });
+
+  it("session-wide abort: aborts all runs and removes session map", () => {
+    const sessionId = crypto.randomUUID();
+    const entryA = register(sessionId, "run-A");
+    const entryB = register(sessionId, "run-B");
 
     abort(sessionId);
-    expect(entry.controller.signal.aborted).toBe(true);
-    expect(get(sessionId)).toBeUndefined();
 
+    expect(entryA.controller.signal.aborted).toBe(true);
+    expect(entryB.controller.signal.aborted).toBe(true);
+    expect(AbortControllerRegistry.has(sessionId)).toBe(false);
+  });
+
+  it("auto-cleanup: removes session map when last run entry is removed", () => {
+    const sessionId = crypto.randomUUID();
+    register(sessionId, "run-1");
     register(sessionId, "run-2");
-    remove(sessionId);
-    expect(get(sessionId)).toBeUndefined();
+
+    remove(sessionId, "run-1");
+    expect(AbortControllerRegistry.has(sessionId)).toBe(true);
+
+    remove(sessionId, "run-2");
+    expect(AbortControllerRegistry.has(sessionId)).toBe(false);
+  });
+
+  it("remove is a no-op for non-existent session or run", () => {
+    expect(() => remove("ghost-session", "ghost-run")).not.toThrow();
+
+    const sessionId = crypto.randomUUID();
+    register(sessionId, "run-1");
+    expect(() => remove(sessionId, "ghost-run")).not.toThrow();
+    expect(get(sessionId, "run-1")).toBeDefined();
+  });
+
+  it("abort is a no-op for non-existent session", () => {
+    expect(() => abort("ghost-session")).not.toThrow();
+    expect(() => abort("ghost-session", "ghost-run")).not.toThrow();
   });
 });
 
-describe("SubagentRuntime abort propagation", () => {
+describe("SubagentRuntime abort propagation — regression", () => {
   it("combines external signal during spawn and cleans registry on completion", async () => {
     const external = new AbortController();
     let capturedSignal: AbortSignal | undefined;
@@ -78,7 +149,7 @@ describe("SubagentRuntime abort propagation", () => {
     expect(capturedSignal).not.toBe(external.signal);
     external.abort();
     expect(capturedSignal?.aborted).toBe(true);
-    expect(get(result.sessionId)).toBeUndefined();
+    expect(AbortControllerRegistry.has(result.sessionId)).toBe(false);
   });
 
   it("combines external signal during send and cleans registry on completion", async () => {
@@ -115,7 +186,7 @@ describe("SubagentRuntime abort propagation", () => {
     expect(capturedSignal).not.toBe(external.signal);
     external.abort();
     expect(capturedSignal?.aborted).toBe(true);
-    expect(get(spawned.sessionId)).toBeUndefined();
+    expect(AbortControllerRegistry.has(spawned.sessionId)).toBe(false);
   });
 
   it("aborts the active controller when cancelling a running spawn", async () => {
@@ -146,15 +217,16 @@ describe("SubagentRuntime abort propagation", () => {
     });
 
     const sessionId = await waitForSessionId();
-    const entry = await waitForAbortEntry(sessionId);
-    await waitForRunningRun(sessionId);
-    expect(entry.controller.signal.aborted).toBe(false);
+    const runId = await waitForRunningRun(sessionId);
+    const entry = get(sessionId, runId);
+    expect(entry).toBeDefined();
+    expect(entry?.controller.signal.aborted).toBe(false);
 
     await SubagentRuntime.cancel({ sessionId });
 
     expect(capturedSignal?.aborted).toBe(true);
     await expectSpawnAbort(pendingSpawn);
-    expect(get(sessionId)).toBeUndefined();
+    expect(AbortControllerRegistry.has(sessionId)).toBe(false);
   });
 });
 
@@ -171,27 +243,13 @@ async function waitForSessionId(): Promise<string> {
   throw new Error("session was not created");
 }
 
-async function waitForAbortEntry(sessionId: string) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const entry = get(sessionId);
-    if (entry) {
-      return entry;
-    }
-
-    await Promise.resolve();
-  }
-
-  throw new Error("abort registry entry was not created");
-}
-
-async function waitForRunningRun(sessionId: string): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+async function waitForRunningRun(sessionId: string): Promise<string> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     const runs = await WorkerRun.listBySession(sessionId);
-    if (runs.some((run) => run.status === "running")) {
-      return;
-    }
+    const running = runs.find((run) => run.status === "running");
+    if (running) return running.runId;
 
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 10));
   }
 
   throw new Error("worker run did not reach running state");

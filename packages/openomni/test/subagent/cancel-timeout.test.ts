@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult, type ChatAgentConfig } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
-import { get as getAbortEntry } from "../../src/subagent/abort-registry";
+import { AbortControllerRegistry, get as getAbortEntry } from "../../src/subagent/abort-registry";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -73,7 +73,7 @@ describe("cancel timeout race", () => {
     expect(run?.status).toBe("interrupted");
     expect(failEvents).toHaveLength(1);
     expect(failEvents[0].error).toBe("cancel timeout exceeded");
-    expect(getAbortEntry(sessionId)).toBeUndefined();
+    expect(getAbortEntry(sessionId, runId)).toBeUndefined();
   });
 
   it("resolves with cancelled when abort completes before timeout", async () => {

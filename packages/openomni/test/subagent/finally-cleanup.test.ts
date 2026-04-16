@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult } from "@openomni/agent";
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
-import { get as getAbortEntry } from "../../src/subagent/abort-registry";
+import { AbortControllerRegistry } from "../../src/subagent/abort-registry";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 const sessionModel = { providerID: "anthropic", modelID: "claude-3-haiku-20240307" };
@@ -118,7 +118,7 @@ describe("finally cleanup — spawn", () => {
     ).rejects.toThrow("boom");
 
     const children = Session.listChildren(parentId);
-    expect(getAbortEntry(children[0]?.id ?? "")).toBeUndefined();
+    expect(AbortControllerRegistry.has(children[0]?.id ?? "")).toBe(false);
   });
 
   it("updates workerMeta status to failed after agent failure", async () => {
@@ -178,7 +178,7 @@ describe("finally cleanup — send", () => {
     const lastRun = runs[runs.length - 1];
     expect(lastRun?.status).toBe("failed");
 
-    expect(getAbortEntry(spawned.sessionId)).toBeUndefined();
+    expect(AbortControllerRegistry.has(spawned.sessionId)).toBe(false);
 
     const meta = Session.getWorkerMeta(spawned.sessionId);
     expect(meta).toBeDefined();
@@ -224,7 +224,7 @@ describe("finally cleanup — resume", () => {
     const lastRun = runs[runs.length - 1];
     expect(lastRun?.status).toBe("failed");
 
-    expect(getAbortEntry(spawned.sessionId)).toBeUndefined();
+    expect(AbortControllerRegistry.has(spawned.sessionId)).toBe(false);
 
     const meta = Session.getWorkerMeta(spawned.sessionId);
     expect(meta).toBeDefined();

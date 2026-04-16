@@ -358,7 +358,7 @@ async function shouldSkipFailureUpdate(sessionId: string, runId: string): Promis
   const run = await WorkerRun.get(sessionId, runId);
   if (run?.status === "cancelled" || run?.status === "interrupted") return true;
   // Cancel in progress: controller aborted but entry kept for completion tracking
-  const entry = getAbortEntry(sessionId);
+  const entry = getAbortEntry(sessionId, runId);
   return !!entry && entry.controller.signal.aborted;
 }
 
@@ -405,12 +405,12 @@ async function finalizeRun(sessionId: string, runId: string): Promise<void> {
   }
 }
 
-async function waitForAbortEntryRemoval(sessionId: string): Promise<void> {
+async function waitForAbortEntryRemoval(sessionId: string, runId: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
-    if (getAbortEntry(sessionId) === undefined) return;
+    if (getAbortEntry(sessionId, runId) === undefined) return;
     await Promise.resolve();
   }
-  while (getAbortEntry(sessionId) !== undefined) {
+  while (getAbortEntry(sessionId, runId) !== undefined) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -422,7 +422,7 @@ async function raceAbortCompletion(
 ): Promise<void> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-  const abortWait = waitForAbortEntryRemoval(sessionId).then(() => "settled" as const);
+  const abortWait = waitForAbortEntryRemoval(sessionId, runId).then(() => "settled" as const);
   const timeout = new Promise<"timeout">((resolve) => {
     timeoutId = setTimeout(() => resolve("timeout"), hardTimeoutMs);
   });
@@ -430,7 +430,7 @@ async function raceAbortCompletion(
   const winner = await Promise.race([abortWait, timeout]);
 
   if (winner === "timeout") {
-    removeAbortController(sessionId);
+    removeAbortController(sessionId, runId);
     const run = await WorkerRun.get(sessionId, runId);
     if (run && !isTerminalStatus(run.status)) {
       await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
@@ -484,7 +484,7 @@ function setupRunTimeouts(
         runId,
         error: "hard timeout exceeded",
       });
-      abortSession(sessionId);
+      abortSession(sessionId, runId);
     }, hardTimeoutMs);
   }
 
@@ -652,7 +652,7 @@ export namespace SubagentRuntime {
         } catch {
           // cleanup must not mask the original error
         }
-        removeAbortController(session.id);
+        removeAbortController(session.id, runId);
       }
     });
   }
@@ -754,7 +754,7 @@ export namespace SubagentRuntime {
           } catch {
             // cleanup must not mask the original error
           }
-          removeAbortController(session.id);
+          removeAbortController(session.id, runId);
         }
       }),
     );
@@ -846,7 +846,7 @@ export namespace SubagentRuntime {
         } catch {
           // cleanup must not mask the original error
         }
-        removeAbortController(session.id);
+        removeAbortController(session.id, runId);
       }
     });
   }
@@ -941,7 +941,7 @@ export namespace SubagentRuntime {
         } catch {
           // cleanup must not mask the original error
         }
-        removeAbortController(config.sessionId);
+        removeAbortController(config.sessionId, runId);
       }
     });
   }
@@ -953,8 +953,8 @@ export namespace SubagentRuntime {
     const hardTimeoutMs = config.hardTimeoutMs ?? 10_000;
 
     if (config.runId) {
-      const entry = getAbortEntry(config.sessionId);
-      const hasInFlightOp = !!entry && entry.activeRunId === config.runId;
+      const entry = getAbortEntry(config.sessionId, config.runId);
+      const hasInFlightOp = !!entry;
 
       if (hasInFlightOp) {
         entry.controller.abort();
@@ -977,7 +977,7 @@ export namespace SubagentRuntime {
 
     const runs = await WorkerRun.listBySession(config.sessionId);
     const activeRun = runs.find((r) => r.status === "running" || r.status === "starting");
-    const abortEntry = getAbortEntry(config.sessionId);
+    const abortEntry = activeRun ? getAbortEntry(config.sessionId, activeRun.runId) : undefined;
 
     if (abortEntry) {
       abortEntry.controller.abort();
