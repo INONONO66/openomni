@@ -59,7 +59,7 @@ export namespace SubagentTool {
     id: "claude-3-haiku-20240307",
   };
 
-  export function create(options?: SubagentToolOptions): SubagentToolSpec {
+  export function create(options: SubagentToolOptions): SubagentToolSpec {
     const spec: Tool.Spec = {
       name: "subagent",
       description:
