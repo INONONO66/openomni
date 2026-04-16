@@ -2,7 +2,7 @@
 
 > Plans live in `.sisyphus/plans/`. This index tracks their status.
 
-Last updated: 2026-03-09
+Last updated: 2026-04-17
 
 ## Completed
 
@@ -26,6 +26,7 @@ Last updated: 2026-03-09
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | `agent-layer-redesign.md`     | Superseded — split into `agent-package-split.md` (Phase 1) + plan-team-mode (Phase 2)      |
 | `planner-identity-upgrade.md` | Abandoned — target file (`apps/cli/src/agent/planner.ts`) removed during CLI restructuring |
+| `plan-team-mode.md` (Team)    | Superseded — Team mode removed; persistent subagent shipped as `SubagentRuntime` + `BackgroundManager` |
 
 ## Active
 
