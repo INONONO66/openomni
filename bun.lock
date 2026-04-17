@@ -69,6 +69,9 @@
       "name": "@openomni/coordinator",
       "version": "0.0.1",
       "dependencies": {
+        "@openomni/agent": "workspace:*",
+        "@openomni/llm": "workspace:*",
+        "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
       },
