@@ -1,7 +1,6 @@
 import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
-import { createToolExecutor } from "@openomni/openomni";
-import type { AgentToolProvider, NativeTool, SystemToolProvider } from "@openomni/openomni";
+import type { AgentToolProvider, SystemToolProvider } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
@@ -32,14 +31,13 @@ function createFallbackDefinition(agentName: string, deps: BridgeDeps): AgentDef
   };
 }
 
-function selectTools(
-  definition: AgentDefinition,
-  deps: BridgeDeps,
-): { specs: Tool.Spec[]; tools: NativeTool[] } {
-  const tools: NativeTool[] = [];
+function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[] {
   const specs: Tool.Spec[] = [];
 
-  function addTools(providerTools: NativeTool[], selection: boolean | string[] | undefined): void {
+  function addTools(
+    providerTools: { spec: Tool.Spec }[],
+    selection: boolean | string[] | undefined,
+  ): void {
     if (!selection) return;
 
     const selected =
@@ -47,7 +45,6 @@ function selectTools(
         ? providerTools
         : providerTools.filter((tool) => new Set(selection).has(tool.spec.name));
 
-    tools.push(...selected);
     specs.push(
       ...selected.map((tool) => ({ ...tool.spec, name: sanitizeToolName(tool.spec.name) })),
     );
@@ -57,12 +54,12 @@ function selectTools(
   addTools(deps.agentProvider.listTools(), definition.tools.agent);
   addTools(deps.mcpProvider.listTools(), definition.tools.mcp);
 
-  return { specs, tools };
+  return specs;
 }
 
 function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
   const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
-  const { specs, tools } = selectTools(definition, deps);
+  const specs = selectTools(definition, deps);
 
   return {
     model: definition.model,
@@ -73,13 +70,6 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },
-    toolExecutor: createToolExecutor({
-      tools,
-      config: {
-        permissions: definition.permissions,
-        workspaceRoot: deps.workspaceRoot,
-      },
-    }),
   };
 }
 
