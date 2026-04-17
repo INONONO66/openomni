@@ -105,7 +105,12 @@ const methods = {
       tool: z.string(),
       input: z.record(z.unknown()),
     }),
-    result: z.object({ output: z.string() }),
+    result: z.object({
+      id: z.string(),
+      toolCallId: z.string(),
+      output: z.string(),
+      isError: z.boolean().optional(),
+    }),
   },
   "worker.state_update": {
     params: z.object({

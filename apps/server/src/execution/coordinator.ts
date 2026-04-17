@@ -6,28 +6,52 @@ import {
   recoverInterruptedRuns as _recoverInterruptedRuns,
   type RecoveryResult,
 } from "@openomni/coordinator";
+import type { McpToolProvider } from "../tool/mcp/provider";
 
 export type CoordinatorConfig = {
   workerScript: string;
   workerCount?: number;
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
+  mcpProvider?: McpToolProvider;
 };
 
 export type ExecutionCoordinator = {
   dispatch(sessionTreeId: string, request: Execution.Request): Promise<Execution.Result>;
   getStats(): { workers: number; active: number; idle: number; ready: number; activeRuns: number };
+  getWorkerSnapshots(): Map<number, WorkerBootstrap.WorkerSnapshot>;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   recoverInterruptedRuns(): Promise<RecoveryResult>;
   shutdown(): Promise<void>;
 };
 
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
+  const workerSnapshots = new Map<number, WorkerBootstrap.WorkerSnapshot>();
+  const { mcpProvider } = config;
+
   const workerPool: WorkerPool = createWorkerPool({
     workerScript: config.workerScript,
     size: config.workerCount,
     socketDir: config.socketDir,
     bootstrap: config.bootstrap,
+    onToolCall: mcpProvider
+      ? async (params) => {
+          const result = await mcpProvider.execute({
+            id: params.callId,
+            tool: params.tool,
+            input: params.input,
+          });
+          return {
+            id: result.id,
+            toolCallId: result.toolCallId,
+            output: result.output,
+            isError: result.isError,
+          };
+        }
+      : undefined,
+    onWorkerSnapshot: (workerId, snapshot) => {
+      workerSnapshots.set(workerId, snapshot);
+    },
   });
 
   const activeRuns = new Set<string>();
@@ -90,6 +114,10 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
 
     getStats() {
       return { ...workerPool.getStats(), activeRuns: activeRuns.size };
+    },
+
+    getWorkerSnapshots() {
+      return workerSnapshots;
     },
 
     async waitUntilReady(timeoutMs) {

@@ -1,12 +1,16 @@
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { SessionRouting } from "./session-routing";
-import { WorkerSupervisor } from "./supervisor";
+import { WorkerSupervisor, type ToolCallParams, type ToolCallResult } from "./supervisor";
+
+export type { ToolCallParams, ToolCallResult };
 
 export type WorkerPoolConfig = {
   size?: number;
   workerScript: string;
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
+  onToolCall?: (params: ToolCallParams) => Promise<ToolCallResult>;
+  onWorkerSnapshot?: (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
 };
 
 export type WorkerPool = {
@@ -23,7 +27,15 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
 
   const workers: WorkerSupervisor[] = Array.from(
     { length: size },
-    (_, i) => new WorkerSupervisor(i, config.workerScript, socketDir, config.bootstrap),
+    (_, i) =>
+      new WorkerSupervisor(
+        i,
+        config.workerScript,
+        socketDir,
+        config.bootstrap,
+        config.onToolCall,
+        config.onWorkerSnapshot,
+      ),
   );
 
   return {

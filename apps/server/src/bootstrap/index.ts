@@ -102,7 +102,7 @@ export async function main(): Promise<void> {
 
   const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
   const bootstrap = await assembleBootstrap(mcpProvider);
-  const coordinator = createExecutionCoordinator({ workerScript, bootstrap });
+  const coordinator = createExecutionCoordinator({ workerScript, bootstrap, mcpProvider });
   await coordinator.waitUntilReady();
   IngressEngine.setCoordinator(coordinator);
 

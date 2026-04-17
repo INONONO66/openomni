@@ -1,8 +1,7 @@
 import { ChatAgent } from "@openomni/agent";
 import { AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
-import type { Tool } from "@openomni/protocol";
-import { Execution, WorkerBootstrap } from "@openomni/protocol";
+import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
@@ -30,6 +29,7 @@ initialize({
 });
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
+const activeRunIds = new Set<string>();
 
 const agentProvider = new AgentToolProvider();
 
@@ -51,6 +51,9 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
     const { runId, sessionId } = request;
 
     (async () => {
+      activeRunIds.add(runId);
+      server.notify("worker.run_started", { runId, sessionId });
+
       try {
         if (request.mode === "direct") {
           const messages = SessionBridge.buildDirectMessages(sessionId).filter(
@@ -61,16 +64,18 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
           const systemProvider = new SystemToolProvider(workspaceRoot);
 
-          // placeholder until T11 wires real IPC transport
-          const mcpPlaceholderCallTool = async (toolName: string): Promise<Tool.Result> => ({
-            id: crypto.randomUUID(),
-            toolCallId: "",
-            output: `MCP proxy not yet connected (tool: ${toolName})`,
-            isError: true,
-          });
           const mcpProxyProvider = McpProxyToolProvider.create(
             workerBootstrap?.mcpTools ?? [],
-            mcpPlaceholderCallTool,
+            async (toolName, toolArgs) => {
+              const raw = await server.call("worker.tool_call", {
+                runId,
+                sessionId,
+                callId: crypto.randomUUID(),
+                tool: toolName,
+                input: toolArgs,
+              });
+              return Tool.Result.parse(raw);
+            },
           );
 
           const availableTools = [
@@ -91,6 +96,14 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             }),
           });
           const runResult = await agent.run({ messages });
+
+          server.notify("worker.run_completed", {
+            runId,
+            sessionId,
+            status: "succeeded",
+            output: runResult.text,
+          });
+
           respond({
             runId,
             sessionId,
@@ -105,6 +118,9 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             systemPrompt: request.systemPrompt,
             budget: request.budget,
           });
+
+          server.notify("worker.run_completed", { runId, sessionId, status: "succeeded" });
+
           respond({
             runId,
             sessionId,
@@ -113,12 +129,21 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           });
         }
       } catch (err) {
+        server.notify("worker.run_completed", {
+          runId,
+          sessionId,
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+
         respond({
           runId,
           sessionId,
           status: "failed",
           error: err instanceof Error ? err.message : String(err),
         });
+      } finally {
+        activeRunIds.delete(runId);
       }
     })();
   } else if (method === "coordinator.cancel_run") {
@@ -127,6 +152,29 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
     respond({ ok: true });
   }
 });
+
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+setInterval(() => {
+  const snapshot: WorkerBootstrap.WorkerSnapshot = {
+    activeRuns: [...activeRunIds],
+    backgroundTasks: [],
+    lastHeartbeat: Date.now(),
+    memoryRss: process.memoryUsage().rss / 1024 / 1024,
+    configEpoch: workerBootstrap?.configEpoch ?? "",
+  };
+
+  server
+    .call("worker.heartbeat", {
+      workerId,
+      activeRunIds: [...activeRunIds],
+      memoryRssMb: process.memoryUsage().rss / 1024 / 1024,
+      snapshot,
+    })
+    .catch(() => {
+      // heartbeat failure is non-fatal; supervisor may not be connected yet
+    });
+}, HEARTBEAT_INTERVAL_MS);
 
 (async () => {
   try {
