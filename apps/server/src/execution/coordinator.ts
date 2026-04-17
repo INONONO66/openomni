@@ -1,10 +1,11 @@
 import { Bus } from "@openomni/session";
 import { Execution, Subagent } from "@openomni/protocol";
-import { createWorkerPool, type WorkerPool } from "@openomni/coordinator/src/worker-pool/pool.js";
 import {
+  createWorkerPool,
+  type WorkerPool,
   recoverInterruptedRuns as _recoverInterruptedRuns,
   type RecoveryResult,
-} from "@openomni/coordinator/src/recovery/index.js";
+} from "@openomni/coordinator";
 
 export type CoordinatorConfig = {
   workerScript: string;
