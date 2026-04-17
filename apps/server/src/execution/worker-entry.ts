@@ -107,8 +107,8 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
 
           const systemTools = systemProvider.listTools();
           const agentTools = agentProvider.listTools();
-          const mcpTools = mcpProxyProvider.listTools();
-          const availableTools = [...systemTools, ...agentTools, ...mcpTools];
+          const proxyTools = mcpProxyProvider.listTools();
+          const availableTools = [...systemTools, ...agentTools, ...proxyTools];
           const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
 
           toolsRef.tools = tools;
@@ -116,7 +116,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           catalogRef.catalog = buildToolCatalog([
             { tools: systemTools, source: "system" },
             { tools: agentTools, source: "agent" },
-            { tools: mcpTools, source: "mcp" },
+            { tools: proxyTools, source: "mcp" },
           ]);
 
           const agent = ChatAgent.create({
