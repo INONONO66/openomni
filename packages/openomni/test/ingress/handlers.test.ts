@@ -4,27 +4,31 @@ import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
-let PlanAgent: typeof import("../../src/plan/plan-agent").PlanAgent;
-let ChatAgent: typeof import("@openomni/agent").ChatAgent;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
 
+type CoordinatorLike = {
+  dispatch(
+    sessionId: string,
+    request: { runId: string; sessionId: string },
+  ): Promise<{
+    runId: string;
+    sessionId: string;
+    status: string;
+    output?: string;
+    finishReason?: string;
+    error?: string;
+  }>;
+};
+
 const originalFns: {
-  planGenerate?: typeof import("../../src/plan/plan-agent").PlanAgent.generate;
-  chatCreate?: typeof import("@openomni/agent").ChatAgent.create;
-  buildPlanGoal?: typeof import("../../src/ingress/session-bridge").SessionBridge.buildPlanGoal;
   storePlanResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storePlanResult;
   storeDirectResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storeDirectResult;
 } = {};
 
 beforeAll(async () => {
   ({ IngressHandlers } = await import("../../src/ingress/handlers"));
-  ({ PlanAgent } = await import("../../src/plan/plan-agent"));
-  ({ ChatAgent } = await import("@openomni/agent"));
   ({ SessionBridge } = await import("../../src/ingress/session-bridge"));
 
-  originalFns.planGenerate = PlanAgent.generate;
-  originalFns.chatCreate = ChatAgent.create;
-  originalFns.buildPlanGoal = SessionBridge.buildPlanGoal;
   originalFns.storePlanResult = SessionBridge.storePlanResult;
   originalFns.storeDirectResult = SessionBridge.storeDirectResult;
 });
@@ -39,9 +43,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (originalFns.planGenerate) PlanAgent.generate = originalFns.planGenerate;
-  if (originalFns.chatCreate) ChatAgent.create = originalFns.chatCreate;
-  if (originalFns.buildPlanGoal) SessionBridge.buildPlanGoal = originalFns.buildPlanGoal;
   if (originalFns.storePlanResult) {
     SessionBridge.storePlanResult = originalFns.storePlanResult;
   }
@@ -129,6 +130,34 @@ function createPlan(): Plan {
   };
 }
 
+function makePlanCoordinator(plan: Plan): CoordinatorLike {
+  return {
+    async dispatch(_sessionId, request) {
+      return {
+        runId: request.runId,
+        sessionId: request.sessionId,
+        status: "succeeded",
+        output: JSON.stringify({ plan }),
+        finishReason: "stop",
+      };
+    },
+  };
+}
+
+function makeDirectCoordinator(output: string): CoordinatorLike {
+  return {
+    async dispatch(_sessionId, request) {
+      return {
+        runId: request.runId,
+        sessionId: request.sessionId,
+        status: "succeeded",
+        output,
+        finishReason: "stop",
+      };
+    },
+  };
+}
+
 describe("IngressHandlers", () => {
   it("buildExecutionRequest preserves tool execution config", () => {
     const toolConfig = { workspaceRoot: "/workspace/openomni" };
@@ -149,6 +178,7 @@ describe("IngressHandlers", () => {
     const request = IngressHandlers.buildExecutionRequest({
       sessionId: "session-1",
       event,
+      coordinator: makeDirectCoordinator(""),
     });
 
     expect(request.tools).toEqual(event.agent.tools);
@@ -161,8 +191,6 @@ describe("IngressHandlers", () => {
     addTextMessage(sessionId, "user", "Plan this work");
 
     const plan = createPlan();
-    const generateMock = mock(async () => ({ plan }));
-    PlanAgent.generate = generateMock;
 
     const event: Ingress.InboundEvent = {
       id: "event-plan-1",
@@ -174,24 +202,22 @@ describe("IngressHandlers", () => {
       },
     };
 
-    const result = await IngressHandlers.handlePlan({ sessionId, event });
+    const result = await IngressHandlers.handlePlan({
+      sessionId,
+      event,
+      coordinator: makePlanCoordinator(plan),
+    });
 
-    expect(generateMock).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("plan");
     expect(result.sessionId).toBe(sessionId);
     expect(result.result.plan.planId).toBe(plan.planId);
   });
 
-  it("handlePlan builds goal and stores plan result", async () => {
+  it("handlePlan delegates to coordinator and stores plan result", async () => {
     const sessionId = createSession();
-    const buildPlanGoalMock = mock(() => "goal-from-session");
     const plan = createPlan();
-    const planResult = { plan };
-    const generateMock = mock(async () => planResult);
     const storePlanResultMock = mock(() => {});
 
-    SessionBridge.buildPlanGoal = buildPlanGoalMock;
-    PlanAgent.generate = generateMock;
     SessionBridge.storePlanResult = storePlanResultMock;
 
     const event: Ingress.InboundEvent = {
@@ -206,47 +232,28 @@ describe("IngressHandlers", () => {
       },
     };
 
-    await IngressHandlers.handlePlan({ sessionId, event });
-
-    expect(buildPlanGoalMock).toHaveBeenCalledWith(sessionId);
-    expect(generateMock).toHaveBeenCalledWith("goal-from-session", {
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      systemPrompt: "planner system",
-      budget: { maxTurns: 2 },
+    await IngressHandlers.handlePlan({
+      sessionId,
+      event,
+      coordinator: makePlanCoordinator(plan),
     });
-    expect(storePlanResultMock).toHaveBeenCalledWith(sessionId, planResult, event.agent.model);
+
+    expect(storePlanResultMock).toHaveBeenCalledTimes(1);
+    const [calledSessionId, calledResult, calledModel] = storePlanResultMock.mock.calls[0];
+    expect(calledSessionId).toBe(sessionId);
+    expect(calledResult.plan.planId).toBe(plan.planId);
+    expect(calledModel).toEqual(event.agent.model);
   });
 
-  it("handleDirect runs ChatAgent with session messages and stores output", async () => {
+  it("handleDirect dispatches via coordinator and stores output", async () => {
     const sessionId = createSession();
     addTextMessage(sessionId, "user", "hello");
     addTextMessage(sessionId, "assistant", "hi");
     addTextMessage(sessionId, "user", "summarize");
 
-    const runMock = mock(async ({ messages }: { messages: unknown[] }) => ({
-      text: "direct output",
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      finishReason: "stop" as const,
-      received: messages,
-    }));
-    const createMock = mock(() => ({
-      run: runMock,
-      async *stream() {
-        return;
-      },
-    }));
     const storeDirectResultMock = mock(() => {});
-
-    ChatAgent.create = createMock as unknown as typeof ChatAgent.create;
     SessionBridge.storeDirectResult = storeDirectResultMock;
 
-    const toolExecutor = async () => ({
-      id: crypto.randomUUID(),
-      toolCallId: "tool-call-1",
-      output: "ok",
-      isError: false,
-    });
     const event: Ingress.InboundEvent = {
       id: "event-direct-1",
       surface: "tui",
@@ -257,26 +264,15 @@ describe("IngressHandlers", () => {
         systemPrompt: "direct system",
         tools: [],
         budget: { maxTurns: 3 },
-        toolExecutor,
       },
     };
 
-    const result = await IngressHandlers.handleDirect({ sessionId, event });
+    const result = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: makeDirectCoordinator("direct output"),
+    });
 
-    expect(createMock).toHaveBeenCalledWith({
-      model: event.agent.model,
-      systemPrompt: "direct system",
-      tools: [],
-      budget: { maxTurns: 3 },
-      toolExecutor,
-    });
-    expect(runMock).toHaveBeenCalledWith({
-      messages: [
-        { role: "user", content: "hello" },
-        { role: "assistant", content: "hi" },
-        { role: "user", content: "summarize" },
-      ],
-    });
     expect(storeDirectResultMock).toHaveBeenCalledWith(
       sessionId,
       "direct output",

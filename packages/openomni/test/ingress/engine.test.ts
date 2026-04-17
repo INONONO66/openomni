@@ -24,23 +24,37 @@ beforeEach(() => {
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
+  IngressEngine.setCoordinator({
+    async dispatch(_sessionId, request) {
+      const output = testState.responseQueue.shift() ?? "{}";
+      return {
+        runId: request.runId,
+        sessionId: request.sessionId,
+        status: "succeeded" as const,
+        output,
+        finishReason: "stop" as const,
+      };
+    },
+  });
 });
 
 function enqueuePlan(goal: string): void {
   testState.responseQueue.push(
     JSON.stringify({
-      planId: crypto.randomUUID(),
-      goal,
-      steps: [
-        {
-          stepId: "s1",
-          description: "Execute step",
-          expectedOutput: "done",
-          dependsOn: [],
-        },
-      ],
-      createdAt: new Date().toISOString(),
-      version: 1,
+      plan: {
+        planId: crypto.randomUUID(),
+        goal,
+        steps: [
+          {
+            stepId: "s1",
+            description: "Execute step",
+            expectedOutput: "done",
+            dependsOn: [],
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        version: 1,
+      },
     }),
   );
 }
@@ -156,6 +170,19 @@ describe("IngressEngine", () => {
 
     const first = await IngressEngine.ingest(event);
     IngressEngine.reset();
+    // Re-set coordinator after reset (reset clears session state but not coordinator)
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        const output = testState.responseQueue.shift() ?? "{}";
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output,
+          finishReason: "stop" as const,
+        };
+      },
+    });
 
     const second = await IngressEngine.ingest({
       ...event,
