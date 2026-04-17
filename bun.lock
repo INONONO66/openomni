@@ -39,6 +39,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@openomni/agent": "workspace:*",
+        "@openomni/coordinator": "workspace:*",
         "@openomni/llm": "workspace:*",
         "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
