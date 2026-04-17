@@ -28,8 +28,8 @@ mock.module("@openomni/coordinator", () => ({
       dispatch: (sessionId: string, runId: string, params: Record<string, unknown>) =>
         mockPoolDispatch(sessionId, runId, params),
       getStats: () => ({ workers: 1, active: 0, idle: 1, ready: 1 }),
-      waitUntilReady: async () => {},
-      shutdown: async () => {},
+      waitUntilReady: async () => undefined,
+      shutdown: async () => undefined,
     };
   },
   recoverInterruptedRuns: async () => ({ recovered: 0, sessions: [] }),

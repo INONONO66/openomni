@@ -216,7 +216,7 @@ describe("IngressHandlers", () => {
   it("handlePlan delegates to coordinator and stores plan result", async () => {
     const sessionId = createSession();
     const plan = createPlan();
-    const storePlanResultMock = mock(() => {});
+    const storePlanResultMock = mock(() => undefined);
 
     SessionBridge.storePlanResult = storePlanResultMock;
 
@@ -251,7 +251,7 @@ describe("IngressHandlers", () => {
     addTextMessage(sessionId, "assistant", "hi");
     addTextMessage(sessionId, "user", "summarize");
 
-    const storeDirectResultMock = mock(() => {});
+    const storeDirectResultMock = mock(() => undefined);
     SessionBridge.storeDirectResult = storeDirectResultMock;
 
     const event: Ingress.InboundEvent = {

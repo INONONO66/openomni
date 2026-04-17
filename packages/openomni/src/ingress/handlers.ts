@@ -37,7 +37,7 @@ export namespace IngressHandlers {
       credentials: undefined,
       budget: ctx.event.agent.budget,
       workspace: ctx.event.workspace,
-      workspaceRoot: ctx.event.workspace,
+      workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
     };
   }
 
