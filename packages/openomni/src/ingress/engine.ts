@@ -1,4 +1,4 @@
-import { InboundEventSchema, type InboundEvent, type IngressResult } from "@openomni/protocol";
+import { Ingress } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
@@ -20,8 +20,8 @@ export namespace IngressEngine {
     _coordinator = c;
   }
 
-  export async function ingest(event: InboundEvent): Promise<IngressResult> {
-    InboundEventSchema.parse(event);
+  export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
+    Ingress.InboundEventSchema.parse(event);
 
     const agentModel = event.agent.model;
     const { session } = IngressSessionResolver.resolve(event, {

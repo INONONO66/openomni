@@ -1,8 +1,8 @@
-import type { InboundEvent, Message } from "@openomni/protocol";
+import type { Ingress, Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 
 export namespace IngressEventProjector {
-  function extractTextPayload(event: InboundEvent): string {
+  function extractTextPayload(event: Ingress.InboundEvent): string {
     if (typeof event.payload === "string") {
       return event.payload;
     }
@@ -19,7 +19,7 @@ export namespace IngressEventProjector {
     return JSON.stringify(event.payload) ?? "";
   }
 
-  export function project(event: InboundEvent, sessionId: string): void {
+  export function project(event: Ingress.InboundEvent, sessionId: string): void {
     const message: Message.UserMessage = {
       id: crypto.randomUUID(),
       sessionID: sessionId,

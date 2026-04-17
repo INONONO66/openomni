@@ -5,4 +5,3 @@ export { Hashline } from "./hashline.js";
 export { InMemoryPlanStore } from "./plan-store.js";
 export type { EditResult, PlanDocument, PlanStore } from "./plan-store.js";
 export { StructuralGate, structuralGateCheck } from "./structural-gate.js";
-export { normalizePlanPayload } from "./plan-json.js";

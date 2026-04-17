@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { InboundEvent, Message } from "@openomni/protocol";
+import type { Ingress, Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { IngressEventProjector } from "../../src/ingress/event-projector";
 
@@ -15,7 +15,7 @@ describe("IngressEventProjector", () => {
   });
 
   it("should store TextPart with string payload verbatim", () => {
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-1",
       surface: "slack",
       mode: "direct",
@@ -38,7 +38,7 @@ describe("IngressEventProjector", () => {
   });
 
   it("should extract text field from object payload", () => {
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-2",
       surface: "discord",
       mode: "direct",
@@ -57,7 +57,7 @@ describe("IngressEventProjector", () => {
 
   it("should JSON.stringify object payload without text field", () => {
     const payload = { type: "reaction", emoji: "👍", count: 5 };
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-3",
       surface: "telegram",
       mode: "direct",
@@ -75,7 +75,7 @@ describe("IngressEventProjector", () => {
   });
 
   it("should set UserMessage.agent to event.surface", () => {
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-4",
       surface: "whatsapp",
       mode: "direct",
@@ -93,7 +93,7 @@ describe("IngressEventProjector", () => {
   });
 
   it("should store both UserMessage and TextPart in session", () => {
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-5",
       surface: "email",
       mode: "direct",

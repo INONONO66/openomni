@@ -1,7 +1,5 @@
-import { type Message, PlanSchema } from "@openomni/protocol";
-import type { Plan, PlanResult } from "@openomni/protocol";
+import { Plan, type Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { normalizePlanPayload } from "../plan/plan-json";
 
 const PLAN_PREFIX = "__OPENOMNI_PLAN__";
 
@@ -84,8 +82,7 @@ export namespace SessionBridge {
     }
 
     const parsed = JSON.parse(lastPlanText);
-    const normalized = normalizePlanPayload(parsed);
-    return PlanSchema.parse(normalized);
+    return Plan.Schema.parse(parsed);
   }
 
   export function buildDirectMessages(
@@ -108,7 +105,7 @@ export namespace SessionBridge {
 
   export function storePlanResult(
     sessionId: string,
-    result: PlanResult,
+    result: Plan.Result,
     model: { provider: string; id: string },
   ): void {
     const message = createAssistantMessage(sessionId, model);

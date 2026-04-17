@@ -1,4 +1,4 @@
-import { PlanSchema, type Gate, type Plan } from "@openomni/protocol";
+import { Plan, type Gate } from "@openomni/protocol";
 import { PlanAgent } from "./plan-agent.js";
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -62,7 +62,7 @@ export namespace PlanPipeline {
             };
           }
         }
-        const revalidation = PlanSchema.safeParse(lastPlan);
+        const revalidation = Plan.Schema.safeParse(lastPlan);
         if (!revalidation.success) {
           return {
             ok: false,

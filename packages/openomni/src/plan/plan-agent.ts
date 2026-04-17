@@ -1,17 +1,17 @@
 import { ChatAgent, type AgentBudget, type ChatAgentInstance } from "@openomni/agent";
-import { PlanSchema, type PlanResult, type Tool } from "@openomni/protocol";
-import { extractJson, normalizePlanPayload } from "./plan-json.js";
+import { Plan, type Tool } from "@openomni/protocol";
+import { extractJson } from "./plan-json.js";
 import { InMemoryPlanStore, type PlanStore } from "./plan-store";
 import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "./plan-tools";
 
-function parsePlan(text: string): PlanResult["plan"] {
+function parsePlan(text: string): Plan.Result["plan"] {
   let raw: unknown;
   try {
     raw = JSON.parse(extractJson(text));
   } catch (e) {
     throw new Error(`Failed to parse plan JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const result = PlanSchema.safeParse(normalizePlanPayload(raw));
+  const result = Plan.Schema.safeParse(raw);
   if (!result.success) throw new Error(`Failed to validate plan: ${result.error.message}`);
   return result.data;
 }
@@ -55,7 +55,7 @@ export namespace PlanAgent {
     });
   }
 
-  export async function generate(goal: string, config: GenerateConfig): Promise<PlanResult> {
+  export async function generate(goal: string, config: GenerateConfig): Promise<Plan.Result> {
     const agent = ChatAgent.create({
       model: config.model,
       systemPrompt: config.systemPrompt ?? "",

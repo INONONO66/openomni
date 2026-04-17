@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { InboundEvent } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { ZodError } from "zod";
 import {
   defaultRunFn,
@@ -219,7 +219,7 @@ describe("IngressEngine integration pipeline", () => {
       };
 
       await expect(
-        IngressEngine.ingest(invalidEvent as unknown as InboundEvent),
+        IngressEngine.ingest(invalidEvent as unknown as Ingress.InboundEvent),
       ).rejects.toBeInstanceOf(ZodError);
     });
   });
