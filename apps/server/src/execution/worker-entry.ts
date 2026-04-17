@@ -1,13 +1,16 @@
 import { ChatAgent } from "@openomni/agent";
 import { AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
+import type { Tool } from "@openomni/protocol";
 import { Execution, WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
+  McpProxyToolProvider,
   PlanAgent,
   SessionBridge,
   SystemToolProvider,
+  buildWorkerMiddleware,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
@@ -54,15 +57,38 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
               m.role === "user" || m.role === "assistant",
           );
-          const workspaceRoot = request.toolConfig?.workspaceRoot ?? config.workspace?.root;
+          const workspaceRoot =
+            request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
           const systemProvider = new SystemToolProvider(workspaceRoot);
-          const availableTools = [...systemProvider.listTools(), ...agentProvider.listTools()];
-          const toolContext = createExecutionToolContext(request, availableTools);
+
+          // placeholder until T11 wires real IPC transport
+          const mcpPlaceholderCallTool = async (toolName: string): Promise<Tool.Result> => ({
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: `MCP proxy not yet connected (tool: ${toolName})`,
+            isError: true,
+          });
+          const mcpProxyProvider = McpProxyToolProvider.create(
+            workerBootstrap?.mcpTools ?? [],
+            mcpPlaceholderCallTool,
+          );
+
+          const availableTools = [
+            ...systemProvider.listTools(),
+            ...agentProvider.listTools(),
+            ...mcpProxyProvider.listTools(),
+          ];
+          const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
           const agent = ChatAgent.create({
             model: request.model,
             systemPrompt: request.systemPrompt,
             budget: request.budget,
-            ...toolContext,
+            tools,
+            toolExecutor,
+            middleware: buildWorkerMiddleware({
+              permissions: request.permissions,
+              budget: request.budget,
+            }),
           });
           const runResult = await agent.run({ messages });
           respond({

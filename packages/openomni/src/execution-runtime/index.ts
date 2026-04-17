@@ -2,6 +2,7 @@ export { buildWorkerMiddleware } from "./middleware.js";
 export type { WorkerMiddlewareConfig } from "./middleware.js";
 export {
   AgentToolProvider,
+  McpProxyToolProvider,
   SystemToolProvider,
   Tool,
   createToolExecutor,
