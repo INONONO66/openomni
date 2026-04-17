@@ -46,7 +46,6 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           const agent = ChatAgent.create({
             model: request.model,
             systemPrompt: request.systemPrompt,
-            tools: request.tools,
             budget: request.budget,
           });
           const runResult = await agent.run({ messages });
