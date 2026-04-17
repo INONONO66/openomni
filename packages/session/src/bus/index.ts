@@ -1,4 +1,5 @@
-import { z } from "zod";
+import type { z } from "zod";
+import { Log } from "../log/index.js";
 
 export namespace BusEvent {
   export interface Descriptor<T> {
@@ -19,13 +20,19 @@ export namespace Bus {
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const handlers = subscribers.get(event.name);
     if (!handlers) return;
-    handlers.forEach((handler) => {
-      try {
-        handler(data);
-      } catch (_handlerErr: unknown) {
-        // handler errors must not affect other handlers
-      }
-    });
+
+    // snapshot handlers to avoid mutation during iteration
+    const handlerSnapshot = [...handlers];
+
+    for (const handler of handlerSnapshot) {
+      queueMicrotask(() => {
+        try {
+          handler(data);
+        } catch (err) {
+          Log.warn("Bus handler error", { event: event.name, error: String(err) });
+        }
+      });
+    }
   }
 
   export function subscribe<T>(

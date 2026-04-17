@@ -8,6 +8,7 @@
         "@biomejs/biome": "2.0.0",
         "@commitlint/cli": "^20.5.0",
         "@commitlint/config-conventional": "^20.5.0",
+        "@types/bun": "latest",
         "lefthook": "^2.1.4",
         "turbo": "^2.8.1",
         "typescript": "5.9.2",
@@ -61,6 +62,18 @@
       },
       "devDependencies": {
         "@types/bun": "latest",
+      },
+    },
+    "packages/coordinator": {
+      "name": "@openomni/coordinator",
+      "version": "0.0.1",
+      "dependencies": {
+        "@openomni/protocol": "workspace:*",
+        "@openomni/session": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5",
       },
     },
     "packages/llm": {
@@ -195,6 +208,8 @@
     "@openomni/agent": ["@openomni/agent@workspace:packages/agent"],
 
     "@openomni/cli": ["@openomni/cli@workspace:apps/cli"],
+
+    "@openomni/coordinator": ["@openomni/coordinator@workspace:packages/coordinator"],
 
     "@openomni/llm": ["@openomni/llm@workspace:packages/llm"],
 

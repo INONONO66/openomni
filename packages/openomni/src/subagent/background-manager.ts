@@ -16,6 +16,7 @@ type Config = {
   maxDepth?: number;
   maxDescendants?: number;
   taskTtlMs?: number;
+  maxQueueSize?: number;
   onTaskComplete?: (result: Subagent.BackgroundTaskResult) => void;
 };
 
@@ -26,6 +27,8 @@ type BackgroundManagerInstance = {
   cancel(taskId: string): Promise<boolean>;
   listByParent(parentSessionId: string): Subagent.BackgroundTask[];
   cleanup(): void;
+  stats(): { active: number; pending: number; total: number };
+  dispose(): void;
 };
 
 export const BackgroundManager = {
@@ -35,12 +38,18 @@ export const BackgroundManager = {
     const maxDepth = config?.maxDepth ?? 5;
     const maxDescendants = config?.maxDescendants ?? 10;
     const taskTtlMs = config?.taskTtlMs ?? 1_800_000;
+    const maxQueueSize = config?.maxQueueSize ?? 100;
     const onTaskComplete = config?.onTaskComplete;
 
     const tasks = new Map<string, Subagent.BackgroundTask>();
     const results = new Map<string, Subagent.BackgroundTaskResult>();
     const controllers = new Map<string, AbortController>();
     const taskUnsubs = new Map<string, () => void>();
+
+    type QueuedItem = { input: LaunchInput; id: string };
+    const pendingQueue: QueuedItem[] = [];
+    // Tracks spawning + running tasks synchronously (incremented before async spawn)
+    let activeCount = 0;
 
     function activeTasks(): Subagent.BackgroundTask[] {
       return [...tasks.values()].filter((t) => t.status === "running" || t.status === "pending");
@@ -71,9 +80,177 @@ export const BackgroundManager = {
       }
     }
 
-    async function launch(input: LaunchInput): Promise<Subagent.BackgroundTask> {
-      cleanup();
+    const cleanupInterval = setInterval(cleanup, 60_000);
 
+    function drainQueue(): void {
+      while (pendingQueue.length > 0 && activeCount < maxConcurrentTotal) {
+        const next = pendingQueue.shift();
+        if (!next) break;
+
+        const task = tasks.get(next.id);
+        // task may have been cancelled while queued
+        if (!task || task.status !== "pending") continue;
+
+        activeCount++;
+        spawnTask(next.id, next.input, task);
+      }
+    }
+
+    function spawnTask(
+      id: string,
+      input: LaunchInput,
+      task: Subagent.BackgroundTask,
+    ): Promise<void> {
+      const controller = new AbortController();
+      controllers.set(id, controller);
+
+      return SubagentRuntime.spawnBackground({
+        agentName: input.agentName,
+        prompt: input.prompt,
+        title: input.prompt.slice(0, 50),
+        model: input.model,
+        signal: controller.signal,
+      }).then(
+        ({ sessionId, runId }) => {
+          const running: Subagent.BackgroundTask = {
+            ...task,
+            status: "running",
+            sessionId,
+            runId,
+            startedAt: Date.now(),
+          };
+          tasks.set(id, running);
+
+          const runUnsubs: Array<() => void> = [];
+          const cleanupRunSubs = () => runUnsubs.forEach((u) => u());
+          taskUnsubs.set(id, cleanupRunSubs);
+
+          runUnsubs.push(
+            Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+              if (data.payload.sessionId !== sessionId) return;
+              cleanupRunSubs();
+              taskUnsubs.delete(id);
+
+              const current = tasks.get(id);
+              if (!current || current.status === "cancelled") {
+                activeCount--;
+                drainQueue();
+                return;
+              }
+
+              activeCount--;
+
+              const completed: Subagent.BackgroundTask = {
+                ...current,
+                status: "completed",
+                completedAt: Date.now(),
+              };
+              tasks.set(id, completed);
+
+              let output: string | undefined;
+              try {
+                const msgs = Session.getMessages(sessionId);
+                const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
+                if (lastAssistant) {
+                  const parts = Session.getParts(lastAssistant.id);
+                  output =
+                    parts
+                      .filter((p): p is Message.TextPart => p.type === "text")
+                      .map((p) => p.text)
+                      .filter(Boolean)
+                      .join("\n") || undefined;
+                }
+              } catch {
+                // session may have been cleaned up
+              }
+              const result: Subagent.BackgroundTaskResult = {
+                taskId: id,
+                status: "completed",
+                output,
+              };
+              results.set(id, result);
+              onTaskComplete?.(result);
+
+              Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
+                traceId: crypto.randomUUID(),
+                time: Date.now(),
+                payload: { taskId: id, status: "completed" as const, sessionId },
+              });
+
+              drainQueue();
+            }),
+          );
+
+          runUnsubs.push(
+            Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+              if (data.payload.sessionId !== sessionId) return;
+              cleanupRunSubs();
+              taskUnsubs.delete(id);
+
+              const current = tasks.get(id);
+              if (!current || current.status === "cancelled") {
+                activeCount--;
+                drainQueue();
+                return;
+              }
+
+              activeCount--;
+
+              const failed: Subagent.BackgroundTask = {
+                ...current,
+                status: "failed",
+                completedAt: Date.now(),
+                error: data.payload.error ?? "unknown error",
+              };
+              tasks.set(id, failed);
+
+              const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
+              results.set(id, result);
+              onTaskComplete?.(result);
+
+              Bus.publish(Subagent.Events.BackgroundTaskFailed, {
+                traceId: crypto.randomUUID(),
+                time: Date.now(),
+                payload: { taskId: id, error: data.payload.error ?? "unknown error" },
+              });
+
+              drainQueue();
+            }),
+          );
+
+          Bus.publish(Subagent.Events.BackgroundTaskLaunched, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: {
+              taskId: id,
+              agentName: input.agentName,
+              parentSessionId: input.parentSessionId,
+              status: "running" as const,
+            },
+          });
+        },
+        (err) => {
+          controllers.delete(id);
+          activeCount--;
+          const failed: Subagent.BackgroundTask = {
+            ...task,
+            status: "failed",
+            completedAt: Date.now(),
+            error: err instanceof Error ? err.message : String(err),
+          };
+          tasks.set(id, failed);
+          Bus.publish(Subagent.Events.BackgroundTaskFailed, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            payload: { taskId: id, error: failed.error },
+          });
+
+          drainQueue();
+        },
+      );
+    }
+
+    async function launch(input: LaunchInput): Promise<Subagent.BackgroundTask> {
       const depth = input.depth ?? 0;
       const active = activeTasks();
 
@@ -83,10 +260,6 @@ export const BackgroundManager = {
           input,
           `max concurrent tasks per agent (${maxConcurrentPerAgent}) exceeded`,
         );
-      }
-
-      if (active.length >= maxConcurrentTotal) {
-        return makeFailedTask(input, `max concurrent total tasks (${maxConcurrentTotal}) exceeded`);
       }
 
       if (depth > maxDepth) {
@@ -104,9 +277,6 @@ export const BackgroundManager = {
       }
 
       const id = `bg_${crypto.randomUUID().slice(0, 8)}`;
-      const controller = new AbortController();
-      controllers.set(id, controller);
-
       const task: Subagent.BackgroundTask = {
         id,
         agentName: input.agentName,
@@ -118,133 +288,18 @@ export const BackgroundManager = {
       };
       tasks.set(id, task);
 
-      let sessionId: string;
-      let runId: string;
-      try {
-        const result = await SubagentRuntime.spawnBackground({
-          agentName: input.agentName,
-          prompt: input.prompt,
-          title: input.prompt.slice(0, 50),
-          model: input.model,
-          signal: controller.signal,
-        });
-        sessionId = result.sessionId;
-        runId = result.runId;
-      } catch (err) {
-        controllers.delete(id);
-        const failed: Subagent.BackgroundTask = {
-          ...task,
-          status: "failed",
-          completedAt: Date.now(),
-          error: err instanceof Error ? err.message : String(err),
-        };
-        tasks.set(id, failed);
-        Bus.publish(Subagent.Events.BackgroundTaskFailed, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          payload: { taskId: id, error: failed.error },
-        });
-        return failed;
+      if (activeCount >= maxConcurrentTotal) {
+        if (pendingQueue.length >= maxQueueSize) {
+          tasks.delete(id);
+          return makeFailedTask(input, `queue full (max ${maxQueueSize})`);
+        }
+        pendingQueue.push({ input, id });
+        return task;
       }
 
-      const running: Subagent.BackgroundTask = {
-        ...task,
-        status: "running",
-        sessionId,
-        runId,
-        startedAt: Date.now(),
-      };
-      tasks.set(id, running);
-
-      const runUnsubs: Array<() => void> = [];
-      const cleanupRunSubs = () => runUnsubs.forEach((u) => u());
-      taskUnsubs.set(id, cleanupRunSubs);
-
-      runUnsubs.push(
-        Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
-          if (data.payload.sessionId !== sessionId) return;
-          cleanupRunSubs();
-          taskUnsubs.delete(id);
-
-          const current = tasks.get(id);
-          if (!current || current.status === "cancelled") return;
-
-          const completed: Subagent.BackgroundTask = {
-            ...current,
-            status: "completed",
-            completedAt: Date.now(),
-          };
-          tasks.set(id, completed);
-
-          let output: string | undefined;
-          try {
-            const msgs = Session.getMessages(sessionId);
-            const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
-            if (lastAssistant) {
-              const parts = Session.getParts(lastAssistant.id);
-              output =
-                parts
-                  .filter((p): p is Message.TextPart => p.type === "text")
-                  .map((p) => p.text)
-                  .filter(Boolean)
-                  .join("\n") || undefined;
-            }
-          } catch {
-            // session may have been cleaned up
-          }
-          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "completed", output };
-          results.set(id, result);
-          onTaskComplete?.(result);
-
-          Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            payload: { taskId: id, status: "completed" as const, sessionId },
-          });
-        }),
-      );
-
-      runUnsubs.push(
-        Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
-          if (data.payload.sessionId !== sessionId) return;
-          cleanupRunSubs();
-          taskUnsubs.delete(id);
-
-          const current = tasks.get(id);
-          if (!current || current.status === "cancelled") return;
-
-          const failed: Subagent.BackgroundTask = {
-            ...current,
-            status: "failed",
-            completedAt: Date.now(),
-            error: data.payload.error ?? "unknown error",
-          };
-          tasks.set(id, failed);
-
-          const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
-          results.set(id, result);
-          onTaskComplete?.(result);
-
-          Bus.publish(Subagent.Events.BackgroundTaskFailed, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            payload: { taskId: id, error: data.payload.error ?? "unknown error" },
-          });
-        }),
-      );
-
-      Bus.publish(Subagent.Events.BackgroundTaskLaunched, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        payload: {
-          taskId: id,
-          agentName: input.agentName,
-          parentSessionId: input.parentSessionId,
-          status: "running" as const,
-        },
-      });
-
-      return running;
+      activeCount++;
+      await spawnTask(id, input, task);
+      return tasks.get(id) ?? task;
     }
 
     async function cancel(taskId: string): Promise<boolean> {
@@ -252,6 +307,11 @@ export const BackgroundManager = {
       if (!task) return false;
       if (task.status === "completed" || task.status === "failed" || task.status === "cancelled")
         return false;
+
+      const queueIdx = pendingQueue.findIndex((item) => item.id === taskId);
+      if (queueIdx !== -1) {
+        pendingQueue.splice(queueIdx, 1);
+      }
 
       controllers.get(taskId)?.abort();
       taskUnsubs.get(taskId)?.();
@@ -275,6 +335,12 @@ export const BackgroundManager = {
       listByParent: (parentSessionId) =>
         [...tasks.values()].filter((t) => t.parentSessionId === parentSessionId),
       cleanup,
+      stats: () => ({
+        active: activeCount,
+        pending: pendingQueue.length,
+        total: tasks.size,
+      }),
+      dispose: () => clearInterval(cleanupInterval),
     };
   },
 };

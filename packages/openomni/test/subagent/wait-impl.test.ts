@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { Bus, Session, WorkerRun } from "@openomni/session";
+import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { Subagent, type Message } from "@openomni/protocol";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
@@ -8,11 +8,18 @@ describe("SubagentRuntime.wait()", () => {
   let runId: string;
 
   beforeEach(async () => {
+    Storage.reset();
     Bus.reset();
     sessionId = crypto.randomUUID();
     runId = crypto.randomUUID();
 
-    await Session.create(sessionId);
+    Storage.getAdapter().session.set(sessionId, {
+      id: sessionId,
+      title: "Test",
+      model: { providerID: "test", modelID: "test" },
+      time: { created: Date.now(), updated: Date.now() },
+      spawnDepth: 0,
+    });
     await WorkerRun.create(sessionId, {
       runId,
       title: "Test Run",
@@ -21,6 +28,7 @@ describe("SubagentRuntime.wait()", () => {
   });
 
   afterEach(() => {
+    Storage.reset();
     Bus.reset();
   });
 
@@ -112,9 +120,11 @@ describe("SubagentRuntime.wait()", () => {
         lastMessageId: assistantMsg.id,
       });
       Bus.publish(Subagent.Events.WorkerRunCompleted, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
         sessionId,
         runId,
-        status: "succeeded",
+        payload: { sessionId, runId, status: "succeeded" as const },
       });
     }, 50);
 
@@ -135,58 +145,17 @@ describe("SubagentRuntime.wait()", () => {
         endedAt: Date.now(),
       });
       Bus.publish(Subagent.Events.WorkerRunFailed, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
         sessionId,
         runId,
-        error: "Test error",
+        payload: { sessionId, runId, error: "Test error" },
       });
     }, 50);
 
     const result = await waitPromise;
 
     expect(result.status).toBe("failed");
-  });
-
-  test("uses polling fallback if Bus event is missed", async () => {
-    await WorkerRun.updateStatus(sessionId, runId, "starting");
-    await WorkerRun.updateStatus(sessionId, runId, "running");
-
-    const assistantMsg: Message.AssistantMessage = {
-      id: crypto.randomUUID(),
-      sessionID: sessionId,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: "test-model",
-      providerID: "test-provider",
-      agent: "test",
-      path: { cwd: process.cwd(), root: process.cwd() },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    };
-    await Session.addMessage(sessionId, assistantMsg);
-
-    const textPart: Message.TextPart = {
-      id: crypto.randomUUID(),
-      sessionID: sessionId,
-      messageID: assistantMsg.id,
-      type: "text",
-      text: "Polled output",
-    };
-    Session.addPart(assistantMsg.id, textPart);
-
-    const waitPromise = SubagentRuntime.wait({ sessionId, runId });
-
-    setTimeout(async () => {
-      await WorkerRun.updateStatus(sessionId, runId, "succeeded", {
-        endedAt: Date.now(),
-        lastMessageId: assistantMsg.id,
-      });
-    }, 50);
-
-    const result = await waitPromise;
-
-    expect(result.status).toBe("succeeded");
-    expect(result.output).toBe("Polled output");
   });
 
   test("respects timeoutMs parameter and rejects on timeout", async () => {
@@ -253,18 +222,22 @@ describe("SubagentRuntime.wait()", () => {
         lastMessageId: assistantMsg.id,
       });
       Bus.publish(Subagent.Events.WorkerRunCompleted, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
         sessionId,
         runId,
-        status: "succeeded",
+        payload: { sessionId, runId, status: "succeeded" as const },
       });
     }, 50);
 
     await waitPromise;
 
     Bus.publish(Subagent.Events.WorkerRunCompleted, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
       sessionId,
       runId,
-      status: "succeeded",
+      payload: { sessionId, runId, status: "succeeded" as const },
     });
 
     expect(true).toBe(true);

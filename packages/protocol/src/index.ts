@@ -17,3 +17,5 @@ export * from "./artifact/index.js";
 export * from "./gate/index.js";
 export * from "./hook/index.js";
 export * from "./subagent/index.js";
+export * from "./ipc/index.js";
+export * from "./daemon/index.js";

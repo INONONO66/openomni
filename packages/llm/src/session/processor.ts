@@ -108,6 +108,8 @@ export namespace Processor {
             try {
               let currentText: Message.TextPart | undefined;
               const reasoningMap: Record<string, Message.ReasoningPart> = {};
+              const textPartMap: Record<string, string[]> = {};
+              const reasoningPartMap: Record<string, string[]> = {};
 
               const stream = await createStream(streamInput);
 
@@ -126,13 +128,14 @@ export namespace Processor {
                       time: { start: now },
                       metadata: (event.providerMetadata as Record<string, unknown>) || {},
                     };
+                    textPartMap[currentText.id] = [];
                     addMessagePart(currentText);
                     break;
                   }
 
                   case "text-delta": {
                     if (currentText) {
-                      currentText.text += String(event.text || "");
+                      textPartMap[currentText.id].push(String(event.text || ""));
                       if (event.providerMetadata) {
                         currentText.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -143,7 +146,8 @@ export namespace Processor {
 
                   case "text-end": {
                     if (currentText?.time) {
-                      currentText.text = currentText.text.trimEnd();
+                      currentText.text = textPartMap[currentText.id].join("").trimEnd();
+                      delete textPartMap[currentText.id];
                       currentText.time = {
                         start: currentText.time.start,
                         end: Date.now(),
@@ -171,6 +175,7 @@ export namespace Processor {
                         metadata: (event.providerMetadata as Record<string, unknown>) || {},
                       };
                       reasoningMap[reasoningId] = part;
+                      reasoningPartMap[part.id] = [];
                       addMessagePart(part);
                     }
                     break;
@@ -180,7 +185,7 @@ export namespace Processor {
                     const reasoningId = String(event.id);
                     if (reasoningId in reasoningMap) {
                       const part = reasoningMap[reasoningId];
-                      part.text += String(event.text || "");
+                      reasoningPartMap[part.id].push(String(event.text || ""));
                       if (event.providerMetadata) {
                         part.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -193,7 +198,8 @@ export namespace Processor {
                     const reasoningId = String(event.id);
                     if (reasoningId in reasoningMap) {
                       const part = reasoningMap[reasoningId];
-                      part.text = part.text.trimEnd();
+                      part.text = reasoningPartMap[part.id].join("").trimEnd();
+                      delete reasoningPartMap[part.id];
                       part.time = {
                         start: part.time.start,
                         end: Date.now(),

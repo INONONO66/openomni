@@ -1,119 +1,130 @@
-import type { Database } from "bun:sqlite";
-import { eq, and, ne, asc, desc, lt, or, inArray, sql } from "drizzle-orm";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Message } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { Storage } from "./storage";
-import { createDb, type DrizzleDb } from "./drizzle/db";
-import {
-  sessionTable,
-  messageTable,
-  partTable,
-  surfaceKeyTable,
-  artifactTable,
-  eventLogTable,
-} from "./drizzle/schema";
+
+const MIGRATION_DIR = join(import.meta.dir, "../../migration");
+
+const ORDERED_MIGRATIONS = [
+  "0001_initial/migration.sql",
+  "0002_pragma_fk_indices/migration.sql",
+  "0003_new_tables/migration.sql",
+  "0004_message_status/migration.sql",
+];
+
+function applyPragmas(db: Database): void {
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = NORMAL");
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.exec("PRAGMA cache_size = -64000");
+  db.exec("PRAGMA mmap_size = 268435456");
+  db.exec("PRAGMA temp_store = MEMORY");
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+}
+
+function applyMigrations(db: Database): void {
+  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
+
+  for (const name of ORDERED_MIGRATIONS) {
+    const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(name);
+    if (applied) continue;
+
+    // 0004 compat: if status column already exists (from an older migration path), skip DDL
+    if (name === "0004_message_status/migration.sql" && hasMessageStatusColumn(db)) {
+      db.exec(`INSERT OR IGNORE INTO _migrations (name) VALUES ('${name}')`);
+      continue;
+    }
+
+    const sql = readFileSync(join(MIGRATION_DIR, name), "utf-8");
+    db.exec(sql);
+    db.exec(`INSERT INTO _migrations (name) VALUES ('${name}')`);
+  }
+}
+
+function hasMessageStatusColumn(db: Database): boolean {
+  const rows = db.query("PRAGMA table_info(message)").all() as Array<{ name: string }>;
+  return rows.some((r) => r.name === "status");
+}
 
 export class SqliteStorageAdapter implements Storage.Adapter {
-  private readonly db: DrizzleDb;
-  private readonly sqlite: Database;
+  private readonly db: Database;
 
   constructor(dbPath: string) {
-    const { db, sqlite } = createDb(dbPath);
-    this.db = db;
-    this.sqlite = sqlite;
-  }
-
-  private parseData<T>(row: { data: string } | undefined): T | undefined {
-    if (!row) return undefined;
-    return JSON.parse(row.data) as T;
+    this.db = new Database(dbPath);
+    applyPragmas(this.db);
+    applyMigrations(this.db);
   }
 
   session = {
     get: (id: string): SessionInfo | undefined => {
-      const row = this.db
-        .select({ data: sessionTable.data })
-        .from(sessionTable)
-        .where(eq(sessionTable.id, id))
-        .get();
-      return this.parseData<SessionInfo>(row);
+      const row = this.db.query("SELECT data FROM session WHERE id = ?").get(id) as {
+        data: string;
+      } | null;
+      return row ? (JSON.parse(row.data) as SessionInfo) : undefined;
     },
 
     set: (id: string, info: SessionInfo): void => {
       this.db
-        .insert(sessionTable)
-        .values({
-          id,
-          data: JSON.stringify(info),
-          time_created: info.time.created,
-          time_updated: info.time.updated,
-        })
-        .onConflictDoUpdate({
-          target: sessionTable.id,
-          set: {
-            data: JSON.stringify(info),
-            time_created: info.time.created,
-            time_updated: info.time.updated,
-          },
-        })
-        .run();
+        .query(
+          `INSERT INTO session (id, data, time_created, time_updated)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             data = excluded.data,
+             time_created = excluded.time_created,
+             time_updated = excluded.time_updated`,
+        )
+        .run(id, JSON.stringify(info), info.time.created, info.time.updated);
     },
 
     list: (): SessionInfo[] => {
-      const rows = this.db.select({ data: sessionTable.data }).from(sessionTable).all();
-      return rows.map((row) => JSON.parse(row.data) as SessionInfo);
+      const rows = this.db.query("SELECT data FROM session").all() as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as SessionInfo);
     },
 
     remove: (id: string): boolean => {
-      const deleted = this.db
-        .delete(sessionTable)
-        .where(eq(sessionTable.id, id))
-        .returning({ id: sessionTable.id })
-        .all();
-      return deleted.length > 0;
+      const result = this.db.query("DELETE FROM session WHERE id = ?").run(id);
+      return result.changes > 0;
     },
   };
 
   message = {
     get: (sessionID: string, messageID: string): Message.Info | undefined => {
       const row = this.db
-        .select({ data: messageTable.data })
-        .from(messageTable)
-        .where(and(eq(messageTable.id, messageID), eq(messageTable.session_id, sessionID)))
-        .get();
-      return this.parseData<Message.Info>(row);
+        .query("SELECT data FROM message WHERE id = ? AND session_id = ?")
+        .get(messageID, sessionID) as { data: string } | null;
+      return row ? (JSON.parse(row.data) as Message.Info) : undefined;
     },
 
     set: (sessionID: string, message: Message.Info): void => {
+      // status is intentionally omitted from the UPDATE set — preserved across upserts
       this.db
-        .insert(messageTable)
-        .values({
-          id: message.id,
-          session_id: sessionID,
-          data: JSON.stringify(message),
-          role: message.role ?? null,
-          time_created: message.time.created,
-        })
-        .onConflictDoUpdate({
-          target: messageTable.id,
-          set: {
-            session_id: sessionID,
-            data: JSON.stringify(message),
-            role: message.role ?? null,
-            time_created: message.time.created,
-          },
-        })
-        .run();
+        .query(
+          `INSERT INTO message (id, session_id, data, role, time_created)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             session_id = excluded.session_id,
+             data = excluded.data,
+             role = excluded.role,
+             time_created = excluded.time_created`,
+        )
+        .run(
+          message.id,
+          sessionID,
+          JSON.stringify(message),
+          message.role ?? null,
+          message.time.created,
+        );
     },
 
     list: (sessionID: string): Message.Info[] => {
       const rows = this.db
-        .select({ data: messageTable.data })
-        .from(messageTable)
-        .where(eq(messageTable.session_id, sessionID))
-        .orderBy(asc(messageTable.time_created), asc(messageTable.id))
-        .all();
-      return rows.map((row) => JSON.parse(row.data) as Message.Info);
+        .query("SELECT data FROM message WHERE session_id = ? ORDER BY time_created ASC, rowid ASC")
+        .all(sessionID) as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as Message.Info);
     },
 
     listPage: (
@@ -121,31 +132,33 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       options: { limit: number; before?: string },
     ): Storage.MessagePage => {
       const cursor = options.before ? decodeCursor(options.before) : undefined;
-      const where = cursor
-        ? and(
-            eq(messageTable.session_id, sessionID),
-            or(
-              lt(messageTable.time_created, cursor.time),
-              and(eq(messageTable.time_created, cursor.time), lt(messageTable.id, cursor.id)),
-            ),
-          )
-        : eq(messageTable.session_id, sessionID);
 
-      const rows = this.db
-        .select({
-          id: messageTable.id,
-          time_created: messageTable.time_created,
-          data: messageTable.data,
-        })
-        .from(messageTable)
-        .where(where)
-        .orderBy(desc(messageTable.time_created), desc(messageTable.id))
-        .limit(options.limit + 1)
-        .all();
+      type Row = { id: string; time_created: number; data: string };
+      let rows: Row[];
+
+      if (cursor) {
+        rows = this.db
+          .query(
+            `SELECT id, time_created, data FROM message
+             WHERE session_id = ? AND (time_created < ? OR (time_created = ? AND id < ?))
+             ORDER BY time_created DESC, id DESC
+             LIMIT ?`,
+          )
+          .all(sessionID, cursor.time, cursor.time, cursor.id, options.limit + 1) as Row[];
+      } else {
+        rows = this.db
+          .query(
+            `SELECT id, time_created, data FROM message
+             WHERE session_id = ?
+             ORDER BY time_created DESC, id DESC
+             LIMIT ?`,
+          )
+          .all(sessionID, options.limit + 1) as Row[];
+      }
 
       const more = rows.length > options.limit;
       const page = more ? rows.slice(0, options.limit) : rows;
-      const items = page.map((row) => JSON.parse(row.data) as Message.Info).reverse();
+      const items = page.map((r) => JSON.parse(r.data) as Message.Info).reverse();
       const tail = page.at(-1);
 
       return {
@@ -156,129 +169,101 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
 
     remove: (sessionID: string, messageID: string): boolean => {
-      const deleted = this.db
-        .delete(messageTable)
-        .where(and(eq(messageTable.id, messageID), eq(messageTable.session_id, sessionID)))
-        .returning({ id: messageTable.id })
-        .all();
-      return deleted.length > 0;
+      const result = this.db
+        .query("DELETE FROM message WHERE id = ? AND session_id = ?")
+        .run(messageID, sessionID);
+      return result.changes > 0;
     },
 
     setStatus: (messageID: string, status: string): void => {
-      this.db.update(messageTable).set({ status }).where(eq(messageTable.id, messageID)).run();
+      this.db.query("UPDATE message SET status = ? WHERE id = ?").run(status, messageID);
     },
 
     findByStatus: (status: string): Array<{ id: string; sessionId: string }> => {
       const rows = this.db
-        .select({ id: messageTable.id, sessionId: messageTable.session_id })
-        .from(messageTable)
-        .where(eq(messageTable.status, status))
-        .all();
-      return rows;
+        .query("SELECT id, session_id FROM message WHERE status = ?")
+        .all(status) as Array<{ id: string; session_id: string }>;
+      return rows.map((r) => ({ id: r.id, sessionId: r.session_id }));
     },
   };
 
   part = {
     get: (messageID: string, partID: string): Message.Part | undefined => {
       const row = this.db
-        .select({ data: partTable.data })
-        .from(partTable)
-        .where(and(eq(partTable.id, partID), eq(partTable.message_id, messageID)))
-        .get();
-      return this.parseData<Message.Part>(row);
+        .query("SELECT data FROM part WHERE id = ? AND message_id = ?")
+        .get(partID, messageID) as { data: string } | null;
+      return row ? (JSON.parse(row.data) as Message.Part) : undefined;
     },
 
     set: (messageID: string, part: Message.Part): void => {
       const timeStart = getPartStartTime(part) ?? null;
       this.db
-        .insert(partTable)
-        .values({
-          id: part.id,
-          message_id: messageID,
-          data: JSON.stringify(part),
-          type: part.type ?? null,
-          time_start: timeStart,
-        })
-        .onConflictDoUpdate({
-          target: partTable.id,
-          set: {
-            message_id: messageID,
-            data: JSON.stringify(part),
-            type: part.type ?? null,
-            time_start: timeStart,
-          },
-        })
-        .run();
+        .query(
+          `INSERT INTO part (id, message_id, data, type, time_start)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             message_id = excluded.message_id,
+             data = excluded.data,
+             type = excluded.type,
+             time_start = excluded.time_start`,
+        )
+        .run(part.id, messageID, JSON.stringify(part), part.type ?? null, timeStart);
     },
 
     list: (messageID: string): Message.Part[] => {
       const rows = this.db
-        .select({ data: partTable.data })
-        .from(partTable)
-        .where(eq(partTable.message_id, messageID))
-        .orderBy(
-          sql`CASE WHEN ${partTable.time_start} IS NOT NULL THEN 0 ELSE 1 END`,
-          asc(partTable.time_start),
-          asc(partTable.id),
-        )
-        .all();
-      return rows.map((row) => JSON.parse(row.data) as Message.Part);
+        .query("SELECT data FROM part WHERE message_id = ? ORDER BY rowid ASC")
+        .all(messageID) as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as Message.Part);
     },
 
     listByMessageIDs: (messageIDs: string[]): Message.Part[] => {
-      if (messageIDs.length === 0) {
-        return [];
-      }
-
+      if (messageIDs.length === 0) return [];
+      const placeholders = messageIDs.map(() => "?").join(", ");
+      // dynamic IN — can't cache this prepared statement
       const rows = this.db
-        .select({ data: partTable.data })
-        .from(partTable)
-        .where(inArray(partTable.message_id, messageIDs))
-        .orderBy(
-          asc(partTable.message_id),
-          sql`CASE WHEN ${partTable.time_start} IS NOT NULL THEN 0 ELSE 1 END`,
-          asc(partTable.time_start),
-          asc(partTable.id),
-        )
-        .all();
-
-      return rows.map((row) => JSON.parse(row.data) as Message.Part);
+        .prepare(`SELECT data FROM part WHERE message_id IN (${placeholders}) ORDER BY rowid ASC`)
+        .all(...messageIDs) as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as Message.Part);
     },
 
     remove: (messageID: string, partID: string): boolean => {
-      const deleted = this.db
-        .delete(partTable)
-        .where(and(eq(partTable.id, partID), eq(partTable.message_id, messageID)))
-        .returning({ id: partTable.id })
-        .all();
-      return deleted.length > 0;
+      const result = this.db
+        .query("DELETE FROM part WHERE id = ? AND message_id = ?")
+        .run(partID, messageID);
+      return result.changes > 0;
     },
   };
 
   surfaceKey = {
     register: (key: string, sessionId: string): void => {
-      const now = Date.now();
       this.db
-        .insert(surfaceKeyTable)
-        .values({ key, session_id: sessionId, time_created: now })
-        .onConflictDoUpdate({
-          target: surfaceKeyTable.key,
-          set: { session_id: sessionId, time_created: now },
-        })
-        .run();
+        .query(
+          `INSERT INTO surface_key (key, session_id, time_created)
+           VALUES (?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             session_id = excluded.session_id,
+             time_created = excluded.time_created`,
+        )
+        .run(key, sessionId, Date.now());
     },
 
     lookup: (key: string): string | undefined => {
-      const row = this.db
-        .select({ session_id: surfaceKeyTable.session_id })
-        .from(surfaceKeyTable)
-        .where(eq(surfaceKeyTable.key, key))
-        .get();
+      const row = this.db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
+        session_id: string;
+      } | null;
       return row?.session_id;
     },
 
     delete: (key: string): void => {
-      this.db.delete(surfaceKeyTable).where(eq(surfaceKeyTable.key, key)).run();
+      this.db.query("DELETE FROM surface_key WHERE key = ?").run(key);
+    },
+
+    listBySession: (sessionId: string): string[] => {
+      const rows = this.db
+        .query("SELECT key FROM surface_key WHERE session_id = ?")
+        .all(sessionId) as Array<{ key: string }>;
+      return rows.map((r) => r.key);
     },
   };
 
@@ -286,125 +271,90 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     store: (id: string, sessionId: string, meta: string, content: string): void => {
       const now = Date.now();
       this.db
-        .insert(artifactTable)
-        .values({
-          id,
-          session_id: sessionId,
-          meta,
-          content,
-          time_created: now,
-          time_updated: now,
-        })
-        .onConflictDoUpdate({
-          target: artifactTable.id,
-          set: { session_id: sessionId, meta, content, time_updated: now },
-        })
-        .run();
+        .query(
+          `INSERT INTO artifact (id, session_id, meta, content, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             session_id = excluded.session_id,
+             meta = excluded.meta,
+             content = excluded.content,
+             time_updated = excluded.time_updated`,
+        )
+        .run(id, sessionId, meta, content, now, now);
     },
 
     get: (id: string): { meta: string; content: string; sessionId: string } | undefined => {
       const row = this.db
-        .select({
-          meta: artifactTable.meta,
-          content: artifactTable.content,
-          sessionId: artifactTable.session_id,
-        })
-        .from(artifactTable)
-        .where(eq(artifactTable.id, id))
-        .get();
-      return row ?? undefined;
+        .query("SELECT meta, content, session_id FROM artifact WHERE id = ?")
+        .get(id) as { meta: string; content: string; session_id: string } | null;
+      if (!row) return undefined;
+      return { meta: row.meta, content: row.content, sessionId: row.session_id };
     },
 
     list: (sessionId: string): Array<{ id: string; meta: string; content: string }> => {
       return this.db
-        .select({
-          id: artifactTable.id,
-          meta: artifactTable.meta,
-          content: artifactTable.content,
-        })
-        .from(artifactTable)
-        .where(eq(artifactTable.session_id, sessionId))
-        .all();
+        .query("SELECT id, meta, content FROM artifact WHERE session_id = ?")
+        .all(sessionId) as Array<{ id: string; meta: string; content: string }>;
     },
 
     delete: (id: string): void => {
-      this.db.delete(artifactTable).where(eq(artifactTable.id, id)).run();
+      this.db.query("DELETE FROM artifact WHERE id = ?").run(id);
     },
   };
 
   eventLog = {
     append: (sessionId: string, type: string, data: string): number => {
-      const now = Date.now();
       const result = this.db
-        .insert(eventLogTable)
-        .values({ session_id: sessionId, type, data, time_created: now })
-        .returning({ id: eventLogTable.id })
-        .get();
-      return result.id;
+        .query("INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)")
+        .run(sessionId, type, data, Date.now());
+      return Number(result.lastInsertRowid);
     },
 
     replay: (
       sessionId: string,
     ): Array<{ id: number; type: string; status: string; data: string }> => {
       return this.db
-        .select({
-          id: eventLogTable.id,
-          type: eventLogTable.type,
-          status: eventLogTable.status,
-          data: eventLogTable.data,
-        })
-        .from(eventLogTable)
-        .where(eq(eventLogTable.session_id, sessionId))
-        .orderBy(asc(eventLogTable.id))
-        .all();
+        .query("SELECT id, type, status, data FROM event_log WHERE session_id = ? ORDER BY id ASC")
+        .all(sessionId) as Array<{ id: number; type: string; status: string; data: string }>;
     },
 
     listIncomplete: (sessionId: string): Array<{ id: number; type: string; data: string }> => {
       return this.db
-        .select({
-          id: eventLogTable.id,
-          type: eventLogTable.type,
-          data: eventLogTable.data,
-        })
-        .from(eventLogTable)
-        .where(and(eq(eventLogTable.session_id, sessionId), ne(eventLogTable.status, "completed")))
-        .orderBy(asc(eventLogTable.id))
-        .all();
+        .query(
+          `SELECT id, type, data FROM event_log
+           WHERE session_id = ? AND status != 'completed'
+           ORDER BY id ASC`,
+        )
+        .all(sessionId) as Array<{ id: number; type: string; data: string }>;
     },
 
     markComplete: (_sessionId: string, eventId: number): void => {
-      this.db
-        .update(eventLogTable)
-        .set({ status: "completed" })
-        .where(eq(eventLogTable.id, eventId))
-        .run();
+      this.db.query("UPDATE event_log SET status = 'completed' WHERE id = ?").run(eventId);
     },
 
     listIncompleteSessions: (): string[] => {
       const rows = this.db
-        .selectDistinct({ session_id: eventLogTable.session_id })
-        .from(eventLogTable)
-        .where(ne(eventLogTable.status, "completed"))
-        .all();
+        .query("SELECT DISTINCT session_id FROM event_log WHERE status != 'completed'")
+        .all() as Array<{ session_id: string }>;
       return rows.map((r) => r.session_id);
     },
   };
 
   clear(): void {
-    this.db.delete(eventLogTable).run();
-    this.db.delete(artifactTable).run();
-    this.db.delete(surfaceKeyTable).run();
-    this.db.delete(partTable).run();
-    this.db.delete(messageTable).run();
-    this.db.delete(sessionTable).run();
+    this.db.exec("DELETE FROM event_log");
+    this.db.exec("DELETE FROM artifact");
+    this.db.exec("DELETE FROM surface_key");
+    this.db.exec("DELETE FROM part");
+    this.db.exec("DELETE FROM message");
+    this.db.exec("DELETE FROM session");
   }
 
   transaction<T>(fn: () => T): T {
-    return this.sqlite.transaction(fn)();
+    return this.db.transaction(fn)();
   }
 
   close(): void {
-    this.sqlite.close();
+    this.db.close();
   }
 }
 

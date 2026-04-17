@@ -27,7 +27,7 @@ export {
 } from "./ingress";
 
 // Task Storage
-export { FileTaskStore, TaskStorage } from "./storage";
+export { SqliteTaskStore, TaskStorage } from "./storage";
 
 // Subagent runtime
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";

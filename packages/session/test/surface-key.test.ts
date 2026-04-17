@@ -1,8 +1,20 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { SurfaceKey } from "../src/surface-key";
+import { Storage } from "../src/storage/storage";
+
+function seedSession(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: "test",
+    model: { providerID: "test", modelID: "test" },
+    time: { created: Date.now(), updated: Date.now() },
+    spawnDepth: 0,
+  });
+}
 
 describe("SurfaceKey", () => {
   beforeEach(() => {
+    Storage.reset();
     SurfaceKey.clear();
   });
 
@@ -36,6 +48,7 @@ describe("SurfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId = "session-123";
 
+      seedSession(sessionId);
       SurfaceKey.register(key, sessionId);
       expect(SurfaceKey.lookup(key)).toBe(sessionId);
     });
@@ -55,6 +68,8 @@ describe("SurfaceKey", () => {
       const sessionId1 = "session-1";
       const sessionId2 = "session-2";
 
+      seedSession(sessionId1);
+      seedSession(sessionId2);
       SurfaceKey.register(key, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId1);
 
@@ -69,6 +84,7 @@ describe("SurfaceKey", () => {
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
 
+      seedSession(sessionId);
       SurfaceKey.register(key1, sessionId);
       SurfaceKey.register(key2, sessionId);
 
@@ -82,6 +98,7 @@ describe("SurfaceKey", () => {
       const key2 = "slack:workspaceA:channel:C456";
       const key3 = "telegram:botId:chat:chatId";
 
+      seedSession(sessionId);
       SurfaceKey.register(key1, sessionId);
       SurfaceKey.register(key2, sessionId);
       SurfaceKey.register(key3, sessionId);
@@ -103,6 +120,7 @@ describe("SurfaceKey", () => {
       const key = "slack:workspaceA:channel:C123";
       const sessionId = "session-123";
 
+      seedSession(sessionId);
       SurfaceKey.register(key, sessionId);
       expect(SurfaceKey.lookup(key)).toBe(sessionId);
 
@@ -121,6 +139,7 @@ describe("SurfaceKey", () => {
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
 
+      seedSession(sessionId);
       SurfaceKey.register(key1, sessionId);
       SurfaceKey.register(key2, sessionId);
 
@@ -136,6 +155,7 @@ describe("SurfaceKey", () => {
       const sessionId = "session-123";
       const key = "slack:workspaceA:channel:C123";
 
+      seedSession(sessionId);
       SurfaceKey.register(key, sessionId);
       expect(SurfaceKey.listBySession(sessionId)).toHaveLength(1);
 
@@ -150,6 +170,8 @@ describe("SurfaceKey", () => {
       const sessionId1 = "session-1";
       const sessionId2 = "session-2";
 
+      seedSession(sessionId1);
+      seedSession(sessionId2);
       SurfaceKey.register(key, sessionId1);
       expect(SurfaceKey.lookup(key)).toBe(sessionId1);
       expect(SurfaceKey.listBySession(sessionId1)).toContain(key);
@@ -165,6 +187,7 @@ describe("SurfaceKey", () => {
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
 
+      seedSession(sessionId);
       SurfaceKey.register(key1, sessionId);
       SurfaceKey.register(key2, sessionId);
 
@@ -321,6 +344,8 @@ describe("SurfaceKey", () => {
         id: "C001",
       });
 
+      seedSession("session-dm");
+      seedSession("session-group");
       SurfaceKey.register(dmKey, "session-dm");
       SurfaceKey.register(groupKey, "session-group");
 
@@ -343,6 +368,8 @@ describe("SurfaceKey", () => {
         threadId: "171000",
       });
 
+      seedSession("session-channel");
+      seedSession("session-thread");
       SurfaceKey.register(channelKey, "session-channel");
       SurfaceKey.register(threadKey, "session-thread");
 
@@ -377,6 +404,7 @@ describe("SurfaceKey", () => {
 
     test("existing keys without explicit kind still register/lookup", () => {
       const legacyKey = "tui:/Users/ino/Develop/OpenOmni";
+      seedSession("session-tui");
       SurfaceKey.register(legacyKey, "session-tui");
       expect(SurfaceKey.lookup(legacyKey)).toBe("session-tui");
     });
@@ -395,9 +423,11 @@ describe("SurfaceKey", () => {
       const key1 = "slack:workspaceA:channel:C123";
       const key2 = "slack:workspaceA:channel:C456";
 
+      seedSession(sessionId);
       SurfaceKey.register(key1, sessionId);
       SurfaceKey.register(key2, sessionId);
 
+      Storage.reset();
       SurfaceKey.clear();
 
       expect(SurfaceKey.lookup(key1)).toBeUndefined();

@@ -18,7 +18,8 @@
     "paths": {
       "@openomni/protocol": ["../protocol/src/index.ts"],
       "@openomni/session": ["./src/index.ts"]
-    }
+    },
+    "types": ["bun"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

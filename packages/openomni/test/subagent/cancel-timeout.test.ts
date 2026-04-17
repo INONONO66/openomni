@@ -73,7 +73,7 @@ describe("cancel timeout race", () => {
     expect(run?.status).toBe("interrupted");
     expect(failEvents).toHaveLength(1);
     expect(failEvents[0].error).toBe("cancel timeout exceeded");
-    expect(getAbortEntry(sessionId)).toBeUndefined();
+    expect(getAbortEntry(sessionId, runId)).toBeUndefined();
   });
 
   it("resolves with cancelled when abort completes before timeout", async () => {

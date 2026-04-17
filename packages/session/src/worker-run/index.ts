@@ -1,5 +1,8 @@
 import { Storage } from "../storage/storage";
 
+// Subagent execution lifecycle per session. Separate from Task.Run in @openomni/openomni,
+// which handles scheduled-task runs (triggers, idempotency, checkpoints).
+
 export type WorkerRunStatus =
   | "queued"
   | "starting"

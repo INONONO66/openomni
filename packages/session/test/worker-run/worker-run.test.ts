@@ -2,8 +2,19 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Storage } from "../../src/storage/storage";
 import { WorkerRun } from "../../src/worker-run/index";
 
+function seedSession(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: "test",
+    model: { providerID: "test", modelID: "test" },
+    time: { created: Date.now(), updated: Date.now() },
+    spawnDepth: 0,
+  });
+}
+
 beforeEach(() => {
   Storage.reset();
+  seedSession("sess-1");
 });
 
 afterEach(() => {

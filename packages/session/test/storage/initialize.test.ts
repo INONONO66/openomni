@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { Storage, InMemoryStorage } from "../../src/storage/storage";
+import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initialize } from "../../src/storage/initialize";
 
@@ -27,11 +27,6 @@ describe("Storage.initialize", () => {
   test("default backend is sqlite", () => {
     initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
     expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
-  });
-
-  test("adapter is not InMemoryStorage after initialize", () => {
-    initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
-    expect(Storage.getAdapter()).not.toBeInstanceOf(InMemoryStorage);
   });
 
   test("sessions persist to disk with sqlite backend", () => {

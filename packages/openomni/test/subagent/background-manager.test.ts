@@ -54,6 +54,10 @@ describe("BackgroundManager.create()", () => {
     expect(typeof manager.cancel).toBe("function");
     expect(typeof manager.listByParent).toBe("function");
     expect(typeof manager.cleanup).toBe("function");
+    expect(typeof manager.stats).toBe("function");
+    expect(typeof manager.dispose).toBe("function");
+
+    manager.dispose();
   });
 });
 
@@ -150,7 +154,7 @@ describe("BackgroundManager.launch()", () => {
       deferred.resolve(createAgentResult("done"));
     });
 
-    it("returns error result when maxConcurrentTotal exceeded", async () => {
+    it("queues task when maxConcurrentTotal exceeded", async () => {
       const deferred = createDeferred<AgentResult>();
       createSpy = spyOn(ChatAgent, "create").mockImplementation(
         () =>
@@ -170,10 +174,10 @@ describe("BackgroundManager.launch()", () => {
         parentSessionId,
       });
 
-      expect(second.status).toBe("failed");
-      expect(second.error).toBeDefined();
+      expect(second.status).toBe("pending");
 
       deferred.resolve(createAgentResult("done"));
+      manager.dispose();
     });
 
     it("returns error result when depth exceeds maxDepth", async () => {

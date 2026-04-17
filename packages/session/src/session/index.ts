@@ -219,15 +219,15 @@ export namespace Session {
     options?: { status?: "received" | "processing" | "completed" },
   ): void {
     const adapter = Storage.getAdapter();
+    const session = adapter.session.get(sessionID);
+    if (!session) return;
+
     adapter.message.set(sessionID, message);
 
     const status = options?.status ?? "completed";
     if (status !== "completed" && adapter.message.setStatus) {
       adapter.message.setStatus(message.id, status);
     }
-
-    const session = adapter.session.get(sessionID);
-    if (!session) return;
 
     const updated: Info = {
       ...session,

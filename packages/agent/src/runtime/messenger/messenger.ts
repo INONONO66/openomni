@@ -1,6 +1,7 @@
 import type { Messenger } from "@openomni/protocol";
 import type { Transport } from "./transport";
 
+const MAX_LOG_SIZE = 1000;
 const messageLog: Messenger.MessageEnvelope[] = [];
 
 function matchesPattern(pattern: Messenger.AllowPattern, from: string, to: string): boolean {
@@ -42,6 +43,9 @@ export namespace AgentMessenger {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
         if (!isAuthorized(options?.allowPatterns, envelope.fromAgentId, envelope.toAgentId)) {
           throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
+        }
+        if (messageLog.length >= MAX_LOG_SIZE) {
+          messageLog.splice(0, Math.floor(MAX_LOG_SIZE / 2));
         }
         messageLog.push(envelope);
         await transport.send(envelope);
