@@ -23,7 +23,12 @@ async function processRetryQueue(
   console.log("[recovery] Retry processing complete");
 }
 
-export async function runRecovery(handler: Adapter.MessageHandler | undefined): Promise<void> {
+export async function runRecovery(
+  handler: Adapter.MessageHandler | undefined,
+  coordinator?: { recoverInterruptedRuns(): Promise<unknown> },
+): Promise<void> {
+  await coordinator?.recoverInterruptedRuns();
+
   const retryQueue = await recoverInterruptedMessages();
   if (handler && retryQueue.length > 0) {
     await processRetryQueue(retryQueue, handler);

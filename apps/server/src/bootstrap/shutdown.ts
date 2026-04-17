@@ -17,6 +17,7 @@ interface ShutdownDeps {
   channels: Array<{ stop(): void }>;
   server: { stop(force: boolean): void };
   mcpProvider: McpToolProvider;
+  coordinator?: { shutdown(): Promise<void> };
 }
 
 export function installShutdownHandlers(deps: ShutdownDeps): void {
@@ -29,6 +30,8 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     console.log("[server] shutting down...");
 
     try {
+      await deps.coordinator?.shutdown();
+
       for (const channel of deps.channels) {
         channel.stop();
       }
