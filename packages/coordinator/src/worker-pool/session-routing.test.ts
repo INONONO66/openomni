@@ -23,12 +23,14 @@ describe("sessionRouting", () => {
     const b = `ses_fill_b_${ts}`;
     const id = `ses_load_decrement_${ts}`;
 
-    sessionRouting.route(a, 2);
-    sessionRouting.route(b, 2);
+    const idxA = sessionRouting.route(a, 2);
+    const idxB = sessionRouting.route(b, 2);
+    expect(idxA).not.toBe(idxB);
+
     sessionRouting.complete(a);
 
     const idx = sessionRouting.route(id, 2);
-    expect(idx).toBe(1);
+    expect(idx).toBe(idxA);
 
     sessionRouting.complete(b);
     sessionRouting.complete(id);
