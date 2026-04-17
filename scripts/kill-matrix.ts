@@ -26,14 +26,20 @@ type ScenarioResult = {
   error?: string;
 };
 
+async function runBunTest(path: string): Promise<boolean> {
+  const proc = Bun.spawn(["bun", "test", path], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  return (await proc.exited) === 0;
+}
+
 // Verifies recoverInterruptedRuns() marks orphaned runs as interrupted
 // and publishes WorkerRunFailed so callers can retry.
 async function scenarioA(): Promise<ScenarioResult> {
   const start = Date.now();
   try {
-    const { recoverInterruptedRuns } = await import(
-      "../packages/coordinator/src/recovery/index.js"
-    );
+    const { recoverInterruptedRuns } = await import("../packages/coordinator/src");
     const result = await recoverInterruptedRuns();
     const passed = typeof result.recovered === "number" && Array.isArray(result.sessions);
     return { id: "a", name: "coordinator crash mid-run", passed, rto_ms: Date.now() - start };
@@ -48,18 +54,14 @@ async function scenarioA(): Promise<ScenarioResult> {
   }
 }
 
-// Verifies WorkerSupervisor exposes crash-recovery surface:
-// forceKill() for SIGKILL escalation and scheduleRestart() for exponential back-off.
+// Verifies the public worker-pool API exposes crash handling without reaching into internals.
 async function scenarioB(): Promise<ScenarioResult> {
   const start = Date.now();
   try {
-    const { WorkerSupervisor } = await import(
-      "../packages/coordinator/src/worker-pool/supervisor.js"
-    );
+    const { createWorkerPool } = await import("../packages/coordinator/src");
     const passed =
-      typeof WorkerSupervisor.prototype.forceKill === "function" &&
-      typeof WorkerSupervisor.prototype.stop === "function" &&
-      typeof WorkerSupervisor.prototype.isActive === "function";
+      typeof createWorkerPool === "function" &&
+      (await runBunTest("packages/coordinator/test/worker-pool/crash.test.ts"));
     return {
       id: "b",
       name: "worker crash during streaming",
@@ -77,18 +79,11 @@ async function scenarioB(): Promise<ScenarioResult> {
   }
 }
 
-// Full SIGTERM drain test requires a running daemon (integration scope).
-// This verifies the source registers handlers and respects DRAIN_TIMEOUT_MS.
+// Verifies shutdown begins draining immediately and rejects new dispatches.
 async function scenarioC(): Promise<ScenarioResult> {
   const start = Date.now();
   try {
-    const src = await Bun.file(
-      new URL("../packages/coordinator/src/daemon/main.ts", import.meta.url),
-    ).text();
-    const passed =
-      src.includes('process.on("SIGTERM"') &&
-      src.includes('process.on("SIGINT"') &&
-      src.includes("DRAIN_TIMEOUT_MS");
+    const passed = await runBunTest("apps/server/test/execution/coordinator.test.ts");
     return { id: "c", name: "SIGTERM graceful drain", passed, rto_ms: Date.now() - start };
   } catch (err) {
     return {

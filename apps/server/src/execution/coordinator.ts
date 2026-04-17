@@ -28,10 +28,14 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
   });
 
   const activeRuns = new Set<string>();
-  let _draining = false;
+  let isDraining = false;
 
   return {
     async dispatch(sessionTreeId, request) {
+      if (isDraining) {
+        throw new Error("Execution coordinator is draining");
+      }
+
       activeRuns.add(request.runId);
 
       Bus.publish(Subagent.Events.WorkerRunStarted, {
@@ -47,11 +51,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       });
 
       try {
-        const raw = await workerPool.dispatch(
-          sessionTreeId,
-          request.runId,
-          request as unknown as Record<string, unknown>,
-        );
+        const raw = await workerPool.dispatch(sessionTreeId, request.runId, { ...request });
         const result = Execution.Result.parse(raw);
 
         Bus.publish(Subagent.Events.WorkerRunCompleted, {
@@ -94,7 +94,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     },
 
     async shutdown() {
-      _draining = true;
+      isDraining = true;
 
       const deadline = Date.now() + 60_000;
       while (activeRuns.size > 0 && Date.now() < deadline) {
