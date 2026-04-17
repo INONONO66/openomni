@@ -1,3 +1,4 @@
+import type { SubagentToolOptions } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
 import { createSubagentTool } from "./tools/subagent.js";
@@ -6,14 +7,19 @@ export class AgentToolProvider implements ToolProvider {
   readonly name = "agent";
   readonly category: ToolCategory = "agent";
 
+  private readonly subagentOptions: SubagentToolOptions | undefined;
   private extraTools: NativeTool[] = [];
+
+  constructor(subagentOptions?: SubagentToolOptions) {
+    this.subagentOptions = subagentOptions;
+  }
 
   register(tool: NativeTool): void {
     this.extraTools.push(tool);
   }
 
   listTools(): NativeTool[] {
-    return [createSubagentTool(), ...this.extraTools];
+    return [createSubagentTool(this.subagentOptions), ...this.extraTools];
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {

@@ -6,6 +6,7 @@ export {
   SystemToolProvider,
   Tool,
   createToolExecutor,
+  createWorkerSubagentRuntime,
   defineTool,
   resolveMeta,
 } from "./tool/index.js";

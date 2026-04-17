@@ -39,6 +39,7 @@ export {
   Tool,
   buildWorkerMiddleware,
   createToolExecutor,
+  createWorkerSubagentRuntime,
   defineTool,
   resolveMeta,
 } from "./execution-runtime";

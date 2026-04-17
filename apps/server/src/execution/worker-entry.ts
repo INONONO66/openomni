@@ -1,15 +1,16 @@
-import { ChatAgent } from "@openomni/agent";
-import { AgentRegistry } from "@openomni/agent";
+import { ChatAgent, AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
+  BackgroundManager,
   McpProxyToolProvider,
   PlanAgent,
   SessionBridge,
   SystemToolProvider,
   buildWorkerMiddleware,
+  createWorkerSubagentRuntime,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
@@ -31,7 +32,11 @@ initialize({
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
 const activeRunIds = new Set<string>();
 
-const agentProvider = new AgentToolProvider();
+const backgroundManager = BackgroundManager.create({
+  maxConcurrentPerAgent: 3,
+  maxConcurrentTotal: 10,
+  maxDepth: 3,
+});
 
 const server = createIpcServer(socketPath, (method, params, respond) => {
   if (method === "coordinator.spawn_run") {
@@ -78,12 +83,35 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             },
           );
 
+          // toolsRef is filled after createExecutionToolContext so the subagent runtime
+          // receives the same tools/executor as the parent agent at call time.
+          const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
+
+          const agentProvider = new AgentToolProvider({
+            subagentRuntime: createWorkerSubagentRuntime({
+              toolsRef,
+              parentSessionId: sessionId,
+              parentPermissions: request.permissions,
+            }),
+            delegationContext: {
+              depth: 0,
+              maxDepth: 3,
+              visitedAgents: new Set([request.agentName ?? "dev"]),
+              parentAbort: new AbortController().signal,
+            },
+            backgroundManager,
+          });
+
           const availableTools = [
             ...systemProvider.listTools(),
             ...agentProvider.listTools(),
             ...mcpProxyProvider.listTools(),
           ];
           const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
+
+          toolsRef.tools = tools;
+          toolsRef.toolExecutor = toolExecutor;
+
           const agent = ChatAgent.create({
             model: request.model,
             systemPrompt: request.systemPrompt,
