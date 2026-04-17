@@ -25,21 +25,28 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
     // ENOENT is expected on first start
   }
 
-  type BunSocket = any;
+  interface SocketData {
+    id: string;
+  }
+
+  interface BunSocket {
+    data: unknown;
+    write(data: Buffer | Uint8Array | string): number;
+  }
 
   const connections = new Map<string, { socket: BunSocket; decoder: LineDecoder }>();
   let connCounter = 0;
 
-  const server = (Bun.listen as any)({
+  const server = Bun.listen({
     unix: socketPath,
     socket: {
       open(socket: BunSocket) {
         const id = `conn-${++connCounter}`;
-        (socket as any).data = { id };
+        (socket.data as unknown as SocketData) = { id };
         connections.set(id, { socket, decoder: new LineDecoder() });
       },
       data(socket: BunSocket, raw: Buffer) {
-        const state = connections.get(((socket as any).data as { id: string }).id);
+        const state = connections.get((socket.data as unknown as SocketData).id);
         if (!state) return;
 
         let messages: unknown[];
@@ -97,11 +104,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         }
       },
       close(socket: BunSocket) {
-        const id = ((socket as any).data as { id: string }).id;
+        const id = (socket.data as unknown as SocketData).id;
         connections.delete(id);
       },
       error(socket: BunSocket, _err: Error) {
-        const id = ((socket as any).data as { id: string }).id;
+        const id = (socket.data as unknown as SocketData).id;
         connections.delete(id);
         void socket;
       },

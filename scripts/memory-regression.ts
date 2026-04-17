@@ -9,8 +9,8 @@ const MODEL = { providerID: "test", modelID: "test" };
 
 async function measureMemory() {
   // force GC before measurement to get a clean baseline
-  if (typeof Bun !== "undefined" && "gc" in Bun) {
-    (Bun as any).gc(true);
+  if (typeof globalThis.gc === "function") {
+    globalThis.gc();
   }
 
   const before = process.memoryUsage();
@@ -32,8 +32,8 @@ async function measureMemory() {
   const afterLoad = process.memoryUsage();
 
   // force GC to distinguish live heap from retained garbage
-  if (typeof Bun !== "undefined" && "gc" in Bun) {
-    (Bun as any).gc(true);
+  if (typeof globalThis.gc === "function") {
+    globalThis.gc();
   }
 
   const afterGC = process.memoryUsage();
