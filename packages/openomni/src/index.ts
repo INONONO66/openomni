@@ -32,5 +32,23 @@ export { SqliteTaskStore, TaskStorage } from "./storage";
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
 
 // Execution runtime
-export { buildWorkerMiddleware } from "./execution-runtime";
-export type { WorkerMiddlewareConfig } from "./execution-runtime";
+export {
+  AgentToolProvider,
+  SystemToolProvider,
+  Tool,
+  buildWorkerMiddleware,
+  createToolExecutor,
+  defineTool,
+  resolveMeta,
+} from "./execution-runtime";
+export type {
+  NativeTool,
+  ToolCategory,
+  ToolExecutorConfig,
+  ToolExecutorContext,
+  ToolMetaValue,
+  ToolProvider,
+  ToolRiskTier,
+  ToolSource,
+  WorkerMiddlewareConfig,
+} from "./execution-runtime";

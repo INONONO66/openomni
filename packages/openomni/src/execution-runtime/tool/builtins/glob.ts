@@ -1,10 +1,10 @@
 import { statSync } from "node:fs";
 import type { Tool } from "@openomni/protocol";
-import { defineTool } from "../define";
-import { optionalString, requireString } from "../shared/input";
-import { errorResult, fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../../filesystem/workspace-path";
-import { GLOB_PROMPT } from "./glob-prompt";
+import { defineTool } from "../define.js";
+import { optionalString, requireString } from "../shared/input.js";
+import { errorResult, fromError, successResult } from "../shared/result.js";
+import { resolveContainedPath } from "../../filesystem/workspace-path.js";
+import { GLOB_PROMPT } from "./glob-prompt.js";
 
 const MAX_RESULTS = 100;
 

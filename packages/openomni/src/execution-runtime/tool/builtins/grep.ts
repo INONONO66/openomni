@@ -1,11 +1,11 @@
 import { statSync } from "node:fs";
 import type { Tool } from "@openomni/protocol";
-import { defineTool } from "../define";
-import { optionalBoolean, optionalString, requireString } from "../shared/input";
-import { errorResult, fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../../filesystem/workspace-path";
-import type { NativeTool } from "../types";
-import { GREP_PROMPT } from "./grep-prompt";
+import { defineTool } from "../define.js";
+import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
+import { errorResult, fromError, successResult } from "../shared/result.js";
+import { resolveContainedPath } from "../../filesystem/workspace-path.js";
+import type { NativeTool } from "../types.js";
+import { GREP_PROMPT } from "./grep-prompt.js";
 
 type MatchResult = { file: string; line: number; text: string };
 

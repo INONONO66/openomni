@@ -2,12 +2,15 @@ import { ChatAgent } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
-import { PlanAgent, SessionBridge } from "@openomni/openomni";
+import {
+  AgentToolProvider,
+  PlanAgent,
+  SessionBridge,
+  SystemToolProvider,
+} from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { connectMcpServers } from "../bootstrap/mcp";
-import { AgentToolProvider } from "../tool/agent";
 import { McpToolProvider } from "../tool/mcp";
-import { SystemToolProvider } from "../tool/system";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
 
 const args = process.argv.slice(2);

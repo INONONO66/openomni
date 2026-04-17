@@ -1,11 +1,11 @@
 import type { Tool } from "@openomni/protocol";
-import type { NativeTool, ToolCategory, ToolProvider } from "../types";
-import { bashTool } from "../builtins/bash";
-import { createEditTool } from "../builtins/edit";
-import { createGlobTool } from "../builtins/glob";
-import { createGrepTool } from "../builtins/grep";
-import { createReadTool } from "../builtins/read";
-import { createWriteTool } from "../builtins/write";
+import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
+import { bashTool } from "../builtins/bash.js";
+import { createEditTool } from "../builtins/edit.js";
+import { createGlobTool } from "../builtins/glob.js";
+import { createGrepTool } from "../builtins/grep.js";
+import { createReadTool } from "../builtins/read.js";
+import { createWriteTool } from "../builtins/write.js";
 
 export class SystemToolProvider implements ToolProvider {
   readonly name = "system";

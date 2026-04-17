@@ -1,12 +1,10 @@
 import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
+import { createToolExecutor } from "@openomni/openomni";
+import type { AgentToolProvider, NativeTool, SystemToolProvider } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
-import { createToolExecutor } from "../tool/executor";
-import type { NativeTool } from "../tool/types";
-import type { AgentToolProvider } from "../tool/agent/provider";
 import type { McpToolProvider } from "../tool/mcp/provider";
-import type { SystemToolProvider } from "../tool/system/provider";
 import { detectMode } from "./mode";
 
 const fallbackModel = { provider: "anthropic", id: "claude-3-haiku-20240307" };

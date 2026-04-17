@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
-import type { NativeTool, ToolCategory, ToolProvider } from "../types";
-import { createSubagentTool } from "./tools/subagent";
+import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
+import { createSubagentTool } from "./tools/subagent.js";
 
 export class AgentToolProvider implements ToolProvider {
   readonly name = "agent";

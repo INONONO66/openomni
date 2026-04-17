@@ -1,10 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { defineTool } from "../define";
-import { requireString } from "../shared/input";
-import { fromError, successResult } from "../shared/result";
-import { resolveContainedPathForCreate } from "../../filesystem/workspace-path";
-import { WRITE_PROMPT } from "./write-prompt";
+import { defineTool } from "../define.js";
+import { requireString } from "../shared/input.js";
+import { fromError, successResult } from "../shared/result.js";
+import { resolveContainedPathForCreate } from "../../filesystem/workspace-path.js";
+import { WRITE_PROMPT } from "./write-prompt.js";
 
 export function createWriteTool(workspaceRoot: string) {
   return defineTool<{ path: string; content: string }>({

@@ -1,5 +1,5 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
-import type { NativeTool, ToolExecutorConfig } from "./types";
+import type { NativeTool, ToolExecutorConfig } from "./types.js";
 
 const tierTimeouts: Record<number, number> = {
   0: 30_000,

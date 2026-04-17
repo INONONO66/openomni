@@ -1,8 +1,8 @@
-import { defineTool } from "../define";
-import { optionalBoolean, requireString } from "../shared/input";
-import { errorResult, fromError, successResult } from "../shared/result";
-import { resolveContainedPath } from "../../filesystem/workspace-path";
-import { EDIT_PROMPT } from "./edit-prompt";
+import { defineTool } from "../define.js";
+import { optionalBoolean, requireString } from "../shared/input.js";
+import { errorResult, fromError, successResult } from "../shared/result.js";
+import { resolveContainedPath } from "../../filesystem/workspace-path.js";
+import { EDIT_PROMPT } from "./edit-prompt.js";
 
 function replaceOnce(
   text: string,

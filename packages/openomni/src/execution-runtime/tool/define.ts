@@ -1,5 +1,5 @@
 import type { Tool as ProtocolTool } from "@openomni/protocol";
-import type { NativeTool, ToolMetaValue, ToolRiskTier, ToolSource } from "./types";
+import type { NativeTool, ToolMetaValue, ToolRiskTier, ToolSource } from "./types.js";
 
 const TOOL_DEFAULTS = {
   isReadOnly: false,

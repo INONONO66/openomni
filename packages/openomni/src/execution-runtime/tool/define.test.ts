@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Tool as ProtocolTool } from "@openomni/protocol";
-import { defineTool, resolveMeta } from "./define";
+import { defineTool, resolveMeta } from "./define.js";
 
 function makeCall(input: Record<string, unknown>): ProtocolTool.Call {
   return {
