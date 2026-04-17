@@ -5,10 +5,11 @@ import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
-  McpProxyToolProvider,
+  ToolProxyProvider,
   PlanAgent,
   SessionBridge,
   SystemToolProvider,
+  buildToolCatalog,
   buildWorkerMiddleware,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
@@ -69,8 +70,8 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
           const systemProvider = new SystemToolProvider(workspaceRoot);
 
-          const mcpProxyProvider = McpProxyToolProvider.create(
-            workerBootstrap?.mcpTools ?? [],
+          const mcpProxyProvider = ToolProxyProvider.create(
+            workerBootstrap?.toolCatalog ?? [],
             async (toolName, toolArgs) => {
               const raw = await server.call("worker.tool_call", {
                 runId,
@@ -83,13 +84,15 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             },
           );
 
-          // toolsRef is filled after createExecutionToolContext so the subagent runtime
-          // receives the same tools/executor as the parent agent at call time.
+          // toolsRef and catalogRef are filled after createExecutionToolContext so the subagent
+          // runtime can apply depth-based tool filtering at spawn time.
           const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
+          const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
 
           const agentProvider = new AgentToolProvider({
             subagentRuntime: createWorkerSubagentRuntime({
               toolsRef,
+              catalogRef,
               parentSessionId: sessionId,
               parentPermissions: request.permissions,
             }),
@@ -102,15 +105,19 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             backgroundManager,
           });
 
-          const availableTools = [
-            ...systemProvider.listTools(),
-            ...agentProvider.listTools(),
-            ...mcpProxyProvider.listTools(),
-          ];
+          const systemTools = systemProvider.listTools();
+          const agentTools = agentProvider.listTools();
+          const mcpTools = mcpProxyProvider.listTools();
+          const availableTools = [...systemTools, ...agentTools, ...mcpTools];
           const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
 
           toolsRef.tools = tools;
           toolsRef.toolExecutor = toolExecutor;
+          catalogRef.catalog = buildToolCatalog([
+            { tools: systemTools, source: "system" },
+            { tools: agentTools, source: "agent" },
+            { tools: mcpTools, source: "mcp" },
+          ]);
 
           const agent = ChatAgent.create({
             model: request.model,
@@ -209,9 +216,19 @@ setInterval(() => {
     const raw = await server.call("worker.ready", { workerId, pid: process.pid });
     const bootstrap = WorkerBootstrap.Bootstrap.parse(raw);
     workerBootstrap = bootstrap;
-    AgentRegistry.replaceAll(bootstrap.agents);
+    // Convert RuntimeAgentDefinition back to AgentProfile.Definition for registry
+    const agentDefs = bootstrap.agents.map((agent) => ({
+      name: agent.name,
+      description: agent.description,
+      model: agent.model,
+      systemPrompt: agent.systemPrompt,
+      tools: agent.tools.allow ?? [],
+      permissions: agent.permissions,
+      budget: agent.budget,
+    }));
+    AgentRegistry.replaceAll(agentDefs);
     console.log(
-      `Worker ${workerId} bootstrap received: ${bootstrap.agents.length} agents, ${bootstrap.mcpTools.length} mcp tools`,
+      `Worker ${workerId} bootstrap received: ${bootstrap.agents.length} agents, ${bootstrap.toolCatalog.length} mcp tools`,
     );
   } catch (err) {
     console.error(
