@@ -1,6 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { MetricsRegistry, collectMetrics } from "../../src/metrics";
-import { measureEventLoopLag } from "../../src/metrics/event-loop";
+import { MetricsRegistry, collectMetrics, measureEventLoopLag } from "../../src/metrics";
 
 describe("MetricsRegistry", () => {
   test("gauge adds a metric entry", () => {

@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createWorkerPool, type WorkerPool } from "../../src/worker-pool/pool";
+import { createWorkerPool, type WorkerPool } from "../../src/worker-pool";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 

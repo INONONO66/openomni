@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { SessionRouting } from "../../src/worker-pool/session-routing";
+import { SessionRouting } from "../../src/worker-pool";
 
 describe("session routing affinity", () => {
   test("same sessionId always routes to same worker", () => {
