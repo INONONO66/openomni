@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
 const baseMessage = z.object({
   v: z.literal(1),
@@ -68,13 +69,17 @@ const methods = {
   },
   "worker.ready": {
     params: z.object({ workerId: z.string(), pid: z.number() }),
-    result: z.object({ acknowledged: z.boolean() }),
+    result: z.object({
+      acknowledged: z.boolean(),
+      bootstrap: WorkerBootstrap.Bootstrap.optional(),
+    }),
   },
   "worker.heartbeat": {
     params: z.object({
       workerId: z.string(),
       activeRunIds: z.array(z.string()),
       memoryRssMb: z.number(),
+      snapshot: WorkerBootstrap.WorkerSnapshot.optional(),
     }),
     result: z.null(),
   },
