@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ChatAgent, type ChatAgentInstance } from "@openomni/agent";
 import { IngressEngine } from "@openomni/openomni";
-import type { Execution } from "@openomni/protocol";
-import type { DirectEvent } from "@openomni/protocol";
+import type { Execution, Ingress } from "@openomni/protocol";
 
 type CoordinatorLike = {
   dispatch(sessionId: string, request: Execution.Request): Promise<Execution.Result>;
 };
 
-function makeDirectEvent(): DirectEvent {
+function makeDirectEvent(): Ingress.DirectEvent {
   return {
     id: crypto.randomUUID(),
     surface: "test",
