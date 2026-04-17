@@ -73,7 +73,7 @@ describe("EventLog with SQLite adapter", () => {
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
 
-    const events: ExecutionEvent.T[] = [];
+    const events: ExecutionEvent[] = [];
     for await (const event of EventLog.replay("sess-1")) {
       events.push(event);
     }
@@ -111,7 +111,7 @@ describe("EventLog with SQLite adapter", () => {
   });
 
   test("replay returns empty for unknown session", async () => {
-    const events: ExecutionEvent.T[] = [];
+    const events: ExecutionEvent[] = [];
     for await (const event of EventLog.replay("unknown")) {
       events.push(event);
     }
@@ -124,9 +124,9 @@ describe("EventLog with SQLite adapter", () => {
     await EventLog.append("sess-a", makeEvent("llm_response", 1));
     await EventLog.append("sess-b", makeEvent("session_suspended", 1));
 
-    const eventsA: ExecutionEvent.T[] = [];
+    const eventsA: ExecutionEvent[] = [];
     for await (const e of EventLog.replay("sess-a")) eventsA.push(e);
-    const eventsB: ExecutionEvent.T[] = [];
+    const eventsB: ExecutionEvent[] = [];
     for await (const e of EventLog.replay("sess-b")) eventsB.push(e);
 
     expect(eventsA).toHaveLength(1);
