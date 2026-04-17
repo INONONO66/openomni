@@ -1,20 +1,38 @@
 import { Bus } from "@openomni/session";
-import { Execution, Subagent, type WorkerBootstrap } from "@openomni/protocol";
+import { Execution, Subagent, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import {
   createWorkerPool,
   type WorkerPool,
   recoverInterruptedRuns as _recoverInterruptedRuns,
   type RecoveryResult,
 } from "@openomni/coordinator";
-import type { McpToolProvider } from "../tool/mcp/provider";
+import type { ToolProvider } from "@openomni/openomni";
 
 export type CoordinatorConfig = {
   workerScript: string;
   workerCount?: number;
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
-  mcpProvider?: McpToolProvider;
+  toolDispatcher?: Map<string, (call: Tool.Call) => Promise<Tool.Result>>;
 };
+
+export function buildToolDispatcher(
+  providers: ToolProvider[],
+): Map<string, (call: Tool.Call) => Promise<Tool.Result>> {
+  const dispatcher = new Map<string, (call: Tool.Call) => Promise<Tool.Result>>();
+
+  for (const provider of providers) {
+    for (const tool of provider.listTools()) {
+      const canonicalName = tool.spec.name;
+      if (dispatcher.has(canonicalName)) {
+        throw new Error(`Duplicate tool in dispatcher: "${canonicalName}"`);
+      }
+      dispatcher.set(canonicalName, (call) => provider.execute(call));
+    }
+  }
+
+  return dispatcher;
+}
 
 export type ExecutionCoordinator = {
   dispatch(sessionTreeId: string, request: Execution.Request): Promise<Execution.Result>;
@@ -27,20 +45,30 @@ export type ExecutionCoordinator = {
 
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
   const workerSnapshots = new Map<number, WorkerBootstrap.WorkerSnapshot>();
-  const { mcpProvider } = config;
+  const { toolDispatcher } = config;
 
   const workerPool: WorkerPool = createWorkerPool({
     workerScript: config.workerScript,
     size: config.workerCount,
     socketDir: config.socketDir,
     bootstrap: config.bootstrap,
-    onToolCall: mcpProvider
+    onToolCall: toolDispatcher
       ? async (params) => {
-          const result = await mcpProvider.execute({
+          const call: Tool.Call = {
             id: params.callId,
             tool: params.tool,
             input: params.input,
-          });
+          };
+          const handler = toolDispatcher.get(params.tool);
+          if (!handler) {
+            return {
+              id: params.callId,
+              toolCallId: params.callId,
+              output: `Unknown tool: ${params.tool}`,
+              isError: true,
+            };
+          }
+          const result = await handler(call);
           return {
             id: result.id,
             toolCallId: result.toolCallId,
