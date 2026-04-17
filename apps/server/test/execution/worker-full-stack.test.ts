@@ -5,7 +5,6 @@ import { Bus } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
 import type { Execution, WorkerBootstrap } from "@openomni/protocol";
 import type { DirectEvent, Tool } from "@openomni/protocol";
-import type { McpToolProvider } from "../../src/tool/mcp/provider";
 
 let capturedOnToolCall:
   | ((params: {
@@ -104,13 +103,18 @@ describe("worker bootstrap — AgentRegistry loaded", () => {
     const bootstrap: WorkerBootstrap.Bootstrap = {
       configEpoch: "v1",
       agents: [
-        { name: "dev", description: "Development agent", tools: ["read", "glob"] },
-        { name: "oracle", description: "Read-only reasoning agent", tools: [] },
+        { name: "dev", description: "Development agent", tools: { allow: ["read", "glob"] } },
+        { name: "oracle", description: "Read-only reasoning agent", tools: {} },
       ],
-      mcpTools: [],
+      toolCatalog: [],
     };
 
-    AgentRegistry.replaceAll(bootstrap.agents);
+    AgentRegistry.replaceAll(
+      bootstrap.agents.map((a) => ({
+        ...a,
+        tools: a.tools.allow ?? [],
+      })),
+    );
 
     const agents = AgentRegistry.list();
     expect(agents).toHaveLength(2);
@@ -178,23 +182,22 @@ describe("builtin middleware — tool-guard", () => {
   });
 });
 
-describe("MCP proxy — worker.tool_call routes to McpToolProvider", () => {
-  test("onToolCall callback delegates to mcpProvider.execute", async () => {
+describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
+  test("onToolCall callback delegates to toolDispatcher handler", async () => {
     const captured: Tool.Call[] = [];
 
-    const mockMcpProvider = {
-      execute: async (call: Tool.Call): Promise<Tool.Result> => {
-        captured.push(call);
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: "mcp-result",
-          isError: false,
-        };
-      },
-    } as unknown as McpToolProvider;
+    const toolDispatcher = new Map<string, (call: Tool.Call) => Promise<Tool.Result>>();
+    toolDispatcher.set("myserver.read_file", async (call: Tool.Call): Promise<Tool.Result> => {
+      captured.push(call);
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: "mcp-result",
+        isError: false,
+      };
+    });
 
-    createExecutionCoordinator({ workerScript: "unused", mcpProvider: mockMcpProvider });
+    createExecutionCoordinator({ workerScript: "unused", toolDispatcher });
 
     expect(capturedOnToolCall).toBeDefined();
     if (!capturedOnToolCall) throw new Error("onToolCall not captured by mock");
