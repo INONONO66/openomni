@@ -24,6 +24,7 @@ export {
   IngressSessionResolver,
   SessionBridge,
 } from "./ingress";
+export type { CoordinatorLike } from "./ingress";
 
 // Task Storage
 export { SqliteTaskStore, TaskStorage } from "./storage";

@@ -12,6 +12,7 @@ import { createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
 import { createChannelAdapters } from "./channels";
+import { LocalRunner } from "./local-runner";
 import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
@@ -100,11 +101,27 @@ export async function main(): Promise<void> {
 
   await connectMcpServers(config, mcpProvider);
 
-  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
-  const bootstrap = await assembleBootstrap(mcpProvider);
-  const coordinator = createExecutionCoordinator({ workerScript, bootstrap, mcpProvider });
-  await coordinator.waitUntilReady();
-  IngressEngine.setCoordinator(coordinator);
+  const isLocalMode = process.env.OPENOMNI_MODE === "local";
+
+  let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
+
+  if (isLocalMode) {
+    console.log("[server] running in local mode (no worker pool)");
+    const localRunner = LocalRunner.create({
+      systemProvider,
+      agentProvider,
+      mcpProvider,
+      workspaceRoot: config.workspace?.root,
+    });
+    IngressEngine.setCoordinator(localRunner);
+  } else {
+    console.log("[server] running in coordinator mode");
+    const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
+    const bootstrap = await assembleBootstrap(mcpProvider);
+    coordinator = createExecutionCoordinator({ workerScript, bootstrap, mcpProvider });
+    await coordinator.waitUntilReady();
+    IngressEngine.setCoordinator(coordinator);
+  }
 
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
