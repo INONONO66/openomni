@@ -44,11 +44,9 @@ export async function main(): Promise<void> {
 
   await connectMcpServers(config, mcpProvider);
 
-  const workerScript = new URL(
-    "../../../../packages/coordinator/src/worker-pool/worker-entry.ts",
-    import.meta.url,
-  ).pathname;
+  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
   const coordinator = createExecutionCoordinator({ workerScript });
+  await coordinator.waitUntilReady();
   IngressEngine.setCoordinator(coordinator);
 
   const hasAnyChannel = Boolean(

@@ -16,6 +16,7 @@ export type CoordinatorConfig = {
 export type ExecutionCoordinator = {
   dispatch(sessionTreeId: string, request: Execution.Request): Promise<Execution.Result>;
   getStats(): { workers: number; active: number; idle: number; ready: number; activeRuns: number };
+  waitUntilReady(timeoutMs?: number): Promise<void>;
   recoverInterruptedRuns(): Promise<RecoveryResult>;
   shutdown(): Promise<void>;
 };
@@ -87,6 +88,10 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
 
     getStats() {
       return { ...workerPool.getStats(), activeRuns: activeRuns.size };
+    },
+
+    async waitUntilReady(timeoutMs) {
+      await workerPool.waitUntilReady(timeoutMs);
     },
 
     async recoverInterruptedRuns() {

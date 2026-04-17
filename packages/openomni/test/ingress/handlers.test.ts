@@ -131,6 +131,32 @@ function createPlan(): Plan {
 }
 
 describe("IngressHandlers", () => {
+  it("buildExecutionRequest preserves tool execution config", () => {
+    const toolConfig = { workspaceRoot: "/workspace/openomni" };
+    const permissions = { denylist: ["bash"] };
+    const event: InboundEvent = {
+      id: "event-request-1",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        tools: [{ name: "bash", inputSchema: { type: "object" } }],
+        toolConfig,
+        permissions,
+      },
+    };
+
+    const request = IngressHandlers.buildExecutionRequest({
+      sessionId: "session-1",
+      event,
+    });
+
+    expect(request.tools).toEqual(event.agent.tools);
+    expect(request.toolConfig).toEqual(toolConfig);
+    expect(request.permissions).toEqual(permissions);
+  });
+
   it("handlePlan returns mode=plan with PlanResult", async () => {
     const sessionId = createSession();
     addTextMessage(sessionId, "user", "Plan this work");

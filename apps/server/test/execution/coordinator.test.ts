@@ -5,6 +5,7 @@ import type { Execution } from "@openomni/protocol";
 type MockWorkerPool = {
   dispatch(sessionId: string, runId: string, params: Record<string, unknown>): Promise<unknown>;
   getStats(): { workers: number; active: number; idle: number; ready: number };
+  waitUntilReady(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
 };
 
@@ -53,6 +54,7 @@ beforeEach(() => {
     getStats() {
       return { workers: 1, active: 1, idle: 0, ready: 1 };
     },
+    async waitUntilReady() {},
     async shutdown() {},
   };
 });
@@ -69,6 +71,20 @@ function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Requ
 }
 
 describe("ExecutionCoordinator", () => {
+  test("waitUntilReady delegates to the worker pool", async () => {
+    const waitUntilReady = mock(async () => {});
+    mockWorkerPool.waitUntilReady = waitUntilReady;
+
+    const coordinator = createExecutionCoordinator({
+      workerScript: "unused-in-test",
+      workerCount: 1,
+    });
+
+    await coordinator.waitUntilReady(1_234);
+
+    expect(waitUntilReady).toHaveBeenCalledWith(1_234);
+  });
+
   test("rejects new dispatches once shutdown begins while allowing active runs to finish", async () => {
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",

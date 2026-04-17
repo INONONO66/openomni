@@ -1,6 +1,14 @@
 import { z } from "zod";
+import { Guardrail } from "../guardrail/index.js";
 import { Tool } from "../tool/index.js";
 import type { PlanResult } from "../plan/index.js";
+
+const AgentToolConfigSchema = z.object({
+  systemTools: z.array(z.string()).optional(),
+  agentTools: z.array(z.string()).optional(),
+  mcpTools: z.array(z.string()).optional(),
+  workspaceRoot: z.string().optional(),
+});
 
 // AgentDef — agent configuration passed in by callers (CLI/CUI layer)
 export const AgentDefSchema = z.object({
@@ -8,6 +16,8 @@ export const AgentDefSchema = z.object({
   systemPrompt: z.string().optional(),
   tools: z.array(Tool.Spec).optional(),
   budget: z.object({ maxTurns: z.number().optional() }).optional(),
+  permissions: Guardrail.ToolPermission.optional(),
+  toolConfig: AgentToolConfigSchema.optional(),
 });
 // IMPORTANT: toolExecutor is a runtime callback, NOT in Zod schema.
 // The TypeScript type extends the schema:

@@ -39,8 +39,8 @@ export namespace IngressHandlers {
       model: ctx.event.agent.model,
       systemPrompt: ctx.event.agent.systemPrompt,
       tools: ctx.event.agent.tools,
-      toolConfig: { workspaceRoot: undefined },
-      permissions: undefined,
+      toolConfig: ctx.event.agent.toolConfig,
+      permissions: ctx.event.agent.permissions,
       credentials: undefined,
       budget: ctx.event.agent.budget,
     };
