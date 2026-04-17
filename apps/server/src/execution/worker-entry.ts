@@ -1,10 +1,14 @@
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { ChatAgent } from "@openomni/agent";
+import { createIpcServer } from "@openomni/coordinator";
 import { Execution } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import { PlanAgent, SessionBridge } from "@openomni/openomni";
-import { createIpcServer } from "../ipc/server";
+import { loadConfig } from "../config";
+import { connectMcpServers } from "../bootstrap/mcp";
+import { AgentToolProvider } from "../tool/agent";
+import { McpToolProvider } from "../tool/mcp";
+import { SystemToolProvider } from "../tool/system";
+import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
 
 const args = process.argv.slice(2);
 const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
@@ -15,9 +19,14 @@ if (!socketPath) {
   process.exit(1);
 }
 
+const config = loadConfig();
 initialize({
-  dbPath: process.env.OPENOMNI_DB_PATH ?? join(homedir(), ".openomni", "storage.db"),
+  dbPath: resolveWorkerDbPath(config),
 });
+
+const agentProvider = new AgentToolProvider();
+const mcpProvider = new McpToolProvider();
+const mcpReady = connectMcpServers(config, mcpProvider);
 
 const server = createIpcServer(socketPath, (method, params, respond) => {
   if (method === "coordinator.spawn_run") {
@@ -38,15 +47,26 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
 
     (async () => {
       try {
+        await mcpReady;
+
         if (request.mode === "direct") {
           const messages = SessionBridge.buildDirectMessages(sessionId).filter(
             (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
               m.role === "user" || m.role === "assistant",
           );
+          const workspaceRoot = request.toolConfig?.workspaceRoot ?? config.workspace?.root;
+          const systemProvider = new SystemToolProvider(workspaceRoot);
+          const availableTools = [
+            ...systemProvider.listTools(),
+            ...agentProvider.listTools(),
+            ...mcpProvider.listTools(),
+          ];
+          const toolContext = createExecutionToolContext(request, availableTools);
           const agent = ChatAgent.create({
             model: request.model,
             systemPrompt: request.systemPrompt,
             budget: request.budget,
+            ...toolContext,
           });
           const runResult = await agent.run({ messages });
           respond({

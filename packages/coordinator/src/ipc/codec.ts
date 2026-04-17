@@ -1,6 +1,6 @@
 import { Ipc } from "@openomni/protocol";
 
-import { IpcProtocolError } from "./errors.js";
+import { IpcProtocolError } from "./errors";
 
 export type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
 

@@ -39,6 +39,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@openomni/agent": "workspace:*",
+        "@openomni/coordinator": "workspace:*",
         "@openomni/llm": "workspace:*",
         "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
@@ -68,6 +69,9 @@
       "name": "@openomni/coordinator",
       "version": "0.0.1",
       "dependencies": {
+        "@openomni/agent": "workspace:*",
+        "@openomni/llm": "workspace:*",
+        "@openomni/openomni": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
       },

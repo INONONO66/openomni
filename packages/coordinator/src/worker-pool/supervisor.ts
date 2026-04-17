@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import { connectIpcClient, type IpcClient } from "../ipc/client.js";
+import { connectIpcClient, type IpcClient } from "../ipc/client";
 
 const MAX_RESTARTS_PER_WINDOW = 10;
 const RESTART_WINDOW_MS = 60_000;
@@ -46,6 +46,7 @@ export class WorkerSupervisor {
 
   private async connectWithRetry(): Promise<void> {
     const deadline = Date.now() + WORKER_CONNECT_TIMEOUT_MS;
+    let lastError: Error | null = null;
     while (Date.now() < deadline && !this.stopping && this.running) {
       if (!fs.existsSync(this.socketPath)) {
         await new Promise<void>((r) => setTimeout(r, 100));
@@ -59,9 +60,14 @@ export class WorkerSupervisor {
           c.close();
         }
         return;
-      } catch {
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
         await new Promise<void>((r) => setTimeout(r, 100));
       }
+    }
+
+    if (!this.stopping && this.running && lastError) {
+      throw lastError;
     }
   }
 

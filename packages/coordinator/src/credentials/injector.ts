@@ -1,6 +1,6 @@
 // Injects credentials into worker via IPC at spawn time.
 // Workers never read env vars for API keys — this is the IronClaw capability injection pattern.
-import { type Credentials, getCredentialsForProvider } from "./store.js";
+import { type Credentials, getCredentialsForProvider } from "./store";
 
 export type CredentialInjector = {
   inject(workerId: string, provider: string): Record<string, string>;

@@ -71,6 +71,10 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): AgentDef {
     systemPrompt: definition.systemPrompt,
     tools: specs,
     budget: definition.budget,
+    permissions: definition.permissions,
+    toolConfig: {
+      workspaceRoot: deps.workspaceRoot,
+    },
     toolExecutor: createToolExecutor({
       tools,
       config: {

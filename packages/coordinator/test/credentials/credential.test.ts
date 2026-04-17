@@ -3,8 +3,11 @@ import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { loadCredentials, getCredentialsForProvider } from "../../src/credentials/store.js";
-import { createCredentialInjector } from "../../src/credentials/injector.js";
+import {
+  createCredentialInjector,
+  getCredentialsForProvider,
+  loadCredentials,
+} from "../../src/credentials";
 
 const TMP = join(tmpdir(), `openomni-cred-test-${process.pid}`);
 const SECRETS_PATH = join(TMP, "secrets.json");
@@ -52,11 +55,6 @@ describe("getCredentialsForProvider", () => {
     const result = getCredentialsForProvider(creds, "anthropic");
     expect(result).toHaveProperty("ANTHROPIC_API_KEY", "sk-ant-test");
     expect(result).toHaveProperty("ANTHROPIC_MODEL", "claude-3");
-  });
-
-  test("includes API_KEY keys regardless of provider prefix", () => {
-    const result = getCredentialsForProvider(creds, "anthropic");
-    expect(result).toHaveProperty("OPENAI_API_KEY", "sk-oai-test");
   });
 
   test("excludes keys that do not match", () => {

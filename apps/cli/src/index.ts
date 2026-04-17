@@ -7,10 +7,8 @@ import { ModelsDev } from "@openomni/llm";
 import { SqliteTaskStore, TaskStorage } from "@openomni/openomni";
 import { Storage } from "@openomni/session";
 import pkg from "../package.json";
-import { AgentCommand } from "./cmd/agent";
 import { AuthCommand } from "./cmd/auth";
 import { ConfigCommand } from "./cmd/config";
-import { DaemonCommand } from "./cmd/daemon";
 
 ModelsDev.init();
 Storage.initialize({ dbPath: join(homedir(), ".openomni", "storage.db") });
@@ -25,10 +23,8 @@ await yargs(hideBin(process.argv))
   .alias("help", "h")
   .version("version", "Show version number", pkg.version)
   .alias("version", "v")
-  .command(AgentCommand)
   .command(AuthCommand)
   .command(ConfigCommand)
-  .command(DaemonCommand)
   .demandCommand(1, "Run a command. Try --help for usage.")
   .strict()
   .parseAsync();

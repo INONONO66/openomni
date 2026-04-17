@@ -1,14 +1,23 @@
 import { InboundEventSchema, type InboundEvent, type IngressResult } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey } from "@openomni/session";
+import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressSessionResolver } from "./session-resolver";
+
+export type { CoordinatorLike };
+
+let _coordinator: CoordinatorLike | undefined;
 
 export namespace IngressEngine {
   export function reset(): void {
     SurfaceKey.clear();
     Storage.reset();
     Bus.reset();
+  }
+
+  export function setCoordinator(c: CoordinatorLike | undefined): void {
+    _coordinator = c;
   }
 
   export async function ingest(event: InboundEvent): Promise<IngressResult> {
@@ -24,9 +33,17 @@ export namespace IngressEngine {
 
     switch (event.mode) {
       case "plan":
-        return IngressHandlers.handlePlan({ sessionId: session.id, event });
+        return IngressHandlers.handlePlan({
+          sessionId: session.id,
+          event,
+          coordinator: _coordinator,
+        });
       case "direct":
-        return IngressHandlers.handleDirect({ sessionId: session.id, event });
+        return IngressHandlers.handleDirect({
+          sessionId: session.id,
+          event,
+          coordinator: _coordinator,
+        });
     }
   }
 }

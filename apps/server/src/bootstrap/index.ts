@@ -2,8 +2,10 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
+import { IngressEngine } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createMessageHandler } from "../handler/conversation";
+import { createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { AgentToolProvider } from "../tool/agent";
 import { McpToolProvider } from "../tool/mcp";
@@ -41,6 +43,11 @@ export async function main(): Promise<void> {
   const mcpProvider = new McpToolProvider();
 
   await connectMcpServers(config, mcpProvider);
+
+  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
+  const coordinator = createExecutionCoordinator({ workerScript });
+  await coordinator.waitUntilReady();
+  IngressEngine.setCoordinator(coordinator);
 
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
@@ -99,7 +106,7 @@ export async function main(): Promise<void> {
   console.log(`[server] listening on http://${config.server.host}:${server.port}`);
   console.log(`[server] websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`);
 
-  await runRecovery(routingHandler);
+  await runRecovery(routingHandler, coordinator);
 
-  installShutdownHandlers({ channels, server, mcpProvider });
+  installShutdownHandlers({ channels, server, mcpProvider, coordinator });
 }

@@ -1,5 +1,5 @@
-import { sessionRouting } from "./session-routing.js";
-import { WorkerSupervisor } from "./supervisor.js";
+import { SessionRouting } from "./session-routing";
+import { WorkerSupervisor } from "./supervisor";
 
 export type WorkerPoolConfig = {
   size?: number;
@@ -25,9 +25,13 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
   );
 
   return {
-    dispatch(sessionId, runId, params) {
-      const index = sessionRouting.route(sessionId, size);
-      return workers[index].dispatch(runId, { sessionId, ...params });
+    async dispatch(sessionId, runId, params) {
+      const index = SessionRouting.route(sessionId, size);
+      try {
+        return await workers[index].dispatch(runId, { sessionId, ...params });
+      } finally {
+        SessionRouting.complete(sessionId);
+      }
     },
     getStats() {
       return {

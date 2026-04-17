@@ -40,6 +40,7 @@ describe("buildInboundEvent", () => {
     expect(event.meta?.kind).toBe("chat");
     expect(event.agent.systemPrompt).toBeDefined();
     expect(event.agent.toolExecutor).toBeDefined();
+    expect(event.agent.toolConfig?.workspaceRoot).toBe(workspaceRoot);
     expect(event.agent.tools?.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["bash", "read", "write", "edit", "grep_search", "glob", "subagent"]),
     );

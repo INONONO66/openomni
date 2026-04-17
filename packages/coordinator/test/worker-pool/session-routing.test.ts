@@ -1,0 +1,60 @@
+import { describe, expect, test } from "bun:test";
+
+import { SessionRouting } from "../../src/worker-pool";
+
+describe("SessionRouting", () => {
+  test("same session always routes to same worker", () => {
+    const id = "ses_same_affinity";
+    const first = SessionRouting.route(id, 4);
+    const second = SessionRouting.route(id, 4);
+    expect(second).toBe(first);
+    SessionRouting.complete(id);
+  });
+
+  test("different sessions can route to different workers", () => {
+    const ids = ["ses_a", "ses_b", "ses_c", "ses_d"];
+    const indices = ids.map((id) => SessionRouting.route(id, 4));
+    expect(new Set(indices).size).toBe(4);
+    for (const id of ids) SessionRouting.complete(id);
+  });
+
+  test("complete() decrements load", () => {
+    const ts = Date.now();
+    const a = `ses_fill_a_${ts}`;
+    const b = `ses_fill_b_${ts}`;
+    const id = `ses_load_decrement_${ts}`;
+
+    const idxA = SessionRouting.route(a, 2);
+    const idxB = SessionRouting.route(b, 2);
+    expect(idxA).not.toBe(idxB);
+
+    SessionRouting.complete(a);
+
+    const idx = SessionRouting.route(id, 2);
+    expect(idx).toBe(idxA);
+
+    SessionRouting.complete(b);
+    SessionRouting.complete(id);
+  });
+
+  test("after complete(), session can be reassigned to a different worker", () => {
+    const id = "ses_reassign";
+    const workerCount = 2;
+
+    const first = SessionRouting.route(id, workerCount);
+    SessionRouting.complete(id);
+
+    const blockers = ["ses_block1", "ses_block2", "ses_block3"];
+    for (const blocker of blockers) {
+      SessionRouting.route(blocker, workerCount);
+    }
+
+    const second = SessionRouting.route(id, workerCount);
+    expect(second).not.toBe(first);
+
+    SessionRouting.complete(id);
+    for (const blocker of blockers) {
+      SessionRouting.complete(blocker);
+    }
+  });
+});

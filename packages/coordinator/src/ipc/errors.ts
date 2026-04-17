@@ -12,4 +12,8 @@ export class IpcTimeoutError extends Error {
 
 export class IpcProtocolError extends Error {
   override name = "IpcProtocolError";
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    if (cause !== undefined) this.cause = cause;
+  }
 }

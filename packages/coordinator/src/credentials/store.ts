@@ -11,7 +11,10 @@ export function loadCredentials(path = DEFAULT_SECRETS_PATH): Credentials {
   try {
     const content = readFileSync(path, "utf-8");
     return JSON.parse(content) as Credentials;
-  } catch {
+  } catch (error) {
+    console.warn(
+      `failed to load credentials from ${path}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return {};
   }
 }
@@ -21,7 +24,5 @@ export function getCredentialsForProvider(
   provider: string,
 ): Record<string, string> {
   const prefix = provider.toUpperCase().replace(/-/g, "_");
-  return Object.fromEntries(
-    Object.entries(creds).filter(([k]) => k.startsWith(prefix) || k.includes("API_KEY")),
-  );
+  return Object.fromEntries(Object.entries(creds).filter(([k]) => k.startsWith(prefix)));
 }

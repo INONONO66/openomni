@@ -1,7 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { MetricsRegistry, collectMetrics } from "../../src/metrics/index.js";
-import { measureEventLoopLag } from "../../src/metrics/event-loop.js";
-import { createHealthServer } from "../../src/daemon/health.js";
+import { MetricsRegistry, collectMetrics, measureEventLoopLag } from "../../src/metrics";
 
 describe("MetricsRegistry", () => {
   test("gauge adds a metric entry", () => {
@@ -101,41 +99,5 @@ describe("measureEventLoopLag", () => {
     const lag = await measureEventLoopLag();
     expect(typeof lag).toBe("number");
     expect(lag).toBeGreaterThanOrEqual(0);
-  });
-});
-
-describe("GET /metrics endpoint", () => {
-  test("returns 200 with Prometheus content-type", async () => {
-    const port = 29800 + (process.pid % 100);
-    const server = createHealthServer(port);
-
-    try {
-      const res = await fetch(`http://localhost:${server.port}/metrics`);
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toContain("text/plain");
-      const body = await res.text();
-      expect(body).toContain("openomni_active_runs");
-      expect(body).toContain("openomni_memory_rss_bytes");
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("returns custom pool stats via getStats option", async () => {
-    const port = 29900 + (process.pid % 100);
-    const server = createHealthServer(port, {
-      getStats: () => ({ activeRuns: 7, queueDepth: 3, workers: 4 }),
-    });
-
-    try {
-      const res = await fetch(`http://localhost:${server.port}/metrics`);
-      expect(res.status).toBe(200);
-      const body = await res.text();
-      expect(body).toContain("openomni_active_runs 7");
-      expect(body).toContain("openomni_queue_depth 3");
-      expect(body).toContain("openomni_workers_total 4");
-    } finally {
-      server.stop();
-    }
   });
 });

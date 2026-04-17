@@ -38,11 +38,19 @@ describe("AgentDef", () => {
       budget: {
         maxTurns: 10,
       },
+      permissions: {
+        allowlist: ["bash"],
+      },
+      toolConfig: {
+        workspaceRoot: "/workspace/openomni",
+      },
     });
     expect(agent.systemPrompt).toBe("You are a helpful assistant");
     expect(agent.tools).toHaveLength(1);
     expect(agent.tools?.[0].name).toBe("bash");
     expect(agent.budget?.maxTurns).toBe(10);
+    expect(agent.permissions?.allowlist).toEqual(["bash"]);
+    expect(agent.toolConfig?.workspaceRoot).toBe("/workspace/openomni");
   });
 });
 

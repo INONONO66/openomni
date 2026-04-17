@@ -19,7 +19,9 @@ export function logPermissionDecision(entry: AuditEntry): void {
   try {
     mkdirSync(AUDIT_DIR, { recursive: true });
     appendFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + "\n");
-  } catch {
-    // Audit log failure must not block tool execution
+  } catch (error) {
+    console.warn(
+      `failed to append audit log to ${AUDIT_LOG_PATH}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }

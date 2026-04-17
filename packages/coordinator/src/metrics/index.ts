@@ -65,6 +65,8 @@ export type MetricsSnapshot = {
   eventLoopLagMs?: number;
 };
 
+export { measureEventLoopLag } from "./event-loop";
+
 export function collectMetrics(registry: MetricsRegistry, stats: MetricsSnapshot): void {
   registry.clear();
   registry.gauge("openomni_active_runs", "Number of active runs", stats.activeRuns);
