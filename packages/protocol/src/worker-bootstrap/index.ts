@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
 import { Guardrail } from "../guardrail/index.js";
 import { Tool } from "../tool/index.js";
+import { ToolSelection } from "../tool-selection/index.js";
 
 export namespace WorkerBootstrap {
   export const RuntimeAgentDefinition = z.object({
@@ -14,7 +15,7 @@ export namespace WorkerBootstrap {
       })
       .optional(),
     systemPrompt: z.string().optional(),
-    tools: z.string().array(),
+    tools: ToolSelection.Selection,
     permissions: Guardrail.ToolPermission.optional(),
     budget: AgentProfile.AgentBudget.optional(),
   });
@@ -23,7 +24,8 @@ export namespace WorkerBootstrap {
   export const RuntimeToolCatalogEntry = z.object({
     canonicalName: z.string(),
     exposedName: z.string(),
-    source: z.enum(["system", "agent", "mcp"]),
+    source: z.enum(["system", "agent", "mcp", "server"]),
+    category: ToolSelection.Category,
     riskTier: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
     spec: Tool.Spec,
     mcpServer: z.string().optional(),

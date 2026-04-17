@@ -2,7 +2,7 @@ import type { Guardrail, Tool } from "@openomni/protocol";
 
 export type ToolCategory = "system" | "agent" | "mcp";
 export type ToolMetaValue = boolean | ((input: unknown) => boolean);
-export type ToolSource = "system" | "mcp" | "agent";
+export type ToolSource = "system" | "mcp" | "agent" | "server";
 
 export type ToolRiskTier = 0 | 1 | 2 | 3;
 // Tier 0: read-only (read, glob, grep.search)
