@@ -28,4 +28,11 @@ export namespace AgentRegistry {
   export function clear(): void {
     store.clear();
   }
+
+  export function replaceAll(defs: AgentProfile.Definition[]): void {
+    store.clear();
+    for (const def of defs) {
+      store.set(def.name, def);
+    }
+  }
 }
