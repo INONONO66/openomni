@@ -35,16 +35,19 @@ export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./suba
 // Execution runtime
 export {
   AgentToolProvider,
-  McpProxyToolProvider,
+  ToolProxyProvider,
   SystemToolProvider,
   Tool,
+  buildToolCatalog,
   buildWorkerMiddleware,
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,
   resolveMeta,
+  resolveToolSelection,
 } from "./execution-runtime";
 export type {
+  CatalogEntry,
   NativeTool,
   ToolCategory,
   ToolExecutorConfig,

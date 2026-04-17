@@ -1,6 +1,7 @@
 import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
 import type { AgentToolProvider, SystemToolProvider } from "@openomni/openomni";
+import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
@@ -26,35 +27,23 @@ function createFallbackDefinition(agentName: string, deps: BridgeDeps): AgentDef
     description: "fallback agent",
     model: deps.defaultModel ?? fallbackModel,
     systemPrompt: "You are a helpful assistant.",
-    tools: { system: false, agent: false, mcp: false },
+    tools: { all: false },
     budget: { maxTurns: 10 },
   };
 }
 
 function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[] {
-  const specs: Tool.Spec[] = [];
+  const catalog = buildToolCatalog([
+    { tools: deps.systemProvider.listTools(), source: "system" },
+    { tools: deps.agentProvider.listTools(), source: "agent" },
+    { tools: deps.mcpProvider.listTools(), source: "mcp" },
+  ]);
 
-  function addTools(
-    providerTools: { spec: Tool.Spec }[],
-    selection: boolean | string[] | undefined,
-  ): void {
-    if (!selection) return;
-
-    const selected =
-      selection === true
-        ? providerTools
-        : providerTools.filter((tool) => new Set(selection).has(tool.spec.name));
-
-    specs.push(
-      ...selected.map((tool) => ({ ...tool.spec, name: sanitizeToolName(tool.spec.name) })),
-    );
-  }
-
-  addTools(deps.systemProvider.listTools(), definition.tools.system);
-  addTools(deps.agentProvider.listTools(), definition.tools.agent);
-  addTools(deps.mcpProvider.listTools(), definition.tools.mcp);
-
-  return specs;
+  const selected = resolveToolSelection(catalog, definition.tools);
+  return selected.map((entry) => ({
+    ...entry.tool.spec,
+    name: sanitizeToolName(entry.tool.spec.name),
+  }));
 }
 
 function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {

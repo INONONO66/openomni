@@ -8,6 +8,5 @@ export {
 export type {
   AgentDefinition,
   AgentFactory,
-  AgentToolSelection,
   AgentPromptMetadata,
 } from "./types";
