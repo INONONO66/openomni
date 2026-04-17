@@ -6,14 +6,14 @@ describe("WorkerBootstrap", () => {
     const agent = {
       name: "test-agent",
       description: "A test agent",
-      tools: ["tool1", "tool2"],
+      tools: { allow: ["tool1", "tool2"] },
       model: { provider: "anthropic", id: "claude-3-sonnet" },
       systemPrompt: "You are helpful",
     };
 
     const parsed = WorkerBootstrap.RuntimeAgentDefinition.parse(agent);
     expect(parsed.name).toBe("test-agent");
-    expect(parsed.tools).toEqual(["tool1", "tool2"]);
+    expect(parsed.tools).toEqual({ allow: ["tool1", "tool2"] });
   });
 
   test("RuntimeToolCatalogEntry round-trip parse", () => {
@@ -21,6 +21,7 @@ describe("WorkerBootstrap", () => {
       canonicalName: "fs.read",
       exposedName: "read_file",
       source: "system" as const,
+      category: "filesystem" as const,
       riskTier: 2 as const,
       spec: {
         name: "read_file",
@@ -32,6 +33,7 @@ describe("WorkerBootstrap", () => {
     const parsed = WorkerBootstrap.RuntimeToolCatalogEntry.parse(entry);
     expect(parsed.canonicalName).toBe("fs.read");
     expect(parsed.source).toBe("system");
+    expect(parsed.category).toBe("filesystem");
     expect(parsed.riskTier).toEqual(2);
   });
 
@@ -57,14 +59,15 @@ describe("WorkerBootstrap", () => {
         {
           name: "agent1",
           description: "First agent",
-          tools: ["tool1"],
+          tools: { allow: ["tool1"] },
         },
       ],
-      mcpTools: [
+      toolCatalog: [
         {
           canonicalName: "mcp.tool1",
           exposedName: "tool1",
           source: "mcp" as const,
+          category: "mcp" as const,
           riskTier: 1 as const,
           spec: {
             name: "tool1",
@@ -79,7 +82,7 @@ describe("WorkerBootstrap", () => {
     const parsed = WorkerBootstrap.Bootstrap.parse(bootstrap);
     expect(parsed.configEpoch).toBe("v1.0.0");
     expect(parsed.agents).toHaveLength(1);
-    expect(parsed.mcpTools).toHaveLength(1);
+    expect(parsed.toolCatalog).toHaveLength(1);
     expect(parsed.credentials?.API_KEY).toBe("secret");
   });
 
@@ -87,7 +90,7 @@ describe("WorkerBootstrap", () => {
     const bootstrap = {
       configEpoch: "v1.0.0",
       agents: [],
-      mcpTools: [],
+      toolCatalog: [],
     };
 
     const parsed = WorkerBootstrap.Bootstrap.parse(bootstrap);

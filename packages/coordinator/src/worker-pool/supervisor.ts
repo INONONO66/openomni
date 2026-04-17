@@ -84,7 +84,9 @@ export class WorkerSupervisor {
           connectTimeoutMs: 500,
           onRequest(method, params, respond) {
             if (method === "worker.ready") {
-              respond(bootstrap ?? { configEpoch: "", agents: [], mcpTools: [], credentials: {} });
+              respond(
+                bootstrap ?? { configEpoch: "", agents: [], toolCatalog: [], credentials: {} },
+              );
               return;
             }
 

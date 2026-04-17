@@ -49,7 +49,7 @@ export namespace WorkerBootstrap {
   export const Bootstrap = z.object({
     configEpoch: z.string(),
     agents: RuntimeAgentDefinition.array(),
-    mcpTools: RuntimeToolCatalogEntry.array(),
+    toolCatalog: RuntimeToolCatalogEntry.array(),
     credentials: z.record(z.string()).optional(),
   });
   export type Bootstrap = z.infer<typeof Bootstrap>;
