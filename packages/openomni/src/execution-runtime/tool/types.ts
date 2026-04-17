@@ -1,4 +1,4 @@
-import type { Guardrail, Tool } from "@openomni/protocol";
+import type { Guardrail, Tool, ToolSelection } from "@openomni/protocol";
 
 export type ToolCategory = "system" | "agent" | "mcp";
 export type ToolMetaValue = boolean | ((input: unknown) => boolean);
@@ -17,6 +17,7 @@ export interface NativeTool {
   isDestructive: ToolMetaValue;
   isConcurrencySafe: ToolMetaValue;
   source?: ToolSource;
+  category?: ToolSelection.Category;
   execute(call: Tool.Call): Promise<Tool.Result>;
 }
 
