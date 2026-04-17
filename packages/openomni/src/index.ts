@@ -30,3 +30,7 @@ export { SqliteTaskStore, TaskStorage } from "./storage";
 
 // Subagent runtime
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
+
+// Execution runtime
+export { buildWorkerMiddleware } from "./execution-runtime";
+export type { WorkerMiddlewareConfig } from "./execution-runtime";

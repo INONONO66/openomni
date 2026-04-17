@@ -39,7 +39,7 @@ describe("Execution", () => {
       },
       budget: {
         maxTurns: 10,
-        maxTokens: 4000,
+        maxToolCalls: 20,
       },
       skills: ["math", "reasoning"],
       workspace: "/tmp/workspace",
@@ -126,5 +126,109 @@ describe("Execution", () => {
     };
 
     expect(() => Execution.Result.parse(invalid)).toThrow();
+  });
+
+  test("ExecutionRequest with new fields (agentName, workspaceRoot, middleware)", () => {
+    const request: Execution.Request = {
+      runId: "run-new",
+      sessionId: "session-new",
+      mode: "direct",
+      prompt: "Execute task",
+      model: {
+        provider: "anthropic",
+        id: "claude-3-5-sonnet",
+      },
+      agentName: "research-agent",
+      workspaceRoot: "/home/user/projects",
+      middleware: ["budget", "tool-guard", "memory"],
+    };
+
+    const parsed = Execution.Request.parse(request);
+    expect(parsed.agentName).toBe("research-agent");
+    expect(parsed.workspaceRoot).toBe("/home/user/projects");
+    expect(parsed.middleware).toEqual(["budget", "tool-guard", "memory"]);
+  });
+
+  test("ExecutionRequest with full Guardrail.ToolPermission", () => {
+    const request: Execution.Request = {
+      runId: "run-perms",
+      sessionId: "session-perms",
+      mode: "direct",
+      prompt: "Execute with permissions",
+      model: {
+        provider: "anthropic",
+        id: "claude-3-5-sonnet",
+      },
+      permissions: {
+        allowlist: ["read_file", "write_file"],
+        denylist: ["delete_file"],
+        requireApproval: ["execute_command"],
+        inputRules: [
+          {
+            toolPattern: "write_file",
+            field: "path",
+            pattern: "^/safe/.*",
+            action: "allow",
+            reason: "Only allow writes to /safe directory",
+            priority: 10,
+          },
+        ],
+      },
+    };
+
+    const parsed = Execution.Request.parse(request);
+    expect(parsed.permissions?.allowlist).toEqual(["read_file", "write_file"]);
+    expect(parsed.permissions?.denylist).toEqual(["delete_file"]);
+    expect(parsed.permissions?.requireApproval).toEqual(["execute_command"]);
+    expect(parsed.permissions?.inputRules).toHaveLength(1);
+    expect(parsed.permissions?.inputRules?.[0].toolPattern).toBe("write_file");
+  });
+
+  test("ExecutionRequest with full AgentProfile.AgentBudget", () => {
+    const request: Execution.Request = {
+      runId: "run-budget",
+      sessionId: "session-budget",
+      mode: "direct",
+      prompt: "Execute with budget",
+      model: {
+        provider: "anthropic",
+        id: "claude-3-5-sonnet",
+      },
+      budget: {
+        maxTurns: 20,
+        maxToolCalls: 50,
+        maxWallTimeMs: 300000,
+        maxToolRuntimeMs: 60000,
+      },
+    };
+
+    const parsed = Execution.Request.parse(request);
+    expect(parsed.budget?.maxTurns).toBe(20);
+    expect(parsed.budget?.maxToolCalls).toBe(50);
+    expect(parsed.budget?.maxWallTimeMs).toBe(300000);
+    expect(parsed.budget?.maxToolRuntimeMs).toBe(60000);
+  });
+
+  test("ExecutionRequest backward compatibility with inline permissions/budget", () => {
+    const request: Execution.Request = {
+      runId: "run-compat",
+      sessionId: "session-compat",
+      mode: "direct",
+      prompt: "Legacy request",
+      model: {
+        provider: "anthropic",
+        id: "claude-3-5-sonnet",
+      },
+      permissions: {
+        allowlist: ["tool1"],
+      },
+      budget: {
+        maxTurns: 5,
+      },
+    };
+
+    const parsed = Execution.Request.parse(request);
+    expect(parsed.permissions?.allowlist).toEqual(["tool1"]);
+    expect(parsed.budget?.maxTurns).toBe(5);
   });
 });
