@@ -25,9 +25,13 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
   );
 
   return {
-    dispatch(sessionId, runId, params) {
+    async dispatch(sessionId, runId, params) {
       const index = sessionRouting.route(sessionId, size);
-      return workers[index].dispatch(runId, { sessionId, ...params });
+      try {
+        return await workers[index].dispatch(runId, { sessionId, ...params });
+      } finally {
+        sessionRouting.complete(sessionId);
+      }
     },
     getStats() {
       return {
