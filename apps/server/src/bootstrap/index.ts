@@ -4,11 +4,16 @@ import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import { AgentRegistry } from "@openomni/agent";
-import { AgentToolProvider, IngressEngine, SystemToolProvider } from "@openomni/openomni";
+import {
+  AgentToolProvider,
+  IngressEngine,
+  SystemToolProvider,
+  resolveCategory,
+} from "@openomni/openomni";
 import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { createMessageHandler } from "../handler/conversation";
-import { createExecutionCoordinator } from "../execution/coordinator";
+import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
 import { createChannelAdapters } from "./channels";
@@ -33,17 +38,18 @@ async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBo
       description: def.description,
       model: def.model,
       systemPrompt: def.systemPrompt,
-      tools: def.tools,
+      tools: def.tools.length > 0 ? { allow: def.tools } : {},
       permissions: def.permissions,
       budget: def.budget,
     }),
   );
 
-  const mcpTools = mcpProvider.listTools().map(
+  const toolCatalog = mcpProvider.listTools().map(
     (tool): WorkerBootstrap.RuntimeToolCatalogEntry => ({
       canonicalName: tool.spec.name,
       exposedName: tool.spec.name,
       source: "mcp",
+      category: resolveCategory(tool.spec.name, "mcp", tool.category),
       riskTier: tool.riskTier,
       spec: tool.spec,
       mcpServer: tool.spec.name.includes(".") ? tool.spec.name.split(".")[0] : undefined,
@@ -66,11 +72,11 @@ async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBo
 
   const epochInput = [
     ...agents.map((a) => a.name).sort(),
-    ...mcpTools.map((t) => t.canonicalName).sort(),
+    ...toolCatalog.map((t) => t.canonicalName).sort(),
   ].join(",");
   const configEpoch = djb2Hash(epochInput);
 
-  return { configEpoch, agents, mcpTools, credentials };
+  return { configEpoch, agents, toolCatalog, credentials };
 }
 
 function createRoutingHandler(
@@ -118,7 +124,8 @@ export async function main(): Promise<void> {
     console.log("[server] running in coordinator mode");
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
-    coordinator = createExecutionCoordinator({ workerScript, bootstrap, mcpProvider });
+    const toolDispatcher = buildToolDispatcher([mcpProvider]);
+    coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
     await coordinator.waitUntilReady();
     IngressEngine.setCoordinator(coordinator);
   }

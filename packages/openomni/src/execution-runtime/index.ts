@@ -11,6 +11,7 @@ export {
   createWorkerSubagentRuntime,
   defineTool,
   resolveMeta,
+  resolveCategory,
   resolveToolSelection,
 } from "./tool/index.js";
 export type {

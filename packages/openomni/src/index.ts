@@ -44,6 +44,7 @@ export {
   createWorkerSubagentRuntime,
   defineTool,
   resolveMeta,
+  resolveCategory,
   resolveToolSelection,
 } from "./execution-runtime";
 export type {
