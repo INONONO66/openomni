@@ -1,4 +1,5 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
+import { WorkspaceLock } from "../workspace-lock.js";
 import type { NativeTool, ToolExecutorConfig } from "./types.js";
 
 const tierTimeouts: Record<number, number> = {
@@ -97,6 +98,8 @@ export function createToolExecutor(
 ): (call: Tool.Call) => Promise<Tool.Result> {
   const dispatch = buildDispatchTable(ctx.tools);
   const config = ctx.config ?? {};
+  const { workspaceRoot } = config;
+  const lockOwnerId = crypto.randomUUID();
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
@@ -122,6 +125,14 @@ export function createToolExecutor(
     const dispatchedCall = originalName === call.tool ? call : { ...call, tool: originalName };
 
     try {
+      if (tool.riskTier >= 1 && workspaceRoot) {
+        await WorkspaceLock.acquire(workspaceRoot, lockOwnerId);
+        try {
+          return await withTimeout(tool.execute(dispatchedCall), timeoutMs);
+        } finally {
+          WorkspaceLock.release(workspaceRoot, lockOwnerId);
+        }
+      }
       return await withTimeout(tool.execute(dispatchedCall), timeoutMs);
     } catch (error) {
       return createErrorResult(call, error instanceof Error ? error.message : String(error));
