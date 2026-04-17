@@ -1,8 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
+import type { WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
+import { AgentRegistry } from "@openomni/agent";
 import { AgentToolProvider, IngressEngine, SystemToolProvider } from "@openomni/openomni";
+import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { createMessageHandler } from "../handler/conversation";
 import { createExecutionCoordinator } from "../execution/coordinator";
@@ -13,6 +16,61 @@ import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { installShutdownHandlers } from "./shutdown";
+
+function djb2Hash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16);
+}
+
+async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBootstrap.Bootstrap> {
+  const agents = AgentRegistry.list().map(
+    (def): WorkerBootstrap.RuntimeAgentDefinition => ({
+      name: def.name,
+      description: def.description,
+      model: def.model,
+      systemPrompt: def.systemPrompt,
+      tools: def.tools,
+      permissions: def.permissions,
+      budget: def.budget,
+    }),
+  );
+
+  const mcpTools = mcpProvider.listTools().map(
+    (tool): WorkerBootstrap.RuntimeToolCatalogEntry => ({
+      canonicalName: tool.spec.name,
+      exposedName: tool.spec.name,
+      source: "mcp",
+      riskTier: tool.riskTier,
+      spec: tool.spec,
+      mcpServer: tool.spec.name.includes(".") ? tool.spec.name.split(".")[0] : undefined,
+    }),
+  );
+
+  const authEntries = await Auth.all();
+  const credentials: Record<string, string> = {};
+  for (const [provider, entry] of Object.entries(authEntries)) {
+    const prefix = provider.toUpperCase();
+    if (entry.type === "api") {
+      credentials[`${prefix}_API_KEY`] = entry.key;
+    } else if (entry.type === "proxy") {
+      credentials[`${prefix}_BASE_URL`] = entry.baseURL;
+      if (entry.apiKey) credentials[`${prefix}_API_KEY`] = entry.apiKey;
+    } else if (entry.type === "oauth") {
+      credentials[`${prefix}_ACCESS_TOKEN`] = entry.access;
+    }
+  }
+
+  const epochInput = [
+    ...agents.map((a) => a.name).sort(),
+    ...mcpTools.map((t) => t.canonicalName).sort(),
+  ].join(",");
+  const configEpoch = djb2Hash(epochInput);
+
+  return { configEpoch, agents, mcpTools, credentials };
+}
 
 function createRoutingHandler(
   systemProvider: SystemToolProvider,
@@ -43,7 +101,8 @@ export async function main(): Promise<void> {
   await connectMcpServers(config, mcpProvider);
 
   const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
-  const coordinator = createExecutionCoordinator({ workerScript });
+  const bootstrap = await assembleBootstrap(mcpProvider);
+  const coordinator = createExecutionCoordinator({ workerScript, bootstrap });
   await coordinator.waitUntilReady();
   IngressEngine.setCoordinator(coordinator);
 

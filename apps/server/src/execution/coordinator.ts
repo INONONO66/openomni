@@ -1,5 +1,5 @@
 import { Bus } from "@openomni/session";
-import { Execution, Subagent } from "@openomni/protocol";
+import { Execution, Subagent, type WorkerBootstrap } from "@openomni/protocol";
 import {
   createWorkerPool,
   type WorkerPool,
@@ -11,6 +11,7 @@ export type CoordinatorConfig = {
   workerScript: string;
   workerCount?: number;
   socketDir?: string;
+  bootstrap?: WorkerBootstrap.Bootstrap;
 };
 
 export type ExecutionCoordinator = {
@@ -26,6 +27,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     workerScript: config.workerScript,
     size: config.workerCount,
     socketDir: config.socketDir,
+    bootstrap: config.bootstrap,
   });
 
   const activeRuns = new Set<string>();

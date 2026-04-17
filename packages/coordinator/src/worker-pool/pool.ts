@@ -1,3 +1,4 @@
+import type { WorkerBootstrap } from "@openomni/protocol";
 import { SessionRouting } from "./session-routing";
 import { WorkerSupervisor } from "./supervisor";
 
@@ -5,6 +6,7 @@ export type WorkerPoolConfig = {
   size?: number;
   workerScript: string;
   socketDir?: string;
+  bootstrap?: WorkerBootstrap.Bootstrap;
 };
 
 export type WorkerPool = {
@@ -21,7 +23,7 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
 
   const workers: WorkerSupervisor[] = Array.from(
     { length: size },
-    (_, i) => new WorkerSupervisor(i, config.workerScript, socketDir),
+    (_, i) => new WorkerSupervisor(i, config.workerScript, socketDir, config.bootstrap),
   );
 
   return {

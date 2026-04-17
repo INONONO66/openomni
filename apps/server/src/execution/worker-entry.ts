@@ -1,6 +1,7 @@
 import { ChatAgent } from "@openomni/agent";
+import { AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
-import { Execution } from "@openomni/protocol";
+import { Execution, WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
@@ -9,8 +10,6 @@ import {
   SystemToolProvider,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
-import { connectMcpServers } from "../bootstrap/mcp";
-import { McpToolProvider } from "../tool/mcp";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
 
 const args = process.argv.slice(2);
@@ -27,9 +26,9 @@ initialize({
   dbPath: resolveWorkerDbPath(config),
 });
 
+let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
+
 const agentProvider = new AgentToolProvider();
-const mcpProvider = new McpToolProvider();
-const mcpReady = connectMcpServers(config, mcpProvider);
 
 const server = createIpcServer(socketPath, (method, params, respond) => {
   if (method === "coordinator.spawn_run") {
@@ -50,8 +49,6 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
 
     (async () => {
       try {
-        await mcpReady;
-
         if (request.mode === "direct") {
           const messages = SessionBridge.buildDirectMessages(sessionId).filter(
             (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
@@ -59,11 +56,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           );
           const workspaceRoot = request.toolConfig?.workspaceRoot ?? config.workspace?.root;
           const systemProvider = new SystemToolProvider(workspaceRoot);
-          const availableTools = [
-            ...systemProvider.listTools(),
-            ...agentProvider.listTools(),
-            ...mcpProvider.listTools(),
-          ];
+          const availableTools = [...systemProvider.listTools(), ...agentProvider.listTools()];
           const toolContext = createExecutionToolContext(request, availableTools);
           const agent = ChatAgent.create({
             model: request.model,
@@ -109,9 +102,28 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
   }
 });
 
+(async () => {
+  try {
+    const raw = await server.call("worker.ready", { workerId, pid: process.pid });
+    const bootstrap = WorkerBootstrap.Bootstrap.parse(raw);
+    workerBootstrap = bootstrap;
+    AgentRegistry.replaceAll(bootstrap.agents);
+    console.log(
+      `Worker ${workerId} bootstrap received: ${bootstrap.agents.length} agents, ${bootstrap.mcpTools.length} mcp tools`,
+    );
+  } catch (err) {
+    console.error(
+      `Worker ${workerId} bootstrap failed:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+})();
+
 process.on("SIGTERM", () => {
   server.close();
   process.exit(0);
 });
 
 console.log(`Worker ${workerId} started (PID ${process.pid}) socket=${socketPath}`);
+
+export { workerBootstrap };
