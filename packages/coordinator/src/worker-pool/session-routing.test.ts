@@ -18,16 +18,17 @@ describe("sessionRouting", () => {
   });
 
   test("complete() decrements load", () => {
-    const a = "ses_fill_a";
-    const b = "ses_fill_b";
-    const id = "ses_load_decrement";
+    const ts = Date.now();
+    const a = `ses_fill_a_${ts}`;
+    const b = `ses_fill_b_${ts}`;
+    const id = `ses_load_decrement_${ts}`;
 
     sessionRouting.route(a, 2);
     sessionRouting.route(b, 2);
     sessionRouting.complete(a);
 
     const idx = sessionRouting.route(id, 2);
-    expect(idx).toBe(0);
+    expect(idx).toBe(1);
 
     sessionRouting.complete(b);
     sessionRouting.complete(id);

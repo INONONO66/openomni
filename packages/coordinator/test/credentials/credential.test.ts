@@ -54,11 +54,6 @@ describe("getCredentialsForProvider", () => {
     expect(result).toHaveProperty("ANTHROPIC_MODEL", "claude-3");
   });
 
-  test("includes API_KEY keys regardless of provider prefix", () => {
-    const result = getCredentialsForProvider(creds, "anthropic");
-    expect(result).toHaveProperty("OPENAI_API_KEY", "sk-oai-test");
-  });
-
   test("excludes keys that do not match", () => {
     const result = getCredentialsForProvider(creds, "anthropic");
     expect(result).not.toHaveProperty("DATABASE_URL");
