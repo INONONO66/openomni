@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Bus, Storage, WorkerRun } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
-import { recoverInterruptedRuns } from "../../src/recovery/index.js";
+import { recoverInterruptedRuns } from "../../src/recovery";
 
 function seedSession(id: string): void {
   Storage.getAdapter().session.set(id, {

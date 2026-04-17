@@ -1,7 +1,7 @@
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
-import { LineDecoder, encode } from "./framing.js";
-import { IpcConnectionError, IpcTimeoutError } from "./errors.js";
+import { LineDecoder, encode } from "./framing";
+import { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
@@ -45,7 +45,10 @@ export function connectIpcClient(socketPath: string, connectTimeoutMs = 5000): P
       let msgs: unknown[];
       try {
         msgs = decoder.push(chunk);
-      } catch {
+      } catch (error) {
+        connected = false;
+        failAllPending(new IpcProtocolError("received invalid IPC frame", error));
+        socket.destroy();
         return;
       }
       for (const raw of msgs) {
@@ -103,5 +106,7 @@ export function connectIpcClient(socketPath: string, connectTimeoutMs = 5000): P
         socket.destroy();
       },
     };
+
+    return client;
   });
 }

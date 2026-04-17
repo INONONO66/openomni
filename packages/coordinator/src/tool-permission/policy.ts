@@ -41,7 +41,10 @@ export function loadPolicy(path = DEFAULT_POLICY_PATH): PolicyConfig {
   if (!existsSync(path)) return {};
   try {
     return JSON.parse(readFileSync(path, "utf-8")) as PolicyConfig;
-  } catch {
+  } catch (error) {
+    console.warn(
+      `failed to load tool policy from ${path}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return {};
   }
 }

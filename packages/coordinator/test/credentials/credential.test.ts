@@ -3,8 +3,8 @@ import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { loadCredentials, getCredentialsForProvider } from "../../src/credentials/store.js";
-import { createCredentialInjector } from "../../src/credentials/injector.js";
+import { loadCredentials, getCredentialsForProvider } from "../../src/credentials/store";
+import { createCredentialInjector } from "../../src/credentials/injector";
 
 const TMP = join(tmpdir(), `openomni-cred-test-${process.pid}`);
 const SECRETS_PATH = join(TMP, "secrets.json");

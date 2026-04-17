@@ -1,9 +1,13 @@
 import { Ipc } from "@openomni/protocol";
 import fs from "node:fs";
 
-import { decodeMessage } from "./codec.js";
-import { IpcProtocolError } from "./errors.js";
-import { LineDecoder, encode } from "./framing.js";
+import { decodeMessage } from "./codec";
+import { IpcProtocolError } from "./errors";
+import { LineDecoder, encode } from "./framing";
+
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
 
 export type RequestHandler = (
   method: string,
@@ -21,8 +25,10 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
   // Remove stale socket file so Bun.listen doesn't fail with EADDRINUSE.
   try {
     fs.unlinkSync(socketPath);
-  } catch {
-    // ENOENT is expected on first start
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
   }
 
   interface SocketData {
@@ -52,7 +58,16 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         let messages: unknown[];
         try {
           messages = state.decoder.push(raw);
-        } catch {
+        } catch (error) {
+          socket.write(
+            encode(
+              Ipc.createErrorResponse(
+                "unknown",
+                4001,
+                error instanceof Error ? error.message : "invalid IPC frame",
+              ),
+            ),
+          );
           return;
         }
 
@@ -97,8 +112,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
                 () => undefined,
                 () => undefined,
               );
-            } catch {
-              // intentional: notification errors are silently dropped
+            } catch (error) {
+              console.warn(
+                "coordinator IPC notification handler failed:",
+                error instanceof Error ? error.message : String(error),
+              );
             }
           }
         }
@@ -121,8 +139,10 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       server.stop(true);
       try {
         fs.unlinkSync(socketPath);
-      } catch {
-        // already gone
+      } catch (error) {
+        if (!isMissingFileError(error)) {
+          throw error;
+        }
       }
     },
   };

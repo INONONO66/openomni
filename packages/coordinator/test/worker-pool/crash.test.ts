@@ -1,11 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createWorkerPool, type WorkerPool } from "../../src/worker-pool/pool.js";
+import { createWorkerPool, type WorkerPool } from "../../src/worker-pool/pool";
 
-const WORKER_ENTRY = fileURLToPath(
-  new URL("../../src/worker-pool/worker-entry.ts", import.meta.url),
-);
+const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 const socketDir = `/tmp/omo-cr-${process.pid}`;
 

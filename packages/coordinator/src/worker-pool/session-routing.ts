@@ -3,7 +3,7 @@ const affinityMap = new Map<string, number>();
 // worker index → number of active session trees assigned
 const workerLoad = new Map<number, number>();
 
-export const sessionRouting = {
+export const SessionRouting = {
   route(rootSessionId: string, workerCount: number): number {
     const existing = affinityMap.get(rootSessionId);
     if (existing !== undefined) return existing;

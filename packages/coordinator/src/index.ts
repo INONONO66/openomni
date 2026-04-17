@@ -1,2 +1,5 @@
-export { createWorkerPool, type WorkerPool, type WorkerPoolConfig } from "./worker-pool/pool.js";
-export { recoverInterruptedRuns, type RecoveryResult } from "./recovery/index.js";
+export { recoverInterruptedRuns } from "./recovery";
+export type { RecoveryResult } from "./recovery";
+
+export { createWorkerPool } from "./worker-pool";
+export type { WorkerPool, WorkerPoolConfig } from "./worker-pool";

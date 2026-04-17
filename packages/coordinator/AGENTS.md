@@ -1,45 +1,39 @@
 # packages/coordinator
 
-Multiprocess coordinator daemon + test harness. This package will eventually house the coordinator daemon process, worker pool management, and IPC transport layer. Currently contains only the test harness infrastructure needed for Phase 4 multiprocess worker testing.
+Multiprocess execution coordinator runtime. This package owns worker pool lifecycle, IPC transport, recovery, credentials/policy helpers, and the worker entrypoint used by server-side dispatch.
 
 ## STRUCTURE
 
 ```
 src/
-└── index.ts              # Package barrel (empty until Phase 1 implementation)
-
-test/
-└── harness/
-    ├── spawn.ts          # Child Bun process spawn + lifecycle management
-    ├── ipc.ts            # Unix socket connection helpers (JSON-newline framing)
-    ├── fixtures.ts       # Fake coordinator/worker stubs for testing
-    ├── assertions.ts     # Multiprocess-specific test assertions
-    └── smoke.test.ts     # Basic smoke test for the harness itself
+├── index.ts              # Package barrel
+├── credentials/          # Worker credential filtering and injection
+├── ipc/                  # Unix socket transport + framing + protocol errors
+├── recovery/             # Interrupted worker run recovery
+├── tool-permission/      # Non-interactive permission policy + audit log
+└── worker-pool/          # Worker routing, supervision, and worker entrypoint
 ```
 
 ## DEPENDENCIES
 
-No internal `@openomni/*` dependencies. Depends only on Bun built-ins and TypeScript.
+Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@openomni/openomni` because the coordinator reconstructs real execution in worker processes.
 
-## PURPOSE OF EACH HARNESS MODULE
+## MODULES
 
 | Module | Purpose |
 |--------|---------|
-| `spawn.ts` | Wraps `Bun.spawn()` with lifecycle tracking — spawn, pipe stdout/stderr, SIGTERM on cleanup |
-| `ipc.ts` | Unix domain socket client helpers with JSON-newline framing and connect timeout |
-| `fixtures.ts` | Minimal UDS echo server (fake coordinator) and heartbeat client (fake worker) for isolated tests |
-| `assertions.ts` | `assertNoOrphanProcesses` + `assertCleanExit` for verifying process lifecycle invariants |
-| `smoke.test.ts` | Proves the harness can spawn a child process and observe clean exit |
-
-## FUTURE (Phase 1+)
-
-- `src/daemon/` — coordinator daemon entry point
-- `src/worker/` — worker process entry point
-- `src/ipc/` — production IPC transport (Unix domain socket, JSON-RPC)
-- `src/pool/` — worker pool lifecycle management
+| `credentials/store.ts` | Loads stored credentials and filters them by provider prefix |
+| `credentials/injector.ts` | Injects provider-scoped credentials into workers |
+| `ipc/*` | Request/response framing, client/server transport, and protocol errors |
+| `recovery/index.ts` | Marks interrupted worker runs failed after restart |
+| `tool-permission/*` | Policy load + audit logging for non-interactive tool decisions |
+| `worker-pool/pool.ts` | Public worker-pool factory |
+| `worker-pool/supervisor.ts` | Worker lifecycle and restart management |
+| `worker-pool/session-routing.ts` | Session-tree affinity routing |
+| `worker-pool/worker-entry.ts` | Worker process entry that executes agent/plan requests |
 
 ## ANTI-PATTERNS
 
-- Do NOT import from other `@openomni/*` packages until Phase 1 implementation begins.
-- Do NOT add runtime dependencies (no npm packages beyond typescript devDep).
-- Harness modules in `test/harness/` are test utilities only — not for production use.
+- Do NOT deep-import from `@openomni/*/src/*`; use package barrels only.
+- Do NOT add empty catch blocks; coordinator needs explicit degradation behavior.
+- Do NOT add generic catch-all files like `utils.ts` or `helpers.ts`.

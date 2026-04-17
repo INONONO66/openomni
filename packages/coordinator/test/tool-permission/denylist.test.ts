@@ -10,12 +10,8 @@ import {
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 
-import {
-  loadPolicy,
-  checkPermission,
-  type PolicyConfig,
-} from "../../src/tool-permission/policy.js";
-import { logPermissionDecision, type AuditEntry } from "../../src/tool-permission/audit.js";
+import { loadPolicy, checkPermission, type PolicyConfig } from "../../src/tool-permission/policy";
+import { logPermissionDecision, type AuditEntry } from "../../src/tool-permission/audit";
 
 const TMP = join(tmpdir(), `openomni-perm-test-${process.pid}`);
 const POLICY_PATH = join(TMP, "tool-policy.json");

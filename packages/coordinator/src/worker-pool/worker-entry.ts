@@ -4,7 +4,7 @@ import { ChatAgent } from "@openomni/agent";
 import { Execution } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
 import { PlanAgent, SessionBridge } from "@openomni/openomni";
-import { createIpcServer } from "../ipc/server.js";
+import { createIpcServer } from "../ipc/server";
 
 const args = process.argv.slice(2);
 const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
