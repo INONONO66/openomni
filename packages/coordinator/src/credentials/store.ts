@@ -21,7 +21,5 @@ export function getCredentialsForProvider(
   provider: string,
 ): Record<string, string> {
   const prefix = provider.toUpperCase().replace(/-/g, "_");
-  return Object.fromEntries(
-    Object.entries(creds).filter(([k]) => k.startsWith(prefix) || k.includes("API_KEY")),
-  );
+  return Object.fromEntries(Object.entries(creds).filter(([k]) => k.startsWith(prefix)));
 }
