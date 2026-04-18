@@ -3,7 +3,19 @@ import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Task, Todo } from "@openomni/protocol";
+import type { SessionInfo } from "../../src/session/info";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+
+function makeSession(id: string): SessionInfo {
+  const now = Date.now();
+  return {
+    id,
+    title: `Session ${id}`,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  };
+}
 
 function tempDbPath(): string {
   return join(tmpdir(), `test-sqlite-ext-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
@@ -324,6 +336,8 @@ describe("SqliteStorageAdapter — todo sub-adapter", () => {
   beforeEach(() => {
     dbPath = tempDbPath();
     adapter = new SqliteStorageAdapter(dbPath);
+    adapter.session.set("s1", makeSession("s1"));
+    adapter.session.set("s2", makeSession("s2"));
   });
 
   afterEach(() => {

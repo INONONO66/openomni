@@ -7,9 +7,23 @@ function makeCall(tool: string, input: Record<string, unknown>): Tool.Call {
   return { id: "call-1", tool, input };
 }
 
+function seedSession(id: string): void {
+  const now = Date.now();
+  Storage.get().session.set(id, {
+    id,
+    title: `Session ${id}`,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  });
+}
+
 describe("TodoToolProvider", () => {
   beforeEach(() => {
     Storage.reset();
+    seedSession("ses-1");
+    seedSession("ses-2");
+    seedSession("ses-3");
   });
 
   it("todo_write: writes todos and returns current state", async () => {

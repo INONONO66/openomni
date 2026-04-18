@@ -1,9 +1,20 @@
-import type { Tool } from "@openomni/protocol";
+import { Task, type Tool } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
 import { defineTool } from "../define.js";
 import { optionalString, requireString } from "../shared/input.js";
 import { fromError, successResult } from "../shared/result.js";
+
+const VALID_STATUSES = new Set(Task.Status.options);
+
+function validateStatus(value: string): Task.Status {
+  if (!VALID_STATUSES.has(value as Task.Status)) {
+    throw new Error(
+      `Invalid status: "${value}". Must be one of: ${[...VALID_STATUSES].join(", ")}`,
+    );
+  }
+  return value as Task.Status;
+}
 
 function taskCreateTool(): NativeTool {
   return defineTool<{
@@ -56,14 +67,7 @@ function taskCreateTool(): NativeTool {
         }
 
         const statusRaw = optionalString(input, "status");
-        const status = (statusRaw ?? "idle") as
-          | "idle"
-          | "scheduled"
-          | "running"
-          | "blocked"
-          | "done"
-          | "failed"
-          | "cancelled";
+        const status = validateStatus(statusRaw ?? "idle");
 
         const tagsRaw = input.tags;
         const tags = Array.isArray(tagsRaw) ? (tagsRaw as string[]) : undefined;
@@ -146,18 +150,7 @@ function taskListTool(): NativeTool {
         if (!taskAdapter) throw new Error("Task storage not configured");
 
         const tasks = taskAdapter.task.list({
-          ...(status
-            ? {
-                status: status as
-                  | "idle"
-                  | "scheduled"
-                  | "running"
-                  | "blocked"
-                  | "done"
-                  | "failed"
-                  | "cancelled",
-              }
-            : {}),
+          ...(status ? { status: validateStatus(status) } : {}),
           ...(ownerId ? { ownerId } : {}),
         });
 
@@ -206,18 +199,7 @@ function taskUpdateTool(): NativeTool {
 
         const updated = {
           ...existing,
-          ...(status
-            ? {
-                status: status as
-                  | "idle"
-                  | "scheduled"
-                  | "running"
-                  | "blocked"
-                  | "done"
-                  | "failed"
-                  | "cancelled",
-              }
-            : {}),
+          ...(status ? { status: validateStatus(status) } : {}),
           ...(title ? { title } : {}),
           ...(description !== undefined ? { description } : {}),
         };

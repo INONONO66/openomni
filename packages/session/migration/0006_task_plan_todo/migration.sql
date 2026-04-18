@@ -2,8 +2,9 @@ CREATE TABLE IF NOT EXISTS task (id TEXT PRIMARY KEY, owner_type TEXT, owner_id 
 CREATE TABLE IF NOT EXISTS task_run (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES task(id) ON DELETE CASCADE, status TEXT NOT NULL, trigger_data TEXT, data TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS task_idempotency (key TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES task_run(id) ON DELETE CASCADE, time_created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS plan (id TEXT PRIMARY KEY, content TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS todo (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', priority TEXT NOT NULL DEFAULT 'medium', position INTEGER NOT NULL DEFAULT 0, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS todo (id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', priority TEXT NOT NULL DEFAULT 'medium', position INTEGER NOT NULL DEFAULT 0, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_task_status ON task(status, time_created);
 CREATE INDEX IF NOT EXISTS idx_task_run_task ON task_run(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_run_status ON task_run(status, time_created);
+CREATE INDEX IF NOT EXISTS idx_task_idempotency_run ON task_idempotency(run_id);
 CREATE INDEX IF NOT EXISTS idx_todo_session ON todo(session_id, position);

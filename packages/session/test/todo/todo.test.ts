@@ -16,9 +16,22 @@ function makeTodo(overrides: Partial<TodoProtocol.Info> = {}): TodoProtocol.Info
   };
 }
 
+function seedSession(id: string): void {
+  const now = Date.now();
+  Storage.get().session.set(id, {
+    id,
+    title: `Session ${id}`,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  });
+}
+
 beforeEach(() => {
   Storage.reset();
   Bus.reset();
+  seedSession("sess-1");
+  seedSession("sess-2");
 });
 
 afterEach(() => {

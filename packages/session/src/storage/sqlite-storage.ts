@@ -510,7 +510,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
           const dir = opts.sortOrder === "asc" ? 1 : -1;
           runs.sort((a, b) => dir * ((a[sortBy] ?? 0) - (b[sortBy] ?? 0)));
         }
-        if (opts?.offset || opts?.limit) {
+        if (opts?.offset !== undefined || opts?.limit !== undefined) {
           const start = opts.offset ?? 0;
           runs = runs.slice(start, start + (opts.limit ?? runs.length));
         }
@@ -619,7 +619,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
             )
             .run(
               todo.id,
-              todo.sessionId,
+              sessionId,
               todo.content,
               todo.status,
               todo.priority,
