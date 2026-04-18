@@ -16,6 +16,7 @@ import { createMessageHandler } from "../handler/conversation";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
+import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { LocalRunner } from "./local-runner";
 import { connectMcpServers } from "./mcp";
@@ -85,11 +86,13 @@ function createRoutingHandler(
   mcpProvider: McpToolProvider,
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
+  customProvider?: CustomToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
+    customProvider,
     defaultModel,
     workspaceRoot,
   });
@@ -104,6 +107,7 @@ export async function main(): Promise<void> {
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
+  const customProvider = new CustomToolProvider();
 
   await connectMcpServers(config, mcpProvider);
 
@@ -117,6 +121,7 @@ export async function main(): Promise<void> {
       systemProvider,
       agentProvider,
       mcpProvider,
+      customProvider,
       workspaceRoot: config.workspace?.root,
     });
     IngressEngine.setCoordinator(localRunner);
@@ -141,6 +146,7 @@ export async function main(): Promise<void> {
         mcpProvider,
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
+        customProvider,
       )
     : undefined;
 

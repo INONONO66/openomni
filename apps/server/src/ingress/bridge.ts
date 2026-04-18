@@ -13,6 +13,7 @@ export interface BridgeDeps {
   systemProvider: SystemToolProvider;
   agentProvider: AgentToolProvider;
   mcpProvider: McpToolProvider;
+  customProvider?: { listTools(): import("@openomni/openomni").NativeTool[] };
   defaultModel?: { provider: string; id: string };
   workspaceRoot: string;
 }
@@ -37,6 +38,9 @@ function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[]
     { tools: deps.systemProvider.listTools(), source: "system" },
     { tools: deps.agentProvider.listTools(), source: "agent" },
     { tools: deps.mcpProvider.listTools(), source: "mcp" },
+    ...(deps.customProvider
+      ? [{ tools: deps.customProvider.listTools(), source: "server" as const }]
+      : []),
   ]);
 
   const selected = resolveToolSelection(catalog, definition.tools);

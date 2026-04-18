@@ -10,12 +10,14 @@ import {
   type CoordinatorLike,
 } from "@openomni/openomni";
 import type { McpToolProvider } from "../tool/mcp";
+import type { CustomToolProvider } from "../tool/custom";
 import { createExecutionToolContext } from "../execution/worker-runtime";
 
 type Config = {
   readonly systemProvider: SystemToolProvider;
   readonly agentProvider: AgentToolProvider;
   readonly mcpProvider: McpToolProvider;
+  readonly customProvider?: CustomToolProvider;
   readonly workspaceRoot?: string;
 };
 
@@ -81,6 +83,7 @@ async function runDirect(config: Config, request: Execution.Request): Promise<Ex
     ...systemProvider.listTools(),
     ...config.agentProvider.listTools(),
     ...config.mcpProvider.listTools(),
+    ...(config.customProvider?.listTools() ?? []),
   ];
 
   const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
