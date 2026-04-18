@@ -84,8 +84,7 @@ export namespace Plan {
     });
 
   export const ResultSchema = z.object({
-    plan: Schema,
-    reviewNotes: z.string().optional(),
+    planId: z.string(),
   });
   export type Result = z.infer<typeof ResultSchema>;
 }
