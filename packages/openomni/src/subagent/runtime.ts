@@ -8,10 +8,15 @@ import {
   remove as removeAbortController,
 } from "./abort-registry";
 import { sendToMailbox } from "./session-mailbox.js";
-
-type RuntimeModel = { provider: string; id: string };
-
-type RuntimeMessage = { role: "user" | "assistant"; content: string };
+import {
+  type RuntimeModel,
+  type RuntimeMessage,
+  toSessionModel,
+  createUserMessage,
+  createAssistantMessage,
+  addTextPart,
+  publishEvent,
+} from "./shared";
 
 type RuntimeConfig = {
   model: RuntimeModel;
@@ -48,56 +53,6 @@ type InMemoryCompactorLike = {
     removedCount: number;
   }>;
 };
-
-function toSessionModel(model: RuntimeModel): { providerID: string; modelID: string } {
-  return {
-    providerID: model.provider,
-    modelID: model.id,
-  };
-}
-
-function createUserMessage(sessionId: string, model: RuntimeModel): Message.UserMessage {
-  return {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    role: "user",
-    time: { created: Date.now() },
-    agent: "subagent-runtime",
-    model: toSessionModel(model),
-  };
-}
-
-function createAssistantMessage(sessionId: string, model: RuntimeModel): Message.AssistantMessage {
-  return {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "",
-    modelID: model.id,
-    providerID: model.provider,
-    agent: "subagent-runtime",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-function addTextPart(sessionId: string, messageId: string, text: string): void {
-  const part: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    messageID: messageId,
-    type: "text",
-    text,
-  };
-  Session.addPart(messageId, part);
-}
 
 function createCompletedToolState(call: Tool.Call, output: string): Tool.StateCompleted {
   const now = Date.now();
@@ -169,25 +124,6 @@ function addAssistantResultParts(
 ): void {
   addTextPart(sessionId, messageId, result.text);
   addToolParts(sessionId, messageId, result.steps);
-}
-
-function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
-  event: BusEvent.Descriptor<{
-    traceId: string;
-    sessionId?: string;
-    runId?: string;
-    time: number;
-    payload: TPayload;
-  }>,
-  payload: TPayload,
-): void {
-  Bus.publish(event, {
-    traceId: crypto.randomUUID(),
-    sessionId: payload.sessionId,
-    runId: payload.runId,
-    time: Date.now(),
-    payload,
-  });
 }
 
 function toRuntimeMessage(
