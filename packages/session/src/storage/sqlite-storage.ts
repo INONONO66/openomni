@@ -443,7 +443,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
           tasks = tasks.filter((t) => t.assignedAgentId === filter.assignedAgentId);
         }
         if (filter.tags && filter.tags.length > 0) {
-          tasks = tasks.filter((t) => filter.tags!.every((tag) => t.tags?.includes(tag)));
+          tasks = tasks.filter((t) => filter.tags?.every((tag) => t.tags?.includes(tag)));
         }
 
         return tasks;

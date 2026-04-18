@@ -57,10 +57,14 @@ describe("SqliteStorageAdapter — task sub-adapter", () => {
   afterEach(() => {
     try {
       adapter.close();
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
     try {
       unlinkSync(dbPath);
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
   });
 
   describe("task", () => {
@@ -235,10 +239,14 @@ describe("SqliteStorageAdapter — plan sub-adapter", () => {
   afterEach(() => {
     try {
       adapter.close();
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
     try {
       unlinkSync(dbPath);
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
   });
 
   test("read: returns undefined for non-existent", async () => {
@@ -321,10 +329,14 @@ describe("SqliteStorageAdapter — todo sub-adapter", () => {
   afterEach(() => {
     try {
       adapter.close();
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
     try {
       unlinkSync(dbPath);
-    } catch (_) {}
+    } catch (_) {
+      void _;
+    }
   });
 
   test("list: returns empty for session with no todos", async () => {
