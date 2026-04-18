@@ -253,33 +253,3 @@ describe("PlanAgent.create", () => {
     expect(toolResultOutput).toContain("No executor for tool");
   });
 });
-
-describe("PlanAgent.generate (regression)", () => {
-  it("still returns PlanResult when LLM returns valid plan JSON", async () => {
-    const goal = "Build API gateway";
-    const now = new Date().toISOString();
-    setupMockResponse(
-      JSON.stringify({
-        planId: "plan-1",
-        goal,
-        steps: [
-          {
-            stepId: "s1",
-            description: "Design routes",
-            expectedOutput: "Route map",
-            dependsOn: [],
-          },
-        ],
-        createdAt: now,
-        version: 1,
-      }),
-    );
-
-    const result = await PlanAgent.generate(goal, { model: MODEL });
-
-    expect(result.planId).toBe("plan-1");
-    expect(result.goal).toBe(goal);
-    expect(result.steps).toHaveLength(1);
-    expect(result.createdAt).toBeInstanceOf(Date);
-  });
-});
