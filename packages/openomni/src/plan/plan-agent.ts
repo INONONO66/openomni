@@ -1,7 +1,6 @@
 import { ChatAgent, type AgentBudget, type ChatAgentInstance } from "@openomni/agent";
-import { Plan, type Tool } from "@openomni/protocol";
+import { Plan, type Storage, type Tool } from "@openomni/protocol";
 import { extractJson } from "./plan-json.js";
-import { InMemoryPlanStore, type PlanStore } from "./plan-store";
 import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "./plan-tools";
 
 function parsePlan(text: string): Plan.Result["plan"] {
@@ -16,6 +15,40 @@ function parsePlan(text: string): Plan.Result["plan"] {
   return result.data;
 }
 
+function memoryPlanAdapter(): Storage.PlanSubAdapter {
+  const store = new Map<
+    string,
+    { content: string; version: number; createdAt: number; updatedAt: number }
+  >();
+  return {
+    async write(id, content) {
+      const existing = store.get(id);
+      const now = Date.now();
+      if (existing) {
+        existing.content = content;
+        existing.version++;
+        existing.updatedAt = now;
+      } else {
+        store.set(id, { content, version: 1, createdAt: now, updatedAt: now });
+      }
+    },
+    async read(id) {
+      return store.get(id);
+    },
+    async delete(id) {
+      store.delete(id);
+    },
+    async list() {
+      return [...store.entries()].map(([id, entry]) => ({
+        id,
+        version: entry.version,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+      }));
+    },
+  };
+}
+
 export namespace PlanAgent {
   export interface GenerateConfig {
     model: { provider: string; id: string };
@@ -26,13 +59,13 @@ export namespace PlanAgent {
   }
 
   export interface CreateConfig extends GenerateConfig {
-    planStore?: PlanStore;
+    planSubAdapter?: Storage.PlanSubAdapter;
     stepGuard?: Parameters<typeof ChatAgent.create>[0]["stepGuard"];
   }
 
   export function create(config: CreateConfig): ChatAgentInstance {
-    const store = config.planStore ?? new InMemoryPlanStore();
-    const planExecutor = createPlanToolExecutor(store);
+    const adapter = config.planSubAdapter ?? memoryPlanAdapter();
+    const planExecutor = createPlanToolExecutor(adapter);
     const allTools: Tool.Spec[] = [...PLAN_TOOL_SPECS, ...(config.tools ?? [])];
     const planToolNames = new Set(PLAN_TOOL_SPECS.map((s) => s.name));
 
