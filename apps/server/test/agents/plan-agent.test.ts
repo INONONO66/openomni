@@ -4,14 +4,15 @@ import { resolveAgentName } from "../../src/router";
 import type { Adapter } from "@openomni/protocol";
 
 describe("plan agent registry", () => {
-  it("getAgentDefinition returns undefined for unregistered plan agent", () => {
+  it("getAgentDefinition returns definition for registered plan agent", () => {
     const definition = getAgentDefinition("plan");
-    expect(definition).toBeUndefined();
+    expect(definition).toBeDefined();
+    expect(definition?.name).toBe("plan");
   });
 });
 
 describe("plan agent routing", () => {
-  it("resolveAgentName falls back to dev when /plan prefix is used but plan agent not registered", () => {
+  it("resolveAgentName returns plan for /plan slash command", () => {
     const message: Adapter.InboundMessage = {
       id: "msg-1",
       surfaceKey: "test:1",
@@ -23,7 +24,7 @@ describe("plan agent routing", () => {
     };
 
     const agentName = resolveAgentName({ message });
-    expect(agentName).toBe("dev");
+    expect(agentName).toBe("plan");
   });
 
   it("resolveAgentName returns dev for non-plan messages", () => {

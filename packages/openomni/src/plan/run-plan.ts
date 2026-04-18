@@ -1,5 +1,6 @@
 import type { AgentBudget } from "@openomni/agent";
 import type { Plan, Storage, Tool } from "@openomni/protocol";
+import { memoryPlanAdapter } from "./memory-plan-adapter.js";
 import { PlanAgent } from "./plan-agent.js";
 
 export interface RunPlanConfig {
@@ -12,43 +13,9 @@ export interface RunPlanConfig {
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
 }
 
-function memoryAdapter(): Storage.PlanSubAdapter {
-  const store = new Map<
-    string,
-    { content: string; version: number; createdAt: number; updatedAt: number }
-  >();
-  return {
-    async write(id, content) {
-      const existing = store.get(id);
-      const now = Date.now();
-      if (existing) {
-        existing.content = content;
-        existing.version++;
-        existing.updatedAt = now;
-      } else {
-        store.set(id, { content, version: 1, createdAt: now, updatedAt: now });
-      }
-    },
-    async read(id) {
-      return store.get(id);
-    },
-    async delete(id) {
-      store.delete(id);
-    },
-    async list() {
-      return [...store.entries()].map(([id, entry]) => ({
-        id,
-        version: entry.version,
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-      }));
-    },
-  };
-}
-
 export async function runPlan(goal: string, config: RunPlanConfig): Promise<Plan.Result> {
   const planId = config.planId ?? crypto.randomUUID();
-  const planSubAdapter = config.planSubAdapter ?? memoryAdapter();
+  const planSubAdapter = config.planSubAdapter ?? memoryPlanAdapter();
 
   const prompt = config.systemPrompt?.includes("{{PLAN_ID}}")
     ? config.systemPrompt.replace("{{PLAN_ID}}", planId)
