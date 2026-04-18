@@ -42,7 +42,7 @@ function taskCreateTool(): NativeTool {
         const id = requireString(input, "id");
         const title = requireString(input, "title");
         const description = optionalString(input, "description");
-        const ownerRaw = input["owner"] as { type: string; id: string } | undefined;
+        const ownerRaw = input.owner as { type: string; id: string } | undefined;
         if (!ownerRaw || typeof ownerRaw !== "object") {
           throw new Error("Invalid input: owner must be an object with type and id");
         }
@@ -65,7 +65,7 @@ function taskCreateTool(): NativeTool {
           | "failed"
           | "cancelled";
 
-        const tagsRaw = input["tags"];
+        const tagsRaw = input.tags;
         const tags = Array.isArray(tagsRaw) ? (tagsRaw as string[]) : undefined;
 
         const task = {

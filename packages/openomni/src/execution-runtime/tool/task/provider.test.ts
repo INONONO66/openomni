@@ -32,10 +32,16 @@ describe("TaskToolProvider", () => {
 
   it("task_create and task_get have correct riskTier", () => {
     const tools = provider.listTools();
-    const create = tools.find((t) => t.spec.name === "task_create")!;
-    const get = tools.find((t) => t.spec.name === "task_get")!;
-    const list = tools.find((t) => t.spec.name === "task_list")!;
-    const update = tools.find((t) => t.spec.name === "task_update")!;
+    const create = tools.find((t) => t.spec.name === "task_create");
+    const get = tools.find((t) => t.spec.name === "task_get");
+    const list = tools.find((t) => t.spec.name === "task_list");
+    const update = tools.find((t) => t.spec.name === "task_update");
+
+    expect(create).toBeDefined();
+    expect(get).toBeDefined();
+    expect(list).toBeDefined();
+    expect(update).toBeDefined();
+    if (!create || !get || !list || !update) return;
 
     expect(create.riskTier).toBe(1);
     expect(get.riskTier).toBe(0);
