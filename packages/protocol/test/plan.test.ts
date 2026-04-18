@@ -1,9 +1,9 @@
 import { describe, test, expect } from "bun:test";
-import { PlanStepSchema, PlanSchema, PlanResultSchema } from "../src/plan/index.js";
+import { Plan } from "../src/plan/index.js";
 
 describe("PlanStep", () => {
   test("should parse valid step with required fields", () => {
-    const step = PlanStepSchema.parse({
+    const step = Plan.StepSchema.parse({
       stepId: "step-1",
       description: "Initialize project",
       expectedOutput: "Project initialized",
@@ -16,7 +16,7 @@ describe("PlanStep", () => {
   });
 
   test("should parse step with optional fields", () => {
-    const step = PlanStepSchema.parse({
+    const step = Plan.StepSchema.parse({
       stepId: "step-2",
       description: "Build API",
       expectedOutput: "API built",
@@ -39,7 +39,7 @@ describe("PlanStep", () => {
   });
 
   test("should default dependsOn to empty array", () => {
-    const step = PlanStepSchema.parse({
+    const step = Plan.StepSchema.parse({
       stepId: "step-1",
       description: "Test",
       expectedOutput: "Done",
@@ -49,7 +49,7 @@ describe("PlanStep", () => {
 
   test("should reject missing required fields", () => {
     expect(() =>
-      PlanStepSchema.parse({
+      Plan.StepSchema.parse({
         stepId: "step-1",
         description: "Test",
         // missing expectedOutput
@@ -61,7 +61,7 @@ describe("PlanStep", () => {
 describe("Plan", () => {
   test("should parse valid plan with empty steps", () => {
     const now = new Date();
-    const plan = PlanSchema.parse({
+    const plan = Plan.Schema.parse({
       planId: "plan-1",
       goal: "Build a web application",
       steps: [],
@@ -76,7 +76,7 @@ describe("Plan", () => {
 
   test("should parse valid plan with steps and dependencies", () => {
     const now = new Date();
-    const plan = PlanSchema.parse({
+    const plan = Plan.Schema.parse({
       planId: "plan-1",
       goal: "Build API",
       steps: [
@@ -102,7 +102,7 @@ describe("Plan", () => {
 
   test("should default version to 1", () => {
     const now = new Date();
-    const plan = PlanSchema.parse({
+    const plan = Plan.Schema.parse({
       planId: "plan-1",
       goal: "Test",
       steps: [],
@@ -114,7 +114,7 @@ describe("Plan", () => {
   test("should reject plan with duplicate step IDs", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "plan-1",
         goal: "Build API",
         steps: [
@@ -140,7 +140,7 @@ describe("Plan", () => {
   test("should reject plan with dependency on non-existent step", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "plan-1",
         goal: "Build API",
         steps: [
@@ -160,7 +160,7 @@ describe("Plan", () => {
   test("should reject missing required fields", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "plan-1",
         // missing goal
         steps: [],
@@ -180,7 +180,7 @@ describe("PlanResult", () => {
       createdAt: now,
       version: 1,
     };
-    const result = PlanResultSchema.parse({
+    const result = Plan.ResultSchema.parse({
       plan,
     });
     expect(result.plan.planId).toBe("plan-1");
@@ -196,7 +196,7 @@ describe("PlanResult", () => {
       createdAt: now,
       version: 1,
     };
-    const result = PlanResultSchema.parse({
+    const result = Plan.ResultSchema.parse({
       plan,
       reviewNotes: "Plan looks good, ready for execution",
     });
@@ -205,7 +205,7 @@ describe("PlanResult", () => {
 
   test("should reject missing plan", () => {
     expect(() =>
-      PlanResultSchema.parse({
+      Plan.ResultSchema.parse({
         // missing plan
       }),
     ).toThrow();
@@ -216,7 +216,7 @@ describe("version constraint (.int() only)", () => {
   test("rejects float version", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "p",
         goal: "g",
         steps: [],
@@ -229,7 +229,7 @@ describe("version constraint (.int() only)", () => {
   test("accepts version 0 (no positive constraint)", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "p",
         goal: "g",
         steps: [],
@@ -240,11 +240,11 @@ describe("version constraint (.int() only)", () => {
   });
 });
 
-describe("superRefine gaps (documented, not fixed)", () => {
-  test("self-dependency A→A is accepted (not detected by superRefine)", () => {
+describe("cycle detection", () => {
+  test("rejects self-dependency A→A", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "p",
         goal: "g",
         steps: [
@@ -258,13 +258,13 @@ describe("superRefine gaps (documented, not fixed)", () => {
         createdAt: now,
         version: 1,
       }),
-    ).not.toThrow();
+    ).toThrow();
   });
 
-  test("circular dependency A→B→A is accepted (not detected by superRefine)", () => {
+  test("rejects circular dependency A→B→A", () => {
     const now = new Date();
     expect(() =>
-      PlanSchema.parse({
+      Plan.Schema.parse({
         planId: "p",
         goal: "g",
         steps: [
@@ -284,10 +284,10 @@ describe("superRefine gaps (documented, not fixed)", () => {
         createdAt: now,
         version: 1,
       }),
-    ).not.toThrow();
+    ).toThrow();
   });
 
-  test("z.date() rejects string from JSON.parse (round-trip fails)", () => {
+  test("z.coerce.date() survives JSON round-trip", () => {
     const now = new Date();
     const plan = {
       planId: "p",
@@ -297,6 +297,7 @@ describe("superRefine gaps (documented, not fixed)", () => {
       version: 1,
     };
     const json = JSON.stringify(plan);
-    expect(() => PlanSchema.parse(JSON.parse(json))).toThrow();
+    const parsed = Plan.Schema.parse(JSON.parse(json));
+    expect(parsed.createdAt.getTime()).toBe(now.getTime());
   });
 });

@@ -40,7 +40,7 @@ describe("Session recovery lifecycle", () => {
     const suspended = await Session.suspend(session.id);
     expect(suspended).toBe(true);
 
-    const events: ExecutionEvent.T[] = [];
+    const events: ExecutionEvent[] = [];
     for await (const event of EventLog.replay(session.id)) {
       events.push(event);
     }
@@ -108,7 +108,7 @@ describe("Session recovery lifecycle", () => {
     expect(abandoned).toBe(true);
     expect(Session.get(session.id)).toBeUndefined();
 
-    const replayed: ExecutionEvent.T[] = [];
+    const replayed: ExecutionEvent[] = [];
     for await (const event of EventLog.replay(session.id)) {
       replayed.push(event);
     }

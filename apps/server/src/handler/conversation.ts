@@ -1,11 +1,11 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
 import { IngressEngine } from "@openomni/openomni";
-import type { Adapter, IngressResult } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
 
-function toResponseText(result: IngressResult): string {
+function toResponseText(result: Ingress.IngressResult): string {
   switch (result.mode) {
     case "direct":
       return result.result.output || "(no response)";

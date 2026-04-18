@@ -1,4 +1,4 @@
-import type { Tool, Adapter, AgentDef, InboundEvent } from "@openomni/protocol";
+import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
@@ -62,7 +62,7 @@ function selectTools(
   return { specs, tools };
 }
 
-function buildAgentDef(agentName: string, deps: BridgeDeps): AgentDef {
+function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
   const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
   const { specs, tools } = selectTools(definition, deps);
 
@@ -88,7 +88,7 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): AgentDef {
 function createBaseEvent(
   message: Adapter.InboundMessage,
   payload: string,
-): Omit<InboundEvent, "mode" | "agent" | "agents"> {
+): Omit<Ingress.InboundEvent, "mode" | "agent" | "agents"> {
   const descriptor = SurfaceKey.parse(message.surfaceKey);
 
   return {
@@ -114,7 +114,7 @@ export function buildInboundEvent(
   message: Adapter.InboundMessage,
   agentName: string,
   deps: BridgeDeps,
-): InboundEvent {
+): Ingress.InboundEvent {
   const mode = detectMode(message.text);
   const base = createBaseEvent(message, mode.text);
   const agent = buildAgentDef(agentName, deps);

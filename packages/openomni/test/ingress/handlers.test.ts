@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message } from "@openomni/protocol";
-import type { InboundEvent, Plan } from "@openomni/protocol";
+import type { Message, Ingress, Plan } from "@openomni/protocol";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 
@@ -134,7 +133,7 @@ describe("IngressHandlers", () => {
   it("buildExecutionRequest preserves tool execution config", () => {
     const toolConfig = { workspaceRoot: "/workspace/openomni" };
     const permissions = { denylist: ["bash"] };
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-request-1",
       surface: "tui",
       mode: "direct",
@@ -165,7 +164,7 @@ describe("IngressHandlers", () => {
     const generateMock = mock(async () => ({ plan }));
     PlanAgent.generate = generateMock;
 
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-plan-1",
       surface: "tui",
       mode: "plan",
@@ -195,7 +194,7 @@ describe("IngressHandlers", () => {
     PlanAgent.generate = generateMock;
     SessionBridge.storePlanResult = storePlanResultMock;
 
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-plan-2",
       surface: "tui",
       mode: "plan",
@@ -248,7 +247,7 @@ describe("IngressHandlers", () => {
       output: "ok",
       isError: false,
     });
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-direct-1",
       surface: "tui",
       mode: "direct",

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { InboundEvent } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -49,7 +49,7 @@ describe("IngressEngine", () => {
   it("ingest() with plan mode returns plan result", async () => {
     enqueuePlan("Create delivery plan");
 
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-plan-1",
       surface: "tui",
       workspace: "/repo",
@@ -73,7 +73,7 @@ describe("IngressEngine", () => {
   it("ingest() with direct mode returns direct result", async () => {
     testState.responseQueue.push("direct response");
 
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-direct-1",
       surface: "slack",
       workspace: "team-a",
@@ -109,7 +109,7 @@ describe("IngressEngine", () => {
     enqueuePlan("First plan");
     enqueuePlan("Second plan");
 
-    const eventA: InboundEvent = {
+    const eventA: Ingress.InboundEvent = {
       id: "event-reuse-1",
       surface: "tui",
       workspace: "/repo",
@@ -121,7 +121,7 @@ describe("IngressEngine", () => {
       },
     };
 
-    const eventB: InboundEvent = {
+    const eventB: Ingress.InboundEvent = {
       id: "event-reuse-2",
       surface: "tui",
       workspace: "/repo",
@@ -143,7 +143,7 @@ describe("IngressEngine", () => {
     enqueuePlan("Plan before reset");
     enqueuePlan("Plan after reset");
 
-    const event: InboundEvent = {
+    const event: Ingress.InboundEvent = {
       id: "event-reset-1",
       surface: "tui",
       workspace: "/repo",

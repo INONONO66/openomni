@@ -1,19 +1,13 @@
 import { ChatAgent } from "@openomni/agent";
-import {
-  type Execution,
-  PlanResultSchema,
-  type InboundEvent,
-  type IngressResult,
-} from "@openomni/protocol";
+import { Plan, type Ingress, type Execution } from "@openomni/protocol";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
 import { PlanAgent } from "../plan/plan-agent";
-import { normalizePlanPayload } from "../plan/plan-json";
 
 export namespace IngressHandlers {
   export interface HandlerContext {
     sessionId: string;
-    event: InboundEvent;
+    event: Ingress.InboundEvent;
     coordinator?: CoordinatorLike;
   }
 
@@ -48,7 +42,7 @@ export namespace IngressHandlers {
 
   export async function handlePlan(
     ctx: HandlerContext,
-  ): Promise<Extract<IngressResult, { mode: "plan" }>> {
+  ): Promise<Extract<Ingress.IngressResult, { mode: "plan" }>> {
     if (ctx.event.mode !== "plan") {
       throw new Error("handlePlan requires plan mode event");
     }
@@ -62,8 +56,7 @@ export namespace IngressHandlers {
         );
       }
       const raw = JSON.parse(coordinatorResult.output ?? "{}");
-      const normalized = { ...raw, plan: normalizePlanPayload(raw.plan) };
-      const planResult = PlanResultSchema.parse(normalized);
+      const planResult = Plan.ResultSchema.parse(raw);
       SessionBridge.storePlanResult(ctx.sessionId, planResult, ctx.event.agent.model);
       return { mode: "plan", sessionId: ctx.sessionId, result: planResult };
     }
@@ -82,7 +75,7 @@ export namespace IngressHandlers {
 
   export async function handleDirect(
     ctx: HandlerContext,
-  ): Promise<Extract<IngressResult, { mode: "direct" }>> {
+  ): Promise<Extract<Ingress.IngressResult, { mode: "direct" }>> {
     if (ctx.event.mode !== "direct") {
       throw new Error("handleDirect requires direct mode event");
     }

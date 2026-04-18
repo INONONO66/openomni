@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { Message } from "@openomni/protocol";
-import type { Plan, PlanResult } from "@openomni/protocol";
+import type { Message, Plan } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { SessionBridge } from "../../src/ingress/session-bridge";
 
@@ -99,7 +98,7 @@ describe("SessionBridge", () => {
   describe("storePlanResult + extractPlan round-trip", () => {
     it("should store and extract Plan with createdAt as Date", () => {
       const plan = createTestPlan();
-      const planResult: PlanResult = { plan };
+      const planResult: Plan.Result = { plan };
 
       SessionBridge.storePlanResult(sessionId, planResult, TEST_MODEL);
 

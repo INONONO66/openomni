@@ -63,7 +63,6 @@ export namespace ExecutionEvent {
     StepFailed,
     SessionSuspended,
   ]);
-  export type T = z.infer<typeof Schema>;
 
   export type LlmResponse = z.infer<typeof LlmResponse>;
   export type ToolStarted = z.infer<typeof ToolStarted>;
@@ -72,3 +71,6 @@ export namespace ExecutionEvent {
   export type StepFailed = z.infer<typeof StepFailed>;
   export type SessionSuspended = z.infer<typeof SessionSuspended>;
 }
+
+// declaration merging: `ExecutionEvent` is both a namespace and a type
+export type ExecutionEvent = z.infer<typeof ExecutionEvent.Schema>;

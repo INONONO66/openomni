@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { Plan } from "../plan/index.js";
-import { PlanSchema } from "../plan/index.js";
+import { Plan } from "../plan/index.js";
 
 export namespace Gate {
   export const Issue = z.object({
@@ -39,7 +38,7 @@ export namespace Gate {
   export type EnrichAction = z.infer<typeof EnrichAction>;
 
   export const EnrichResult = z.object({
-    plan: PlanSchema,
+    plan: Plan.Schema,
     applied: z.array(EnrichAction),
   });
   export type EnrichResult = z.infer<typeof EnrichResult>;

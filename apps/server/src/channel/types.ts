@@ -1,4 +1,4 @@
-import type { Adapter, IngressResult } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 
 /**
  * Platform API calls: send messages, typing indicators, authentication, rate limiting.
@@ -23,7 +23,7 @@ export interface InboundNormalizer<TPayload = unknown> {
  * MUST NOT: interpret business logic, call IngressEngine, manage adapter lifecycle.
  */
 export interface OutboundFormatter {
-  format(result: IngressResult, channelId: string, client: ChannelClient): Promise<void>;
+  format(result: Ingress.IngressResult, channelId: string, client: ChannelClient): Promise<void>;
 }
 
 /**

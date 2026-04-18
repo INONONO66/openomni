@@ -6,14 +6,14 @@ function getAdapter(): Storage.Adapter["eventLog"] | undefined {
 }
 
 export namespace EventLog {
-  export async function append(sessionId: string, event: ExecutionEvent.T): Promise<void> {
+  export async function append(sessionId: string, event: ExecutionEvent): Promise<void> {
     const adapter = getAdapter();
     if (adapter) {
       adapter.append(sessionId, event.type, JSON.stringify(event));
     }
   }
 
-  export async function* replay(sessionId: string): AsyncGenerator<ExecutionEvent.T> {
+  export async function* replay(sessionId: string): AsyncGenerator<ExecutionEvent> {
     const adapter = getAdapter();
     if (adapter) {
       for (const row of adapter.replay(sessionId)) {

@@ -8,7 +8,6 @@ export {
   PlanPipeline,
   StructuralGate,
   createPlanToolExecutor,
-  normalizePlanPayload,
   structuralGateCheck,
 } from "./plan";
 export type { EditResult, PlanDocument, PlanStore } from "./plan";

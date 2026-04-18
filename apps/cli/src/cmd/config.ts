@@ -23,10 +23,6 @@ async function promptUsers(): Promise<string[] | undefined> {
     .filter(Boolean);
 }
 
-// ---------------------------------------------------------------------------
-// config add
-// ---------------------------------------------------------------------------
-
 const ConfigAddCommand: CommandModule = {
   command: "add",
   describe: "Configure an adapter",
@@ -117,10 +113,6 @@ const ConfigAddCommand: CommandModule = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// config list
-// ---------------------------------------------------------------------------
-
 const ConfigListCommand: CommandModule = {
   command: "list",
   aliases: ["ls"],
@@ -167,10 +159,6 @@ const ConfigListCommand: CommandModule = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// config remove
-// ---------------------------------------------------------------------------
-
 const ConfigRemoveCommand: CommandModule = {
   command: "remove",
   aliases: ["rm"],
@@ -200,10 +188,6 @@ const ConfigRemoveCommand: CommandModule = {
     prompts.outro(`${selected} configuration removed`);
   },
 };
-
-// ---------------------------------------------------------------------------
-// config (parent)
-// ---------------------------------------------------------------------------
 
 export const ConfigCommand: CommandModule = {
   command: "config",
