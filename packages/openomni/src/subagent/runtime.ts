@@ -1,30 +1,22 @@
 import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
-import {
-  get as getAbortEntry,
-  register as registerAbortController,
-  remove as removeAbortController,
-} from "./abort-registry";
+import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import {
   buildAbortSignal,
-  clearRunTimeouts,
-  finalizeRun,
+  executeRun,
+  isTerminalStatus,
   raceAbortCompletion,
   setupRunTimeouts,
-  shouldSkipFailureUpdate,
-  isTerminalStatus,
 } from "./run-lifecycle";
 import { sendToMailbox } from "./session-mailbox.js";
 import {
   type RuntimeMessage,
-  toSessionModel,
-  createUserMessage,
-  createAssistantMessage,
   addTextPart,
+  createSpawnSession,
+  createUserMessage,
   publishEvent,
 } from "./shared";
-import { addAssistantResultParts } from "./message-builder";
 import {
   type RuntimeConfig,
   type SendCompactionConfig,
@@ -83,309 +75,6 @@ export namespace SubagentRuntime {
     output?: string;
   }
 
-  export function spawn(config: SpawnConfig): Promise<RunResult> {
-    const workerMeta = Subagent.ChildSessionMeta.parse({
-      kind: "subagent",
-      parentSessionId: config.parentSessionId,
-      agentName: config.agentName,
-      spawnDepth: config.parentSessionId ? undefined : 0,
-      status: "idle",
-    });
-
-    const session = config.parentSessionId
-      ? Session.createChild({
-          parentSessionId: config.parentSessionId,
-          title: config.title,
-          model: toSessionModel(config.model),
-          workerMeta,
-        })
-      : Session.create({
-          title: config.title,
-          model: toSessionModel(config.model),
-        });
-
-    if (!config.parentSessionId) {
-      Session.updateWorkerMeta(session.id, workerMeta);
-    }
-
-    publishEvent(Subagent.Events.WorkerSessionSpawned, {
-      sessionId: session.id,
-      parentSessionId: config.parentSessionId,
-      agentName: config.agentName,
-      spawnDepth: session.spawnDepth,
-      kind: "subagent",
-    });
-
-    return sendToMailbox(session.id, async () => {
-      const userMessage = createUserMessage(session.id, config.model);
-      Session.addMessage(session.id, userMessage);
-      addTextPart(session.id, userMessage.id, config.prompt);
-
-      const runId = crypto.randomUUID();
-      await WorkerRun.create(session.id, {
-        runId,
-        title: config.title,
-        prompt: config.prompt,
-      });
-      const abortEntry = registerAbortController(session.id, runId);
-      const signal = buildAbortSignal(abortEntry.controller, config.signal);
-      const timers = setupRunTimeouts(
-        session.id,
-        runId,
-        config.softTimeoutMs,
-        config.hardTimeoutMs,
-      );
-      await WorkerRun.updateStatus(session.id, runId, "starting");
-      publishEvent(Subagent.Events.WorkerRunStarted, {
-        sessionId: session.id,
-        runId,
-        title: config.title,
-      });
-
-      try {
-        await WorkerRun.updateStatus(session.id, runId, "running");
-        const permissions = config.permissions ?? { denylist: ["subagent"] };
-        const result = await runWithTranscript(session.id, config, signal, permissions);
-
-        const assistantMessage = createAssistantMessage(session.id, config.model);
-        Session.addMessage(session.id, assistantMessage);
-        addAssistantResultParts(session.id, assistantMessage.id, result);
-
-        await WorkerRun.updateStatus(session.id, runId, "succeeded", {
-          endedAt: Date.now(),
-          lastMessageId: assistantMessage.id,
-        });
-
-        publishEvent(Subagent.Events.WorkerRunCompleted, {
-          sessionId: session.id,
-          runId,
-          status: "succeeded",
-        });
-
-        return {
-          sessionId: session.id,
-          runId,
-          output: result.text,
-          finishReason: result.finishReason,
-        };
-      } catch (error) {
-        if (await shouldSkipFailureUpdate(session.id, runId)) {
-          throw error;
-        }
-
-        await WorkerRun.updateStatus(session.id, runId, "failed", {
-          endedAt: Date.now(),
-        });
-        publishEvent(Subagent.Events.WorkerRunFailed, {
-          sessionId: session.id,
-          runId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      } finally {
-        clearRunTimeouts(timers);
-        try {
-          await finalizeRun(session.id, runId);
-        } catch {
-          // cleanup must not mask the original error
-        }
-        removeAbortController(session.id, runId);
-      }
-    });
-  }
-
-  export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
-    const workerMeta = Subagent.ChildSessionMeta.parse({
-      kind: "subagent",
-      parentSessionId: config.parentSessionId,
-      agentName: config.agentName,
-      spawnDepth: config.parentSessionId ? undefined : 0,
-      status: "idle",
-    });
-
-    const session = config.parentSessionId
-      ? Session.createChild({
-          parentSessionId: config.parentSessionId,
-          title: config.title,
-          model: toSessionModel(config.model),
-          workerMeta,
-        })
-      : Session.create({
-          title: config.title,
-          model: toSessionModel(config.model),
-        });
-
-    if (!config.parentSessionId) {
-      Session.updateWorkerMeta(session.id, workerMeta);
-    }
-
-    publishEvent(Subagent.Events.WorkerSessionSpawned, {
-      sessionId: session.id,
-      parentSessionId: config.parentSessionId,
-      agentName: config.agentName,
-      spawnDepth: session.spawnDepth,
-      kind: "subagent",
-    });
-
-    const userMessage = createUserMessage(session.id, config.model);
-    Session.addMessage(session.id, userMessage);
-    addTextPart(session.id, userMessage.id, config.prompt);
-
-    const runId = crypto.randomUUID();
-    await WorkerRun.create(session.id, {
-      runId,
-      title: config.title,
-      prompt: config.prompt,
-    });
-
-    const abortEntry = registerAbortController(session.id, runId);
-    const signal = buildAbortSignal(abortEntry.controller, config.signal);
-    const timers = setupRunTimeouts(session.id, runId, config.softTimeoutMs, config.hardTimeoutMs);
-
-    await WorkerRun.updateStatus(session.id, runId, "starting");
-    publishEvent(Subagent.Events.WorkerRunStarted, {
-      sessionId: session.id,
-      runId,
-      title: config.title,
-    });
-    await WorkerRun.updateStatus(session.id, runId, "running");
-
-    const backgroundRun = sendToMailbox(session.id, async () => {
-      try {
-        const permissions = config.permissions ?? { denylist: ["subagent"] };
-        const result = await runWithTranscript(session.id, config, signal, permissions);
-
-        const assistantMessage = createAssistantMessage(session.id, config.model);
-        Session.addMessage(session.id, assistantMessage);
-        addAssistantResultParts(session.id, assistantMessage.id, result);
-
-        await WorkerRun.updateStatus(session.id, runId, "succeeded", {
-          endedAt: Date.now(),
-          lastMessageId: assistantMessage.id,
-        });
-
-        publishEvent(Subagent.Events.WorkerRunCompleted, {
-          sessionId: session.id,
-          runId,
-          status: "succeeded",
-        });
-      } catch (error) {
-        if (await shouldSkipFailureUpdate(session.id, runId)) {
-          throw error;
-        }
-
-        await WorkerRun.updateStatus(session.id, runId, "failed", {
-          endedAt: Date.now(),
-        });
-        publishEvent(Subagent.Events.WorkerRunFailed, {
-          sessionId: session.id,
-          runId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      } finally {
-        clearRunTimeouts(timers);
-        try {
-          await finalizeRun(session.id, runId);
-        } catch {
-          // cleanup must not mask the original error
-        }
-        removeAbortController(session.id, runId);
-      }
-    });
-
-    backgroundRun.catch(() => undefined);
-
-    return {
-      sessionId: session.id,
-      runId,
-    };
-  }
-
-  export function send(config: SendConfig): Promise<RunResult> {
-    const session = Session.get(config.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${config.sessionId}`);
-    }
-
-    return sendToMailbox(session.id, async () => {
-      const userMessage = createUserMessage(session.id, config.model);
-      Session.addMessage(session.id, userMessage);
-      addTextPart(session.id, userMessage.id, config.prompt);
-
-      const runId = crypto.randomUUID();
-      await WorkerRun.create(session.id, {
-        runId,
-        title: "retry",
-        prompt: config.prompt,
-      });
-      const abortEntry = registerAbortController(session.id, runId);
-      const signal = buildAbortSignal(abortEntry.controller, config.signal);
-      const timers = setupRunTimeouts(
-        session.id,
-        runId,
-        config.softTimeoutMs,
-        config.hardTimeoutMs,
-      );
-      await WorkerRun.updateStatus(session.id, runId, "starting");
-      await WorkerRun.updateStatus(session.id, runId, "running");
-
-      try {
-        const permissions = config.permissions ?? { denylist: ["subagent"] };
-        const messages = await maybeCompactSendTranscript(
-          session.id,
-          buildChildMessagesInternal(session.id),
-          config.compaction,
-        );
-        const result = await runWithTranscript(session.id, config, signal, permissions, messages);
-
-        const assistantMessage = createAssistantMessage(session.id, config.model);
-        Session.addMessage(session.id, assistantMessage);
-        addAssistantResultParts(session.id, assistantMessage.id, result);
-
-        await WorkerRun.updateStatus(session.id, runId, "succeeded", {
-          endedAt: Date.now(),
-          lastMessageId: assistantMessage.id,
-        });
-
-        publishEvent(Subagent.Events.WorkerRunCompleted, {
-          sessionId: session.id,
-          runId,
-          status: "succeeded",
-        });
-
-        return {
-          sessionId: session.id,
-          runId,
-          output: result.text,
-          finishReason: result.finishReason,
-        };
-      } catch (error) {
-        if (await shouldSkipFailureUpdate(session.id, runId)) {
-          throw error;
-        }
-
-        await WorkerRun.updateStatus(session.id, runId, "failed", {
-          endedAt: Date.now(),
-        });
-        publishEvent(Subagent.Events.WorkerRunFailed, {
-          sessionId: session.id,
-          runId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      } finally {
-        clearRunTimeouts(timers);
-        try {
-          await finalizeRun(session.id, runId);
-        } catch {
-          // cleanup must not mask the original error
-        }
-        removeAbortController(session.id, runId);
-      }
-    });
-  }
-
   export interface ResumeConfig extends RuntimeConfig {
     sessionId: string;
   }
@@ -402,6 +91,107 @@ export namespace SubagentRuntime {
     sessionId: string;
     runId?: string;
     hardTimeoutMs?: number;
+  }
+
+  export function spawn(config: SpawnConfig): Promise<RunResult> {
+    const session = createSpawnSession(config);
+
+    return sendToMailbox(session.id, async () => {
+      const userMessage = createUserMessage(session.id, config.model);
+      Session.addMessage(session.id, userMessage);
+      addTextPart(session.id, userMessage.id, config.prompt);
+
+      const runId = crypto.randomUUID();
+      await WorkerRun.create(session.id, { runId, title: config.title, prompt: config.prompt });
+      const abortEntry = registerAbortController(session.id, runId);
+      const signal = buildAbortSignal(abortEntry.controller, config.signal);
+      const timers = setupRunTimeouts(
+        session.id,
+        runId,
+        config.softTimeoutMs,
+        config.hardTimeoutMs,
+      );
+      await WorkerRun.updateStatus(session.id, runId, "starting");
+      publishEvent(Subagent.Events.WorkerRunStarted, {
+        sessionId: session.id,
+        runId,
+        title: config.title,
+      });
+
+      await WorkerRun.updateStatus(session.id, runId, "running");
+      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      return executeRun(session.id, runId, config.model, timers, () =>
+        runWithTranscript(session.id, config, signal, permissions),
+      );
+    });
+  }
+
+  export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
+    const session = createSpawnSession(config);
+
+    const userMessage = createUserMessage(session.id, config.model);
+    Session.addMessage(session.id, userMessage);
+    addTextPart(session.id, userMessage.id, config.prompt);
+
+    const runId = crypto.randomUUID();
+    await WorkerRun.create(session.id, { runId, title: config.title, prompt: config.prompt });
+    const abortEntry = registerAbortController(session.id, runId);
+    const signal = buildAbortSignal(abortEntry.controller, config.signal);
+    const timers = setupRunTimeouts(session.id, runId, config.softTimeoutMs, config.hardTimeoutMs);
+
+    await WorkerRun.updateStatus(session.id, runId, "starting");
+    publishEvent(Subagent.Events.WorkerRunStarted, {
+      sessionId: session.id,
+      runId,
+      title: config.title,
+    });
+    await WorkerRun.updateStatus(session.id, runId, "running");
+
+    const permissions = config.permissions ?? { denylist: ["subagent"] };
+    const backgroundRun = sendToMailbox(session.id, () =>
+      executeRun(session.id, runId, config.model, timers, () =>
+        runWithTranscript(session.id, config, signal, permissions),
+      ),
+    );
+    backgroundRun.catch(() => undefined);
+
+    return { sessionId: session.id, runId };
+  }
+
+  export function send(config: SendConfig): Promise<RunResult> {
+    const session = Session.get(config.sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${config.sessionId}`);
+    }
+
+    return sendToMailbox(session.id, async () => {
+      const userMessage = createUserMessage(session.id, config.model);
+      Session.addMessage(session.id, userMessage);
+      addTextPart(session.id, userMessage.id, config.prompt);
+
+      const runId = crypto.randomUUID();
+      await WorkerRun.create(session.id, { runId, title: "retry", prompt: config.prompt });
+      const abortEntry = registerAbortController(session.id, runId);
+      const signal = buildAbortSignal(abortEntry.controller, config.signal);
+      const timers = setupRunTimeouts(
+        session.id,
+        runId,
+        config.softTimeoutMs,
+        config.hardTimeoutMs,
+      );
+      await WorkerRun.updateStatus(session.id, runId, "starting");
+      await WorkerRun.updateStatus(session.id, runId, "running");
+
+      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      const messages = await maybeCompactSendTranscript(
+        session.id,
+        buildChildMessagesInternal(session.id),
+        config.compaction,
+      );
+      return executeRun(session.id, runId, config.model, timers, () =>
+        runWithTranscript(session.id, config, signal, permissions, messages),
+      );
+    });
   }
 
   export async function resume(config: ResumeConfig): Promise<ResumeResult> {
@@ -430,54 +220,11 @@ export namespace SubagentRuntime {
         runId,
       });
 
-      try {
-        await WorkerRun.updateStatus(config.sessionId, runId, "running");
-        const result = await runWithTranscript(config.sessionId, config);
-
-        const assistantMessage = createAssistantMessage(config.sessionId, config.model);
-        Session.addMessage(config.sessionId, assistantMessage);
-        addAssistantResultParts(config.sessionId, assistantMessage.id, result);
-
-        await WorkerRun.updateStatus(config.sessionId, runId, "succeeded", {
-          endedAt: Date.now(),
-          lastMessageId: assistantMessage.id,
-        });
-
-        publishEvent(Subagent.Events.WorkerRunCompleted, {
-          sessionId: config.sessionId,
-          runId,
-          status: "succeeded",
-        });
-
-        return {
-          resumed: true,
-          sessionId: config.sessionId,
-          runId,
-          output: result.text,
-          finishReason: result.finishReason,
-        };
-      } catch (error) {
-        if (await shouldSkipFailureUpdate(config.sessionId, runId)) {
-          throw error;
-        }
-
-        await WorkerRun.updateStatus(config.sessionId, runId, "failed", {
-          endedAt: Date.now(),
-        });
-        publishEvent(Subagent.Events.WorkerRunFailed, {
-          sessionId: config.sessionId,
-          runId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      } finally {
-        try {
-          await finalizeRun(config.sessionId, runId);
-        } catch {
-          // cleanup must not mask the original error
-        }
-        removeAbortController(config.sessionId, runId);
-      }
+      await WorkerRun.updateStatus(config.sessionId, runId, "running");
+      const result = await executeRun(config.sessionId, runId, config.model, undefined, () =>
+        runWithTranscript(config.sessionId, config),
+      );
+      return { resumed: true, ...result };
     });
   }
 

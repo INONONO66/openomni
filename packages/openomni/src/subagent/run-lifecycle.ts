@@ -1,3 +1,4 @@
+import type { ChatAgent } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
 import { Session, WorkerRun } from "@openomni/session";
 import {
@@ -5,7 +6,8 @@ import {
   get as getAbortEntry,
   remove as removeAbortController,
 } from "./abort-registry";
-import { publishEvent } from "./shared";
+import { addAssistantResultParts } from "./message-builder";
+import { createAssistantMessage, publishEvent, type RuntimeModel } from "./shared";
 
 export function buildAbortSignal(controller: AbortController, signal?: AbortSignal): AbortSignal {
   return AbortSignal.any(
@@ -155,4 +157,49 @@ export function setupRunTimeouts(
 export function clearRunTimeouts(timers: TimeoutTimers): void {
   if (timers.soft) clearTimeout(timers.soft);
   if (timers.hard) clearTimeout(timers.hard);
+}
+
+type AgentRunResult = Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>;
+
+export async function executeRun(
+  sessionId: string,
+  runId: string,
+  model: RuntimeModel,
+  timers: TimeoutTimers | undefined,
+  runFn: () => Promise<AgentRunResult>,
+): Promise<{
+  sessionId: string;
+  runId: string;
+  output: string;
+  finishReason: AgentRunResult["finishReason"];
+}> {
+  try {
+    const result = await runFn();
+    const assistantMessage = createAssistantMessage(sessionId, model);
+    Session.addMessage(sessionId, assistantMessage);
+    addAssistantResultParts(sessionId, assistantMessage.id, result);
+    await WorkerRun.updateStatus(sessionId, runId, "succeeded", {
+      endedAt: Date.now(),
+      lastMessageId: assistantMessage.id,
+    });
+    publishEvent(Subagent.Events.WorkerRunCompleted, { sessionId, runId, status: "succeeded" });
+    return { sessionId, runId, output: result.text, finishReason: result.finishReason };
+  } catch (error) {
+    if (await shouldSkipFailureUpdate(sessionId, runId)) throw error;
+    await WorkerRun.updateStatus(sessionId, runId, "failed", { endedAt: Date.now() });
+    publishEvent(Subagent.Events.WorkerRunFailed, {
+      sessionId,
+      runId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    if (timers) clearRunTimeouts(timers);
+    try {
+      await finalizeRun(sessionId, runId);
+    } catch {
+      // cleanup must not mask the original error
+    }
+    removeAbortController(sessionId, runId);
+  }
 }

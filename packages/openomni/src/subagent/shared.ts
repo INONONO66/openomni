@@ -1,4 +1,5 @@
 import type { Message } from "@openomni/protocol";
+import { Subagent } from "@openomni/protocol";
 import { Bus, type BusEvent, Session } from "@openomni/session";
 
 export type RuntimeModel = { provider: string; id: string };
@@ -61,6 +62,47 @@ export function addTextPart(sessionId: string, messageId: string, text: string):
     text,
   };
   Session.addPart(messageId, part);
+}
+
+export function createSpawnSession(config: {
+  parentSessionId?: string;
+  agentName: string;
+  title: string;
+  model: RuntimeModel;
+}): ReturnType<typeof Session.create> {
+  const workerMeta = Subagent.ChildSessionMeta.parse({
+    kind: "subagent",
+    parentSessionId: config.parentSessionId,
+    agentName: config.agentName,
+    spawnDepth: config.parentSessionId ? undefined : 0,
+    status: "idle",
+  });
+
+  const session = config.parentSessionId
+    ? Session.createChild({
+        parentSessionId: config.parentSessionId,
+        title: config.title,
+        model: toSessionModel(config.model),
+        workerMeta,
+      })
+    : Session.create({
+        title: config.title,
+        model: toSessionModel(config.model),
+      });
+
+  if (!config.parentSessionId) {
+    Session.updateWorkerMeta(session.id, workerMeta);
+  }
+
+  publishEvent(Subagent.Events.WorkerSessionSpawned, {
+    sessionId: session.id,
+    parentSessionId: config.parentSessionId,
+    agentName: config.agentName,
+    spawnDepth: session.spawnDepth,
+    kind: "subagent",
+  });
+
+  return session;
 }
 
 export function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
