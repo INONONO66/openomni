@@ -40,7 +40,7 @@ export namespace PlanPipeline {
       const enrichedGoal = previousFeedback
         ? `${goal}\n\n[Previous plan was rejected. Address this feedback:\n${previousFeedback}]`
         : goal;
-      lastPlan = (await PlanAgent.generate(enrichedGoal, config.generator)).plan;
+      lastPlan = await PlanAgent.generate(enrichedGoal, config.generator);
       if (config.enrichers && config.enrichers.length > 0) {
         for (const enricher of config.enrichers) {
           try {

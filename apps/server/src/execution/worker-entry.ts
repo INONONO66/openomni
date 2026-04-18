@@ -1,12 +1,11 @@
 import { ChatAgent, AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
-import { initialize } from "@openomni/session";
+import { initialize, Storage } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
   ToolProxyProvider,
-  PlanAgent,
   PlanToolProvider,
   SessionBridge,
   SystemToolProvider,
@@ -15,6 +14,7 @@ import {
   buildToolCatalog,
   buildWorkerMiddleware,
   createWorkerSubagentRuntime,
+  runPlan,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
@@ -175,11 +175,27 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             finishReason: runResult.finishReason,
           });
         } else {
-          const goal = SessionBridge.buildPlanGoal(sessionId);
-          const result = await PlanAgent.generate(goal, {
+          const planWorkspaceRoot =
+            request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
+          const planSystemProvider = new SystemToolProvider(planWorkspaceRoot);
+          const planToolProvider = new PlanToolProvider();
+          const planAvailableTools = [
+            ...planSystemProvider.listTools(),
+            ...planToolProvider.listTools(),
+          ];
+          const { tools: planTools, toolExecutor: planToolExecutor } = createExecutionToolContext(
+            request,
+            planAvailableTools,
+          );
+          const goal = await SessionBridge.buildPlanGoal(sessionId);
+          const planResult = await runPlan(goal, {
             model: request.model,
             systemPrompt: request.systemPrompt,
+            planSubAdapter: Storage.get().plan!,
+            planId: request.runId,
             budget: request.budget,
+            tools: planTools,
+            toolExecutor: planToolExecutor,
           });
 
           server.notify("worker.run_completed", { runId, sessionId, status: "succeeded" });
@@ -188,7 +204,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             runId,
             sessionId,
             status: "succeeded",
-            output: JSON.stringify(result),
+            output: JSON.stringify(planResult),
           });
         }
       } catch (err) {

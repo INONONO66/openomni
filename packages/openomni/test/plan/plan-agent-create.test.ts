@@ -277,9 +277,9 @@ describe("PlanAgent.generate (regression)", () => {
 
     const result = await PlanAgent.generate(goal, { model: MODEL });
 
-    expect(result.plan.planId).toBe("plan-1");
-    expect(result.plan.goal).toBe(goal);
-    expect(result.plan.steps).toHaveLength(1);
-    expect(result.plan.createdAt).toBeInstanceOf(Date);
+    expect(result.planId).toBe("plan-1");
+    expect(result.goal).toBe(goal);
+    expect(result.steps).toHaveLength(1);
+    expect(result.createdAt).toBeInstanceOf(Date);
   });
 });

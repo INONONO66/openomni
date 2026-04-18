@@ -3,9 +3,7 @@ import type { Gate, Plan } from "@openomni/protocol";
 
 type GenerateFn = Awaited<typeof import("../../src/plan/plan-agent")>["PlanAgent"]["generate"];
 
-const mockGenerate = mock<GenerateFn>(async (_goal, _config) => ({
-  plan: createPlan("plan-default"),
-}));
+const mockGenerate = mock<GenerateFn>(async (_goal, _config) => createPlan("plan-default"));
 
 let PlanPipeline: typeof import("../../src/plan/plan-pipeline").PlanPipeline;
 let originalGenerate: GenerateFn;
@@ -31,7 +29,7 @@ beforeEach(() => {
 
 describe("PlanPipeline enrichers", () => {
   it("runs without enrichers like before", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
 
     const result = await PlanPipeline.run("goal", {
       generator: {
@@ -47,7 +45,7 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("enriches plan before passing to gates", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1", "orig-step") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1", "orig-step"));
 
     const enrichedPlan = createPlan("p1", "orig-step");
     enrichedPlan.steps.push({
@@ -99,7 +97,7 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("keeps original plan when enricher returns skip (empty applied)", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
 
     const enricher: Gate.Enricher = {
       name: "skip-enricher",
@@ -128,7 +126,7 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("runs multiple enrichers in order", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
     const callOrder: string[] = [];
 
     const enricherA: Gate.Enricher = {
@@ -158,7 +156,7 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("returns error when enricher throws", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
 
     const enricher: Gate.Enricher = {
       name: "bad-enricher",
@@ -183,7 +181,7 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("fails when enriched plan is structurally invalid", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
 
     const enricher: Gate.Enricher = {
       name: "bad-plan-enricher",
@@ -227,8 +225,8 @@ describe("PlanPipeline enrichers", () => {
   });
 
   it("runs enrichers on each retry attempt", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p1") });
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("p2") });
+    mockGenerate.mockResolvedValueOnce(createPlan("p1"));
+    mockGenerate.mockResolvedValueOnce(createPlan("p2"));
 
     let enrichCallCount = 0;
     const enricher: Gate.Enricher = {

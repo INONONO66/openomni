@@ -10,11 +10,9 @@ import {
 } from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
-let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
-  ({ SessionBridge } = await import("../../src/ingress/session-bridge"));
 });
 
 afterAll(() => {
@@ -41,32 +39,15 @@ beforeEach(() => {
   });
 });
 
-function enqueuePlan(planId: string, goal: string, stepId: string): void {
-  testState.responseQueue.push(
-    JSON.stringify({
-      plan: {
-        planId,
-        goal,
-        steps: [
-          {
-            stepId,
-            description: `Do ${stepId}`,
-            expectedOutput: `${stepId} done`,
-            dependsOn: [],
-          },
-        ],
-        createdAt: "2024-01-01T00:00:00.000Z",
-        version: 1,
-      },
-    }),
-  );
+function enqueuePlan(planId: string): void {
+  testState.responseQueue.push(JSON.stringify({ planId }));
 }
 
 describe("IngressEngine integration pipeline", () => {
   describe("plan -> re-plan lifecycle", () => {
-    it("reuses session and builds on previous plan", async () => {
-      enqueuePlan("plan-1", "Build a REST API", "step-1");
-      enqueuePlan("plan-2", "Add auth to step 2", "step-2");
+    it("reuses session and returns planId reference", async () => {
+      enqueuePlan("plan-1");
+      enqueuePlan("plan-2");
 
       const first = await IngressEngine.ingest({
         id: "evt-plan-1",
@@ -80,11 +61,8 @@ describe("IngressEngine integration pipeline", () => {
       });
 
       expect(first.mode).toBe("plan");
-      if (first.mode !== "plan") {
-        throw new Error("Expected plan mode result");
-      }
-      const firstStoredPlan = SessionBridge.extractPlan(first.sessionId);
-      expect(firstStoredPlan.goal).toBe("Build a REST API");
+      if (first.mode !== "plan") throw new Error("Expected plan mode result");
+      expect(first.result.planId).toBe("plan-1");
 
       const second = await IngressEngine.ingest({
         id: "evt-plan-2",
@@ -98,10 +76,8 @@ describe("IngressEngine integration pipeline", () => {
       });
 
       expect(second.mode).toBe("plan");
-      if (second.mode !== "plan") {
-        throw new Error("Expected plan mode result");
-      }
-      expect(second.result.plan.goal).toBe("Add auth to step 2");
+      if (second.mode !== "plan") throw new Error("Expected plan mode result");
+      expect(second.result.planId).toBe("plan-2");
       expect(first.sessionId).toBe(second.sessionId);
     });
   });
@@ -143,8 +119,8 @@ describe("IngressEngine integration pipeline", () => {
 
   describe("session isolation", () => {
     it("does not leak plan context across different surface keys", async () => {
-      enqueuePlan("plan-a", "Plan A", "step-a");
-      enqueuePlan("plan-b", "Plan B", "step-b");
+      enqueuePlan("plan-a");
+      enqueuePlan("plan-b");
 
       const first = await IngressEngine.ingest({
         id: "evt-isolation-a",
@@ -169,10 +145,11 @@ describe("IngressEngine integration pipeline", () => {
       });
 
       expect(first.sessionId).not.toBe(second.sessionId);
-      const planA = SessionBridge.extractPlan(first.sessionId);
-      const planB = SessionBridge.extractPlan(second.sessionId);
-      expect(planA.goal).toBe("Plan A");
-      expect(planB.goal).toBe("Plan B");
+      if (first.mode !== "plan" || second.mode !== "plan") {
+        throw new Error("Expected plan mode results");
+      }
+      expect(first.result.planId).toBe("plan-a");
+      expect(second.result.planId).toBe("plan-b");
     });
   });
 

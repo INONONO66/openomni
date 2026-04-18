@@ -1,9 +1,8 @@
 import { ChatAgent } from "@openomni/agent";
 import { type Execution, Subagent } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus, Storage } from "@openomni/session";
 import {
   type AgentToolProvider,
-  PlanAgent,
   PlanToolProvider,
   SessionBridge,
   SystemToolProvider,
@@ -11,6 +10,7 @@ import {
   TodoToolProvider,
   buildWorkerMiddleware,
   type CoordinatorLike,
+  runPlan,
 } from "@openomni/openomni";
 import type { McpToolProvider } from "../tool/mcp";
 import type { CustomToolProvider } from "../tool/custom";
@@ -45,7 +45,9 @@ async function run(config: Config, request: Execution.Request): Promise<Executio
 
   try {
     const result =
-      request.mode === "direct" ? await runDirect(config, request) : await runPlan(request);
+      request.mode === "direct"
+        ? await runDirect(config, request)
+        : await executePlan(config, request);
 
     Bus.publish(Subagent.Events.WorkerRunCompleted, {
       traceId: crypto.randomUUID(),
@@ -120,18 +122,41 @@ async function runDirect(config: Config, request: Execution.Request): Promise<Ex
   };
 }
 
-async function runPlan(request: Execution.Request): Promise<Execution.Result> {
-  const goal = SessionBridge.buildPlanGoal(request.sessionId);
-  const result = await PlanAgent.generate(goal, {
+async function executePlan(config: Config, request: Execution.Request): Promise<Execution.Result> {
+  const { runId, sessionId } = request;
+  const workspaceRoot =
+    request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspaceRoot;
+  const systemProvider = new SystemToolProvider(workspaceRoot);
+  const taskProvider = new TaskToolProvider();
+  const planProvider = new PlanToolProvider();
+  const todoProvider = new TodoToolProvider();
+
+  const availableTools = [
+    ...systemProvider.listTools(),
+    ...config.agentProvider.listTools(),
+    ...config.mcpProvider.listTools(),
+    ...(config.customProvider?.listTools() ?? []),
+    ...taskProvider.listTools(),
+    ...planProvider.listTools(),
+    ...todoProvider.listTools(),
+  ];
+
+  const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
+  const goal = await SessionBridge.buildPlanGoal(sessionId);
+  const planResult = await runPlan(goal, {
     model: request.model,
     systemPrompt: request.systemPrompt,
+    planSubAdapter: Storage.get().plan!,
+    planId: runId,
     budget: request.budget,
+    tools,
+    toolExecutor,
   });
 
   return {
-    runId: request.runId,
-    sessionId: request.sessionId,
+    runId,
+    sessionId,
     status: "succeeded",
-    output: JSON.stringify(result),
+    output: JSON.stringify(planResult),
   };
 }

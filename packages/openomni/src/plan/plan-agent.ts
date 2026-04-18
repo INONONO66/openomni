@@ -3,7 +3,7 @@ import { Plan, type Storage, type Tool } from "@openomni/protocol";
 import { extractJson } from "./plan-json.js";
 import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "./plan-tools";
 
-function parsePlan(text: string): Plan.Result["plan"] {
+function parsePlan(text: string): Plan {
   let raw: unknown;
   try {
     raw = JSON.parse(extractJson(text));
@@ -88,7 +88,7 @@ export namespace PlanAgent {
     });
   }
 
-  export async function generate(goal: string, config: GenerateConfig): Promise<Plan.Result> {
+  export async function generate(goal: string, config: GenerateConfig): Promise<Plan> {
     const agent = ChatAgent.create({
       model: config.model,
       systemPrompt: config.systemPrompt ?? "",
@@ -97,6 +97,6 @@ export namespace PlanAgent {
       toolExecutor: config.toolExecutor,
     });
     const result = await agent.run({ messages: [{ role: "user", content: goal }] });
-    return { plan: parsePlan(result.text) };
+    return parsePlan(result.text);
   }
 }

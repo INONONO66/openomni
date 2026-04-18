@@ -7,9 +7,10 @@ export {
   PlanPipeline,
   StructuralGate,
   createPlanToolExecutor,
+  runPlan,
   structuralGateCheck,
 } from "./plan";
-export type { EditResult, PlanDocument, PlanStore } from "./plan";
+export type { EditResult, PlanDocument, PlanStore, RunPlanConfig } from "./plan";
 
 // DAG utilities
 export { DAG } from "./dag";

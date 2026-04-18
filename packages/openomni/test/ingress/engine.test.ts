@@ -38,30 +38,13 @@ beforeEach(() => {
   });
 });
 
-function enqueuePlan(goal: string): void {
-  testState.responseQueue.push(
-    JSON.stringify({
-      plan: {
-        planId: crypto.randomUUID(),
-        goal,
-        steps: [
-          {
-            stepId: "s1",
-            description: "Execute step",
-            expectedOutput: "done",
-            dependsOn: [],
-          },
-        ],
-        createdAt: new Date().toISOString(),
-        version: 1,
-      },
-    }),
-  );
+function enqueuePlan(planId?: string): void {
+  testState.responseQueue.push(JSON.stringify({ planId: planId ?? crypto.randomUUID() }));
 }
 
 describe("IngressEngine", () => {
   it("ingest() with plan mode returns plan result", async () => {
-    enqueuePlan("Create delivery plan");
+    enqueuePlan();
 
     const event: Ingress.InboundEvent = {
       id: "event-plan-1",
@@ -81,7 +64,7 @@ describe("IngressEngine", () => {
       throw new Error("Expected plan mode result");
     }
     expect(result.sessionId).toBeString();
-    expect(result.result.plan.goal).toBe("Create delivery plan");
+    expect(result.result.planId).toBeString();
   });
 
   it("ingest() with direct mode returns direct result", async () => {
@@ -120,8 +103,8 @@ describe("IngressEngine", () => {
   });
 
   it("reuses session for same surface key across calls", async () => {
-    enqueuePlan("First plan");
-    enqueuePlan("Second plan");
+    enqueuePlan();
+    enqueuePlan();
 
     const eventA: Ingress.InboundEvent = {
       id: "event-reuse-1",
@@ -154,8 +137,8 @@ describe("IngressEngine", () => {
   });
 
   it("reset() clears session mapping state", async () => {
-    enqueuePlan("Plan before reset");
-    enqueuePlan("Plan after reset");
+    enqueuePlan();
+    enqueuePlan();
 
     const event: Ingress.InboundEvent = {
       id: "event-reset-1",

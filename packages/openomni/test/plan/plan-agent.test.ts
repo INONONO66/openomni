@@ -119,10 +119,10 @@ describe("PlanAgent.generate", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
 
-    expect(result.plan.planId).toBe("plan-1");
-    expect(result.plan.goal).toBe(goal);
-    expect(result.plan.steps).toHaveLength(1);
-    expect(result.plan.createdAt).toBeInstanceOf(Date);
+    expect(result.planId).toBe("plan-1");
+    expect(result.goal).toBe(goal);
+    expect(result.steps).toHaveLength(1);
+    expect(result.createdAt).toBeInstanceOf(Date);
   });
 
   it("throws when LLM output is not valid JSON", async () => {
@@ -175,7 +175,7 @@ describe("PlanAgent.generate", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
 
-    expect(result.plan.goal).toBe(goal);
+    expect(result.goal).toBe(goal);
   });
 
   it("parses steps with dependsOn links", async () => {
@@ -206,7 +206,7 @@ describe("PlanAgent.generate", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
 
-    expect(result.plan.steps[1]?.dependsOn).toEqual(["s1"]);
+    expect(result.steps[1]?.dependsOn).toEqual(["s1"]);
   });
 
   it("accepts empty steps array as a valid plan", async () => {
@@ -224,6 +224,6 @@ describe("PlanAgent.generate", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
     });
 
-    expect(result.plan.steps).toEqual([]);
+    expect(result.steps).toEqual([]);
   });
 });

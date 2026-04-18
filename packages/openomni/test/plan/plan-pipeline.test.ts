@@ -3,9 +3,7 @@ import type { Gate, Plan } from "@openomni/protocol";
 
 type GenerateFn = Awaited<typeof import("../../src/plan/plan-agent")>["PlanAgent"]["generate"];
 
-const mockGenerate = mock<GenerateFn>(async (_goal, _config) => ({
-  plan: createPlan("plan-default"),
-}));
+const mockGenerate = mock<GenerateFn>(async (_goal, _config) => createPlan("plan-default"));
 
 let PlanPipeline: typeof import("../../src/plan/plan-pipeline").PlanPipeline;
 let originalGenerate: GenerateFn;
@@ -30,7 +28,7 @@ beforeEach(() => {
 
 describe("PlanPipeline.run", () => {
   it("succeeds on first attempt when no gates are configured", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("plan-1") });
+    mockGenerate.mockResolvedValueOnce(createPlan("plan-1"));
 
     const result = await PlanPipeline.run("Create release plan", {
       generator: {
@@ -74,8 +72,8 @@ describe("PlanPipeline.run", () => {
   });
 
   it("retries after a failed gate and succeeds on second attempt", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("plan-1") });
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("plan-2") });
+    mockGenerate.mockResolvedValueOnce(createPlan("plan-1"));
+    mockGenerate.mockResolvedValueOnce(createPlan("plan-2"));
 
     const contexts: Gate.Context[] = [];
     const retryGate: Gate.Check = {
@@ -134,8 +132,8 @@ describe("PlanPipeline.run", () => {
   });
 
   it("returns failure when max retries are exceeded", async () => {
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("plan-1") });
-    mockGenerate.mockResolvedValueOnce({ plan: createPlan("plan-2") });
+    mockGenerate.mockResolvedValueOnce(createPlan("plan-1"));
+    mockGenerate.mockResolvedValueOnce(createPlan("plan-2"));
 
     const failingGate: Gate.Check = {
       name: "always-fail",
