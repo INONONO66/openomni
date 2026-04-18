@@ -6,9 +6,9 @@ LLM-driven plan generation: goal → structured `Plan` with steps, dependencies,
 
 | File | Role |
 |------|------|
-| `plan-agent.ts` | `PlanAgent.create()` (interactive with plan tools) and `PlanAgent.generate()` (one-shot JSON) |
-| `plan-pipeline.ts` | Orchestrates generate → enrich → gate with retry loop |
-| `plan-tools.ts` | Tool specs and executor for `plan_read`, `plan_write`, `plan_edit` |
+| `plan-agent.ts` | `PlanAgent.create()` (interactive with plan tools) and `PlanAgent.generate()` (one-shot) |
+| `run-plan.ts` | `runPlan()` — shared entry point for plan execution with `Storage.PlanSubAdapter` |
+| `plan-tools.ts` | Tool specs and executor for `plan_read`, `plan_write`, `plan_edit`, `plan_list` |
 | `plan-store.ts` | `PlanStore` interface + `InMemoryPlanStore` implementation |
 | `hashline.ts` | Hash-anchored line references for precise plan editing (load-bearing algorithm) |
 | `structural-gate.ts` | Gate policy: which checks to run, thresholds, accept/reject decisions |
@@ -18,12 +18,11 @@ LLM-driven plan generation: goal → structured `Plan` with steps, dependencies,
 ## Composition
 
 ```
-PlanPipeline.run(goal, config)
-  └─ PlanAgent.generate(goal)     → raw Plan from LLM
-  └─ enrichers[].enrich(plan)     → enriched Plan
-  └─ gates[].check(plan)          → StructuralGate.evaluate()
-       └─ plan-checks helpers     → pure algorithms
-  └─ retry on gate failure        → re-generate with feedback
+runPlan(goal, config)
+  └─ PlanAgent.create(config)     → interactive agent with plan tools
+  └─ agent.run(goal)              → LLM generates plan via plan_write
+  └─ planSubAdapter.write()       → persists Plan to Storage.PlanSubAdapter
+  └─ returns { planId }           → Plan.Result with ID reference
 ```
 
 ## Schema

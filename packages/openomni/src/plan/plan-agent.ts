@@ -1,19 +1,6 @@
 import { ChatAgent, type AgentBudget, type ChatAgentInstance } from "@openomni/agent";
-import { Plan, type Storage, type Tool } from "@openomni/protocol";
-import { extractJson } from "./plan-json.js";
+import type { Storage, Tool } from "@openomni/protocol";
 import { PLAN_TOOL_SPECS, createPlanToolExecutor } from "./plan-tools";
-
-function parsePlan(text: string): Plan {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(extractJson(text));
-  } catch (e) {
-    throw new Error(`Failed to parse plan JSON: ${e instanceof Error ? e.message : String(e)}`);
-  }
-  const result = Plan.Schema.safeParse(raw);
-  if (!result.success) throw new Error(`Failed to validate plan: ${result.error.message}`);
-  return result.data;
-}
 
 function memoryPlanAdapter(): Storage.PlanSubAdapter {
   const store = new Map<
@@ -50,15 +37,12 @@ function memoryPlanAdapter(): Storage.PlanSubAdapter {
 }
 
 export namespace PlanAgent {
-  export interface GenerateConfig {
+  export interface CreateConfig {
     model: { provider: string; id: string };
     systemPrompt?: string;
     budget?: AgentBudget;
     tools?: Tool.Spec[];
     toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
-  }
-
-  export interface CreateConfig extends GenerateConfig {
     planSubAdapter?: Storage.PlanSubAdapter;
     stepGuard?: Parameters<typeof ChatAgent.create>[0]["stepGuard"];
   }
@@ -86,17 +70,5 @@ export namespace PlanAgent {
       },
       stepGuard: config.stepGuard,
     });
-  }
-
-  export async function generate(goal: string, config: GenerateConfig): Promise<Plan> {
-    const agent = ChatAgent.create({
-      model: config.model,
-      systemPrompt: config.systemPrompt ?? "",
-      budget: config.budget,
-      tools: config.tools,
-      toolExecutor: config.toolExecutor,
-    });
-    const result = await agent.run({ messages: [{ role: "user", content: goal }] });
-    return parsePlan(result.text);
   }
 }

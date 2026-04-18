@@ -12,20 +12,18 @@ Every inbound event flows through three stages:
 
 | Mode     | Handler        | What it does                                                    |
 |----------|----------------|-----------------------------------------------------------------|
-| `plan`   | `handlePlan`   | Builds goal from session history, calls `PlanAgent.generate()`  |
+| `plan`   | `handlePlan`   | Builds goal from session history, calls `runPlan()`, returns `{ planId }` |
 | `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent`                 |
 
 ## Session Bridge
 
 `session-bridge.ts` manages session state per mode:
 
-- **Plan mode**: stores/extracts `Plan` objects using a `__OPENOMNI_PLAN__` prefix convention on `TextPart`. Handles iterative planning by combining previous plans with user feedback.
+- **Plan mode**: stores plan IDs using a `__OPENOMNI_PLANID__` marker on `TextPart`. Reads/writes plan content via `Storage.PlanSubAdapter` (async). Handles iterative planning by combining previous plans with user feedback.
 - **Direct mode**: reads session messages into a flat `{ role, content }` array for `ChatAgent.run()`.
-
-Plan payload normalization (Date revival after JSON round-trip) is imported from `../plan/plan-json`.
 
 ## Dependencies
 
 - **Upstream**: `@openomni/protocol` (schemas), `@openomni/session` (storage), `@openomni/agent` (ChatAgent)
-- **Sibling**: `../plan/` (PlanAgent, normalizePlanPayload)
+- **Sibling**: `../plan/` (PlanAgent, runPlan)
 - **Downstream**: consumed by `apps/server` (per-message `createMessageHandler` → `IngressEngine.ingest`) and any surface adapter that submits `InboundEvent`s

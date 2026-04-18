@@ -123,6 +123,7 @@ Add a new channel by:
 - `apps/server/src/agents/registry.ts` is a **server-local** agent registry (keyed by name) distinct from the `AgentRegistry` inside `@openomni/agent`.
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools: { system, agent, mcp }` (selection flags or allowlists), optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
+- `apps/server/src/agents/plan-agent/` provides a plan-specific agent definition (`index.ts`) and system prompt (`prompt.ts`) for plan mode execution.
 
 ## ANTI-PATTERNS
 
