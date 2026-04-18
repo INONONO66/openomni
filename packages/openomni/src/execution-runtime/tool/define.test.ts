@@ -54,6 +54,65 @@ describe("defineTool", () => {
   });
 });
 
+describe("defineTool with implicitInputs", () => {
+  it("strips implicit fields from public schema", () => {
+    const tool = defineTool<{ sessionId: string; text: string }>({
+      name: "my_tool",
+      implicitInputs: { sessionId: "sessionId" },
+      inputSchema: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["sessionId", "text"],
+      },
+      async execute(call) {
+        return { id: "1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const schema = tool.spec.inputSchema as Record<string, unknown>;
+    const props = schema.properties as Record<string, unknown>;
+    expect(props.sessionId).toBeUndefined();
+    expect(props.text).toBeDefined();
+    expect(schema.required).toEqual(["text"]);
+  });
+
+  it("preserves implicitInputs on the NativeTool", () => {
+    const tool = defineTool<{ sessionId: string }>({
+      name: "my_tool",
+      implicitInputs: { sessionId: "sessionId" },
+      inputSchema: {
+        type: "object",
+        properties: { sessionId: { type: "string" } },
+        required: ["sessionId"],
+      },
+      async execute(call) {
+        return { id: "1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    expect(tool.implicitInputs).toEqual({ sessionId: "sessionId" });
+  });
+
+  it("does not set implicitInputs when not provided", () => {
+    const tool = defineTool<{ text: string }>({
+      name: "plain_tool",
+      inputSchema: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+      },
+      async execute(call) {
+        return { id: "1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    expect(tool.implicitInputs).toBeUndefined();
+  });
+});
+
 describe("resolveMeta", () => {
   it("returns true for static true", () => {
     expect(resolveMeta(true, { cmd: "ls" })).toBe(true);

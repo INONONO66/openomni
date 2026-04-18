@@ -145,4 +145,66 @@ describe("createToolExecutor", () => {
     expect((await executor(makeCall("bash"))).isError).toBeUndefined();
     expect((await executor(makeCall("read"))).isError).toBeUndefined();
   });
+
+  it("injects implicit inputs from runtime context", async () => {
+    let capturedInput: Record<string, unknown> = {};
+    const tool = makeTool("todo_write", {
+      implicitInputs: { sessionId: "sessionId" },
+      execute: async (call) => {
+        capturedInput = call.input as Record<string, unknown>;
+        return { id: "r1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const executor = createToolExecutor({
+      tools: [tool],
+      config: {
+        runtime: {
+          sessionId: "ses-abc",
+          runId: "run-1",
+        },
+      },
+    });
+
+    await executor(makeCall("todo_write", { todos: [] }));
+    expect(capturedInput.sessionId).toBe("ses-abc");
+    expect(capturedInput.todos).toEqual([]);
+  });
+
+  it("does not inject when runtime context is absent", async () => {
+    let capturedInput: Record<string, unknown> = {};
+    const tool = makeTool("todo_write", {
+      implicitInputs: { sessionId: "sessionId" },
+      execute: async (call) => {
+        capturedInput = call.input as Record<string, unknown>;
+        return { id: "r1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const executor = createToolExecutor({ tools: [tool] });
+    await executor(makeCall("todo_write", { todos: [] }));
+    expect(capturedInput.sessionId).toBeUndefined();
+  });
+
+  it("runtime injection overrides LLM-provided value", async () => {
+    let capturedInput: Record<string, unknown> = {};
+    const tool = makeTool("todo_write", {
+      implicitInputs: { sessionId: "sessionId" },
+      execute: async (call) => {
+        capturedInput = call.input as Record<string, unknown>;
+        return { id: "r1", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const executor = createToolExecutor({
+      tools: [tool],
+      config: {
+        runtime: { sessionId: "real-session", runId: "run-1" },
+      },
+    });
+
+    // LLM provides a wrong/stale sessionId — runtime should override
+    await executor(makeCall("todo_write", { sessionId: "fake-session", todos: [] }));
+    expect(capturedInput.sessionId).toBe("real-session");
+  });
 });
