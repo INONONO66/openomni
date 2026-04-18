@@ -1,7 +1,6 @@
 import { Plan, type Ingress, type Execution } from "@openomni/protocol";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
-import { PlanAgent } from "../plan/plan-agent";
 
 export namespace IngressHandlers {
   export interface HandlerContext {
