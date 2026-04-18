@@ -1,4 +1,4 @@
-import type { Message } from "@openomni/protocol";
+import type { Message, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { SessionInfo } from "../session/info";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
@@ -66,6 +66,9 @@ export namespace Storage {
       ): Array<{ id: string; data: string; status: string; output?: string }>;
       delete(id: string): void;
     };
+    task?: ProtocolStorage.TaskSubAdapter;
+    plan?: ProtocolStorage.PlanSubAdapter;
+    todo?: ProtocolStorage.TodoSubAdapter;
   }
 }
 

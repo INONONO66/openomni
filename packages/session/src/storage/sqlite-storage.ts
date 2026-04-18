@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Message } from "@openomni/protocol";
+import type { Message, Task, Todo, Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { Storage } from "./storage";
@@ -400,8 +400,270 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
+  task: ProtocolStorage.TaskSubAdapter = {
+    task: {
+      get: (id: string): Task.Info | undefined => {
+        const row = this.db.query("SELECT data FROM task WHERE id = ?").get(id) as {
+          data: string;
+        } | null;
+        return row ? (JSON.parse(row.data) as Task.Info) : undefined;
+      },
+
+      set: (id: string, info: Task.Info): void => {
+        const now = Date.now();
+        this.db
+          .query(
+            `INSERT INTO task (id, owner_type, owner_id, status, data, time_created, time_updated)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               owner_type = excluded.owner_type,
+               owner_id = excluded.owner_id,
+               status = excluded.status,
+               data = excluded.data,
+               time_updated = excluded.time_updated`,
+          )
+          .run(id, info.owner.type, info.owner.id, info.status, JSON.stringify(info), now, now);
+      },
+
+      list: (filter?: ProtocolStorage.TaskListFilter): Task.Info[] => {
+        let tasks = (this.db.query("SELECT data FROM task").all() as Array<{ data: string }>).map(
+          (r) => JSON.parse(r.data) as Task.Info,
+        );
+
+        if (!filter) return tasks;
+
+        if (filter.status) {
+          const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
+          tasks = tasks.filter((t) => statuses.includes(t.status));
+        }
+        if (filter.ownerId) {
+          tasks = tasks.filter((t) => t.owner.id === filter.ownerId);
+        }
+        if (filter.assignedAgentId) {
+          tasks = tasks.filter((t) => t.assignedAgentId === filter.assignedAgentId);
+        }
+        if (filter.tags && filter.tags.length > 0) {
+          tasks = tasks.filter((t) => filter.tags!.every((tag) => t.tags?.includes(tag)));
+        }
+
+        return tasks;
+      },
+
+      remove: (id: string): boolean => {
+        const existing = this.db.query("SELECT 1 FROM task WHERE id = ?").get(id);
+        if (!existing) return false;
+        // CASCADE in migration auto-removes task_run rows and their task_idempotency entries
+        this.db.query("DELETE FROM task WHERE id = ?").run(id);
+        return true;
+      },
+    },
+
+    run: {
+      get: (runId: string): Task.Run | undefined => {
+        const row = this.db.query("SELECT data FROM task_run WHERE id = ?").get(runId) as {
+          data: string;
+        } | null;
+        return row ? (JSON.parse(row.data) as Task.Run) : undefined;
+      },
+
+      set: (taskId: string, run: Task.Run): void => {
+        const now = Date.now();
+        this.db.transaction(() => {
+          this.db
+            .query(
+              `INSERT INTO task_run (id, task_id, status, trigger_data, data, time_created, time_updated)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 status = excluded.status,
+                 trigger_data = excluded.trigger_data,
+                 data = excluded.data,
+                 time_updated = excluded.time_updated`,
+            )
+            .run(
+              run.runId,
+              taskId,
+              run.status,
+              JSON.stringify(run.trigger),
+              JSON.stringify(run),
+              now,
+              now,
+            );
+          this.db
+            .query(
+              `INSERT INTO task_idempotency (key, run_id, time_created)
+               VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET run_id = excluded.run_id`,
+            )
+            .run(run.idempotencyKey, run.runId, now);
+        })();
+      },
+
+      list: (taskId: string, opts?: ProtocolStorage.RunListOptions): Task.Run[] => {
+        let runs = (
+          this.db.query("SELECT data FROM task_run WHERE task_id = ?").all(taskId) as Array<{
+            data: string;
+          }>
+        ).map((r) => JSON.parse(r.data) as Task.Run);
+
+        if (opts?.sortBy) {
+          const { sortBy } = opts;
+          const dir = opts.sortOrder === "asc" ? 1 : -1;
+          runs.sort((a, b) => dir * ((a[sortBy] ?? 0) - (b[sortBy] ?? 0)));
+        }
+        if (opts?.offset || opts?.limit) {
+          const start = opts.offset ?? 0;
+          runs = runs.slice(start, start + (opts.limit ?? runs.length));
+        }
+
+        return runs;
+      },
+
+      listByStatus: (statuses: Task.RunStatus[]): Task.Run[] => {
+        if (statuses.length === 0) return [];
+        const placeholders = statuses.map(() => "?").join(", ");
+        const rows = this.db
+          .prepare(`SELECT data FROM task_run WHERE status IN (${placeholders})`)
+          .all(...statuses) as Array<{ data: string }>;
+        return rows.map((r) => JSON.parse(r.data) as Task.Run);
+      },
+
+      remove: (runId: string): boolean => {
+        const existing = this.db.query("SELECT 1 FROM task_run WHERE id = ?").get(runId);
+        if (!existing) return false;
+        // CASCADE auto-removes task_idempotency entry
+        this.db.query("DELETE FROM task_run WHERE id = ?").run(runId);
+        return true;
+      },
+
+      getByIdempotencyKey: (key: string): Task.Run | undefined => {
+        const row = this.db.query("SELECT run_id FROM task_idempotency WHERE key = ?").get(key) as {
+          run_id: string;
+        } | null;
+        if (!row) return undefined;
+        return this.task.run.get(row.run_id);
+      },
+    },
+  };
+
+  plan: ProtocolStorage.PlanSubAdapter = {
+    write: async (id: string, content: string): Promise<void> => {
+      const now = Date.now();
+      this.db
+        .query(
+          `INSERT INTO plan (id, content, version, time_created, time_updated)
+           VALUES (?, ?, 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             content = excluded.content,
+             version = plan.version + 1,
+             time_updated = excluded.time_updated`,
+        )
+        .run(id, content, now, now);
+    },
+
+    read: async (
+      id: string,
+    ): Promise<
+      { content: string; version: number; createdAt: number; updatedAt: number } | undefined
+    > => {
+      const row = this.db
+        .query("SELECT content, version, time_created, time_updated FROM plan WHERE id = ?")
+        .get(id) as {
+        content: string;
+        version: number;
+        time_created: number;
+        time_updated: number;
+      } | null;
+      if (!row) return undefined;
+      return {
+        content: row.content,
+        version: row.version,
+        createdAt: row.time_created,
+        updatedAt: row.time_updated,
+      };
+    },
+
+    delete: async (id: string): Promise<void> => {
+      this.db.query("DELETE FROM plan WHERE id = ?").run(id);
+    },
+
+    list: async (): Promise<
+      { id: string; version: number; createdAt: number; updatedAt: number }[]
+    > => {
+      const rows = this.db
+        .query("SELECT id, version, time_created, time_updated FROM plan ORDER BY time_created ASC")
+        .all() as Array<{
+        id: string;
+        version: number;
+        time_created: number;
+        time_updated: number;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        version: r.version,
+        createdAt: r.time_created,
+        updatedAt: r.time_updated,
+      }));
+    },
+  };
+
+  todo: ProtocolStorage.TodoSubAdapter = {
+    upsertAll: async (sessionId: string, todos: Todo.Info[]): Promise<void> => {
+      this.db.transaction(() => {
+        this.db.query("DELETE FROM todo WHERE session_id = ?").run(sessionId);
+        for (const todo of todos) {
+          const now = Date.now();
+          this.db
+            .query(
+              `INSERT INTO todo (id, session_id, content, status, priority, position, time_created, time_updated)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+              todo.id,
+              todo.sessionId,
+              todo.content,
+              todo.status,
+              todo.priority,
+              todo.position,
+              now,
+              now,
+            );
+        }
+      })();
+    },
+
+    list: async (sessionId: string): Promise<Todo.Info[]> => {
+      const rows = this.db
+        .query(
+          "SELECT id, session_id, content, status, priority, position FROM todo WHERE session_id = ? ORDER BY position ASC",
+        )
+        .all(sessionId) as Array<{
+        id: string;
+        session_id: string;
+        content: string;
+        status: string;
+        priority: string;
+        position: number;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        sessionId: r.session_id,
+        content: r.content,
+        status: r.status as Todo.Status,
+        priority: r.priority as Todo.Priority,
+        position: r.position,
+      }));
+    },
+
+    deleteAll: async (sessionId: string): Promise<void> => {
+      this.db.query("DELETE FROM todo WHERE session_id = ?").run(sessionId);
+    },
+  };
+
   clear(): void {
     this.db.exec("DELETE FROM background_task");
+    this.db.exec("DELETE FROM todo");
+    this.db.exec("DELETE FROM plan");
+    this.db.exec("DELETE FROM task");
     this.db.exec("DELETE FROM event_log");
     this.db.exec("DELETE FROM artifact");
     this.db.exec("DELETE FROM surface_key");
