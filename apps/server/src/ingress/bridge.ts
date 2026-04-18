@@ -1,12 +1,10 @@
 import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
+import type { AgentToolProvider, SystemToolProvider } from "@openomni/openomni";
+import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
-import { createToolExecutor } from "../tool/executor";
-import type { NativeTool } from "../tool/types";
-import type { AgentToolProvider } from "../tool/agent/provider";
 import type { McpToolProvider } from "../tool/mcp/provider";
-import type { SystemToolProvider } from "../tool/system/provider";
 import { detectMode } from "./mode";
 
 const fallbackModel = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -15,6 +13,7 @@ export interface BridgeDeps {
   systemProvider: SystemToolProvider;
   agentProvider: AgentToolProvider;
   mcpProvider: McpToolProvider;
+  customProvider?: { listTools(): import("@openomni/openomni").NativeTool[] };
   defaultModel?: { provider: string; id: string };
   workspaceRoot: string;
 }
@@ -29,42 +28,31 @@ function createFallbackDefinition(agentName: string, deps: BridgeDeps): AgentDef
     description: "fallback agent",
     model: deps.defaultModel ?? fallbackModel,
     systemPrompt: "You are a helpful assistant.",
-    tools: { system: false, agent: false, mcp: false },
+    tools: { all: false },
     budget: { maxTurns: 10 },
   };
 }
 
-function selectTools(
-  definition: AgentDefinition,
-  deps: BridgeDeps,
-): { specs: Tool.Spec[]; tools: NativeTool[] } {
-  const tools: NativeTool[] = [];
-  const specs: Tool.Spec[] = [];
+function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[] {
+  const catalog = buildToolCatalog([
+    { tools: deps.systemProvider.listTools(), source: "system" },
+    { tools: deps.agentProvider.listTools(), source: "agent" },
+    { tools: deps.mcpProvider.listTools(), source: "mcp" },
+    ...(deps.customProvider
+      ? [{ tools: deps.customProvider.listTools(), source: "server" as const }]
+      : []),
+  ]);
 
-  function addTools(providerTools: NativeTool[], selection: boolean | string[] | undefined): void {
-    if (!selection) return;
-
-    const selected =
-      selection === true
-        ? providerTools
-        : providerTools.filter((tool) => new Set(selection).has(tool.spec.name));
-
-    tools.push(...selected);
-    specs.push(
-      ...selected.map((tool) => ({ ...tool.spec, name: sanitizeToolName(tool.spec.name) })),
-    );
-  }
-
-  addTools(deps.systemProvider.listTools(), definition.tools.system);
-  addTools(deps.agentProvider.listTools(), definition.tools.agent);
-  addTools(deps.mcpProvider.listTools(), definition.tools.mcp);
-
-  return { specs, tools };
+  const selected = resolveToolSelection(catalog, definition.tools);
+  return selected.map((entry) => ({
+    ...entry.tool.spec,
+    name: sanitizeToolName(entry.tool.spec.name),
+  }));
 }
 
 function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
   const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
-  const { specs, tools } = selectTools(definition, deps);
+  const specs = selectTools(definition, deps);
 
   return {
     model: definition.model,
@@ -75,13 +63,6 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },
-    toolExecutor: createToolExecutor({
-      tools,
-      config: {
-        permissions: definition.permissions,
-        workspaceRoot: deps.workspaceRoot,
-      },
-    }),
   };
 }
 

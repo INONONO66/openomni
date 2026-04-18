@@ -33,3 +33,9 @@ export { BackgroundOutputTool, BackgroundCancelTool } from "./runtime/index";
 export type { BackgroundOutputToolOptions, BackgroundCancelToolOptions } from "./runtime/index";
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
+export {
+  createBudgetReassuranceMiddleware,
+  createBudgetWarningMiddleware,
+} from "./core/middleware/builtin/budget";
+export { createIdleNudgeMiddleware } from "./core/middleware/builtin/idle-nudge";
+export { createToolGuardMiddleware } from "./core/middleware/builtin/tool-guard";

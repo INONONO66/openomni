@@ -16,11 +16,15 @@ export namespace IngressEngine {
     Bus.reset();
   }
 
-  export function setCoordinator(c: CoordinatorLike | undefined): void {
+  export function setCoordinator(c: CoordinatorLike): void {
     _coordinator = c;
   }
 
   export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
+    if (!_coordinator) {
+      throw new Error("coordinator is required");
+    }
+
     Ingress.InboundEventSchema.parse(event);
 
     const agentModel = event.agent.model;

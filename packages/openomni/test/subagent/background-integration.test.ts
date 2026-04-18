@@ -256,6 +256,7 @@ describe("BackgroundManager integration: TTL cleanup", () => {
     manager.cleanup();
 
     expect(manager.getTask(first.id)).toBeUndefined();
+    expect(manager.getResult(first.id)).toBeUndefined();
   });
 });
 

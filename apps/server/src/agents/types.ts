@@ -1,11 +1,5 @@
 import type { AgentBudget, ChatAgentConfig } from "@openomni/agent";
-import type { Guardrail } from "@openomni/protocol";
-
-export interface AgentToolSelection {
-  system?: boolean | string[]; // true = all, string[] = specific tool names
-  agent?: boolean | string[];
-  mcp?: boolean | string[]; // string[] = specific server names
-}
+import type { Guardrail, ToolSelection } from "@openomni/protocol";
 
 export interface AgentDefinition {
   name: string;
@@ -14,7 +8,7 @@ export interface AgentDefinition {
   // to a concrete provider model ID from models.dev before execution.
   model: ChatAgentConfig["model"];
   systemPrompt: string;
-  tools: AgentToolSelection;
+  tools: ToolSelection.Selection;
   budget?: AgentBudget;
   permissions?: Guardrail.ToolPermission;
 }

@@ -52,6 +52,20 @@ export namespace Storage {
       markComplete(sessionId: string, eventId: number): void;
       listIncompleteSessions(): string[];
     };
+    backgroundTask?: {
+      upsert(
+        id: string,
+        status: string,
+        parentSessionId: string,
+        data: string,
+        output?: string,
+      ): void;
+      get(id: string): { data: string; status: string; output?: string } | undefined;
+      listByStatus(
+        ...statuses: string[]
+      ): Array<{ id: string; data: string; status: string; output?: string }>;
+      delete(id: string): void;
+    };
   }
 }
 

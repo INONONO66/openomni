@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { Tool } from "../tool/index.js";
+import { Guardrail } from "../guardrail/index.js";
+import { AgentProfile } from "../agent/index.js";
 
 const requestSchema = z.object({
   runId: z.string(),
@@ -20,21 +22,14 @@ const requestSchema = z.object({
       workspaceRoot: z.string().optional(),
     })
     .optional(),
-  permissions: z
-    .object({
-      denylist: z.array(z.string()).optional(),
-      allowlist: z.array(z.string()).optional(),
-    })
-    .optional(),
+  permissions: Guardrail.ToolPermission.optional(),
   credentials: z.record(z.string()).optional(),
-  budget: z
-    .object({
-      maxTurns: z.number().optional(),
-      maxTokens: z.number().optional(),
-    })
-    .optional(),
+  budget: AgentProfile.AgentBudget.optional(),
   skills: z.array(z.string()).optional(),
   workspace: z.string().optional(),
+  agentName: z.string().optional(),
+  workspaceRoot: z.string().optional(),
+  middleware: z.array(z.string()).optional(),
 });
 
 const resultSchema = z.object({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { SystemToolProvider } from "../../src/tool/system/provider";
+import { SystemToolProvider } from "@openomni/openomni";
 import {
   createExecutionToolContext,
   resolveWorkerDbPath,
@@ -53,7 +53,8 @@ describe("worker-runtime", () => {
     expect(context.tools).toHaveLength(1);
     expect(context.toolExecutor).toBeDefined();
 
-    const result = await context.toolExecutor!({
+    if (!context.toolExecutor) throw new Error("expected toolExecutor to be defined");
+    const result = await context.toolExecutor({
       id: crypto.randomUUID(),
       tool: "bash",
       input: { command: "pwd" },

@@ -57,4 +57,25 @@ describe("AgentRegistry", () => {
     AgentRegistry.clear();
     expect(AgentRegistry.list()).toHaveLength(0);
   });
+
+  it("replaceAll() replaces all agents with new definitions", () => {
+    AgentRegistry.define(makeDefinition("old-a"));
+    AgentRegistry.define(makeDefinition("old-b"));
+    const newDefs = [makeDefinition("new-a"), makeDefinition("new-b"), makeDefinition("new-c")];
+    AgentRegistry.replaceAll(newDefs);
+    const names = AgentRegistry.list().map((d) => d.name);
+    expect(names).toHaveLength(3);
+    expect(names).toContain("new-a");
+    expect(names).toContain("new-b");
+    expect(names).toContain("new-c");
+    expect(names).not.toContain("old-a");
+    expect(names).not.toContain("old-b");
+  });
+
+  it("replaceAll() with empty array clears all agents", () => {
+    AgentRegistry.define(makeDefinition("a"));
+    AgentRegistry.define(makeDefinition("b"));
+    AgentRegistry.replaceAll([]);
+    expect(AgentRegistry.list()).toHaveLength(0);
+  });
 });

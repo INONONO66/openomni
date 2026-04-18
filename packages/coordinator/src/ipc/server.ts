@@ -2,7 +2,7 @@ import { Ipc } from "@openomni/protocol";
 import fs from "node:fs";
 
 import { decodeMessage } from "./codec";
-import { IpcProtocolError } from "./errors";
+import { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
 import { LineDecoder, encode } from "./framing";
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
@@ -18,8 +18,16 @@ export type RequestHandler = (
 
 export interface IpcServer {
   readonly socketPath: string;
+  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  notify(method: string, params?: Record<string, unknown>): void;
   close(): void;
 }
+
+type PendingRequest = {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export function createIpcServer(socketPath: string, handler: RequestHandler): IpcServer {
   // Remove stale socket file so Bun.listen doesn't fail with EADDRINUSE.
@@ -41,7 +49,21 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
   }
 
   const connections = new Map<string, { socket: BunSocket; decoder: LineDecoder }>();
+  const pending = new Map<string, PendingRequest>();
   let connCounter = 0;
+
+  function getActiveSocket(): BunSocket | undefined {
+    const first = connections.values().next();
+    return first.done ? undefined : first.value.socket;
+  }
+
+  function failAllPending(err: Error): void {
+    for (const [, handler] of pending) {
+      clearTimeout(handler.timer);
+      handler.reject(err);
+    }
+    pending.clear();
+  }
 
   const server = Bun.listen({
     unix: socketPath,
@@ -83,7 +105,20 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
             continue;
           }
 
-          if (parsed.type === "request") {
+          if (parsed.type === "response") {
+            const handler = pending.get(parsed.id);
+            if (handler) {
+              clearTimeout(handler.timer);
+              pending.delete(parsed.id);
+              if (parsed.error) {
+                handler.reject(
+                  new IpcConnectionError(`IPC error ${parsed.error.code}: ${parsed.error.message}`),
+                );
+              } else {
+                handler.resolve(parsed.result);
+              }
+            }
+          } else if (parsed.type === "request") {
             const respond = (result: unknown) => {
               socket.write(encode(Ipc.createResponse(parsed.id, result)));
             };
@@ -124,18 +159,46 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       close(socket: BunSocket) {
         const id = (socket.data as unknown as SocketData).id;
         connections.delete(id);
+        if (connections.size === 0) {
+          failAllPending(new IpcConnectionError("socket closed"));
+        }
       },
       error(socket: BunSocket, _err: Error) {
         const id = (socket.data as unknown as SocketData).id;
         connections.delete(id);
         void socket;
+        if (connections.size === 0) {
+          failAllPending(new IpcConnectionError("socket error"));
+        }
       },
     },
   });
 
   return {
     socketPath,
+    call(method, params, timeoutMs = 30_000) {
+      const sock = getActiveSocket();
+      if (!sock) {
+        return Promise.reject(new IpcConnectionError("no connected client"));
+      }
+      return new Promise((res, rej) => {
+        const req = Ipc.createRequest(method, params);
+        const timer = setTimeout(() => {
+          pending.delete(req.id);
+          rej(new IpcTimeoutError(`request timeout: ${method}`));
+        }, timeoutMs);
+        pending.set(req.id, { resolve: res, reject: rej, timer });
+        sock.write(encode(req));
+      });
+    },
+    notify(method, params) {
+      const sock = getActiveSocket();
+      if (sock) {
+        sock.write(encode(Ipc.createNotification(method, params)));
+      }
+    },
     close() {
+      failAllPending(new IpcConnectionError("server closed"));
       server.stop(true);
       try {
         fs.unlinkSync(socketPath);

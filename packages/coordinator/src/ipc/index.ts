@@ -1,4 +1,4 @@
-export { connectIpcClient, type IpcClient } from "./client";
+export { connectIpcClient, type IpcClient, type ConnectIpcClientOptions } from "./client";
 export { decodeMessage, encodeMessage, type IpcMessage } from "./codec";
 export { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
 export { encode, LineDecoder } from "./framing";

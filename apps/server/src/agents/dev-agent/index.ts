@@ -15,11 +15,7 @@ export const createDevAgent: AgentFactory = (): AgentDefinition => ({
   description: devAgentMeta.description,
   model: { provider: "anthropic", id: "claude-sonnet-4-6" },
   systemPrompt: DEV_AGENT_PROMPT,
-  tools: {
-    system: true,
-    agent: ["subagent"],
-    mcp: false,
-  },
+  tools: { categories: ["filesystem", "execution", "delegation", "custom"] },
   budget: {
     maxTurns: 24,
     maxToolCalls: 80,

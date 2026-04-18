@@ -1,7 +1,7 @@
 import type { Execution, Tool } from "@openomni/protocol";
+import { createToolExecutor } from "@openomni/openomni";
+import type { NativeTool } from "@openomni/openomni";
 import type { ServerConfig } from "../config";
-import { createToolExecutor } from "../tool/executor";
-import type { NativeTool } from "../tool/types";
 
 function expandRequestedToolNames(tools: Tool.Spec[] | undefined): Set<string> {
   const names = new Set<string>();

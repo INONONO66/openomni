@@ -15,7 +15,31 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-export function connectIpcClient(socketPath: string, connectTimeoutMs = 5000): Promise<IpcClient> {
+export type ConnectIpcClientOptions = {
+  connectTimeoutMs?: number;
+  onRequest?: (
+    method: string,
+    params: Record<string, unknown> | undefined,
+    respond: (result: unknown) => void,
+  ) => void;
+  onNotification?: (method: string, params: Record<string, unknown> | undefined) => void;
+};
+
+export function connectIpcClient(socketPath: string, connectTimeoutMs?: number): Promise<IpcClient>;
+export function connectIpcClient(
+  socketPath: string,
+  options?: ConnectIpcClientOptions,
+): Promise<IpcClient>;
+export function connectIpcClient(
+  socketPath: string,
+  optionsOrTimeout?: ConnectIpcClientOptions | number,
+): Promise<IpcClient> {
+  const opts: ConnectIpcClientOptions =
+    typeof optionsOrTimeout === "number"
+      ? { connectTimeoutMs: optionsOrTimeout }
+      : (optionsOrTimeout ?? {});
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
+
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     const decoder = new LineDecoder();
@@ -52,17 +76,35 @@ export function connectIpcClient(socketPath: string, connectTimeoutMs = 5000): P
         return;
       }
       for (const raw of msgs) {
-        const parsed = Ipc.Response.safeParse(raw);
-        if (!parsed.success) continue;
-        const { id, result, error } = parsed.data;
-        const handler = pending.get(id);
-        if (!handler) continue;
-        clearTimeout(handler.timer);
-        pending.delete(id);
-        if (error) {
-          handler.reject(new IpcConnectionError(`IPC error ${error.code}: ${error.message}`));
-        } else {
-          handler.resolve(result);
+        const response = Ipc.Response.safeParse(raw);
+        if (response.success) {
+          const { id, result, error } = response.data;
+          const handler = pending.get(id);
+          if (!handler) continue;
+          clearTimeout(handler.timer);
+          pending.delete(id);
+          if (error) {
+            handler.reject(new IpcConnectionError(`IPC error ${error.code}: ${error.message}`));
+          } else {
+            handler.resolve(result);
+          }
+          continue;
+        }
+
+        const request = Ipc.Request.safeParse(raw);
+        if (request.success) {
+          if (opts.onRequest) {
+            const respond = (result: unknown) => {
+              socket.write(encode(Ipc.createResponse(request.data.id, result)));
+            };
+            opts.onRequest(request.data.method, request.data.params, respond);
+          }
+          continue;
+        }
+
+        const notification = Ipc.Notification.safeParse(raw);
+        if (notification.success && opts.onNotification) {
+          opts.onNotification(notification.data.method, notification.data.params);
         }
       }
     });

@@ -404,6 +404,7 @@ describe("BackgroundManager.cleanup()", () => {
 
     manager.cleanup();
     expect(manager.getTask(task.id)).toBeUndefined();
+    expect(manager.getResult(task.id)).toBeUndefined();
   });
 });
 

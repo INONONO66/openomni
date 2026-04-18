@@ -24,9 +24,38 @@ export {
   IngressSessionResolver,
   SessionBridge,
 } from "./ingress";
+export type { CoordinatorLike } from "./ingress";
 
 // Task Storage
 export { SqliteTaskStore, TaskStorage } from "./storage";
 
 // Subagent runtime
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
+
+// Execution runtime
+export {
+  AgentToolProvider,
+  ToolProxyProvider,
+  SystemToolProvider,
+  Tool,
+  buildToolCatalog,
+  buildWorkerMiddleware,
+  createToolExecutor,
+  createWorkerSubagentRuntime,
+  defineTool,
+  resolveMeta,
+  resolveCategory,
+  resolveToolSelection,
+} from "./execution-runtime";
+export type {
+  CatalogEntry,
+  NativeTool,
+  ToolCategory,
+  ToolExecutorConfig,
+  ToolExecutorContext,
+  ToolMetaValue,
+  ToolProvider,
+  ToolRiskTier,
+  ToolSource,
+  WorkerMiddlewareConfig,
+} from "./execution-runtime";

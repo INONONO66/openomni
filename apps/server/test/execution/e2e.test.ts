@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ChatAgent, type ChatAgentInstance } from "@openomni/agent";
 import { IngressEngine } from "@openomni/openomni";
 import type { Execution, Ingress } from "@openomni/protocol";
 
@@ -20,31 +19,13 @@ function makeDirectEvent(): Ingress.DirectEvent {
   };
 }
 
-function makeMockAgentInstance(text: string): ChatAgentInstance {
-  return {
-    async run() {
-      return {
-        text,
-        finishReason: "stop",
-        steps: [],
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      };
-    },
-    async *stream() {},
-  };
-}
-
-const originalChatAgentCreate = ChatAgent.create;
-
 beforeEach(() => {
   IngressEngine.reset();
   IngressEngine.setCoordinator(undefined);
-  ChatAgent.create = originalChatAgentCreate;
 });
 
 afterEach(() => {
   IngressEngine.setCoordinator(undefined);
-  ChatAgent.create = originalChatAgentCreate;
 });
 
 describe("coordinator dispatch path — direct mode", () => {
@@ -71,15 +52,11 @@ describe("coordinator dispatch path — direct mode", () => {
   });
 });
 
-describe("fallback path — no coordinator", () => {
-  test("falls back to local ChatAgent when no coordinator is set", async () => {
-    ChatAgent.create = (_config) => makeMockAgentInstance("local fallback response");
-
-    const result = await IngressEngine.ingest(makeDirectEvent());
-
-    expect(result.mode).toBe("direct");
-    if (result.mode !== "direct") throw new Error("expected direct result");
-    expect(result.result.output).toBe("local fallback response");
+describe("no coordinator — error required", () => {
+  test("throws when coordinator is not set", async () => {
+    await expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
+      "coordinator is required",
+    );
   });
 });
 

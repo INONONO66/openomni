@@ -13,6 +13,7 @@ const ORDERED_MIGRATIONS = [
   "0002_pragma_fk_indices/migration.sql",
   "0003_new_tables/migration.sql",
   "0004_message_status/migration.sql",
+  "0005_background_task/migration.sql",
 ];
 
 function applyPragmas(db: Database): void {
@@ -340,7 +341,66 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
+  backgroundTask = {
+    upsert: (
+      id: string,
+      status: string,
+      parentSessionId: string,
+      data: string,
+      output?: string,
+    ): void => {
+      const now = Date.now();
+      this.db
+        .query(
+          `INSERT INTO background_task (id, status, parent_session_id, data, output, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             status = excluded.status,
+             data = excluded.data,
+             output = COALESCE(excluded.output, background_task.output),
+             time_updated = excluded.time_updated`,
+        )
+        .run(id, status, parentSessionId, data, output ?? null, now, now);
+    },
+
+    get: (id: string): { data: string; status: string; output?: string } | undefined => {
+      const row = this.db
+        .query("SELECT data, status, output FROM background_task WHERE id = ?")
+        .get(id) as { data: string; status: string; output: string | null } | null;
+      if (!row) return undefined;
+      return { data: row.data, status: row.status, output: row.output ?? undefined };
+    },
+
+    listByStatus: (
+      ...statuses: string[]
+    ): Array<{ id: string; data: string; status: string; output?: string }> => {
+      if (statuses.length === 0) return [];
+      const placeholders = statuses.map(() => "?").join(", ");
+      const rows = this.db
+        .prepare(
+          `SELECT id, data, status, output FROM background_task WHERE status IN (${placeholders})`,
+        )
+        .all(...statuses) as Array<{
+        id: string;
+        data: string;
+        status: string;
+        output: string | null;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        data: r.data,
+        status: r.status,
+        output: r.output ?? undefined,
+      }));
+    },
+
+    delete: (id: string): void => {
+      this.db.query("DELETE FROM background_task WHERE id = ?").run(id);
+    },
+  };
+
   clear(): void {
+    this.db.exec("DELETE FROM background_task");
     this.db.exec("DELETE FROM event_log");
     this.db.exec("DELETE FROM artifact");
     this.db.exec("DELETE FROM surface_key");

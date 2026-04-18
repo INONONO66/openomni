@@ -1,5 +1,6 @@
 import { type Message, Subagent } from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
+import { BackgroundStore } from "./background-store.js";
 import { SubagentRuntime } from "./runtime.js";
 
 type LaunchInput = {
@@ -51,6 +52,11 @@ export const BackgroundManager = {
     // Tracks spawning + running tasks synchronously (incremented before async spawn)
     let activeCount = 0;
 
+    for (const interrupted of BackgroundStore.loadInterrupted()) {
+      tasks.set(interrupted.id, interrupted);
+      results.set(interrupted.id, { taskId: interrupted.id, status: "failed" });
+    }
+
     function activeTasks(): Subagent.BackgroundTask[] {
       return [...tasks.values()].filter((t) => t.status === "running" || t.status === "pending");
     }
@@ -76,6 +82,7 @@ export const BackgroundManager = {
           results.delete(id);
           controllers.delete(id);
           taskUnsubs.delete(id);
+          BackgroundStore.deleteTask(id);
         }
       }
     }
@@ -120,6 +127,7 @@ export const BackgroundManager = {
             startedAt: Date.now(),
           };
           tasks.set(id, running);
+          BackgroundStore.persist(running);
 
           const runUnsubs: Array<() => void> = [];
           const cleanupRunSubs = () => runUnsubs.forEach((u) => u());
@@ -169,6 +177,7 @@ export const BackgroundManager = {
                 output,
               };
               results.set(id, result);
+              BackgroundStore.persist(completed, output);
               onTaskComplete?.(result);
 
               Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
@@ -203,6 +212,7 @@ export const BackgroundManager = {
                 error: data.payload.error ?? "unknown error",
               };
               tasks.set(id, failed);
+              BackgroundStore.persist(failed);
 
               const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
               results.set(id, result);
@@ -239,6 +249,7 @@ export const BackgroundManager = {
             error: err instanceof Error ? err.message : String(err),
           };
           tasks.set(id, failed);
+          BackgroundStore.persist(failed);
           Bus.publish(Subagent.Events.BackgroundTaskFailed, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -316,7 +327,13 @@ export const BackgroundManager = {
       controllers.get(taskId)?.abort();
       taskUnsubs.get(taskId)?.();
       taskUnsubs.delete(taskId);
-      tasks.set(taskId, { ...task, status: "cancelled", completedAt: Date.now() });
+      const cancelled: Subagent.BackgroundTask = {
+        ...task,
+        status: "cancelled",
+        completedAt: Date.now(),
+      };
+      tasks.set(taskId, cancelled);
+      BackgroundStore.persist(cancelled);
 
       Bus.publish(Subagent.Events.BackgroundTaskCancelled, {
         traceId: crypto.randomUUID(),
@@ -329,8 +346,8 @@ export const BackgroundManager = {
 
     return {
       launch,
-      getTask: (taskId) => tasks.get(taskId),
-      getResult: (taskId) => results.get(taskId),
+      getTask: (taskId) => tasks.get(taskId) ?? BackgroundStore.getTask(taskId),
+      getResult: (taskId) => results.get(taskId) ?? BackgroundStore.getResult(taskId),
       cancel,
       listByParent: (parentSessionId) =>
         [...tasks.values()].filter((t) => t.parentSessionId === parentSessionId),

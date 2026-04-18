@@ -1,20 +1,84 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
+import type { WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
-import { IngressEngine } from "@openomni/openomni";
+import {
+  AgentToolProvider,
+  IngressEngine,
+  SystemToolProvider,
+  resolveCategory,
+} from "@openomni/openomni";
+import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { createMessageHandler } from "../handler/conversation";
-import { createExecutionCoordinator } from "../execution/coordinator";
+import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
-import { AgentToolProvider } from "../tool/agent";
 import { McpToolProvider } from "../tool/mcp";
-import { SystemToolProvider } from "../tool/system";
+import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
+import { LocalRunner } from "./local-runner";
 import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { installShutdownHandlers } from "./shutdown";
+import { createAllAgents } from "../agents";
+
+function djb2Hash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16);
+}
+
+async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBootstrap.Bootstrap> {
+  const agents = [...createAllAgents().values()].map(
+    (def): WorkerBootstrap.RuntimeAgentDefinition => ({
+      name: def.name,
+      description: def.description,
+      model: def.model,
+      systemPrompt: def.systemPrompt,
+      tools: def.tools,
+      permissions: def.permissions,
+      budget: def.budget,
+    }),
+  );
+
+  const toolCatalog = mcpProvider.listTools().map(
+    (tool): WorkerBootstrap.RuntimeToolCatalogEntry => ({
+      canonicalName: tool.spec.name,
+      exposedName: tool.spec.name,
+      source: "mcp",
+      category: resolveCategory(tool.spec.name, "mcp", tool.category),
+      riskTier: tool.riskTier,
+      spec: tool.spec,
+      mcpServer: tool.spec.name.includes(".") ? tool.spec.name.split(".")[0] : undefined,
+    }),
+  );
+
+  const authEntries = await Auth.all();
+  const credentials: Record<string, string> = {};
+  for (const [provider, entry] of Object.entries(authEntries)) {
+    const prefix = provider.toUpperCase();
+    if (entry.type === "api") {
+      credentials[`${prefix}_API_KEY`] = entry.key;
+    } else if (entry.type === "proxy") {
+      credentials[`${prefix}_BASE_URL`] = entry.baseURL;
+      if (entry.apiKey) credentials[`${prefix}_API_KEY`] = entry.apiKey;
+    } else if (entry.type === "oauth") {
+      credentials[`${prefix}_ACCESS_TOKEN`] = entry.access;
+    }
+  }
+
+  const epochInput = [
+    ...agents.map((a) => a.name).sort(),
+    ...toolCatalog.map((t) => t.canonicalName).sort(),
+  ].join(",");
+  const configEpoch = djb2Hash(epochInput);
+
+  return { configEpoch, agents, toolCatalog, credentials };
+}
 
 function createRoutingHandler(
   systemProvider: SystemToolProvider,
@@ -22,11 +86,13 @@ function createRoutingHandler(
   mcpProvider: McpToolProvider,
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
+  customProvider?: CustomToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
+    customProvider,
     defaultModel,
     workspaceRoot,
   });
@@ -41,13 +107,33 @@ export async function main(): Promise<void> {
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
+  const customProvider = new CustomToolProvider();
 
   await connectMcpServers(config, mcpProvider);
 
-  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
-  const coordinator = createExecutionCoordinator({ workerScript });
-  await coordinator.waitUntilReady();
-  IngressEngine.setCoordinator(coordinator);
+  const isLocalMode = process.env.OPENOMNI_MODE === "local";
+
+  let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
+
+  if (isLocalMode) {
+    console.log("[server] running in local mode (no worker pool)");
+    const localRunner = LocalRunner.create({
+      systemProvider,
+      agentProvider,
+      mcpProvider,
+      customProvider,
+      workspaceRoot: config.workspace?.root,
+    });
+    IngressEngine.setCoordinator(localRunner);
+  } else {
+    console.log("[server] running in coordinator mode");
+    const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
+    const bootstrap = await assembleBootstrap(mcpProvider);
+    const toolDispatcher = buildToolDispatcher([mcpProvider]);
+    coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
+    await coordinator.waitUntilReady();
+    IngressEngine.setCoordinator(coordinator);
+  }
 
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
@@ -60,6 +146,7 @@ export async function main(): Promise<void> {
         mcpProvider,
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
+        customProvider,
       )
     : undefined;
 
