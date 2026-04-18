@@ -37,6 +37,7 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   Tool,
+  WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
   createToolExecutor,
