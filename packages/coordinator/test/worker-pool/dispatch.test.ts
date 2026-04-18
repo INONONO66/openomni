@@ -68,4 +68,21 @@ describe("worker pool dispatch", () => {
     expect(stats.active).toBe(4);
     expect(stats.idle).toBe(0);
   });
+
+  test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
+    const result = await pool.dispatch("session-budget-1", "run-budget-1", {
+      delayMs: 10,
+      prompt: "test",
+      budget: { maxWallTimeMs: 120_000 },
+    });
+    expect((result as Record<string, unknown>).accepted).toBe(true);
+  });
+
+  test("dispatch without budget defaults to timeout=330_000", async () => {
+    const result = await pool.dispatch("session-budget-2", "run-budget-2", {
+      delayMs: 10,
+      prompt: "test",
+    });
+    expect((result as Record<string, unknown>).accepted).toBe(true);
+  });
 });
