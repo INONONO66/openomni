@@ -12,6 +12,7 @@ const todoWriteTool = defineTool<{
   name: "todo_write",
   description: "Write the current todo list for a session, replacing all existing todos.",
   riskTier: 1,
+  implicitInputs: { sessionId: "sessionId" },
   inputSchema: {
     type: "object",
     properties: {

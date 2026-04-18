@@ -29,7 +29,11 @@ export function selectRequestedTools(
 }
 
 export function createExecutionToolContext(
-  request: Pick<Execution.Request, "tools" | "permissions" | "toolConfig">,
+  request: Pick<Execution.Request, "tools" | "permissions" | "toolConfig"> & {
+    sessionId?: string;
+    runId?: string;
+    agentName?: string;
+  },
   availableTools: NativeTool[],
 ): {
   tools?: Execution.Request["tools"];
@@ -47,6 +51,15 @@ export function createExecutionToolContext(
       config: {
         permissions: request.permissions,
         workspaceRoot: request.toolConfig?.workspaceRoot,
+        runtime:
+          request.sessionId && request.runId
+            ? {
+                sessionId: request.sessionId,
+                runId: request.runId,
+                agentName: request.agentName,
+                workspaceRoot: request.toolConfig?.workspaceRoot,
+              }
+            : undefined,
       },
     }),
   };

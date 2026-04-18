@@ -1,6 +1,11 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
 import { WorkspaceLock } from "../workspace-lock.js";
-import type { NativeTool, ToolExecutorConfig } from "./types.js";
+import type {
+  ImplicitInputSource,
+  NativeTool,
+  ToolExecutorConfig,
+  ToolRuntimeContext,
+} from "./types.js";
 
 const tierTimeouts: Record<number, number> = {
   0: 30_000,
@@ -93,6 +98,37 @@ function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   };
 }
 
+function resolveImplicitValue(
+  source: ImplicitInputSource,
+  runtime: ToolRuntimeContext,
+): string | undefined {
+  switch (source) {
+    case "sessionId":
+      return runtime.sessionId;
+    case "runId":
+      return runtime.runId;
+    case "agentName":
+      return runtime.agentName;
+    case "workspaceRoot":
+      return runtime.workspaceRoot;
+  }
+}
+
+function injectImplicitInputs(
+  call: Tool.Call,
+  tool: NativeTool,
+  runtime: ToolRuntimeContext | undefined,
+): Tool.Call {
+  if (!tool.implicitInputs || !runtime) return call;
+
+  const injected: Record<string, unknown> = { ...(call.input as Record<string, unknown>) };
+  for (const [param, source] of Object.entries(tool.implicitInputs)) {
+    const value = resolveImplicitValue(source, runtime);
+    if (value !== undefined) injected[param] = value;
+  }
+  return { ...call, input: injected };
+}
+
 export function createToolExecutor(
   ctx: ToolExecutorContext,
 ): (call: Tool.Call) => Promise<Tool.Result> {
@@ -100,6 +136,8 @@ export function createToolExecutor(
   const config = ctx.config ?? {};
   const { workspaceRoot } = config;
   const lockOwnerId = crypto.randomUUID();
+
+  const runtime = config.runtime;
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
@@ -122,7 +160,9 @@ export function createToolExecutor(
     }
 
     const timeoutMs = getTimeoutMs(tool.riskTier, config);
-    const dispatchedCall = originalName === call.tool ? call : { ...call, tool: originalName };
+    const enrichedCall = injectImplicitInputs(call, tool, runtime);
+    const dispatchedCall =
+      originalName === enrichedCall.tool ? enrichedCall : { ...enrichedCall, tool: originalName };
 
     try {
       if (tool.riskTier >= 1 && workspaceRoot) {

@@ -10,11 +10,13 @@ export { TodoToolProvider } from "./todo/provider.js";
 export type { CatalogEntry } from "./catalog.js";
 export type { ToolExecutorContext } from "./executor.js";
 export type {
+  ImplicitInputSource,
   NativeTool,
   ToolCategory,
   ToolExecutorConfig,
   ToolMetaValue,
   ToolProvider,
   ToolRiskTier,
+  ToolRuntimeContext,
   ToolSource,
 } from "./types.js";
