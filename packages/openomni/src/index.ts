@@ -2,7 +2,6 @@
 // Plan Mode
 export {
   Hashline,
-  InMemoryPlanStore,
   PLAN_TOOL_SPECS,
   PlanAgent,
   PlanPipeline,
