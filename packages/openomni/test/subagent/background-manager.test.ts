@@ -381,20 +381,6 @@ describe("BackgroundManager.listByParent()", () => {
 });
 
 describe("BackgroundManager.cleanup()", () => {
-  beforeEach(() => {
-    // BackgroundStore.getTask() falls back to SQLite after cleanup() removes from in-memory map.
-    // Use an adapter without backgroundTask so BackgroundStore is a no-op and cleanup() fully removes tasks.
-    const base = Storage.get();
-    Storage.configure({
-      session: base.session,
-      message: base.message,
-      part: base.part,
-      surfaceKey: base.surfaceKey,
-      eventLog: base.eventLog,
-      artifact: base.artifact,
-    });
-  });
-
   it("removes tasks with completedAt older than taskTtlMs", async () => {
     const deferred = createDeferred<AgentResult>();
     createSpy = spyOn(ChatAgent, "create").mockImplementation(
@@ -418,6 +404,7 @@ describe("BackgroundManager.cleanup()", () => {
 
     manager.cleanup();
     expect(manager.getTask(task.id)).toBeUndefined();
+    expect(manager.getResult(task.id)).toBeUndefined();
   });
 });
 

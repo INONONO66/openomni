@@ -82,6 +82,7 @@ export const BackgroundManager = {
           results.delete(id);
           controllers.delete(id);
           taskUnsubs.delete(id);
+          BackgroundStore.deleteTask(id);
         }
       }
     }

@@ -38,6 +38,10 @@ export namespace BackgroundStore {
     };
   }
 
+  export function deleteTask(taskId: string): void {
+    adapter()?.delete(taskId);
+  }
+
   export function loadInterrupted(): Subagent.BackgroundTask[] {
     const store = adapter();
     if (!store) return [];

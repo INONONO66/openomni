@@ -88,11 +88,19 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           // runtime can apply depth-based tool filtering at spawn time.
           const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
           const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
+          const agentDefinitionsRef: {
+            definitions?: Map<string, WorkerBootstrap.RuntimeAgentDefinition>;
+          } = {
+            definitions: new Map(
+              (workerBootstrap?.agents ?? []).map((agent) => [agent.name, agent]),
+            ),
+          };
 
           const agentProvider = new AgentToolProvider({
             subagentRuntime: createWorkerSubagentRuntime({
               toolsRef,
               catalogRef,
+              agentDefinitionsRef,
               parentSessionId: sessionId,
               parentPermissions: request.permissions,
             }),

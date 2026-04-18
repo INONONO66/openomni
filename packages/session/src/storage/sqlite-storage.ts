@@ -393,6 +393,10 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         output: r.output ?? undefined,
       }));
     },
+
+    delete: (id: string): void => {
+      this.db.query("DELETE FROM background_task WHERE id = ?").run(id);
+    },
   };
 
   clear(): void {

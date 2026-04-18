@@ -719,6 +719,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.surfaceKey?.register("channel:1", "s1");
       adapter.artifact?.store("a1", "s1", "{}", "content");
       adapter.eventLog?.append("s1", "run.started", "{}");
+      adapter.backgroundTask?.upsert("bg1", "completed", "s1", '{"id":"bg1"}', "output");
 
       adapter.clear();
 
@@ -728,6 +729,17 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
       expect(adapter.artifact?.get("a1")).toBeUndefined();
       expect(adapter.eventLog?.replay("s1")).toEqual([]);
+      expect(adapter.backgroundTask?.get("bg1")).toBeUndefined();
+    });
+  });
+
+  describe("backgroundTask", () => {
+    test("delete removes persisted task rows", () => {
+      adapter.backgroundTask?.upsert("bg1", "completed", "s1", '{"id":"bg1"}', "output");
+
+      adapter.backgroundTask?.delete("bg1");
+
+      expect(adapter.backgroundTask?.get("bg1")).toBeUndefined();
     });
   });
 

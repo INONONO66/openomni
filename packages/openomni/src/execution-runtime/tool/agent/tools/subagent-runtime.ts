@@ -1,11 +1,14 @@
-import { ChatAgent, AgentRegistry } from "@openomni/agent";
+import { ChatAgent } from "@openomni/agent";
 import type { SubagentToolOptions, ChatAgentConfig } from "@openomni/agent";
-import type { Guardrail } from "@openomni/protocol";
+import { Subagent } from "@openomni/protocol";
+import type { Guardrail, WorkerBootstrap } from "@openomni/protocol";
+import { Session } from "@openomni/session";
 import { SubagentRuntime } from "../../../../subagent/runtime.js";
 import { resolveToolSelection } from "../../catalog.js";
 import type { CatalogEntry } from "../../catalog.js";
 
 type SubagentRuntimeInterface = SubagentToolOptions["subagentRuntime"];
+type RuntimeAgentDefinition = WorkerBootstrap.RuntimeAgentDefinition;
 
 // Simple in-process shim: creates a fresh ChatAgent per call without tool inheritance.
 export function createSubagentRuntime(): SubagentRuntimeInterface {
@@ -66,27 +69,54 @@ type WorkerRuntimeConfig = {
   parentPermissions?: Guardrail.ToolPermission;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
+  agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };
 };
+
+function resolveChildDefinition(
+  cfg: WorkerRuntimeConfig,
+  agentName: string | undefined,
+): RuntimeAgentDefinition | undefined {
+  if (!agentName) return undefined;
+  return cfg.agentDefinitionsRef?.definitions?.get(agentName);
+}
+
+function resolveSessionAgentName(sessionId: string): string | undefined {
+  const meta = Session.getWorkerMeta(sessionId);
+  if (!meta) return undefined;
+  try {
+    return Subagent.ChildSessionMeta.parse(meta).agentName;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveChildTools(
+  cfg: WorkerRuntimeConfig,
+  childDefinition: RuntimeAgentDefinition | undefined,
+  depth: number,
+): ChatAgentConfig["tools"] {
+  if (!cfg.catalogRef?.catalog) {
+    return cfg.toolsRef.tools;
+  }
+
+  const parentAllowed = cfg.toolsRef.tools
+    ? new Set(cfg.toolsRef.tools.map((tool) => tool.name))
+    : undefined;
+  const filtered = resolveToolSelection(
+    cfg.catalogRef.catalog,
+    childDefinition?.tools ?? { all: true },
+    parentAllowed,
+    depth,
+  );
+  return filtered.map((entry) => entry.tool.spec);
+}
 
 export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentRuntimeInterface {
   return {
     async spawn(config) {
-      const childDef = AgentRegistry.get(config.agentName);
-      const permissions = intersectPermissions(cfg.parentPermissions, childDef?.permissions);
-
-      let childTools = cfg.toolsRef.tools;
-      if (cfg.catalogRef?.catalog) {
-        const parentAllowed = cfg.toolsRef.tools
-          ? new Set(cfg.toolsRef.tools.map((t) => t.name))
-          : undefined;
-        const filtered = resolveToolSelection(
-          cfg.catalogRef.catalog,
-          { all: true },
-          parentAllowed,
-          1,
-        );
-        childTools = filtered.map((e) => e.tool.spec);
-      }
+      const childDefinition = resolveChildDefinition(cfg, config.agentName);
+      const permissions = intersectPermissions(cfg.parentPermissions, childDefinition?.permissions);
+      const childTools = resolveChildTools(cfg, childDefinition, 1);
 
       const result = await SubagentRuntime.spawn({
         agentName: config.agentName,
@@ -102,13 +132,18 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
     },
     async send(config) {
-      const permissions = cfg.parentPermissions;
+      const childDefinition = resolveChildDefinition(
+        cfg,
+        resolveSessionAgentName(config.sessionId),
+      );
+      const permissions = intersectPermissions(cfg.parentPermissions, childDefinition?.permissions);
+      const depth = Session.get(config.sessionId)?.spawnDepth ?? 1;
       const result = await SubagentRuntime.send({
         sessionId: config.sessionId,
         prompt: config.prompt,
         model: config.model,
         systemPrompt: config.systemPrompt,
-        tools: cfg.toolsRef.tools,
+        tools: resolveChildTools(cfg, childDefinition, depth),
         toolExecutor: cfg.toolsRef.toolExecutor,
         permissions,
       });

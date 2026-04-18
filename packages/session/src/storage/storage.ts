@@ -64,6 +64,7 @@ export namespace Storage {
       listByStatus(
         ...statuses: string[]
       ): Array<{ id: string; data: string; status: string; output?: string }>;
+      delete(id: string): void;
     };
   }
 }

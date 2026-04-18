@@ -228,20 +228,6 @@ describe("BackgroundManager integration: multiple agents in parallel", () => {
 });
 
 describe("BackgroundManager integration: TTL cleanup", () => {
-  beforeEach(() => {
-    // BackgroundStore.getTask() falls back to SQLite after cleanup() removes from in-memory map.
-    // Use an adapter without backgroundTask so BackgroundStore is a no-op and cleanup() fully removes tasks.
-    const base = Storage.get();
-    Storage.configure({
-      session: base.session,
-      message: base.message,
-      part: base.part,
-      surfaceKey: base.surfaceKey,
-      eventLog: base.eventLog,
-      artifact: base.artifact,
-    });
-  });
-
   it("completed task is removed after TTL expires on next launch", async () => {
     createSpy = spyOn(ChatAgent, "create").mockImplementation(
       () =>
@@ -270,6 +256,7 @@ describe("BackgroundManager integration: TTL cleanup", () => {
     manager.cleanup();
 
     expect(manager.getTask(first.id)).toBeUndefined();
+    expect(manager.getResult(first.id)).toBeUndefined();
   });
 });
 

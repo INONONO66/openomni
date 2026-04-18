@@ -3,7 +3,6 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { initialize } from "@openomni/session";
-import { AgentRegistry } from "@openomni/agent";
 import {
   AgentToolProvider,
   IngressEngine,
@@ -23,6 +22,7 @@ import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { installShutdownHandlers } from "./shutdown";
+import { createAllAgents } from "../agents";
 
 function djb2Hash(s: string): string {
   let h = 5381;
@@ -33,13 +33,13 @@ function djb2Hash(s: string): string {
 }
 
 async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBootstrap.Bootstrap> {
-  const agents = AgentRegistry.list().map(
+  const agents = [...createAllAgents().values()].map(
     (def): WorkerBootstrap.RuntimeAgentDefinition => ({
       name: def.name,
       description: def.description,
       model: def.model,
       systemPrompt: def.systemPrompt,
-      tools: def.tools.length > 0 ? { allow: def.tools } : {},
+      tools: def.tools,
       permissions: def.permissions,
       budget: def.budget,
     }),
