@@ -7,8 +7,11 @@ import {
   BackgroundManager,
   ToolProxyProvider,
   PlanAgent,
+  PlanToolProvider,
   SessionBridge,
   SystemToolProvider,
+  TaskToolProvider,
+  TodoToolProvider,
   buildToolCatalog,
   buildWorkerMiddleware,
   createWorkerSubagentRuntime,
@@ -113,10 +116,24 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             backgroundManager,
           });
 
+          const taskProvider = new TaskToolProvider();
+          const planProvider = new PlanToolProvider();
+          const todoProvider = new TodoToolProvider();
+
           const systemTools = systemProvider.listTools();
           const agentTools = agentProvider.listTools();
           const proxyTools = mcpProxyProvider.listTools();
-          const availableTools = [...systemTools, ...agentTools, ...proxyTools];
+          const taskTools = taskProvider.listTools();
+          const planTools = planProvider.listTools();
+          const todoTools = todoProvider.listTools();
+          const availableTools = [
+            ...systemTools,
+            ...agentTools,
+            ...proxyTools,
+            ...taskTools,
+            ...planTools,
+            ...todoTools,
+          ];
           const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
 
           toolsRef.tools = tools;
@@ -125,6 +142,9 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             { tools: systemTools, source: "system" },
             { tools: agentTools, source: "agent" },
             { tools: proxyTools, source: "mcp" },
+            { tools: taskTools, source: "system" },
+            { tools: planTools, source: "system" },
+            { tools: todoTools, source: "system" },
           ]);
 
           const agent = ChatAgent.create({

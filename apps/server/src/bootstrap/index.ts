@@ -90,12 +90,18 @@ function createRoutingHandler(
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
+  taskProvider?: TaskToolProvider,
+  planProvider?: PlanToolProvider,
+  todoProvider?: TodoToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
     customProvider,
+    taskProvider,
+    planProvider,
+    todoProvider,
     defaultModel,
     workspaceRoot,
   });
@@ -158,6 +164,9 @@ export async function main(): Promise<void> {
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
+        taskProvider,
+        planProvider,
+        todoProvider,
       )
     : undefined;
 
