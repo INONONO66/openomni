@@ -2,7 +2,6 @@
 // Plan Mode
 export {
   Hashline,
-  InMemoryPlanStore,
   PLAN_TOOL_SPECS,
   PlanAgent,
   PlanPipeline,
@@ -38,6 +37,7 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   Tool,
+  WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
   createToolExecutor,

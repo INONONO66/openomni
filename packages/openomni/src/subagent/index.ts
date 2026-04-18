@@ -1,4 +1,4 @@
-export * from "./runtime.js";
-export * from "./consultation.js";
-export * from "./background-manager.js";
-export * from "./background-store.js";
+export { SubagentRuntime } from "./runtime.js";
+export { SubagentConsultation } from "./consultation.js";
+export { BackgroundManager } from "./background-manager.js";
+export { BackgroundStore } from "./background-store.js";

@@ -1,10 +1,15 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import { type Message, Subagent } from "@openomni/protocol";
-import { Bus, type BusEvent, Session, WorkerRun } from "@openomni/session";
-
-type RuntimeModel = { provider: string; id: string };
-
-type RuntimeMessage = { role: "user" | "assistant"; content: string };
+import { Session, WorkerRun } from "@openomni/session";
+import {
+  type RuntimeModel,
+  type RuntimeMessage,
+  toSessionModel,
+  createUserMessage,
+  createAssistantMessage,
+  addTextPart,
+  publishEvent,
+} from "./shared";
 
 type ConsultationConfig = {
   model: RuntimeModel;
@@ -13,75 +18,6 @@ type ConsultationConfig = {
   toolExecutor?: ChatAgentConfig["toolExecutor"];
   budget?: ChatAgentConfig["budget"];
 };
-
-function toSessionModel(model: RuntimeModel): { providerID: string; modelID: string } {
-  return {
-    providerID: model.provider,
-    modelID: model.id,
-  };
-}
-
-function createUserMessage(sessionId: string, model: RuntimeModel): Message.UserMessage {
-  return {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    role: "user",
-    time: { created: Date.now() },
-    agent: "subagent-consultation",
-    model: toSessionModel(model),
-  };
-}
-
-function createAssistantMessage(sessionId: string, model: RuntimeModel): Message.AssistantMessage {
-  return {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "",
-    modelID: model.id,
-    providerID: model.provider,
-    agent: "subagent-consultation",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-function addTextPart(sessionId: string, messageId: string, text: string): void {
-  const part: Message.TextPart = {
-    id: crypto.randomUUID(),
-    sessionID: sessionId,
-    messageID: messageId,
-    type: "text",
-    text,
-  };
-  Session.addPart(messageId, part);
-}
-
-function publishEvent<TPayload extends { sessionId?: string; runId?: string }>(
-  event: BusEvent.Descriptor<{
-    traceId: string;
-    sessionId?: string;
-    runId?: string;
-    time: number;
-    payload: TPayload;
-  }>,
-  payload: TPayload,
-): void {
-  Bus.publish(event, {
-    traceId: crypto.randomUUID(),
-    sessionId: payload.sessionId,
-    runId: payload.runId,
-    time: Date.now(),
-    payload,
-  });
-}
 
 function createRuntimeAgent(config: ConsultationConfig) {
   return ChatAgent.create({
@@ -173,7 +109,7 @@ export namespace SubagentConsultation {
       workerMeta,
     });
 
-    const userMessage = createUserMessage(childSession.id, config.model);
+    const userMessage = createUserMessage(childSession.id, config.model, "subagent-consultation");
     Session.addMessage(childSession.id, userMessage);
     addTextPart(childSession.id, userMessage.id, request.question);
 
@@ -200,7 +136,11 @@ export namespace SubagentConsultation {
         messages: [{ role: "user", content: request.question }],
       });
 
-      const assistantMessage = createAssistantMessage(childSession.id, config.model);
+      const assistantMessage = createAssistantMessage(
+        childSession.id,
+        config.model,
+        "subagent-consultation",
+      );
       Session.addMessage(childSession.id, assistantMessage);
       addTextPart(childSession.id, assistantMessage.id, result.text);
 
