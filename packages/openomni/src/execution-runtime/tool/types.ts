@@ -10,6 +10,15 @@ export type ToolRiskTier = 0 | 1 | 2 | 3;
 // Tier 2: bash — logged, future approval gate
 // Tier 3: reserved
 
+export type ImplicitInputSource = "sessionId" | "runId" | "agentName" | "workspaceRoot";
+
+export interface ToolRuntimeContext {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly agentName?: string;
+  readonly workspaceRoot?: string;
+}
+
 export interface NativeTool {
   spec: Tool.Spec;
   riskTier: ToolRiskTier;
@@ -18,6 +27,7 @@ export interface NativeTool {
   isConcurrencySafe: ToolMetaValue;
   source?: ToolSource;
   category?: ToolSelection.Category;
+  implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
   execute(call: Tool.Call): Promise<Tool.Result>;
 }
 
@@ -31,6 +41,7 @@ export interface ToolProvider {
 export interface ToolExecutorConfig {
   permissions?: Guardrail.ToolPermission;
   workspaceRoot?: string;
+  runtime?: ToolRuntimeContext;
   timeoutMs?: {
     tier0?: number;
     tier1?: number;

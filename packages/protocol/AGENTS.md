@@ -25,6 +25,9 @@ src/
 ├── artifact/             # Artifact.Meta, Artifact.Part
 ├── gate/                 # Gate.Check / Enricher / Verdict / Issue (plan validation)
 ├── hook/                 # Hook.Timing (9), Hook.Verdict (6), Middleware.Definition + FailPolicy
+├── storage/              # Storage.TaskSubAdapter, Storage.PlanSubAdapter, Storage.TodoSubAdapter interfaces
+├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
+├── todo/                 # Todo.Info, Todo.Status, Todo.Priority, Todo.Updated BusEvent
 └── subagent/             # ChildSession / WorkerRun / ConsultationRequest / BackgroundTask + Subagent.Events.*
 ```
 
@@ -38,6 +41,9 @@ src/
 - **Hook timings**: 9 middleware timing points — `pre_run`, `pre_turn`, `on_system_prompt`, `pre_tool_use`, `post_tool_use`, `post_turn`, `post_compaction`, `post_run`, `on_error`. `Hook.Verdict` returns one of `continue | skip | abort | retry | transform | inject`.
 - **Subagent lifecycle**: `Subagent.Events.*` covers worker sessions (`WorkerSessionSpawned/Resumed/Cancelled`), worker runs (`WorkerRunStarted/Completed/Failed`), consultations (`WorkerConsultationRequested/Completed`), and background tasks (`BackgroundTaskLaunched/Completed/Failed/Cancelled`).
 - **Plan DAG validation**: `PlanSchema.superRefine()` enforces unique `stepId` values and acyclic `dependsOn` references.
+- **Storage sub-adapters**: `Storage.TaskSubAdapter`, `Storage.PlanSubAdapter`, and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
+- **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.
+- **Todo types**: `Todo.Info` / `Todo.Status` / `Todo.Priority` live in `todo/index.ts`. `Todo.Updated` is a `BusEvent.define()` descriptor published when a session's todo list changes.
 
 ## ANTI-PATTERNS
 
@@ -53,4 +59,7 @@ src/
 - Adding a new run type? Add to the `Run` namespace in `run/index.ts`.
 - Adding a new middleware timing? Update `Hook.Timing` in `hook/index.ts` and coordinate with `packages/agent/src/core/middleware/engine.ts`.
 - Adding a new subagent event? Extend `Subagent.Events` in `subagent/index.ts` with a `BusEvent.define()` call.
+- Adding a new storage sub-adapter interface? Add it to `storage/index.ts` as a named interface under the `Storage` namespace.
+- Adding a new task field? Update `Task.Info` or `Task.Run` in `task/index.ts`.
+- Adding a new todo field? Update `Todo.Info` in `todo/index.ts` and keep `Todo.Updated` in sync.
 - This package builds to `dist/` — run `bun run build` after changes.

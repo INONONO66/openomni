@@ -6,7 +6,10 @@ import { initialize } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
+  PlanToolProvider,
   SystemToolProvider,
+  TaskToolProvider,
+  TodoToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
 import { Auth } from "@openomni/llm";
@@ -87,12 +90,18 @@ function createRoutingHandler(
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
+  taskProvider?: TaskToolProvider,
+  planProvider?: PlanToolProvider,
+  todoProvider?: TodoToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
     customProvider,
+    taskProvider,
+    planProvider,
+    todoProvider,
     defaultModel,
     workspaceRoot,
   });
@@ -108,6 +117,9 @@ export async function main(): Promise<void> {
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
   const customProvider = new CustomToolProvider();
+  const taskProvider = new TaskToolProvider();
+  const planProvider = new PlanToolProvider();
+  const todoProvider = new TodoToolProvider();
 
   await connectMcpServers(config, mcpProvider);
 
@@ -129,7 +141,12 @@ export async function main(): Promise<void> {
     console.log("[server] running in coordinator mode");
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
-    const toolDispatcher = buildToolDispatcher([mcpProvider]);
+    const toolDispatcher = buildToolDispatcher([
+      mcpProvider,
+      taskProvider,
+      planProvider,
+      todoProvider,
+    ]);
     coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
     await coordinator.waitUntilReady();
     IngressEngine.setCoordinator(coordinator);
@@ -147,6 +164,9 @@ export async function main(): Promise<void> {
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
+        taskProvider,
+        planProvider,
+        todoProvider,
       )
     : undefined;
 

@@ -25,9 +25,6 @@ export {
 } from "./ingress";
 export type { CoordinatorLike } from "./ingress";
 
-// Task Storage
-export { SqliteTaskStore, TaskStorage } from "./storage";
-
 // Subagent runtime
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
 
@@ -36,6 +33,9 @@ export {
   AgentToolProvider,
   ToolProxyProvider,
   SystemToolProvider,
+  TaskToolProvider,
+  PlanToolProvider,
+  TodoToolProvider,
   Tool,
   WorkspaceLock,
   buildToolCatalog,
