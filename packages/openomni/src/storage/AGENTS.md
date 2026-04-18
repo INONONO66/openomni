@@ -1,24 +1,22 @@
 # storage/
 
-Task persistence layer for the openomni orchestration system.
+Thin re-export shim. Task types (`Task.Info`, `Task.Run`, `Task.Status`, etc.) now live in `@openomni/protocol/task` and are re-exported here for backward compatibility.
 
 ## Files
 
-- **task-storage.ts** — `TaskStore` interface (the contract) and `TaskStorage` namespace (global adapter singleton). All consumer code goes through `TaskStorage.getAdapter()`. `TaskStorage.configure(adapter)` must be called before any access — the package throws if unconfigured.
-- **file-task-storage.ts** — `FileTaskStore`, a file-backed `TaskStore` that mirrors in-memory state to JSON files on disk. Used by the CLI for durable task/run persistence.
-- **task-types.ts** — Minimal `Task.Info`, `Task.Run`, `Task.Status` types needed by the storage layer.
-- **index.ts** — Barrel.
+- **task-types.ts** — `export { Task } from "@openomni/protocol"`. No logic.
 
-## Architecture
+## Where persistence actually lives
 
-`TaskStore` exposes two sub-objects: `task` (CRUD for `Task.Info`) and `run` (CRUD for `Task.Run` with idempotency and status indexing). `TaskStorage.configure(adapter)` sets the active adapter globally; there is no default — callers must configure before use.
+Task, plan, and todo persistence moved to `@openomni/session`. The `Storage.Adapter` in that package has three optional sub-adapters:
 
-`FileTaskStore` maintains in-memory Maps and flushes to disk on every mutation. Reads are always from memory; disk is the persistence backing store loaded at construction.
+- `task` — satisfies `Storage.TaskSubAdapter` from `@openomni/protocol`
+- `plan` — satisfies `Storage.PlanSubAdapter` from `@openomni/protocol`
+- `todo` — satisfies `Storage.TodoSubAdapter` from `@openomni/protocol`
+
+`SqliteStorageAdapter` in `@openomni/session` implements all three, backed by migration 0006 tables (`task`, `task_run`, `task_idempotency`, `plan`, `todo`).
 
 ## Gotchas
 
-- **configure is mandatory**: `TaskStorage.configure()` must be called at startup. Accessing the adapter before configuration throws.
-- **Atomic writes**: `FileTaskStore` writes via tmp-file + rename to avoid partial writes on crash. The tmp cleanup in the catch block is intentional — if rename fails, the stale tmp must not linger.
-- **No file locking**: Concurrent `FileTaskStore` instances on the same directory will corrupt state. Single-writer assumption.
-- **Status index serialization**: `Set<string>` is stored as `string[]` in JSON; rebuilt from runs on parse failure.
-- **Index consistency**: `run.set` maintains 4 secondary indices (taskRuns, idempotency, status, runs). All must stay in sync — partial updates corrupt lookups.
+- `TaskStorage` and `SqliteTaskStore` no longer exist. Any code that called `TaskStorage.configure()` must be updated to configure `Storage.Adapter` in `@openomni/session` instead.
+- Tool providers (`TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`) read from `Storage.get()` in `@openomni/session` directly.
