@@ -18,6 +18,19 @@ export function createCompletedToolState(call: Tool.Call, output: string): Tool.
   };
 }
 
+export function createErrorToolState(call: Tool.Call, error: string): Tool.StateError {
+  const now = Date.now();
+  return {
+    status: "error",
+    input: call.input,
+    error,
+    time: {
+      start: now,
+      end: now,
+    },
+  };
+}
+
 export function addToolParts(
   sessionId: string,
   messageId: string,
@@ -42,7 +55,9 @@ export function addToolParts(
         type: "tool",
         callID: call.id,
         tool: call.tool,
-        state: createCompletedToolState(call, result.output),
+        state: result.isError
+          ? createErrorToolState(call, result.output)
+          : createCompletedToolState(call, result.output),
       };
       Session.addPart(messageId, part);
     }
