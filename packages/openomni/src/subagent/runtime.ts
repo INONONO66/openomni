@@ -1,6 +1,6 @@
-import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
+import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
-import { Bus, type BusEvent, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
+import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import {
   get as getAbortEntry,
   register as registerAbortController,
@@ -17,7 +17,6 @@ import {
 } from "./run-lifecycle";
 import { sendToMailbox } from "./session-mailbox.js";
 import {
-  type RuntimeModel,
   type RuntimeMessage,
   toSessionModel,
   createUserMessage,
@@ -25,122 +24,14 @@ import {
   addTextPart,
   publishEvent,
 } from "./shared";
+import { addAssistantResultParts } from "./message-builder";
 import {
-  addAssistantResultParts,
-  buildRuntimeMessages,
-  buildSessionMessagesWithParts,
-  estimateRuntimeTokens,
-} from "./message-builder";
-
-type RuntimeConfig = {
-  model: RuntimeModel;
-  systemPrompt?: string;
-  tools?: ChatAgentConfig["tools"];
-  toolExecutor?: ChatAgentConfig["toolExecutor"];
-  budget?: ChatAgentConfig["budget"];
-};
-
-type SendCompactionConfig = {
-  contextWindowTokens: number;
-  thresholdRatio?: number;
-  onSummarize?: (messages: RuntimeMessage[]) => Promise<string>;
-};
-
-type InMemoryCompactorLike = {
-  shouldCompact(
-    totalTokens: number,
-    options: {
-      contextWindowTokens: number;
-      thresholdRatio?: number;
-    },
-  ): boolean;
-  compact(
-    messages: Message.WithParts[],
-    options: {
-      contextWindowTokens: number;
-      thresholdRatio?: number;
-      onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
-    },
-  ): Promise<{
-    messages: Message.WithParts[];
-    compacted: boolean;
-    removedCount: number;
-  }>;
-};
-
-async function loadInMemoryCompactor(): Promise<InMemoryCompactorLike> {
-  const module = (await import(
-    new URL("../../../agent/src/core/execution/compaction.ts", import.meta.url).href
-  )) as { InMemoryCompactor: InMemoryCompactorLike };
-
-  return module.InMemoryCompactor;
-}
-
-function buildChildMessagesInternal(sessionId: string, repair?: boolean): RuntimeMessage[] {
-  return buildRuntimeMessages(buildSessionMessagesWithParts(sessionId), repair);
-}
-
-async function maybeCompactSendTranscript(
-  sessionId: string,
-  messages: RuntimeMessage[],
-  compaction?: SendCompactionConfig,
-): Promise<RuntimeMessage[]> {
-  if (!compaction) {
-    return messages;
-  }
-
-  const compactor = await loadInMemoryCompactor();
-  const totalTokens = estimateRuntimeTokens(messages);
-  if (
-    !compactor.shouldCompact(totalTokens, {
-      contextWindowTokens: compaction.contextWindowTokens,
-      thresholdRatio: compaction.thresholdRatio,
-    })
-  ) {
-    return messages;
-  }
-
-  const anchor = messages.find((message) => message.role === "user")?.content;
-  const result = await compactor.compact(buildSessionMessagesWithParts(sessionId), {
-    contextWindowTokens: compaction.contextWindowTokens,
-    thresholdRatio: compaction.thresholdRatio,
-    onSummarize: compaction.onSummarize
-      ? async (messagesToSummarize) =>
-          compaction.onSummarize!(buildRuntimeMessages(messagesToSummarize))
-      : undefined,
-  });
-
-  if (!result.compacted) {
-    return messages;
-  }
-
-  const compactedMessages = buildRuntimeMessages(result.messages);
-  if (!anchor) {
-    return compactedMessages;
-  }
-
-  return [{ role: "user", content: `Original goal: ${anchor}` }, ...compactedMessages];
-}
-
-async function runWithTranscript(
-  sessionId: string,
-  config: RuntimeConfig,
-  signal?: AbortSignal,
-  permissions?: Guardrail.ToolPermission,
-  messages = buildChildMessagesInternal(sessionId),
-): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
-  const agent = ChatAgent.create({
-    model: config.model,
-    systemPrompt: config.systemPrompt,
-    tools: config.tools,
-    budget: config.budget,
-    toolExecutor: config.toolExecutor,
-    signal,
-    permissions,
-  });
-
-  return agent.run({ messages });
-}
+  type RuntimeConfig,
+  type SendCompactionConfig,
+  buildChildMessagesInternal,
+  maybeCompactSendTranscript,
+  runWithTranscript,
+} from "./transcript";
 
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
