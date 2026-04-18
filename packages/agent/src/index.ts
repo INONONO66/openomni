@@ -39,3 +39,4 @@ export {
 } from "./core/middleware/builtin/budget";
 export { createIdleNudgeMiddleware } from "./core/middleware/builtin/idle-nudge";
 export { createToolGuardMiddleware } from "./core/middleware/builtin/tool-guard";
+export { InMemoryCompactor } from "./core/execution/compaction";
