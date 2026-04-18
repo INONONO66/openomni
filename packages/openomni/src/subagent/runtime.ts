@@ -213,6 +213,8 @@ export namespace SubagentRuntime {
       const prompt = latestRun?.prompt ?? "resume";
 
       await WorkerRun.create(config.sessionId, { runId, title, prompt });
+      const abortEntry = registerAbortController(config.sessionId, runId);
+      const signal = buildAbortSignal(abortEntry.controller);
       await WorkerRun.updateStatus(config.sessionId, runId, "starting");
 
       publishEvent(Subagent.Events.WorkerSessionResumed, {
@@ -222,7 +224,7 @@ export namespace SubagentRuntime {
 
       await WorkerRun.updateStatus(config.sessionId, runId, "running");
       const result = await executeRun(config.sessionId, runId, config.model, undefined, () =>
-        runWithTranscript(config.sessionId, config),
+        runWithTranscript(config.sessionId, config, signal),
       );
       return { resumed: true, ...result };
     });
