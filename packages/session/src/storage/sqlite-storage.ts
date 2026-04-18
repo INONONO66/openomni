@@ -14,6 +14,7 @@ const ORDERED_MIGRATIONS = [
   "0003_new_tables/migration.sql",
   "0004_message_status/migration.sql",
   "0005_background_task/migration.sql",
+  "0006_task_plan_todo/migration.sql",
 ];
 
 function applyPragmas(db: Database): void {
