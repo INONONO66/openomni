@@ -22,13 +22,16 @@ export class McpClient {
   async connect(): Promise<void> {
     const traceId = randomUUID();
     const transport = createTransport(this.config);
-    const transportType = this.config.transport as "stdio" | "sse" | "http";
+    const transportType =
+      this.config.transport === "streamable-http"
+        ? ("streamable-http" as const)
+        : (this.config.transport as "stdio" | "sse" | "http");
 
     try {
       await this.client.connect(transport);
+      const tools = await this.client.listTools();
       this.connected = true;
 
-      const tools = await this.client.listTools();
       const toolCount = tools.tools.length;
 
       Log.info("MCP server connected", {
@@ -45,6 +48,7 @@ export class McpClient {
         time: Date.now(),
       });
     } catch (err) {
+      this.connected = false;
       Log.error("MCP connection failed", {
         serverName: this.config.name,
         error: String(err),

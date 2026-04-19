@@ -34,7 +34,7 @@ export namespace IngressEngine {
     const payloadLength =
       typeof event.payload === "string"
         ? event.payload.length
-        : JSON.stringify(event.payload).length;
+        : (JSON.stringify(event.payload ?? null) ?? "").length;
 
     Bus.publish(IngressEvent.Received, {
       traceId: trace.traceId,
@@ -45,13 +45,13 @@ export namespace IngressEngine {
     });
 
     const agentModel = event.agent.model;
-    const { session, trace: resolvedTrace } = IngressSessionResolver.resolve(
+    const { session } = IngressSessionResolver.resolve(
       event,
       { providerID: agentModel.provider, modelID: agentModel.id },
       trace,
     );
 
-    const activeTrace = resolvedTrace ?? TraceContext.child(trace, { sessionId: session.id });
+    const activeTrace = TraceContext.child(trace, { sessionId: session.id });
 
     IngressEventProjector.project(
       event,

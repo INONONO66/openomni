@@ -158,7 +158,14 @@ export function createToolExecutor(
       return createErrorResult(call, `[Blocked] Tool "${originalName}" requires approval`);
     }
 
-    Log.debug("executor: risk tier evaluated", { toolName: originalName, tier: tool.riskTier });
+    if (tool.riskTier >= 2) {
+      Log.warn("executor: high-risk tool execution", {
+        toolName: originalName,
+        tier: tool.riskTier,
+      });
+    } else {
+      Log.debug("executor: risk tier evaluated", { toolName: originalName, tier: tool.riskTier });
+    }
 
     const timeoutMs = getTimeoutMs(tool.riskTier, config);
     const enrichedCall = injectImplicitInputs(call, tool, runtime);

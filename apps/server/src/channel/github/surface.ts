@@ -104,7 +104,8 @@ export class GitHubAdapter implements Adapter.Surface {
       Log.error("github message handler error", {
         repo: content.repo,
         issue: content.issueNumber,
-        err: String(err),
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
       });
     }
 

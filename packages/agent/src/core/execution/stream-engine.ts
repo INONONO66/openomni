@@ -259,6 +259,7 @@ export async function* streamAgent(
                 usage: totalUsage,
               }),
               onVerdict: (verdict) => preToolUseVerdicts.push(verdict),
+              traceContext: trace,
             })
           : undefined;
 
@@ -336,7 +337,14 @@ export async function* streamAgent(
               time: Date.now(),
               toolCallId: call.id,
               toolName: call.tool,
-              inputSummary: call.tool,
+              inputSummary: (() => {
+                try {
+                  const str = JSON.stringify(call.input);
+                  return str.length > 100 ? `${str.slice(0, 97)}...` : str;
+                } catch {
+                  return "[unserializable]";
+                }
+              })(),
             });
             sink?.onToolCall(call);
           },

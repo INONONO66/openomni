@@ -67,6 +67,7 @@ export function checkBudget(
       turns: state.turns,
       toolCalls: state.toolCalls,
       wallTimeMs: elapsed,
+      toolRuntimeMs: state.toolRuntimeMs,
     });
     return "exceeded";
   }
@@ -102,13 +103,34 @@ export function checkBudget(
 
 export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {
   const parts: string[] = [];
+
   const maxTurns = budget?.maxTurns ?? 24;
   if (maxTurns === -1) {
     parts.push("unlimited turns remaining");
   } else {
-    const remainingTurns = maxTurns - state.turns;
-    parts.push(`${remainingTurns} turn${remainingTurns !== 1 ? "s" : ""} remaining`);
+    const remaining = maxTurns - state.turns;
+    parts.push(`${remaining} turn${remaining !== 1 ? "s" : ""} remaining`);
   }
+
+  const maxToolCalls = budget?.maxToolCalls ?? 40;
+  if (maxToolCalls !== -1) {
+    const remaining = maxToolCalls - state.toolCalls;
+    parts.push(`${remaining} tool call${remaining !== 1 ? "s" : ""} remaining`);
+  }
+
+  const maxWallTimeMs = budget?.maxWallTimeMs ?? 5 * 60 * 1000;
+  if (maxWallTimeMs !== -1) {
+    const elapsed = Date.now() - state.startTime;
+    const remaining = Math.max(0, maxWallTimeMs - elapsed);
+    parts.push(`${Math.round(remaining / 1000)}s wall time remaining`);
+  }
+
+  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
+  if (maxToolRuntimeMs !== -1) {
+    const remaining = Math.max(0, maxToolRuntimeMs - state.toolRuntimeMs);
+    parts.push(`${Math.round(remaining / 1000)}s tool runtime remaining`);
+  }
+
   return parts.join(", ");
 }
 

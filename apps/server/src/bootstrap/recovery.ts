@@ -40,7 +40,8 @@ export async function runRecovery(
 
   let sessionsRecovered = 0;
   try {
-    sessionsRecovered = ((await coordinator?.recoverInterruptedRuns()) as number | undefined) ?? 0;
+    const recoveryResult = await coordinator?.recoverInterruptedRuns();
+    sessionsRecovered = typeof recoveryResult === "number" ? recoveryResult : 0;
 
     const retryQueue = await recoverInterruptedMessages();
     if (handler && retryQueue.length > 0) {

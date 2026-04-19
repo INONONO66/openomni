@@ -216,6 +216,9 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             budget: request.budget,
             tools: planTools,
             toolExecutor: planToolExecutor,
+            ...(request.traceId
+              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
+              : {}),
           });
 
           server.notify("worker.run_completed", { runId, sessionId, status: "succeeded" });

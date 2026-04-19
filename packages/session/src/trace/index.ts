@@ -9,7 +9,7 @@ export namespace TraceContext {
     parent: TraceContextType.Type,
     overrides?: Partial<TraceContextType.Type>,
   ): TraceContextType.Type {
-    return { ...parent, ...overrides };
+    return { ...parent, ...overrides, traceId: parent.traceId };
   }
 
   export function empty(): TraceContextType.Type {

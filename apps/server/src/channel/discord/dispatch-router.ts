@@ -85,7 +85,10 @@ function handleDispatch(
   try {
     actions.callbacks.onDispatch(event, data);
   } catch (err) {
-    Log.error("discord dispatch error", { err: String(err) });
+    Log.error("discord dispatch error", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
   }
   return false;
 }
