@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Message } from "../../src/session/message";
+import { Message } from "@openomni/protocol";
 
 describe("Message.TextPart", () => {
   test("creates valid TextPart", () => {

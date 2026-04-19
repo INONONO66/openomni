@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/session";
-import { AgentMessenger, BusTransport } from "../../../src/runtime/messenger/index";
+import { AgentMessenger } from "../../../src/runtime/messenger/index";
 import type { Messenger } from "@openomni/protocol";
+import { InMemoryTransport } from "./in-memory-transport";
 
 function makeEnvelope(
   from: string,
@@ -24,13 +24,12 @@ function makeEnvelope(
 }
 
 afterEach(() => {
-  Bus.reset();
   AgentMessenger._resetLog();
 });
 
 describe("AgentMessenger", () => {
   it("delivers message to subscriber", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const received: Messenger.MessageEnvelope[] = [];
@@ -45,7 +44,7 @@ describe("AgentMessenger", () => {
   });
 
   it("does not deliver to wrong agent", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const receivedByC: Messenger.MessageEnvelope[] = [];
@@ -57,14 +56,14 @@ describe("AgentMessenger", () => {
   });
 
   it("allows message when no allow patterns configured", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     await expect(messenger.send(makeEnvelope("agent-x", "agent-y"))).resolves.toBeUndefined();
   });
 
   it("allows message matching allow pattern", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport, {
       allowPatterns: [{ from: "agent-a", to: "agent-b" }],
     });
@@ -73,7 +72,7 @@ describe("AgentMessenger", () => {
   });
 
   it("denies message not matching allow pattern", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport, {
       allowPatterns: [{ from: "agent-a", to: "agent-b" }],
     });
@@ -84,7 +83,7 @@ describe("AgentMessenger", () => {
   });
 
   it("allows wildcard * in allow pattern", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport, {
       allowPatterns: [{ from: "*", to: "*" }],
     });
@@ -93,7 +92,7 @@ describe("AgentMessenger", () => {
   });
 
   it("handles 3 concurrent sends without message loss", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const receivedByB: Messenger.MessageEnvelope[] = [];
@@ -117,7 +116,7 @@ describe("AgentMessenger", () => {
   });
 
   it("persists persistencePolicy in log", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     await messenger.send(makeEnvelope("a", "b", "asker_only"));
@@ -129,7 +128,7 @@ describe("AgentMessenger", () => {
   });
 
   it("unsubscribe stops delivery", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const received: Messenger.MessageEnvelope[] = [];
@@ -143,7 +142,7 @@ describe("AgentMessenger", () => {
   });
 
   it("rotates log when MAX_LOG_SIZE is reached", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     for (let i = 0; i < 1001; i++) {

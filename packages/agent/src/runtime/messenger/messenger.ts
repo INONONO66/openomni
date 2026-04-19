@@ -1,5 +1,9 @@
 import type { Messenger } from "@openomni/protocol";
-import type { Transport } from "./transport";
+
+export interface Transport {
+  send(envelope: Messenger.MessageEnvelope): Promise<void>;
+  subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void;
+}
 
 const MAX_LOG_SIZE = 1000;
 const messageLog: Messenger.MessageEnvelope[] = [];

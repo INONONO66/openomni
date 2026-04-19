@@ -19,7 +19,11 @@ export namespace IngressEventProjector {
     return JSON.stringify(event.payload) ?? "";
   }
 
-  export function project(event: Ingress.InboundEvent, sessionId: string): void {
+  export function project(
+    event: Ingress.InboundEvent,
+    sessionId: string,
+    model: { providerID: string; modelID: string },
+  ): void {
     const message: Message.UserMessage = {
       id: crypto.randomUUID(),
       sessionID: sessionId,
@@ -28,9 +32,7 @@ export namespace IngressEventProjector {
         created: Date.now(),
       },
       agent: event.surface,
-      // model is set by the caller after projection; undefined here is intentional
-      // biome-ignore lint/suspicious/noExplicitAny: Message.UserMessage.model is required by protocol schema but not available at ingress time
-      model: undefined as any,
+      model,
     };
 
     Session.addMessage(sessionId, message);

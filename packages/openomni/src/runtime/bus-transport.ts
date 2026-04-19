@@ -1,5 +1,6 @@
 import { Bus, BusEvent } from "@openomni/session";
-import type { Messenger } from "@openomni/protocol";
+import { Messenger } from "@openomni/protocol";
+import type { z } from "zod";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
@@ -8,8 +9,7 @@ export interface Transport {
 
 const messengerEvent = BusEvent.define<Messenger.MessageEnvelope>(
   "messenger.envelope",
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  { parse: (v: unknown) => v } as any,
+  Messenger.MessageEnvelopeSchema as z.ZodSchema<Messenger.MessageEnvelope>,
 );
 
 export class BusTransport implements Transport {
