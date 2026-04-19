@@ -14,6 +14,7 @@ import {
 } from "@openomni/openomni";
 import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
+import { McpConfigLoader } from "../context/index";
 import { createMessageHandler } from "../handler/conversation";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
@@ -121,7 +122,12 @@ export async function main(): Promise<void> {
   const planProvider = new PlanToolProvider();
   const todoProvider = new TodoToolProvider();
 
-  await connectMcpServers(config, mcpProvider);
+  const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
+  const mergedMcpConfig = {
+    ...config.mcp,
+    servers: McpConfigLoader.merge(config.mcp.servers, projectMcpServers),
+  };
+  await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider);
 
   const isLocalMode = process.env.OPENOMNI_MODE === "local";
 
