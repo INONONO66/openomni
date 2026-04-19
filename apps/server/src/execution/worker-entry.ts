@@ -18,6 +18,7 @@ import {
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
+import { createContextMiddleware, ContextAssembler } from "../context/index";
 
 const args = process.argv.slice(2);
 const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
@@ -153,10 +154,13 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             budget: request.budget,
             tools,
             toolExecutor,
-            middleware: buildWorkerMiddleware({
-              permissions: request.permissions,
-              budget: request.budget,
-            }),
+            middleware: [
+              createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
+              ...buildWorkerMiddleware({
+                permissions: request.permissions,
+                budget: request.budget,
+              }),
+            ],
           });
           const runResult = await agent.run({ messages });
 
@@ -188,9 +192,15 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             planAvailableTools,
           );
           const goal = await SessionBridge.buildPlanGoal(sessionId);
+          const planContext = ContextAssembler.assemble({
+            workspaceRoot: planWorkspaceRoot ?? process.cwd(),
+          });
+          const planSystemPrompt = planContext
+            ? `${request.systemPrompt}\n\n${planContext}`
+            : request.systemPrompt;
           const planResult = await runPlan(goal, {
             model: request.model,
-            systemPrompt: request.systemPrompt,
+            systemPrompt: planSystemPrompt,
             planSubAdapter: Storage.get().plan!,
             planId: request.runId,
             budget: request.budget,

@@ -15,6 +15,7 @@ import {
 import type { McpToolProvider } from "../tool/mcp";
 import type { CustomToolProvider } from "../tool/custom";
 import { createExecutionToolContext } from "../execution/worker-runtime";
+import { createContextMiddleware, ContextAssembler } from "../context/index";
 
 type Config = {
   readonly systemProvider: SystemToolProvider;
@@ -105,10 +106,13 @@ async function runDirect(config: Config, request: Execution.Request): Promise<Ex
     budget: request.budget,
     tools,
     toolExecutor,
-    middleware: buildWorkerMiddleware({
-      permissions: request.permissions,
-      budget: request.budget,
-    }),
+    middleware: [
+      createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
+      ...buildWorkerMiddleware({
+        permissions: request.permissions,
+        budget: request.budget,
+      }),
+    ],
   });
 
   const runResult = await agent.run({ messages });
@@ -143,9 +147,13 @@ async function executePlan(config: Config, request: Execution.Request): Promise<
 
   const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
   const goal = await SessionBridge.buildPlanGoal(sessionId);
+  const planContext = ContextAssembler.assemble({ workspaceRoot: workspaceRoot ?? process.cwd() });
+  const planSystemPrompt = planContext
+    ? `${request.systemPrompt}\n\n${planContext}`
+    : request.systemPrompt;
   const planResult = await runPlan(goal, {
     model: request.model,
-    systemPrompt: request.systemPrompt,
+    systemPrompt: planSystemPrompt,
     planSubAdapter: Storage.get().plan!,
     planId: runId,
     budget: request.budget,
