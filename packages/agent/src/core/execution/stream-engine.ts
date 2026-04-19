@@ -1,5 +1,7 @@
 import { run as llmRun, type RunInput } from "@openomni/llm";
+import { AgentExecution } from "@openomni/protocol";
 import type { Message, Sink, Tool } from "@openomni/protocol";
+import { Bus, Log, TraceContext } from "@openomni/session";
 import type {
   AgentEvent,
   AgentStep,
@@ -44,6 +46,15 @@ export async function* streamAgent(
   let attempt = 1;
   let lastError = "";
 
+  const trace = input.traceContext ?? TraceContext.empty();
+  const log = Log.withContext({ traceId: trace.traceId, sessionId: trace.sessionId });
+  const agentBase = {
+    traceId: trace.traceId,
+    sessionId: trace.sessionId ?? "",
+    runId: trace.runId,
+  };
+  log.info("agent.run.started", { model: config.model.id });
+
   while (attempt <= retryPolicy.maxAttempts) {
     let budgetState = createBudgetState();
     let messages = toMessagesWithParts(input.messages, "stream-engine");
@@ -70,6 +81,15 @@ export async function* streamAgent(
           stepGuard: config.stepGuard,
           eventEmitter: config.eventEmitter,
           source: "stream-engine",
+          onToolBlocked: (toolCallId, toolName, reason) => {
+            Bus.publish(AgentExecution.ToolBlocked, {
+              ...agentBase,
+              time: Date.now(),
+              toolCallId,
+              toolName,
+              reason,
+            });
+          },
         }),
       );
     }
@@ -141,6 +161,11 @@ export async function* streamAgent(
             const payload = postRunVerdict.input as { text?: unknown };
             if (typeof payload.text === "string") lastAssistantText = payload.text;
           }
+          log.info("agent.run.completed", {
+            finishReason: "max-steps",
+            turns: budgetState.turns,
+            durationMs: Date.now() - startTime,
+          });
           yield {
             type: "complete",
             result: {
@@ -159,6 +184,12 @@ export async function* streamAgent(
           time: Date.now(),
           turnIndex: budgetState.turns,
         });
+        Bus.publish(AgentExecution.TurnStart, {
+          ...agentBase,
+          time: Date.now(),
+          turnIndex: budgetState.turns,
+        });
+        log.debug("agent.turn.started", { turnIndex: budgetState.turns });
 
         const preTurnVerdict = await engine.dispatch("pre_turn", {
           steps,
@@ -176,15 +207,23 @@ export async function* streamAgent(
         if (preTurnVerdict.action === "inject") {
           messages.push(createUserMessage(preTurnVerdict.message, "stream-engine"));
           if (preTurnVerdict.message.startsWith("[Budget Status]")) {
-            yield {
-              type: "budget_reassurance",
-              remaining: describeBudgetRemaining(budgetState, config.budget),
-            };
+            const remaining = describeBudgetRemaining(budgetState, config.budget);
+            Bus.publish(AgentExecution.BudgetReassurance, {
+              ...agentBase,
+              time: Date.now(),
+              remaining,
+              threshold: config.budget?.reassuranceThreshold ?? 0.6,
+            });
+            yield { type: "budget_reassurance", remaining };
           } else if (preTurnVerdict.message.startsWith("[Budget Warning]")) {
-            yield {
-              type: "budget_warning",
-              remaining: describeBudgetRemaining(budgetState, config.budget),
-            };
+            const remaining = describeBudgetRemaining(budgetState, config.budget);
+            Bus.publish(AgentExecution.BudgetWarning, {
+              ...agentBase,
+              time: Date.now(),
+              remaining,
+              threshold: config.budget?.warningThreshold ?? 0.8,
+            });
+            yield { type: "budget_warning", remaining };
           }
         } else if (preTurnVerdict.action === "abort") {
           yield {
@@ -292,6 +331,13 @@ export async function* streamAgent(
               toolName: call.tool,
               args: call.input,
             });
+            Bus.publish(AgentExecution.ToolInvoked, {
+              ...agentBase,
+              time: Date.now(),
+              toolCallId: call.id,
+              toolName: call.tool,
+              inputSummary: call.tool,
+            });
             sink?.onToolCall(call);
           },
           onToolResult: (result) => {
@@ -313,6 +359,21 @@ export async function* streamAgent(
               outputTokens: totalUsage.outputTokens,
               totalTokens: totalUsage.totalTokens,
             },
+          });
+          Bus.publish(AgentExecution.TurnComplete, {
+            ...agentBase,
+            time: Date.now(),
+            turnIndex,
+            usage: {
+              inputTokens: totalUsage.inputTokens,
+              outputTokens: totalUsage.outputTokens,
+              totalTokens: totalUsage.totalTokens,
+            },
+          });
+          log.debug("agent.turn.completed", {
+            turnIndex,
+            inputTokens: turnUsage.inputTokens,
+            outputTokens: turnUsage.outputTokens,
           });
 
           if (lastAssistantText) yield { type: "text_chunk", text: lastAssistantText };
@@ -380,8 +441,15 @@ export async function* streamAgent(
             if (compactionVerdict.action === "transform") {
               const payload = compactionVerdict.input as Record<string, unknown>;
               if (Array.isArray(payload.messages)) {
+                const messagesBefore = messages.length;
                 messages = payload.messages as Message.WithParts[];
                 compactionCount += 1;
+                Bus.publish(AgentExecution.Compaction, {
+                  ...agentBase,
+                  time: Date.now(),
+                  messagesBefore,
+                  messagesAfter: messages.length,
+                });
               }
             }
 
@@ -424,6 +492,11 @@ export async function* streamAgent(
             }
           }
 
+          log.info("agent.run.completed", {
+            finishReason: "stop",
+            turns: budgetState.turns,
+            durationMs: Date.now() - startTime,
+          });
           yield {
             type: "complete",
             result: {
@@ -483,6 +556,18 @@ export async function* streamAgent(
           maxAttempts: retryPolicy.maxAttempts,
           error: lastError,
         });
+        Bus.publish(AgentExecution.ErrorRetry, {
+          ...agentBase,
+          time: Date.now(),
+          attempt,
+          maxAttempts: retryPolicy.maxAttempts,
+          error: lastError,
+        });
+        log.warn("agent.retry", {
+          attempt,
+          maxAttempts: retryPolicy.maxAttempts,
+          error: lastError,
+        });
         yield {
           type: "error",
           error: error instanceof Error ? error : new Error(lastError),
@@ -493,6 +578,7 @@ export async function* streamAgent(
         continue;
       }
 
+      log.error("agent.run.failed", { error: lastError });
       yield {
         type: "error",
         error: error instanceof Error ? error : new Error(lastError),

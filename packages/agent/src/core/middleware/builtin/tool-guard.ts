@@ -9,6 +9,7 @@ export interface ToolGuardMiddlewareConfig {
   stepGuard?: ChatAgentConfig["stepGuard"];
   eventEmitter?: AgentEventEmitter;
   source?: string;
+  onToolBlocked?: (toolCallId: string, toolName: string, reason: string) => void;
 }
 
 export function createToolGuardMiddleware(
@@ -39,6 +40,7 @@ export function createToolGuardMiddleware(
           toolName,
           reason: "denied by policy",
         });
+        config.onToolBlocked?.(ctx.toolCallId ?? "", toolName, "denied by policy");
         return {
           action: "abort",
           reason: `Blocked: Tool "${toolName}" is not permitted by policy`,
@@ -85,6 +87,7 @@ export function createToolGuardMiddleware(
           toolName,
           reason: "requires approval",
         });
+        config.onToolBlocked?.(ctx.toolCallId ?? "", toolName, "requires approval");
         return {
           action: "abort",
           reason: `Blocked: Tool "${toolName}" requires approval`,
