@@ -1,4 +1,5 @@
 import type { Guardrail, Tool } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 import { WorkspaceLock } from "../workspace-lock.js";
 import type {
   ImplicitInputSource,
@@ -148,16 +149,16 @@ export function createToolExecutor(
     const originalName = tool.spec.name;
     const verdict = checkPermission(originalName, config.permissions);
     if (verdict === "deny") {
+      Log.warn("executor: permission denied", { toolName: originalName });
       return createErrorResult(call, `[Blocked] Tool "${originalName}" denied by policy`);
     }
 
     if (verdict === "require_approval") {
+      Log.warn("executor: approval required", { toolName: originalName });
       return createErrorResult(call, `[Blocked] Tool "${originalName}" requires approval`);
     }
 
-    if (tool.riskTier >= 2) {
-      console.warn(`[executor] executing tier-${tool.riskTier} tool: ${originalName}`);
-    }
+    Log.debug("executor: risk tier evaluated", { toolName: originalName, tier: tool.riskTier });
 
     const timeoutMs = getTimeoutMs(tool.riskTier, config);
     const enrichedCall = injectImplicitInputs(call, tool, runtime);

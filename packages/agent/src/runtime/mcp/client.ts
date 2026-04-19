@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import type { Tool } from "@openomni/protocol";
 import { Mcp } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
