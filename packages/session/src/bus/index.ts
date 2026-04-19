@@ -1,16 +1,7 @@
-import type { z } from "zod";
 import { Log } from "../log/index.js";
+import { BusEvent } from "@openomni/protocol";
 
-export namespace BusEvent {
-  export interface Descriptor<T> {
-    name: string;
-    schema: z.ZodSchema<T>;
-  }
-
-  export function define<T>(name: string, schema: z.ZodSchema<T>): Descriptor<T> {
-    return { name, schema };
-  }
-}
+export { BusEvent };
 
 export namespace Bus {
   type Handler = (data: unknown) => void;
