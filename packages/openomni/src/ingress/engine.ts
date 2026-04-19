@@ -33,7 +33,10 @@ export namespace IngressEngine {
       modelID: agentModel.id,
     });
 
-    IngressEventProjector.project(event, session.id);
+    IngressEventProjector.project(event, session.id, {
+      providerID: agentModel.provider,
+      modelID: agentModel.id,
+    });
 
     switch (event.mode) {
       case "plan":

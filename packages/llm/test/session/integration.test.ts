@@ -1,10 +1,9 @@
 // @ts-ignore - bun test types are provided at runtime
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Session } from "@openomni/session";
-import type { Message } from "../../src/session/message";
+import type { Message, Tool } from "@openomni/protocol";
 import { Storage, Bus } from "@openomni/session";
 import { Snapshot } from "@openomni/session";
-import { Tool } from "../../src/session/tool";
 
 describe("Integration", () => {
   beforeEach(() => {
