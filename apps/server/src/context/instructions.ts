@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { Log } from "@openomni/session";
 import { findUp } from "./find-up";
 
 const FILE_MAX_CHARS = 12_000;
@@ -36,7 +37,7 @@ export namespace InstructionLoader {
           results.push({ path: join(rulesDir, entry), priority: 15, label: `Rules: ${entry}` });
         }
       } catch {
-        console.warn(`[instructions] failed to read rules dir ${rulesDir}, skipping`);
+        Log.warn("failed to read rules dir, skipping", { rulesDir });
       }
     }
 
@@ -58,7 +59,7 @@ export namespace InstructionLoader {
       try {
         content = readFileSync(file.path, "utf-8");
       } catch {
-        console.warn(`[instructions] failed to read ${file.path}, skipping`);
+        Log.warn("failed to read instruction file, skipping", { path: file.path });
         continue;
       }
 

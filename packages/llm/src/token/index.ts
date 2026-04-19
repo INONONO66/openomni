@@ -1,3 +1,5 @@
+import { Log } from "@openomni/session";
+
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -158,7 +160,7 @@ export namespace TokenTracker {
   export function calculateCost(usage: TokenUsage, modelId: string): TokenCost {
     const pricing = MODEL_PRICING[modelId];
     if (!pricing) {
-      console.warn(`[TokenTracker] No pricing data for model '${modelId}'. Cost set to 0.`);
+      Log.warn("no pricing data for model, cost set to 0", { modelId });
       return { inputCost: 0, outputCost: 0, totalCost: 0 };
     }
 

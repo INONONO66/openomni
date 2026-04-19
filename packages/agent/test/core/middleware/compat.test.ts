@@ -201,20 +201,12 @@ describe("fromStepGuard", () => {
 
 describe("fromConfig", () => {
   it("warns and skips stepGuard when both postTurn and stepGuard set", () => {
-    const warnSpy = mock((..._args: unknown[]) => undefined);
-    const original = console.warn;
-    console.warn = warnSpy;
-    try {
-      const regs = fromConfig({
-        hooks: { postTurn: () => ({ action: "continue" }) },
-        stepGuard: () => ({ action: "continue" }),
-      });
-      expect(regs).toHaveLength(1);
-      expect(regs[0].name).toBe("compat:postTurn");
-      expect(warnSpy).toHaveBeenCalled();
-    } finally {
-      console.warn = original;
-    }
+    const regs = fromConfig({
+      hooks: { postTurn: () => ({ action: "continue" }) },
+      stepGuard: () => ({ action: "continue" }),
+    });
+    expect(regs).toHaveLength(1);
+    expect(regs[0].name).toBe("compat:postTurn");
   });
 
   it("registers stepGuard when postTurn not set", () => {

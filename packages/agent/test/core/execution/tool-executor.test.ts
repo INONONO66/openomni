@@ -1,0 +1,170 @@
+import { beforeEach, describe, expect, it } from "bun:test";
+import { Bus } from "@openomni/session";
+import { ToolExecution } from "@openomni/protocol";
+import { MiddlewareEngine } from "../../../src/core/middleware";
+import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+import type { Tool } from "@openomni/protocol";
+import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+
+function makeEngine() {
+  return MiddlewareEngine.create();
+}
+
+function makeCall(id = "call-1", tool = "bash"): Tool.Call {
+  return { id, tool, input: { command: "ls" } };
+}
+
+function abortMiddleware(reason: string): MiddlewareRegistration {
+  return {
+    name: "test-abort",
+    timing: "pre_tool_use",
+    priority: 0,
+    fn: async () => ({ action: "abort", reason }),
+  };
+}
+
+// flush queueMicrotask callbacks used by Bus.publish
+function flushBus(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 0));
+}
+
+describe("createToolExecutor bus events", () => {
+  beforeEach(() => {
+    Bus.reset();
+  });
+
+  it("publishes Started then Completed on successful execution", async () => {
+    const started: unknown[] = [];
+    const completed: unknown[] = [];
+    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
+    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: "r1",
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      engine: makeEngine(),
+      traceContext: { traceId: "trace-1", sessionId: "sess-1" },
+    });
+
+    await executor(makeCall());
+    await flushBus();
+
+    expect(started).toHaveLength(1);
+    expect(completed).toHaveLength(1);
+
+    const s = started[0] as {
+      traceId: string;
+      sessionId: string;
+      toolName: string;
+      toolCallId: string;
+    };
+    expect(s.traceId).toBe("trace-1");
+    expect(s.sessionId).toBe("sess-1");
+    expect(s.toolName).toBe("bash");
+    expect(s.toolCallId).toBe("call-1");
+
+    const c = completed[0] as { isError: boolean; durationMs: number };
+    expect(c.isError).toBe(false);
+    expect(typeof c.durationMs).toBe("number");
+  });
+
+  it("publishes Completed with isError:true when tool result has error", async () => {
+    const completed: unknown[] = [];
+    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: "r1",
+        toolCallId: call.id,
+        output: "err",
+        isError: true,
+      }),
+      engine: makeEngine(),
+      traceContext: { traceId: "trace-2", sessionId: "sess-2" },
+    });
+
+    await executor(makeCall("call-err"));
+    await flushBus();
+
+    expect(completed).toHaveLength(1);
+    expect((completed[0] as { isError: boolean }).isError).toBe(true);
+  });
+
+  it("publishes PermissionDenied and no Started on abort", async () => {
+    const started: unknown[] = [];
+    const denied: unknown[] = [];
+    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
+    Bus.subscribe(ToolExecution.PermissionDenied, (d) => denied.push(d));
+
+    const engine = makeEngine();
+    engine.register(abortMiddleware("Blocked: test rule"));
+
+    const executor = createToolExecutor({
+      toolExecutor: async () => ({ id: "r1", toolCallId: "x", output: "never", isError: false }),
+      engine,
+      traceContext: { traceId: "trace-3", sessionId: "sess-3" },
+    });
+
+    const result = await executor(makeCall("call-deny"));
+    await flushBus();
+
+    expect(result.isError).toBe(true);
+    expect(String(result.output)).toContain("[Blocked:");
+    expect(started).toHaveLength(0);
+    expect(denied).toHaveLength(1);
+
+    const d = denied[0] as { reason: string; toolName: string; toolCallId: string };
+    expect(d.reason).toBe("Blocked: test rule");
+    expect(d.toolName).toBe("bash");
+    expect(d.toolCallId).toBe("call-deny");
+  });
+
+  it("publishes Completed with isError:true when toolExecutor throws", async () => {
+    const started: unknown[] = [];
+    const completed: unknown[] = [];
+    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
+    Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
+
+    const executor = createToolExecutor({
+      toolExecutor: async () => {
+        throw new Error("boom");
+      },
+      engine: makeEngine(),
+      traceContext: { traceId: "trace-4", sessionId: "sess-4" },
+    });
+
+    await expect(executor(makeCall("call-throw"))).rejects.toThrow("boom");
+    await flushBus();
+
+    expect(started).toHaveLength(1);
+    expect(completed).toHaveLength(1);
+    expect((completed[0] as { isError: boolean }).isError).toBe(true);
+  });
+
+  it("falls back to generated traceId when no traceContext provided", async () => {
+    const started: unknown[] = [];
+    Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
+
+    const executor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: "r1",
+        toolCallId: call.id,
+        output: "ok",
+        isError: false,
+      }),
+      engine: makeEngine(),
+    });
+
+    await executor(makeCall());
+    await flushBus();
+
+    expect(started).toHaveLength(1);
+    const s = started[0] as { traceId: string; sessionId: string };
+    expect(s.traceId.length).toBeGreaterThan(0);
+    expect(s.sessionId).toBe("");
+  });
+});

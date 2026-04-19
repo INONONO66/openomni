@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Telemetry } from "../../src/core/telemetry";
+import { Telemetry } from "@openomni/session";
 
 afterEach(() => {
   Telemetry.reset();

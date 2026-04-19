@@ -1,10 +1,12 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
+import { LlmCall } from "@openomni/protocol";
 import { streamText, jsonSchema } from "ai";
 import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
 import { type Provider, getLanguage } from "./provider";
 import { Auth } from "./auth/storage";
+import { Bus, Log } from "@openomni/session";
 
 /**
  * Input for the run() function.
@@ -23,6 +25,7 @@ export interface RunInput {
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   providerOptions?: Record<string, unknown>;
+  trace?: { traceId?: string };
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
@@ -115,7 +118,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         maxRetries: 0,
         stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
         onError: ({ error }: { error: unknown }) => {
-          console.error("[llm/run] streamText error", error);
+          Log.error("streamText error", { error: String(error) });
         },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
@@ -174,11 +177,63 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     createStream,
   });
 
+  const traceId = input.trace?.traceId ?? crypto.randomUUID();
+  const provider = model?.providerID ?? "default";
+  const modelId = model?.id ?? "default";
+
+  Log.info("llm call starting", {
+    model: modelId,
+    provider,
+    messageCount: messages.length,
+    toolCount: input.tools.length,
+    traceId,
+    sessionId: sessionID,
+  });
+
+  Bus.publish(LlmCall.Started, {
+    traceId,
+    sessionId: sessionID,
+    provider,
+    model: modelId,
+    messageCount: messages.length,
+    toolCount: input.tools.length,
+    time: Date.now(),
+  });
+
+  const startMs = Date.now();
+
   try {
     const result = await processor.process({
       messages: messages.map((m) => m.info),
       model: resolvedModel,
       system,
+    });
+
+    const durationMs = Date.now() - startMs;
+    const finalTokens = processor.message.tokens;
+    const finishReason = processor.message.finish ?? "unknown";
+
+    Log.info("llm call completed", {
+      model: modelId,
+      provider,
+      durationMs,
+      inputTokens: finalTokens.input,
+      outputTokens: finalTokens.output,
+      finishReason,
+      traceId,
+      sessionId: sessionID,
+    });
+
+    Bus.publish(LlmCall.Completed, {
+      traceId,
+      sessionId: sessionID,
+      provider,
+      model: modelId,
+      durationMs,
+      inputTokens: finalTokens.input,
+      outputTokens: finalTokens.output,
+      finishReason,
+      time: Date.now(),
     });
 
     switch (result) {

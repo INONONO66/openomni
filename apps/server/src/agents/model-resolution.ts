@@ -1,5 +1,6 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { Auth, Provider } from "@openomni/llm";
+import { Log } from "@openomni/session";
 
 const DATE_SUFFIX_RE = /-\d{8}$/;
 
@@ -115,15 +116,20 @@ export async function resolveRuntimeModel(
     : "model not in provider catalog";
 
   if (defaultModel && defaultModel.provider === model.provider) {
-    console.warn(
-      `[server] ${reason} for ${model.provider}/${model.id} — falling back to default ${defaultModel.id}`,
-    );
+    Log.warn("model resolution failed, falling back to default", {
+      reason,
+      provider: model.provider,
+      id: model.id,
+      fallback: defaultModel.id,
+    });
     return defaultModel;
   }
 
-  console.warn(
-    `[server] ${reason} for ${model.provider}/${model.id} — passing through unresolved; downstream will throw Model not found`,
-  );
+  Log.warn("model resolution failed, passing through unresolved", {
+    reason,
+    provider: model.provider,
+    id: model.id,
+  });
   return model;
 }
 
@@ -144,7 +150,7 @@ export async function resolveDefaultProviderModel(): Promise<CatalogModel | unde
     return resolveCatalogModel(preferred.id, models) ?? preferred;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[server] failed to resolve model: ${msg}`);
+    Log.warn("failed to resolve model", { msg });
     return undefined;
   }
 }

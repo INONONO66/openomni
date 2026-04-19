@@ -1,5 +1,5 @@
 import type { AgentBudget } from "@openomni/agent";
-import type { Plan, Storage, Tool } from "@openomni/protocol";
+import type { Plan, Storage, Tool, TraceContext } from "@openomni/protocol";
 import { memoryPlanAdapter } from "./memory-plan-adapter.js";
 import { PlanAgent } from "./plan-agent.js";
 
@@ -11,6 +11,7 @@ export interface RunPlanConfig {
   budget?: AgentBudget;
   tools?: Tool.Spec[];
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  traceContext?: TraceContext.Type;
 }
 
 export async function runPlan(goal: string, config: RunPlanConfig): Promise<Plan.Result> {
@@ -30,7 +31,10 @@ export async function runPlan(goal: string, config: RunPlanConfig): Promise<Plan
     toolExecutor: config.toolExecutor,
   });
 
-  await agent.run({ messages: [{ role: "user", content: goal }] });
+  await agent.run({
+    messages: [{ role: "user", content: goal }],
+    traceContext: config.traceContext,
+  });
 
   const doc = await planSubAdapter.read(planId);
   if (!doc) throw new Error(`plan agent did not write plan: ${planId}`);

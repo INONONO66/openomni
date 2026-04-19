@@ -16,7 +16,7 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas (20 domains): error, tool, message, run, sink, bus, event, notification, adapter, plan, ingress, messenger, guardrail, event-log, agent, artifact, gate, hook, subagent
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), EventLog, Artifact, Snapshot, SurfaceKey, WorkerRun
 │   ├── llm/             # LLM abstraction: providers, auth (API key + OAuth), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — no session dependency
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — depends on session for observability (Log, Bus, Telemetry, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, tool-guard, memory, delegation, telemetry, middleware engine
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── middleware/     # Engine + builtins (budget, memory, tool-guard, compaction, post-tool, post-turn, idle-nudge) + legacy compat bridge
@@ -37,7 +37,7 @@ openomni/
 protocol ← session ← llm ← agent ← openomni ← coordinator ← { cli, server }
 ```
 
-Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `cli` and `server` are sibling apps — neither depends on the other. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Log, Bus, Telemetry, TraceContext). `cli` and `server` are sibling apps — neither depends on the other. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
 
 ## WHERE TO LOOK
 

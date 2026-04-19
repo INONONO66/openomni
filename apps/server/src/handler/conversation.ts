@@ -1,6 +1,7 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
 import { IngressEngine } from "@openomni/openomni";
 import type { Adapter, Ingress } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
@@ -22,7 +23,7 @@ async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps)
     return toResponseText(await IngressEngine.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[conversation] ingress error: ${msg}`);
+    Log.error("ingress error", { msg });
     return `Error: ${msg}`;
   }
 }

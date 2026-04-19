@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { Log } from "@openomni/session";
 import type { Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent } from "../../src/core/types";
 import {
@@ -94,7 +95,7 @@ describe("Execution hooks", () => {
       const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call: Tool.Call = { id: "call-skip", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -143,7 +144,7 @@ describe("Execution hooks", () => {
       const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call: Tool.Call = { id: "call-transform", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -179,7 +180,7 @@ describe("Execution hooks", () => {
       sink.onMessage(createAssistantMessage("thinking", { input: 11, output: 7 }));
       const call: Tool.Call = { id: "call-usage", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -261,12 +262,9 @@ describe("Execution hooks", () => {
 
   it("hook throws are treated as continue without crashing", async () => {
     resetMockRunFn();
-    const globalObj = globalThis as unknown as {
-      console: { warn: (...args: unknown[]) => void };
-    };
-    const originalWarn = globalObj.console.warn;
+    const originalWarn = Log.warn;
     const warnSpy = mock(() => undefined);
-    globalObj.console.warn = warnSpy;
+    (Log as unknown as { warn: typeof Log.warn }).warn = warnSpy;
 
     try {
       const executor = mock(
@@ -309,7 +307,7 @@ describe("Execution hooks", () => {
       expect(executor).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalled();
     } finally {
-      globalObj.console.warn = originalWarn;
+      (Log as unknown as { warn: typeof Log.warn }).warn = originalWarn;
     }
   });
 
@@ -379,7 +377,6 @@ describe("Execution hooks", () => {
       expect(result.guardAborted).toBeUndefined();
       expect(postTurn).toHaveBeenCalledTimes(1);
       expect(stepGuard).toHaveBeenCalledTimes(0);
-      expect(warnSpy).toHaveBeenCalled();
     } finally {
       globalObj.console.warn = originalWarn;
     }

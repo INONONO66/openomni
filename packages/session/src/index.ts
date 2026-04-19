@@ -8,5 +8,8 @@ export { EventLog } from "./event-log/index.js";
 export { Artifact } from "./artifact/index";
 export * from "./worker-run/index.js";
 export { Log } from "./log/index";
+export { TraceContext } from "./trace/index.js";
 export * from "./storage/wal-maintenance.js";
 export { Todo } from "./todo/index.js";
+export { Telemetry } from "./telemetry/index.js";
+export type { TelemetryConfig } from "./telemetry/index.js";
