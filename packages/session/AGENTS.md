@@ -44,7 +44,7 @@ src/
 
 ## ANTI-PATTERNS
 
-- Do NOT access `Storage.getAdapter()` directly from outside this package — go through the `Session.*` / `WorkerRun.*` / `Artifact.*` / `EventLog.*` / `SurfaceKey.*` namespaces.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters (`task`, `plan`, `todo`, `backgroundTask`) from outside this package. Use it directly when you need raw sub-adapter access. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) so bus events are published. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc subagent state alongside `Session`; use `WorkerRun` so it is event-sourced and replayable.
-- Do NOT call `Storage.get().todo` directly from outside this package — go through `Todo.update()` / `Todo.get()` so the bus event is always published.
+- Do NOT call `Storage.get().todo` directly when you need bus event publication — go through `Todo.update()` / `Todo.get()` instead. Direct access is OK for read-only queries that don't require event notification.
