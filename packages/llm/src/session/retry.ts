@@ -1,4 +1,6 @@
 import { APIError, RetryError } from "../error";
+import { Bus, Log } from "@openomni/session";
+import { LlmCall } from "@openomni/protocol";
 
 export namespace Retry {
   export const RETRY_INITIAL_DELAY = 2000;
@@ -53,14 +55,11 @@ export namespace Retry {
           }
         }
 
-        return baseDelay * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1);
+        return baseDelay * RETRY_BACKOFF_FACTOR ** (attempt - 1);
       }
     }
 
-    return Math.min(
-      baseDelay * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1),
-      RETRY_MAX_DELAY_NO_HEADERS,
-    );
+    return Math.min(baseDelay * RETRY_BACKOFF_FACTOR ** (attempt - 1), RETRY_MAX_DELAY_NO_HEADERS);
   }
 
   export function isRetryable(error: unknown): string | undefined {
@@ -113,6 +112,7 @@ export namespace Retry {
     maxAttempts?: number;
     signal?: AbortSignal;
     initialDelay?: number;
+    trace?: { traceId: string; sessionId: string; provider?: string };
   }
 
   export async function withRetry<T>(fn: () => Promise<T>, options?: WithRetryOptions): Promise<T> {
@@ -151,6 +151,47 @@ export namespace Retry {
           }
 
           const delayMs = delay(attempt, e, initialDelay);
+
+          if (options?.trace) {
+            const { traceId, sessionId, provider = "unknown" } = options.trace;
+
+            Log.warn("llm retry decided", {
+              attempt,
+              maxAttempts,
+              reason: retryReason,
+              backoffMs: delayMs,
+              traceId,
+            });
+
+            Bus.publish(LlmCall.RetryDecided, {
+              traceId,
+              sessionId,
+              attempt,
+              maxAttempts,
+              reason: retryReason,
+              backoffMs: delayMs,
+              time: Date.now(),
+            });
+
+            const isRateLimit =
+              retryReason === "Too Many Requests" || retryReason === "Rate Limited";
+            if (isRateLimit) {
+              Log.warn("llm rate limited", {
+                provider,
+                retryAfterMs: delayMs,
+                traceId,
+              });
+
+              Bus.publish(LlmCall.RateLimited, {
+                traceId,
+                sessionId,
+                provider,
+                retryAfterMs: delayMs,
+                time: Date.now(),
+              });
+            }
+          }
+
           try {
             await sleep(delayMs, signal ?? new AbortController().signal);
           } catch (sleepError) {
