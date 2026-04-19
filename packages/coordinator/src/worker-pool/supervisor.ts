@@ -173,7 +173,9 @@ export class WorkerSupervisor {
     if (!c?.connected) {
       throw new Error(`worker ${this.id} not available`);
     }
-    return c.call("coordinator.spawn_run", { runId, ...params });
+    const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
+    const timeoutMs = Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000;
+    return c.call("coordinator.spawn_run", { runId, ...params }, timeoutMs);
   }
 
   forceKill(): void {

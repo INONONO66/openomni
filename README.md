@@ -57,7 +57,7 @@ Each package depends only on packages to its left. `protocol` is the leaf with z
 Ingress supports two modes:
 
 - **`direct`** — default. Runs `ChatAgent` against session history and returns the response.
-- **`plan`** — triggered by a `/plan` prefix. Runs `PlanAgent.generate()` to produce a structured plan.
+- **`plan`** — triggered by a `/plan` prefix. Runs `PlanAgent.create()` with plan tools to produce a plan stored in `Storage.PlanSubAdapter`.
 
 ## Getting Started
 

@@ -16,8 +16,8 @@ InboundEvent
         ├─→ IngressSessionResolver.resolve()         — SurfaceKey-based session lookup/create
         ├─→ IngressEventProjector.project()          — persist UserMessage + TextPart to the session
         └─→ switch (event.mode)
-              ├─→ "plan"   → IngressHandlers.handlePlan()   → PlanAgent.generate()
-              └─→ "direct" → IngressHandlers.handleDirect() → ChatAgent.run()
+              ├─→ "plan"   → IngressHandlers.handlePlan()   → coordinator.dispatch() → runPlan()
+              └─→ "direct" → IngressHandlers.handleDirect() → coordinator.dispatch() → ChatAgent.run()
 ```
 
 Only `plan` and `direct` modes exist. Parallel execution across plan steps is the caller's responsibility (typically through `SubagentRuntime` / `BackgroundManager`).
@@ -75,7 +75,7 @@ type AgentDef = {
 
 ```typescript
 type IngressResult =
-  | { mode: "plan";   sessionId: string; result: PlanResult }
+  | { mode: "plan";   sessionId: string; result: { planId: string } }
   | { mode: "direct"; sessionId: string; result: { output: string; finishReason: string } };
 ```
 
@@ -84,7 +84,7 @@ type IngressResult =
 A single session spans plan → re-plan → direct interactions:
 
 - Same `surface` + `workspace` + `channel` → same session via `SurfaceKey`.
-- Re-plan: a second `mode: "plan"` call on the same session combines the previously stored plan (TextPart with `__OPENOMNI_PLAN__` prefix) with new user feedback to regenerate.
+- Re-plan: a second `mode: "plan"` call on the same session reads the previous plan from `Storage.PlanSubAdapter` (via `__OPENOMNI_PLANID__` marker) and combines with new user feedback.
 - Direct follow-up: `mode: "direct"` reads the flat session history and runs a single `ChatAgent`.
 
 ### Key Modules
@@ -94,14 +94,14 @@ A single session spans plan → re-plan → direct interactions:
 | `IngressEngine` | `src/ingress/engine.ts` | Top-level stateless pipeline |
 | `IngressSessionResolver` | `src/ingress/session-resolver.ts` | SurfaceKey → session lookup/create |
 | `IngressEventProjector` | `src/ingress/event-projector.ts` | InboundEvent → UserMessage + TextPart |
-| `SessionBridge` | `src/ingress/session-bridge.ts` | Session ↔ agent input/output conversion (including `__OPENOMNI_PLAN__` prefix handling) |
+| `SessionBridge` | `src/ingress/session-bridge.ts` | Session ↔ agent input/output conversion (plan ID markers + `Storage.PlanSubAdapter` reads) |
 | `IngressHandlers` | `src/ingress/handlers.ts` | Mode-specific handler functions |
 
 ### Architectural Decisions
 
 - **Stateless** — no `configure()`; all info comes from `InboundEvent`. Agent definitions are provided by the caller (e.g. `apps/server` builds them from its own agent registry).
 - **`toolExecutor` preserved** — the Zod parse is validation-only; the original event object is used downstream so function fields such as `toolExecutor` survive.
-- **Plan stored in session** — generated plans are persisted as a `TextPart` prefixed with `__OPENOMNI_PLAN__` so `SessionBridge` can extract / combine them deterministically.
+- **Plan stored in Storage** — plans are persisted in `Storage.PlanSubAdapter`. The session stores only a `planId` reference (via `__OPENOMNI_PLANID__` marker) so `SessionBridge` can locate the plan for re-planning.
 - **Re-plan via conversation** — there is no dedicated re-plan API. Session history provides the context for the next `plan` call.
 - **No auto mode** — mode selection is explicit. `apps/server` uses a `/plan` text prefix to detect plan mode before calling `IngressEngine.ingest`.
 - **No rework** — post-execution result modification is out of scope.

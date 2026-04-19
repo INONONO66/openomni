@@ -20,9 +20,10 @@ export function resolveAgentName(ctx: RoutingContext): string {
 }
 
 function parseSlashCommand(text: string): { command: string; rest: string } | null {
-  if (!text.startsWith("/")) return null;
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith("/")) return null;
 
-  const parts = text.slice(1).split(/\s+/);
+  const parts = trimmed.slice(1).split(/\s+/);
   const command = parts[0];
   if (!command) return null;
 

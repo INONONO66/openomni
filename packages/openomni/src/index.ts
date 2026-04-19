@@ -4,12 +4,10 @@ export {
   Hashline,
   PLAN_TOOL_SPECS,
   PlanAgent,
-  PlanPipeline,
-  StructuralGate,
   createPlanToolExecutor,
-  structuralGateCheck,
+  runPlan,
 } from "./plan";
-export type { EditResult, PlanDocument, PlanStore } from "./plan";
+export type { RunPlanConfig } from "./plan";
 
 // DAG utilities
 export { DAG } from "./dag";

@@ -171,44 +171,17 @@ describe("Plan", () => {
 });
 
 describe("PlanResult", () => {
-  test("should parse valid result with plan only", () => {
-    const now = new Date();
-    const plan = {
-      planId: "plan-1",
-      goal: "Build API",
-      steps: [],
-      createdAt: now,
-      version: 1,
-    };
-    const result = Plan.ResultSchema.parse({
-      plan,
-    });
-    expect(result.plan.planId).toBe("plan-1");
-    expect(result.reviewNotes).toBeUndefined();
+  test("should parse valid result with planId", () => {
+    const result = Plan.ResultSchema.parse({ planId: "plan-1" });
+    expect(result.planId).toBe("plan-1");
   });
 
-  test("should parse result with review notes", () => {
-    const now = new Date();
-    const plan = {
-      planId: "plan-1",
-      goal: "Build API",
-      steps: [],
-      createdAt: now,
-      version: 1,
-    };
-    const result = Plan.ResultSchema.parse({
-      plan,
-      reviewNotes: "Plan looks good, ready for execution",
-    });
-    expect(result.reviewNotes).toBe("Plan looks good, ready for execution");
+  test("should reject missing planId", () => {
+    expect(() => Plan.ResultSchema.parse({})).toThrow();
   });
 
-  test("should reject missing plan", () => {
-    expect(() =>
-      Plan.ResultSchema.parse({
-        // missing plan
-      }),
-    ).toThrow();
+  test("should reject non-string planId", () => {
+    expect(() => Plan.ResultSchema.parse({ planId: 123 })).toThrow();
   });
 });
 

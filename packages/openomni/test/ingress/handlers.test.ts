@@ -137,7 +137,7 @@ function makePlanCoordinator(plan: Plan): CoordinatorLike {
         runId: request.runId,
         sessionId: request.sessionId,
         status: "succeeded",
-        output: JSON.stringify({ plan }),
+        output: JSON.stringify({ planId: plan.planId }),
         finishReason: "stop",
       };
     },
@@ -210,7 +210,7 @@ describe("IngressHandlers", () => {
 
     expect(result.mode).toBe("plan");
     expect(result.sessionId).toBe(sessionId);
-    expect(result.result.plan.planId).toBe(plan.planId);
+    expect(result.result.planId).toBe(plan.planId);
   });
 
   it("handlePlan delegates to coordinator and stores plan result", async () => {
@@ -241,7 +241,7 @@ describe("IngressHandlers", () => {
     expect(storePlanResultMock).toHaveBeenCalledTimes(1);
     const [calledSessionId, calledResult, calledModel] = storePlanResultMock.mock.calls[0];
     expect(calledSessionId).toBe(sessionId);
-    expect(calledResult.plan.planId).toBe(plan.planId);
+    expect(calledResult.planId).toBe(plan.planId);
     expect(calledModel).toEqual(event.agent.model);
   });
 

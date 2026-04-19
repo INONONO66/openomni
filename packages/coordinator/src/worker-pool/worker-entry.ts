@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { ChatAgent } from "@openomni/agent";
 import { Execution } from "@openomni/protocol";
-import { initialize } from "@openomni/session";
-import { PlanAgent, SessionBridge } from "@openomni/openomni";
+import { initialize, Storage } from "@openomni/session";
+import { SessionBridge, runPlan } from "@openomni/openomni";
 import { createIpcServer } from "../ipc/server";
 
 const args = process.argv.slice(2);
@@ -57,17 +57,19 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             finishReason: runResult.finishReason,
           });
         } else {
-          const goal = SessionBridge.buildPlanGoal(sessionId);
-          const result = await PlanAgent.generate(goal, {
+          const goal = await SessionBridge.buildPlanGoal(sessionId);
+          const planResult = await runPlan(goal, {
             model: request.model,
             systemPrompt: request.systemPrompt,
+            planSubAdapter: Storage.get().plan!,
+            planId: runId,
             budget: request.budget,
           });
           respond({
             runId,
             sessionId,
             status: "succeeded",
-            output: JSON.stringify(result),
+            output: JSON.stringify(planResult),
           });
         }
       } catch (err) {

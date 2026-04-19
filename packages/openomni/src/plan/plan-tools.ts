@@ -1,6 +1,5 @@
-import type { Tool } from "@openomni/protocol";
+import type { Storage, Tool } from "@openomni/protocol";
 import { Hashline } from "./hashline.js";
-import type { PlanStore } from "./plan-store";
 
 export const PLAN_TOOL_SPECS: Tool.Spec[] = [
   {
@@ -47,10 +46,19 @@ export const PLAN_TOOL_SPECS: Tool.Spec[] = [
     },
     safe: false,
   },
+  {
+    name: "plan_list",
+    description: "List all plans",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    safe: true,
+  },
 ];
 
 export function createPlanToolExecutor(
-  store: PlanStore,
+  adapter: Storage.PlanSubAdapter,
 ): (call: Tool.Call) => Promise<Tool.Result> {
   const fail = (call: Tool.Call, msg: string): Tool.Result => ({
     id: crypto.randomUUID(),
@@ -62,7 +70,6 @@ export function createPlanToolExecutor(
     id: crypto.randomUUID(),
     toolCallId: call.id,
     output: out,
-    isError: false,
   });
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
@@ -82,26 +89,32 @@ export function createPlanToolExecutor(
           return fail(call, "from and to must be finite numbers");
         if ((fromNum !== undefined && fromNum < 1) || (toNum !== undefined && toNum < 1))
           return fail(call, "from and to must be positive integers");
-        const doc = store.read(planId);
+        const doc = await adapter.read(planId);
         if (!doc) return fail(call, `Plan '${planId}' not found`);
-        if (fromNum !== undefined || toNum !== undefined) {
-          return ok(
-            call,
-            Hashline.formatRange(
-              doc.content,
-              fromNum ?? 1,
-              toNum ?? doc.content.split("\n").length,
-            ),
-          );
-        }
-        return ok(call, Hashline.format(doc.content));
+        const formatted =
+          fromNum !== undefined || toNum !== undefined
+            ? Hashline.formatRange(
+                doc.content,
+                fromNum ?? 1,
+                toNum ?? doc.content.split("\n").length,
+              )
+            : Hashline.format(doc.content);
+        return ok(
+          call,
+          JSON.stringify({
+            content: formatted,
+            version: doc.version,
+            createdAt: doc.createdAt,
+            updatedAt: doc.updatedAt,
+          }),
+        );
       }
       case "plan_write": {
         const { planId, content } = inp;
         if (typeof planId !== "string") return fail(call, "planId must be a string");
         if (typeof content !== "string") return fail(call, "content must be a string");
-        store.write(planId, content);
-        return ok(call, `Plan '${planId}' created (${content.split("\n").length} lines)`);
+        await adapter.write(planId, content);
+        return ok(call, JSON.stringify({ ok: true, id: planId }));
       }
       case "plan_edit": {
         const { planId, edits } = inp;
@@ -109,10 +122,16 @@ export function createPlanToolExecutor(
         if (!Array.isArray(edits)) return fail(call, "edits must be an array");
         if (edits.some((e) => e === null || typeof e !== "object"))
           return fail(call, "each edit must be a non-null object");
-        const result = store.edit(planId, edits as Hashline.EditOp[]);
-        return result.ok
-          ? ok(call, `Plan '${planId}' edited`)
-          : fail(call, result.errors.join("\n"));
+        const doc = await adapter.read(planId);
+        if (!doc) return fail(call, `Plan '${planId}' not found`);
+        const editResult = Hashline.applyEdits(doc.content, edits as Hashline.EditOp[]);
+        if (!editResult.ok) return fail(call, editResult.errors.join("\n"));
+        await adapter.write(planId, editResult.content);
+        return ok(call, `Plan '${planId}' edited`);
+      }
+      case "plan_list": {
+        const plans = await adapter.list();
+        return ok(call, JSON.stringify(plans));
       }
       default:
         return fail(call, `Unknown tool: ${call.tool}`);

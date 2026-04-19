@@ -10,7 +10,7 @@ function toResponseText(result: Ingress.IngressResult): string {
     case "direct":
       return result.result.output || "(no response)";
     case "plan":
-      return `Plan generated: ${result.result.plan.goal}`;
+      return `Plan generated: ${result.result.planId}`;
   }
 }
 

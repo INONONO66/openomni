@@ -11,7 +11,7 @@ Originally, `packages/agent` contained both the LLM ReAct loop and all orchestra
 Split responsibilities across two packages:
 
 - **`packages/agent`** — Stateless `ChatAgent` primitive plus the multi-agent runtime (messenger, registry, subagent / background tool specs, MCP client). No session dependency — sinks and transports are injected by callers.
-- **`packages/openomni`** — Orchestration: `IngressEngine`, `PlanAgent`, `PlanPipeline`, DAG utilities, `TaskStorage`, and the session-backed subagent layer (`SubagentRuntime`, `BackgroundManager`, `SubagentConsultation`).
+- **`packages/openomni`** — Orchestration: `IngressEngine`, `PlanAgent`, `runPlan`, DAG utilities, `TaskStorage`, and the session-backed subagent layer (`SubagentRuntime`, `BackgroundManager`, `SubagentConsultation`).
 
 `ChatAgent` remains a function-style primitive: take messages + tools, run the ReAct loop, return results. State (budget, memory, delegation depth) lives on a per-call context. Extension happens via the middleware engine in `packages/agent/src/core/middleware/`.
 

@@ -1,7 +1,7 @@
 import { Plan, type Message } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
 
-const PLAN_PREFIX = "__OPENOMNI_PLAN__";
+const PLAN_ID_MARKER = "__OPENOMNI_PLANID__";
 
 function createAssistantMessage(
   sessionId: string,
@@ -27,61 +27,60 @@ function createAssistantMessage(
   };
 }
 
-export namespace SessionBridge {
-  export function buildPlanGoal(sessionId: string): string {
-    const messages = Session.getMessages(sessionId);
-
-    // Scan for the last plan in session
-    let lastPlanJson: string | undefined;
-    for (const message of messages) {
-      if (message.role !== "assistant") continue;
-      const parts = Session.getParts(message.id);
-      for (const part of parts) {
-        if (part.type === "text" && part.text.startsWith(PLAN_PREFIX)) {
-          lastPlanJson = part.text.slice(PLAN_PREFIX.length);
-        }
+function extractStoredPlanId(sessionId: string): string | undefined {
+  const messages = Session.getMessages(sessionId);
+  let lastPlanId: string | undefined;
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const parts = Session.getParts(message.id);
+    for (const part of parts) {
+      if (part.type === "text" && part.text.startsWith(PLAN_ID_MARKER)) {
+        lastPlanId = part.text.slice(PLAN_ID_MARKER.length);
       }
     }
+  }
+  return lastPlanId;
+}
 
-    // Get the latest user message text
+export namespace SessionBridge {
+  export async function buildPlanGoal(sessionId: string): Promise<string> {
+    const messages = Session.getMessages(sessionId);
     let latestUserText = "";
     for (const message of messages) {
       if (message.role === "user") {
         const parts = Session.getParts(message.id);
         for (const part of parts) {
-          if (part.type === "text") {
-            latestUserText = part.text;
-          }
+          if (part.type === "text") latestUserText = part.text;
         }
       }
     }
 
-    if (!lastPlanJson) {
-      return latestUserText;
+    const planId = extractStoredPlanId(sessionId);
+    if (!planId) return latestUserText;
+
+    const planAdapter = Storage.get().plan;
+    if (planAdapter) {
+      const doc = await planAdapter.read(planId);
+      if (doc) {
+        return `Previous plan:\n${doc.content}\n\nUser feedback:\n${latestUserText}`;
+      }
     }
 
-    return `Previous plan:\n${lastPlanJson}\n\nUser feedback:\n${latestUserText}`;
+    // Fallback when plan content isn't in storage (e.g. cross-process scenarios)
+    return `Previous plan ID: ${planId}\n\nUser feedback:\n${latestUserText}`;
   }
 
-  export function extractPlan(sessionId: string): Plan {
-    const messages = Session.getMessages(sessionId);
+  export async function extractPlan(sessionId: string): Promise<Plan> {
+    const planId = extractStoredPlanId(sessionId);
+    if (!planId) throw new Error("No plan found in session");
 
-    let lastPlanText: string | undefined;
-    for (const message of messages) {
-      if (message.role !== "assistant") continue;
-      const parts = Session.getParts(message.id);
-      for (const part of parts) {
-        if (part.type === "text" && part.text.startsWith(PLAN_PREFIX)) {
-          lastPlanText = part.text.slice(PLAN_PREFIX.length);
-        }
-      }
-    }
+    const planAdapter = Storage.get().plan;
+    if (!planAdapter) throw new Error("No plan found in session");
 
-    if (!lastPlanText) {
-      throw new Error("No plan found in session");
-    }
+    const doc = await planAdapter.read(planId);
+    if (!doc) throw new Error("No plan found in session");
 
-    const parsed = JSON.parse(lastPlanText);
+    const parsed = JSON.parse(doc.content);
     return Plan.Schema.parse(parsed);
   }
 
@@ -94,7 +93,7 @@ export namespace SessionBridge {
     for (const message of messages) {
       const parts = Session.getParts(message.id);
       for (const part of parts) {
-        if (part.type === "text" && !part.text.startsWith(PLAN_PREFIX)) {
+        if (part.type === "text" && !part.text.startsWith(PLAN_ID_MARKER)) {
           result.push({ role: message.role, content: part.text });
         }
       }
@@ -116,7 +115,7 @@ export namespace SessionBridge {
       sessionID: sessionId,
       messageID: message.id,
       type: "text",
-      text: PLAN_PREFIX + JSON.stringify(result.plan),
+      text: PLAN_ID_MARKER + result.planId,
     };
     Session.addPart(message.id, part);
   }

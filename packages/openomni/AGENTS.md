@@ -6,7 +6,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
-| `src/plan/` | LLM-driven plan generation and gating | `PlanAgent`, `PlanPipeline`, `PlanStore`, `SqlitePlanStore`, `Hashline`, `StructuralGate`, `PLAN_TOOL_SPECS`, `createPlanToolExecutor`, `normalizePlanPayload` |
+| `src/plan/` | Tool-based plan generation | `PlanAgent`, `runPlan`, `Hashline`, `PLAN_TOOL_SPECS`, `createPlanToolExecutor` |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge` |
 | `src/storage/` | Shared task type re-exports | `Task` (re-exported from `@openomni/protocol`) |
@@ -16,8 +16,8 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
-- `src/plan/` turns a goal into a structured `Plan`, then runs enrichment + validation gates before the result is handed off.
-- `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `plan` or `direct` handler.
+- `src/plan/` turns a goal into a plan via `runPlan()` → `PlanAgent.create()`. The LLM uses plan tools (`plan_write`, `plan_read`, `plan_edit`, `plan_list`) to write plans directly to `Storage.PlanSubAdapter`. Result is a `{ planId }` reference.
+- `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `plan` or `direct` handler. `SessionBridge` manages plan storage via `Storage.PlanSubAdapter` (plan ID markers on messages).
 - `src/storage/` is now a thin re-export shim. Task types (`Task.Info`, `Task.Run`, `Task.Status`) moved to `@openomni/protocol/task` and are re-exported here for backward compatibility. Task, plan, and todo persistence is handled by the optional sub-adapters on `Storage.Adapter` in `@openomni/session`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
 
@@ -51,7 +51,8 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 ## Extension Points
 
-- Add a new plan gate or enricher in `src/plan/` so validation stays next to planning.
+- Add new plan tools in `src/plan/plan-tools.ts` (specs + executor). Plan tools are always available to `PlanAgent.create()` and `runPlan()`.
+- Add new gates or enrichers in `src/plan/` so validation stays next to planning.
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface. The three new providers (`TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`) each live in their own subdirectory (`task/`, `plan/`, `todo/`) and read from `Storage.get()` in `@openomni/session`.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 - Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.

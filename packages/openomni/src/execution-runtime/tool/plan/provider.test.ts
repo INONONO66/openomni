@@ -21,12 +21,13 @@ describe("PlanToolProvider", () => {
     expect(provider.category).toBe("system");
   });
 
-  it("lists 3 tools: plan_write, plan_read, plan_list", () => {
+  it("lists 4 tools: plan_write, plan_read, plan_edit, plan_list", () => {
     const tools = provider.listTools();
-    expect(tools).toHaveLength(3);
+    expect(tools).toHaveLength(4);
     const names = tools.map((t) => t.spec.name);
     expect(names).toContain("plan_write");
     expect(names).toContain("plan_read");
+    expect(names).toContain("plan_edit");
     expect(names).toContain("plan_list");
   });
 
@@ -57,7 +58,7 @@ describe("PlanToolProvider", () => {
   describe("plan_write", () => {
     it("writes a plan and returns success", async () => {
       const result = await provider.execute(
-        makeCall("plan_write", { id: "plan-1", content: "# My Plan" }),
+        makeCall("plan_write", { planId: "plan-1", content: "# My Plan" }),
       );
       expect(result.isError).toBeUndefined();
       const parsed = JSON.parse(result.output);
@@ -65,32 +66,32 @@ describe("PlanToolProvider", () => {
       expect(parsed.id).toBe("plan-1");
     });
 
-    it("returns error when id is missing", async () => {
+    it("returns error when planId is missing", async () => {
       const result = await provider.execute(makeCall("plan_write", { content: "# Plan" }));
       expect(result.isError).toBe(true);
     });
 
     it("returns error when content is missing", async () => {
-      const result = await provider.execute(makeCall("plan_write", { id: "plan-1" }));
+      const result = await provider.execute(makeCall("plan_write", { planId: "plan-1" }));
       expect(result.isError).toBe(true);
     });
   });
 
   describe("plan_read", () => {
     it("returns plan content after writing", async () => {
-      await provider.execute(makeCall("plan_write", { id: "plan-2", content: "# Step 1" }));
+      await provider.execute(makeCall("plan_write", { planId: "plan-2", content: "# Step 1" }));
 
-      const result = await provider.execute(makeCall("plan_read", { id: "plan-2" }));
+      const result = await provider.execute(makeCall("plan_read", { planId: "plan-2" }));
       expect(result.isError).toBeUndefined();
       const parsed = JSON.parse(result.output);
-      expect(parsed.content).toBe("# Step 1");
+      expect(parsed.content).toContain("# Step 1");
       expect(parsed.version).toBe(1);
     });
 
     it("returns error for missing plan", async () => {
-      const result = await provider.execute(makeCall("plan_read", { id: "nonexistent" }));
+      const result = await provider.execute(makeCall("plan_read", { planId: "nonexistent" }));
       expect(result.isError).toBe(true);
-      expect(result.output).toContain("Plan not found: nonexistent");
+      expect(result.output).toContain("not found");
     });
   });
 
@@ -103,8 +104,8 @@ describe("PlanToolProvider", () => {
     });
 
     it("returns list of plans after writing", async () => {
-      await provider.execute(makeCall("plan_write", { id: "plan-a", content: "Plan A" }));
-      await provider.execute(makeCall("plan_write", { id: "plan-b", content: "Plan B" }));
+      await provider.execute(makeCall("plan_write", { planId: "plan-a", content: "Plan A" }));
+      await provider.execute(makeCall("plan_write", { planId: "plan-b", content: "Plan B" }));
 
       const result = await provider.execute(makeCall("plan_list"));
       expect(result.isError).toBeUndefined();
@@ -116,7 +117,9 @@ describe("PlanToolProvider", () => {
     });
 
     it("list entries do not include content", async () => {
-      await provider.execute(makeCall("plan_write", { id: "plan-c", content: "secret content" }));
+      await provider.execute(
+        makeCall("plan_write", { planId: "plan-c", content: "secret content" }),
+      );
 
       const result = await provider.execute(makeCall("plan_list"));
       const parsed = JSON.parse(result.output);

@@ -63,7 +63,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
 | Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
-| Plan Mode (PlanAgent) | `packages/openomni/src/plan/` | `PlanAgent.generate()` (one-shot), `PlanAgent.create()` (interactive with `plan_*` tools) |
+| Plan Mode (PlanAgent) | `packages/openomni/src/plan/` | `runPlan()` → `PlanAgent.create()` (tool-based with `plan_*` tools, stores to `Storage.PlanSubAdapter`) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Task storage | `packages/openomni/src/storage/` | `TaskStorage`, `FileTaskStore`, task types |
 | Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session resolve → project → mode dispatch |
@@ -87,7 +87,7 @@ Ingress supports two execution modes:
 | Mode | Trigger | Handler | Output |
 | --- | --- | --- | --- |
 | `direct` | Default (no prefix) | `handleDirect` → `ChatAgent.run()` | LLM response text |
-| `plan` | `/plan` prefix | `handlePlan` → `PlanAgent.generate()` | Structured `Plan` JSON |
+| `plan` | `/plan` prefix | `handlePlan` → `runPlan()` → `PlanAgent.create()` | `{ planId }` reference (plan stored in `Storage.PlanSubAdapter`) |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
