@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { SkillLoader, type SkillMeta } from "../../src/context/skills";
 
 let tempRoot: string;
+let emptyGlobalDir: string;
 
 function makeWorkspace(root: string) {
   const skillsDir = join(root, ".openomni", "skills");
@@ -20,6 +21,8 @@ function writeSkill(skillsDir: string, name: string, content: string) {
 
 beforeAll(() => {
   tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "skills-test-")));
+  emptyGlobalDir = join(tempRoot, "empty-global");
+  mkdirSync(emptyGlobalDir);
 });
 
 afterAll(() => {
@@ -36,7 +39,7 @@ describe("SkillLoader.discover", () => {
       "---\nname: my-skill\ndescription: A test skill\n---\n# Content",
     );
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills).toHaveLength(1);
     expect(skills[0].name).toBe("my-skill");
@@ -53,7 +56,7 @@ describe("SkillLoader.discover", () => {
       "---\nname: parsed-name\ndescription: Parsed description\n---\n# Body",
     );
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills[0].name).toBe("parsed-name");
     expect(skills[0].description).toBe("Parsed description");
@@ -64,7 +67,7 @@ describe("SkillLoader.discover", () => {
     const skillsDir = makeWorkspace(ws);
     writeSkill(skillsDir, "dir-fallback", "---\ndescription: Only description\n---\n# Body");
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills[0].name).toBe("dir-fallback");
     expect(skills[0].description).toBe("Only description");
@@ -75,7 +78,7 @@ describe("SkillLoader.discover", () => {
     const skillsDir = makeWorkspace(ws);
     writeSkill(skillsDir, "no-desc", "---\nname: no-desc\n---\n# Body");
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills[0].description).toBe("");
   });
@@ -85,8 +88,8 @@ describe("SkillLoader.discover", () => {
     const skillsDir = makeWorkspace(ws);
     writeSkill(skillsDir, "bad-yaml", "---\nname: [unclosed bracket\ndescription: ok\n---\n# Body");
 
-    expect(() => SkillLoader.discover(ws)).not.toThrow();
-    const skills = SkillLoader.discover(ws);
+    expect(() => SkillLoader.discover(ws, emptyGlobalDir)).not.toThrow();
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
     expect(skills[0].name).toBe("bad-yaml");
   });
 
@@ -97,7 +100,7 @@ describe("SkillLoader.discover", () => {
     writeSkill(skillsDir, "skill-b", "---\nname: skill-b\ndescription: Beta\n---");
     writeSkill(skillsDir, "skill-c", "---\nname: skill-c\ndescription: Gamma\n---");
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills).toHaveLength(3);
     const names = skills.map((s) => s.name).sort();
@@ -148,7 +151,7 @@ describe("SkillLoader.discover", () => {
 
   it("returns empty array when no skills dir exists", () => {
     const ws = realpathSync(mkdtempSync(join(tempRoot, "test9-")));
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
     expect(skills).toEqual([]);
   });
 
@@ -163,7 +166,7 @@ describe("SkillLoader.discover", () => {
       );
     }
 
-    const skills = SkillLoader.discover(ws);
+    const skills = SkillLoader.discover(ws, emptyGlobalDir);
 
     expect(skills.length).toBeLessThanOrEqual(200);
   });

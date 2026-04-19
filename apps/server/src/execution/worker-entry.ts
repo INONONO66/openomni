@@ -192,9 +192,14 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             planAvailableTools,
           );
           const goal = await SessionBridge.buildPlanGoal(sessionId);
-          const planContext = ContextAssembler.assemble({
-            workspaceRoot: planWorkspaceRoot ?? process.cwd(),
-          });
+          let planContext = "";
+          try {
+            planContext = ContextAssembler.assemble({
+              workspaceRoot: planWorkspaceRoot ?? process.cwd(),
+            });
+          } catch {
+            console.warn("[worker] context assembly failed, continuing without context");
+          }
           const planSystemPrompt = planContext
             ? `${request.systemPrompt}\n\n${planContext}`
             : request.systemPrompt;

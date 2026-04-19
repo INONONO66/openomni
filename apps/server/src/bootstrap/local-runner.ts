@@ -147,7 +147,12 @@ async function executePlan(config: Config, request: Execution.Request): Promise<
 
   const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
   const goal = await SessionBridge.buildPlanGoal(sessionId);
-  const planContext = ContextAssembler.assemble({ workspaceRoot: workspaceRoot ?? process.cwd() });
+  let planContext = "";
+  try {
+    planContext = ContextAssembler.assemble({ workspaceRoot: workspaceRoot ?? process.cwd() });
+  } catch {
+    console.warn("[local-runner] context assembly failed, continuing without context");
+  }
   const planSystemPrompt = planContext
     ? `${request.systemPrompt}\n\n${planContext}`
     : request.systemPrompt;

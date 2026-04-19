@@ -29,10 +29,14 @@ export namespace InstructionLoader {
 
     const rulesDir = join(workspaceRoot, ".openomni", "rules");
     if (existsSync(rulesDir)) {
-      const entries = readdirSync(rulesDir);
-      for (const entry of entries) {
-        if (!entry.endsWith(".md")) continue;
-        results.push({ path: join(rulesDir, entry), priority: 15, label: `Rules: ${entry}` });
+      try {
+        const entries = readdirSync(rulesDir).sort();
+        for (const entry of entries) {
+          if (!entry.endsWith(".md")) continue;
+          results.push({ path: join(rulesDir, entry), priority: 15, label: `Rules: ${entry}` });
+        }
+      } catch {
+        console.warn(`[instructions] failed to read rules dir ${rulesDir}, skipping`);
       }
     }
 

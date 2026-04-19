@@ -17,7 +17,12 @@ export namespace McpConfigLoader {
       return null;
     }
 
-    if (Array.isArray(parsed)) return parsed as McpServerConfig[];
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (e): e is McpServerConfig =>
+          e !== null && typeof e === "object" && typeof (e as { name?: unknown }).name === "string",
+      );
+    }
     if (
       parsed !== null &&
       typeof parsed === "object" &&

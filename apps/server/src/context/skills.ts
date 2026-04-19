@@ -17,7 +17,7 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
 
   let entries: string[];
   try {
-    entries = readdirSync(skillsDir);
+    entries = readdirSync(skillsDir).sort();
   } catch {
     return [];
   }
