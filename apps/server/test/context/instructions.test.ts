@@ -28,8 +28,8 @@ describe("InstructionLoader.discover", () => {
     const files = InstructionLoader.discover(ws);
     const project = files.find((f) => f.label === "Project");
     expect(project).toBeDefined();
-    expect(project!.path).toBe(join(ws, "AGENTS.md"));
-    expect(project!.priority).toBe(10);
+    expect(project?.path).toBe(join(ws, "AGENTS.md"));
+    expect(project?.priority).toBe(10);
   });
 
   it("discovers global AGENTS.md from custom globalConfigDir", () => {
@@ -40,8 +40,8 @@ describe("InstructionLoader.discover", () => {
     const files = InstructionLoader.discover(ws, globalDir);
     const global = files.find((f) => f.label === "Global");
     expect(global).toBeDefined();
-    expect(global!.path).toBe(join(globalDir, "AGENTS.md"));
-    expect(global!.priority).toBe(0);
+    expect(global?.path).toBe(join(globalDir, "AGENTS.md"));
+    expect(global?.priority).toBe(0);
   });
 
   it("discovers AGENTS.local.md in workspace root (existsSync only, no findUp)", () => {
@@ -55,8 +55,8 @@ describe("InstructionLoader.discover", () => {
     const files = InstructionLoader.discover(ws);
     const local = files.find((f) => f.label === "Local");
     expect(local).toBeDefined();
-    expect(local!.path).toBe(join(ws, "AGENTS.local.md"));
-    expect(local!.priority).toBe(20);
+    expect(local?.path).toBe(join(ws, "AGENTS.local.md"));
+    expect(local?.priority).toBe(20);
 
     // Subdirectory should NOT find parent's AGENTS.local.md
     const subdirFiles = InstructionLoader.discover(subdir);

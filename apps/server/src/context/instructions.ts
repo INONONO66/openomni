@@ -59,7 +59,7 @@ export namespace InstructionLoader {
       }
 
       if (content.length > FILE_MAX_CHARS) {
-        content = content.slice(0, FILE_MAX_CHARS) + "\n[...truncated]";
+        content = `${content.slice(0, FILE_MAX_CHARS)}\n[...truncated]`;
       }
 
       const section = `\n\n---\n**Instructions from ${file.label}:**\n\n${content}`;
