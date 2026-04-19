@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import type { Hook, Middleware } from "@openomni/protocol";
 import type { MiddlewareContext, MiddlewareRegistration } from "./types";
 
@@ -44,16 +45,29 @@ function create(): MiddlewareEngineInstance {
 
     for (const reg of selected) {
       let verdict: Hook.Verdict;
+      const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
+        const durationMs = Date.now() - startTime;
+        Log.debug("middleware dispatch", {
+          timing,
+          name: reg.name,
+          verdict: verdict.action,
+          durationMs,
+        });
       } catch (err) {
+        const durationMs = Date.now() - startTime;
         const failPolicy = reg.failPolicy ?? "fail-open";
+        Log.warn("middleware error", {
+          timing,
+          name: reg.name,
+          error: String(err),
+          failPolicy,
+          durationMs,
+        });
         if (failPolicy === "fail-closed") {
           return { action: "abort", reason: "middleware-error" };
         }
-        console.warn(
-          `[middleware:${reg.name}] threw error (fail-open, continuing): ${(err as Error).message}`,
-        );
         continue;
       }
 
@@ -77,16 +91,29 @@ function create(): MiddlewareEngineInstance {
 
     for (const reg of selected) {
       let verdict: Hook.Verdict;
+      const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
+        const durationMs = Date.now() - startTime;
+        Log.debug("middleware dispatch", {
+          timing: "on_system_prompt",
+          name: reg.name,
+          verdict: verdict.action,
+          durationMs,
+        });
       } catch (err) {
+        const durationMs = Date.now() - startTime;
         const failPolicy = reg.failPolicy ?? "fail-open";
+        Log.warn("middleware error", {
+          timing: "on_system_prompt",
+          name: reg.name,
+          error: String(err),
+          failPolicy,
+          durationMs,
+        });
         if (failPolicy === "fail-closed") {
           throw err;
         }
-        console.warn(
-          `[middleware:${reg.name}] threw error (fail-open, continuing): ${(err as Error).message}`,
-        );
         continue;
       }
 

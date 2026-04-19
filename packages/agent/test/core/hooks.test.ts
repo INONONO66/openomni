@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { Log } from "@openomni/session";
 import type { Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent } from "../../src/core/types";
 import {
@@ -261,12 +262,9 @@ describe("Execution hooks", () => {
 
   it("hook throws are treated as continue without crashing", async () => {
     resetMockRunFn();
-    const globalObj = globalThis as unknown as {
-      console: { warn: (...args: unknown[]) => void };
-    };
-    const originalWarn = globalObj.console.warn;
+    const originalWarn = Log.warn;
     const warnSpy = mock(() => undefined);
-    globalObj.console.warn = warnSpy;
+    (Log as unknown as { warn: typeof Log.warn }).warn = warnSpy;
 
     try {
       const executor = mock(
@@ -309,7 +307,7 @@ describe("Execution hooks", () => {
       expect(executor).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalled();
     } finally {
-      globalObj.console.warn = originalWarn;
+      (Log as unknown as { warn: typeof Log.warn }).warn = originalWarn;
     }
   });
 

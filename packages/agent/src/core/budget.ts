@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import type { AgentBudget } from "./types";
 
 export interface BudgetState {
@@ -33,10 +34,42 @@ export function checkBudget(
 
   const elapsed = Date.now() - state.startTime;
 
-  if (maxWallTimeMs !== -1 && elapsed >= maxWallTimeMs) return "exceeded";
-  if (maxTurns !== -1 && state.turns >= maxTurns) return "exceeded";
-  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) return "exceeded";
-  if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) return "exceeded";
+  if (maxWallTimeMs !== -1 && elapsed >= maxWallTimeMs) {
+    Log.warn("budget exceeded: wall time", {
+      type: "exceeded",
+      turns: state.turns,
+      toolCalls: state.toolCalls,
+      wallTimeMs: elapsed,
+    });
+    return "exceeded";
+  }
+  if (maxTurns !== -1 && state.turns >= maxTurns) {
+    Log.warn("budget exceeded: turns", {
+      type: "exceeded",
+      turns: state.turns,
+      toolCalls: state.toolCalls,
+      wallTimeMs: elapsed,
+    });
+    return "exceeded";
+  }
+  if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) {
+    Log.warn("budget exceeded: tool calls", {
+      type: "exceeded",
+      turns: state.turns,
+      toolCalls: state.toolCalls,
+      wallTimeMs: elapsed,
+    });
+    return "exceeded";
+  }
+  if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) {
+    Log.warn("budget exceeded: tool runtime", {
+      type: "exceeded",
+      turns: state.turns,
+      toolCalls: state.toolCalls,
+      wallTimeMs: elapsed,
+    });
+    return "exceeded";
+  }
 
   const ratios: number[] = [];
   if (maxWallTimeMs !== -1) ratios.push(elapsed / maxWallTimeMs);
@@ -48,8 +81,22 @@ export function checkBudget(
 
   const maxRatio = Math.max(...ratios);
 
-  if (maxRatio >= warningRatio) return "warning";
-  if (maxRatio >= reassuranceRatio) return "reassurance";
+  if (maxRatio >= warningRatio) {
+    Log.warn("budget threshold warning", {
+      type: "warning",
+      remaining: describeBudgetRemaining(state, budget),
+      ratio: maxRatio.toFixed(2),
+    });
+    return "warning";
+  }
+  if (maxRatio >= reassuranceRatio) {
+    Log.info("budget threshold reassurance", {
+      type: "reassurance",
+      remaining: describeBudgetRemaining(state, budget),
+      ratio: maxRatio.toFixed(2),
+    });
+    return "reassurance";
+  }
   return "ok";
 }
 

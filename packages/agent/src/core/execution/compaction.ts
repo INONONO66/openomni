@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import type { Message } from "@openomni/protocol";
 
 export interface CompactionOptions {
@@ -44,6 +45,13 @@ export namespace InMemoryCompactor {
     }
 
     const compacted = [...summaryMessages, ...toKeep];
+
+    Log.info("compaction triggered", {
+      messagesBefore: messages.length,
+      messagesAfter: compacted.length,
+      removedCount: toRemove.length,
+      reason: "context window threshold exceeded",
+    });
 
     return {
       messages: compacted,
