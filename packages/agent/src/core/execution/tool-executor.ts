@@ -1,4 +1,6 @@
-import type { Tool } from "@openomni/protocol";
+import type { Tool, TraceContext } from "@openomni/protocol";
+import { ToolExecution } from "@openomni/protocol";
+import { Bus, Log } from "@openomni/session";
 import type { HookContext, HookVerdict, TokenUsage } from "../types";
 import type { MiddlewareEngineInstance } from "../middleware";
 
@@ -9,12 +11,15 @@ export interface ToolExecutorOptions {
     usage?: TokenUsage;
   };
   onVerdict?: (verdict: HookVerdict) => void;
+  traceContext?: TraceContext.Type;
 }
 
 export function createToolExecutor(
   options: ToolExecutorOptions,
 ): (call: Tool.Call) => Promise<Tool.Result> {
-  const { toolExecutor, engine, getContext, onVerdict } = options;
+  const { toolExecutor, engine, getContext, onVerdict, traceContext } = options;
+  const traceId = traceContext?.traceId ?? crypto.randomUUID();
+  const sessionId = traceContext?.sessionId ?? "";
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const ctx = getContext?.();
@@ -44,6 +49,15 @@ export function createToolExecutor(
 
     if (preVerdict.action === "abort") {
       const reason = preVerdict.reason ?? "middleware";
+      Log.warn("tool execution denied", { toolName: call.tool, toolCallId: call.id, reason });
+      Bus.publish(ToolExecution.PermissionDenied, {
+        traceId,
+        sessionId,
+        toolCallId: call.id,
+        toolName: call.tool,
+        reason,
+        time: Date.now(),
+      });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -57,7 +71,50 @@ export function createToolExecutor(
         ? { ...call, input: preVerdict.input }
         : call;
 
-    const result = await toolExecutor(effectiveCall);
+    Log.debug("tool execution started", { toolName: call.tool, toolCallId: call.id });
+    Bus.publish(ToolExecution.Started, {
+      traceId,
+      sessionId,
+      toolCallId: call.id,
+      toolName: call.tool,
+      time: Date.now(),
+    });
+
+    const startMs = Date.now();
+    let result: Tool.Result;
+    try {
+      result = await toolExecutor(effectiveCall);
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      Log.error("tool execution threw", { toolName: call.tool, toolCallId: call.id, durationMs });
+      Bus.publish(ToolExecution.Completed, {
+        traceId,
+        sessionId,
+        toolCallId: call.id,
+        toolName: call.tool,
+        durationMs,
+        isError: true,
+        time: Date.now(),
+      });
+      throw err;
+    }
+
+    const durationMs = Date.now() - startMs;
+    Log.debug("tool execution completed", {
+      toolName: call.tool,
+      toolCallId: call.id,
+      durationMs,
+      isError: result.isError,
+    });
+    Bus.publish(ToolExecution.Completed, {
+      traceId,
+      sessionId,
+      toolCallId: call.id,
+      toolName: call.tool,
+      durationMs,
+      isError: result.isError,
+      time: Date.now(),
+    });
 
     const postVerdict = await engine.dispatch("post_tool_use", {
       steps: ctx?.steps ?? [],
