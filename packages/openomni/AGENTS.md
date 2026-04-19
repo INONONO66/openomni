@@ -16,7 +16,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
-- `src/plan/` turns a goal into a structured `Plan` via `runPlan()`, which uses `Storage.PlanSubAdapter` for persistence. `PlanAgent.create()` provides interactive planning with plan tools; `PlanAgent.generate()` is one-shot without tools.
+- `src/plan/` turns a goal into a plan via `runPlan()` → `PlanAgent.create()`. The LLM uses plan tools (`plan_write`, `plan_read`, `plan_edit`, `plan_list`) to write plans directly to `Storage.PlanSubAdapter`. Result is a `{ planId }` reference.
 - `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `plan` or `direct` handler. `SessionBridge` manages plan storage via `Storage.PlanSubAdapter` (plan ID markers on messages).
 - `src/storage/` is now a thin re-export shim. Task types (`Task.Info`, `Task.Run`, `Task.Status`) moved to `@openomni/protocol/task` and are re-exported here for backward compatibility. Task, plan, and todo persistence is handled by the optional sub-adapters on `Storage.Adapter` in `@openomni/session`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.

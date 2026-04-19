@@ -1,19 +1,16 @@
 # Plan Domain
 
-LLM-driven plan generation: goal → structured `Plan` with steps, dependencies, and validation gates.
+Tool-based plan generation: goal → LLM uses plan tools → plan stored in `Storage.PlanSubAdapter`.
 
 ## Modules
 
 | File | Role |
 |------|------|
-| `plan-agent.ts` | `PlanAgent.create()` (interactive with plan tools) and `PlanAgent.generate()` (one-shot) |
-| `run-plan.ts` | `runPlan()` — shared entry point for plan execution with `Storage.PlanSubAdapter` |
-| `plan-tools.ts` | Tool specs and executor for `plan_read`, `plan_write`, `plan_edit`, `plan_list` |
-| `plan-store.ts` | `PlanStore` interface + `InMemoryPlanStore` implementation |
-| `hashline.ts` | Hash-anchored line references for precise plan editing (load-bearing algorithm) |
-| `structural-gate.ts` | Gate policy: which checks to run, thresholds, accept/reject decisions |
-| `plan-checks.ts` | Pure helpers: word count, Jaccard similarity, dependency depth BFS |
-| `plan-json.ts` | Pure JSON helpers: Date normalization from JSON round-trip, fence stripping |
+| `run-plan.ts` | `runPlan()` — shared entry point. Creates `PlanAgent`, runs it, verifies plan was written |
+| `plan-agent.ts` | `PlanAgent.create()` — builds ChatAgent with plan tools + caller-provided tools |
+| `plan-tools.ts` | `PLAN_TOOL_SPECS` + `createPlanToolExecutor(adapter)` — plan_read/write/edit/list backed by `Storage.PlanSubAdapter` |
+| `memory-plan-adapter.ts` | In-memory `Storage.PlanSubAdapter` for testing and fallback |
+| `hashline.ts` | Hash-anchored line references for precise plan editing (used by plan_edit) |
 
 ## Composition
 

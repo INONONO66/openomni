@@ -2,7 +2,7 @@
 
 > Per-package quality assessment. Updated periodically to track progress.
 
-Last updated: 2026-03-27
+Last updated: 2026-04-19
 
 | Package  | Tests                  | Lint         | Types                      | API Stability           | Docs                           | Overall |
 | -------- | ---------------------- | ------------ | -------------------------- | ----------------------- | ------------------------------ | ------- |
@@ -26,6 +26,6 @@ Last updated: 2026-03-27
 
 - CLI deep imports into `@openomni/llm/src/` internals (2 violations)
 - CLI has zero test files
-- openomni still has broader `any` usage than other packages
+- openomni `any` usage reduced after plan mode refactoring (removed legacy plan-json, plan-pipeline, plan-store)
 - agent `stream()` is a stub (Phase 2 planned)
 - Biome configured (replaces ESLint + Prettier)

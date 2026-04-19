@@ -2,70 +2,75 @@
 
 | API | Signature |
 | --- | --- |
-| `PlanAgent.generate` | `generate(goal: string, config: GenerateConfig): Promise<PlanResult>` |
-| `PlanAgent.create` | `create(config: GenerateConfig): ChatAgentInstance` — interactive plan agent with `plan_read` / `plan_write` / `plan_edit` tools |
-| `PlanPipeline.run` | `run(goal: string, config): Promise<{ ok, plan?, issues? }>` — generate → enrich → gate loop |
+| `runPlan` | `runPlan(goal: string, config: RunPlanConfig): Promise<Plan.Result>` |
+| `PlanAgent.create` | `create(config: CreateConfig): ChatAgentInstance` — plan agent with `plan_read` / `plan_write` / `plan_edit` / `plan_list` tools |
 
 ### Architecture
 
-`PlanAgent.generate(goal, config)` calls an LLM to produce a structured `Plan` with steps and DAG dependencies. It does not execute the plan. Execution is delegated to the orchestration layer (e.g. `IngressEngine` handling the `direct` follow-up, or a subagent invoked through `@openomni/openomni` `SubagentRuntime`).
+`runPlan(goal, config)` creates a `PlanAgent` with plan tools bound to `Storage.PlanSubAdapter`. The LLM writes the plan via `plan_write` tool calls. The plan is stored directly in the adapter — no JSON parsing or transformation. Result is a `{ planId }` reference.
 
 ```
 goal (string)
-  └─→ PlanAgent.generate()
-        └─→ ChatAgent.run()                     (LLM call via @openomni/agent)
-              └─→ JSON parse + Zod validate      (Plan schema from @openomni/protocol)
-                    └─→ PlanResult { plan }
-
-(optional)
-  └─→ PlanPipeline.run(goal, { enrichers, gates, maxAttempts })
-        ├─→ PlanAgent.generate()
-        ├─→ enrichers[].enrich(plan)
-        ├─→ gates[].check(plan) (StructuralGate uses plan-checks helpers)
-        └─→ retry with feedback up to maxAttempts on gate rejection
+  └─→ runPlan(goal, config)
+        ├─→ PlanAgent.create(config)          (ChatAgent with plan tools)
+        ├─→ agent.run(goal, sink)             (LLM uses plan_write to store plan)
+        ├─→ verify plan_write was called      (via Sink.onToolCall)
+        └─→ Plan.Result { planId }
 ```
 
-### PlanAgent API
+### runPlan API
 
 ```typescript
-namespace PlanAgent {
-  interface GenerateConfig {
-    model: { provider: string; id: string };
-    systemPrompt?: string;   // override default planning prompt
-    reviewPrompt?: string;   // appended to the system prompt
-    budget?: AgentBudget;
-  }
-
-  function generate(goal: string, config: GenerateConfig): Promise<PlanResult>;
-  function create(config: GenerateConfig): ChatAgentInstance;
+interface RunPlanConfig {
+  model: { provider: string; id: string };
+  systemPrompt?: string;
+  planSubAdapter?: Storage.PlanSubAdapter;  // defaults to in-memory
+  planId?: string;                          // deterministic ID, defaults to randomUUID
+  budget?: AgentBudget;
+  tools?: Tool.Spec[];                      // additional tools (filesystem, bash)
+  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
 }
+
+function runPlan(goal: string, config: RunPlanConfig): Promise<Plan.Result>;
 ```
 
 **Usage:**
 
 ```typescript
-import { PlanAgent } from "@openomni/openomni";
+import { runPlan } from "@openomni/openomni";
 
-const { plan } = await PlanAgent.generate(
+const { planId } = await runPlan(
   "Build a REST API for user management",
-  { model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" } },
+  {
+    model: { provider: "anthropic", id: "claude-sonnet-4-6" },
+    planSubAdapter: Storage.get().plan!,
+  },
 );
-
-console.log(plan.steps); // PlanStep[]
+// Plan is now stored in Storage.PlanSubAdapter under planId
 ```
 
-`PlanAgent.create()` returns a `ChatAgent` instance with `plan_read` / `plan_write` / `plan_edit` tools bound so the LLM can iteratively refine a plan via hash-anchored line edits.
+`PlanAgent.create()` returns a `ChatAgent` instance with `plan_read` / `plan_write` / `plan_edit` / `plan_list` tools bound so the LLM can create and iteratively refine a plan via hash-anchored line edits.
+
+### Plan Result (from `@openomni/protocol`)
+
+```typescript
+type Plan.Result = { planId: string };
+```
+
+The plan content (markdown) is stored in `Storage.PlanSubAdapter` and can be read via `adapter.read(planId)`.
 
 ### Plan Schema (from `@openomni/protocol`)
+
+`Plan.Schema` still exists for structured plan content validation when needed:
 
 ```typescript
 type PlanStep = {
   stepId: string;
   description: string;
   expectedOutput: string;
-  dependsOn: string[];          // stepIds this step depends on
-  suggestedAgent?: string;      // optional routing hint
-  guardrail?: string;           // acceptance criteria
+  dependsOn: string[];
+  suggestedAgent?: string;
+  guardrail?: string;
   tools?: Tool.Spec[];
   requiresApproval?: boolean;
 };
@@ -77,15 +82,17 @@ type Plan = {
   createdAt: Date;
   version: number;
 };
-
-type PlanResult = {
-  plan: Plan;
-  reviewNotes?: string;
-};
 ```
 
 ### Relationship With Other Modes
 
-- `plan` mode stores the generated plan as a `TextPart` with a `__OPENOMNI_PLAN__` prefix on the ingressed session. Subsequent `plan` calls on the same session combine the stored plan with user feedback for iterative refinement.
+- `plan` mode stores the plan in `Storage.PlanSubAdapter` and records the `planId` in the session via a `__OPENOMNI_PLANID__` marker. Subsequent `plan` calls on the same session read the previous plan from storage and combine with user feedback for iterative refinement.
 - `direct` mode runs `ChatAgent` over the same session. A consumer can follow a plan step by step by calling `direct` on the same session and referencing the plan in the user message.
 - Parallel execution across plan steps is the caller's responsibility (typically via `SubagentRuntime` + `BackgroundManager` dispatching one worker per ready step).
+
+### Plan Agent (apps/server)
+
+The server registers a `plan` agent in `apps/server/src/agents/plan-agent/` with:
+- `triggers.slashCommand: "plan"` — routes `/plan` commands via existing `resolveAgentName()`
+- `categories: ["filesystem", "execution"]` + `allow: ["plan_read", "plan_write", "plan_edit", "plan_list"]`
+- `permissions.denylist: ["write", "edit"]` — file mutation blocked, bash allowed for exploration
