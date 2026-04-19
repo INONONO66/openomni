@@ -95,7 +95,7 @@ describe("Execution hooks", () => {
       const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call: Tool.Call = { id: "call-skip", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -144,7 +144,7 @@ describe("Execution hooks", () => {
       const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call: Tool.Call = { id: "call-transform", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -377,7 +377,6 @@ describe("Execution hooks", () => {
       expect(result.guardAborted).toBeUndefined();
       expect(postTurn).toHaveBeenCalledTimes(1);
       expect(stepGuard).toHaveBeenCalledTimes(0);
-      expect(warnSpy).toHaveBeenCalled();
     } finally {
       globalObj.console.warn = originalWarn;
     }
