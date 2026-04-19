@@ -180,7 +180,7 @@ describe("Execution hooks", () => {
       sink.onMessage(createAssistantMessage("thinking", { input: 11, output: 7 }));
       const call: Tool.Call = { id: "call-usage", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
-      const result = await runInput.toolExecutor!(call);
+      const result = await runInput.toolExecutor?.(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
