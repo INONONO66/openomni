@@ -2,8 +2,10 @@ import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 
 const AgentBase = z.object({
+  traceId: z.string(),
   sessionId: z.string(),
   agentId: z.string().optional(),
+  runId: z.string().optional(),
   time: z.number(),
 });
 

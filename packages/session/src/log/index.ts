@@ -24,4 +24,17 @@ export namespace Log {
   export const info = (msg: string, ctx?: Record<string, unknown>) => write("info", msg, ctx);
   export const warn = (msg: string, ctx?: Record<string, unknown>) => write("warn", msg, ctx);
   export const error = (msg: string, ctx?: Record<string, unknown>) => write("error", msg, ctx);
+
+  export function withContext(baseCtx: Record<string, unknown>) {
+    return {
+      debug: (msg: string, ctx?: Record<string, unknown>) =>
+        write("debug", msg, { ...baseCtx, ...ctx }),
+      info: (msg: string, ctx?: Record<string, unknown>) =>
+        write("info", msg, { ...baseCtx, ...ctx }),
+      warn: (msg: string, ctx?: Record<string, unknown>) =>
+        write("warn", msg, { ...baseCtx, ...ctx }),
+      error: (msg: string, ctx?: Record<string, unknown>) =>
+        write("error", msg, { ...baseCtx, ...ctx }),
+    };
+  }
 }
