@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Session, Storage, SurfaceKey, Log } from "@openomni/session";
+import { Log, Session, Storage, SurfaceKey } from "@openomni/session";
 
 export interface RecoveryItem {
   sessionId: string;
@@ -13,7 +13,7 @@ export interface RecoveryItem {
 export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
   const retryQueue: RecoveryItem[] = [];
 
-  Log.info("recovery checking for interrupted messages");
+  Log.info("checking for interrupted messages");
 
   try {
     const adapter = Storage.get();
@@ -22,13 +22,15 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
     const interrupted = [...processing, ...received];
 
     if (interrupted.length === 0) {
-      Log.info("recovery no interrupted messages found");
+      Log.info("no interrupted messages found");
       return retryQueue;
     }
 
-    Log.info(
-      `recovery found ${interrupted.length} interrupted message(s) (${processing.length} processing, ${received.length} received)`,
-    );
+    Log.info("found interrupted messages", {
+      total: interrupted.length,
+      processing: processing.length,
+      received: received.length,
+    });
 
     let recovered = 0;
 
@@ -43,13 +45,13 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         if (hasAssistantAfter) {
           Session.updateMessageStatus(messageId, "completed");
           recovered++;
-          Log.info(`recovery marked message ${messageId} as completed (assistant response exists)`);
+          Log.info("marked message as completed", { messageId });
           continue;
         }
 
         const session = Session.get(sessionId);
         if (!session) {
-          Log.warn(`recovery session ${sessionId} not found, skipping message ${messageId}`);
+          Log.warn("session not found, skipping message", { sessionId, messageId });
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -58,7 +60,7 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
 
         if (!textPart?.text) {
-          Log.warn(`recovery no text found for message ${messageId}, skipping retry`);
+          Log.warn("no text found for message, skipping retry", { messageId });
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -75,17 +77,15 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
           text: textPart.text,
           resumeExisting: true,
         });
-        Log.info(`recovery queued message ${messageId} for retry`);
+        Log.info("queued message for retry", { messageId });
       } catch (err) {
-        Log.error(`recovery error processing message ${messageId}`, { err: String(err) });
+        Log.error("error processing message", { messageId, err: String(err) });
       }
     }
 
-    Log.info(
-      `recovery done: ${recovered} recovered, ${retryQueue.length} queued for retry, ${processing.length} total`,
-    );
+    Log.info("recovery done", { recovered, queued: retryQueue.length, total: processing.length });
   } catch (err) {
-    Log.error("recovery recovery failed", { err: String(err) });
+    Log.error("recovery failed", { err: String(err) });
   }
 
   return retryQueue;
