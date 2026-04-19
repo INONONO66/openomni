@@ -1,9 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
+import type { Run, Sink } from "@openomni/protocol";
 
-// --- Mock setup (must be before dynamic import) ---
-
-type MockLlmFn = (input: any, sink: Sink) => Promise<Run.Outcome>;
+// mock.module must precede dynamic import of the module under test
+type MockLlmFn = (input: unknown, sink: Sink) => Promise<Run.Outcome>;
 
 let mockRunFn: MockLlmFn = async () => ({ type: "stop" });
 
@@ -29,7 +28,7 @@ mock.module("@openomni/llm", () => ({
   ModelsDev: { get: mockModelsGet },
   Provider: { fromModelsDevModel: mockProviderFromModelsDevModel },
   ProviderTransform: { resolveVariant: () => ({}) },
-  run: (input: any, sink: Sink) => mockRunFn(input, sink),
+  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
   },
@@ -47,133 +46,52 @@ afterAll(() => {
   mock.restore();
 });
 
-// --- Helpers ---
-
-function createToolCallMessage(toolName: string, args: Record<string, unknown>): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = "run-plan-test";
-  const now = Date.now();
-  const info: Message.AssistantMessage = {
-    id,
-    sessionID,
-    role: "assistant",
-    time: { created: now },
-    parentID: "",
-    modelID: "claude-3-haiku-20240307",
-    providerID: "anthropic",
-    agent: "chat-agent",
-    path: { cwd: "", root: "" },
-    cost: 0,
-    tokens: {
-      input: 10,
-      output: 5,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-
-  const toolCallPart: Message.ToolCallPart = {
-    id: crypto.randomUUID(),
-    sessionID,
-    messageID: id,
-    type: "tool-call",
-    toolCallId: crypto.randomUUID(),
-    tool: toolName,
-    args,
-  };
-
-  return { info, parts: [toolCallPart] };
-}
-
-// --- Tests ---
-
 describe("runPlan", () => {
-  it("returns planId when agent calls plan_write tool", async () => {
-    const planContent = {
-      title: "Test Plan",
-      steps: [
-        {
-          stepId: "step-1",
-          title: "Step 1",
-          description: "First step",
-          dependsOn: [],
-        },
-      ],
-    };
+  it("returns planId when plan is written to adapter", async () => {
+    const { memoryPlanAdapter } = await import("../../src/plan/memory-plan-adapter");
+    const adapter = memoryPlanAdapter();
 
-    mockRunFn = async (input: any, sink: Sink) => {
-      const toolCall: Tool.Call = {
-        id: crypto.randomUUID(),
-        tool: "plan_write",
-        args: { content: JSON.stringify(planContent) },
-      };
-      sink.onToolCall?.(toolCall);
-
-      const result: Tool.Result = {
-        id: crypto.randomUUID(),
-        toolCallId: toolCall.id,
-        output: "Plan written",
-        isError: false,
-      };
-      sink.onToolResult?.(result);
-
+    mockRunFn = async () => {
+      // simulate what plan tool executor does when LLM calls plan_write
+      await adapter.write("test-plan", "# My Plan\n## Steps\n- step 1");
       return { type: "stop" };
     };
 
     const result = await runPlan("Generate a test plan", {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      planSubAdapter: adapter,
+      planId: "test-plan",
     });
 
-    expect(result).toHaveProperty("planId");
-    expect(typeof result.planId).toBe("string");
-    expect(result.planId.length).toBeGreaterThan(0);
+    expect(result.planId).toBe("test-plan");
   });
 
-  it("throws error when agent does not call plan_write", async () => {
+  it("throws error when plan is not written to adapter", async () => {
     mockRunFn = async () => ({ type: "stop" });
 
+    const { memoryPlanAdapter } = await import("../../src/plan/memory-plan-adapter");
     const promise = runPlan("Generate a test plan", {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      planSubAdapter: memoryPlanAdapter(),
+      planId: "missing-plan",
     });
 
-    await expect(promise).rejects.toThrow();
+    await expect(promise).rejects.toThrow("plan agent did not write plan");
   });
 
   it("returns deterministic planId when passed in config", async () => {
-    const planContent = {
-      title: "Test Plan",
-      steps: [
-        {
-          stepId: "step-1",
-          title: "Step 1",
-          description: "First step",
-          dependsOn: [],
-        },
-      ],
-    };
+    const { memoryPlanAdapter } = await import("../../src/plan/memory-plan-adapter");
+    const adapter = memoryPlanAdapter();
+    const expectedPlanId = "test-plan-123";
 
-    mockRunFn = async (input: any, sink: Sink) => {
-      const toolCall: Tool.Call = {
-        id: crypto.randomUUID(),
-        tool: "plan_write",
-        args: { content: JSON.stringify(planContent) },
-      };
-      sink.onToolCall?.(toolCall);
-
-      const result: Tool.Result = {
-        id: crypto.randomUUID(),
-        toolCallId: toolCall.id,
-        output: "Plan written",
-        isError: false,
-      };
-      sink.onToolResult?.(result);
-
+    mockRunFn = async () => {
+      await adapter.write(expectedPlanId, "# Plan content");
       return { type: "stop" };
     };
 
-    const expectedPlanId = "test-plan-123";
     const result = await runPlan("Generate a test plan", {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      planSubAdapter: adapter,
       planId: expectedPlanId,
     });
 

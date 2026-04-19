@@ -78,6 +78,7 @@ describe("resolveAgentName", () => {
   it("routes /dev slash command with leading whitespace", () => {
     const name = resolveAgentName({
       message: makeMessage("  /dev implement feature X"),
+      defaultAgent: "plan",
     });
     expect(name).toBe("dev");
   });
@@ -85,6 +86,7 @@ describe("resolveAgentName", () => {
   it("handles multiple leading spaces before slash command", () => {
     const name = resolveAgentName({
       message: makeMessage("    /dev fix bug"),
+      defaultAgent: "plan",
     });
     expect(name).toBe("dev");
   });

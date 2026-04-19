@@ -30,19 +30,9 @@ export async function runPlan(goal: string, config: RunPlanConfig): Promise<Plan
     toolExecutor: config.toolExecutor,
   });
 
-  let planWritten = false;
-  await agent.run(
-    { messages: [{ role: "user", content: goal }] },
-    {
-      onMessage() {},
-      onToolCall(call) {
-        if (call.tool === "plan_write") planWritten = true;
-      },
-      onToolResult() {},
-      onSnapshot() {},
-    },
-  );
+  await agent.run({ messages: [{ role: "user", content: goal }] });
 
-  if (!planWritten) throw new Error(`plan agent did not write plan: ${planId}`);
+  const doc = await planSubAdapter.read(planId);
+  if (!doc) throw new Error(`plan agent did not write plan: ${planId}`);
   return { planId };
 }

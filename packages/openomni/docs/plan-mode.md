@@ -37,6 +37,7 @@ function runPlan(goal: string, config: RunPlanConfig): Promise<Plan.Result>;
 **Usage:**
 
 ```typescript
+import { Storage } from "@openomni/session";
 import { runPlan } from "@openomni/openomni";
 
 const { planId } = await runPlan(
@@ -46,7 +47,6 @@ const { planId } = await runPlan(
     planSubAdapter: Storage.get().plan!,
   },
 );
-// Plan is now stored in Storage.PlanSubAdapter under planId
 ```
 
 `PlanAgent.create()` returns a `ChatAgent` instance with `plan_read` / `plan_write` / `plan_edit` / `plan_list` tools bound so the LLM can create and iteratively refine a plan via hash-anchored line edits.
@@ -54,7 +54,8 @@ const { planId } = await runPlan(
 ### Plan Result (from `@openomni/protocol`)
 
 ```typescript
-type Plan.Result = { planId: string };
+// Plan.Result is a namespace type: z.infer<typeof Plan.ResultSchema>
+// Equivalent to: { planId: string }
 ```
 
 The plan content (markdown) is stored in `Storage.PlanSubAdapter` and can be read via `adapter.read(planId)`.
