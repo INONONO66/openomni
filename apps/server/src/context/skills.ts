@@ -43,7 +43,10 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
       const { data } = matter(content);
       if (typeof data.name === "string" && data.name) name = data.name;
       if (typeof data.description === "string") description = data.description;
-    } catch {}
+    } catch {
+      // gray-matter parse failure or unreadable file — fall back to directory name
+      console.warn(`[skills] failed to parse ${skillFile}, using directory name as fallback`);
+    }
 
     skills.push({ name, description, path: skillFile });
   }
