@@ -40,14 +40,15 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas (20 domains — message, tool, run, event, plan, subagent, hook, …)
 │   ├── session/         # Session CRUD, pub/sub bus, storage adapters, event log, worker runs
 │   ├── llm/             # LLM abstraction (providers, auth, streaming, retry, token tracking)
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, MCP, subagent tools)
-│   └── openomni/        # Orchestration (Plan mode, DAG, task storage, SubagentRuntime, BackgroundManager, Ingress)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, MCP, subagent tools) — no session dependency
+│   ├── openomni/        # Orchestration (Plan mode, DAG, Ingress, SubagentRuntime, BackgroundManager, BusTransport, execution runtime)
+│   └── coordinator/     # Multiprocess execution coordinator (worker pool, IPC, recovery, credentials, tool-permission)
 ```
 
 ### Dependency Graph
 
 ```
-protocol ← session ← llm ← agent ← openomni ← { cli, server }
+protocol ← session ← llm ← agent ← openomni ← coordinator ← { cli, server }
 ```
 
 Each package depends only on packages to its left. `protocol` is the leaf with zero internal dependencies. `cli` and `server` are sibling apps.

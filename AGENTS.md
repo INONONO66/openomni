@@ -3,7 +3,7 @@
 
 ## OVERVIEW
 
-OpenOmni — orchestration framework for LLM-powered autonomous agents. TypeScript monorepo (Bun + Turborepo) with 5 packages and 2 apps (CLI + Server).
+OpenOmni — orchestration framework for LLM-powered autonomous agents. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
 
 ## STRUCTURE
 
@@ -16,16 +16,17 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas (20 domains): error, tool, message, run, sink, bus, event, notification, adapter, plan, ingress, messenger, guardrail, event-log, agent, artifact, gate, hook, subagent
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), EventLog, Artifact, Snapshot, SurfaceKey, WorkerRun
 │   ├── llm/             # LLM abstraction: providers, auth (API key + OAuth), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — no session dependency
 │   │   ├── src/core/           # ChatAgent, budget, retry, tool-guard, memory, delegation, telemetry, middleware engine
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── middleware/     # Engine + builtins (budget, memory, tool-guard, compaction, post-tool, post-turn, idle-nudge) + legacy compat bridge
 │   │   └── src/runtime/        # Multi-agent infrastructure
-│   │       ├── messenger/      # AgentMessenger, BusTransport
+│   │       ├── messenger/      # AgentMessenger
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
 │   │       └── mcp/            # McpClient
-│   └── openomni/        # Orchestration: Plan mode, DAG, task storage, Ingress, SubagentRuntime + BackgroundManager
+│   ├── openomni/        # Orchestration: Plan mode, DAG, Ingress, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
+│   └── coordinator/     # Multiprocess execution coordinator: worker pool, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -33,7 +34,7 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol ← session ← llm ← agent ← openomni ← { cli, server }
+protocol ← session ← llm ← agent ← openomni ← coordinator ← { cli, server }
 ```
 
 Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `cli` and `server` are sibling apps — neither depends on the other. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
@@ -59,15 +60,18 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, tool-guard, memory, delegation, telemetry |
 | Middleware engine | `packages/agent/src/core/middleware/` | `MiddlewareEngine.create()` + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
-| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger, BusTransport |
+| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
 | Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
 | Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Plan Mode (PlanAgent) | `packages/openomni/src/plan/` | `runPlan()` → `PlanAgent.create()` (tool-based with `plan_*` tools, stores to `Storage.PlanSubAdapter`) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
-| Task storage | `packages/openomni/src/storage/` | `TaskStorage`, `FileTaskStore`, task types |
+| Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
 | Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session resolve → project → mode dispatch |
 | Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
+| Coordinator (worker pool) | `packages/coordinator/src/worker-pool/` | Worker routing, supervision, session-tree affinity routing |
+| Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
+| Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
 | Plan schemas | `packages/protocol/src/plan/` | `Plan`, `PlanStep`, `PlanResult` |
 | CLI commands | `apps/cli/src/cmd/` | `auth`, `config` only |
 | Server tool providers | `apps/server/src/tool/` | 3 categories: `system/`, `agent/`, `mcp/` |
@@ -91,7 +95,6 @@ Ingress supports two execution modes:
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-- **CLI deep imports**: `apps/cli/src/cmd/auth.ts` still imports `@openomni/llm/src/auth/registry` and `/auth/storage` directly. Known tech debt — do NOT extend.
 - **Backward-compat hook shims**: `compat.ts` in `packages/agent/src/core/middleware/` converts legacy `ExecutionHooks` and `stepGuard` config to middleware. Deprecated — new code uses `middleware: [...]`.
 - **`as any` in protocol**: `NamedError.create()` uses `(this as any).cause = options.cause`. This is the ONE exception; do not add more.
 
@@ -131,8 +134,9 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, tests for all packages.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
-- `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
-- `packages/openomni` orchestrates plans, ingress, tasks, and subagent runtime. `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
+- `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). It has **no session dependency** — `BusTransport` lives in `packages/openomni`. The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
+- `packages/openomni` orchestrates plans, ingress, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
+- `packages/coordinator` owns multiprocess execution: worker pool lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
 - **Plan Mode** (`PlanAgent`) is implemented in `packages/openomni/src/plan/`. It generates a structured `Plan` via LLM and validates via gates.
 - Plan protocol types live in `packages/protocol/src/plan/` — `Plan`, `PlanStep`, `PlanResult`.
 - Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.

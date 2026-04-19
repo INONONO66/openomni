@@ -1,4 +1,4 @@
-import type { Message } from "./message";
+import type { Message } from "@openomni/protocol";
 import { type Provider, ProviderTransform } from "../provider";
 
 type SystemMessage = {

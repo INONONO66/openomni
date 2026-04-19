@@ -1,7 +1,7 @@
 import z from "zod";
-import { NamedError } from "@openomni/protocol";
+import { NamedError, APIError } from "@openomni/protocol";
 
-export { NamedError };
+export { NamedError, APIError };
 
 export const AuthError = NamedError.create(
   "AuthError",
@@ -48,18 +48,6 @@ export const RetryError = NamedError.create(
     message: z.string(),
     attempts: z.number(),
     lastError: z.string().optional(),
-  }),
-);
-
-export const APIError = NamedError.create(
-  "APIError",
-  z.object({
-    message: z.string(),
-    statusCode: z.number().optional(),
-    isRetryable: z.boolean(),
-    responseHeaders: z.record(z.string(), z.string()).optional(),
-    responseBody: z.string().optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
   }),
 );
 

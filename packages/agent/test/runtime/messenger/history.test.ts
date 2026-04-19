@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/session";
 import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
-import { BusTransport } from "../../../src/runtime/messenger/transport";
 import { queryHistory } from "../../../src/runtime/messenger/history";
 import type { Messenger } from "@openomni/protocol";
+import { InMemoryTransport } from "./in-memory-transport";
 
 function makeEnvelope(
   from: string,
@@ -26,13 +25,12 @@ function makeEnvelope(
 }
 
 afterEach(() => {
-  Bus.reset();
   AgentMessenger._resetLog();
 });
 
 describe("queryHistory", () => {
   it("returns messages visible to the querying agent", async () => {
-    const messenger = AgentMessenger.create(new BusTransport());
+    const messenger = AgentMessenger.create(new InMemoryTransport());
     await messenger.send(makeEnvelope("agent-a", "agent-b", "both"));
     await messenger.send(makeEnvelope("agent-c", "agent-d", "both"));
 
@@ -42,7 +40,7 @@ describe("queryHistory", () => {
   });
 
   it("asker_only: only asker (sender) can see the message", async () => {
-    const messenger = AgentMessenger.create(new BusTransport());
+    const messenger = AgentMessenger.create(new InMemoryTransport());
     await messenger.send(makeEnvelope("agent-a", "agent-b", "asker_only"));
 
     const resultA = queryHistory("agent-a");
@@ -53,7 +51,7 @@ describe("queryHistory", () => {
   });
 
   it("both: both sender and receiver can see the message", async () => {
-    const messenger = AgentMessenger.create(new BusTransport());
+    const messenger = AgentMessenger.create(new InMemoryTransport());
     await messenger.send(makeEnvelope("agent-a", "agent-b", "both"));
 
     const resultA = queryHistory("agent-a");
@@ -64,7 +62,7 @@ describe("queryHistory", () => {
   });
 
   it("filters by schemaRef", async () => {
-    const messenger = AgentMessenger.create(new BusTransport());
+    const messenger = AgentMessenger.create(new InMemoryTransport());
     const env1 = { ...makeEnvelope("agent-a", "agent-b"), schemaRef: "text" };
     const env2 = { ...makeEnvelope("agent-a", "agent-b"), schemaRef: "json" };
     await messenger.send(env1);
@@ -76,7 +74,7 @@ describe("queryHistory", () => {
   });
 
   it("paginates with limit and offset", async () => {
-    const messenger = AgentMessenger.create(new BusTransport());
+    const messenger = AgentMessenger.create(new InMemoryTransport());
     for (let i = 0; i < 5; i++) {
       await messenger.send(makeEnvelope("agent-a", "agent-b"));
     }

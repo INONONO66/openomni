@@ -30,7 +30,6 @@ Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@o
 | `worker-pool/pool.ts` | Public worker-pool factory |
 | `worker-pool/supervisor.ts` | Worker lifecycle and restart management |
 | `worker-pool/session-routing.ts` | Session-tree affinity routing |
-| `worker-pool/worker-entry.ts` | Worker process entry that executes agent/plan requests |
 
 ## ANTI-PATTERNS
 
