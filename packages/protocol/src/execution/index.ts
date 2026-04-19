@@ -30,6 +30,7 @@ const requestSchema = z.object({
   agentName: z.string().optional(),
   workspaceRoot: z.string().optional(),
   middleware: z.array(z.string()).optional(),
+  traceId: z.string().optional(),
 });
 
 const resultSchema = z.object({
