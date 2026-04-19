@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/session";
 import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
-import { BusTransport } from "../../../src/runtime/messenger/transport";
 import type { Messenger } from "@openomni/protocol";
+import { InMemoryTransport } from "./in-memory-transport";
 
 function makeEnvelope(from: string, to: string, id?: string): Messenger.MessageEnvelope {
   return {
@@ -21,13 +20,12 @@ function makeEnvelope(from: string, to: string, id?: string): Messenger.MessageE
 }
 
 afterEach(() => {
-  Bus.reset();
   AgentMessenger._resetLog();
 });
 
 describe("AgentMessenger.request", () => {
   it("resolves when response with matching correlationId arrives", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const requestEnvelope = makeEnvelope("agent-a", "agent-b");
@@ -48,7 +46,7 @@ describe("AgentMessenger.request", () => {
   });
 
   it("rejects with timeout when no response arrives", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const requestEnvelope = makeEnvelope("agent-a", "agent-b");
@@ -57,7 +55,7 @@ describe("AgentMessenger.request", () => {
   });
 
   it("rejects when aborted via signal", async () => {
-    const transport = new BusTransport();
+    const transport = new InMemoryTransport();
     const messenger = AgentMessenger.create(transport);
 
     const controller = new AbortController();

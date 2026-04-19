@@ -97,7 +97,12 @@ describe("Message.StepFinishPart", () => {
     expect(part.type).toBe("step-finish");
     expect(part.reason).toBe("end_turn");
     expect(part.cost).toBe(0.05);
-    expect(part.tokens).toEqual({ input: 100, output: 50 });
+    expect(part.tokens).toEqual({
+      input: 100,
+      output: 50,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    });
   });
 
   test("rejects missing cost", () => {

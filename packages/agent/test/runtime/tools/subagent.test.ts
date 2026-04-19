@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
-import { Bus } from "@openomni/session";
 import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import type { AgentProfile } from "@openomni/protocol";
 
@@ -31,7 +30,6 @@ function makeRuntime() {
 
 function resetState() {
   AgentRegistry.clear();
-  Bus.reset();
   AgentMessenger._resetLog();
 }
 

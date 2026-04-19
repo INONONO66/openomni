@@ -1,5 +1,4 @@
-import type { Sink } from "@openomni/protocol";
-import type { Message } from "./message";
+import type { Sink, Message } from "@openomni/protocol";
 import { TokenTracker } from "../token";
 import { Retry } from "./retry";
 import { APIError } from "../error";

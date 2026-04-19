@@ -25,7 +25,10 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId);
+    IngressEventProjector.project(event, sessionId, {
+      providerID: "anthropic",
+      modelID: "claude-3-haiku",
+    });
 
     const messages = Session.getMessages(sessionId);
     expect(messages).toHaveLength(1);
@@ -48,7 +51,10 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId);
+    IngressEventProjector.project(event, sessionId, {
+      providerID: "anthropic",
+      modelID: "claude-3-haiku",
+    });
 
     const messages = Session.getMessages(sessionId);
     const parts = Session.getParts(messages[0].id);
@@ -67,7 +73,10 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId);
+    IngressEventProjector.project(event, sessionId, {
+      providerID: "anthropic",
+      modelID: "claude-3-haiku",
+    });
 
     const messages = Session.getMessages(sessionId);
     const parts = Session.getParts(messages[0].id);
@@ -85,7 +94,10 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId);
+    IngressEventProjector.project(event, sessionId, {
+      providerID: "anthropic",
+      modelID: "claude-3-haiku",
+    });
 
     const messages = Session.getMessages(sessionId);
     expect((messages[0] as Message.UserMessage).agent).toBe("whatsapp");
@@ -103,7 +115,10 @@ describe("IngressEventProjector", () => {
       },
     };
 
-    IngressEventProjector.project(event, sessionId);
+    IngressEventProjector.project(event, sessionId, {
+      providerID: "anthropic",
+      modelID: "claude-3-haiku",
+    });
 
     // Verify UserMessage is stored
     const messages = Session.getMessages(sessionId);

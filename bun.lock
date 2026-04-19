@@ -58,7 +58,6 @@
         "@modelcontextprotocol/sdk": "^1.27.1",
         "@openomni/llm": "workspace:*",
         "@openomni/protocol": "workspace:*",
-        "@openomni/session": "workspace:*",
         "@opentelemetry/api": "^1.9.0",
         "zod": "^3.22.4",
       },

@@ -23,6 +23,10 @@ export {
 } from "./ingress";
 export type { CoordinatorLike } from "./ingress";
 
+// Runtime
+export { BusTransport } from "./runtime/bus-transport";
+export type { Transport } from "./runtime/bus-transport";
+
 // Subagent runtime
 export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
 
