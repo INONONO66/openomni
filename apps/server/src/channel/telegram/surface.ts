@@ -1,4 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { splitText } from "../../shared/chunk-text";
 import { TelegramClient } from "./client";
@@ -42,7 +43,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const me = await this.client.getMe();
     const botId = String(me.id);
     const botUsername = me.username ?? "";
-    console.log(`[telegram] Bot started: @${me.username ?? me.first_name} (${me.id})`);
+    Log.info("telegram bot started", { username: me.username ?? me.first_name, botId: me.id });
 
     this.normalizer = new TelegramNormalizer({
       botId,
@@ -54,7 +55,7 @@ export class TelegramAdapter implements Adapter.Surface {
       onMessage: (message) => {
         if (this.dedupe.isDuplicate(String(message.message_id))) return;
         this.handleMessage(message).catch((err) => {
-          console.error("[telegram] Error handling message:", err);
+          Log.error("telegram message handling failed", { err: String(err) });
         });
       },
     });
@@ -64,7 +65,7 @@ export class TelegramAdapter implements Adapter.Surface {
 
   stop(): void {
     this.poller?.stop();
-    console.log("[telegram] Bot stopped");
+    Log.info("telegram bot stopped");
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
@@ -81,7 +82,7 @@ export class TelegramAdapter implements Adapter.Surface {
     if (!inbound) return;
 
     const chatId = String(message.chat.id);
-    console.log(`[telegram] ${chatId}: ${inbound.text.slice(0, 80)}`);
+    Log.debug("telegram message received", { chatId });
 
     const typingInterval = setInterval(() => {
       this.client.sendTyping(chatId);
@@ -92,7 +93,7 @@ export class TelegramAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound);
     } catch (err) {
-      console.error(`[telegram] Error in chat ${chatId}:`, err);
+      Log.error("telegram message handler error", { chatId, err: String(err) });
       await this.sendOutbound(chatId, { text: "Sorry, an error occurred." });
     } finally {
       clearInterval(typingInterval);

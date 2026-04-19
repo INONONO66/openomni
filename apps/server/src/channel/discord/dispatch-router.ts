@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { GatewayOp } from "./types";
 import type { GatewayCallbacks } from "./gateway";
 import type { GatewayPayload, DiscordUser } from "./types";
@@ -42,12 +43,12 @@ export function handleGatewayPayload(
     case GatewayOp.HEARTBEAT_ACK:
       return false;
     case GatewayOp.RECONNECT:
-      console.log("[discord] Server requested reconnect");
+      Log.info("discord server requested reconnect");
       actions.closeSocket(4000);
       return false;
     case GatewayOp.INVALID_SESSION: {
       const resumable = payload.d as boolean;
-      console.log(`[discord] Invalid session (resumable: ${resumable})`);
+      Log.warn("discord invalid session", { resumable });
       if (!resumable) {
         state.sessionId = null;
         state.sequence = null;
@@ -78,13 +79,13 @@ function handleDispatch(
   }
   if (event === "RESUMED") {
     state.reconnectAttempt = 0;
-    console.log("[discord] Session resumed");
+    Log.info("discord session resumed");
     return true;
   }
   try {
     actions.callbacks.onDispatch(event, data);
   } catch (err) {
-    console.error("[discord] Error handling dispatch:", err);
+    Log.error("discord dispatch error", { err: String(err) });
   }
   return false;
 }

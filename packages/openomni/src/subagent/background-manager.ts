@@ -1,5 +1,5 @@
 import { type Message, Subagent } from "@openomni/protocol";
-import { Bus, Session } from "@openomni/session";
+import { Bus, Log, Session } from "@openomni/session";
 import { BackgroundStore } from "./background-store.js";
 import { SubagentRuntime } from "./runtime.js";
 
@@ -179,6 +179,7 @@ export const BackgroundManager = {
               results.set(id, result);
               BackgroundStore.persist(completed, output);
               onTaskComplete?.(result);
+              Log.info("background.task.completed", { taskId: id, sessionId });
 
               Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
                 traceId: crypto.randomUUID(),
@@ -217,6 +218,11 @@ export const BackgroundManager = {
               const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
               results.set(id, result);
               onTaskComplete?.(result);
+              Log.info("background.task.failed", {
+                taskId: id,
+                sessionId,
+                error: data.payload.error,
+              });
 
               Bus.publish(Subagent.Events.BackgroundTaskFailed, {
                 traceId: crypto.randomUUID(),
@@ -228,6 +234,12 @@ export const BackgroundManager = {
             }),
           );
 
+          Log.info("background.task.launched", {
+            taskId: id,
+            agentName: input.agentName,
+            sessionId,
+            runId,
+          });
           Bus.publish(Subagent.Events.BackgroundTaskLaunched, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -250,6 +262,11 @@ export const BackgroundManager = {
           };
           tasks.set(id, failed);
           BackgroundStore.persist(failed);
+          Log.info("background.task.spawn-failed", {
+            taskId: id,
+            agentName: input.agentName,
+            error: failed.error,
+          });
           Bus.publish(Subagent.Events.BackgroundTaskFailed, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -267,6 +284,11 @@ export const BackgroundManager = {
 
       const perAgentCount = active.filter((t) => t.agentName === input.agentName).length;
       if (perAgentCount >= maxConcurrentPerAgent) {
+        Log.warn("background.limit.per-agent", {
+          agentName: input.agentName,
+          count: perAgentCount,
+          limit: maxConcurrentPerAgent,
+        });
         return makeFailedTask(
           input,
           `max concurrent tasks per agent (${maxConcurrentPerAgent}) exceeded`,
@@ -274,6 +296,7 @@ export const BackgroundManager = {
       }
 
       if (depth > maxDepth) {
+        Log.warn("background.limit.depth", { agentName: input.agentName, depth, limit: maxDepth });
         return makeFailedTask(input, `max depth (${maxDepth}) exceeded`);
       }
 
@@ -281,6 +304,11 @@ export const BackgroundManager = {
         (t) => t.parentSessionId === input.parentSessionId,
       ).length;
       if (descendantCount >= maxDescendants) {
+        Log.warn("background.limit.descendants", {
+          parentSessionId: input.parentSessionId,
+          count: descendantCount,
+          limit: maxDescendants,
+        });
         return makeFailedTask(
           input,
           `max descendants (${maxDescendants}) from same parent exceeded`,
@@ -301,9 +329,20 @@ export const BackgroundManager = {
 
       if (activeCount >= maxConcurrentTotal) {
         if (pendingQueue.length >= maxQueueSize) {
+          Log.warn("background.limit.queue-full", {
+            agentName: input.agentName,
+            queueSize: pendingQueue.length,
+            limit: maxQueueSize,
+          });
           tasks.delete(id);
           return makeFailedTask(input, `queue full (max ${maxQueueSize})`);
         }
+        Log.info("background.task.queued", {
+          taskId: id,
+          agentName: input.agentName,
+          depth,
+          queueDepth: pendingQueue.length + 1,
+        });
         pendingQueue.push({ input, id });
         return task;
       }

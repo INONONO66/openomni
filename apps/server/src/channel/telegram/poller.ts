@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage, TelegramUpdate } from "./types";
@@ -43,7 +44,7 @@ export class TelegramPoller {
         }
       } catch (err) {
         if (!this.running) break;
-        console.error("[telegram] Poll error:", err);
+        Log.warn("telegram poll error", { err: String(err) });
         await sleep(5000);
       }
     }

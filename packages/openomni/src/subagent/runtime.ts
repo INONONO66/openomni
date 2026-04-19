@@ -1,6 +1,6 @@
 import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
-import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
+import { Bus, Log, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import {
   buildAbortSignal,
@@ -95,6 +95,12 @@ export namespace SubagentRuntime {
 
   export function spawn(config: SpawnConfig): Promise<RunResult> {
     const session = createSpawnSession(config);
+    Log.info("subagent.spawn", {
+      agentName: config.agentName,
+      sessionId: session.id,
+      parentSessionId: config.parentSessionId,
+      titleLen: config.title.length,
+    });
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -120,9 +126,15 @@ export namespace SubagentRuntime {
 
       await WorkerRun.updateStatus(session.id, runId, "running");
       const permissions = config.permissions ?? { denylist: ["subagent"] };
-      return executeRun(session.id, runId, config.model, timers, () =>
+      const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, config, signal, permissions),
       );
+      Log.info("subagent.spawn.complete", {
+        agentName: config.agentName,
+        sessionId: session.id,
+        runId,
+      });
+      return result;
     });
   }
 
@@ -146,6 +158,11 @@ export namespace SubagentRuntime {
       title: config.title,
     });
     await WorkerRun.updateStatus(session.id, runId, "running");
+    Log.info("subagent.spawn-background", {
+      agentName: config.agentName,
+      sessionId: session.id,
+      runId,
+    });
 
     const permissions = config.permissions ?? { denylist: ["subagent"] };
     const backgroundRun = sendToMailbox(session.id, () =>
@@ -163,6 +180,7 @@ export namespace SubagentRuntime {
     if (!session) {
       throw new Error(`Session not found: ${config.sessionId}`);
     }
+    Log.info("subagent.send", { sessionId: config.sessionId });
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -199,6 +217,7 @@ export namespace SubagentRuntime {
     if (!session) {
       return { resumed: false, sessionId: config.sessionId, runId: undefined };
     }
+    Log.info("subagent.resume", { sessionId: config.sessionId });
 
     return sendToMailbox(config.sessionId, async () => {
       const runs = await WorkerRun.listBySession(config.sessionId);
@@ -233,6 +252,7 @@ export namespace SubagentRuntime {
   export async function cancel(config: CancelConfig): Promise<void> {
     const session = Session.get(config.sessionId);
     if (!session) return;
+    Log.info("subagent.cancel", { sessionId: config.sessionId, runId: config.runId });
 
     const hardTimeoutMs = config.hardTimeoutMs ?? 10_000;
 
@@ -284,6 +304,11 @@ export namespace SubagentRuntime {
   }
 
   export async function wait(config: WaitConfig): Promise<WaitResult> {
+    Log.info("subagent.wait", {
+      sessionId: config.sessionId,
+      runId: config.runId,
+      timeoutMs: config.timeoutMs,
+    });
     const run = await WorkerRun.get(config.sessionId, config.runId);
     if (!run) {
       throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);
