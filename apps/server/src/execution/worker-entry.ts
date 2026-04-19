@@ -162,7 +162,12 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
               }),
             ],
           });
-          const runResult = await agent.run({ messages });
+          const runResult = await agent.run({
+            messages,
+            ...(request.traceId
+              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
+              : {}),
+          });
 
           server.notify("worker.run_completed", {
             runId,
