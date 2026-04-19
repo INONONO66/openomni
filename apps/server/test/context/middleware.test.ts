@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { MiddlewareContext } from "@openomni/agent";
 import { createContextMiddleware } from "../../src/context/middleware";
 
 let tempRoot: string;
@@ -54,9 +55,9 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    };
+    } as unknown as MiddlewareContext;
 
-    const result = await middleware.fn(mockCtx as any);
+    const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });
   });
 
@@ -71,17 +72,19 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    };
+    } as unknown as MiddlewareContext;
 
-    const result = await middleware.fn(mockCtx as any);
+    const result = await middleware.fn(mockCtx);
     expect(result.action).toBe("transform");
-    expect(result.input).toBeDefined();
-    expect(result.input.appendContext).toBeDefined();
-    expect(result.input.appendContext).toContain("# Project Knowledge");
+    if (result.action === "transform") {
+      expect(result.input).toBeDefined();
+      const appendContext = result.input.appendContext as string | undefined;
+      expect(appendContext).toBeDefined();
+      expect(appendContext).toContain("# Project Knowledge");
+    }
   });
 
   it("returns { action: 'continue' } when ContextAssembler throws", async () => {
-    const ws = makeWorkspace("bad-workspace");
     // Create a workspace that will cause assembler to fail (e.g., permission issue)
     // For this test, we'll just use a non-existent path
     const middleware = createContextMiddleware({ workspaceRoot: "/nonexistent/path/xyz" });
@@ -91,9 +94,9 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    };
+    } as unknown as MiddlewareContext;
 
-    const result = await middleware.fn(mockCtx as any);
+    const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });
   });
 
@@ -109,12 +112,15 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    };
+    } as unknown as MiddlewareContext;
 
-    const result = await middleware.fn(mockCtx as any);
+    const result = await middleware.fn(mockCtx);
     expect(result.action).toBe("transform");
-    expect(result.input.appendContext).toContain("Agent Configuration");
-    expect(result.input.appendContext).toContain("MaxTurns: 10");
+    if (result.action === "transform") {
+      const appendContext = result.input.appendContext as string | undefined;
+      expect(appendContext).toContain("Agent Configuration");
+      expect(appendContext).toContain("MaxTurns: 10");
+    }
   });
 
   it("returns { action: 'continue' } when assembled context is empty string", async () => {
@@ -127,9 +133,9 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    };
+    } as unknown as MiddlewareContext;
 
-    const result = await middleware.fn(mockCtx as any);
+    const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });
   });
 });
