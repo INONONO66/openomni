@@ -118,7 +118,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         maxRetries: 0,
         stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
         onError: ({ error }: { error: unknown }) => {
-          console.error("[llm/run] streamText error", error);
+          Log.error("streamText error", { error: String(error) });
         },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
