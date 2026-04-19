@@ -27,7 +27,15 @@ declare const Bun: {
   exit(code: number): never;
 };
 
-type PackageKey = "protocol" | "session" | "llm" | "agent" | "openomni" | "cli";
+type PackageKey =
+  | "protocol"
+  | "session"
+  | "llm"
+  | "agent"
+  | "openomni"
+  | "coordinator"
+  | "cli"
+  | "server";
 
 type PackageRule = {
   displayName: string;
@@ -41,8 +49,6 @@ const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 // Known deep import violations (tracked tech debt — do not extend)
 // Keyed by "file:importPath" to avoid file-wide exemptions that could hide new violations.
 const KNOWN_DEEP_IMPORTS = new Set([
-  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/registry",
-  "apps/cli/src/cmd/auth.ts:@openomni/llm/src/auth/storage",
   "apps/server/src/tool/mcp/provider.ts:@openomni/agent/src/runtime/mcp",
   "apps/server/src/index.ts:@openomni/agent/src/runtime/mcp",
 ]);
@@ -70,7 +76,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
     packageName: "@openomni/agent",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/llm", "@openomni/session"]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/llm"]),
   },
   openomni: {
     displayName: "openomni",
@@ -78,10 +84,28 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageName: "@openomni/openomni",
     allowedDeps: "any-except-self",
   },
+  coordinator: {
+    displayName: "coordinator",
+    packageJsonPath: "packages/coordinator/package.json",
+    packageName: "@openomni/coordinator",
+    allowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/session",
+      "@openomni/llm",
+      "@openomni/agent",
+      "@openomni/openomni",
+    ]),
+  },
   cli: {
     displayName: "cli",
     packageJsonPath: "apps/cli/package.json",
     packageName: "@openomni/cli",
+    allowedDeps: "any-except-self",
+  },
+  server: {
+    displayName: "server",
+    packageJsonPath: "apps/server/package.json",
+    packageName: "@openomni/server",
     allowedDeps: "any-except-self",
   },
 };
