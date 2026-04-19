@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { AgentMessenger } from "../../../src/runtime/messenger/index";
 import type { Messenger } from "@openomni/protocol";
-import { InMemoryTransport } from "./helpers";
+import { InMemoryTransport } from "./in-memory-transport";
 
 function makeEnvelope(
   from: string,
