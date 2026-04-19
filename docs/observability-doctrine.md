@@ -33,7 +33,7 @@ The `OPENOMNI_LOG_LEVEL` env var controls the minimum level (default: `info`). D
 
 ## When to Use Event
 
-`Bus` (`packages/session/src/bus/index.ts`) is an in-process pub/sub channel. Events are typed, Zod-validated, and dispatched via `queueMicrotask` so handlers don't block the publisher. Nothing is persisted by default.
+`Bus` (`packages/session/src/bus/index.ts`) is an in-process pub/sub channel. Events are typed and dispatched via `queueMicrotask` so handlers don't block the publisher. Nothing is persisted by default.
 
 Use `Bus.publish()` when a state transition needs to be observed by other modules in the same process, without creating a direct dependency between them.
 
@@ -58,7 +58,7 @@ Bus.publish(Subagent.Events.WorkerRunStarted, {
 });
 ```
 
-All bus event schemas live in `packages/protocol/src/event/` and `packages/protocol/src/subagent/index.ts`. New events are defined with `BusEvent.define()`:
+Bus event schemas are defined with `BusEvent.define()` across protocol and session: `packages/protocol/src/event/`, `packages/protocol/src/subagent/index.ts`, `packages/session/src/session/index.ts`, and `packages/session/src/snapshot/index.ts`. New events follow this pattern:
 
 ```typescript
 export const MyEvent = BusEvent.define(
@@ -86,12 +86,12 @@ It carries `AgentEvent` variants (`text_chunk`, `tool_call_start`, `turn_complet
 
 ## When to Use Span
 
-`Telemetry` (`packages/agent/src/core/telemetry.ts`) wraps the OpenTelemetry API. Spans capture timing with parent-child relationships across async boundaries. Counters and histograms track aggregate metrics.
+`Telemetry` (`packages/session/src/telemetry/index.ts`) wraps the OpenTelemetry API. Spans capture timing with parent-child relationships across async boundaries. Counters and histograms track aggregate metrics.
 
 Telemetry is **disabled by default**. `Telemetry.init({ enabled: false })` is the default state. Spans fall through to a no-op when disabled, so call sites pay no runtime cost.
 
 ```typescript
-import { Telemetry } from "@openomni/agent";
+import { Telemetry } from "@openomni/session";
 
 // wrap an LLM call to measure latency and capture model attributes
 const result = await Telemetry.span(
