@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { fetchWithRetry } from "../../shared/fetch-retry";
 import type { ChannelClient } from "../types";
 import type { TelegramResponse, TelegramUser } from "./types";
@@ -15,7 +16,7 @@ export class TelegramClient implements ChannelClient {
 
   async sendTyping(channelId: string): Promise<void> {
     await this.api("sendChatAction", { chat_id: channelId, action: "typing" }).catch((e) =>
-      console.error("[telegram] typing indicator error:", e),
+      Log.warn("telegram typing indicator failed", { err: String(e) }),
     );
   }
 

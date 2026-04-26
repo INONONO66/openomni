@@ -1,4 +1,5 @@
-import type { Messenger } from "@openomni/protocol";
+import { MessengerEvent, type Messenger } from "@openomni/protocol";
+import { Bus, Log } from "@openomni/session";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
@@ -46,17 +47,90 @@ export namespace AgentMessenger {
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
         if (!isAuthorized(options?.allowPatterns, envelope.fromAgentId, envelope.toAgentId)) {
+          const traceId = envelope.traceId || crypto.randomUUID();
+          Log.warn("messenger send authorization denied", {
+            envelopeId: envelope.id,
+            traceId,
+            fromAgentId: envelope.fromAgentId,
+            toAgentId: envelope.toAgentId,
+          });
+          Bus.publish(MessengerEvent.DeliveryFailed, {
+            traceId,
+            envelopeId: envelope.id,
+            reason: `authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`,
+            time: Date.now(),
+          });
           throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
         }
+
+        const traceId = envelope.traceId || crypto.randomUUID();
+        const outbound = traceId !== envelope.traceId ? { ...envelope, traceId } : envelope;
+
         if (messageLog.length >= MAX_LOG_SIZE) {
           messageLog.splice(0, Math.floor(MAX_LOG_SIZE / 2));
         }
-        messageLog.push(envelope);
-        await transport.send(envelope);
+        messageLog.push(outbound);
+
+        Log.debug("messenger envelope send", {
+          envelopeId: outbound.id,
+          traceId,
+          fromAgentId: outbound.fromAgentId,
+          toAgentId: outbound.toAgentId,
+          correlationId: outbound.correlationId,
+        });
+
+        Bus.publish(MessengerEvent.EnvelopeCreated, {
+          traceId,
+          envelopeId: outbound.id,
+          fromAgentId: outbound.fromAgentId,
+          toAgentId: outbound.toAgentId,
+          correlationId: outbound.correlationId,
+          time: Date.now(),
+        });
+
+        try {
+          await transport.send(outbound);
+          Log.debug("messenger envelope delivered", {
+            envelopeId: outbound.id,
+            traceId,
+            fromAgentId: outbound.fromAgentId,
+            toAgentId: outbound.toAgentId,
+          });
+          Bus.publish(MessengerEvent.Delivered, {
+            traceId,
+            envelopeId: outbound.id,
+            fromAgentId: outbound.fromAgentId,
+            toAgentId: outbound.toAgentId,
+            time: Date.now(),
+          });
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? err.message : String(err);
+          Log.warn("messenger delivery failed", {
+            envelopeId: outbound.id,
+            traceId,
+            reason,
+          });
+          Bus.publish(MessengerEvent.DeliveryFailed, {
+            traceId,
+            envelopeId: outbound.id,
+            reason,
+            time: Date.now(),
+          });
+          throw err;
+        }
       },
 
       subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void {
-        return transport.subscribe(agentId, handler);
+        Log.debug("messenger subscribe registered", { agentId });
+        return transport.subscribe(agentId, (env) => {
+          Log.debug("messenger envelope received", {
+            envelopeId: env.id,
+            traceId: env.traceId,
+            fromAgentId: env.fromAgentId,
+            toAgentId: env.toAgentId,
+          });
+          handler(env);
+        });
       },
 
       async request(
@@ -68,6 +142,13 @@ export namespace AgentMessenger {
         return new Promise<Messenger.MessageEnvelope>((resolve, reject) => {
           const timer = setTimeout(() => {
             unsub();
+            Log.warn("messenger request timed out", {
+              envelopeId: envelope.id,
+              traceId: envelope.traceId,
+              fromAgentId: envelope.fromAgentId,
+              toAgentId: envelope.toAgentId,
+              timeoutMs: reqOptions.timeout,
+            });
             reject(new Error(`Request timed out after ${reqOptions.timeout}ms`));
           }, reqOptions.timeout);
 
@@ -75,6 +156,12 @@ export namespace AgentMessenger {
             if (response.correlationId === correlationId) {
               clearTimeout(timer);
               unsub();
+              Log.debug("messenger request response received", {
+                envelopeId: response.id,
+                traceId: response.traceId,
+                correlationId,
+                fromAgentId: response.fromAgentId,
+              });
               resolve(response);
             }
           });
@@ -83,6 +170,10 @@ export namespace AgentMessenger {
             reqOptions.signal.addEventListener("abort", () => {
               clearTimeout(timer);
               unsub();
+              Log.warn("messenger request aborted", {
+                envelopeId: envelope.id,
+                traceId: envelope.traceId,
+              });
               reject(new Error("Request aborted"));
             });
           }

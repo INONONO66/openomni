@@ -110,6 +110,7 @@ export interface ChatAgentConfig {
 export interface ChatAgentInput {
   messages: Array<{ role: "user"; content: string } | { role: "assistant"; content: string }>;
   metadata?: Record<string, unknown>;
+  traceContext?: import("@openomni/protocol").TraceContext.Type;
 }
 
 export interface AgentStep {

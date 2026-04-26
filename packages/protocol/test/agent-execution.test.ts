@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { AgentExecution } from "../src/event/agent-execution.js";
 
 describe("AgentExecution BusEvents", () => {
-  const base = { sessionId: "s1", time: Date.now() };
+  const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
 
   test("TurnStart parses", () => {
     expect(() => AgentExecution.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();

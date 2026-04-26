@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import type { McpToolProvider } from "../tool/mcp";
 import type { ServerConfig } from "../config";
 
@@ -13,5 +14,5 @@ export async function connectMcpServers(
   }
 
   await provider.refreshTools();
-  console.log(`[mcp] connected ${provider.serverCount}/${servers.length} server(s)`);
+  Log.info(`mcp connected ${provider.serverCount}/${servers.length} server(s)`);
 }

@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a middleware engine — plus the multi-agent runtime (messenger, registry, subagent / background tools, MCP client). No session dependency; sinks are injected by the caller. Depends on `@openomni/protocol` and `@openomni/llm`.
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a middleware engine — plus the multi-agent runtime (messenger, registry, subagent / background tools, MCP client). Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
 
 ## STRUCTURE
 
@@ -168,7 +168,7 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 
 ## ANTI-PATTERNS
 
-- Do NOT import `@openomni/session` — this package has no session dependency. Orchestration that needs session lives in `@openomni/openomni`.
+- Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT add new `ExecutionHooks` / `stepGuard` callers. Extend behavior via `middleware: [...]`.
 - Do NOT mutate the legacy compat types — they exist only for backward compatibility and will be trimmed once downstream callers migrate.
 - Do NOT bypass `ToolGuard.check` by returning placeholder tool results in user code; use a `pre_tool_use` middleware so behavior is uniform.

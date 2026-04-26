@@ -1,6 +1,6 @@
 import type { ChatAgent } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
-import { Session, WorkerRun } from "@openomni/session";
+import { Log, Session, WorkerRun } from "@openomni/session";
 import {
   abort as abortSession,
   get as getAbortEntry,
@@ -91,6 +91,7 @@ export async function raceAbortCompletion(
   });
 
   const winner = await Promise.race([abortWait, timeout]);
+  Log.debug("run.abort.settled", { sessionId, runId, outcome: winner });
 
   if (winner === "timeout") {
     removeAbortController(sessionId, runId);
@@ -126,7 +127,9 @@ export function setupRunTimeouts(
   const timers: TimeoutTimers = {};
 
   if (softTimeoutMs !== undefined) {
+    Log.debug("run.timeout.setup.soft", { sessionId, runId, softTimeoutMs });
     timers.soft = setTimeout(() => {
+      Log.debug("run.timeout.soft-fired", { sessionId, runId });
       publishEvent(Subagent.Events.WorkerRunFailed, {
         sessionId,
         runId,
@@ -136,7 +139,9 @@ export function setupRunTimeouts(
   }
 
   if (hardTimeoutMs !== undefined) {
+    Log.debug("run.timeout.setup.hard", { sessionId, runId, hardTimeoutMs });
     timers.hard = setTimeout(async () => {
+      Log.debug("run.timeout.hard-fired", { sessionId, runId });
       try {
         await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
       } catch {

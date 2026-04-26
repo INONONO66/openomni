@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Log } from "@openomni/session";
 import type { ServerConfig } from "../config.js";
 
 type McpServerConfig = ServerConfig["mcp"]["servers"][number];
@@ -13,7 +14,7 @@ export namespace McpConfigLoader {
     try {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      console.warn(`[mcp-config] failed to parse ${configPath}`);
+      Log.warn("failed to parse mcp config", { configPath });
       return null;
     }
 
@@ -32,7 +33,7 @@ export namespace McpConfigLoader {
       return (parsed as { servers: McpServerConfig[] }).servers;
     }
 
-    console.warn(`[mcp-config] unexpected format in ${configPath}`);
+    Log.warn("unexpected format in mcp config", { configPath });
     return null;
   }
 

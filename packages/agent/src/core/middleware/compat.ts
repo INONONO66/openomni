@@ -1,5 +1,6 @@
 import type { ExecutionHooks, StepGuardContext, StepGuardVerdict, AgentStep } from "../types";
 import type { MiddlewareContext, MiddlewareRegistration } from "./types";
+import { Log } from "@openomni/session";
 
 function toHookContext(ctx: MiddlewareContext) {
   return {
@@ -133,9 +134,7 @@ export function fromConfig(config: {
 
   if (config.hooks) {
     if (config.hooks.postTurn && config.stepGuard) {
-      console.warn(
-        "[hooks] Both hooks.postTurn and stepGuard are set. hooks.postTurn takes precedence.",
-      );
+      Log.warn("hooks.postTurn and stepGuard both set; hooks.postTurn takes precedence");
     }
     registrations.push(...fromExecutionHooks(config.hooks));
   }

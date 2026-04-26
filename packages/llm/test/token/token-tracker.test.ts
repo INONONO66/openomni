@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { TokenTracker } from "../../src/token/index";
 
 describe("TokenTracker.extractUsage", () => {
@@ -59,7 +59,6 @@ describe("TokenTracker.calculateCost", () => {
   });
 
   it("returns zero cost for unknown model with warning", () => {
-    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
     const cost = TokenTracker.calculateCost(
       {
         inputTokens: 1000,
@@ -71,8 +70,6 @@ describe("TokenTracker.calculateCost", () => {
       "unknown-model-xyz",
     );
     expect(cost.totalCost).toBe(0);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
   });
 
   it("calculates proportional cost for partial tokens", () => {

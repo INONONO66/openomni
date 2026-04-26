@@ -1,4 +1,11 @@
-import { Plan, type Ingress, type Execution } from "@openomni/protocol";
+import {
+  IngressEvent,
+  Plan,
+  type Execution,
+  type Ingress,
+  type TraceContext as TraceContextProtocol,
+} from "@openomni/protocol";
+import { Bus, Log } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
 
@@ -7,6 +14,7 @@ export namespace IngressHandlers {
     sessionId: string;
     event: Ingress.InboundEvent;
     coordinator: CoordinatorLike;
+    traceContext?: TraceContextProtocol.Type;
   }
 
   function extractPrompt(payload: unknown): string {
@@ -36,6 +44,7 @@ export namespace IngressHandlers {
       credentials: undefined,
       budget: ctx.event.agent.budget,
       workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
+      traceId: ctx.traceContext?.traceId,
     };
   }
 
@@ -46,6 +55,20 @@ export namespace IngressHandlers {
       throw new Error("handlePlan requires plan mode event");
     }
 
+    const log = ctx.traceContext ? Log.withContext({ traceId: ctx.traceContext.traceId }) : Log;
+
+    log.info("dispatching plan mode", { sessionId: ctx.sessionId });
+
+    if (ctx.traceContext) {
+      Bus.publish(IngressEvent.ModeDetected, {
+        traceId: ctx.traceContext.traceId,
+        sessionId: ctx.sessionId,
+        mode: "plan",
+        time: Date.now(),
+      });
+    }
+
+    const start = Date.now();
     const request = buildExecutionRequest(ctx);
     const coordinatorResult = await ctx.coordinator.dispatch(ctx.sessionId, request);
     if (coordinatorResult.status !== "succeeded") {
@@ -56,6 +79,17 @@ export namespace IngressHandlers {
     const raw = JSON.parse(coordinatorResult.output ?? "{}");
     const planResult = Plan.ResultSchema.parse(raw);
     SessionBridge.storePlanResult(ctx.sessionId, planResult, ctx.event.agent.model);
+
+    if (ctx.traceContext) {
+      Bus.publish(IngressEvent.Completed, {
+        traceId: ctx.traceContext.traceId,
+        sessionId: ctx.sessionId,
+        mode: "plan",
+        durationMs: Date.now() - start,
+        time: Date.now(),
+      });
+    }
+
     return { mode: "plan", sessionId: ctx.sessionId, result: planResult };
   }
 
@@ -66,6 +100,20 @@ export namespace IngressHandlers {
       throw new Error("handleDirect requires direct mode event");
     }
 
+    const log = ctx.traceContext ? Log.withContext({ traceId: ctx.traceContext.traceId }) : Log;
+
+    log.info("dispatching direct mode", { sessionId: ctx.sessionId });
+
+    if (ctx.traceContext) {
+      Bus.publish(IngressEvent.ModeDetected, {
+        traceId: ctx.traceContext.traceId,
+        sessionId: ctx.sessionId,
+        mode: "direct",
+        time: Date.now(),
+      });
+    }
+
+    const start = Date.now();
     const request = buildExecutionRequest(ctx);
     const coordinatorResult = await ctx.coordinator.dispatch(ctx.sessionId, request);
     if (coordinatorResult.status !== "succeeded") {
@@ -75,6 +123,17 @@ export namespace IngressHandlers {
     }
     const output = coordinatorResult.output ?? "";
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+
+    if (ctx.traceContext) {
+      Bus.publish(IngressEvent.Completed, {
+        traceId: ctx.traceContext.traceId,
+        sessionId: ctx.sessionId,
+        mode: "direct",
+        durationMs: Date.now() - start,
+        time: Date.now(),
+      });
+    }
+
     return {
       mode: "direct",
       sessionId: ctx.sessionId,

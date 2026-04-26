@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { sleep } from "./sleep";
 
 const MAX_API_RETRIES = 3;
@@ -34,9 +35,12 @@ export async function fetchWithRetry(
       }
     }
 
-    console.warn(
-      `[${label}] Rate limited, retrying in ${retryAfter}s (${retries + 1}/${MAX_API_RETRIES})`,
-    );
+    Log.warn("rate limited, retrying", {
+      label,
+      retryAfter,
+      attempt: retries + 1,
+      max: MAX_API_RETRIES,
+    });
     await sleep(retryAfter * 1000);
 
     return fetchWithRetry(url, init, {

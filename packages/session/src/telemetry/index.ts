@@ -63,7 +63,11 @@ export namespace Telemetry {
     add: (value: number, attributes?: Record<string, string | number | boolean>) => void;
   } {
     if (!_config.enabled || !_meter) {
-      return { add: () => {} };
+      return {
+        add: () => {
+          // noop when telemetry disabled
+        },
+      };
     }
     const counter = _meter.createCounter(name);
     return {
@@ -75,7 +79,11 @@ export namespace Telemetry {
     record: (value: number, attributes?: Record<string, string | number | boolean>) => void;
   } {
     if (!_config.enabled || !_meter) {
-      return { record: () => {} };
+      return {
+        record: () => {
+          // noop when telemetry disabled
+        },
+      };
     }
     const histogram = _meter.createHistogram(name);
     return {

@@ -1,5 +1,5 @@
-import type { Ingress, Message } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import type { Ingress, Message, TraceContext as TraceContextProtocol } from "@openomni/protocol";
+import { Log, Session } from "@openomni/session";
 
 export namespace IngressEventProjector {
   function extractTextPayload(event: Ingress.InboundEvent): string {
@@ -23,6 +23,7 @@ export namespace IngressEventProjector {
     event: Ingress.InboundEvent,
     sessionId: string,
     model: { providerID: string; modelID: string },
+    traceContext?: TraceContextProtocol.Type,
   ): void {
     const message: Message.UserMessage = {
       id: crypto.randomUUID(),
@@ -47,5 +48,9 @@ export namespace IngressEventProjector {
     };
 
     Session.addPart(message.id, part);
+
+    if (traceContext) {
+      Log.withContext({ traceId: traceContext.traceId }).info("message projected", { sessionId });
+    }
   }
 }

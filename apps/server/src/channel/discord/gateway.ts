@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
 import { Heartbeat } from "./heartbeat";
 import { FATAL_CLOSE_CODES, calculateBackoff } from "./reconnect-backoff";
@@ -84,21 +85,27 @@ export class DiscordGateway {
         }
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
-          console.error(`[discord] Fatal close code (${event.code}), stopping reconnect attempts`);
+          Log.error("discord gateway fatal close code", { code: event.code });
           return;
         }
         if (this.running) {
           this.state.reconnectAttempt++;
           const backoffMs = calculateBackoff(this.state.reconnectAttempt);
-          console.log(
-            `[discord] Connection closed (${event.code}), reconnecting in ${Math.round(backoffMs)}ms...`,
-          );
+          Log.warn("discord connection closed, reconnecting", {
+            code: event.code,
+            backoffMs: Math.round(backoffMs),
+          });
           await sleep(backoffMs);
-          if (this.running) this.reconnect().catch(console.error);
+          if (this.running)
+            this.reconnect().catch((err) =>
+              Log.error("discord reconnect failed", { err: String(err) }),
+            );
         }
       });
 
-      ws.addEventListener("error", (err) => console.error("[discord] WebSocket error:", err));
+      ws.addEventListener("error", (err) =>
+        Log.error("discord websocket error", { err: String(err) }),
+      );
     });
   }
 

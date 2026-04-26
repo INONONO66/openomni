@@ -1,6 +1,6 @@
 import { ChatAgent } from "@openomni/agent";
 import { type Execution, Subagent } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Bus, Storage, Log } from "@openomni/session";
 import {
   type AgentToolProvider,
   PlanToolProvider,
@@ -151,7 +151,7 @@ async function executePlan(config: Config, request: Execution.Request): Promise<
   try {
     planContext = ContextAssembler.assemble({ workspaceRoot: workspaceRoot ?? process.cwd() });
   } catch {
-    console.warn("[local-runner] context assembly failed, continuing without context");
+    Log.warn("local-runner context assembly failed, continuing without context");
   }
   const planSystemPrompt = planContext
     ? `${request.systemPrompt}\n\n${planContext}`
