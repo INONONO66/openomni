@@ -1,32 +1,69 @@
-name: Bug Report
+name: "\U0001F41B Bug Report"
 description: Something is broken or not working as expected
-labels: ["bug"]
+labels: ["bug", "needs-triage"]
 body:
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Pre-flight Checks
+      options:
+        - label: I searched existing issues and this hasn't been reported
+          required: true
+        - label: I'm using the latest version of the affected package
+          required: true
+        - label: This is a bug, not a usage question (use [Discussions](https://github.com/INONONO66/openomni/discussions) for questions)
+          required: true
+
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: What happened? What did you expect to happen?
-      placeholder: "When I run X, Y happens instead of Z."
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "When I call X with Y, it does Z instead of W."
     validations:
       required: true
 
   - type: textarea
     id: reproduction
     attributes:
-      label: Steps to Reproduce
-      description: Minimal steps to reproduce the issue.
+      label: Minimal Reproduction
+      description: |
+        Please provide a minimal code snippet or steps that reliably reproduce the issue.
+        Issues without reproduction steps may be closed without investigation.
       placeholder: |
-        1. Run `bun test` in packages/llm
+        ```ts
+        import { Storage } from "@openomni/session";
+        Storage.get(); // Expected: returns adapter, Actual: throws
+        ```
+
+        Or steps:
+        1. Run `bun test` in packages/session
         2. See error in test X
     validations:
       required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error Message & Stack Trace
+      description: Paste the full error output if applicable.
+      render: shell
+    validations:
+      required: false
 
   - type: dropdown
     id: package
     attributes:
       label: Affected Package
-      description: Which package is affected?
+      description: Which package(s) are affected?
       multiple: true
       options:
         - protocol
@@ -34,8 +71,23 @@ body:
         - llm
         - agent
         - openomni
+        - coordinator
         - cli
-        - infra (CI, scripts, config)
+        - server
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: |
+        Run this and paste the output:
+        ```bash
+        echo "Bun: $(bun --version)" && echo "Node: $(node --version)" && echo "OS: $(uname -srm)"
+        ```
+      render: shell
     validations:
       required: true
 
@@ -43,7 +95,6 @@ body:
     id: context
     attributes:
       label: Additional Context
-      description: Error logs, screenshots, relevant file paths, related ADRs or golden principles.
-      placeholder: "Error output, stack trace, or link to docs/design-decisions/003-*.md"
+      description: Relevant config, screenshots, related ADRs or golden principles.
     validations:
       required: false

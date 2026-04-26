@@ -1,18 +1,17 @@
-name: Improvement
-description: Enhancement, tech debt, enforcement gap, or new tooling
+name: "\U0001F527 Improvement"
+description: Tech debt, enforcement gap, refactoring, or internal tooling
 labels: ["improvement"]
 body:
   - type: dropdown
     id: category
     attributes:
       label: Category
-      description: What kind of improvement is this?
       options:
-        - enforcement — add mechanical enforcement for an existing rule
+        - enforcement — mechanical enforcement for an existing rule
         - tooling — new script, CI step, or dev workflow
         - tech-debt — clean up known debt or anti-patterns
+        - refactor — restructure without behavior change
         - docs — documentation gap or staleness
-        - feature — new capability
     validations:
       required: true
 
@@ -50,9 +49,10 @@ body:
         - llm
         - agent
         - openomni
+        - coordinator
         - cli
+        - server
         - infra (CI, scripts, config)
-        - docs
     validations:
       required: true
 
@@ -62,8 +62,8 @@ body:
       label: Effort Estimate
       options:
         - trivial (< 30 min)
-        - small (30 min - 2 hr)
-        - medium (2 hr - 1 day)
+        - small (30 min – 2 hr)
+        - medium (2 hr – 1 day)
         - large (1+ days)
     validations:
       required: true
