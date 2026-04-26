@@ -26,7 +26,6 @@ const requestSchema = z.object({
   credentials: z.record(z.string()).optional(),
   budget: AgentProfile.AgentBudget.optional(),
   skills: z.array(z.string()).optional(),
-  workspace: z.string().optional(),
   agentName: z.string().optional(),
   workspaceRoot: z.string().optional(),
   middleware: z.array(z.string()).optional(),
