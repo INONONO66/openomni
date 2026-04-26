@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Artifact } from "../../src/artifact/index";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 import type { Artifact as ArtifactSchema } from "@openomni/protocol";
 
 const now = new Date().toISOString();
@@ -29,6 +30,7 @@ function seedSession(id: string): void {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {

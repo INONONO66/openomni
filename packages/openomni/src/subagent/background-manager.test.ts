@@ -22,6 +22,7 @@ function makeTask(id: string): import("@openomni/protocol").Subagent.BackgroundT
 describe("BackgroundStore — SQLite persistence", () => {
   beforeEach(() => {
     const adapter = new SqliteStorageAdapter(":memory:");
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
   });
 
@@ -84,6 +85,7 @@ describe("BackgroundStore — SQLite persistence", () => {
 
 describe("BackgroundManager — task survives recreation", () => {
   beforeEach(() => {
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(new SqliteStorageAdapter(":memory:"));
   });
 

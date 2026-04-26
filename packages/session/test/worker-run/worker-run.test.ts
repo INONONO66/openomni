@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 import { WorkerRun } from "../../src/worker-run/index";
 
 function seedSession(id: string): void {
@@ -14,6 +15,7 @@ function seedSession(id: string): void {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   seedSession("sess-1");
 });
 

@@ -25,6 +25,7 @@ beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "server-recovery-"));
   dbPath = join(tmpDir, "test.db");
   adapter = new SqliteStorageAdapter(dbPath);
+  Storage.initialize({ dbPath: ":memory:" });
   Storage.configure(adapter);
 });
 

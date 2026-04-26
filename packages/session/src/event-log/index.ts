@@ -1,4 +1,5 @@
 import { ExecutionEvent } from "@openomni/protocol";
+import { Log } from "../log/index.js";
 import { Storage } from "../storage/storage";
 
 function getAdapter(): Storage.Adapter["eventLog"] | undefined {
@@ -22,8 +23,11 @@ export namespace EventLog {
           if (parsed.success) {
             yield parsed.data;
           }
-        } catch (_) {
-          /* malformed event row — skip */
+        } catch (err) {
+          Log.warn("EventLog.replay: malformed event row skipped", {
+            sessionId,
+            error: String(err),
+          });
         }
       }
     }

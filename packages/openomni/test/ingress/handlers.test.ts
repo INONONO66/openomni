@@ -36,6 +36,7 @@ beforeAll(async () => {
 beforeEach(() => {
   SurfaceKey.clear();
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
   resetTestState();
   mockModelsGet.mockClear();

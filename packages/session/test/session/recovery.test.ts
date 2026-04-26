@@ -7,11 +7,13 @@ import { Session } from "../../src/session";
 import { EventLog } from "../../src/event-log/index";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 
 let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "openomni-session-recovery-test-"));
+  Storage.initialize({ dbPath: ":memory:" });
   Storage.configure(new SqliteStorageAdapter(join(tmpDir, "test.db")));
 });
 

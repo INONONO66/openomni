@@ -29,7 +29,7 @@ export namespace Adapter {
     text: string;
   }
 
-  // TODO: DeliveryPolicy is not yet enforced — placeholder type only
+  // TODO: implement runtime enforcement of "final" delivery policy (suppress intermediate streams)
   export type DeliveryPolicy = "all" | "final";
 
   export interface MediaAttachment {

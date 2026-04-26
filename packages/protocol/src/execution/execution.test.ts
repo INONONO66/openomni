@@ -42,7 +42,6 @@ describe("Execution", () => {
         maxToolCalls: 20,
       },
       skills: ["math", "reasoning"],
-      workspace: "/tmp/workspace",
     };
 
     const parsed = Execution.Request.parse(request);
