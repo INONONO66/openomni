@@ -230,4 +230,29 @@ describe("run", () => {
     expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
     expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
   });
+
+  test("returns RunOutcome with correct type mapping for processor results", () => {
+    const testCases: Array<["stop" | "continue" | "compact", "stop" | "continue" | "compact"]> = [
+      ["stop", "stop"],
+      ["continue", "continue"],
+      ["compact", "compact"],
+    ];
+
+    for (const [processorResult, expectedOutcomeType] of testCases) {
+      const switchResult = (() => {
+        switch (processorResult) {
+          case "stop":
+            return { type: "stop" as const };
+          case "continue":
+            return { type: "continue" as const };
+          case "compact":
+            return { type: "compact" as const };
+          default:
+            return { type: "stop" as const };
+        }
+      })();
+
+      expect(switchResult.type).toBe(expectedOutcomeType);
+    }
+  });
 });

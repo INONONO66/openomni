@@ -239,9 +239,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       case "stop":
         return { type: "stop" };
       case "continue":
-        return { type: "stop" };
+        return { type: "continue" };
       case "compact":
-        return { type: "stop" };
+        return { type: "compact" };
       default:
         return { type: "stop" };
     }
