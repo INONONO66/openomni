@@ -586,4 +586,119 @@ describe("Processor", () => {
       expect(result).toBe("stop");
     });
   });
+
+  describe("cost tracking", () => {
+    test("calculates cost from model.cost and accumulates in assistantMessage", async () => {
+      const modelWithCost: Provider.Model = {
+        id: "claude-opus-4-5",
+        providerID: "anthropic",
+        name: "Claude Opus",
+        cost: { input: 15.0, output: 75.0, cache: { read: 1.5, write: 18.75 } },
+      };
+
+      const mockStream = {
+        fullStream: (async function* () {
+          yield {
+            type: "step-finish",
+            finishReason: "end_turn",
+            usage: { inputTokens: 10000, outputTokens: 5000 },
+          };
+          yield { type: "finish" };
+        })(),
+      };
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: modelWithCost,
+        abort: abortController.signal,
+        createStream: async () => mockStream,
+      });
+
+      await processor.process({ messages: [], model: modelWithCost, system: "" });
+
+      // inputCost = (10000/1M) * 15.0 = 0.15
+      // outputCost = (5000/1M) * 75.0 = 0.375
+      // totalCost = 0.15 + 0.375 = 0.525
+      expect(mockAssistantMessage.cost).toBeGreaterThan(0);
+      expect(mockAssistantMessage.cost).toBeCloseTo(0.525, 4);
+    });
+
+    test("falls back to static pricing when model.cost is absent", async () => {
+      const modelNoCost: Provider.Model = {
+        id: "gpt-4o",
+        providerID: "openai",
+        name: "GPT-4o",
+      };
+
+      const mockStream = {
+        fullStream: (async function* () {
+          yield {
+            type: "step-finish",
+            finishReason: "stop",
+            usage: { inputTokens: 10000, outputTokens: 5000 },
+          };
+          yield { type: "finish" };
+        })(),
+      };
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: modelNoCost,
+        abort: abortController.signal,
+        createStream: async () => mockStream,
+      });
+
+      await processor.process({ messages: [], model: modelNoCost, system: "" });
+
+      // gpt-4o static: input=2.5/M, output=10.0/M
+      // inputCost = (10000/1M) * 2.5 = 0.025
+      // outputCost = (5000/1M) * 10.0 = 0.05
+      // totalCost = 0.075
+      expect(mockAssistantMessage.cost).toBeCloseTo(0.075, 4);
+    });
+
+    test("accumulates cost across multiple step-finish events", async () => {
+      const mockStream = {
+        fullStream: (async function* () {
+          yield {
+            type: "step-finish",
+            finishReason: "tool_use",
+            usage: { inputTokens: 1000, outputTokens: 500 },
+          };
+          yield {
+            type: "step-finish",
+            finishReason: "end_turn",
+            usage: { inputTokens: 2000, outputTokens: 800 },
+          };
+          yield { type: "finish" };
+        })(),
+      };
+
+      // claude-3-5-sonnet: input=3.0/M, output=15.0/M (from static pricing under "claude-3-5-sonnet-20241022")
+      const modelStaticMatch: Provider.Model = {
+        id: "claude-3-5-sonnet-20241022",
+        providerID: "anthropic",
+        name: "Claude 3.5 Sonnet",
+      };
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: modelStaticMatch,
+        abort: abortController.signal,
+        createStream: async () => mockStream,
+      });
+
+      await processor.process({ messages: [], model: modelStaticMatch, system: "" });
+
+      // step1: (1000/1M)*3.0 + (500/1M)*15.0 = 0.003 + 0.0075 = 0.0105
+      // step2: (2000/1M)*3.0 + (800/1M)*15.0 = 0.006 + 0.012 = 0.018
+      // total = 0.0285
+      expect(mockAssistantMessage.cost).toBeCloseTo(0.0285, 4);
+      expect(mockAssistantMessage.tokens.input).toBe(3000);
+      expect(mockAssistantMessage.tokens.output).toBe(1300);
+    });
+  });
 });

@@ -59,6 +59,7 @@ export namespace Processor {
     const {
       assistantMessage,
       sessionID,
+      model,
       abort,
       sink = createNoopSink(),
       onToolCall,
@@ -344,13 +345,26 @@ export namespace Processor {
                         | undefined,
                     });
 
+                    const tokenCost = TokenTracker.calculateCost(
+                      usage,
+                      model.id,
+                      model.cost
+                        ? {
+                            input: model.cost.input,
+                            output: model.cost.output,
+                            cacheRead: model.cost.cache?.read,
+                            cacheWrite: model.cost.cache?.write,
+                          }
+                        : undefined,
+                    );
+
                     const stepFinishPart: Message.StepFinishPart = {
                       id: generateId(),
                       sessionID,
                       messageID: assistantMessage.id,
                       type: "step-finish",
                       reason: finishReason,
-                      cost: 0,
+                      cost: tokenCost.totalCost,
                       tokens: {
                         input: usage.inputTokens,
                         output: usage.outputTokens,
@@ -364,6 +378,7 @@ export namespace Processor {
                     addMessagePart(stepFinishPart);
 
                     assistantMessage.finish = finishReason;
+                    assistantMessage.cost += tokenCost.totalCost;
                     assistantMessage.tokens.input += usage.inputTokens;
                     assistantMessage.tokens.output += usage.outputTokens;
                     assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
