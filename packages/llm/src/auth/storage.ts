@@ -2,14 +2,6 @@ import z from "zod";
 import { join } from "path";
 import { mkdirSync, existsSync, chmodSync } from "fs";
 
-const OauthAuth = z.object({
-  type: z.literal("oauth"),
-  refresh: z.string(),
-  access: z.string(),
-  expires: z.number(),
-  accountId: z.string().optional(),
-});
-
 const ApiAuth = z.object({
   type: z.literal("api"),
   key: z.string(),
@@ -21,7 +13,7 @@ const ProxyAuth = z.object({
   apiKey: z.string().optional(),
 });
 
-const Info = z.discriminatedUnion("type", [OauthAuth, ApiAuth, ProxyAuth]);
+const Info = z.discriminatedUnion("type", [ApiAuth, ProxyAuth]);
 type Info = z.infer<typeof Info>;
 
 const getAuthFilePath = () => {

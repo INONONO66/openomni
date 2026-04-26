@@ -71,8 +71,6 @@ async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBo
     } else if (entry.type === "proxy") {
       credentials[`${prefix}_BASE_URL`] = entry.baseURL;
       if (entry.apiKey) credentials[`${prefix}_API_KEY`] = entry.apiKey;
-    } else if (entry.type === "oauth") {
-      credentials[`${prefix}_ACCESS_TOKEN`] = entry.access;
     }
   }
 

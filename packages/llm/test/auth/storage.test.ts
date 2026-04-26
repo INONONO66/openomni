@@ -32,35 +32,32 @@ describe("Auth Storage", () => {
       delete process.env.OPENOMNI_AUTH_FILE;
     }
   });
-  it("should write OAuth auth to auth.json", async () => {
+  it("should write API auth to auth.json", async () => {
     await Auth.set("anthropic", {
-      type: "oauth",
-      refresh: "r",
-      access: "a",
-      expires: 999,
+      type: "api",
+      key: "sk-ant",
     });
 
     const stored = await Auth.get("anthropic");
     expect(stored).toBeDefined();
-    expect(stored?.type).toBe("oauth");
-    expect(stored?.refresh).toBe("r");
-    expect(stored?.access).toBe("a");
-    expect(stored?.expires).toBe(999);
+    expect(stored?.type).toBe("api");
+    if (stored?.type !== "api") throw new Error("expected API auth");
+    expect(stored?.key).toBe("sk-ant");
   });
 
   it("should return stored value with correct Zod type", async () => {
     await Auth.set("anthropic", {
-      type: "oauth",
-      refresh: "refresh_token",
-      access: "access_token",
-      expires: 1234567890,
-      accountId: "account123",
+      type: "proxy",
+      baseURL: "http://localhost:8317/v1",
+      apiKey: "proxy-key",
     });
 
     const stored = await Auth.get("anthropic");
     expect(stored).toBeDefined();
-    expect(stored?.type).toBe("oauth");
-    expect(stored?.accountId).toBe("account123");
+    expect(stored?.type).toBe("proxy");
+    if (stored?.type !== "proxy") throw new Error("expected proxy auth");
+    expect(stored?.baseURL).toBe("http://localhost:8317/v1");
+    expect(stored?.apiKey).toBe("proxy-key");
   });
 
   it("should return undefined for nonexistent key", async () => {
@@ -70,10 +67,8 @@ describe("Auth Storage", () => {
 
   it("should remove entry from auth.json", async () => {
     await Auth.set("anthropic", {
-      type: "oauth",
-      refresh: "r",
-      access: "a",
-      expires: 999,
+      type: "api",
+      key: "sk-ant",
     });
 
     let stored = await Auth.get("anthropic");
@@ -86,10 +81,8 @@ describe("Auth Storage", () => {
 
   it("should return all entries", async () => {
     await Auth.set("anthropic", {
-      type: "oauth",
-      refresh: "r1",
-      access: "a1",
-      expires: 999,
+      type: "proxy",
+      baseURL: "http://localhost:8317/v1",
     });
 
     await Auth.set("openai", {
@@ -101,7 +94,7 @@ describe("Auth Storage", () => {
     expect(Object.keys(all).length).toBe(2);
     expect(all.anthropic).toBeDefined();
     expect(all.openai).toBeDefined();
-    expect(all.anthropic?.type).toBe("oauth");
+    expect(all.anthropic?.type).toBe("proxy");
     expect(all.openai?.type).toBe("api");
   });
 
@@ -116,10 +109,8 @@ describe("Auth Storage", () => {
       testAuthFile,
       JSON.stringify({
         valid: {
-          type: "oauth",
-          refresh: "r",
-          access: "a",
-          expires: 999,
+          type: "api",
+          key: "sk-valid",
         },
         invalid: {
           type: "unknown",
@@ -134,12 +125,33 @@ describe("Auth Storage", () => {
     expect(all.invalid).toBeUndefined();
   });
 
+  it("should silently skip legacy token auth data", async () => {
+    const { mkdirSync } = await import("fs");
+    const dir = testAuthDir;
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+
+    await Bun.write(
+      testAuthFile,
+      JSON.stringify({
+        legacy: {
+          type: "oauth",
+          refresh: "r",
+          access: "a",
+          expires: 999,
+        },
+      }),
+    );
+
+    const all = await Auth.all();
+    expect(all.legacy).toBeUndefined();
+  });
+
   it("should set auth.json file with 0o600 permissions", async () => {
     await Auth.set("anthropic", {
-      type: "oauth",
-      refresh: "r",
-      access: "a",
-      expires: 999,
+      type: "api",
+      key: "sk-ant",
     });
 
     const file = Bun.file(testAuthFile);
@@ -159,6 +171,7 @@ describe("Auth Storage", () => {
     const stored = await Auth.get("openai");
     expect(stored).toBeDefined();
     expect(stored?.type).toBe("api");
+    if (stored?.type !== "api") throw new Error("expected API auth");
     expect(stored?.key).toBe("sk-xxx");
   });
 });
