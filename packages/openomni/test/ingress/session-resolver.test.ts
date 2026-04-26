@@ -6,6 +6,7 @@ describe("IngressSessionResolver", () => {
   beforeEach(() => {
     SurfaceKey.clear();
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   describe("extractSurfaceKey", () => {

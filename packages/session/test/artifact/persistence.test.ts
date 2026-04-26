@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Artifact as ArtifactSchema } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 import { Artifact } from "../../src/artifact/index";
 
 const now = new Date().toISOString();
@@ -40,6 +41,7 @@ describe("Artifact persistence (SQLite)", () => {
       `test-artifact-persist-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     adapter = new SqliteStorageAdapter(dbPath);
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
     Artifact._reset();
     ensureSession(adapter, "sess-1");

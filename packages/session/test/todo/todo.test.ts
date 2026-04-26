@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Todo } from "../../src/todo/index";
 import { Bus } from "../../src/bus/index";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 import { Todo as TodoProtocol } from "@openomni/protocol";
 
 function makeTodo(overrides: Partial<TodoProtocol.Info> = {}): TodoProtocol.Info {
@@ -29,6 +30,7 @@ function seedSession(id: string): void {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
   seedSession("sess-1");
   seedSession("sess-2");

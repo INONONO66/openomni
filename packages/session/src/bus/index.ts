@@ -6,19 +6,24 @@ export { BusEvent };
 export namespace Bus {
   type Handler = (data: unknown) => void;
 
-  const subscribers = new Map<string, Set<Handler>>();
+  interface Subscription {
+    handler: Handler;
+    match?: Record<string, unknown>;
+  }
+
+  const subscribers = new Map<string, Set<Subscription>>();
 
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    const handlers = subscribers.get(event.name);
-    if (!handlers) return;
+    const subs = subscribers.get(event.name);
+    if (!subs) return;
 
-    // snapshot handlers to avoid mutation during iteration
-    const handlerSnapshot = [...handlers];
+    const snapshot = [...subs];
 
-    for (const handler of handlerSnapshot) {
+    for (const sub of snapshot) {
       queueMicrotask(() => {
         try {
-          handler(data);
+          if (sub.match && !matches(data, sub.match)) return;
+          sub.handler(data);
         } catch (err) {
           Log.warn("Bus handler error", { event: event.name, error: String(err) });
         }
@@ -29,19 +34,34 @@ export namespace Bus {
   export function subscribe<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,
+    options?: { match?: Partial<T> },
   ): () => void {
-    let handlers = subscribers.get(event.name);
-    if (!handlers) {
-      handlers = new Set();
-      subscribers.set(event.name, handlers);
+    let subs = subscribers.get(event.name);
+    if (!subs) {
+      subs = new Set();
+      subscribers.set(event.name, subs);
     }
-    handlers.add(handler as Handler);
+    const subscription: Subscription = {
+      handler: handler as Handler,
+      match: options?.match as Record<string, unknown> | undefined,
+    };
+    subs.add(subscription);
+    const captured = subs;
     return () => {
-      handlers!.delete(handler as Handler);
+      captured.delete(subscription);
     };
   }
 
   export function reset(): void {
     subscribers.clear();
+  }
+
+  function matches(data: unknown, match: Record<string, unknown>): boolean {
+    if (data === null || typeof data !== "object") return false;
+    const obj = data as Record<string, unknown>;
+    for (const [key, expected] of Object.entries(match)) {
+      if (obj[key] !== expected) return false;
+    }
+    return true;
   }
 }

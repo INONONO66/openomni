@@ -40,6 +40,7 @@ function getAssistantMessage(sessionId: string): Message.AssistantMessage {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   runCalls.length = 0;
   runResults.length = 0;
   createSpy = spyOn(ChatAgent, "create").mockImplementation(() => {

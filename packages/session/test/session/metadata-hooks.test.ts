@@ -1,7 +1,8 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { Session } from "../../src/session";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 
 function makeUserMessage(
   sessionID: string,
@@ -47,6 +48,7 @@ function makeAssistantMessage(
 describe("Session.addMessage metadata hooks", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   describe("messageCount", () => {

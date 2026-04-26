@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { SurfaceKey } from "../src/surface-key";
 import { Storage } from "../src/storage/storage";
+import "../src/storage/initialize";
 
 function seedSession(id: string): void {
   Storage.getAdapter().session.set(id, {
@@ -15,6 +16,7 @@ function seedSession(id: string): void {
 describe("SurfaceKey", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     SurfaceKey.clear();
   });
 
@@ -428,6 +430,7 @@ describe("SurfaceKey", () => {
       SurfaceKey.register(key2, sessionId);
 
       Storage.reset();
+      Storage.initialize({ dbPath: ":memory:" });
       SurfaceKey.clear();
 
       expect(SurfaceKey.lookup(key1)).toBeUndefined();

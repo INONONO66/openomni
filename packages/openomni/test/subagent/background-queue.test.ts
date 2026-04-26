@@ -36,6 +36,7 @@ let spawnSpy: ReturnType<typeof spyOn> | undefined;
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
 });
 

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Session } from "../../src/session";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 
 describe("Session lineage APIs", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("createChild links to parent and increments spawnDepth", () => {

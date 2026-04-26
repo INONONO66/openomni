@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
+import { Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -24,6 +25,7 @@ beforeEach(() => {
   mockModelsGet.mockClear();
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   IngressEngine.setCoordinator({
     async dispatch(_sessionId, request) {
       const output = testState.responseQueue.shift() ?? "{}";
@@ -153,7 +155,7 @@ describe("IngressEngine", () => {
 
     const first = await IngressEngine.ingest(event);
     IngressEngine.reset();
-    // Re-set coordinator after reset (reset clears session state but not coordinator)
+    Storage.initialize({ dbPath: ":memory:" });
     IngressEngine.setCoordinator({
       async dispatch(_sessionId, request) {
         const output = testState.responseQueue.shift() ?? "{}";

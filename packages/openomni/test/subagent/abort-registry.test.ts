@@ -34,6 +34,7 @@ function createResult(text: string): AgentResult {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   createSpy = spyOn(ChatAgent, "create");
 });
 

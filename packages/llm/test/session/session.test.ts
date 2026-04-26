@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { Session } from "@openomni/session";
-import { Message } from "../../src/session/message";
+import { Session, Storage } from "@openomni/session";
+import type { Message } from "../../src/session/message";
 
 describe("Session", () => {
   beforeEach(() => {
-    Session["storage"].clear();
-    Session["messages"].clear();
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   describe("create", () => {

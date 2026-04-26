@@ -73,21 +73,35 @@ export namespace Storage {
 }
 
 export namespace Storage {
-  let adapter: Adapter = new SqliteStorageAdapter(process.env.OPENOMNI_DB_PATH ?? ":memory:");
+  let adapter: Adapter | null = null;
+  export let initializedDbPath: string | null = null;
+  let warnedOnce = false;
 
   export function configure(newAdapter: Adapter): void {
     adapter = newAdapter;
+    initializedDbPath = "__configured__";
   }
 
   export function get(): Adapter {
+    if (adapter === null) {
+      if (!warnedOnce) {
+        console.warn(
+          "Storage.get() called before initialize() — auto-initializing in-memory adapter. Call Storage.initialize({ dbPath }) at app entry to suppress this warning.",
+        );
+        warnedOnce = true;
+      }
+      adapter = new SqliteStorageAdapter(":memory:");
+    }
     return adapter;
   }
 
   export function getAdapter(): Adapter {
-    return adapter;
+    return get();
   }
 
   export function reset(): void {
-    adapter = new SqliteStorageAdapter(":memory:");
+    adapter = null;
+    initializedDbPath = null;
+    warnedOnce = false;
   }
 }

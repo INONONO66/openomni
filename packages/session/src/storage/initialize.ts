@@ -4,14 +4,24 @@ import { Storage } from "./storage";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
 export interface InitializeOptions {
-  dbPath: string;
+  dbPath?: string;
 }
 
-export function initialize(options: InitializeOptions): void {
-  const dbPath = options.dbPath;
+export function initialize(options?: InitializeOptions): void {
+  const dbPath = options?.dbPath ?? process.env.OPENOMNI_DB_PATH ?? ":memory:";
 
-  mkdirSync(dirname(dbPath), { recursive: true });
+  if (Storage.initializedDbPath !== null && Storage.initializedDbPath !== "__configured__") {
+    if (Storage.initializedDbPath === dbPath) return;
+    throw new Error(
+      "Storage already initialized with a different dbPath. Call Storage.reset() first.",
+    );
+  }
+
+  if (dbPath !== ":memory:") {
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
   Storage.configure(new SqliteStorageAdapter(dbPath));
+  Storage.initializedDbPath = dbPath;
 }
 
 declare module "./storage" {

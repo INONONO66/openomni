@@ -7,6 +7,7 @@ import type { Message } from "@openomni/protocol";
 import { Session } from "../../src/session/index";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 
 function makeUserMessage(sessionID: string, messageID: string): Message.Info {
   return {
@@ -30,6 +31,7 @@ describe("message status tracking", () => {
       `test-msg-status-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     adapter = new SqliteStorageAdapter(dbPath);
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
     rawDb = new Database(dbPath, { readonly: true });
   });
@@ -93,6 +95,7 @@ describe("message status tracking", () => {
 
   test("updateMessageStatus does not throw with in-memory SQLite", () => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
 
     const session = Session.create({
       title: "test",

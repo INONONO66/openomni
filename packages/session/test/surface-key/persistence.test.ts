@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { SurfaceKey } from "../../src/surface-key";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 import { Session } from "../../src/session";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ describe("SurfaceKey SQLite persistence", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "surfacekey-test-"));
     dbPath = join(tmpDir, "test.db");
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(new SqliteStorageAdapter(dbPath));
     SurfaceKey.clear();
   });
