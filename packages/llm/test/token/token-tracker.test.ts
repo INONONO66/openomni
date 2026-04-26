@@ -84,4 +84,128 @@ describe("TokenTracker.calculateCost", () => {
     expect(cost.inputCost).toBeCloseTo(0.075);
     expect(cost.outputCost).toBe(0);
   });
+
+  it("calculateCost prefers modelCost over static map", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5", {
+      input: 5.0,
+      output: 15.0,
+    });
+    expect(cost.inputCost).toBeCloseTo(5.0);
+    expect(cost.outputCost).toBeCloseTo(15.0);
+    expect(cost.totalCost).toBeCloseTo(20.0);
+  });
+
+  it("calculateCost falls back to static MODEL_PRICING for known models", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
+    expect(cost.inputCost).toBeCloseTo(15.0);
+    expect(cost.outputCost).toBeCloseTo(75.0);
+    expect(cost.totalCost).toBeCloseTo(90.0);
+  });
+
+  it("calculateCost returns zero with warning for unknown model without modelCost", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const cost = TokenTracker.calculateCost(usage, "unknown-model-xyz");
+    expect(cost.totalCost).toBe(0);
+    expect(cost.inputCost).toBe(0);
+    expect(cost.outputCost).toBe(0);
+  });
+
+  it("calculateCost includes cacheReadCost when cacheReadTokens > 0", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 0,
+      cacheReadTokens: 1_000_000,
+      cacheWriteTokens: 0,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
+    expect(cost.cacheReadCost).toBeDefined();
+    expect(cost.cacheReadCost).toBeGreaterThan(0);
+    expect(cost.totalCost).toBeGreaterThan(90.0);
+  });
+
+  it("calculateCost includes cacheWriteCost when cacheWriteTokens > 0", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 1_000_000,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
+    expect(cost.cacheWriteCost).toBeDefined();
+    expect(cost.cacheWriteCost).toBeGreaterThan(0);
+    expect(cost.totalCost).toBeGreaterThan(90.0);
+  });
+
+  it("calculateCost includes reasoningCost when reasoningTokens > 0", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 1_000_000,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
+    expect(cost.reasoningCost).toBeDefined();
+    expect(cost.reasoningCost).toBeGreaterThan(0);
+    expect(cost.totalCost).toBeGreaterThan(90.0);
+  });
+
+  it("totalCost sums all components", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+      cacheWriteTokens: 1_000_000,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
+    const expectedTotal =
+      (cost.inputCost ?? 0) +
+      (cost.outputCost ?? 0) +
+      (cost.cacheReadCost ?? 0) +
+      (cost.cacheWriteCost ?? 0) +
+      (cost.reasoningCost ?? 0);
+    expect(cost.totalCost).toBeCloseTo(expectedTotal);
+  });
+
+  it("calculateCost handles partial modelCost (only input/output, no cache/reasoning)", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      reasoningTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+      cacheWriteTokens: 1_000_000,
+    };
+    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5", {
+      input: 5.0,
+      output: 15.0,
+    });
+    expect(cost.inputCost).toBeCloseTo(5.0);
+    expect(cost.outputCost).toBeCloseTo(15.0);
+    expect(cost.cacheReadCost).toBeDefined();
+    expect(cost.cacheWriteCost).toBeDefined();
+    expect(cost.reasoningCost).toBeDefined();
+  });
 });
