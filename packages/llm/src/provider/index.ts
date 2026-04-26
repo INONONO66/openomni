@@ -148,6 +148,7 @@ export namespace Provider {
   export const BUNDLED_PROVIDERS = {
     "@ai-sdk/anthropic": true,
     "@ai-sdk/openai": true,
+    "@ai-sdk/openai-compatible": true,
   } as const;
 
   export type ProviderID = string;

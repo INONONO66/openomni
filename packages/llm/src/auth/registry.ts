@@ -93,7 +93,56 @@ const openaiProvider: AuthProvider = {
   ],
 };
 
-const registry: AuthProvider[] = [anthropicProvider, openaiProvider];
+const moonshotaiProvider: AuthProvider = {
+  id: "moonshotai",
+  name: "Moonshot AI",
+  hint: "Moonshot AI (Kimi) API key",
+  methods: [
+    {
+      id: "api",
+      label: "API key",
+      hint: "Use Moonshot AI API key",
+      async run(cb) {
+        const key = (await cb.getInput("Moonshot AI API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("moonshotai", { type: "api", key });
+        cb.showMessage("API key saved");
+      },
+    },
+  ],
+};
+
+const zhipuaiProvider: AuthProvider = {
+  id: "zhipuai",
+  name: "Zhipu AI",
+  hint: "Zhipu AI (GLM) API key",
+  methods: [
+    {
+      id: "api",
+      label: "API key",
+      hint: "Use Zhipu AI API key",
+      async run(cb) {
+        const key = (await cb.getInput("Zhipu AI API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("zhipuai", { type: "api", key });
+        cb.showMessage("API key saved");
+      },
+    },
+  ],
+};
+
+const registry: AuthProvider[] = [
+  anthropicProvider,
+  openaiProvider,
+  moonshotaiProvider,
+  zhipuaiProvider,
+];
 
 export function getAuthProviders(): AuthProvider[] {
   return registry;
