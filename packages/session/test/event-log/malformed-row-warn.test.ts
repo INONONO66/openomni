@@ -6,6 +6,7 @@ import type { ExecutionEvent } from "@openomni/protocol";
 import { Log } from "../../src/log/index";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 import { EventLog } from "../../src/event-log/index";
 
 const now = new Date().toISOString();
@@ -49,6 +50,7 @@ describe("EventLog.replay warns on malformed rows", () => {
       `test-eventlog-malformed-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     adapter = new SqliteStorageAdapter(dbPath);
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
     EventLog._reset();
   });

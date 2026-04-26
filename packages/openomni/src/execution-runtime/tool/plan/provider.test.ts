@@ -12,6 +12,7 @@ describe("PlanToolProvider", () => {
   let provider: PlanToolProvider;
 
   beforeEach(() => {
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(new SqliteStorageAdapter(":memory:"));
     provider = new PlanToolProvider();
   });

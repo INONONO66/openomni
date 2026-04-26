@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ExecutionEvent } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import "../../src/storage/initialize";
 import { EventLog } from "../../src/event-log/index";
 
 const now = new Date().toISOString();
@@ -48,6 +49,7 @@ describe("EventLog with SQLite adapter", () => {
       `test-eventlog-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     adapter = new SqliteStorageAdapter(dbPath);
+    Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
     EventLog._reset();
   });
