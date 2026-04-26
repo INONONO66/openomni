@@ -1,6 +1,7 @@
 import z from "zod";
-import { join } from "path";
-import { mkdirSync, existsSync, chmodSync } from "fs";
+import { join, dirname } from "node:path";
+import { mkdirSync, existsSync, chmodSync } from "node:fs";
+import { homedir } from "node:os";
 
 const ApiAuth = z.object({
   type: z.literal("api"),
@@ -20,12 +21,12 @@ const getAuthFilePath = () => {
   if (process.env.OPENOMNI_AUTH_FILE) {
     return process.env.OPENOMNI_AUTH_FILE;
   }
-  return join(process.env.HOME!, ".openomni", "auth.json");
+  return join(homedir(), ".openomni", "auth.json");
 };
 
 const ensureAuthDir = () => {
   const filepath = getAuthFilePath();
-  const dir = filepath.substring(0, filepath.lastIndexOf("/"));
+  const dir = dirname(filepath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
