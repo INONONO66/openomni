@@ -2,7 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
-import { initialize } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { initialize, Bus, Log } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
@@ -134,7 +135,7 @@ export async function main(): Promise<void> {
   let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
 
   if (isLocalMode) {
-    console.log("[server] running in local mode (no worker pool)");
+    Log.info("server running in local mode (no worker pool)");
     const localRunner = LocalRunner.create({
       systemProvider,
       agentProvider,
@@ -144,7 +145,7 @@ export async function main(): Promise<void> {
     });
     IngressEngine.setCoordinator(localRunner);
   } else {
-    console.log("[server] running in coordinator mode");
+    Log.info("server running in coordinator mode");
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
     const toolDispatcher = buildToolDispatcher([
@@ -177,9 +178,9 @@ export async function main(): Promise<void> {
     : undefined;
 
   if (model) {
-    console.log(`[server] Using model: ${model.providerID}/${model.id}`);
+    Log.info(`server using model: ${model.providerID}/${model.id}`);
   } else {
-    console.warn("[server] no model credentials found; realtime surfaces disabled");
+    Log.warn("server no model credentials found; realtime surfaces disabled");
   }
 
   const { channels, wsHandler, githubWebhookHandler } = createChannelAdapters(
@@ -188,7 +189,7 @@ export async function main(): Promise<void> {
   );
 
   if (hasAnyChannel && !routingHandler) {
-    console.warn("[server] channel credentials found but no model credentials; channels disabled");
+    Log.warn("server channel credentials found but no model credentials; channels disabled");
   }
 
   const app = createRouter(githubWebhookHandler);
@@ -213,13 +214,22 @@ export async function main(): Promise<void> {
   await Promise.all(channels.map((channel) => channel.start()));
 
   if (channels.length === 0) {
-    console.log("[server] No external channels configured. Web and WebSocket endpoints only.");
+    Log.info("server no external channels configured; web and websocket endpoints only");
   }
 
-  console.log(`[server] listening on http://${config.server.host}:${server.port}`);
-  console.log(`[server] websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`);
+  Log.info(`server listening on http://${config.server.host}:${server.port}`);
+  Log.info(`server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`);
 
-  await runRecovery(routingHandler, coordinator);
+  const traceId = crypto.randomUUID();
+  const mode = isLocalMode ? "local" : "coordinator";
+  await runRecovery(routingHandler, coordinator, traceId);
 
-  installShutdownHandlers({ channels, server, mcpProvider, coordinator });
+  Bus.publish(Operational.BootstrapCompleted, {
+    traceId,
+    mode,
+    channelCount: channels.length,
+    time: Date.now(),
+  });
+
+  installShutdownHandlers({ channels, server, mcpProvider, coordinator, traceId });
 }

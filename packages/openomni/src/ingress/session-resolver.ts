@@ -1,4 +1,5 @@
-import { Session, SurfaceKey } from "@openomni/session";
+import { IngressEvent, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
+import { Bus, Log, Session, SurfaceKey, TraceContext } from "@openomni/session";
 
 interface ResolvableEvent {
   surface: string;
@@ -15,6 +16,7 @@ export namespace IngressSessionResolver {
   export interface ResolveResult {
     session: Session.Info;
     isNew: boolean;
+    trace?: TraceContextProtocol.Type;
   }
 
   // Format: "surface:workspace:channel" — always 3 positional parts to prevent collisions
@@ -29,24 +31,43 @@ export namespace IngressSessionResolver {
       providerID: "anthropic",
       modelID: "claude-3-5-sonnet-20241022",
     },
+    traceContext?: TraceContextProtocol.Type,
   ): ResolveResult {
     const surfaceKey = extractSurfaceKey(event);
     const existingSessionId = SurfaceKey.lookup(surfaceKey);
 
+    let session: Session.Info;
+    let isNew: boolean;
+
     if (existingSessionId) {
       const existing = Session.get(existingSessionId);
       if (existing) {
-        return { session: existing, isNew: false };
+        session = existing;
+        isNew = false;
+      } else {
+        // Stale entry — session was deleted, create new
+        session = Session.create({ title: `Session from ${event.surface}`, model: defaultModel });
+        SurfaceKey.register(surfaceKey, session.id);
+        isNew = true;
       }
-      // Stale entry — session was deleted, create new
+    } else {
+      session = Session.create({ title: `Session from ${event.surface}`, model: defaultModel });
+      SurfaceKey.register(surfaceKey, session.id);
+      isNew = true;
     }
 
-    // Create new session and register
-    const session = Session.create({
-      title: `Session from ${event.surface}`,
-      model: defaultModel,
-    });
-    SurfaceKey.register(surfaceKey, session.id);
-    return { session, isNew: true };
+    if (traceContext) {
+      const log = Log.withContext({ traceId: traceContext.traceId });
+      log.info("session resolved", { sessionId: session.id, isNew });
+      Bus.publish(IngressEvent.SessionResolved, {
+        traceId: traceContext.traceId,
+        sessionId: session.id,
+        isNew,
+        time: Date.now(),
+      });
+      return { session, isNew, trace: TraceContext.child(traceContext, { sessionId: session.id }) };
+    }
+
+    return { session, isNew };
   }
 }

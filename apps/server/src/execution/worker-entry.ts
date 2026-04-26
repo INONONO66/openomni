@@ -1,7 +1,7 @@
 import { ChatAgent, AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
-import { initialize, Storage } from "@openomni/session";
+import { initialize, Log, Storage } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
@@ -25,7 +25,7 @@ const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
 const socketPath = args[args.indexOf("--socket") + 1];
 
 if (!socketPath) {
-  console.error("worker-entry: missing --socket argument");
+  Log.error("worker-entry: missing --socket argument");
   process.exit(1);
 }
 
@@ -162,7 +162,12 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
               }),
             ],
           });
-          const runResult = await agent.run({ messages });
+          const runResult = await agent.run({
+            messages,
+            ...(request.traceId
+              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
+              : {}),
+          });
 
           server.notify("worker.run_completed", {
             runId,
@@ -198,7 +203,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
               workspaceRoot: planWorkspaceRoot ?? process.cwd(),
             });
           } catch {
-            console.warn("[worker] context assembly failed, continuing without context");
+            Log.warn("context assembly failed, continuing without context");
           }
           const planSystemPrompt = planContext
             ? `${request.systemPrompt}\n\n${planContext}`
@@ -211,6 +216,9 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             budget: request.budget,
             tools: planTools,
             toolExecutor: planToolExecutor,
+            ...(request.traceId
+              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
+              : {}),
           });
 
           server.notify("worker.run_completed", { runId, sessionId, status: "succeeded" });
@@ -286,14 +294,16 @@ setInterval(() => {
       budget: agent.budget,
     }));
     AgentRegistry.replaceAll(agentDefs);
-    console.log(
-      `Worker ${workerId} bootstrap received: ${bootstrap.agents.length} agents, ${bootstrap.toolCatalog.length} mcp tools`,
-    );
+    Log.info("worker bootstrap received", {
+      workerId,
+      agents: bootstrap.agents.length,
+      mcpTools: bootstrap.toolCatalog.length,
+    });
   } catch (err) {
-    console.error(
-      `Worker ${workerId} bootstrap failed:`,
-      err instanceof Error ? err.message : String(err),
-    );
+    Log.error("worker bootstrap failed", {
+      workerId,
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 })();
 
@@ -302,6 +312,6 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-console.log(`Worker ${workerId} started (PID ${process.pid}) socket=${socketPath}`);
+Log.info("worker started", { workerId, pid: process.pid, socketPath });
 
 export { workerBootstrap };

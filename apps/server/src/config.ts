@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { Log } from "@openomni/session";
 
 type McpServerConfig = {
   name: string;
@@ -61,7 +62,7 @@ function loadRaw(configPath: string): RawConfig {
   try {
     return JSON.parse(readFileSync(configPath, "utf-8")) as RawConfig;
   } catch {
-    console.warn(`[config] failed to parse ${configPath}, using defaults`);
+    Log.warn("failed to parse config, using defaults", { configPath });
     return {};
   }
 }
@@ -71,7 +72,7 @@ function resolve(raw: RawConfig): ServerConfig {
   const workspaceRoot = raw.workspace?.root;
 
   if (workspaceRoot && !existsSync(workspaceRoot)) {
-    console.warn(`[config] workspace root not found: ${workspaceRoot}`);
+    Log.warn("workspace root not found", { workspaceRoot });
   }
 
   return {

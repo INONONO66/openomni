@@ -1,4 +1,5 @@
 import type { Guardrail } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 
 const MAX_REGEX_PATTERN_LENGTH = 200;
 const MAX_INPUT_LENGTH = 10_000;
@@ -37,22 +38,48 @@ export namespace ToolGuard {
           matchToolPattern(toolName, rule.toolPattern) &&
           matchInputField(input, rule.field, rule.pattern)
         ) {
+          Log.warn("guardrail: input rule matched", {
+            toolName,
+            action: rule.action,
+            field: rule.field,
+          });
           return rule.action;
         }
       }
     }
     // 2. Fall through to existing tool-level logic
-    if (permission.denylist?.includes(toolName)) return "deny";
-    if (permission.requireApproval?.includes(toolName)) return "require_approval";
+    if (permission.denylist?.includes(toolName)) {
+      Log.warn("guardrail: tool denied by denylist", { toolName });
+      return "deny";
+    }
+    if (permission.requireApproval?.includes(toolName)) {
+      Log.warn("guardrail: tool requires approval", { toolName });
+      return "require_approval";
+    }
     if (permission.allowlist !== undefined) {
-      if (permission.allowlist.length === 0) return "deny";
-      if (permission.allowlist.includes("*")) return "allow";
+      if (permission.allowlist.length === 0) {
+        Log.warn("guardrail: tool denied by empty allowlist", { toolName });
+        return "deny";
+      }
+      if (permission.allowlist.includes("*")) {
+        Log.debug("guardrail: tool allowed by wildcard", { toolName });
+        return "allow";
+      }
       const prefixMatch = permission.allowlist.some(
         (p: string) => p.endsWith(".*") && toolName.startsWith(p.slice(0, -1)),
       );
-      if (prefixMatch) return "allow";
-      return permission.allowlist.includes(toolName) ? "allow" : "deny";
+      if (prefixMatch) {
+        Log.debug("guardrail: tool allowed by prefix match", { toolName });
+        return "allow";
+      }
+      if (permission.allowlist.includes(toolName)) {
+        Log.debug("guardrail: tool allowed by allowlist", { toolName });
+        return "allow";
+      }
+      Log.warn("guardrail: tool denied by allowlist", { toolName });
+      return "deny";
     }
+    Log.debug("guardrail: tool allowed by default", { toolName });
     return "allow";
   }
 }

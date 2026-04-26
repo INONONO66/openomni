@@ -1,4 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 
 export interface WebSocketConfig {
   token?: string;
@@ -19,10 +20,15 @@ export class WebSocketHandler {
     return {
       message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
+        Log.debug("websocket message received", { surfaceKey: ws.data.surfaceKey });
         void self.handleMessage(ws, raw);
       },
       open(ws: { data: WsConnectionData }) {
         ws.data = { surfaceKey: `ws:${crypto.randomUUID()}` };
+        Log.info("websocket connection opened", { surfaceKey: ws.data.surfaceKey });
+      },
+      close(ws: { data: WsConnectionData }) {
+        Log.info("websocket connection closed", { surfaceKey: ws.data.surfaceKey });
       },
     };
   }
@@ -35,6 +41,7 @@ export class WebSocketHandler {
       const url = new URL(req.url);
       const provided = url.searchParams.get("token");
       if (provided !== this.config.token) {
+        Log.warn("websocket auth failure");
         return new Response("Unauthorized", { status: 401 });
       }
     }

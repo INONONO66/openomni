@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { Log } from "../../src/log/index";
+import { Log, TraceContext } from "../../src/index";
 
 describe("Log", () => {
   let originalStdoutWrite: typeof process.stdout.write;
@@ -106,5 +106,77 @@ describe("Log", () => {
     expect(capturedOutput.length).toBe(4);
     const levels = capturedOutput.map((line) => JSON.parse(line).level);
     expect(levels).toEqual(["debug", "info", "warn", "error"]);
+  });
+
+  it("withContext merges context into all log calls", () => {
+    const logger = Log.withContext({ traceId: "abc123", userId: "user1" });
+    logger.info("test message");
+    expect(capturedOutput.length).toBe(1);
+    const parsed = JSON.parse(capturedOutput[0]);
+    expect(parsed.traceId).toBe("abc123");
+    expect(parsed.userId).toBe("user1");
+    expect(parsed.msg).toBe("test message");
+  });
+
+  it("withContext allows overriding context in individual calls", () => {
+    const logger = Log.withContext({ traceId: "abc123", userId: "user1" });
+    logger.info("test", { userId: "user2" });
+    const parsed = JSON.parse(capturedOutput[0]);
+    expect(parsed.traceId).toBe("abc123");
+    expect(parsed.userId).toBe("user2");
+  });
+
+  it("withContext works with all log levels", () => {
+    process.env.OPENOMNI_LOG_LEVEL = "debug";
+    const logger = Log.withContext({ traceId: "xyz789" });
+    logger.debug("d");
+    logger.info("i");
+    logger.warn("w");
+    logger.error("e");
+    expect(capturedOutput.length).toBe(4);
+    const parsed = capturedOutput.map((line) => JSON.parse(line));
+    expect(parsed.every((p) => p.traceId === "xyz789")).toBe(true);
+  });
+});
+
+describe("TraceContext", () => {
+  it("create generates a traceId", () => {
+    const ctx = TraceContext.create();
+    expect(ctx.traceId).toBeDefined();
+    expect(typeof ctx.traceId).toBe("string");
+    expect(ctx.traceId.length).toBeGreaterThan(0);
+  });
+
+  it("create with overrides merges fields", () => {
+    const ctx = TraceContext.create({ sessionId: "sess123", userId: "user1" });
+    expect(ctx.traceId).toBeDefined();
+    expect(ctx.sessionId).toBe("sess123");
+  });
+
+  it("child preserves parent traceId by default", () => {
+    const parent = TraceContext.create({ sessionId: "sess123" });
+    const child = TraceContext.child(parent);
+    expect(child.traceId).toBe(parent.traceId);
+    expect(child.sessionId).toBe(parent.sessionId);
+  });
+
+  it("child can override parent fields", () => {
+    const parent = TraceContext.create({ sessionId: "sess123" });
+    const child = TraceContext.child(parent, { runId: "run456" });
+    expect(child.traceId).toBe(parent.traceId);
+    expect(child.sessionId).toBe(parent.sessionId);
+    expect(child.runId).toBe("run456");
+  });
+
+  it("empty generates a new traceId", () => {
+    const ctx = TraceContext.empty();
+    expect(ctx.traceId).toBeDefined();
+    expect(typeof ctx.traceId).toBe("string");
+  });
+
+  it("empty generates unique traceIds", () => {
+    const ctx1 = TraceContext.empty();
+    const ctx2 = TraceContext.empty();
+    expect(ctx1.traceId).not.toBe(ctx2.traceId);
   });
 });

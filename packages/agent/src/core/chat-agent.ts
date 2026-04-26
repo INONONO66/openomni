@@ -1,7 +1,7 @@
 import type { Sink } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput, AgentResult, AgentEvent } from "./types";
 import { streamAgent } from "./execution/stream-engine";
-import { Telemetry } from "./telemetry";
+import { Telemetry } from "@openomni/session";
 
 export interface ChatAgentInstance {
   run(input: ChatAgentInput, sink?: Sink): Promise<AgentResult>;

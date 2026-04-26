@@ -1,5 +1,5 @@
-import { Ingress } from "@openomni/protocol";
-import { Bus, Storage, SurfaceKey } from "@openomni/session";
+import { Ingress, IngressEvent } from "@openomni/protocol";
+import { Bus, Log, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
@@ -27,16 +27,38 @@ export namespace IngressEngine {
 
     Ingress.InboundEventSchema.parse(event);
 
-    const agentModel = event.agent.model;
-    const { session } = IngressSessionResolver.resolve(event, {
-      providerID: agentModel.provider,
-      modelID: agentModel.id,
+    const trace = TraceContext.create();
+    const log = Log.withContext({ traceId: trace.traceId });
+    log.info("ingress received", { surface: event.surface, mode: event.mode });
+
+    const payloadLength =
+      typeof event.payload === "string"
+        ? event.payload.length
+        : (JSON.stringify(event.payload ?? null) ?? "").length;
+
+    Bus.publish(IngressEvent.Received, {
+      traceId: trace.traceId,
+      surface: event.surface,
+      mode: event.mode,
+      payloadLength,
+      time: Date.now(),
     });
 
-    IngressEventProjector.project(event, session.id, {
-      providerID: agentModel.provider,
-      modelID: agentModel.id,
-    });
+    const agentModel = event.agent.model;
+    const { session } = IngressSessionResolver.resolve(
+      event,
+      { providerID: agentModel.provider, modelID: agentModel.id },
+      trace,
+    );
+
+    const activeTrace = TraceContext.child(trace, { sessionId: session.id });
+
+    IngressEventProjector.project(
+      event,
+      session.id,
+      { providerID: agentModel.provider, modelID: agentModel.id },
+      activeTrace,
+    );
 
     switch (event.mode) {
       case "plan":
@@ -44,12 +66,14 @@ export namespace IngressEngine {
           sessionId: session.id,
           event,
           coordinator: _coordinator,
+          traceContext: activeTrace,
         });
       case "direct":
         return IngressHandlers.handleDirect({
           sessionId: session.id,
           event,
           coordinator: _coordinator,
+          traceContext: activeTrace,
         });
     }
   }

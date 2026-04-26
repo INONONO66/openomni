@@ -1,3 +1,4 @@
+import { Log } from "@openomni/session";
 import { fetchWithRetry } from "../../shared/fetch-retry";
 
 export class GitHubClient {
@@ -27,6 +28,6 @@ export class GitHubClient {
       throw new Error(`GitHub API failed (${response.status}): ${text}`);
     }
 
-    console.log(`[github] Posted comment to ${repo}#${issueNumber}`);
+    Log.debug("github comment posted", { repo, issueNumber });
   }
 }

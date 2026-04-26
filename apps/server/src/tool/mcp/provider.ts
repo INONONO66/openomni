@@ -1,5 +1,6 @@
 import { McpClient, type McpServerConfig } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 import type { NativeTool, ToolCategory, ToolProvider } from "@openomni/openomni";
 
 export class McpToolProvider implements ToolProvider {
@@ -18,10 +19,10 @@ export class McpToolProvider implements ToolProvider {
       this.connected.add(config.name);
       this.cachedTools = null;
     } catch (err) {
-      console.warn(
-        `[mcp] Failed to connect to ${config.name}:`,
-        err instanceof Error ? err.message : err,
-      );
+      Log.warn("failed to connect to mcp server", {
+        name: config.name,
+        err: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -65,10 +66,10 @@ export class McpToolProvider implements ToolProvider {
           });
         }
       } catch (err) {
-        console.warn(
-          `[mcp] Failed to list tools from ${serverName}:`,
-          err instanceof Error ? err.message : err,
-        );
+        Log.warn("failed to list tools from mcp server", {
+          serverName,
+          err: err instanceof Error ? err.message : String(err),
+        });
       }
     }
     this.cachedTools = tools;
