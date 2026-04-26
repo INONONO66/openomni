@@ -17,7 +17,6 @@ export namespace Bus {
     const subs = subscribers.get(event.name);
     if (!subs) return;
 
-    // snapshot to avoid mutation during iteration
     const snapshot = [...subs];
 
     for (const sub of snapshot) {
@@ -47,8 +46,9 @@ export namespace Bus {
       match: options?.match as Record<string, unknown> | undefined,
     };
     subs.add(subscription);
+    const captured = subs;
     return () => {
-      subs!.delete(subscription);
+      captured.delete(subscription);
     };
   }
 

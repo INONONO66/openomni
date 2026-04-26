@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, spyOn } from "bun:test";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import type { ExecutionEvent } from "@openomni/protocol";
 import { Log } from "../../src/log/index";
 import { Storage } from "../../src/storage/storage";
@@ -60,7 +61,9 @@ describe("EventLog.replay warns on malformed rows", () => {
     Storage.reset();
     try {
       adapter.close();
-    } catch {}
+    } catch {
+      /* already closed */
+    }
     unlinkSync(dbPath);
   });
 
@@ -68,10 +71,11 @@ describe("EventLog.replay warns on malformed rows", () => {
     ensureSession(adapter, "sess-1");
     await EventLog.append("sess-1", makeEvent("llm_response", 1));
 
-    const db = (adapter as any).db;
-    db.query(
-      "INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)",
-    ).run("sess-1", "llm_response", "{ invalid json", Date.now());
+    const rawDb = new Database(dbPath);
+    rawDb
+      .query("INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)")
+      .run("sess-1", "llm_response", "{ invalid json", Date.now());
+    rawDb.close();
 
     await EventLog.append("sess-1", makeEvent("session_suspended", 3));
 
@@ -98,13 +102,14 @@ describe("EventLog.replay warns on malformed rows", () => {
     ensureSession(adapter, "sess-3");
     await EventLog.append("sess-3", makeEvent("llm_response", 1));
 
-    const db = (adapter as any).db;
-    db.query(
-      "INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)",
-    ).run("sess-3", "llm_response", "{ bad json 1", Date.now());
-    db.query(
-      "INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)",
-    ).run("sess-3", "llm_response", "{ bad json 2", Date.now());
+    const rawDb = new Database(dbPath);
+    rawDb
+      .query("INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)")
+      .run("sess-3", "llm_response", "{ bad json 1", Date.now());
+    rawDb
+      .query("INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)")
+      .run("sess-3", "llm_response", "{ bad json 2", Date.now());
+    rawDb.close();
 
     await EventLog.append("sess-3", makeEvent("session_suspended", 4));
 
