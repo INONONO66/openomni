@@ -11,12 +11,18 @@ export interface TokenUsage {
 export interface TokenCost {
   inputCost: number;
   outputCost: number;
+  cacheReadCost?: number;
+  cacheWriteCost?: number;
+  reasoningCost?: number;
   totalCost: number;
 }
 
 interface ModelPricingEntry {
   inputPerMillion: number;
   outputPerMillion: number;
+  cacheReadPerMillion?: number;
+  cacheWritePerMillion?: number;
+  reasoningPerMillion?: number;
 }
 
 const MODEL_PRICING: Record<string, ModelPricingEntry> = {
@@ -157,19 +163,47 @@ export namespace TokenTracker {
     };
   }
 
-  export function calculateCost(usage: TokenUsage, modelId: string): TokenCost {
-    const pricing = MODEL_PRICING[modelId];
-    if (!pricing) {
+  export function calculateCost(
+    usage: TokenUsage,
+    modelId: string,
+    modelCost?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      reasoning?: number;
+    },
+  ): TokenCost {
+    const staticPricing = MODEL_PRICING[modelId];
+
+    const inputRate = modelCost?.input ?? staticPricing?.inputPerMillion ?? 0;
+    const outputRate = modelCost?.output ?? staticPricing?.outputPerMillion ?? 0;
+
+    if (!modelCost?.input && !staticPricing) {
       Log.warn("no pricing data for model, cost set to 0", { modelId });
       return { inputCost: 0, outputCost: 0, totalCost: 0 };
     }
 
-    const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPerMillion;
-    const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+    const inputCost = (usage.inputTokens / 1_000_000) * inputRate;
+    const outputCost = (usage.outputTokens / 1_000_000) * outputRate;
+
+    const cacheReadRate =
+      modelCost?.cacheRead ?? staticPricing?.cacheReadPerMillion ?? inputRate * 0.1;
+    const cacheWriteRate =
+      modelCost?.cacheWrite ?? staticPricing?.cacheWritePerMillion ?? inputRate * 1.25;
+    const reasoningRate = modelCost?.reasoning ?? staticPricing?.reasoningPerMillion ?? outputRate;
+
+    const cacheReadCost = ((usage.cacheReadTokens ?? 0) / 1_000_000) * cacheReadRate;
+    const cacheWriteCost = ((usage.cacheWriteTokens ?? 0) / 1_000_000) * cacheWriteRate;
+    const reasoningCost = ((usage.reasoningTokens ?? 0) / 1_000_000) * reasoningRate;
+
     return {
       inputCost,
       outputCost,
-      totalCost: inputCost + outputCost,
+      cacheReadCost: cacheReadCost || undefined,
+      cacheWriteCost: cacheWriteCost || undefined,
+      reasoningCost: reasoningCost || undefined,
+      totalCost: inputCost + outputCost + cacheReadCost + cacheWriteCost + reasoningCost,
     };
   }
 }
