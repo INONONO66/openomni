@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Session } from "../../src/session";
 import { Storage } from "../../src/storage/storage";
+import "../../src/storage/initialize";
 
 function makeUserMessage(sessionID: string, index: number): Message.UserMessage {
   return {
@@ -17,6 +18,7 @@ function makeUserMessage(sessionID: string, index: number): Message.UserMessage 
 describe("Session.listMessagesPage", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   test("returns paged items with cursor and more flag", () => {

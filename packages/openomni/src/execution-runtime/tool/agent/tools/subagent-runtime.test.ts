@@ -52,6 +52,7 @@ function makeRuntime(selection: ToolSelection.Selection) {
 describe("createWorkerSubagentRuntime", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   afterEach(() => {

@@ -8,6 +8,7 @@ import { Snapshot } from "@openomni/session";
 describe("Integration", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     Bus.reset();
     Snapshot.reset();
   });
@@ -163,6 +164,7 @@ describe("Integration", () => {
     expect(Session.get(session.id)).toBeDefined();
 
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     expect(Session.get(session.id)).toBeUndefined();
   });
 

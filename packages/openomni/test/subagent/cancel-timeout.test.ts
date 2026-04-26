@@ -33,6 +33,7 @@ async function waitForRunningRun(sessionId: string): Promise<string> {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
 });
 

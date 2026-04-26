@@ -41,6 +41,7 @@ function createParentSession(): string {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   createSpy = spyOn(ChatAgent, "create").mockImplementation(
     () =>
       ({

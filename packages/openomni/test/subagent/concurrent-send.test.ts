@@ -19,6 +19,7 @@ function makeDelayedResult(index: number): AgentResult {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
   executionLog.length = 0;
 });
 

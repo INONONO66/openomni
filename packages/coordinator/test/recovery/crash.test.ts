@@ -41,6 +41,7 @@ async function seedRunAtStatus(
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {

@@ -70,6 +70,7 @@ async function makeCompletedMessage(sessionId: string, text: string) {
 describe("wait() — event-driven (no polling)", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     Bus.reset();
   });
 

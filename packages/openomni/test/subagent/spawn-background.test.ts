@@ -41,6 +41,7 @@ describe("SubagentRuntime.spawnBackground()", () => {
 
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     Bus.reset();
     runCalls = [];
   });

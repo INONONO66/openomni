@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import { SqliteStorageAdapter } from "@openomni/session/src/storage/sqlite-storage";
@@ -40,6 +40,11 @@ describe("PLAN_TOOL_SPECS", () => {
 });
 
 describe("createPlanToolExecutor", () => {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
   test("plan_write then plan_read returns hashline-formatted content", async () => {
     Storage.configure(new SqliteStorageAdapter(":memory:"));
     const execute = createPlanToolExecutor(Storage.get().plan!);

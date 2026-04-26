@@ -1,9 +1,12 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Session } from "../src/session";
+import { Storage } from "../src/storage/storage";
+import "../src/storage/initialize";
 
 describe("Session TTL", () => {
   beforeEach(() => {
-    Session.storage.clear();
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
   });
 
   describe("create with ttlMs", () => {

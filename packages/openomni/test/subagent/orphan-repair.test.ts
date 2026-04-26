@@ -26,6 +26,7 @@ function createAssistantMessage(sessionId: string): Message.AssistantMessage {
 
 beforeEach(() => {
   Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
 });
 
 afterEach(() => {

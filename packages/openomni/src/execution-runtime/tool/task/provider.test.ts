@@ -12,6 +12,7 @@ describe("TaskToolProvider", () => {
 
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     provider = new TaskToolProvider();
   });
 

@@ -21,6 +21,7 @@ function seedSession(id: string): void {
 describe("TodoToolProvider", () => {
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     seedSession("ses-1");
     seedSession("ses-2");
     seedSession("ses-3");

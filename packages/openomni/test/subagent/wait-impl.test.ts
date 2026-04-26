@@ -9,6 +9,7 @@ describe("SubagentRuntime.wait()", () => {
 
   beforeEach(async () => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     Bus.reset();
     sessionId = crypto.randomUUID();
     runId = crypto.randomUUID();

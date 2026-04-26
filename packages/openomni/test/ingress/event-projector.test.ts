@@ -8,6 +8,7 @@ describe("IngressEventProjector", () => {
 
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     sessionId = Session.create({
       title: "Test Session",
       model: { providerID: "anthropic", modelID: "claude-3-haiku" },

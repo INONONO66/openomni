@@ -92,6 +92,7 @@ describe("SessionBridge", () => {
 
   beforeEach(() => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
     sessionId = createTestSession();
   });
 

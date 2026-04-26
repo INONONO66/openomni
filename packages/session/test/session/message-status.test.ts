@@ -95,6 +95,7 @@ describe("message status tracking", () => {
 
   test("updateMessageStatus does not throw with in-memory SQLite", () => {
     Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
 
     const session = Session.create({
       title: "test",
