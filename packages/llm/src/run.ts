@@ -37,9 +37,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     throw new Error("Failed to initialize abort signal");
   }
 
-  const sessionID =
-    messages[0]?.info.sessionID || `session-${Math.random().toString(36).substring(2, 11)}`;
-  const messageID = `msg-${Math.random().toString(36).substring(2, 11)}`;
+  const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
+  const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
   const assistantMessage: Message.AssistantMessage = {
