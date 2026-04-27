@@ -151,6 +151,10 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
               type: "reasoning-delta",
               text: event.textDelta ?? event.text,
             };
+          } else if (event.type === "finish-step") {
+            yield { ...event, type: "step-finish" };
+          } else if (event.type === "start-step") {
+            yield { ...event, type: "step-start" };
           } else {
             yield event;
           }
