@@ -624,7 +624,7 @@ describe("Processor", () => {
       expect(mockAssistantMessage.cost).toBeCloseTo(0.525, 4);
     });
 
-    test("falls back to static pricing when model.cost is absent", async () => {
+    test("returns zero cost when model.cost is absent", async () => {
       const modelNoCost: Provider.Model = {
         id: "gpt-4o",
         providerID: "openai",
@@ -652,11 +652,9 @@ describe("Processor", () => {
 
       await processor.process({ messages: [], model: modelNoCost, system: "" });
 
-      // gpt-4o static: input=2.5/M, output=10.0/M
-      // inputCost = (10000/1M) * 2.5 = 0.025
-      // outputCost = (5000/1M) * 10.0 = 0.05
-      // totalCost = 0.075
-      expect(mockAssistantMessage.cost).toBeCloseTo(0.075, 4);
+      expect(mockAssistantMessage.cost).toBe(0);
+      expect(mockAssistantMessage.tokens.input).toBe(10000);
+      expect(mockAssistantMessage.tokens.output).toBe(5000);
     });
 
     test("accumulates cost across multiple step-finish events", async () => {
@@ -676,25 +674,25 @@ describe("Processor", () => {
         })(),
       };
 
-      // claude-3-5-sonnet: input=3.0/M, output=15.0/M (from static pricing under "claude-3-5-sonnet-20241022")
-      const modelStaticMatch: Provider.Model = {
+      const modelWithCost: Provider.Model = {
         id: "claude-3-5-sonnet-20241022",
         providerID: "anthropic",
         name: "Claude 3.5 Sonnet",
+        cost: { input: 3, output: 15 },
       };
 
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
-        model: modelStaticMatch,
+        model: modelWithCost,
         abort: abortController.signal,
         createStream: async () => mockStream,
       });
 
-      await processor.process({ messages: [], model: modelStaticMatch, system: "" });
+      await processor.process({ messages: [], model: modelWithCost, system: "" });
 
-      // step1: (1000/1M)*3.0 + (500/1M)*15.0 = 0.003 + 0.0075 = 0.0105
-      // step2: (2000/1M)*3.0 + (800/1M)*15.0 = 0.006 + 0.012 = 0.018
+      // step1: (1000/1M)*3 + (500/1M)*15 = 0.003 + 0.0075 = 0.0105
+      // step2: (2000/1M)*3 + (800/1M)*15 = 0.006 + 0.012 = 0.018
       // total = 0.0285
       expect(mockAssistantMessage.cost).toBeCloseTo(0.0285, 4);
       expect(mockAssistantMessage.tokens.input).toBe(3000);

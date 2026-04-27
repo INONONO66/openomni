@@ -347,7 +347,6 @@ export namespace Processor {
 
                     const tokenCost = TokenTracker.calculateCost(
                       usage,
-                      model.id,
                       model.cost
                         ? {
                             input: model.cost.input,

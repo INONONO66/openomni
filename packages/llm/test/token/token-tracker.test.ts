@@ -44,132 +44,50 @@ describe("TokenTracker.extractUsage", () => {
 });
 
 describe("TokenTracker.calculateCost", () => {
-  it("calculates cost for known model", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-3-haiku-20240307");
-    expect(cost.inputCost).toBeCloseTo(0.25);
-    expect(cost.outputCost).toBeCloseTo(1.25);
-    expect(cost.totalCost).toBeCloseTo(1.5);
+  const opusCost = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 };
+
+  it("calculates cost from modelCost rates", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+    const cost = TokenTracker.calculateCost(usage, opusCost);
+    expect(cost.inputCost).toBeCloseTo(5);
+    expect(cost.outputCost).toBeCloseTo(25);
+    expect(cost.totalCost).toBeCloseTo(30);
   });
 
-  it("returns zero cost for unknown model with warning", () => {
-    const cost = TokenTracker.calculateCost(
-      {
-        inputTokens: 1000,
-        outputTokens: 500,
-        reasoningTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-      "unknown-model-xyz",
-    );
-    expect(cost.totalCost).toBe(0);
-  });
-
-  it("calculates proportional cost for partial tokens", () => {
-    const usage = {
-      inputTokens: 500_000,
-      outputTokens: 0,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "gpt-4o-mini");
-    expect(cost.inputCost).toBeCloseTo(0.075);
-    expect(cost.outputCost).toBe(0);
-  });
-
-  it("calculateCost prefers modelCost over static map", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5", {
-      input: 5.0,
-      output: 15.0,
-    });
-    expect(cost.inputCost).toBeCloseTo(5.0);
-    expect(cost.outputCost).toBeCloseTo(15.0);
-    expect(cost.totalCost).toBeCloseTo(20.0);
-  });
-
-  it("calculateCost falls back to static MODEL_PRICING for known models", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
-    expect(cost.inputCost).toBeCloseTo(15.0);
-    expect(cost.outputCost).toBeCloseTo(75.0);
-    expect(cost.totalCost).toBeCloseTo(90.0);
-  });
-
-  it("calculateCost returns zero with warning for unknown model without modelCost", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "unknown-model-xyz");
+  it("returns zero when no modelCost provided", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 500_000 };
+    const cost = TokenTracker.calculateCost(usage);
     expect(cost.totalCost).toBe(0);
     expect(cost.inputCost).toBe(0);
     expect(cost.outputCost).toBe(0);
   });
 
-  it("calculateCost includes cacheReadCost when cacheReadTokens > 0", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 1_000_000,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
-    expect(cost.cacheReadCost).toBeDefined();
-    expect(cost.cacheReadCost).toBeGreaterThan(0);
-    expect(cost.totalCost).toBeGreaterThan(90.0);
+  it("calculates proportional cost for partial tokens", () => {
+    const usage = { inputTokens: 500_000, outputTokens: 0 };
+    const cost = TokenTracker.calculateCost(usage, { input: 2.5, output: 10 });
+    expect(cost.inputCost).toBeCloseTo(1.25);
+    expect(cost.outputCost).toBe(0);
   });
 
-  it("calculateCost includes cacheWriteCost when cacheWriteTokens > 0", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 1_000_000,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
-    expect(cost.cacheWriteCost).toBeDefined();
-    expect(cost.cacheWriteCost).toBeGreaterThan(0);
-    expect(cost.totalCost).toBeGreaterThan(90.0);
+  it("includes cacheReadCost when cacheReadTokens > 0", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000 };
+    const cost = TokenTracker.calculateCost(usage, opusCost);
+    expect(cost.cacheReadCost).toBeCloseTo(0.5);
+    expect(cost.totalCost).toBeGreaterThan(30);
   });
 
-  it("calculateCost includes reasoningCost when reasoningTokens > 0", () => {
-    const usage = {
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      reasoningTokens: 1_000_000,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
-    expect(cost.reasoningCost).toBeDefined();
-    expect(cost.reasoningCost).toBeGreaterThan(0);
-    expect(cost.totalCost).toBeGreaterThan(90.0);
+  it("includes cacheWriteCost when cacheWriteTokens > 0", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheWriteTokens: 1_000_000 };
+    const cost = TokenTracker.calculateCost(usage, opusCost);
+    expect(cost.cacheWriteCost).toBeCloseTo(6.25);
+    expect(cost.totalCost).toBeGreaterThan(30);
+  });
+
+  it("includes reasoningCost when reasoningTokens > 0", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, reasoningTokens: 1_000_000 };
+    const cost = TokenTracker.calculateCost(usage, opusCost);
+    expect(cost.reasoningCost).toBeCloseTo(25);
+    expect(cost.totalCost).toBeCloseTo(55);
   });
 
   it("totalCost sums all components", () => {
@@ -180,17 +98,12 @@ describe("TokenTracker.calculateCost", () => {
       cacheReadTokens: 1_000_000,
       cacheWriteTokens: 1_000_000,
     };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5");
-    const expectedTotal =
-      (cost.inputCost ?? 0) +
-      (cost.outputCost ?? 0) +
-      (cost.cacheReadCost ?? 0) +
-      (cost.cacheWriteCost ?? 0) +
-      (cost.reasoningCost ?? 0);
-    expect(cost.totalCost).toBeCloseTo(expectedTotal);
+    const cost = TokenTracker.calculateCost(usage, opusCost);
+    // 5 + 25 + 25(reasoning=output rate) + 0.5 + 6.25 = 61.75
+    expect(cost.totalCost).toBeCloseTo(61.75);
   });
 
-  it("calculateCost handles partial modelCost (only input/output, no cache/reasoning)", () => {
+  it("derives cache/reasoning rates from input/output when not specified", () => {
     const usage = {
       inputTokens: 1_000_000,
       outputTokens: 1_000_000,
@@ -198,14 +111,11 @@ describe("TokenTracker.calculateCost", () => {
       cacheReadTokens: 1_000_000,
       cacheWriteTokens: 1_000_000,
     };
-    const cost = TokenTracker.calculateCost(usage, "claude-opus-4-5", {
-      input: 5.0,
-      output: 15.0,
-    });
-    expect(cost.inputCost).toBeCloseTo(5.0);
-    expect(cost.outputCost).toBeCloseTo(15.0);
-    expect(cost.cacheReadCost).toBeDefined();
-    expect(cost.cacheWriteCost).toBeDefined();
-    expect(cost.reasoningCost).toBeDefined();
+    const cost = TokenTracker.calculateCost(usage, { input: 10, output: 50 });
+    // cacheRead = input * 0.1 = 1, cacheWrite = input * 1.25 = 12.5, reasoning = output = 50
+    expect(cost.cacheReadCost).toBeCloseTo(1);
+    expect(cost.cacheWriteCost).toBeCloseTo(12.5);
+    expect(cost.reasoningCost).toBeCloseTo(50);
+    expect(cost.totalCost).toBeCloseTo(10 + 50 + 1 + 12.5 + 50);
   });
 });
