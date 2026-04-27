@@ -1,10 +1,6 @@
-import { authorize, exchange, createApiKey } from "../oauth/anthropic";
-import * as openaiOAuth from "../oauth/openai";
-import { generatePKCE, generateState } from "../oauth/pkce";
-import { parseCallbackWithStateValidation } from "../oauth/callback-parser";
 import { Auth } from "./storage";
 
-export type OAuthMethod = {
+export type AuthMethod = {
   id: string;
   label: string;
   hint: string;
@@ -24,80 +20,14 @@ export type AuthProvider = {
   id: string;
   name: string;
   hint?: string;
-  methods: OAuthMethod[];
+  methods: AuthMethod[];
 };
 
 const anthropicProvider: AuthProvider = {
   id: "anthropic",
   name: "Anthropic",
-  hint: "Claude Max, Console, CLIProxy, or API key",
+  hint: "CLIProxy or API key",
   methods: [
-    {
-      id: "oauth-max",
-      label: "Claude Pro/Max",
-      hint: "Sign in with your Claude.ai Pro or Max subscription",
-      async run(cb) {
-        const result = await authorize("max");
-        cb.showUrl(result.url);
-        const input = await cb.getInput("Paste the authorization code or callback URL:");
-        const parsed = parseCallbackWithStateValidation(input, result.verifier);
-        if (!parsed) {
-          cb.showMessage("Invalid or mismatched authorization code — login cancelled");
-          return;
-        }
-        cb.showProgress("Exchanging code for tokens...");
-        const tokens = await exchange(`${parsed.code}#${parsed.state}`, result.verifier);
-        cb.stopProgress("");
-        if (tokens.type === "failed") {
-          cb.showMessage("Token exchange failed — please try again");
-          return;
-        }
-        await Auth.set("anthropic", {
-          type: "oauth",
-          access: tokens.access,
-          refresh: tokens.refresh,
-          expires: tokens.expires,
-        });
-        cb.showMessage("Signed in with Claude Pro/Max");
-      },
-    },
-    {
-      id: "oauth-console",
-      label: "Create an API Key",
-      hint: "Create an Anthropic API key via OAuth (console.anthropic.com)",
-      async run(cb) {
-        const result = await authorize("console");
-        cb.showUrl(result.url);
-        const input = await cb.getInput("Paste the authorization code or callback URL:");
-        const parsed = parseCallbackWithStateValidation(input, result.verifier);
-        if (!parsed) {
-          cb.showMessage("Invalid or mismatched authorization code — login cancelled");
-          return;
-        }
-        cb.showProgress("Creating API key...");
-        const tokens = await exchange(`${parsed.code}#${parsed.state}`, result.verifier);
-        if (tokens.type === "failed") {
-          cb.stopProgress("");
-          cb.showMessage("Token exchange failed — please try again");
-          return;
-        }
-        const apiKeyResult = await createApiKey(tokens.access);
-        cb.stopProgress("");
-        if (apiKeyResult.type === "failed") {
-          // Fall back to OAuth tokens if API key creation isn't available
-          await Auth.set("anthropic", {
-            type: "oauth",
-            access: tokens.access,
-            refresh: tokens.refresh,
-            expires: tokens.expires,
-          });
-          cb.showMessage("Saved OAuth tokens (API key creation unavailable)");
-          return;
-        }
-        await Auth.set("anthropic", { type: "api", key: apiKeyResult.key });
-        cb.showMessage("API key created and saved");
-      },
-    },
     {
       id: "proxy",
       label: "CLIProxy",
@@ -131,70 +61,8 @@ const anthropicProvider: AuthProvider = {
 const openaiProvider: AuthProvider = {
   id: "openai",
   name: "OpenAI",
-  hint: "OAuth, CLIProxy, or API key",
+  hint: "CLIProxy or API key",
   methods: [
-    {
-      id: "browser",
-      label: "Browser",
-      hint: "Opens browser, auto-callback via local server",
-      async run(cb) {
-        const pkce = await generatePKCE();
-        const state = generateState();
-        cb.showProgress("Starting local OAuth server...");
-        const { redirectUri } = await openaiOAuth.startOAuthServer();
-        cb.stopProgress("OAuth server ready");
-        const url = openaiOAuth.buildAuthorizeUrl(redirectUri, pkce, state);
-        cb.showUrl(url);
-        cb.showProgress("Waiting for authorization...");
-        try {
-          const tokens = await openaiOAuth.waitForOAuthCallback(pkce, state);
-          const accountId = openaiOAuth.extractAccountId(tokens);
-          await Auth.set("openai", {
-            type: "oauth",
-            access: tokens.access_token,
-            refresh: tokens.refresh_token,
-            expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-            accountId,
-          });
-          cb.stopProgress("Login successful");
-        } catch (err) {
-          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-          openaiOAuth.stopOAuthServer();
-        }
-      },
-    },
-    {
-      id: "device",
-      label: "Device code",
-      hint: "For headless/remote servers",
-      async run(cb) {
-        cb.showProgress("Initiating device authorization...");
-        const device = await openaiOAuth.initiateDeviceAuth();
-        cb.stopProgress("Device code ready");
-        cb.showMessage("Go to: https://auth.openai.com/activate");
-        cb.showMessage(`Enter code: ${device.user_code}`);
-        cb.showProgress("Waiting for authorization...");
-        try {
-          const tokens = await openaiOAuth.pollDeviceAuth(
-            device.device_auth_id,
-            device.user_code,
-            parseInt(device.interval) * 1000 || 5000,
-          );
-          const accountId = openaiOAuth.extractAccountId(tokens);
-          await Auth.set("openai", {
-            type: "oauth",
-            access: tokens.access_token,
-            refresh: tokens.refresh_token,
-            expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-            accountId,
-          });
-          cb.stopProgress("Login successful");
-        } catch (err) {
-          cb.stopProgress(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      },
-    },
     {
       id: "proxy",
       label: "CLIProxy",
@@ -225,7 +93,56 @@ const openaiProvider: AuthProvider = {
   ],
 };
 
-const registry: AuthProvider[] = [anthropicProvider, openaiProvider];
+const moonshotaiProvider: AuthProvider = {
+  id: "moonshotai",
+  name: "Moonshot AI",
+  hint: "Moonshot AI (Kimi) API key",
+  methods: [
+    {
+      id: "api",
+      label: "API key",
+      hint: "Use Moonshot AI API key",
+      async run(cb) {
+        const key = (await cb.getInput("Moonshot AI API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("moonshotai", { type: "api", key });
+        cb.showMessage("API key saved");
+      },
+    },
+  ],
+};
+
+const zhipuaiProvider: AuthProvider = {
+  id: "zhipuai",
+  name: "Zhipu AI",
+  hint: "Zhipu AI (GLM) API key",
+  methods: [
+    {
+      id: "api",
+      label: "API key",
+      hint: "Use Zhipu AI API key",
+      async run(cb) {
+        const key = (await cb.getInput("Zhipu AI API key")).trim();
+        if (!key) {
+          cb.showMessage("No API key provided — skipped");
+          return;
+        }
+        await Auth.set("zhipuai", { type: "api", key });
+        cb.showMessage("API key saved");
+      },
+    },
+  ],
+};
+
+const registry: AuthProvider[] = [
+  anthropicProvider,
+  openaiProvider,
+  moonshotaiProvider,
+  zhipuaiProvider,
+];
 
 export function getAuthProviders(): AuthProvider[] {
   return registry;

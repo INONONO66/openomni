@@ -307,17 +307,26 @@ export async function* streamAgent(
           result: Tool.Result;
         }> = [];
 
+        let prevInputTokens = 0;
+        let prevOutputTokens = 0;
+
         const trackingSink: Sink = {
           onMessage: (message: Message.WithParts) => {
             if (message.info.role === "assistant") {
               const tokens = (message.info as Message.AssistantMessage).tokens;
-              turnUsage.inputTokens += tokens.input;
-              turnUsage.outputTokens += tokens.output;
-              turnUsage.totalTokens += tokens.input + tokens.output;
-              totalUsage.inputTokens += tokens.input;
-              totalUsage.outputTokens += tokens.output;
-              totalUsage.totalTokens += tokens.input + tokens.output;
-              budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
+              const deltaInput = tokens.input - prevInputTokens;
+              const deltaOutput = tokens.output - prevOutputTokens;
+              prevInputTokens = tokens.input;
+              prevOutputTokens = tokens.output;
+              if (deltaInput > 0 || deltaOutput > 0) {
+                turnUsage.inputTokens += deltaInput;
+                turnUsage.outputTokens += deltaOutput;
+                turnUsage.totalTokens += deltaInput + deltaOutput;
+                totalUsage.inputTokens += deltaInput;
+                totalUsage.outputTokens += deltaOutput;
+                totalUsage.totalTokens += deltaInput + deltaOutput;
+                budgetState = recordTokenUsage(budgetState, deltaInput, deltaOutput);
+              }
             }
             const text = message.parts
               .filter((part): part is Message.TextPart => part.type === "text")
@@ -518,9 +527,75 @@ export async function* streamAgent(
           return;
         }
 
+        if (outcome.type === "continue") {
+          config.eventEmitter?.emit("agent.turn.complete", {
+            sessionId: "stream-engine",
+            time: Date.now(),
+            turnIndex,
+            usage: {
+              inputTokens: totalUsage.inputTokens,
+              outputTokens: totalUsage.outputTokens,
+              totalTokens: totalUsage.totalTokens,
+            },
+          });
+          Bus.publish(AgentExecution.TurnComplete, {
+            ...agentBase,
+            time: Date.now(),
+            turnIndex,
+            usage: {
+              inputTokens: totalUsage.inputTokens,
+              outputTokens: totalUsage.outputTokens,
+              totalTokens: totalUsage.totalTokens,
+            },
+          });
+          log.debug("agent.turn.completed", {
+            turnIndex,
+            inputTokens: turnUsage.inputTokens,
+            outputTokens: turnUsage.outputTokens,
+          });
+
+          yield { type: "turn_complete", turnIndex, usage: turnUsage };
+
+          turnIndex++;
+          continue;
+        }
+
+        if (outcome.type === "compact") {
+          const compactionVerdict = await engine.dispatch("post_compaction", {
+            steps,
+            usage: totalUsage,
+            turnCount: budgetState.turns,
+            isCompletion: false,
+            continuationCount,
+            elapsedMs: Date.now() - startTime,
+            messages,
+            budgetState,
+            budget: config.budget,
+            eventEmitter: config.eventEmitter,
+          });
+          if (compactionVerdict.action === "transform") {
+            const payload = compactionVerdict.input as Record<string, unknown>;
+            if (Array.isArray(payload.messages)) {
+              const messagesBefore = messages.length;
+              messages = payload.messages as Message.WithParts[];
+              compactionCount += 1;
+              Bus.publish(AgentExecution.Compaction, {
+                ...agentBase,
+                time: Date.now(),
+                messagesBefore,
+                messagesAfter: messages.length,
+              });
+            }
+          }
+
+          turnIndex++;
+          continue;
+        }
+
         if (outcome.type === "aborted") throw new Error("aborted");
         if (outcome.type === "error") throw new Error(outcome.error.message);
-        throw new Error("unreachable");
+        const _exhaustive: never = outcome;
+        throw new Error(`Unknown outcome type: ${(_exhaustive as { type?: string }).type}`);
       }
     } catch (error) {
       const onErrorVerdict = await engine.dispatch("on_error", {

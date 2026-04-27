@@ -1,14 +1,7 @@
 import z from "zod";
-import { join } from "path";
-import { mkdirSync, existsSync, chmodSync } from "fs";
-
-const OauthAuth = z.object({
-  type: z.literal("oauth"),
-  refresh: z.string(),
-  access: z.string(),
-  expires: z.number(),
-  accountId: z.string().optional(),
-});
+import { join, dirname } from "node:path";
+import { mkdirSync, existsSync, chmodSync } from "node:fs";
+import { homedir } from "node:os";
 
 const ApiAuth = z.object({
   type: z.literal("api"),
@@ -21,19 +14,19 @@ const ProxyAuth = z.object({
   apiKey: z.string().optional(),
 });
 
-const Info = z.discriminatedUnion("type", [OauthAuth, ApiAuth, ProxyAuth]);
+const Info = z.discriminatedUnion("type", [ApiAuth, ProxyAuth]);
 type Info = z.infer<typeof Info>;
 
 const getAuthFilePath = () => {
   if (process.env.OPENOMNI_AUTH_FILE) {
     return process.env.OPENOMNI_AUTH_FILE;
   }
-  return join(process.env.HOME!, ".openomni", "auth.json");
+  return join(homedir(), ".openomni", "auth.json");
 };
 
 const ensureAuthDir = () => {
   const filepath = getAuthFilePath();
-  const dir = filepath.substring(0, filepath.lastIndexOf("/"));
+  const dir = dirname(filepath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

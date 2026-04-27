@@ -11,6 +11,8 @@ export namespace Run {
 
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
+    z.object({ type: z.literal("continue") }),
+    z.object({ type: z.literal("compact") }),
     z.object({ type: z.literal("aborted") }),
     z.object({
       type: z.literal("error"),

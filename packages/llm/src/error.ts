@@ -19,14 +19,6 @@ export const ProviderError = NamedError.create(
   }),
 );
 
-export const TokenRefreshError = NamedError.create(
-  "TokenRefreshError",
-  z.object({
-    message: z.string(),
-    status: z.number(),
-  }),
-);
-
 export const SessionError = NamedError.create(
   "SessionError",
   z.object({

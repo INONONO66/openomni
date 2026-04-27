@@ -122,17 +122,16 @@ async function scenarioD(): Promise<ScenarioResult> {
   }
 }
 
-// Actual 429 flood requires a live network tap; this confirms the Anthropic
-// fetch layer is present and wired into the package graph.
+// Confirms the LLM provider layer is present and wired into the package graph.
 async function scenarioE(): Promise<ScenarioResult> {
   const start = Date.now();
   try {
     const providerExists = await Bun.file(
-      new URL("../packages/llm/src/fetch/anthropic.ts", import.meta.url),
+      new URL("../packages/llm/src/provider/provider.ts", import.meta.url),
     ).exists();
     return {
       id: "e",
-      name: "LLM API 429 flood",
+      name: "LLM provider wiring",
       passed: providerExists,
       rto_ms: Date.now() - start,
     };

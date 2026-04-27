@@ -43,8 +43,8 @@ export namespace Processor {
     process(streamInput: StreamInput): Promise<ProcessResult>;
   }
 
-  function generateId(prefix: string): string {
-    return `${prefix}-${Math.random().toString(36).substring(2, 11)}`;
+  function generateId(): string {
+    return crypto.randomUUID();
   }
 
   function defaultStream(_input: StreamInput): Promise<Stream> {
@@ -59,6 +59,7 @@ export namespace Processor {
     const {
       assistantMessage,
       sessionID,
+      model,
       abort,
       sink = createNoopSink(),
       onToolCall,
@@ -86,7 +87,7 @@ export namespace Processor {
 
     function publishStatus(state: Record<string, unknown>): void {
       sink.onSnapshot({
-        id: generateId("snapshot"),
+        id: generateId(),
         sessionID,
         timestamp: Date.now(),
         state,
@@ -119,7 +120,7 @@ export namespace Processor {
                   case "text-start": {
                     const now = Date.now();
                     currentText = {
-                      id: generateId("part"),
+                      id: generateId(),
                       sessionID,
                       messageID: assistantMessage.id,
                       type: "text",
@@ -165,7 +166,7 @@ export namespace Processor {
                     if (!(reasoningId in reasoningMap)) {
                       const now = Date.now();
                       const part: Message.ReasoningPart = {
-                        id: generateId("part"),
+                        id: generateId(),
                         sessionID,
                         messageID: assistantMessage.id,
                         type: "reasoning",
@@ -214,7 +215,7 @@ export namespace Processor {
 
                   case "tool-call": {
                     const toolPart: Message.ToolPart = {
-                      id: generateId("part"),
+                      id: generateId(),
                       sessionID,
                       messageID: assistantMessage.id,
                       type: "tool",
@@ -259,7 +260,7 @@ export namespace Processor {
                         };
                         updateMessagePart(toolPart);
                         sink.onToolResult({
-                          id: generateId("tool-result"),
+                          id: generateId(),
                           toolCallId: toolPart.callID,
                           output: result.output,
                         });
@@ -279,7 +280,7 @@ export namespace Processor {
                         };
                         updateMessagePart(toolPart);
                         sink.onToolResult({
-                          id: generateId("tool-result"),
+                          id: generateId(),
                           toolCallId: toolPart.callID,
                           output: errorMessage,
                           isError: true,
@@ -293,7 +294,7 @@ export namespace Processor {
 
                   case "step-start": {
                     const stepPart: Message.StepStartPart = {
-                      id: generateId("part"),
+                      id: generateId(),
                       sessionID,
                       messageID: assistantMessage.id,
                       type: "step-start",
@@ -344,13 +345,33 @@ export namespace Processor {
                         | undefined,
                     });
 
+                    const tokenCost = TokenTracker.calculateCost(
+                      usage,
+                      model.cost
+                        ? {
+                            input: model.cost.input,
+                            output: model.cost.output,
+                            cacheRead: model.cost.cache?.read,
+                            cacheWrite: model.cost.cache?.write,
+                          }
+                        : undefined,
+                    );
+
+                    assistantMessage.finish = finishReason;
+                    assistantMessage.cost += tokenCost.totalCost;
+                    assistantMessage.tokens.input += usage.inputTokens;
+                    assistantMessage.tokens.output += usage.outputTokens;
+                    assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
+                    assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
+                    assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
+
                     const stepFinishPart: Message.StepFinishPart = {
-                      id: generateId("part"),
+                      id: generateId(),
                       sessionID,
                       messageID: assistantMessage.id,
                       type: "step-finish",
                       reason: finishReason,
-                      cost: 0,
+                      cost: tokenCost.totalCost,
                       tokens: {
                         input: usage.inputTokens,
                         output: usage.outputTokens,
@@ -362,13 +383,6 @@ export namespace Processor {
                       },
                     };
                     addMessagePart(stepFinishPart);
-
-                    assistantMessage.finish = finishReason;
-                    assistantMessage.tokens.input += usage.inputTokens;
-                    assistantMessage.tokens.output += usage.outputTokens;
-                    assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
-                    assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
-                    assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
                     break;
                   }
 
@@ -465,7 +479,7 @@ export namespace Processor {
         };
         updateMessagePart(tool);
         sink.onToolResult({
-          id: generateId("tool-result"),
+          id: generateId(),
           toolCallId: tool.callID,
           output: "Processing was interrupted",
           isError: true,

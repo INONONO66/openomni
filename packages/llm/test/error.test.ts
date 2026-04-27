@@ -3,7 +3,6 @@ import {
   AuthError,
   NamedError,
   ProviderError,
-  TokenRefreshError,
   SessionError,
   StreamError,
   RetryError,
@@ -80,50 +79,6 @@ describe("ProviderError", () => {
     const err = new ProviderError({ message: "test", provider: "x" });
     expect(ProviderError.isInstance(err)).toBe(true);
     expect(ProviderError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(false);
-  });
-});
-
-describe("TokenRefreshError", () => {
-  test("construction and properties", () => {
-    const err = new TokenRefreshError({
-      message: "refresh failed",
-      status: 401,
-    });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("TokenRefreshError");
-    expect(err.data.message).toBe("refresh failed");
-    expect(err.data.status).toBe(401);
-  });
-
-  test("toObject serialization", () => {
-    const err = new TokenRefreshError({ message: "expired", status: 403 });
-    expect(err.toObject()).toEqual({
-      name: "TokenRefreshError",
-      data: { message: "expired", status: 403 },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new TokenRefreshError({ message: "test", status: 500 });
-    expect(TokenRefreshError.isInstance(err)).toBe(true);
-    expect(TokenRefreshError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(
-      false,
-    );
-  });
-
-  test("can be caught and inspected", () => {
-    try {
-      throw new TokenRefreshError({
-        message: "Token refresh failed: 401",
-        status: 401,
-      });
-    } catch (e) {
-      expect(TokenRefreshError.isInstance(e)).toBe(true);
-      if (TokenRefreshError.isInstance(e)) {
-        expect(e.data.status).toBe(401);
-      }
-    }
   });
 });
 

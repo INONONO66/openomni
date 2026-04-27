@@ -1,9 +1,8 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
-import { Auth } from "../auth/storage";
-import { createAnthropicOAuthFetch } from "../fetch/anthropic";
-import { createOpenAIOAuthFetch } from "../fetch/openai";
+import type { Auth } from "../auth/storage";
 import { Provider } from "./index";
 import type { ModelsDev } from "../model";
 
@@ -47,9 +46,6 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
   const factory = BUNDLED_PROVIDERS[npm];
-  if (!factory) {
-    throw new Error(`No bundled provider for npm package: ${npm}`);
-  }
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -59,37 +55,26 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
     ...(custom?.options ?? {}),
   };
 
-  if (auth.type === "oauth") {
-    let fetchFn: typeof globalThis.fetch;
-
-    if (providerID === "anthropic") {
-      fetchFn = createAnthropicOAuthFetch({
-        getAuth: async () =>
-          (await Auth.get("anthropic")) ??
-          (() => {
-            throw new Error("No anthropic auth");
-          })(),
-        setAuth: async (info) => Auth.set("anthropic", info),
-      });
-    } else {
-      fetchFn = createOpenAIOAuthFetch({
-        getAuth: async () =>
-          (await Auth.get(providerID)) ??
-          (() => {
-            throw new Error(`No ${providerID} auth`);
-          })(),
-        setAuth: async (info) => Auth.set(providerID, info),
-      });
-    }
-
-    sdkOptions.fetch = fetchFn;
-    sdkOptions.apiKey = "";
-  } else if (auth.type === "api") {
+  if (auth.type === "api") {
     sdkOptions.apiKey = auth.key;
   } else if (auth.type === "proxy") {
     const proxyAuth = auth as Extract<Auth.Info, { type: "proxy" }>;
     if (proxyAuth.baseURL) sdkOptions.baseURL = proxyAuth.baseURL;
     sdkOptions.apiKey = proxyAuth.apiKey ?? "proxy";
+  }
+
+  if (!factory) {
+    const baseURL = sdkOptions.baseURL ?? model.api?.url;
+    if (!baseURL) {
+      throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
+    }
+    const sdk = createOpenAICompatible({
+      name: providerID,
+      baseURL,
+      apiKey: sdkOptions.apiKey,
+    });
+    SDK_CACHE.set(cacheKey, sdk as unknown as SDK);
+    return sdk;
   }
 
   const sdk = factory(sdkOptions) as SDK;
@@ -150,7 +135,7 @@ export const CODEX_ALLOWED_MODELS = new Set([
 
 export function filterModels(
   providerID: string,
-  authType: "api" | "proxy" | "oauth",
+  authType: "api" | "proxy",
   models: Provider.Model[],
 ): Provider.Model[] {
   if (providerID === "openai" && authType === "proxy") {

@@ -1,5 +1,3 @@
-import { Log } from "@openomni/session";
-
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -11,30 +9,11 @@ export interface TokenUsage {
 export interface TokenCost {
   inputCost: number;
   outputCost: number;
+  cacheReadCost?: number;
+  cacheWriteCost?: number;
+  reasoningCost?: number;
   totalCost: number;
 }
-
-interface ModelPricingEntry {
-  inputPerMillion: number;
-  outputPerMillion: number;
-}
-
-const MODEL_PRICING: Record<string, ModelPricingEntry> = {
-  "claude-opus-4-5": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
-  "claude-sonnet-4-5": { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  "claude-haiku-4-5": { inputPerMillion: 0.8, outputPerMillion: 4.0 },
-  "claude-3-5-sonnet-20241022": {
-    inputPerMillion: 3.0,
-    outputPerMillion: 15.0,
-  },
-  "claude-3-5-haiku-20241022": { inputPerMillion: 0.8, outputPerMillion: 4.0 },
-  "claude-3-opus-20240229": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
-  "claude-3-haiku-20240307": { inputPerMillion: 0.25, outputPerMillion: 1.25 },
-  "gpt-4o": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
-  "gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
-  "gpt-4-turbo": { inputPerMillion: 10.0, outputPerMillion: 30.0 },
-  "gpt-3.5-turbo": { inputPerMillion: 0.5, outputPerMillion: 1.5 },
-};
 
 interface AnthropicUsage {
   input_tokens?: number;
@@ -157,19 +136,41 @@ export namespace TokenTracker {
     };
   }
 
-  export function calculateCost(usage: TokenUsage, modelId: string): TokenCost {
-    const pricing = MODEL_PRICING[modelId];
-    if (!pricing) {
-      Log.warn("no pricing data for model, cost set to 0", { modelId });
+  export function calculateCost(
+    usage: TokenUsage,
+    modelCost?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      reasoning?: number;
+    },
+  ): TokenCost {
+    const inputRate = modelCost?.input ?? 0;
+    const outputRate = modelCost?.output ?? 0;
+
+    if (!inputRate && !outputRate) {
       return { inputCost: 0, outputCost: 0, totalCost: 0 };
     }
 
-    const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPerMillion;
-    const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+    const inputCost = (usage.inputTokens / 1_000_000) * inputRate;
+    const outputCost = (usage.outputTokens / 1_000_000) * outputRate;
+
+    const cacheReadRate = modelCost?.cacheRead ?? inputRate * 0.1;
+    const cacheWriteRate = modelCost?.cacheWrite ?? inputRate * 1.25;
+    const reasoningRate = modelCost?.reasoning ?? outputRate;
+
+    const cacheReadCost = ((usage.cacheReadTokens ?? 0) / 1_000_000) * cacheReadRate;
+    const cacheWriteCost = ((usage.cacheWriteTokens ?? 0) / 1_000_000) * cacheWriteRate;
+    const reasoningCost = ((usage.reasoningTokens ?? 0) / 1_000_000) * reasoningRate;
+
     return {
       inputCost,
       outputCost,
-      totalCost: inputCost + outputCost,
+      cacheReadCost: cacheReadCost || undefined,
+      cacheWriteCost: cacheWriteCost || undefined,
+      reasoningCost: reasoningCost || undefined,
+      totalCost: inputCost + outputCost + cacheReadCost + cacheWriteCost + reasoningCost,
     };
   }
 }

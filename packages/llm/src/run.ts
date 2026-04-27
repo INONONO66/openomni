@@ -37,9 +37,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     throw new Error("Failed to initialize abort signal");
   }
 
-  const sessionID =
-    messages[0]?.info.sessionID || `session-${Math.random().toString(36).substring(2, 11)}`;
-  const messageID = `msg-${Math.random().toString(36).substring(2, 11)}`;
+  const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
+  const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
   const assistantMessage: Message.AssistantMessage = {
@@ -152,6 +151,10 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
               type: "reasoning-delta",
               text: event.textDelta ?? event.text,
             };
+          } else if (event.type === "finish-step") {
+            yield { ...event, type: "step-finish" };
+          } else if (event.type === "start-step") {
+            yield { ...event, type: "step-start" };
           } else {
             yield event;
           }
@@ -240,9 +243,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       case "stop":
         return { type: "stop" };
       case "continue":
-        return { type: "stop" };
+        return { type: "continue" };
       case "compact":
-        return { type: "stop" };
+        return { type: "compact" };
       default:
         return { type: "stop" };
     }
