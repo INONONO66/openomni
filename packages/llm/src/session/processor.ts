@@ -357,6 +357,14 @@ export namespace Processor {
                         : undefined,
                     );
 
+                    assistantMessage.finish = finishReason;
+                    assistantMessage.cost += tokenCost.totalCost;
+                    assistantMessage.tokens.input += usage.inputTokens;
+                    assistantMessage.tokens.output += usage.outputTokens;
+                    assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
+                    assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
+                    assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
+
                     const stepFinishPart: Message.StepFinishPart = {
                       id: generateId(),
                       sessionID,
@@ -375,14 +383,6 @@ export namespace Processor {
                       },
                     };
                     addMessagePart(stepFinishPart);
-
-                    assistantMessage.finish = finishReason;
-                    assistantMessage.cost += tokenCost.totalCost;
-                    assistantMessage.tokens.input += usage.inputTokens;
-                    assistantMessage.tokens.output += usage.outputTokens;
-                    assistantMessage.tokens.reasoning += usage.reasoningTokens ?? 0;
-                    assistantMessage.tokens.cache.read += usage.cacheReadTokens ?? 0;
-                    assistantMessage.tokens.cache.write += usage.cacheWriteTokens ?? 0;
                     break;
                   }
 
