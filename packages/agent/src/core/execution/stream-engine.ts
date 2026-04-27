@@ -307,17 +307,26 @@ export async function* streamAgent(
           result: Tool.Result;
         }> = [];
 
+        let prevInputTokens = 0;
+        let prevOutputTokens = 0;
+
         const trackingSink: Sink = {
           onMessage: (message: Message.WithParts) => {
             if (message.info.role === "assistant") {
               const tokens = (message.info as Message.AssistantMessage).tokens;
-              turnUsage.inputTokens += tokens.input;
-              turnUsage.outputTokens += tokens.output;
-              turnUsage.totalTokens += tokens.input + tokens.output;
-              totalUsage.inputTokens += tokens.input;
-              totalUsage.outputTokens += tokens.output;
-              totalUsage.totalTokens += tokens.input + tokens.output;
-              budgetState = recordTokenUsage(budgetState, tokens.input, tokens.output);
+              const deltaInput = tokens.input - prevInputTokens;
+              const deltaOutput = tokens.output - prevOutputTokens;
+              prevInputTokens = tokens.input;
+              prevOutputTokens = tokens.output;
+              if (deltaInput > 0 || deltaOutput > 0) {
+                turnUsage.inputTokens += deltaInput;
+                turnUsage.outputTokens += deltaOutput;
+                turnUsage.totalTokens += deltaInput + deltaOutput;
+                totalUsage.inputTokens += deltaInput;
+                totalUsage.outputTokens += deltaOutput;
+                totalUsage.totalTokens += deltaInput + deltaOutput;
+                budgetState = recordTokenUsage(budgetState, deltaInput, deltaOutput);
+              }
             }
             const text = message.parts
               .filter((part): part is Message.TextPart => part.type === "text")
