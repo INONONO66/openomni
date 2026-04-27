@@ -64,7 +64,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
   }
 
   if (!factory) {
-    const baseURL = model.api?.url ?? sdkOptions.baseURL;
+    const baseURL = sdkOptions.baseURL ?? model.api?.url;
     if (!baseURL) {
       throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
     }
