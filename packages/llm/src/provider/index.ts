@@ -106,14 +106,16 @@ export namespace Provider {
       status: model.status ?? "active",
       headers: model.headers ?? {},
       options: model.options ?? {},
-      cost: {
-        input: model.cost?.input ?? 0,
-        output: model.cost?.output ?? 0,
-        cache: {
-          read: model.cost?.cache_read ?? 0,
-          write: model.cost?.cache_write ?? 0,
-        },
-      },
+      cost: model.cost
+        ? {
+            input: model.cost.input,
+            output: model.cost.output,
+            cache: {
+              read: model.cost.cache_read ?? 0,
+              write: model.cost.cache_write ?? 0,
+            },
+          }
+        : undefined,
       limit: {
         context: model.limit?.context ?? 0,
         input: model.limit?.input,
