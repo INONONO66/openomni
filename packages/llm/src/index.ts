@@ -6,7 +6,6 @@ export {
   NamedError,
   AuthError,
   ProviderError,
-  TokenRefreshError,
   SessionError,
   StreamError,
   RetryError,
