@@ -45,6 +45,18 @@ src/
 - **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.
 - **Todo types**: `Todo.Info` / `Todo.Status` / `Todo.Priority` live in `todo/index.ts`. `Todo.Updated` is a `BusEvent.define()` descriptor published when a session's todo list changes.
 
+## FUTURE PERSONA CONTRACTS
+
+The persona workforce direction is documented in `docs/persona-workforce.md` and `docs/persona-runtime-roadmap.md`. Future schemas should live here when they become implementation work:
+
+- persona profile and lifecycle contracts;
+- inbound authority / actor role contracts;
+- self-loop session metadata;
+- distilled writeback records;
+- memory candidate records for Anamnesis ingestion.
+
+Keep these as protocol contracts only. Runtime policy and storage implementations belong in upper packages.
+
 ## ANTI-PATTERNS
 
 - Do NOT add runtime logic here — this package is schemas/types only.

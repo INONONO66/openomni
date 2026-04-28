@@ -20,17 +20,20 @@
 ## 2. Dependency Direction
 
 ```
-protocol → session → llm → agent → openomni → cli
+protocol → session → llm → agent → openomni → coordinator → { cli, server }
 ```
 
-Each package may depend only on packages to its LEFT. Reverse dependencies are build failures.
+Each package may depend only on packages to its LEFT. Packages may skip intermediate layers when a lower-layer contract is explicitly allowed. Reverse dependencies are build failures.
 
 - `protocol`: zero `@openomni/*` deps (leaf)
 - `session`: only `@openomni/protocol`
 - `llm`: `@openomni/protocol`, `@openomni/session`
-- `agent`: `@openomni/protocol`, `@openomni/llm`
-- `openomni`: any `@openomni/*`
-- `cli`: any `@openomni/*`
+- `agent`: `@openomni/protocol`, `@openomni/llm`, and sanctioned `@openomni/session` observability primitives only
+- `openomni`: any lower package
+- `coordinator`: any lower package
+- `cli`, `server`: any package; they do not depend on each other
+
+`agent` must not own session lifecycle, conversation persistence, or durable state mutation. Session-backed orchestration belongs in `openomni`.
 
 ## 3. Zod-First Types
 

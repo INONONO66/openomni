@@ -1,6 +1,6 @@
 # packages/openomni
 
-Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add plan generation, DAG utilities, inbound event handling, task persistence, and a session-backed subagent runtime.
+Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add plan generation, DAG utilities, inbound event handling, task persistence, and a session-backed subagent runtime. This package is the future home for the Main Persona orchestration seams: controlled inbound authority, self-loop session creation, persona delegation, and distilled writeback.
 
 ## Module Map
 
@@ -20,6 +20,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 - `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `plan` or `direct` handler. `SessionBridge` manages plan storage via `Storage.PlanSubAdapter` (plan ID markers on messages).
 - `src/storage/` is now a thin re-export shim. Task types (`Task.Info`, `Task.Run`, `Task.Status`) moved to `@openomni/protocol/task` and are re-exported here for backward compatibility. Task, plan, and todo persistence is handled by the optional sub-adapters on `Storage.Adapter` in `@openomni/session`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
+- Persona workforce direction: `src/ingress/` remains the external/internal inbound seam, `src/subagent/` remains the child persona execution seam, and a future self-loop/writeback layer should live in this package rather than in `agent`.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.
 
@@ -56,6 +57,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface. The three new providers (`TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`) each live in their own subdirectory (`task/`, `plan/`, `todo/`) and read from `Storage.get()` in `@openomni/session`.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 - Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.
+- Add persona workforce orchestration here when implementing `docs/persona-runtime-roadmap.md`: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
 
 ## What This Package Is Not
 

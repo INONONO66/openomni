@@ -22,6 +22,16 @@ InboundEvent
 
 Only `plan` and `direct` modes exist. Parallel execution across plan steps is the caller's responsibility (typically through `SubagentRuntime` / `BackgroundManager`).
 
+### Persona Workforce Direction
+
+Ingress is the authority boundary for work entering the runtime.
+
+- **External inbound**: user, surface, or API submits work to a target persona.
+- **Internal inbound**: the Main Persona or an explicitly trusted manager persona submits new work back through ingress.
+- **Ordinary Sub Personas**: should return results or suggestions; they should not create new top-level inbound work by default.
+
+This authority model is target direction, not the full current implementation. When implemented, inbound authority checks should happen before work is projected into durable session history.
+
 ### IngressEngine API
 
 ```typescript
@@ -86,6 +96,7 @@ A single session spans plan → re-plan → direct interactions:
 - Same `surface` + `workspace` + `channel` → same session via `SurfaceKey`.
 - Re-plan: a second `mode: "plan"` call on the same session reads the previous plan from `Storage.PlanSubAdapter` (via `__OPENOMNI_PLANID__` marker) and combines with new user feedback.
 - Direct follow-up: `mode: "direct"` reads the flat session history and runs a single `ChatAgent`.
+- Future self-loop work should create child sessions instead of writing internal reasoning into the original user-facing session.
 
 ### Key Modules
 

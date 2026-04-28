@@ -14,6 +14,7 @@ Each ADR follows: Context → Decision → Rationale → Consequences.
 | [002](./002-zod-first-types.md)              | Zod-first type definitions                       | Accepted   |
 | [003](./003-layered-package-architecture.md) | Strict layered package dependency direction      | Accepted   |
 | [004](./004-stateless-chat-agent.md)         | Stateless ChatAgent separated from orchestration | Accepted   |
+| [005](./005-persona-workforce-runtime.md)    | Persona workforce runtime direction              | Accepted   |
 | [009](./009-persistent-subagent-team-orchestration-draft.md) | Persistent subagent sessions (partial ship) | Superseded |
 
 ## Adding a New ADR

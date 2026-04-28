@@ -1,6 +1,6 @@
 # packages/session
 
-Session lifecycle, message/part storage, event bus, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`.
+Session lifecycle, message/part storage, event bus, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`. In the persona workforce model, this package owns the durable substrate for original sessions, self-loop sessions, child persona sessions, and worker-run history.
 
 ## STRUCTURE
 
@@ -41,6 +41,7 @@ src/
 - **Snapshot.Provider**: Interface for capturing and restoring session message state. `Snapshot.Diff` reports added / removed / modified message IDs.
 - **WorkerRun**: Event-sourced via `Storage.Adapter.eventLog`. `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.listBySession()`. State transitions (e.g. `waiting_input → running`) increment `resumeCount`. Used by `SubagentRuntime` / `BackgroundManager` to persist subagent runs.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
+- **Persona session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child persona trees. Future work should add explicit metadata conventions before adding new storage shapes.
 
 ## ANTI-PATTERNS
 
@@ -48,3 +49,4 @@ src/
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc subagent state alongside `Session`; use `WorkerRun` so it is event-sourced and replayable.
 - Do NOT call `Storage.get().todo` directly for writes that require bus event publication — go through `Todo.update()` instead. For read-only queries that don't require event notification, direct access is OK (or use `Todo.get()`).
+- Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

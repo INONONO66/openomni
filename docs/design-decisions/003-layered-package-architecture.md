@@ -17,7 +17,7 @@ protocol → session → llm → agent → openomni → coordinator → { cli, s
 - `protocol`: zero `@openomni/*` deps (leaf)
 - `session`: only `protocol`
 - `llm`: `protocol`, `session`
-- `agent`: `protocol`, `llm` — **no session dependency** (enforced; `BusTransport` lives in `openomni`)
+- `agent`: `protocol`, `llm`, and sanctioned `session` observability primitives — **no session state ownership** (session-backed orchestration and `BusTransport` live in `openomni`)
 - `openomni`: `protocol`, `session`, `llm`, `agent`
 - `coordinator`: all packages above — owns worker pool, IPC, recovery, credentials, tool-permission
 - `cli`, `server`: any `@openomni/*`; they do not depend on each other
@@ -30,7 +30,7 @@ Reverse dependencies (e.g., `protocol` importing from `session`) are build failu
 
 - **Prevents circular deps**: Linear chain makes cycles structurally impossible.
 - **Independent testability**: Lower packages (`protocol`, `session`) can be tested without upper packages.
-- **Clear ownership**: Each layer has a defined responsibility boundary.
+- **Clear ownership**: Each layer has a defined responsibility boundary. `agent` may emit observability but must not own durable session state.
 - **Enforceable**: `script/check-deps.ts` validates both dependency direction and package boundary violations in CI.
 
 ## Consequences

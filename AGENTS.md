@@ -3,7 +3,9 @@
 
 ## OVERVIEW
 
-OpenOmni — orchestration framework for LLM-powered autonomous agents. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
+OpenOmni — personal AI workforce infrastructure. The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
+
+Product direction lives in `docs/persona-workforce.md`; the staged implementation path is `docs/persona-runtime-roadmap.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
 
 ## STRUCTURE
 
@@ -77,6 +79,8 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Server tool providers | `apps/server/src/tool/` | 3 categories: `system/`, `agent/`, `mcp/` |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
+| Persona workforce direction | `docs/persona-workforce.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Main Persona, Sub Personas, self-loop sessions, controlled inbound authority |
+| Persona runtime roadmap | `docs/persona-runtime-roadmap.md` | Target contracts and staged implementation plan |
 
 ## CONVENTIONS
 
@@ -86,12 +90,24 @@ Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object
 
 ## MODES
 
-Ingress supports two execution modes:
+Ingress supports two execution modes today:
 
 | Mode | Trigger | Handler | Output |
 | --- | --- | --- | --- |
-| `direct` | Default (no prefix) | `handleDirect` → `ChatAgent.run()` | LLM response text |
-| `plan` | `/plan` prefix | `handlePlan` → `runPlan()` → `PlanAgent.create()` | `{ planId }` reference (plan stored in `Storage.PlanSubAdapter`) |
+| `direct` | Default (no prefix) | `handleDirect` → `CoordinatorLike.dispatch()` → worker execution | LLM response text |
+| `plan` | `/plan` prefix | `handlePlan` → `CoordinatorLike.dispatch()` → `runPlan()` → `PlanAgent.create()` | `{ planId }` reference (plan stored in `Storage.PlanSubAdapter`) |
+
+Target direction: the user and Main Persona may submit new inbound work; ordinary Sub Personas cannot create new top-level inbound work unless explicitly granted manager authority.
+
+## PERSONA WORKFORCE MODEL
+
+| Concept | Meaning | Current hooks |
+| --- | --- | --- |
+| Main Persona | Default user-facing assistant and workforce manager | Ingress target agent + future persona policy |
+| Sub Persona | Specialized worker identity for a domain or role | `AgentRegistry`, `SubagentRuntime` |
+| Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
+| Controlled inbound | Only user/Main/trusted managers create top-level work | Future `IngressEngine` authority policy |
+| Persona promotion | Temporary worker becomes persistent after repeated value | Future persona lifecycle schema |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -128,13 +144,13 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 
 ## NOTES
 
-- README.md describes project architecture, dependency graph, and getting started.
+- README.md describes product direction, project architecture, dependency graph, and getting started.
 - `packages/protocol` publishes built `dist/` artifacts (`main: ./dist/index.js`). Other packages point `main` at source (`./src/index.ts`) for Bun's native TS support.
 - Lint + format via Biome (`biome.json`). No ESLint.
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, tests for all packages.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
-- `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). It has **no session dependency** — `BusTransport` lives in `packages/openomni`. The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
+- `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
 - `packages/openomni` orchestrates plans, ingress, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
 - `packages/coordinator` owns multiprocess execution: worker pool lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
 - **Plan Mode** (`PlanAgent`) is implemented in `packages/openomni/src/plan/`. It generates a structured `Plan` via LLM and validates via gates.
