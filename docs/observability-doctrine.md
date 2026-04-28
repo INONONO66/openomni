@@ -201,3 +201,20 @@ Bus.publish(Subagent.Events.WorkerRunStarted, {
 | `agentName` | No | The agent profile name handling this work |
 
 When adding new bus events or log calls, include `traceId` in the context whenever it's available. It's the primary key for correlating observability data across the system.
+
+## Persona Workforce Observability
+
+The persona workforce model adds a user-facing question that observability must answer: who assigned work to whom, where did it run, and what was written back to the original session?
+
+Track these relationships with identifiers and summaries, not raw prompt bodies:
+
+- original session ID;
+- self-loop session ID, when work was forked;
+- child persona session ID;
+- persona or agent name;
+- worker run ID;
+- parent run ID, if available;
+- writeback target session ID;
+- result summary or memory candidate ID.
+
+Do not log full self-loop transcripts, drafts, social content bodies, user prompts, or private memory content. Store internal transcripts in session storage when required, and emit only correlation identifiers through Log, Bus, and Telemetry.
