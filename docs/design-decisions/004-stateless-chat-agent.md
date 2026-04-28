@@ -10,7 +10,7 @@ Originally, `packages/agent` contained both the LLM ReAct loop and all orchestra
 
 Split responsibilities across two packages:
 
-- **`packages/agent`** — Stateless `ChatAgent` primitive plus the multi-agent runtime (messenger, registry, subagent / background tool specs, MCP client). No session dependency — sinks and transports are injected by callers.
+- **`packages/agent`** — Stateless `ChatAgent` primitive plus the multi-agent runtime (messenger, registry, subagent / background tool specs, MCP client). It does not own session lifecycle or durable conversation state; sinks and transports are injected by callers. It may use sanctioned session observability primitives.
 - **`packages/openomni`** — Orchestration: `IngressEngine`, `PlanAgent`, `runPlan`, DAG utilities, `TaskStorage`, and the session-backed subagent layer (`SubagentRuntime`, `BackgroundManager`, `SubagentConsultation`).
 
 `ChatAgent` remains a function-style primitive: take messages + tools, run the ReAct loop, return results. State (budget, memory, delegation depth) lives on a per-call context. Extension happens via the middleware engine in `packages/agent/src/core/middleware/`.
@@ -20,7 +20,7 @@ Split responsibilities across two packages:
 - **Single responsibility**: `ChatAgent` only runs an LLM tool-use loop. Orchestration is a separate concern.
 - **Reusability**: `ChatAgent` can be used standalone or composed by `SubagentRuntime`, `PlanAgent`, and `IngressEngine` without pulling in orchestration dependencies.
 - **Testability**: `ChatAgent` tests don't require session mocking, storage setup, or event bus wiring.
-- **Dependency hygiene**: `agent` depends on `protocol` + `llm` only. Code that needs `session` lives in `openomni`.
+- **Dependency hygiene**: `agent` depends on execution contracts and model access, while session-backed orchestration lives in `openomni`. Any `agent` use of `session` must be limited to observability primitives, not state ownership.
 
 ## Consequences
 
