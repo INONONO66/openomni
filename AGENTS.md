@@ -5,7 +5,7 @@
 
 OpenOmni — personal AI workforce infrastructure. The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
 
-Product direction lives in `docs/persona-workforce.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
+Product direction lives in `docs/persona-workforce.md`; the staged implementation path is `docs/persona-runtime-roadmap.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
 
 ## STRUCTURE
 
@@ -80,6 +80,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
 | Persona workforce direction | `docs/persona-workforce.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Main Persona, Sub Personas, self-loop sessions, controlled inbound authority |
+| Persona runtime roadmap | `docs/persona-runtime-roadmap.md` | Target contracts and staged implementation plan |
 
 ## CONVENTIONS
 

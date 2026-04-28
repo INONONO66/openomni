@@ -125,6 +125,7 @@ Ingress currently supports two execution modes:
 ## Documentation Map
 
 - [Persona Workforce Direction](docs/persona-workforce.md) — product model, runtime concepts, persona lifecycle, and gaps.
+- [Persona Runtime Roadmap](docs/persona-runtime-roadmap.md) — staged implementation path for authority, self-loop sessions, persona lifecycle, SNS, and memory readiness.
 - [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) — accepted decision for the persona workforce runtime direction.
 - [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
 - [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
