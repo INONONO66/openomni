@@ -3,7 +3,7 @@
 
 ## OVERVIEW
 
-OpenOmni — personal AI workforce infrastructure. The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
+OpenOmni — personal AI workforce infrastructure. The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 2 apps (CLI + Server).
 
 Product direction lives in `docs/persona-workforce.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
 
@@ -97,6 +97,16 @@ Ingress supports two execution modes today:
 | `plan` | `/plan` prefix | `handlePlan` → `CoordinatorLike.dispatch()` → `runPlan()` → `PlanAgent.create()` | `{ planId }` reference (plan stored in `Storage.PlanSubAdapter`) |
 
 Target direction: the user and Main Persona may submit new inbound work; ordinary Sub Personas cannot create new top-level inbound work unless explicitly granted manager authority.
+
+## PERSONA WORKFORCE MODEL
+
+| Concept | Meaning | Current hooks |
+| --- | --- | --- |
+| Main Persona | Default user-facing assistant and workforce manager | Ingress target agent + future persona policy |
+| Sub Persona | Specialized worker identity for a domain or role | `AgentRegistry`, `SubagentRuntime` |
+| Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
+| Controlled inbound | Only user/Main/trusted managers create top-level work | Future `IngressEngine` authority policy |
+| Persona promotion | Temporary worker becomes persistent after repeated value | Future persona lifecycle schema |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 

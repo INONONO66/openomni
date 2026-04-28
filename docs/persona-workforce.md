@@ -133,15 +133,15 @@ OpenOmni should provide:
 
 Raw session history is not the same as memory. Durable behavioral memory should be scoped, attributed, and reviewable. Core logic and safety policy should not be rewritten by memory reflection. Personality, domain rules, tone, skills, and routing preferences may evolve within policy boundaries.
 
-## Competitive Positioning
+## Design Priorities
 
-OpenOmni should not compete primarily on channel breadth or minimal implementation size.
+OpenOmni should optimize for a clear workforce model instead of maximizing the number of channels, tools, or autonomous loops at once.
 
-- OpenClaw is positioned around a local-first personal assistant gateway with broad channel and companion-app coverage.
-- Hermes Agent is positioned around a growing autonomous agent with memory, skill creation, and learning loops.
-- NanoClaw is positioned around a lightweight auditable personal assistant with container isolation.
-
-OpenOmni's distinct position is a memory-ready persona workforce: one Main Persona manages a controlled hierarchy of Sub Personas, isolates internal work from the original user session, and uses session lineage and event records to make delegated work auditable.
+- **Relationship continuity**: the Main Persona remains the stable user-facing identity.
+- **Controlled delegation**: Sub Personas work inside explicit authority and session boundaries.
+- **Session isolation**: internal reasoning and failed attempts do not pollute the original session.
+- **Auditable growth**: repeated useful work can promote a temporary worker into a persistent persona.
+- **Memory readiness**: session lineage and provenance prepare the system for long-term memory without treating raw transcripts as behavioral truth.
 
 ## Current Implementation Hooks
 
