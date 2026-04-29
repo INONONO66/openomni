@@ -1,8 +1,7 @@
 import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
 import type { Memory } from "./memory";
 import type { MiddlewareRegistration } from "./middleware/types";
-
-export type ParallelToolsMode = "off" | "safe-only" | "all";
+import type { AgentRuntimeContext } from "./runtime-context";
 
 export type StepGuardVerdict =
   | { action: "continue" }
@@ -87,7 +86,6 @@ export interface ChatAgentConfig {
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
-  parallelTools?: ParallelToolsMode;
   memory?: Memory;
   /**
    * @deprecated Use `middleware` array with `post_turn` timing instead.
@@ -105,6 +103,7 @@ export interface ChatAgentConfig {
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
   middleware?: MiddlewareRegistration[];
+  context?: AgentRuntimeContext;
 }
 
 export interface ChatAgentInput {

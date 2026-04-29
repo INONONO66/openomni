@@ -1,13 +1,12 @@
 import { MessengerEvent, type Messenger } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
+import type { AgentRuntimeContext } from "../../core/runtime-context";
+import { getDefaultContext } from "../../core/runtime-context";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
   subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void;
 }
-
-const MAX_LOG_SIZE = 1000;
-const messageLog: Messenger.MessageEnvelope[] = [];
 
 function matchesPattern(pattern: Messenger.AllowPattern, from: string, to: string): boolean {
   const fromMatch = pattern.from === "*" || pattern.from === from;
@@ -26,6 +25,7 @@ function isAuthorized(
 
 export interface AgentMessengerOptions {
   allowPatterns?: Messenger.AllowPattern[];
+  context?: AgentRuntimeContext;
 }
 
 export interface RequestOptions {
@@ -44,6 +44,8 @@ export namespace AgentMessenger {
   }
 
   export function create(transport: Transport, options?: AgentMessengerOptions): Instance {
+    const context = options?.context ?? getDefaultContext();
+
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
         if (!isAuthorized(options?.allowPatterns, envelope.fromAgentId, envelope.toAgentId)) {
@@ -66,10 +68,7 @@ export namespace AgentMessenger {
         const traceId = envelope.traceId || crypto.randomUUID();
         const outbound = traceId !== envelope.traceId ? { ...envelope, traceId } : envelope;
 
-        if (messageLog.length >= MAX_LOG_SIZE) {
-          messageLog.splice(0, Math.floor(MAX_LOG_SIZE / 2));
-        }
-        messageLog.push(outbound);
+        context.messageLog.append(outbound);
 
         Log.debug("messenger envelope send", {
           envelopeId: outbound.id,
@@ -189,10 +188,10 @@ export namespace AgentMessenger {
   }
 
   export function getLog(): Messenger.MessageEnvelope[] {
-    return [...messageLog];
+    return getDefaultContext().messageLog.getLog();
   }
 
   export function _resetLog(): void {
-    messageLog.length = 0;
+    getDefaultContext().messageLog.reset();
   }
 }

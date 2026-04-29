@@ -1,49 +1,36 @@
-export type InstanceStatus = "idle" | "busy" | "error";
+import { getDefaultContext } from "../../core/runtime-context";
+import type { RuntimeAgentInstance, RuntimeInstanceStatus } from "../../core/runtime-context";
 
-export interface AgentInstance {
-  instanceId: string;
-  agentId: string;
-  status: InstanceStatus;
-  registeredAt: number;
-  metadata?: Record<string, unknown>;
-}
+export type InstanceStatus = RuntimeInstanceStatus;
 
-const store = new Map<string, AgentInstance>();
+export type AgentInstance = RuntimeAgentInstance;
 
 export namespace InstanceRegistry {
   export function register(
     instanceId: string,
     agentId: string,
     metadata?: Record<string, unknown>,
-  ): void {
-    store.set(instanceId, {
-      instanceId,
-      agentId,
-      status: "idle",
-      registeredAt: Date.now(),
-      metadata,
-    });
+  ): () => void {
+    return getDefaultContext().instances.register(instanceId, agentId, metadata);
   }
 
   export function unregister(instanceId: string): void {
-    store.delete(instanceId);
+    getDefaultContext().instances.unregister(instanceId);
   }
 
   export function getById(instanceId: string): AgentInstance | undefined {
-    return store.get(instanceId);
+    return getDefaultContext().instances.getById(instanceId);
   }
 
   export function getByAgent(agentId: string): AgentInstance[] {
-    return Array.from(store.values()).filter((i) => i.agentId === agentId);
+    return getDefaultContext().instances.getByAgent(agentId);
   }
 
   export function updateStatus(instanceId: string, status: InstanceStatus): void {
-    const instance = store.get(instanceId);
-    if (!instance) throw new Error(`Instance '${instanceId}' not registered`);
-    store.set(instanceId, { ...instance, status });
+    getDefaultContext().instances.updateStatus(instanceId, status);
   }
 
   export function clear(): void {
-    store.clear();
+    getDefaultContext().instances.clear();
   }
 }

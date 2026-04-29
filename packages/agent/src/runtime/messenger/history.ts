@@ -1,5 +1,6 @@
 import type { Messenger } from "@openomni/protocol";
-import { AgentMessenger } from "./messenger";
+import type { AgentRuntimeContext } from "../../core/runtime-context";
+import { getDefaultContext } from "../../core/runtime-context";
 
 export interface HistoryQueryOptions {
   timeRange?: { from?: number; to?: number };
@@ -16,9 +17,13 @@ export interface HistoryResult {
   hasMore: boolean;
 }
 
-export function queryHistory(agentId: string, options: HistoryQueryOptions = {}): HistoryResult {
+export function queryHistory(
+  agentId: string,
+  options: HistoryQueryOptions = {},
+  context: AgentRuntimeContext = getDefaultContext(),
+): HistoryResult {
   const { limit = 50, offset = 0 } = options;
-  const all = AgentMessenger.getLog();
+  const all = context.messageLog.getLog();
 
   const visible = all.filter((msg) => {
     if (msg.persistencePolicy === "asker_only") {

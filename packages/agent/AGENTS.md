@@ -22,8 +22,7 @@ src/
 │   ├── execution/
 │   │   ├── stream-engine.ts    # streamAgent() — retry loop + turn loop + middleware dispatch
 │   │   ├── tool-executor.ts    # Wraps user toolExecutor with pre_tool_use / post_tool_use dispatch
-│   │   ├── compaction.ts       # InMemoryCompactor for message compression
-│   │   └── parallel-tools.ts   # Parallel tool call scheduler ("off" | "safe-only" | "all")
+│   │   └── compaction.ts       # InMemoryCompactor for message compression
 │   └── middleware/
 │       ├── engine.ts           # MiddlewareEngine.create() — register, dispatch, dispatchSystemPrompt
 │       ├── types.ts            # MiddlewareContext, MiddlewareFn, MiddlewareRegistration
@@ -93,7 +92,6 @@ Also exported from `@openomni/agent`:
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
 | `permissions?`   | `Guardrail.ToolPermission`               | Evaluated by the built-in `tool-guard` middleware                           |
 | `compaction?`    | `{ contextWindowTokens, ... }`           | Trigger message compaction via `InMemoryCompactor`                          |
-| `parallelTools?` | `"off" \| "safe-only" \| "all"`          | Concurrency policy inside a turn                                            |
 | `memory?`        | `Memory`                                 | Memory interface retrieved by the `memory` middleware                       |
 | `middleware?`    | `MiddlewareRegistration[]`               | **Preferred extension mechanism**                                           |
 | `stepGuard?`     | _(deprecated)_                           | Legacy post_turn guard — routed through `middleware/compat.ts`              |

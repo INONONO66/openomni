@@ -1,4 +1,5 @@
 import type { MiddlewareContext, MiddlewareRegistration } from "../types";
+import { Log } from "@openomni/session";
 
 export type PostToolEnricher = (ctx: MiddlewareContext) => string | null | Promise<string | null>;
 
@@ -11,7 +12,8 @@ export function createPostToolMiddleware(enricher: PostToolEnricher): Middleware
       let addition: string | null;
       try {
         addition = await enricher(ctx);
-      } catch {
+      } catch (error) {
+        Log.debug("post-tool enricher failed", { error });
         return { action: "continue" };
       }
       if (!addition) return { action: "continue" };

@@ -17,6 +17,18 @@ export type {
   HookContext,
   HookVerdict,
 } from "./core/types";
+export {
+  createAgentRuntimeContext,
+  getDefaultContext,
+} from "./core/runtime-context";
+export type {
+  AgentRuntimeContext,
+  AgentRegistryStore,
+  InstanceRegistryStore,
+  MessageLogStore,
+  RuntimeAgentInstance,
+  RuntimeInstanceStatus,
+} from "./core/runtime-context";
 export { MiddlewareEngine } from "./core/middleware";
 export type {
   MiddlewareContext,

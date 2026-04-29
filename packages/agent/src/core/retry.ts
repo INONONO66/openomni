@@ -4,7 +4,7 @@ import type { Run } from "@openomni/protocol";
 export type RetryReason = "timeout" | "tool_error" | "transient_error" | "validation_error";
 
 export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
-  maxAttempts: 1,
+  maxAttempts: 3,
   backoffMs: { initial: 1000, multiplier: 2, max: 30_000 },
   retryOn: ["timeout", "tool_error", "transient_error"],
 };

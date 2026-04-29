@@ -1,6 +1,7 @@
 import type { Guardrail } from "@openomni/protocol";
 import type { AgentEventEmitter, ChatAgentConfig } from "../../types";
 import type { MiddlewareRegistration } from "../types";
+import { Log } from "@openomni/session";
 import { ToolGuard } from "../../tool-guard";
 import { summarizeInput } from "../../execution/shared";
 
@@ -28,7 +29,8 @@ export function createToolGuardMiddleware(
       let verdict: "allow" | "deny" | "require_approval";
       try {
         verdict = ToolGuard.check(toolName, toolInput ?? {}, config.permission);
-      } catch {
+      } catch (error) {
+        Log.debug("tool guard evaluation failed", { toolName, error });
         verdict = "deny";
       }
 
@@ -75,8 +77,8 @@ export function createToolGuardMiddleware(
               });
               return { action: "continue" };
             }
-          } catch {
-            // stepGuard threw; treat as denial
+          } catch (error) {
+            Log.debug("tool guard evaluation failed", { toolName, error });
           }
         }
 

@@ -3,6 +3,7 @@ import type { Subagent } from "@openomni/protocol";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
 import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import type { AgentProfile } from "@openomni/protocol";
+import type { SubagentRuntime } from "../../../src/runtime/tools/subagent";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 let mockChatAgentCreate: any;
@@ -66,6 +67,13 @@ function makeDefinition(
   };
 }
 
+function makeRuntime(): SubagentRuntime {
+  return {
+    spawn: mock(async () => ({ sessionId: "s", runId: "r", output: "" })),
+    send: mock(async () => ({ sessionId: "s", runId: "r", output: "" })),
+  };
+}
+
 function resetState() {
   AgentRegistry.clear();
   AgentMessenger._resetLog();
@@ -77,7 +85,7 @@ function resetState() {
 describe("SubagentTool background mode", () => {
   it("spec has background property in inputSchema", () => {
     resetState();
-    const { spec } = SubagentTool.create();
+    const { spec } = SubagentTool.create({ subagentRuntime: makeRuntime() });
     expect(spec.inputSchema.properties).toHaveProperty("background");
   });
 
@@ -85,7 +93,10 @@ describe("SubagentTool background mode", () => {
     resetState();
     const manager = createMockBackgroundManager();
     AgentRegistry.define(makeDefinition("test"));
-    const { execute } = SubagentTool.create({ backgroundManager: manager });
+    const { execute } = SubagentTool.create({
+      backgroundManager: manager,
+      subagentRuntime: makeRuntime(),
+    });
 
     const result = await execute({
       agentName: "test",
@@ -100,7 +111,7 @@ describe("SubagentTool background mode", () => {
   it("returns error when background is true but backgroundManager not provided", async () => {
     resetState();
     AgentRegistry.define(makeDefinition("test"));
-    const { execute } = SubagentTool.create();
+    const { execute } = SubagentTool.create({ subagentRuntime: makeRuntime() });
 
     const result = await execute({
       agentName: "test",
@@ -114,7 +125,7 @@ describe("SubagentTool background mode", () => {
 
   it("uses sync path when background is false", async () => {
     resetState();
-    const { execute } = SubagentTool.create();
+    const { execute } = SubagentTool.create({ subagentRuntime: makeRuntime() });
 
     const result = await execute({
       agentName: "unknown",
@@ -128,7 +139,7 @@ describe("SubagentTool background mode", () => {
 
   it("uses sync path when background is not specified", async () => {
     resetState();
-    const { execute } = SubagentTool.create();
+    const { execute } = SubagentTool.create({ subagentRuntime: makeRuntime() });
 
     const result = await execute({
       agentName: "unknown",

@@ -1,6 +1,7 @@
 import type { Memory } from "../../memory";
 import type { MiddlewareRegistration } from "../types";
 import type { Message } from "@openomni/protocol";
+import { Log } from "@openomni/session";
 
 function getLastUserText(messages: Message.WithParts[] | undefined): string | null {
   if (!messages) return null;
@@ -26,7 +27,8 @@ export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
       let results;
       try {
         results = await memory.retrieve(text);
-      } catch {
+      } catch (error) {
+        Log.debug("memory retrieval failed", { error });
         return { action: "continue" };
       }
       if (!results || results.length === 0) return { action: "continue" };
