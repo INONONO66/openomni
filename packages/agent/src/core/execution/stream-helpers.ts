@@ -724,8 +724,12 @@ async function buildTurnSystemPrompt(
     eventEmitter: config.eventEmitter,
   });
   if (spVerdict.systemPrompt) system = spVerdict.systemPrompt;
-  if (spVerdict.prependContext) system = `${spVerdict.prependContext}\n\n${system}`;
-  if (spVerdict.appendContext) system = `${system}\n\n${spVerdict.appendContext}`;
+  if (spVerdict.prependContext) {
+    system = system ? `${spVerdict.prependContext}\n\n${system}` : spVerdict.prependContext;
+  }
+  if (spVerdict.appendContext) {
+    system = system ? `${system}\n\n${spVerdict.appendContext}` : spVerdict.appendContext;
+  }
   return system;
 }
 
