@@ -213,7 +213,7 @@ describe("ChatAgent", () => {
     expect(stepFinishCalls[1]?.type).toBe("text");
   });
 
-  it("does not retry when transient errors happen with default policy", async () => {
+  it("retries transient errors up to the default max attempts", async () => {
     let attempts = 0;
     mockRunFn = async () => {
       attempts += 1;
@@ -231,7 +231,7 @@ describe("ChatAgent", () => {
 
     expect(retryError).toBeInstanceOf(Error);
     expect((retryError as Error).message).toContain("transient network error");
-    expect(attempts).toBe(1);
+    expect(attempts).toBe(3);
   });
 
   it("imports Telemetry from session package for observability", async () => {
