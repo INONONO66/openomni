@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
+import { getDefaultContext } from "../../../src/core/runtime-context";
 import type { AgentProfile } from "@openomni/protocol";
 
 function makeDefinition(name: string): AgentProfile.Definition {
@@ -10,31 +11,38 @@ function makeDefinition(name: string): AgentProfile.Definition {
   };
 }
 
-afterEach(() => {
-  AgentRegistry.clear();
-});
+function itWithCleanRegistry(name: string, fn: () => void): void {
+  it(name, () => {
+    AgentRegistry.clear();
+    try {
+      fn();
+    } finally {
+      AgentRegistry.clear();
+    }
+  });
+}
 
 describe("AgentRegistry", () => {
-  it("defines and retrieves an agent", () => {
+  itWithCleanRegistry("defines and retrieves an agent", () => {
     AgentRegistry.define(makeDefinition("explore"));
     const result = AgentRegistry.get("explore");
     expect(result?.name).toBe("explore");
   });
 
-  it("has() returns true for registered agent", () => {
+  itWithCleanRegistry("has() returns true for registered agent", () => {
     AgentRegistry.define(makeDefinition("coder"));
     expect(AgentRegistry.has("coder")).toBe(true);
   });
 
-  it("has() returns false for unregistered agent", () => {
+  itWithCleanRegistry("has() returns false for unregistered agent", () => {
     expect(AgentRegistry.has("unknown")).toBe(false);
   });
 
-  it("get() returns undefined for unregistered agent", () => {
+  itWithCleanRegistry("get() returns undefined for unregistered agent", () => {
     expect(AgentRegistry.get("unknown")).toBeUndefined();
   });
 
-  it("list() returns all registered agents", () => {
+  itWithCleanRegistry("list() returns all registered agents", () => {
     AgentRegistry.define(makeDefinition("a"));
     AgentRegistry.define(makeDefinition("b"));
     const names = AgentRegistry.list().map((d) => d.name);
@@ -42,23 +50,23 @@ describe("AgentRegistry", () => {
     expect(names).toContain("b");
   });
 
-  it("override() updates existing agent fields", () => {
+  itWithCleanRegistry("override() updates existing agent fields", () => {
     AgentRegistry.define(makeDefinition("agent-x"));
     AgentRegistry.override("agent-x", { description: "updated" });
     expect(AgentRegistry.get("agent-x")?.description).toBe("updated");
   });
 
-  it("override() throws for unregistered agent", () => {
+  itWithCleanRegistry("override() throws for unregistered agent", () => {
     expect(() => AgentRegistry.override("missing", {})).toThrow();
   });
 
-  it("clear() removes all agents", () => {
+  itWithCleanRegistry("clear() removes all agents", () => {
     AgentRegistry.define(makeDefinition("a"));
     AgentRegistry.clear();
     expect(AgentRegistry.list()).toHaveLength(0);
   });
 
-  it("replaceAll() replaces all agents with new definitions", () => {
+  itWithCleanRegistry("replaceAll() replaces all agents with new definitions", () => {
     AgentRegistry.define(makeDefinition("old-a"));
     AgentRegistry.define(makeDefinition("old-b"));
     const newDefs = [makeDefinition("new-a"), makeDefinition("new-b"), makeDefinition("new-c")];
@@ -72,10 +80,18 @@ describe("AgentRegistry", () => {
     expect(names).not.toContain("old-b");
   });
 
-  it("replaceAll() with empty array clears all agents", () => {
+  itWithCleanRegistry("replaceAll() with empty array clears all agents", () => {
     AgentRegistry.define(makeDefinition("a"));
     AgentRegistry.define(makeDefinition("b"));
     AgentRegistry.replaceAll([]);
     expect(AgentRegistry.list()).toHaveLength(0);
+  });
+
+  itWithCleanRegistry("delegates namespace calls to the default runtime context registry", () => {
+    AgentRegistry.define(makeDefinition("namespace-agent"));
+    expect(getDefaultContext().registry.has("namespace-agent")).toBe(true);
+
+    getDefaultContext().registry.define(makeDefinition("context-agent"));
+    expect(AgentRegistry.get("context-agent")?.name).toBe("context-agent");
   });
 });

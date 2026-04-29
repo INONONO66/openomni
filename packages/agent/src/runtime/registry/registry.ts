@@ -1,38 +1,32 @@
 import type { AgentProfile } from "@openomni/protocol";
-
-const store = new Map<string, AgentProfile.Definition>();
+import { getDefaultContext } from "../../core/runtime-context";
 
 export namespace AgentRegistry {
   export function define(definition: AgentProfile.Definition): void {
-    store.set(definition.name, definition);
+    getDefaultContext().registry.define(definition);
   }
 
   export function get(name: string): AgentProfile.Definition | undefined {
-    return store.get(name);
+    return getDefaultContext().registry.get(name);
   }
 
   export function has(name: string): boolean {
-    return store.has(name);
+    return getDefaultContext().registry.has(name);
   }
 
   export function list(): AgentProfile.Definition[] {
-    return Array.from(store.values());
+    return getDefaultContext().registry.list();
   }
 
   export function override(name: string, partial: Partial<AgentProfile.Definition>): void {
-    const existing = store.get(name);
-    if (!existing) throw new Error(`Agent '${name}' not registered`);
-    store.set(name, { ...existing, ...partial });
+    getDefaultContext().registry.override(name, partial);
   }
 
   export function clear(): void {
-    store.clear();
+    getDefaultContext().registry.clear();
   }
 
   export function replaceAll(defs: AgentProfile.Definition[]): void {
-    store.clear();
-    for (const def of defs) {
-      store.set(def.name, def);
-    }
+    getDefaultContext().registry.replaceAll(defs);
   }
 }
