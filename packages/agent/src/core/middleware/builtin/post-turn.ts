@@ -1,5 +1,6 @@
 import type { Hook } from "@openomni/protocol";
 import type { MiddlewareContext, MiddlewareRegistration } from "../types";
+import { Log } from "@openomni/session";
 
 export type PostTurnHandler = (ctx: MiddlewareContext) => Promise<Hook.Verdict> | Hook.Verdict;
 
@@ -11,7 +12,8 @@ export function createPostTurnMiddleware(handler: PostTurnHandler): MiddlewareRe
     fn: async (ctx) => {
       try {
         return await handler(ctx);
-      } catch {
+      } catch (error) {
+        Log.debug("post-turn handler failed", { error });
         return { action: "continue" };
       }
     },

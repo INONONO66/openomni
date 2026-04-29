@@ -48,7 +48,8 @@ export function fromExecutionHooks(hooks: ExecutionHooks): MiddlewareRegistratio
       fn: async (ctx) => {
         try {
           return await fn(toHookContext(ctx));
-        } catch {
+        } catch (error) {
+          Log.debug("legacy hook failed", { hook: "postToolUse", error });
           return { action: "continue" };
         }
       },
@@ -64,7 +65,8 @@ export function fromExecutionHooks(hooks: ExecutionHooks): MiddlewareRegistratio
       fn: async (ctx) => {
         try {
           return await fn(toHookContext(ctx));
-        } catch {
+        } catch (error) {
+          Log.debug("legacy hook failed", { hook: "preTurn", error });
           return { action: "continue" };
         }
       },
@@ -80,7 +82,8 @@ export function fromExecutionHooks(hooks: ExecutionHooks): MiddlewareRegistratio
       fn: async (ctx) => {
         try {
           return await fn(toHookContext(ctx));
-        } catch {
+        } catch (error) {
+          Log.debug("legacy hook failed", { hook: "postTurn", error });
           return { action: "continue" };
         }
       },
@@ -98,7 +101,8 @@ export function fromExecutionHooks(hooks: ExecutionHooks): MiddlewareRegistratio
         if (!(maybeError instanceof Error)) return { action: "continue" };
         try {
           return await fn({ ...toHookContext(ctx), error: maybeError });
-        } catch {
+        } catch (error) {
+          Log.debug("legacy hook failed", { hook: "onError", error });
           return { action: "continue" };
         }
       },
