@@ -2,6 +2,7 @@ import type { Tool, Subagent } from "@openomni/protocol";
 import { AgentRegistry } from "../registry/registry";
 import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import type { MiddlewareRegistration } from "../../core/middleware/types";
+import type { AgentRuntimeContext } from "../../core/runtime-context";
 
 export interface SubagentRuntimeSpawnConfig {
   agentName: string;
@@ -30,9 +31,11 @@ export type SubagentRuntime = {
 };
 
 export interface SubagentToolOptions {
+  context?: AgentRuntimeContext;
   delegationContext?: DelegationContext;
   messengerAllowPatterns?: Array<{ from: string; to: string }>;
   middleware?: MiddlewareRegistration[];
+  defaultModel?: { provider: string; id: string };
   subagentRuntime: SubagentRuntime;
   backgroundManager?: {
     launch: (input: {
@@ -54,7 +57,7 @@ export interface SubagentToolSpec {
 }
 
 export namespace SubagentTool {
-  const fallbackModel = {
+  const DEFAULT_SUBAGENT_MODEL = {
     provider: "anthropic",
     id: "claude-3-haiku-20240307",
   };
@@ -96,7 +99,7 @@ export namespace SubagentTool {
         background?: boolean;
       };
 
-      const ctx = options?.delegationContext;
+      const ctx = options.delegationContext;
       if (ctx) {
         const verdict = checkDelegation(agentName, ctx);
         if (verdict === "circular_detected") {
@@ -117,7 +120,7 @@ export namespace SubagentTool {
         }
       }
 
-      const definition = AgentRegistry.get(agentName);
+      const definition = options.context?.registry.get(agentName) ?? AgentRegistry.get(agentName);
       if (!definition) {
         return {
           id: crypto.randomUUID(),
@@ -127,10 +130,10 @@ export namespace SubagentTool {
         };
       }
 
-      const model = definition.model ?? fallbackModel;
+      const model = definition.model ?? options.defaultModel ?? DEFAULT_SUBAGENT_MODEL;
 
       if (background) {
-        if (!options?.backgroundManager) {
+        if (!options.backgroundManager) {
           return {
             id: crypto.randomUUID(),
             toolCallId: "",
@@ -157,15 +160,6 @@ export namespace SubagentTool {
           toolCallId: "",
           output: `Background task launched.\n\nTask ID: ${task.id}\nStatus: ${task.status}`,
           isError: false,
-        };
-      }
-
-      if (!options?.subagentRuntime) {
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: "",
-          output: "subagentRuntime is required but not configured",
-          isError: true,
         };
       }
 

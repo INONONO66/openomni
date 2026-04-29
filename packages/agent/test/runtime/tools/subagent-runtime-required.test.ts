@@ -50,18 +50,7 @@ function makeMiddleware(name: string, propagate?: boolean): MiddlewareRegistrati
   };
 }
 
-describe("SubagentTool SubagentRuntime enforcement", () => {
-  it("returns error when subagentRuntime is not provided", async () => {
-    resetState();
-    AgentRegistry.define(makeDefinition("no-runtime-agent"));
-    const { execute } = SubagentTool.create();
-
-    const result = await execute({ agentName: "no-runtime-agent", prompt: "hello" });
-
-    expect(result.isError).toBe(true);
-    expect(result.output.toLowerCase()).toMatch(/runtime/);
-  });
-
+describe("SubagentTool SubagentRuntime execution", () => {
   it("calls spawn with agentName and prompt when subagentRuntime is provided", async () => {
     resetState();
     const spawn = mock(async () => ({
