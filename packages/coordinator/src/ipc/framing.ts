@@ -19,7 +19,7 @@ export class LineDecoder {
     const lines = this.buffer.split("\n");
     this.buffer = lines.pop() ?? "";
 
-    if (encoder.encode(this.buffer).byteLength > MAX_FRAME_BYTES) {
+    if (Buffer.byteLength(this.buffer, "utf-8") > MAX_FRAME_BYTES) {
       this.buffer = "";
       throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
     }
@@ -27,7 +27,7 @@ export class LineDecoder {
     return lines
       .filter((l) => l.trim())
       .map((l) => {
-        if (encoder.encode(l).byteLength > MAX_FRAME_BYTES) {
+        if (Buffer.byteLength(l, "utf-8") > MAX_FRAME_BYTES) {
           throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
         }
         return JSON.parse(l);
