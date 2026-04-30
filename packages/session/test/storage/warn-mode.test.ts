@@ -12,7 +12,7 @@ let warnSpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "openomni-warn-test-"));
   Storage.reset();
-  warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+  warnSpy = spyOn(console, "warn").mockImplementation(() => undefined);
 });
 
 afterEach(() => {

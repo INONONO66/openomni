@@ -103,6 +103,9 @@ export namespace SurfaceKey {
 
     for (let i = 2; i < segments.length; i++) {
       const seg = segments[i];
+      if (seg == null) {
+        continue;
+      }
       if (KNOWN_KINDS.has(seg)) {
         if (seg === "thread") {
           threadId = segments[i + 1];
