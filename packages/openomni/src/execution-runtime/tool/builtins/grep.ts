@@ -112,7 +112,9 @@ async function searchWithGrep(
       if (!line || matches.length >= MAX_MATCHES) continue;
       const parsed = line.match(/^(.*?):(\d+):(.*)$/);
       if (!parsed) continue;
-      matches.push({ file: parsed[1], line: Number(parsed[2]), text: parsed[3] });
+      const [, file, lineNumber, text] = parsed;
+      if (file == null || lineNumber == null || text == null) continue;
+      matches.push({ file, line: Number(lineNumber), text });
     }
   }
 

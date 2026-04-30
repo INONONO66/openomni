@@ -10,6 +10,9 @@ type MailboxEntry<T> = {
   reject: (err: unknown) => void;
 };
 
+const MAX_QUEUE_DEPTH = 1000;
+const WARN_THRESHOLD = Math.floor(MAX_QUEUE_DEPTH * 0.8);
+
 const mailboxes = new Map<string, MailboxEntry<unknown>[]>();
 const processing = new Set<string>();
 
@@ -49,8 +52,28 @@ async function drainMailbox(sessionId: string): Promise<void> {
 export function sendToMailbox<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const queue = mailboxes.get(sessionId) ?? [];
+
+    // Check if queue is at max depth before enqueuing
+    if (queue.length >= MAX_QUEUE_DEPTH) {
+      const err = new Error(
+        `Mailbox queue depth exceeded for session ${sessionId}: ${queue.length} >= ${MAX_QUEUE_DEPTH}`,
+      );
+      reject(err);
+      return;
+    }
+
     queue.push({ fn, resolve, reject } as MailboxEntry<unknown>);
     mailboxes.set(sessionId, queue);
+
+    // Warn when queue reaches 80% of max depth
+    if (queue.length >= WARN_THRESHOLD) {
+      Log.warn("mailbox.queue.high", {
+        sessionId,
+        queueDepth: queue.length,
+        maxDepth: MAX_QUEUE_DEPTH,
+      });
+    }
+
     Log.debug("mailbox.enqueued", { sessionId, queueDepth: queue.length });
     drainMailbox(sessionId);
   });

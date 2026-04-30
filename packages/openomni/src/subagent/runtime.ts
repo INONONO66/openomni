@@ -170,7 +170,13 @@ export namespace SubagentRuntime {
         runWithTranscript(session.id, config, signal, permissions),
       ),
     );
-    backgroundRun.catch(() => undefined);
+    backgroundRun.catch((err) => {
+      Log.warn("subagent.spawn-background.failed", {
+        sessionId: session.id,
+        runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 
     return { sessionId: session.id, runId };
   }

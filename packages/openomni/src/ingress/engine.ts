@@ -75,6 +75,10 @@ export namespace IngressEngine {
           coordinator: _coordinator,
           traceContext: activeTrace,
         });
+      default: {
+        const unknownMode = (event as { mode: unknown }).mode;
+        throw new Error(`unknown ingress mode: ${unknownMode}`);
+      }
     }
   }
 }

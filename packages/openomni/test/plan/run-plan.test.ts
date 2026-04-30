@@ -37,9 +37,10 @@ mock.module("@openomni/llm", () => ({
 // --- Dynamic import after mock ---
 
 let runPlan: typeof import("../../src/plan/run-plan").runPlan;
+let PlanValidationFailedError: typeof import("../../src/plan/run-plan").PlanValidationFailedError;
 
 beforeAll(async () => {
-  ({ runPlan } = await import("../../src/plan/run-plan"));
+  ({ runPlan, PlanValidationFailedError } = await import("../../src/plan/run-plan"));
 });
 
 afterAll(() => {
@@ -70,13 +71,19 @@ describe("runPlan", () => {
     mockRunFn = async () => ({ type: "stop" });
 
     const { memoryPlanAdapter } = await import("../../src/plan/memory-plan-adapter");
-    const promise = runPlan("Generate a test plan", {
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      planSubAdapter: memoryPlanAdapter(),
-      planId: "missing-plan",
-    });
+    let caught: unknown;
+    try {
+      await runPlan("Generate a test plan", {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        planSubAdapter: memoryPlanAdapter(),
+        planId: "missing-plan",
+      });
+    } catch (err) {
+      caught = err;
+    }
 
-    await expect(promise).rejects.toThrow("plan agent did not write plan");
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain("plan agent did not write plan");
   });
 
   it("returns deterministic planId when passed in config", async () => {
@@ -96,5 +103,43 @@ describe("runPlan", () => {
     });
 
     expect(result.planId).toBe(expectedPlanId);
+  });
+
+  it("rejects a generated markdown plan with cyclic dependencies", async () => {
+    const { memoryPlanAdapter } = await import("../../src/plan/memory-plan-adapter");
+    const adapter = memoryPlanAdapter();
+
+    mockRunFn = async () => {
+      await adapter.write(
+        "cyclic-plan",
+        [
+          "# Plan",
+          "## Steps",
+          "- A: Build the first piece",
+          "- B: Build the second piece",
+          "## Dependencies",
+          "- A depends on B",
+          "- B depends on A",
+        ].join("\n"),
+      );
+      return { type: "stop" };
+    };
+
+    let caught: unknown;
+    try {
+      await runPlan("Generate a cyclic test plan", {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        planSubAdapter: adapter,
+        planId: "cyclic-plan",
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(PlanValidationFailedError.isInstance(caught)).toBe(true);
+    if (!PlanValidationFailedError.isInstance(caught)) throw new Error("expected validation error");
+    expect(caught.name).toBe("PLAN_VALIDATION_FAILED");
+    expect(caught.data.code).toBe("PLAN_VALIDATION_FAILED");
+    expect(caught.data.message).toContain("Dependency cycle detected");
   });
 });

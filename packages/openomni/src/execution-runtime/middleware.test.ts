@@ -10,6 +10,9 @@ describe("buildWorkerMiddleware", () => {
   it("first registration is tool-guard with fail-closed policy", () => {
     const registrations = buildWorkerMiddleware({});
     const toolGuard = registrations[0];
+    if (toolGuard == null) {
+      throw new Error("expected tool-guard registration");
+    }
     expect(toolGuard.name).toBe("builtin:tool-guard");
     expect(toolGuard.failPolicy).toBe("fail-closed");
   });
@@ -35,6 +38,6 @@ describe("buildWorkerMiddleware", () => {
   it("passes permissions to tool-guard", () => {
     const permissions = { allowlist: ["tool:read"] };
     const registrations = buildWorkerMiddleware({ permissions });
-    expect(registrations[0].name).toBe("builtin:tool-guard");
+    expect(registrations[0]?.name).toBe("builtin:tool-guard");
   });
 });

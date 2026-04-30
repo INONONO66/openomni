@@ -8,10 +8,14 @@ import {
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import {
   AbortControllerRegistry,
+  MAX_ENTRY_AGE_MS,
   abort,
   get,
   register,
   remove,
+  startSweep,
+  stopSweep,
+  sweep,
 } from "../../src/subagent/abort-registry";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
@@ -41,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   createSpy.mockRestore();
   Storage.reset();
+  stopSweep();
   AbortControllerRegistry.clear();
 });
 
@@ -123,6 +128,99 @@ describe("AbortControllerRegistry — nested map structure", () => {
   it("abort is a no-op for non-existent session", () => {
     expect(() => abort("ghost-session")).not.toThrow();
     expect(() => abort("ghost-session", "ghost-run")).not.toThrow();
+  });
+});
+
+describe("AbortControllerRegistry — orphan sweep", () => {
+  it("removes aborted entries", () => {
+    const sessionId = crypto.randomUUID();
+    const entry = register(sessionId, "run-1");
+    register(sessionId, "run-2");
+    entry.controller.abort();
+
+    const removed = sweep();
+
+    expect(removed).toBe(1);
+    expect(get(sessionId, "run-1")).toBeUndefined();
+    expect(get(sessionId, "run-2")).toBeDefined();
+  });
+
+  it("removes entries older than maxAgeMs", () => {
+    const sessionId = crypto.randomUUID();
+    register(sessionId, "old-run");
+
+    // backdate the entry
+    const sessionMap = AbortControllerRegistry.get(sessionId)!;
+    const oldEntry = sessionMap.get("old-run")!;
+    (oldEntry as { createdAt: number }).createdAt = Date.now() - MAX_ENTRY_AGE_MS - 1;
+
+    register(sessionId, "fresh-run");
+
+    const removed = sweep();
+
+    expect(removed).toBe(1);
+    expect(get(sessionId, "old-run")).toBeUndefined();
+    expect(get(sessionId, "fresh-run")).toBeDefined();
+  });
+
+  it("cleans up empty session maps after sweep", () => {
+    const sessionId = crypto.randomUUID();
+    const entry = register(sessionId, "run-1");
+    entry.controller.abort();
+
+    sweep();
+
+    expect(AbortControllerRegistry.has(sessionId)).toBe(false);
+  });
+
+  it("returns zero when nothing to sweep", () => {
+    expect(sweep()).toBe(0);
+
+    const sessionId = crypto.randomUUID();
+    register(sessionId, "active-run");
+    expect(sweep()).toBe(0);
+  });
+
+  it("accepts custom maxAgeMs", () => {
+    const sessionId = crypto.randomUUID();
+    register(sessionId, "run-1");
+
+    // backdate by 5 seconds
+    const sessionMap = AbortControllerRegistry.get(sessionId)!;
+    const entry = sessionMap.get("run-1")!;
+    (entry as { createdAt: number }).createdAt = Date.now() - 5_000;
+
+    expect(sweep(10_000)).toBe(0);
+    expect(sweep(3_000)).toBe(1);
+  });
+
+  it("startSweep does not create multiple intervals", () => {
+    startSweep(60_000);
+    startSweep(60_000);
+    startSweep(60_000);
+
+    // no throw, idempotent — cleanup in afterEach
+  });
+
+  it("stopSweep is idempotent", () => {
+    stopSweep();
+    startSweep(60_000);
+    stopSweep();
+    stopSweep();
+    // no throw
+  });
+
+  it("periodic sweep removes stale entries via timer", async () => {
+    const sessionId = crypto.randomUUID();
+    const entry = register(sessionId, "run-1");
+    entry.controller.abort();
+
+    startSweep(50);
+
+    await new Promise((r) => setTimeout(r, 120));
+
+    expect(get(sessionId, "run-1")).toBeUndefined();
+    expect(AbortControllerRegistry.has(sessionId)).toBe(false);
   });
 });
 

@@ -204,8 +204,6 @@ describe("SubagentRuntime", () => {
   });
 
   describe("cancel", () => {
-    const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
-
     it("cancels a specific run by runId", async () => {
       const session = Session.create({
         title: "to-cancel",

@@ -117,4 +117,38 @@ describe("session mailbox", () => {
     ]);
     expect(race).toBe("timeout");
   });
+
+  it("rejects enqueue when queue is at MAX_QUEUE_DEPTH", async () => {
+    // Create a blocker to keep the first item running
+    let unblock: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+
+    // Start one item that will block
+    sendToMailbox(SESSION_A, () => blocker.then(() => "running"));
+
+    // Enqueue MAX_QUEUE_DEPTH items (these will be pending)
+    const MAX_QUEUE_DEPTH = 1000;
+    const promises: Promise<unknown>[] = [];
+    for (let i = 0; i < MAX_QUEUE_DEPTH; i++) {
+      promises.push(sendToMailbox(SESSION_A, async () => `item-${i}`));
+    }
+
+    // Try to enqueue one more — should be rejected
+    const overflow = sendToMailbox(SESSION_A, async () => "overflow");
+
+    // Verify the overflow promise rejects
+    const result = await Promise.allSettled([overflow]);
+    expect(result[0].status).toBe("rejected");
+    if (result[0].status === "rejected") {
+      expect(result[0].reason).toBeInstanceOf(Error);
+      expect(result[0].reason.message).toContain("Mailbox queue depth exceeded");
+    }
+
+    // Unblock and verify the queued items still process
+    unblock!();
+    const settledResults = await Promise.allSettled(promises);
+    expect(settledResults.every((r) => r.status === "fulfilled")).toBe(true);
+  });
 });
