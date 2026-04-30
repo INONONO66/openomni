@@ -9,6 +9,36 @@ describe("SessionRouting", () => {
     const second = SessionRouting.route(id, 4);
     expect(second).toBe(first);
     SessionRouting.complete(id);
+    SessionRouting.complete(id);
+  });
+
+  test("keeps same-session affinity until all concurrent routes complete", () => {
+    const ts = Date.now();
+    const preload = `ses_concurrent_preload_${ts}`;
+    const id = `ses_concurrent_${ts}`;
+    const blocker = `ses_concurrent_block_${ts}`;
+
+    const preloaded = SessionRouting.route(preload, 2);
+    const first = SessionRouting.route(id, 2);
+    const second = SessionRouting.route(id, 2);
+    expect(first).not.toBe(preloaded);
+    expect(second).toBe(first);
+
+    SessionRouting.complete(id);
+
+    SessionRouting.route(blocker, 2);
+
+    expect(SessionRouting.route(id, 2)).toBe(first);
+
+    SessionRouting.complete(id);
+    SessionRouting.complete(id);
+    SessionRouting.complete(preload);
+    SessionRouting.complete(blocker);
+
+    const reassigned = SessionRouting.route(id, 2);
+    expect(reassigned).not.toBe(first);
+
+    SessionRouting.complete(id);
   });
 
   test("different sessions can route to different workers", () => {

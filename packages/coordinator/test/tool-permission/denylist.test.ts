@@ -148,7 +148,11 @@ describe("logPermissionDecision — audit log", () => {
 
     const lines = readFileSync(auditPath, "utf-8").trim().split("\n").filter(Boolean);
     expect(lines.length).toBeGreaterThan(0);
-    const parsed = JSON.parse(lines[lines.length - 1]);
+    const lastLine = lines.at(-1);
+    if (lastLine == null) {
+      throw new Error("expected audit log entry");
+    }
+    const parsed = JSON.parse(lastLine);
     expect(parsed.tool).toBe("bash");
     expect(parsed.allowed).toBe(false);
     expect(parsed.tier).toBe("risk-default");
@@ -181,7 +185,11 @@ describe("logPermissionDecision — audit log", () => {
 
     if (existsSync(defaultAuditPath)) {
       const lines = readFileSync(defaultAuditPath, "utf-8").trim().split("\n").filter(Boolean);
-      const last = JSON.parse(lines[lines.length - 1]);
+      const lastLine = lines.at(-1);
+      if (lastLine == null) {
+        throw new Error("expected audit log entry");
+      }
+      const last = JSON.parse(lastLine);
       expect(last).toHaveProperty("tool");
       expect(last).toHaveProperty("allowed");
       expect(last).toHaveProperty("tier");

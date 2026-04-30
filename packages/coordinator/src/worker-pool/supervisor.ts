@@ -7,6 +7,7 @@ const MAX_RESTARTS_PER_WINDOW = 10;
 const RESTART_WINDOW_MS = 60_000;
 const MAX_BACKOFF_MS = 30_000;
 const WORKER_CONNECT_TIMEOUT_MS = 10_000;
+const MAX_DISPATCH_TIMEOUT_MS = 600_000;
 
 export type ToolCallParams = {
   runId: string;
@@ -76,7 +77,7 @@ export class WorkerSupervisor {
 
     while (Date.now() < deadline && !this.stopping && this.running) {
       if (!fs.existsSync(this.socketPath)) {
-        await new Promise<void>((r) => setTimeout(r, 100));
+        await new Promise<void>((r) => setTimeout(r, 250));
         continue;
       }
       try {
@@ -163,7 +164,7 @@ export class WorkerSupervisor {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (this.isReady()) return;
-      await new Promise<void>((r) => setTimeout(r, 50));
+      await new Promise<void>((r) => setTimeout(r, 200));
     }
     throw new Error(`worker ${this.id} not ready after ${timeoutMs}ms`);
   }
@@ -174,7 +175,10 @@ export class WorkerSupervisor {
       throw new Error(`worker ${this.id} not available`);
     }
     const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
-    const timeoutMs = Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000;
+    const timeoutMs = Math.min(
+      Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000,
+      MAX_DISPATCH_TIMEOUT_MS,
+    );
     return c.call("coordinator.spawn_run", { runId, ...params }, timeoutMs);
   }
 
