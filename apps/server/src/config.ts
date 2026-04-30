@@ -83,23 +83,23 @@ function resolve(raw: RawConfig): ServerConfig {
     server: {
       port: raw.server?.port ?? 3000,
       host: raw.server?.host ?? "127.0.0.1",
-      wsToken: process.env.WS_AUTH_TOKEN ?? raw.server?.wsToken,
+      wsToken: process.env.WS_AUTH_TOKEN?.trim() || raw.server?.wsToken,
     },
     storage: {
       dbPath: raw.storage?.dbPath ?? defaultDbPath,
     },
     telegram: {
-      token: process.env.TELEGRAM_BOT_TOKEN ?? raw.telegram?.token,
+      token: process.env.TELEGRAM_BOT_TOKEN?.trim() || raw.telegram?.token,
       allowedUsers: raw.telegram?.allowedUsers ?? [],
     },
     github: {
-      secret: process.env.GITHUB_WEBHOOK_SECRET ?? raw.github?.secret,
+      secret: process.env.GITHUB_WEBHOOK_SECRET?.trim() || raw.github?.secret,
       token: raw.github?.token,
       botUsername: raw.github?.botUsername,
       allowedUsers: raw.github?.allowedUsers ?? [],
     },
     discord: {
-      token: process.env.DISCORD_BOT_TOKEN ?? raw.discord?.token,
+      token: process.env.DISCORD_BOT_TOKEN?.trim() || raw.discord?.token,
       allowedUsers: raw.discord?.allowedUsers ?? [],
     },
   };
