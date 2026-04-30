@@ -55,8 +55,14 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
   return skills;
 }
 
+const discoverCache = new Map<string, SkillMeta[]>();
+
 export namespace SkillLoader {
   export function discover(workspaceRoot: string, globalConfigDir?: string): SkillMeta[] {
+    const key = `${workspaceRoot}\0${globalConfigDir === undefined ? "\0undef" : globalConfigDir}`;
+    const cached = discoverCache.get(key);
+    if (cached) return cached;
+
     const projectOpenomniDir = findUp(".openomni", workspaceRoot);
     const projectSkills = projectOpenomniDir
       ? loadSkillsFromDir(join(projectOpenomniDir, "skills"))
@@ -75,7 +81,9 @@ export namespace SkillLoader {
       }
     }
 
-    return merged.slice(0, MAX_SKILLS);
+    const result = merged.slice(0, MAX_SKILLS);
+    discoverCache.set(key, result);
+    return result;
   }
 
   export function format(skills: SkillMeta[]): string {
@@ -88,5 +96,9 @@ export namespace SkillLoader {
     lines.push("");
 
     return lines.join("\n");
+  }
+
+  export function _resetCache(): void {
+    discoverCache.clear();
   }
 }

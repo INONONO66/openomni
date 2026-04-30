@@ -67,7 +67,7 @@ export namespace BackgroundOutputTool {
       if (block && (task.status === "running" || task.status === "pending")) {
         const deadline = Date.now() + Math.min(timeout ?? 60000, 300000);
         while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 500));
           const current = options?.backgroundManager?.getTask(taskId);
           if (current && current.status !== "running" && current.status !== "pending") break;
         }

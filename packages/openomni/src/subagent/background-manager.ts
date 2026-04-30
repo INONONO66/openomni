@@ -1,5 +1,6 @@
 import { type Message, Subagent } from "@openomni/protocol";
 import { Bus, Log, Session } from "@openomni/session";
+import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
 import { SubagentRuntime } from "./runtime.js";
 
@@ -88,6 +89,7 @@ export const BackgroundManager = {
     }
 
     const cleanupInterval = setInterval(cleanup, 60_000);
+    startSweep();
 
     function drainQueue(): void {
       while (pendingQueue.length > 0 && activeCount < maxConcurrentTotal) {
@@ -396,7 +398,10 @@ export const BackgroundManager = {
         pending: pendingQueue.length,
         total: tasks.size,
       }),
-      dispose: () => clearInterval(cleanupInterval),
+      dispose: () => {
+        clearInterval(cleanupInterval);
+        stopSweep();
+      },
     };
   },
 };

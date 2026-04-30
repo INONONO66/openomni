@@ -24,7 +24,7 @@ export class GitHubAdapter implements Adapter.Surface {
     private readonly secret: string,
     readonly config: Adapter.Config,
     githubToken?: string,
-    private readonly botUsername?: string,
+    botUsername?: string,
   ) {
     this.client = new GitHubClient(githubToken);
     this.normalizer = new GitHubNormalizer({
@@ -51,7 +51,8 @@ export class GitHubAdapter implements Adapter.Surface {
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
     const parsed = SurfaceKey.parse(surfaceKey);
     const repo = parsed.namespace;
-    const issueNumber = parseInt((parsed.id ?? "").split("-")[1]);
+    const [, issueId] = (parsed.id ?? "").split("-");
+    const issueNumber = Number.parseInt(issueId ?? "", 10);
 
     if (Number.isNaN(issueNumber)) {
       Log.error("github invalid surface key", { surfaceKey });

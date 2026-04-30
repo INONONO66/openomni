@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
+import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
   defaultRunFn,
@@ -100,7 +101,7 @@ describe("IngressEngine", () => {
         id: "invalid-1",
         surface: "tui",
         payload: "hello",
-      } as unknown as InboundEvent),
+      } as unknown as Ingress.InboundEvent),
     ).rejects.toThrow();
   });
 
@@ -176,5 +177,39 @@ describe("IngressEngine", () => {
     });
 
     expect(first.sessionId).not.toBe(second.sessionId);
+  });
+
+  it("ingest() with unknown mode throws UNKNOWN_INGRESS_MODE error", async () => {
+    // Create an event with an unknown mode
+    const event: Ingress.InboundEvent = {
+      id: "event-unknown-1",
+      surface: "tui",
+      workspace: "/repo",
+      mode: "unknown-mode",
+      payload: "test",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    } as unknown as Ingress.InboundEvent;
+
+    // Mock the schema parse to allow the unknown mode through so we can test the switch default case
+    const originalParse = IngressNamespace.InboundEventSchema.parse;
+    IngressNamespace.InboundEventSchema.parse = (input: unknown) => input as Ingress.InboundEvent;
+
+    try {
+      let caughtError: unknown;
+      try {
+        await IngressEngine.ingest(event);
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(Error);
+      expect((caughtError as Error).message).toContain("unknown ingress mode");
+      expect((caughtError as Error).message).toContain("unknown-mode");
+    } finally {
+      // Restore original parse behavior
+      IngressNamespace.InboundEventSchema.parse = originalParse;
+    }
   });
 });

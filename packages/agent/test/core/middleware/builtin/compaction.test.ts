@@ -73,15 +73,18 @@ describe("createCompactionMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("transform");
-    expect((verdict as any).input).toBeDefined();
-    expect((verdict as any).input.messages).toBeDefined();
-    expect((verdict as any).input.messages.length).toBeLessThan(messages.length);
+    const v = verdict as Record<string, unknown>;
+    expect(v.input).toBeDefined();
+    expect((v.input as Record<string, unknown>).messages).toBeDefined();
+    expect(((v.input as Record<string, unknown>).messages as unknown[]).length).toBeLessThan(
+      messages.length,
+    );
   });
 
   it("emits compaction event when compacting", async () => {
-    const events: any[] = [];
+    const events: Array<{ name: string; data: unknown }> = [];
     const mockEmitter = {
-      emit: (name: string, data: any) => {
+      emit: (name: string, data: unknown) => {
         events.push({ name, data });
       },
     };
@@ -96,7 +99,7 @@ describe("createCompactionMiddleware", () => {
     const ctx = baseCtx({
       messages,
       budgetState: { turns: 1, totalInputTokens: 7000, totalOutputTokens: 1000 },
-      eventEmitter: mockEmitter as any,
+      eventEmitter: mockEmitter as unknown as Parameters<typeof baseCtx>[0]["eventEmitter"],
     });
 
     const verdict = await middleware.fn(ctx);

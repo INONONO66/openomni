@@ -80,12 +80,29 @@ describe("Todo.get", () => {
 });
 
 describe("Todo.update", () => {
-  it("throws when todo storage is not configured", async () => {
+  it("returns gracefully when todo storage is not configured", async () => {
     const adapter = Storage.get();
     const noTodoAdapter = { ...adapter, todo: undefined };
     Storage.configure(noTodoAdapter);
 
-    await expect(Todo.update("sess-1", [])).rejects.toThrow("Todo storage not configured");
+    await expect(Todo.update("sess-1", [])).resolves.toBeUndefined();
+  });
+
+  it("does not publish bus event when todo storage is not configured", async () => {
+    const adapter = Storage.get();
+    const noTodoAdapter = { ...adapter, todo: undefined };
+    Storage.configure(noTodoAdapter);
+
+    const received: { sessionId: string; todos: TodoProtocol.Info[] }[] = [];
+    Bus.subscribe(TodoProtocol.Updated, (data) => received.push(data));
+
+    const todos = [makeTodo()];
+    await Todo.update("sess-1", todos);
+
+    // Bus.publish dispatches via queueMicrotask
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(received).toHaveLength(0);
   });
 
   it("persists todos and they are retrievable via get", async () => {

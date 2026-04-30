@@ -28,6 +28,11 @@ describe("context barrel export", () => {
     expect(typeof mod.findUp).toBe("function");
   });
 
+  it("exports _resetFindUpCache", async () => {
+    const mod = await import("../../src/context/index");
+    expect(typeof mod._resetFindUpCache).toBe("function");
+  });
+
   it("exports InstructionLoader", async () => {
     const mod = await import("../../src/context/index");
     expect(typeof mod.InstructionLoader).toBe("object");

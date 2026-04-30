@@ -86,13 +86,6 @@ function createAssistantMessage(text: string): Message.WithParts {
   return { info, parts: [textPart] };
 }
 
-function setupMockResponse(text: string) {
-  mockRunFn = async (_input: MockRunInput, sink: Sink) => {
-    sink.onMessage(createAssistantMessage(text));
-    return { type: "stop" } as Run.Outcome;
-  };
-}
-
 beforeEach(() => {
   mockRunFn = async () => ({ type: "stop" }) as Run.Outcome;
   mockModelsGet.mockClear();
@@ -239,12 +232,12 @@ describe("PlanAgent.create", () => {
     const agent = PlanAgent.create({ model: MODEL });
 
     const sink: Sink = {
-      onMessage: () => {},
-      onToolCall: () => {},
+      onMessage: () => undefined,
+      onToolCall: () => undefined,
       onToolResult: (result) => {
         toolResultOutput = result.output;
       },
-      onSnapshot: () => {},
+      onSnapshot: () => undefined,
     };
 
     const result = await agent.run({ messages: [{ role: "user", content: "test" }] }, sink);

@@ -59,7 +59,9 @@ describe("EventLog with SQLite adapter", () => {
     Storage.reset();
     try {
       adapter.close();
-    } catch {}
+    } catch {
+      /* db may already be closed */
+    }
     unlinkSync(dbPath);
   });
 

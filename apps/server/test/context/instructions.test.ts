@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { InstructionLoader } from "../../src/context/instructions";
+import { _resetFindUpCache } from "../../src/context/find-up";
 
 let tempRoot: string;
 
@@ -173,5 +174,61 @@ describe("InstructionLoader.load", () => {
     expect(betaPos).toBeGreaterThanOrEqual(0);
     expect(alphaPos).toBeLessThan(betaPos);
     expect(result).toContain("---");
+  });
+});
+
+describe("InstructionLoader caching", () => {
+  afterEach(() => {
+    InstructionLoader._resetCache();
+    _resetFindUpCache();
+  });
+
+  it("discover returns cached result on repeated calls", () => {
+    const ws = makeWorkspace("cache-discover");
+    writeFileSync(join(ws, "AGENTS.md"), "# Original");
+
+    const first = InstructionLoader.discover(ws, ws);
+    const second = InstructionLoader.discover(ws, ws);
+    expect(second).toBe(first);
+  });
+
+  it("discover returns stale result after file deletion until cache reset", () => {
+    const ws = makeWorkspace("cache-stale-discover");
+    const agentsPath = join(ws, "AGENTS.md");
+    writeFileSync(agentsPath, "# Will be deleted");
+
+    const first = InstructionLoader.discover(ws, ws);
+    expect(first.some((f) => f.label === "Project")).toBe(true);
+
+    unlinkSync(agentsPath);
+
+    const cached = InstructionLoader.discover(ws, ws);
+    expect(cached.some((f) => f.label === "Project")).toBe(true);
+
+    InstructionLoader._resetCache();
+    _resetFindUpCache();
+
+    const fresh = InstructionLoader.discover(ws, ws);
+    expect(fresh.some((f) => f.label === "Project")).toBe(false);
+  });
+
+  it("load returns cached result on repeated calls with same files", () => {
+    const ws = makeWorkspace("cache-load");
+    const filePath = join(ws, "test.md");
+    writeFileSync(filePath, "Content A");
+
+    const files = [{ path: filePath, priority: 0, label: "Test" }];
+    const first = InstructionLoader.load(files);
+    expect(first).toContain("Content A");
+
+    writeFileSync(filePath, "Content B");
+
+    const cached = InstructionLoader.load(files);
+    expect(cached).toContain("Content A");
+
+    InstructionLoader._resetCache();
+
+    const fresh = InstructionLoader.load(files);
+    expect(fresh).toContain("Content B");
   });
 });

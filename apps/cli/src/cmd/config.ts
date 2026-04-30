@@ -198,5 +198,5 @@ export const ConfigCommand: CommandModule = {
       .command(ConfigListCommand)
       .command(ConfigRemoveCommand)
       .demandCommand(1, "Run a subcommand. Try --help for usage."),
-  handler: () => {},
+  handler: () => undefined,
 };

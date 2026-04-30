@@ -56,16 +56,14 @@ export namespace ProviderTransform {
     return undefined;
   }
 
-  export function topP(model: Provider.Model): number | undefined {
-    const id = model.id.toLowerCase();
+  export function topP(_model: Provider.Model): number | undefined {
     return undefined;
   }
 
-  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
+  export function variants(model: Provider.Model): Record<string, Record<string, unknown>> {
     if (!model.capabilities?.reasoning) return {};
 
     const npm = model.api?.npm;
-    const id = model.id.toLowerCase();
 
     if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       return {
@@ -143,7 +141,7 @@ export namespace ProviderTransform {
         }
         if (!Array.isArray(msg.content)) return msg;
 
-        const filtered = msg.content.filter((part: any) => {
+        const filtered = msg.content.filter((part: Record<string, unknown>) => {
           if (part.type === "text" || part.type === "reasoning") {
             return (part as { text: string }).text !== "";
           }
@@ -159,7 +157,7 @@ export namespace ProviderTransform {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           return {
             ...msg,
-            content: msg.content.map((part: any) => {
+            content: msg.content.map((part: Record<string, unknown>) => {
               if (
                 (part.type === "tool-call" || part.type === "tool-result") &&
                 "toolCallId" in part
@@ -189,7 +187,11 @@ export namespace ProviderTransform {
     const targets = new Set<number>();
     let found = 0;
     for (let i = msgs.length - 1; i >= 0 && found < 2; i--) {
-      const role = msgs[i].role;
+      const msg = msgs[i];
+      if (msg == null) {
+        continue;
+      }
+      const role = msg.role;
       if (role === "user" || role === "assistant") {
         targets.add(i);
         found++;

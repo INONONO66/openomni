@@ -180,7 +180,11 @@ describe("Execution", () => {
     expect(parsed.permissions?.denylist).toEqual(["delete_file"]);
     expect(parsed.permissions?.requireApproval).toEqual(["execute_command"]);
     expect(parsed.permissions?.inputRules).toHaveLength(1);
-    expect(parsed.permissions?.inputRules?.[0].toolPattern).toBe("write_file");
+    const [inputRule] = parsed.permissions?.inputRules ?? [];
+    if (inputRule == null) {
+      throw new Error("expected parsed input rule");
+    }
+    expect(inputRule.toolPattern).toBe("write_file");
   });
 
   test("ExecutionRequest with full AgentProfile.AgentBudget", () => {

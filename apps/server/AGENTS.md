@@ -2,7 +2,7 @@
 
 Hono server that hosts the orchestration layer and exposes it through external channels (Discord / Telegram / GitHub / WebSocket). This is where inbound messages actually run: bootstrap → channel adapter → routing handler → `IngressEngine.ingest()` → response back to the channel.
 
-Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`. Does **not** import from `@openomni/agent` directly — all agent work goes through `@openomni/openomni`'s `IngressEngine`.
+Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. The `execution/worker-entry.ts` and `bootstrap/local-runner.ts` import `ChatAgent` from `@openomni/agent` directly; `context/middleware.ts` and `agents/` also import agent types directly.
 
 ## STRUCTURE
 
@@ -11,11 +11,11 @@ src/
 ├── index.ts              # Entry — calls bootstrap/main()
 ├── config.ts             # loadConfig() — reads env / config files into ServerConfig
 ├── router.ts             # resolveAgentName() — per-message agent resolution (slash command, channel, default)
-├── routes.ts             # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, model, channels, server, recovery, shutdown
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
+│   ├── local-runner.ts   # LocalRunner.create() — in-process CoordinatorLike for OPENOMNI_MODE=local
 │   ├── providers.ts      # resolveModel() — picks a default LLM model from stored credentials
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
@@ -27,45 +27,60 @@ src/
 │   ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 │   ├── telegram/         # Telegram polling surface
 │   └── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
+├── context/
+│   ├── index.ts          # Barrel re-exports
+│   ├── assembler.ts      # ContextAssembler.assemble() — builds system prompt context from workspace
+│   ├── find-up.ts        # findUp() — walks up directory tree to locate config files
+│   ├── instructions.ts   # InstructionLoader — loads AGENTS.md / CLAUDE.md instruction files
+│   ├── mcp-config.ts     # McpConfigLoader.discover() / merge() — project-level MCP server config
+│   ├── middleware.ts      # createContextMiddleware() — on_system_prompt middleware that appends context
+│   └── skills.ts         # SkillLoader — loads skill definitions from workspace
+├── execution/
+│   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker pool wrapper
+│   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution, plan execution
+│   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
-│   ├── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls IngressEngine
-│   └── surface-store.ts  # Per-surface routing memory
+│   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls IngressEngine
 ├── ingress/
 │   ├── bridge.ts         # buildInboundEvent() — Adapter.InboundMessage → InboundEvent (+ tool selection, toolExecutor)
 │   └── mode.ts           # detectMode() — "/plan …" prefix → plan mode, else direct
 ├── agents/
+│   ├── index.ts          # createAllAgents() — builds the full agent registry map
 │   ├── registry.ts       # Per-server AgentDefinition registry (keyed by name)
 │   ├── types.ts          # AgentDefinition + factory types
 │   ├── model-resolution.ts # resolveRuntimeModel() — alias resolution for per-message models
-│   └── dev-agent/        # Default "dev" agent factory + prompt
+│   ├── dev-agent/        # Default "dev" agent factory + prompt
+│   └── plan-agent/       # Plan-mode agent definition + system prompt
 ├── tool/
-│   ├── index.ts          # Barrel
-│   ├── types.ts          # ToolProvider, NativeTool, ToolCategory, ToolRiskTier, ToolExecutorConfig
-│   ├── define.ts         # defineTool() helper + metadata resolution
-│   ├── executor.ts       # createToolExecutor() — permission + tier-based timeout wrapper
-│   ├── system/           # Tier 0–2: read / glob / grep / write / edit / bash
-│   ├── agent/            # Agent-category tools (subagent delegation)
-│   ├── mcp/              # MCP-backed tool provider
-│   ├── builtins/         # Shared tool primitives used across providers
-│   └── shared/           # Utilities shared between tool providers
-├── filesystem/           # Workspace-scoped filesystem helpers (used by system tools)
-├── shared/               # Cross-module helpers
-└── server/               # Low-level Hono wiring (consumed by routes.ts)
+│   ├── custom/           # CustomToolProvider — user-defined tool provider
+│   └── mcp/              # McpToolProvider — MCP-backed tool provider
+├── server/
+│   └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
+└── shared/               # Cross-module helpers (chunk-text, dedupe, fetch-retry, sleep, trigger)
 ```
 
 ## BOOT SEQUENCE (`bootstrap/index.ts`)
 
+Two execution modes are selected by `OPENOMNI_MODE` env var:
+
+**Coordinator mode** (default):
 1. `loadConfig()` — read env + config files.
 2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
-3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`.
+3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`, `TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` — pick a default model from stored credentials (if any).
-6. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, defaultModel, workspaceRoot })`.
-7. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket with their trigger rules and delivery policies.
-8. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
-9. Start each channel (`channel.start()` in parallel).
-10. `runRecovery(routingHandler)` — resume sessions that were busy before last shutdown.
-11. `installShutdownHandlers({ channels, server, mcpProvider })` — graceful stop on SIGINT / SIGTERM.
+6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP, task, plan, and todo tools.
+7. `IngressEngine.setCoordinator(coordinator)`.
+8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, taskProvider, planProvider, todoProvider, defaultModel, workspaceRoot })`.
+9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
+10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
+11. Start each channel (`channel.start()` in parallel).
+12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
+13. `installShutdownHandlers({ channels, server, mcpProvider, coordinator })` — graceful stop on SIGINT / SIGTERM.
+
+**Local mode** (`OPENOMNI_MODE=local`):
+- Skips worker pool; uses `LocalRunner.create(...)` as the `CoordinatorLike`.
+- `LocalRunner` runs `ChatAgent` in-process via `bootstrap/local-runner.ts`.
 
 ## MESSAGE FLOW
 
@@ -90,19 +105,21 @@ Adapter.InboundMessage
 
 Errors bubble up as `Error: {message}` strings back to the channel so operators can see failures instead of silent drops.
 
-## TOOL SYSTEM (3 CATEGORIES)
+## TOOL SYSTEM
 
-`ToolCategory = "system" | "agent" | "mcp"` — defined in `tool/types.ts`.
+Tool providers are assembled in `bootstrap/index.ts` and passed through to the routing handler and worker pool:
 
-| Category | Tier | Examples | Notes |
-| --- | --- | --- | --- |
-| `system` | 0 (read-only) | `read`, `glob`, `grep` | Tier 0 timeout: 30s default |
-| `system` | 1 (local write) | `write`, `edit` | Tier 1 timeout: 30s default |
-| `system` | 2 (bash) | `bash` | Logged; future human-approval gate |
-| `agent` | — | `subagent` | Delegates via `@openomni/openomni` SubagentRuntime / BackgroundManager |
-| `mcp` | — | configured MCP tools | One provider per MCP connection |
+| Provider | Source | Notes |
+| --- | --- | --- |
+| `SystemToolProvider` | `@openomni/openomni` | read / glob / grep / write / edit / bash |
+| `AgentToolProvider` | `@openomni/openomni` | subagent delegation tools |
+| `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
+| `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
+| `TaskToolProvider` | `@openomni/openomni` | task management tools |
+| `PlanToolProvider` | `@openomni/openomni` | plan-mode tools |
+| `TodoToolProvider` | `@openomni/openomni` | todo list tools |
 
-`createToolExecutor({ tools, config })` dispatches by sanitized name (periods → underscores), enforces `Guardrail.ToolPermission`, applies a tier-based timeout (`tier0/tier1/tier2` overridable in config), and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
+`createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Guardrail.ToolPermission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
 
 ## CHANNELS
 
@@ -116,23 +133,33 @@ Errors bubble up as `Error: {message}` strings back to the channel so operators 
 Add a new channel by:
 1. Creating an adapter under `src/channel/{name}/` implementing `Adapter.Surface` (or wrap an existing SDK).
 2. Registering it in `bootstrap/channels.ts` behind a config flag.
-3. Surfacing it over HTTP in `routes.ts` if it needs a webhook endpoint.
+3. Surfacing it over HTTP in `server/routes.ts` if it needs a webhook endpoint.
 
 ## AGENT REGISTRY
 
 - `apps/server/src/agents/registry.ts` is a **server-local** agent registry (keyed by name) distinct from the `AgentRegistry` inside `@openomni/agent`.
-- Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools: { system, agent, mcp }` (selection flags or allowlists), optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
+- Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
-- `apps/server/src/agents/plan-agent/` provides a plan-specific agent definition (`index.ts`) and system prompt (`prompt.ts`) for plan mode execution.
+- `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
+- `apps/server/src/agents/plan-agent/` provides a plan-specific agent definition and system prompt for plan mode execution.
+
+## CONTEXT SYSTEM
+
+`src/context/` assembles the system prompt context injected into each agent run:
+
+- `ContextAssembler.assemble({ workspaceRoot })` — reads AGENTS.md, CLAUDE.md, skill files, and MCP config from the workspace tree.
+- `createContextMiddleware(config)` — wraps the assembler as an `on_system_prompt` middleware registration for `ChatAgent`.
+- `McpConfigLoader.discover(root)` / `merge(...)` — finds and merges project-level MCP server configs.
+- `InstructionLoader` / `SkillLoader` — load instruction and skill files from the workspace.
 
 ## ANTI-PATTERNS
 
-- **Direct `@openomni/agent` imports**: server → openomni → agent. Never import `ChatAgent` / `SubagentTool` / etc. directly in this app; go through `IngressEngine`.
 - **Bypassing `createMessageHandler`**: all message handling should flow through the per-surface FIFO queue so one surface cannot interleave runs.
 - **New channel logic in `apps/cli`**: CLI is intentionally minimal (auth + config). All channel work lives here.
-- **Ad-hoc tool permission logic**: if a new policy is needed, extend `Guardrail.ToolPermission` and enforce it inside `createToolExecutor`, not inside individual tools.
+- **Ad-hoc tool permission logic**: if a new policy is needed, extend `Guardrail.ToolPermission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
 
 ## KNOWN TECH DEBT
 
 - `recovery.ts` is a thin wrapper around `bootstrap/recovery.ts` — consolidate when the recovery model stabilizes.
 - `resolveRuntimeModel` currently resolves aliases per message; caching is a future optimization once usage patterns are clearer.
+- `execution/worker-entry.ts` is large and handles both direct and plan modes inline; extracting mode handlers would improve readability.

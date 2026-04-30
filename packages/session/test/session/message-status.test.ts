@@ -41,7 +41,9 @@ describe("message status tracking", () => {
     adapter.close();
     try {
       unlinkSync(dbPath);
-    } catch (_) {}
+    } catch {
+      /* expected */
+    }
     Storage.reset();
   });
 

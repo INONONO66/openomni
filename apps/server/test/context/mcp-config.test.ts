@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -107,5 +107,47 @@ describe("McpConfigLoader.merge", () => {
 
   it("returns global servers when project is empty", () => {
     expect(McpConfigLoader.merge(globalServers, [])).toEqual(globalServers);
+  });
+});
+
+describe("McpConfigLoader caching", () => {
+  afterEach(() => McpConfigLoader._resetCache());
+
+  it("discover returns cached result on repeated calls", () => {
+    const dir = join(tempRoot, "cache-repeat");
+    const openomniDir = join(dir, ".openomni");
+    mkdirSync(openomniDir, { recursive: true });
+    writeFileSync(
+      join(openomniDir, "mcp.json"),
+      JSON.stringify([{ name: "s1", transport: "stdio", command: "node" }]),
+    );
+
+    const first = McpConfigLoader.discover(dir);
+    const second = McpConfigLoader.discover(dir);
+    expect(second).toEqual(first);
+    expect(first).toHaveLength(1);
+  });
+
+  it("discover caches null for missing config", () => {
+    const dir = join(tempRoot, "cache-null");
+    mkdirSync(dir, { recursive: true });
+
+    const first = McpConfigLoader.discover(dir);
+    expect(first).toBeNull();
+
+    // create config after initial call — still returns null from cache
+    mkdirSync(join(dir, ".openomni"), { recursive: true });
+    writeFileSync(
+      join(dir, ".openomni", "mcp.json"),
+      JSON.stringify([{ name: "late", transport: "stdio" }]),
+    );
+
+    const cached = McpConfigLoader.discover(dir);
+    expect(cached).toBeNull();
+
+    McpConfigLoader._resetCache();
+
+    const fresh = McpConfigLoader.discover(dir);
+    expect(fresh).toHaveLength(1);
   });
 });

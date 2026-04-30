@@ -532,8 +532,7 @@ export async function* handleStop(
   };
 
   if (postTurnVerdict.action === "inject") {
-    const parentID =
-      state.messages.length > 0 ? state.messages[state.messages.length - 1].info.id : "";
+    const parentID = state.messages.at(-1)?.info.id ?? "";
     state.messages.push(
       createAssistantMessage(state.lastAssistantText, parentID, "stream-engine"),
       createUserMessage(postTurnVerdict.message, "stream-engine"),

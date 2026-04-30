@@ -22,10 +22,13 @@ function makeTool(name: string): NativeTool {
 }
 
 function makeRuntime(selection: ToolSelection.Selection) {
-  const tools = [makeTool("read"), makeTool("bash"), makeTool("subagent")];
+  const readTool = makeTool("read");
+  const bashTool = makeTool("bash");
+  const subagentTool = makeTool("subagent");
+  const tools = [readTool, bashTool, subagentTool];
   const catalog = buildToolCatalog([
-    { tools: [tools[0], tools[1]], source: "system" as const },
-    { tools: [tools[2]], source: "agent" as const },
+    { tools: [readTool, bashTool], source: "system" as const },
+    { tools: [subagentTool], source: "agent" as const },
   ]);
   const definitions = new Map<string, WorkerBootstrap.RuntimeAgentDefinition>([
     [

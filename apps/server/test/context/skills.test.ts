@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SkillLoader, type SkillMeta } from "../../src/context/skills";
+import { _resetFindUpCache } from "../../src/context/find-up";
 
 let tempRoot: string;
 let emptyGlobalDir: string;
@@ -203,5 +204,43 @@ describe("SkillLoader.format", () => {
     expect(result).toContain("beta");
     expect(result).toContain("Alpha skill");
     expect(result).toContain("Beta skill");
+  });
+});
+
+describe("SkillLoader caching", () => {
+  afterEach(() => {
+    SkillLoader._resetCache();
+    _resetFindUpCache();
+  });
+
+  it("discover returns cached result on repeated calls", () => {
+    const ws = realpathSync(mkdtempSync(join(tempRoot, "cache1-")));
+    const skillsDir = makeWorkspace(ws);
+    writeSkill(skillsDir, "cached-skill", "---\nname: cached-skill\ndescription: Cached\n---");
+
+    const first = SkillLoader.discover(ws, emptyGlobalDir);
+    const second = SkillLoader.discover(ws, emptyGlobalDir);
+    expect(second).toBe(first);
+    expect(first).toHaveLength(1);
+  });
+
+  it("discover returns stale result after skill added until cache reset", () => {
+    const ws = realpathSync(mkdtempSync(join(tempRoot, "cache2-")));
+    const skillsDir = makeWorkspace(ws);
+    writeSkill(skillsDir, "original", "---\nname: original\ndescription: First\n---");
+
+    const first = SkillLoader.discover(ws, emptyGlobalDir);
+    expect(first).toHaveLength(1);
+
+    writeSkill(skillsDir, "added", "---\nname: added\ndescription: Second\n---");
+
+    const cached = SkillLoader.discover(ws, emptyGlobalDir);
+    expect(cached).toHaveLength(1);
+
+    SkillLoader._resetCache();
+    _resetFindUpCache();
+
+    const fresh = SkillLoader.discover(ws, emptyGlobalDir);
+    expect(fresh).toHaveLength(2);
   });
 });

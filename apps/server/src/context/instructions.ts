@@ -13,8 +13,15 @@ export interface InstructionFile {
   label: string;
 }
 
+const discoverCache = new Map<string, InstructionFile[]>();
+const loadCache = new Map<string, string>();
+
 export namespace InstructionLoader {
   export function discover(workspaceRoot: string, globalConfigDir?: string): InstructionFile[] {
+    const key = `${workspaceRoot}\0${globalConfigDir ?? ""}`;
+    const cached = discoverCache.get(key);
+    if (cached) return cached;
+
     const results: InstructionFile[] = [];
 
     const globalDir = globalConfigDir ?? join(homedir(), ".openomni");
@@ -46,11 +53,17 @@ export namespace InstructionLoader {
       results.push({ path: localPath, priority: 20, label: "Local" });
     }
 
-    return results.sort((a, b) => a.priority - b.priority);
+    const sorted = results.sort((a, b) => a.priority - b.priority);
+    discoverCache.set(key, sorted);
+    return sorted;
   }
 
   export function load(files: InstructionFile[]): string {
     if (files.length === 0) return "";
+
+    const key = files.map((f) => f.path).join("\0");
+    const cached = loadCache.get(key);
+    if (cached !== undefined) return cached;
 
     let output = "";
 
@@ -80,6 +93,12 @@ export namespace InstructionLoader {
       output += section;
     }
 
+    loadCache.set(key, output);
     return output;
+  }
+
+  export function _resetCache(): void {
+    discoverCache.clear();
+    loadCache.clear();
   }
 }

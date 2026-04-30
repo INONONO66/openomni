@@ -20,10 +20,14 @@ const parseRef = (ref: string): ParsedRef | null => {
   if (!match) {
     return null;
   }
+  const [, lineNumber, expectedHash] = match;
+  if (lineNumber == null || expectedHash == null) {
+    return null;
+  }
 
   return {
-    lineNumber: Number(match[1]),
-    expectedHash: match[2],
+    lineNumber: Number(lineNumber),
+    expectedHash,
   };
 };
 
@@ -45,14 +49,14 @@ export namespace Hashline {
     const normalized = normalize(content);
 
     if (normalized.length === 0) {
-      const char1 = ALPHABET[lineNumber & 0xf];
-      const char2 = ALPHABET[(lineNumber >>> 4) & 0xf];
+      const char1 = ALPHABET.charAt(lineNumber & 0xf);
+      const char2 = ALPHABET.charAt((lineNumber >>> 4) & 0xf);
       return `${char1}${char2}`;
     }
 
     const n = hasher(normalized, lineNumber) >>> 0;
-    const char1 = ALPHABET[n & 0xf];
-    const char2 = ALPHABET[(n >>> 4) & 0xf];
+    const char1 = ALPHABET.charAt(n & 0xf);
+    const char2 = ALPHABET.charAt((n >>> 4) & 0xf);
     return `${char1}${char2}`;
   };
 

@@ -1,4 +1,4 @@
-export { findUp } from "./find-up";
+export { findUp, _resetFindUpCache } from "./find-up";
 export { InstructionLoader } from "./instructions";
 export type { InstructionFile } from "./instructions";
 export { SkillLoader } from "./skills";

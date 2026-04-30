@@ -15,7 +15,6 @@ const ProxyAuth = z.object({
 });
 
 const Info = z.discriminatedUnion("type", [ApiAuth, ProxyAuth]);
-type Info = z.infer<typeof Info>;
 
 const getAuthFilePath = () => {
   if (process.env.OPENOMNI_AUTH_FILE) {

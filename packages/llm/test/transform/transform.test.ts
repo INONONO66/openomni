@@ -71,15 +71,15 @@ describe("ProviderTransform.normalizeMessages", () => {
   });
 
   test("anthropic removes message when all array parts are empty", () => {
-    const msgs: ModelMessage[] = [
+    const msgs = [
       {
-        role: "assistant",
+        role: "assistant" as const,
         content: [
           { type: "text", text: "" },
           { type: "reasoning", text: "" },
         ],
       },
-    ];
+    ] as ModelMessage[];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(0);
   });
@@ -100,7 +100,7 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    const part = (result[0].content as any[])[0];
+    const part = (result[0].content as Array<Record<string, unknown>>)[0];
     expect(part.toolCallId).toBe("call_with_dots_and_slashes");
   });
 
@@ -113,16 +113,13 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-result",
             toolCallId: "id@with#special$chars",
             toolName: "test",
-            output: {
-              type: "text",
-              value: "ok",
-            },
+            output: "ok",
           },
         ],
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    const part = (result[0].content as any[])[0];
+    const part = (result[0].content as Array<Record<string, unknown>>)[0];
     expect(part.toolCallId).toBe("id_with_special_chars");
   });
 
@@ -145,7 +142,7 @@ describe("ProviderTransform.normalizeMessages", () => {
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, nonClaudeAnthropicModel);
-    const part = (result[0].content as any[])[0];
+    const part = (result[0].content as Array<Record<string, unknown>>)[0];
     expect(part.toolCallId).toBe("call.with.dots");
   });
 
@@ -166,8 +163,8 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    expect((result[0].content as any[]).length).toBe(1);
-    expect((result[0].content as any[])[0].type).toBe("tool-call");
+    expect((result[0].content as unknown[]).length).toBe(1);
+    expect((result[0].content as Array<Record<string, unknown>>)[0].type).toBe("tool-call");
   });
 
   test("accepts Provider.Model directly", () => {
@@ -200,11 +197,13 @@ describe("ProviderTransform.variants", () => {
     };
     const v = ProviderTransform.variants(model);
     expect(v.high).toBeDefined();
-    expect(v.high.thinking.type).toBe("enabled");
-    expect(v.high.thinking.budgetTokens).toBe(15_999);
+    const highThinking = v.high.thinking as Record<string, unknown>;
+    expect(highThinking.type).toBe("enabled");
+    expect(highThinking.budgetTokens).toBe(15_999);
     expect(v.max).toBeDefined();
-    expect(v.max.thinking.type).toBe("enabled");
-    expect(v.max.thinking.budgetTokens).toBe(31_999);
+    const maxThinking = v.max.thinking as Record<string, unknown>;
+    expect(maxThinking.type).toBe("enabled");
+    expect(maxThinking.budgetTokens).toBe(31_999);
   });
 
   test("returns reasoning efforts for openai reasoning model", () => {
@@ -278,8 +277,8 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
     const result = ProviderTransform.applyAnthropicCaching(msgs);
 
     expect(result[0]).toEqual({ role: "system", content: "sys", ...EXPECTED_OPTS });
-    expect((result[1] as any).providerOptions).toBeUndefined();
-    expect((result[2] as any).providerOptions).toBeUndefined();
+    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect((result[2] as Record<string, unknown>).providerOptions).toBeUndefined();
     expect(result[3]).toEqual({ role: "user", content: "msg3", ...EXPECTED_OPTS });
     expect(result[4]).toEqual({ role: "assistant", content: "msg4", ...EXPECTED_OPTS });
   });
@@ -294,7 +293,7 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
       { role: "assistant", content: "done" },
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[1] as any).providerOptions).toBeUndefined();
+    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
     expect(result[0]).toEqual({ role: "user", content: "run tool", ...EXPECTED_OPTS });
     expect(result[2]).toEqual({ role: "assistant", content: "done", ...EXPECTED_OPTS });
   });
@@ -312,8 +311,12 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
       { role: "system", content: "sys2" },
     ];
     const result = ProviderTransform.applyAnthropicCaching(msgs);
-    expect((result[0] as any).providerOptions).toEqual(EXPECTED_OPTS.providerOptions);
-    expect((result[1] as any).providerOptions).toEqual(EXPECTED_OPTS.providerOptions);
+    expect((result[0] as Record<string, unknown>).providerOptions).toEqual(
+      EXPECTED_OPTS.providerOptions,
+    );
+    expect((result[1] as Record<string, unknown>).providerOptions).toEqual(
+      EXPECTED_OPTS.providerOptions,
+    );
   });
 });
 
@@ -327,12 +330,20 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "user", content: "hi" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    expect((result[0] as any).providerOptions?.anthropic?.cacheControl).toEqual({
-      type: "ephemeral",
-    });
-    expect((result[1] as any).providerOptions?.anthropic?.cacheControl).toEqual({
-      type: "ephemeral",
-    });
+    expect(
+      (
+        (result[0] as Record<string, unknown>).providerOptions as
+          | Record<string, Record<string, unknown>>
+          | undefined
+      )?.anthropic?.cacheControl,
+    ).toEqual({ type: "ephemeral" });
+    expect(
+      (
+        (result[1] as Record<string, unknown>).providerOptions as
+          | Record<string, Record<string, unknown>>
+          | undefined
+      )?.anthropic?.cacheControl,
+    ).toEqual({ type: "ephemeral" });
   });
 
   test("openai messages do not get cacheControl", () => {
@@ -341,8 +352,8 @@ describe("normalizeMessages applies caching for anthropic", () => {
       { role: "user", content: "hi" },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, openaiModel);
-    expect((result[0] as any).providerOptions).toBeUndefined();
-    expect((result[1] as any).providerOptions).toBeUndefined();
+    expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
+    expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
   });
 });
 
@@ -393,7 +404,7 @@ describe("ProviderTransform.resolveVariant", () => {
     const result = ProviderTransform.resolveVariant(model, "high");
     expect(result).toBeDefined();
     expect(result.thinking).toBeDefined();
-    expect(result.thinking.type).toBe("enabled");
+    expect((result.thinking as Record<string, unknown>).type).toBe("enabled");
   });
 
   test("resolveVariant with openai reasoning model and low variant", () => {

@@ -165,7 +165,7 @@ describe("Bus.subscribe match filter", () => {
 
   it("type safety: invalid keys in match are rejected at compile time", () => {
     const event = BusEvent.define<TestEvent>("test:type", TestEventSchema);
-    Bus.subscribe(event, () => {}, {
+    Bus.subscribe(event, () => undefined, {
       // @ts-expect-error - 'invalidKey' is not a key of TestEvent
       match: { invalidKey: "z" },
     });

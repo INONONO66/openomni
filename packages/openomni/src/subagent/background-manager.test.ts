@@ -74,7 +74,7 @@ describe("BackgroundStore — SQLite persistence", () => {
 
     const interrupted = BackgroundStore.loadInterrupted();
     expect(interrupted).toHaveLength(1);
-    expect(interrupted[0].id).toBe("bg_running");
+    expect(interrupted[0]?.id).toBe("bg_running");
   });
 
   it("getResult returns undefined for tasks still in running state", () => {

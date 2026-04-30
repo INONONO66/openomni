@@ -42,7 +42,11 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
     async dispatch(sessionId, runId, params) {
       const index = SessionRouting.route(sessionId, size);
       try {
-        return await workers[index].dispatch(runId, { sessionId, ...params });
+        const worker = workers[index];
+        if (worker == null) {
+          throw new Error(`Worker not found for route index ${index}`);
+        }
+        return await worker.dispatch(runId, { sessionId, ...params });
       } finally {
         SessionRouting.complete(sessionId);
       }

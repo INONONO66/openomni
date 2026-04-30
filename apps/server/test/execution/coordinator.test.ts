@@ -54,8 +54,12 @@ beforeEach(() => {
     getStats() {
       return { workers: 1, active: 1, idle: 0, ready: 1 };
     },
-    async waitUntilReady() {},
-    async shutdown() {},
+    async waitUntilReady() {
+      /* no-op */
+    },
+    async shutdown() {
+      /* no-op */
+    },
   };
 });
 
@@ -72,7 +76,7 @@ function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Requ
 
 describe("ExecutionCoordinator", () => {
   test("waitUntilReady delegates to the worker pool", async () => {
-    const waitUntilReady = mock(async () => {});
+    const waitUntilReady = mock(async () => undefined);
     mockWorkerPool.waitUntilReady = waitUntilReady;
 
     const coordinator = createExecutionCoordinator({

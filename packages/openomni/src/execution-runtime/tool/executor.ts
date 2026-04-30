@@ -14,6 +14,7 @@ const tierTimeouts: Record<number, number> = {
   2: 60_000,
   3: 120_000,
 };
+const DEFAULT_TIER_TIMEOUT_MS = 30_000;
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -74,7 +75,7 @@ function getTimeoutMs(riskTier: number, config: ToolExecutorConfig): number {
           ? config.timeoutMs?.tier2
           : undefined;
 
-  return configured ?? tierTimeouts[riskTier] ?? tierTimeouts[0];
+  return configured ?? tierTimeouts[riskTier] ?? DEFAULT_TIER_TIMEOUT_MS;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -85,7 +86,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
         reject(new Error(`timeout after ${ms}ms`));
       }, ms);
 
-      promise.finally(() => globalThis.clearTimeout(timer)).catch(() => undefined);
+      promise.then(
+        () => globalThis.clearTimeout(timer),
+        () => globalThis.clearTimeout(timer),
+      );
     }),
   ]);
 }

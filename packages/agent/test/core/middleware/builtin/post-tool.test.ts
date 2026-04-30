@@ -29,7 +29,9 @@ describe("createPostToolMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("transform");
-    expect((verdict as any).input.output).toBe("original output\nenrichment text");
+    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
+      "original output\nenrichment text",
+    );
   });
 
   it("enricher returns null → continue verdict", async () => {
@@ -97,7 +99,9 @@ describe("createPostToolMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("transform");
-    expect((verdict as any).input.output).toBe("enrichment text");
+    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
+      "enrichment text",
+    );
   });
 
   it("has priority 200", () => {
@@ -130,6 +134,8 @@ describe("createPostToolMiddleware", () => {
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.action).toBe("transform");
-    expect((verdict as any).input.output).toBe("original output\nasync enrichment");
+    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
+      "original output\nasync enrichment",
+    );
   });
 });

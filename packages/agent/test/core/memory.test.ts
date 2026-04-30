@@ -136,11 +136,11 @@ describe("ChatAgent memory integration", () => {
     const { ChatAgent } = await import("../../src/core/chat-agent");
 
     const mockMemory: Memory = {
-      store: async () => {},
+      store: async () => undefined,
       retrieve: async () => {
         return [{ key: "k1", content: "relevant context", score: 0.8 }];
       },
-      clear: async () => {},
+      clear: async () => undefined,
     };
 
     const agent = ChatAgent.create({
@@ -155,14 +155,14 @@ describe("ChatAgent memory integration", () => {
 
   it("mock memory retrieve returns expected format", async () => {
     const mockMemory: Memory = {
-      store: async () => {},
+      store: async () => undefined,
       retrieve: async (query: string) => {
         return [
           { key: "k1", content: `context for: ${query}`, score: 0.9 },
           { key: "k2", content: "secondary context", score: 0.5 },
         ];
       },
-      clear: async () => {},
+      clear: async () => undefined,
     };
 
     const results = await mockMemory.retrieve("test query");
