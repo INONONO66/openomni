@@ -1,7 +1,35 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { Log } from "@openomni/session";
 
-export function createRouter(githubWebhookHandler?: (req: Request) => Promise<Response>): Hono {
-  const app = new Hono();
+type Env = { Variables: { requestId: string } };
+
+export function createRouter(
+  githubWebhookHandler?: (req: Request) => Promise<Response>,
+): Hono<Env> {
+  const app = new Hono<Env>();
+
+  app.use("*", cors({ origin: "*" }));
+
+  app.use("*", async (c, next) => {
+    const requestId = crypto.randomUUID();
+    c.set("requestId", requestId);
+    c.header("X-Request-Id", requestId);
+    await next();
+  });
+
+  app.use("*", async (c, next) => {
+    const start = performance.now();
+    await next();
+    const duration = Math.round(performance.now() - start);
+    Log.info("http request", {
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      durationMs: duration,
+      requestId: c.get("requestId"),
+    });
+  });
 
   app.get("/health", (c) =>
     c.json({

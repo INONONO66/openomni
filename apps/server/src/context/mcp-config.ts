@@ -5,36 +5,49 @@ import type { ServerConfig } from "../config.js";
 
 type McpServerConfig = ServerConfig["mcp"]["servers"][number];
 
+const discoverCache = new Map<string, { result: McpServerConfig[] | null }>();
+
 export namespace McpConfigLoader {
   export function discover(workspaceRoot: string): McpServerConfig[] | null {
+    const cached = discoverCache.get(workspaceRoot);
+    if (cached) return cached.result;
+
     const configPath = join(workspaceRoot, ".openomni", "mcp.json");
-    if (!existsSync(configPath)) return null;
+    if (!existsSync(configPath)) {
+      discoverCache.set(workspaceRoot, { result: null });
+      return null;
+    }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
       Log.warn("failed to parse mcp config", { configPath });
+      discoverCache.set(workspaceRoot, { result: null });
       return null;
     }
 
+    let result: McpServerConfig[] | null;
+
     if (Array.isArray(parsed)) {
-      return parsed.filter(
+      result = parsed.filter(
         (e): e is McpServerConfig =>
           e !== null && typeof e === "object" && typeof (e as { name?: unknown }).name === "string",
       );
-    }
-    if (
+    } else if (
       parsed !== null &&
       typeof parsed === "object" &&
       "servers" in parsed &&
       Array.isArray((parsed as { servers: unknown }).servers)
     ) {
-      return (parsed as { servers: McpServerConfig[] }).servers;
+      result = (parsed as { servers: McpServerConfig[] }).servers;
+    } else {
+      Log.warn("unexpected format in mcp config", { configPath });
+      result = null;
     }
 
-    Log.warn("unexpected format in mcp config", { configPath });
-    return null;
+    discoverCache.set(workspaceRoot, { result });
+    return result;
   }
 
   export function merge(
@@ -49,5 +62,9 @@ export namespace McpConfigLoader {
     }
 
     return [...byName.values()];
+  }
+
+  export function _resetCache(): void {
+    discoverCache.clear();
   }
 }

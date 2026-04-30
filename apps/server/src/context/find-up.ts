@@ -3,7 +3,12 @@ import { dirname, resolve } from "node:path";
 
 const MAX_DEPTH = 10;
 
+const cache = new Map<string, string | undefined>();
+
 export function findUp(filename: string, startDir: string): string | undefined {
+  const key = `${filename}\0${startDir}`;
+  if (cache.has(key)) return cache.get(key);
+
   let currentDir = resolve(startDir);
   let depth = 0;
 
@@ -13,6 +18,7 @@ export function findUp(filename: string, startDir: string): string | undefined {
     try {
       const realPath = realpathSync(candidatePath);
       if (existsSync(realPath)) {
+        cache.set(key, realPath);
         return realPath;
       }
     } catch {
@@ -21,7 +27,6 @@ export function findUp(filename: string, startDir: string): string | undefined {
 
     const parentDir = dirname(currentDir);
     if (parentDir === currentDir) {
-      // Reached filesystem root
       break;
     }
 
@@ -29,5 +34,10 @@ export function findUp(filename: string, startDir: string): string | undefined {
     depth++;
   }
 
+  cache.set(key, undefined);
   return undefined;
+}
+
+export function _resetFindUpCache(): void {
+  cache.clear();
 }
