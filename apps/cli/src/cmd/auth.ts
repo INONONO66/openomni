@@ -89,6 +89,10 @@ const AuthLoginCommand: CommandModule = {
 
     const methods = provider.methods;
     let method = methods[0];
+    if (method == null) {
+      prompts.log.error("No login methods available");
+      return;
+    }
 
     if (methods.length > 1) {
       const selected = await prompts.select({
@@ -100,7 +104,7 @@ const AuthLoginCommand: CommandModule = {
         })),
       });
       if (prompts.isCancel(selected)) cancel();
-      method = methods.find((m) => m.id === selected) ?? methods[0];
+      method = methods.find((m) => m.id === selected) ?? method;
     }
 
     await method.run(createCallbacks());
@@ -166,5 +170,5 @@ export const AuthCommand: CommandModule = {
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .demandCommand(1, "Run a subcommand. Try --help for usage."),
-  handler: () => {},
+  handler: () => undefined,
 };

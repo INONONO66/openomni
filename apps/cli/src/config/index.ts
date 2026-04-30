@@ -1,9 +1,11 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { z } from "zod";
 
-const CONFIG_PATH = join(homedir(), ".openomni", "config.json");
+function getConfigPath(): string {
+  return process.env.OPENOMNI_CONFIG_PATH ?? join(homedir(), ".openomni", "config.json");
+}
 
 const AdaptersSchema = z
   .object({
@@ -55,9 +57,10 @@ export namespace Config {
   }
 
   export function load(): Adapters {
-    if (!existsSync(CONFIG_PATH)) return {};
+    const configPath = getConfigPath();
+    if (!existsSync(configPath)) return {};
     try {
-      const parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+      const parsed = JSON.parse(readFileSync(configPath, "utf-8"));
       const result = AdaptersSchema.safeParse(parsed);
       if (!result.success) {
         console.warn("[config] invalid config.json, ignoring:", result.error.message);
@@ -74,12 +77,13 @@ export namespace Config {
   }
 
   export function save(config: Adapters): void {
-    const dir = join(homedir(), ".openomni");
+    const configPath = getConfigPath();
+    const dir = dirname(configPath);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", {
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", {
       mode: 0o600,
     });
-    secureFile(CONFIG_PATH);
+    secureFile(configPath);
   }
 
   export function setAdapter<K extends keyof Adapters>(
