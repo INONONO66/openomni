@@ -6,7 +6,7 @@ const MAX_DEPTH = 10;
 const cache = new Map<string, string | undefined>();
 
 export function findUp(filename: string, startDir: string): string | undefined {
-  const key = `${filename}\0${startDir}`;
+  const key = `${filename}\0${resolve(startDir)}`;
   if (cache.has(key)) return cache.get(key);
 
   let currentDir = resolve(startDir);

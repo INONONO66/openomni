@@ -59,7 +59,7 @@ const discoverCache = new Map<string, SkillMeta[]>();
 
 export namespace SkillLoader {
   export function discover(workspaceRoot: string, globalConfigDir?: string): SkillMeta[] {
-    const key = `${workspaceRoot}\0${globalConfigDir ?? ""}`;
+    const key = `${workspaceRoot}\0${globalConfigDir === undefined ? "\0undef" : globalConfigDir}`;
     const cached = discoverCache.get(key);
     if (cached) return cached;
 

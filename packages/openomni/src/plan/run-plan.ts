@@ -163,7 +163,11 @@ function parseMarkdownPlan(planId: string, fallbackGoal: string, doc: StoredPlan
 }
 
 function parseStoredPlan(planId: string, goal: string, doc: StoredPlanDocument): unknown {
-  return extractJsonCandidate(doc.content) ?? parseMarkdownPlan(planId, goal, doc);
+  const json = extractJsonCandidate(doc.content);
+  if (json != null && typeof json === "object") {
+    return { planId, goal, ...json };
+  }
+  return parseMarkdownPlan(planId, goal, doc);
 }
 
 function validateStoredPlan(planId: string, goal: string, doc: StoredPlanDocument): void {
