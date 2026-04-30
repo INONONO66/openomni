@@ -68,8 +68,8 @@ export function sweep(maxAgeMs: number = MAX_ENTRY_AGE_MS): number {
 
   for (const [sessionId, sessionMap] of AbortControllerRegistry) {
     for (const [runId, entry] of sessionMap) {
-      const stale = entry.controller.signal.aborted && now - entry.createdAt >= maxAgeMs;
-      if (stale) {
+      const expired = now - entry.createdAt >= maxAgeMs;
+      if (entry.controller.signal.aborted || expired) {
         sessionMap.delete(runId);
         removed++;
       }
