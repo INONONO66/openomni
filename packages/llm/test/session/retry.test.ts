@@ -59,7 +59,6 @@ describe("Retry", () => {
 
     test("caps delay at RETRY_MAX_DELAY", async () => {
       const controller = new AbortController();
-      const start = Date.now();
       // Request a delay larger than RETRY_MAX_DELAY
       const promise = Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal);
 
@@ -68,7 +67,7 @@ describe("Retry", () => {
 
       try {
         await promise;
-      } catch (e) {
+      } catch {
         // Expected to abort
       }
     });
@@ -386,9 +385,7 @@ describe("Retry", () => {
     });
 
     test("uses default maxAttempts of 3", async () => {
-      let callCount = 0;
       const fn = async () => {
-        callCount++;
         throw new APIError({
           message: JSON.stringify({
             type: "error",

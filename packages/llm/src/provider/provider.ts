@@ -16,11 +16,11 @@ type SDK = ReturnType<typeof createAnthropic> | ReturnType<typeof createOpenAI>;
 const SDK_CACHE = new Map<string, SDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
 
-type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => any;
+type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, unknown>) => any;
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
-  options?: Record<string, any>;
+  options?: Record<string, unknown>;
 }
 
 const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {

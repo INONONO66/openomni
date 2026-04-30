@@ -135,7 +135,7 @@ export namespace Processor {
 
                   case "text-delta": {
                     if (currentText) {
-                      textPartMap[currentText.id].push(String(event.text || ""));
+                      (textPartMap[currentText.id] ??= []).push(String(event.text || ""));
                       if (event.providerMetadata) {
                         currentText.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -146,7 +146,7 @@ export namespace Processor {
 
                   case "text-end": {
                     if (currentText?.time) {
-                      currentText.text = textPartMap[currentText.id].join("").trimEnd();
+                      currentText.text = (textPartMap[currentText.id] ?? []).join("").trimEnd();
                       delete textPartMap[currentText.id];
                       currentText.time = {
                         start: currentText.time.start,
@@ -183,9 +183,9 @@ export namespace Processor {
 
                   case "reasoning-delta": {
                     const reasoningId = String(event.id);
-                    if (reasoningId in reasoningMap) {
-                      const part = reasoningMap[reasoningId];
-                      reasoningPartMap[part.id].push(String(event.text || ""));
+                    const part = reasoningMap[reasoningId];
+                    if (part != null) {
+                      (reasoningPartMap[part.id] ??= []).push(String(event.text || ""));
                       if (event.providerMetadata) {
                         part.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -196,12 +196,12 @@ export namespace Processor {
 
                   case "reasoning-end": {
                     const reasoningId = String(event.id);
-                    if (reasoningId in reasoningMap) {
-                      const part = reasoningMap[reasoningId];
-                      part.text = reasoningPartMap[part.id].join("").trimEnd();
+                    const part = reasoningMap[reasoningId];
+                    if (part != null) {
+                      part.text = (reasoningPartMap[part.id] ?? []).join("").trimEnd();
                       delete reasoningPartMap[part.id];
                       part.time = {
-                        start: part.time.start,
+                        start: part.time?.start ?? Date.now(),
                         end: Date.now(),
                       };
                       if (event.providerMetadata) {
