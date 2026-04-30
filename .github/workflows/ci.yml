@@ -87,6 +87,15 @@ jobs:
       - name: Test (openomni)
         run: bun run test:ci
         working-directory: packages/openomni
+      - name: Test (coordinator)
+        run: bun test
+        working-directory: packages/coordinator
+      - name: Test (server)
+        run: bun test
+        working-directory: apps/server
+      - name: Test (cli)
+        run: bun test
+        working-directory: apps/cli
       - uses: actions/upload-artifact@v4
         if: always()
         with:
