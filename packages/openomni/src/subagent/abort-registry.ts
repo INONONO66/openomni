@@ -8,6 +8,7 @@ export const MAX_ENTRY_AGE_MS = 30 * 60 * 1000;
 export const AbortControllerRegistry = new Map<string, Map<string, AbortControllerEntry>>();
 
 let sweepTimer: ReturnType<typeof setInterval> | undefined;
+let sweepRefCount = 0;
 
 export function register(sessionId: string, runId: string): AbortControllerEntry {
   let sessionMap = AbortControllerRegistry.get(sessionId);
@@ -67,8 +68,8 @@ export function sweep(maxAgeMs: number = MAX_ENTRY_AGE_MS): number {
 
   for (const [sessionId, sessionMap] of AbortControllerRegistry) {
     for (const [runId, entry] of sessionMap) {
-      const expired = now - entry.createdAt >= maxAgeMs;
-      if (entry.controller.signal.aborted || expired) {
+      const stale = entry.controller.signal.aborted && now - entry.createdAt >= maxAgeMs;
+      if (stale) {
         sessionMap.delete(runId);
         removed++;
       }
@@ -82,12 +83,14 @@ export function sweep(maxAgeMs: number = MAX_ENTRY_AGE_MS): number {
 }
 
 export function startSweep(intervalMs = 300_000): void {
+  sweepRefCount++;
   if (sweepTimer !== undefined) return;
   sweepTimer = setInterval(sweep, intervalMs);
 }
 
 export function stopSweep(): void {
-  if (sweepTimer === undefined) return;
+  sweepRefCount = Math.max(0, sweepRefCount - 1);
+  if (sweepRefCount > 0 || sweepTimer === undefined) return;
   clearInterval(sweepTimer);
   sweepTimer = undefined;
 }
