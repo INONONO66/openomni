@@ -10,9 +10,9 @@ describe("createMemoryMiddleware", () => {
 
   beforeEach(() => {
     mockMemory = {
-      store: async () => {},
+      store: async () => undefined,
       retrieve: async () => [],
-      clear: async () => {},
+      clear: async () => undefined,
     };
 
     ctx = {

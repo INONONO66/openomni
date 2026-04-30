@@ -6,8 +6,9 @@ import { Log } from "@openomni/session";
 function getLastUserText(messages: Message.WithParts[] | undefined): string | null {
   if (!messages) return null;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].info.role === "user") {
-      return messages[i].parts
+    const message = messages[i];
+    if (message?.info.role === "user") {
+      return message.parts
         .filter((p): p is Message.TextPart => p.type === "text")
         .map((p) => p.text)
         .join("");

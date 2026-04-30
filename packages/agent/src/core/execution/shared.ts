@@ -25,8 +25,9 @@ export async function resolveProviderModel(model: {
 
 export function getLastUserMessageText(messages: Message.WithParts[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].info.role === "user") {
-      return messages[i].parts
+    const message = messages[i];
+    if (message?.info.role === "user") {
+      return message.parts
         .filter((part): part is Message.TextPart => part.type === "text")
         .map((part) => part.text)
         .join("");
@@ -55,7 +56,7 @@ export function toMessagesWithParts(
   const output: Message.WithParts[] = [];
 
   for (const message of messages) {
-    const parentID = output.length > 0 ? output[output.length - 1].info.id : "";
+    const parentID = output.at(-1)?.info.id ?? "";
     output.push(
       message.role === "user"
         ? createUserMessage(message.content, source)
