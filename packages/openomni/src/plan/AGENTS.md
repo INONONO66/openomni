@@ -1,6 +1,6 @@
 # Plan Domain
 
-Tool-based plan generation: goal → LLM uses plan tools → plan stored in `Storage.PlanSubAdapter`.
+Tool-based plan generation: goal → LLM uses plan tools → plan stored in `Storage.PlanSubAdapter`. Plan Mode remains active for compatibility while ADR-010 is pending; do not add new product surface here.
 
 ## Modules
 
@@ -21,6 +21,10 @@ runPlan(goal, config)
   └─ planSubAdapter.write()       → persists Plan to Storage.PlanSubAdapter
   └─ returns { planId }           → Plan.Result with ID reference
 ```
+
+## Policy
+
+Plan Mode is compatibility-only while `docs/design-decisions/010-remove-plan-mode-draft.md` remains draft. Changes here should either preserve existing behavior/tests or be part of a coordinated removal/rejection decision.
 
 ## Schema
 

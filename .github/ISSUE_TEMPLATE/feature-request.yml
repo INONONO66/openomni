@@ -58,7 +58,6 @@ body:
         - agent
         - openomni
         - coordinator
-        - cli
         - server
         - New package
         - Not sure

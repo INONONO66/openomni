@@ -50,7 +50,7 @@ src/
 │   ├── types.ts          # AgentDefinition + factory types
 │   ├── model-resolution.ts # resolveRuntimeModel() — alias resolution for per-message models
 │   ├── dev-agent/        # Default "dev" agent factory + prompt
-│   └── plan-agent/       # Plan-mode agent definition + system prompt
+│   └── plan-agent/       # Compatibility-only Plan Mode agent definition + system prompt
 ├── tool/
 │   ├── custom/           # CustomToolProvider — user-defined tool provider
 │   └── mcp/              # McpToolProvider — MCP-backed tool provider
@@ -116,7 +116,7 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
 | `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
 | `TaskToolProvider` | `@openomni/openomni` | task management tools |
-| `PlanToolProvider` | `@openomni/openomni` | plan-mode tools |
+| `PlanToolProvider` | `@openomni/openomni` | compatibility-only plan tools while ADR-010 is pending |
 | `TodoToolProvider` | `@openomni/openomni` | todo list tools |
 
 `createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Guardrail.ToolPermission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
@@ -141,7 +141,7 @@ Add a new channel by:
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
-- `apps/server/src/agents/plan-agent/` provides a plan-specific agent definition and system prompt for plan mode execution.
+- `apps/server/src/agents/plan-agent/` provides the compatibility Plan Mode agent definition and system prompt; do not expand Plan Mode product surface while ADR-010 is pending.
 
 ## CONTEXT SYSTEM
 
@@ -155,7 +155,7 @@ Add a new channel by:
 ## ANTI-PATTERNS
 
 - **Bypassing `createMessageHandler`**: all message handling should flow through the per-surface FIFO queue so one surface cannot interleave runs.
-- **New channel logic in `apps/cli`**: CLI is intentionally minimal (auth + config). All channel work lives here.
+- **Channel logic outside server**: all channel work lives here. Do not add channel adapters to scripts or tooling packages.
 - **Ad-hoc tool permission logic**: if a new policy is needed, extend `Guardrail.ToolPermission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
 
 ## KNOWN TECH DEBT

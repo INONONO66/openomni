@@ -15,6 +15,7 @@ src/
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── delegation.ts           # DelegationContext + checkDelegation (depth / circular detection)
 │   ├── memory.ts               # Memory interface + InMemoryMemory (Jaccard retrieval)
+│   ├── runtime-context.ts      # Runtime context helpers for agent execution
 │   ├── tool-guard.ts           # ToolGuard.check — evaluates Guardrail.ToolPermission + InputRule list
 │   ├── prompt-builder.ts       # System prompt composition helpers
 │   ├── message-factory.ts      # Message envelope helpers for injected messages

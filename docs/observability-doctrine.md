@@ -186,7 +186,7 @@ Bus.publish(Subagent.Events.WorkerRunStarted, {
 });
 ```
 
-**Auto-generation:** Call sites that don't have an ingress context (tests, CLI commands, direct API calls) generate a fresh `traceId` locally. This ensures every log line has a trace ID without requiring callers to thread context manually.
+**Auto-generation:** Call sites that don't have an ingress context (tests, scripts, direct API calls) generate a fresh `traceId` locally. This ensures every log line has a trace ID without requiring callers to thread context manually.
 
 **Parent-child chains:** When a subagent spawns a child, the child inherits the parent's `traceId`. The `runId` and `taskId` fields distinguish the child's work within the same trace. This means a single `traceId` can span multiple sessions and multiple worker runs in a multi-agent execution.
 

@@ -1,6 +1,6 @@
 # packages/session
 
-Session lifecycle, message/part storage, event bus, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`. In the persona workforce model, this package owns the durable substrate for original sessions, self-loop sessions, child persona sessions, and worker-run history.
+Session lifecycle, message/part storage, event bus, logs, telemetry, trace context, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`. In the persona workforce model, this package owns the durable substrate for original sessions, self-loop sessions, child persona sessions, and worker-run history.
 
 ## STRUCTURE
 
@@ -17,7 +17,11 @@ src/
 │   ├── sqlite-storage.ts # SqliteStorageAdapter (Drizzle-backed persistence)
 │   ├── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 │   ├── part-time.ts      # Message-part timestamp helpers
+│   ├── wal-maintenance.ts # SQLite WAL checkpoint helpers
 │   └── drizzle/          # Drizzle schema + migration artifacts
+├── log/                  # Log namespace for observability records
+├── telemetry/            # Telemetry helpers
+├── trace/                # TraceContext helpers
 ├── snapshot/             # Snapshot.Provider + InMemorySnapshotProvider; Snapshot.Diff
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)

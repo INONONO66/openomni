@@ -72,7 +72,6 @@ body:
         - agent
         - openomni
         - coordinator
-        - cli
         - server
         - Not sure
     validations:

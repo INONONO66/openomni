@@ -4,14 +4,14 @@
 
 ## Context
 
-Monorepo with 6 packages and 2 apps needs clear dependency rules. Without them, circular dependencies emerge and packages become tightly coupled.
+Monorepo with 6 packages and one runtime app needs clear dependency rules. Without them, circular dependencies emerge and packages become tightly coupled.
 
 ## Decision
 
-Packages form a strict linear dependency chain. Apps (`cli`, `server`) are siblings consuming any package. Each package may only depend on packages to its left:
+Packages form a strict linear dependency chain. The server app consumes packages at the top of the chain. Each package may only depend on packages to its left:
 
 ```
-protocol → session → llm → agent → openomni → coordinator → { cli, server }
+protocol → session → llm → agent → openomni → coordinator → server
 ```
 
 - `protocol`: zero `@openomni/*` deps (leaf)
@@ -20,7 +20,7 @@ protocol → session → llm → agent → openomni → coordinator → { cli, s
 - `agent`: `protocol`, `llm`, and sanctioned `session` observability primitives — **no session state ownership** (session-backed orchestration and `BusTransport` live in `openomni`)
 - `openomni`: `protocol`, `session`, `llm`, `agent`
 - `coordinator`: all packages above — owns worker pool, IPC, recovery, credentials, tool-permission
-- `cli`, `server`: any `@openomni/*`; they do not depend on each other
+- `server`: any `@openomni/*`; hosts the runtime and external surfaces
 
 Reverse dependencies (e.g., `protocol` importing from `session`) are build failures. Cross-package imports go through `index.ts` barrel only — no deep imports like `@openomni/llm/src/auth/storage`.
 
@@ -37,4 +37,4 @@ Reverse dependencies (e.g., `protocol` importing from `session`) are build failu
 
 - Adding a new package requires deciding its position in the chain.
 - Shared types must live in `protocol` (the leaf), even if only used by 2 packages.
-- `apps/cli` and `apps/server` share nothing at runtime; shared helpers (if any are extracted later) must live in a package, not in either app.
+- App-local helpers must not become hidden shared contracts; shared helpers must live in a package.

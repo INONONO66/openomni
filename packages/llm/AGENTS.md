@@ -21,15 +21,6 @@ src/
 ├── provider/
 │   ├── index.ts      # Provider + ProviderTransform + ModelsDev namespaces
 │   └── provider.ts   # getSDK() + getLanguage() — maps Provider.Model to @ai-sdk/* instance
-├── oauth/
-│   ├── pkce.ts               # PKCE challenge/verifier helpers
-│   ├── anthropic.ts          # Anthropic OAuth flow (authorize / exchange / refresh)
-│   ├── openai.ts             # OpenAI OAuth flow (device auth, JWT parsing)
-│   └── callback-parser.ts    # Shared callback URL parsing
-├── fetch/
-│   ├── anthropic.ts          # createAnthropicOAuthFetch() — token refresh + request rewriting
-│   ├── anthropic-transform.ts# Provider-specific request body / header transforms for Anthropic OAuth
-│   └── openai.ts             # createOpenAIOAuthFetch()
 ├── transform/
 │   └── index.ts      # ProviderTransform — message normalization, caching, per-provider variants
 ├── token/
@@ -47,7 +38,7 @@ src/
 - **`run()` entry point**: Takes `RunInput` (messages, tools, system, model, toolExecutor, toolChoice, maxSteps, providerOptions), drives a Processor loop, and returns `Run.Outcome` via the injected `Sink`.
 - **Provider.Model**: Zod schema with capabilities, cost, limits, status. Built from `models.dev` data via `Provider.fromModelsDevModel()`. `Provider.listModels()` / `listProviders()` / `getProviderInfo()` surface catalog lookups.
 - **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "oauth", access, refresh, expires, accountId? }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.
-- **SDK wiring**: `getSDK(model, auth)` resolves to Anthropic / OpenAI / OpenAI-compatible. When `auth.type === "oauth"`, requests go through `createAnthropicOAuthFetch` / `createOpenAIOAuthFetch` which refresh tokens on expiry and apply provider-specific request rewriting. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key.
+- **SDK wiring**: `getSDK(model, auth)` resolves to Anthropic / OpenAI / OpenAI-compatible. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key. Provider-specific behavior belongs in `provider/`, `auth/`, or `transform/`, not in call sites.
 - **Provider transforms** (`transform/index.ts`): `normalizeMessages()` filters empty blocks, sanitizes tool-call IDs, applies Anthropic ephemeral caching to the last two user/assistant messages. `variants(model)` exposes per-provider thinking / reasoning presets; `resolveVariant(model, variant?)` picks one.
 - **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink, onToolCall, createStream })`. `process()` returns `"stop" | "continue" | "compact"`. Accumulates `TextPart` / `ReasoningPart` / `ToolPart` and publishes through `Sink`.
 - **Retry**: `Retry.delay(attempt, error?)` computes backoff respecting `retry-after` / `retry-after-ms` headers. `Retry.isRetryable(error)` checks `APIError.isRetryable`.
@@ -58,6 +49,6 @@ src/
 ## ANTI-PATTERNS
 
 - `packages/llm` sets `noEmit: true` in tsconfig — it does NOT produce a `dist/`. It is consumed as source by Bun.
-- Do NOT add provider-specific logic outside `fetch/`, `oauth/`, and `provider/provider.ts` — keep `session/`, `transform/`, and `token/` generic.
+- Do NOT add provider-specific logic to call sites. Keep SDK wiring in `provider/`, credential handling in `auth/`, and message/request shaping in `transform/`.
 - Do NOT bypass `Auth.get()` for credentials (e.g. reading env vars inline). All credentials flow through the namespace.
-- Do NOT hand-craft provider-specific request rewriting at call sites — put it behind the per-provider fetch wrapper so it stays in one place.
+- Do NOT hand-craft provider-specific request rewriting at call sites — keep it behind provider or transform modules so it stays in one place.

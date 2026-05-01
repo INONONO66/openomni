@@ -16,7 +16,7 @@ export class GitHubClient {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/vnd.github.v3+json",
           "Content-Type": "application/json",
-          "User-Agent": "openomni-cli",
+          "User-Agent": "openomni-server",
         },
         body: JSON.stringify({ body }),
       },
