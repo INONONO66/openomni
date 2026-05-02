@@ -1,6 +1,6 @@
 # Ingress Module
 
-Single entry point that bridges inbound events to plan/direct execution modes.
+Single entry point that bridges inbound events to direct execution and the compatibility-only Plan Mode path while ADR-010 is pending.
 
 ## Pipeline
 
@@ -10,10 +10,10 @@ Every inbound event flows through three stages:
 2. **Event projection** (`event-projector.ts`) — converts the `InboundEvent` into a `UserMessage` + `TextPart` and persists both to the resolved session.
 3. **Mode dispatch** (`handlers.ts`) — routes to the correct handler based on `event.mode`:
 
-| Mode     | Handler        | What it does                                                    |
-|----------|----------------|-----------------------------------------------------------------|
-| `plan`   | `handlePlan`   | Builds goal from session history, calls `runPlan()`, returns `{ planId }` |
-| `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent`                 |
+| Mode | Handler | What it does | Policy |
+| --- | --- | --- | --- |
+| `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent` | Primary path |
+| `plan` | `handlePlan` | Builds goal from session history, calls `runPlan()`, returns `{ planId }` | Compatibility only pending ADR-010 |
 
 ## Session Bridge
 

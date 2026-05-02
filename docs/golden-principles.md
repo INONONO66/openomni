@@ -15,12 +15,11 @@
 - Cross-package imports go through `index.ts` barrel only.
 - **Forbidden**: `from "@openomni/llm/src/auth/storage"` (deep import)
 - **Allowed**: `from "@openomni/llm"` (barrel import)
-- Known exceptions: `apps/cli/src/cmd/auth.ts` (tech debt — tracked, do not extend)
 
 ## 2. Dependency Direction
 
 ```
-protocol → session → llm → agent → openomni → coordinator → { cli, server }
+protocol → session → llm → agent → openomni → coordinator → server
 ```
 
 Each package may depend only on packages to its LEFT. Packages may skip intermediate layers when a lower-layer contract is explicitly allowed. Reverse dependencies are build failures.
@@ -31,7 +30,7 @@ Each package may depend only on packages to its LEFT. Packages may skip intermed
 - `agent`: `@openomni/protocol`, `@openomni/llm`, and sanctioned `@openomni/session` observability primitives only
 - `openomni`: any lower package
 - `coordinator`: any lower package
-- `cli`, `server`: any package; they do not depend on each other
+- `server`: any package; runtime host app
 
 `agent` must not own session lifecycle, conversation persistence, or durable state mutation. Session-backed orchestration belongs in `openomni`.
 
@@ -40,6 +39,8 @@ Each package may depend only on packages to its LEFT. Packages may skip intermed
 - New types MUST be defined as `z.object(...)` first, then `type X = z.infer<typeof X>`.
 - Schema and type share the same name.
 - No standalone `interface` or `type` for cross-package contracts.
+- Cross-package contracts live in `@openomni/protocol`; upper packages must not redefine them with parallel Zod schemas.
+- Runtime wrappers around protocol contracts are allowed only when they add behavior, such as persistence, bus publication, or host-specific normalization.
 
 ## 4. Namespace Pattern
 
@@ -59,12 +60,17 @@ Each package may depend only on packages to its LEFT. Packages may skip intermed
 - Bug fixes require regression tests.
 - Tests mirror `src/` structure in `test/` dirs.
 - `bun test` must pass before commit.
+- App tests must be reachable from the standard local and CI test matrix. If a workspace lacks a `test` script, document the exception or add one.
+- Avoid tautological assertions such as `expect(true).toBe(true)` unless the test is explicitly compile-time or no-throw oriented and documents that intent.
+- Tool changes require tests for permission denial, timeout, path containment, and error-shaped results where applicable.
+- Persistence changes require migration, idempotency, and recovery coverage.
 
 ## 7. File Hygiene
 
 - Every subdirectory has `index.ts` that re-exports public API.
 - No `utils.ts` or `helpers.ts` catch-all files.
 - ESM only: `"type": "module"`, imports use `from "./foo"` (no `.ts` extension).
+- Build artifacts such as `dist/` are not source. Do not rely on generated tests or generated declarations when assessing coverage or public APIs.
 
 ## 8. Code Style
 
@@ -106,3 +112,21 @@ export type Plan = z.infer<typeof Plan.Schema>;
 ```
 
 This allows `Plan` to work as both a namespace (`Plan.Schema`, `Plan.Step`) and a type (`const p: Plan = ...`).
+
+## 9. Runtime Ownership
+
+- `agent` owns stateless execution behavior only. It may use `session` for sanctioned observability primitives but must not create sessions, mutate durable conversation state, or own recovery.
+- `openomni` owns session-backed orchestration: ingress, subagent runtime, execution runtime, and Plan Mode while it remains active.
+- `coordinator` owns multiprocess execution: worker pools, IPC, recovery, credential injection, and non-interactive permission policy.
+- `apps/server` wires runtime packages to external surfaces. Host-specific payload types may live there, but reusable contracts must move down to `protocol`.
+- `apps/cli` has been removed. Channel adapters, conversation runtime, and operator-facing server setup belong in `apps/server` or documented server/operator flows.
+
+## 10. Documentation Freshness
+
+- Structure, command, runtime-mode, package-boundary, or public-contract changes must update docs in the same change.
+- Root `AGENTS.md` is the fast map. Package `AGENTS.md` files are local maps. Detailed policy belongs in committed `docs/` pages.
+- New ADR files must be added to `docs/design-decisions/index.md`, including drafts.
+- `docs/quality-score.md` must be updated when test counts, lint posture, or package quality materially changes.
+- Local insight files (`*.local.md`) are reference material, not source-of-truth. Promote stable policy into committed docs before relying on it.
+
+See [Repository Guidelines](./repository-guidelines.md) for the current cleanup backlog and operating guidance.

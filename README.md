@@ -85,7 +85,6 @@ OpenOmni is a TypeScript monorepo powered by [Bun](https://bun.sh) and [Turborep
 ```txt
 openomni/
 ├── apps/
-│   ├── cli/             # CLI entry point (auth + config)
 │   └── server/          # Hono server with Discord / Telegram / GitHub / WebSocket channels
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
@@ -99,7 +98,7 @@ openomni/
 ### Dependency graph
 
 ```txt
-protocol ← session ← llm ← agent ← openomni ← coordinator ← { cli, server }
+protocol ← session ← llm ← agent ← openomni ← coordinator ← server
 ```
 
 Each package depends only on packages to its left. `protocol` is the leaf with zero internal dependencies. `agent` owns execution behavior, not durable session state; sanctioned observability primitives may come from `session`. Session-backed orchestration belongs in `openomni`.
@@ -128,8 +127,10 @@ Ingress currently supports two execution modes:
 - [Persona Runtime Roadmap](docs/persona-runtime-roadmap.md) — staged implementation path for authority, self-loop sessions, persona lifecycle, SNS, and memory readiness.
 - [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) — accepted decision for the persona workforce runtime direction.
 - [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
+- [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, Plan Mode, and cleanup priorities.
 - [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
 - [Quality Score](docs/quality-score.md) — package quality status and known technical debt.
+- [Daemon Packaging](packaging/README.md) — Linux systemd user-service installation and operations notes.
 
 ## Development
 

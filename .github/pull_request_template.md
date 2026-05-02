@@ -34,7 +34,6 @@ Relates to #
 - [ ] `agent`
 - [ ] `openomni`
 - [ ] `coordinator`
-- [ ] `cli`
 - [ ] `server`
 
 ## Breaking Changes

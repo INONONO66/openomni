@@ -13,6 +13,10 @@ declare const Bun: {
     exists(): Promise<boolean>;
     text(): Promise<string>;
   };
+  spawn(options: { cmd: string[]; stdout: "pipe"; stderr: "pipe" }): {
+    stdout: ReadableStream;
+    exited: Promise<number>;
+  };
   Glob: new (
     pattern: string,
   ) => {
@@ -27,15 +31,7 @@ declare const Bun: {
   exit(code: number): never;
 };
 
-type PackageKey =
-  | "protocol"
-  | "session"
-  | "llm"
-  | "agent"
-  | "openomni"
-  | "coordinator"
-  | "cli"
-  | "server";
+type PackageKey = "protocol" | "session" | "llm" | "agent" | "openomni" | "coordinator" | "server";
 
 type PackageRule = {
   displayName: string;
@@ -95,12 +91,6 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/agent",
       "@openomni/openomni",
     ]),
-  },
-  cli: {
-    displayName: "cli",
-    packageJsonPath: "apps/cli/package.json",
-    packageName: "@openomni/cli",
-    allowedDeps: "any-except-self",
   },
   server: {
     displayName: "server",
@@ -276,11 +266,11 @@ const ALLOWED_AS_ANY_FILES = new Set([
 ]);
 
 // Known catch-all filenames (pre-existing tech debt)
-const KNOWN_CATCHALL_FILES = new Set(["apps/cli/src/serve/utils.ts"]);
+const KNOWN_CATCHALL_FILES = new Set<string>();
 
 // Known empty catch blocks (pre-existing tech debt — do not extend)
 // Keyed by "file:line" to track exact locations.
-const KNOWN_EMPTY_CATCHES = new Set([]);
+const KNOWN_EMPTY_CATCHES = new Set<string>();
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];

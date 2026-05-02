@@ -9,6 +9,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | `src/plan/` | Tool-based plan generation | `PlanAgent`, `runPlan`, `Hashline`, `PLAN_TOOL_SPECS`, `createPlanToolExecutor` |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge` |
+| `src/runtime/` | Session bus transport bridge | `BusTransport`, `Transport` |
 | `src/storage/` | Shared task type re-exports | `Task` (re-exported from `@openomni/protocol`) |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
 | `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
@@ -30,6 +31,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 dag/                → no internal deps
 plan/               → dag/
 storage/            → no orchestration deps (re-exports from @openomni/protocol)
+runtime/            → @openomni/session + @openomni/agent transport contracts
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → plan/
 subagent/           → execution-runtime/ (uses @openomni/agent + @openomni/session + protocol directly)
@@ -44,6 +46,7 @@ Consumers should only use `@openomni/openomni` exports:
 - Plan generation + plan tooling from `src/plan/`
 - DAG helpers from `src/dag/`
 - Ingress orchestration from `src/ingress/`
+- Bus transport bridge from `src/runtime/`
 - Task type re-exports from `src/storage/` (persistence is in `@openomni/session`)
 - Subagent runtime + background manager from `src/subagent/`
 - Tool system, workspace lock, and worker middleware from `src/execution-runtime/`
