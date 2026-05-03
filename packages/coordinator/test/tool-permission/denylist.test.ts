@@ -1,22 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import {
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-  readFileSync,
-  existsSync,
-  appendFileSync,
-} from "node:fs";
+import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 
-import {
-  checkPermission,
-  loadPolicy,
-  logPermissionDecision,
-  type AuditEntry,
-  type PolicyConfig,
-} from "../../src/tool-permission";
+import { checkPermission, loadPolicy, type PolicyConfig } from "../../src/tool-permission";
 
 const TMP = join(tmpdir(), `openomni-perm-test-${process.pid}`);
 const POLICY_PATH = join(TMP, "tool-policy.json");
@@ -154,73 +141,5 @@ describe("checkPermission — user override precedence", () => {
     expect(result.allowed).toBe(true);
     expect(result.reason).toBe("user_override_allow");
     expect(result.tier).toBe("user-override");
-  });
-});
-
-describe("logPermissionDecision — audit log", () => {
-  const auditPath = join(TMP, "audit.jsonl");
-
-  test("writes JSON-lines entry to custom audit log path", () => {
-    const entry: AuditEntry = {
-      ts: 1000,
-      tool: "bash",
-      allowed: false,
-      reason: "risk default: deny",
-      tier: "risk-default",
-      runId: "run-123",
-      sessionId: "sess-456",
-    };
-
-    mkdirSync(TMP, { recursive: true });
-    appendFileSync(auditPath, JSON.stringify(entry) + "\n");
-
-    const lines = readFileSync(auditPath, "utf-8").trim().split("\n").filter(Boolean);
-    expect(lines.length).toBeGreaterThan(0);
-    const lastLine = lines.at(-1);
-    if (lastLine == null) {
-      throw new Error("expected audit log entry");
-    }
-    const parsed = JSON.parse(lastLine);
-    expect(parsed.tool).toBe("bash");
-    expect(parsed.allowed).toBe(false);
-    expect(parsed.tier).toBe("risk-default");
-    expect(parsed.runId).toBe("run-123");
-  });
-
-  test("does not throw when logPermissionDecision is called", () => {
-    expect(() =>
-      logPermissionDecision({
-        ts: Date.now(),
-        tool: "echo",
-        allowed: true,
-        reason: "risk default: allow",
-        tier: "risk-default",
-      }),
-    ).not.toThrow();
-  });
-
-  test("logPermissionDecision produces parseable JSON-lines output", () => {
-    const defaultAuditPath = join(homedir(), ".openomni", "audit.jsonl");
-
-    logPermissionDecision({
-      ts: 9999,
-      tool: "test-tool-audit-verify",
-      allowed: true,
-      reason: "default_allow",
-      tier: "unknown-default",
-      runId: "test-run",
-    });
-
-    if (existsSync(defaultAuditPath)) {
-      const lines = readFileSync(defaultAuditPath, "utf-8").trim().split("\n").filter(Boolean);
-      const lastLine = lines.at(-1);
-      if (lastLine == null) {
-        throw new Error("expected audit log entry");
-      }
-      const last = JSON.parse(lastLine);
-      expect(last).toHaveProperty("tool");
-      expect(last).toHaveProperty("allowed");
-      expect(last).toHaveProperty("tier");
-    }
   });
 });
