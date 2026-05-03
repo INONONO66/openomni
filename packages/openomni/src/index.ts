@@ -17,6 +17,7 @@ export type { DAGStructure } from "./dag";
 export {
   IngressEngine,
   IngressEventProjector,
+  IngressAuthorityMiddleware,
   IngressHandlers,
   IngressSessionResolver,
   SessionBridge,
