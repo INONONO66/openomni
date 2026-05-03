@@ -66,6 +66,15 @@ const MirroredBusEvent = z.object({
 
 const VerdictAction = z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]);
 
+const ActionRequested = z.object({
+  type: z.literal("action_requested"),
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+  input: z.record(z.string(), z.unknown()).optional(),
+  ...baseEvent,
+});
+
 const PolicyEvaluated = z.object({
   type: z.literal("policy_evaluated"),
   policyId: z.string(),
@@ -112,6 +121,42 @@ const ActionApproved = z.object({
   ...baseEvent,
 });
 
+const WorkerRunCreated = z.object({
+  type: z.literal("worker_run_created"),
+  runId: z.string(),
+  title: z.string(),
+  prompt: z.string(),
+  assignedStepId: z.string().optional(),
+  startedAt: z.number(),
+  ...baseEvent,
+});
+
+const WorkerRunStatusChanged = z.object({
+  type: z.literal("worker_run_status_changed"),
+  runId: z.string(),
+  status: z.enum(["starting", "running", "waiting_input"]),
+  lastMessageId: z.string().optional(),
+  ...baseEvent,
+});
+
+const WorkerRunCompleted = z.object({
+  type: z.literal("worker_run_completed"),
+  runId: z.string(),
+  status: z.literal("succeeded"),
+  endedAt: z.number().optional(),
+  lastMessageId: z.string().optional(),
+  ...baseEvent,
+});
+
+const WorkerRunFailed = z.object({
+  type: z.literal("worker_run_failed"),
+  runId: z.string(),
+  status: z.enum(["failed", "cancelled", "interrupted"]),
+  error: z.string().optional(),
+  endedAt: z.number().optional(),
+  ...baseEvent,
+});
+
 export namespace ExecutionEvent {
   export const Schema = z.discriminatedUnion("type", [
     LlmResponse,
@@ -121,10 +166,15 @@ export namespace ExecutionEvent {
     StepFailed,
     SessionSuspended,
     MirroredBusEvent,
+    ActionRequested,
     PolicyEvaluated,
     ActionBlocked,
     ActionRewritten,
     ActionApproved,
+    WorkerRunCreated,
+    WorkerRunStatusChanged,
+    WorkerRunCompleted,
+    WorkerRunFailed,
   ]);
 
   export type LlmResponse = z.infer<typeof LlmResponse>;
@@ -134,10 +184,15 @@ export namespace ExecutionEvent {
   export type StepFailed = z.infer<typeof StepFailed>;
   export type SessionSuspended = z.infer<typeof SessionSuspended>;
   export type MirroredBusEvent = z.infer<typeof MirroredBusEvent>;
+  export type ActionRequested = z.infer<typeof ActionRequested>;
   export type PolicyEvaluated = z.infer<typeof PolicyEvaluated>;
   export type ActionBlocked = z.infer<typeof ActionBlocked>;
   export type ActionRewritten = z.infer<typeof ActionRewritten>;
   export type ActionApproved = z.infer<typeof ActionApproved>;
+  export type WorkerRunCreated = z.infer<typeof WorkerRunCreated>;
+  export type WorkerRunStatusChanged = z.infer<typeof WorkerRunStatusChanged>;
+  export type WorkerRunCompleted = z.infer<typeof WorkerRunCompleted>;
+  export type WorkerRunFailed = z.infer<typeof WorkerRunFailed>;
 }
 
 // declaration merging: `ExecutionEvent` is both a namespace and a type

@@ -116,6 +116,23 @@ describe("ExecutionEvent schemas", () => {
     });
   });
 
+  it("parses action_requested event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "action_requested",
+      actor: { id: "agent-1", role: "worker" },
+      action: "tool.call",
+      resource: "tool.write",
+      input: { path: "file.txt" },
+      ...baseEvent("action-request-1", 8),
+    });
+    expect(event).toMatchObject({
+      type: "action_requested",
+      action: "tool.call",
+      resource: "tool.write",
+      input: { path: "file.txt" },
+    });
+  });
+
   it("parses action_blocked event", () => {
     const event = ExecutionEvent.Schema.parse({
       type: "action_blocked",
@@ -170,6 +187,110 @@ describe("ExecutionEvent schemas", () => {
       type: "action_approved",
       reason: "admin override approved",
       resource: "tool.admin_tool",
+    });
+  });
+
+  it("parses worker_run_created event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_created",
+      runId: "run-1",
+      title: "worker task",
+      prompt: "do the thing",
+      assignedStepId: "step-1",
+      startedAt: 1234567890,
+      ...baseEvent("worker-action-1", 11),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_created",
+      runId: "run-1",
+      title: "worker task",
+      startedAt: 1234567890,
+    });
+  });
+
+  it("parses worker_run_status_changed event for starting", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_status_changed",
+      runId: "run-1",
+      status: "starting",
+      ...baseEvent("worker-action-2", 12),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_status_changed",
+      status: "starting",
+    });
+  });
+
+  it("parses worker_run_status_changed event for running with lastMessageId", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_status_changed",
+      runId: "run-1",
+      status: "running",
+      lastMessageId: "msg-1",
+      ...baseEvent("worker-action-3", 13),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_status_changed",
+      status: "running",
+      lastMessageId: "msg-1",
+    });
+  });
+
+  it("parses worker_run_status_changed event for waiting_input", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_status_changed",
+      runId: "run-1",
+      status: "waiting_input",
+      ...baseEvent("worker-action-4", 14),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_status_changed",
+      status: "waiting_input",
+    });
+  });
+
+  it("parses worker_run_completed event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_completed",
+      runId: "run-1",
+      status: "succeeded",
+      endedAt: 1234567900,
+      lastMessageId: "msg-2",
+      ...baseEvent("worker-action-5", 15),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_completed",
+      status: "succeeded",
+      endedAt: 1234567900,
+    });
+  });
+
+  it("parses worker_run_failed event with error", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_failed",
+      runId: "run-1",
+      status: "failed",
+      error: "timeout",
+      endedAt: 1234567910,
+      ...baseEvent("worker-action-6", 16),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_failed",
+      status: "failed",
+      error: "timeout",
+    });
+  });
+
+  it("parses worker_run_failed event with cancelled status", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "worker_run_failed",
+      runId: "run-2",
+      status: "cancelled",
+      ...baseEvent("worker-action-7", 17),
+    });
+    expect(event).toMatchObject({
+      type: "worker_run_failed",
+      status: "cancelled",
     });
   });
 
@@ -252,10 +373,15 @@ describe("discriminator coverage", () => {
       "step_failed",
       "session_suspended",
       "bus_event",
+      "action_requested",
       "policy_evaluated",
       "action_blocked",
       "action_rewritten",
       "action_approved",
+      "worker_run_created",
+      "worker_run_status_changed",
+      "worker_run_completed",
+      "worker_run_failed",
     ];
 
     for (const type of supportedTypes) {
@@ -315,6 +441,15 @@ describe("discriminator coverage", () => {
           payload: { label: "test" },
           ...baseEvent("action-1", 1),
         };
+      } else if (type === "action_requested") {
+        event = {
+          type,
+          actor: {},
+          action: "test",
+          resource: "test.resource",
+          input: {},
+          ...baseEvent("action-1", 1),
+        };
       } else if (type === "policy_evaluated") {
         event = {
           type,
@@ -359,6 +494,36 @@ describe("discriminator coverage", () => {
           resource: "test.resource",
           verdict: "continue",
           reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "worker_run_created") {
+        event = {
+          type,
+          runId: "run-1",
+          title: "test",
+          prompt: "test",
+          startedAt: 1234567890,
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "worker_run_status_changed") {
+        event = {
+          type,
+          runId: "run-1",
+          status: "running",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "worker_run_completed") {
+        event = {
+          type,
+          runId: "run-1",
+          status: "succeeded",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "worker_run_failed") {
+        event = {
+          type,
+          runId: "run-1",
+          status: "failed",
           ...baseEvent("action-1", 1),
         };
       }
