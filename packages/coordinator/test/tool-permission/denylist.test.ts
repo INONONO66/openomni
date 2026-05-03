@@ -56,7 +56,7 @@ describe("checkPermission — denylist", () => {
     const policy: PolicyConfig = { denylist: ["danger"] };
     const result = checkPermission("danger", policy);
     expect(result.allowed).toBe(false);
-    expect(result.reason).toBe("in denylist");
+    expect(result.reason).toBe("denylist");
     expect(result.tier).toBe("user-override");
   });
 
@@ -64,7 +64,23 @@ describe("checkPermission — denylist", () => {
     const policy: PolicyConfig = { allowlist: ["safetool"] };
     const result = checkPermission("safetool", policy);
     expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("in allowlist");
+    expect(result.reason).toBe("allowlist");
+    expect(result.tier).toBe("user-override");
+  });
+
+  test("denies tool outside allowlist using canonical fail-closed semantics", () => {
+    const policy: PolicyConfig = { allowlist: ["safetool"] };
+    const result = checkPermission("othertool", policy);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("allowlist_miss");
+    expect(result.tier).toBe("user-override");
+  });
+
+  test("matches prefix patterns through the guardrail evaluator", () => {
+    const policy: PolicyConfig = { denylist: ["filesystem.*"] };
+    const result = checkPermission("filesystem.write", policy);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("denylist");
     expect(result.tier).toBe("user-override");
   });
 });
@@ -91,14 +107,23 @@ describe("checkPermission — risk defaults", () => {
   test("allows echo by risk default", () => {
     const result = checkPermission("echo", {});
     expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("default_allow");
     expect(result.tier).toBe("risk-default");
   });
 });
 
 describe("checkPermission — unknown tool", () => {
-  test("allows unknown tool with unknown-default tier", () => {
+  test("allows lower-risk unknown tool with unknown-default tier", () => {
     const result = checkPermission("some-custom-tool-xyz", {});
     expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("default_allow");
+    expect(result.tier).toBe("unknown-default");
+  });
+
+  test("denies high-risk unknown tool by default", () => {
+    const result = checkPermission("some-custom-tool-xyz", {}, { riskTier: 2 });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("denylist");
     expect(result.tier).toBe("unknown-default");
   });
 });
@@ -108,6 +133,7 @@ describe("checkPermission — user override precedence", () => {
     const policy: PolicyConfig = { userOverrides: { bash: "allow" } };
     const result = checkPermission("bash", policy);
     expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("user_override_allow");
     expect(result.tier).toBe("user-override");
   });
 
@@ -115,6 +141,7 @@ describe("checkPermission — user override precedence", () => {
     const policy: PolicyConfig = { userOverrides: { echo: "deny" } };
     const result = checkPermission("echo", policy);
     expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("user_override_deny");
     expect(result.tier).toBe("user-override");
   });
 
@@ -125,6 +152,7 @@ describe("checkPermission — user override precedence", () => {
     };
     const result = checkPermission("mytool", policy);
     expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("user_override_allow");
     expect(result.tier).toBe("user-override");
   });
 });
@@ -178,7 +206,7 @@ describe("logPermissionDecision — audit log", () => {
       ts: 9999,
       tool: "test-tool-audit-verify",
       allowed: true,
-      reason: "unknown tool: allowed by default",
+      reason: "default_allow",
       tier: "unknown-default",
       runId: "test-run",
     });
