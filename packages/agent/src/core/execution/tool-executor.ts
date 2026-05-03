@@ -3,6 +3,7 @@ import { ToolExecution } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
 import type { HookContext, HookVerdict, TokenUsage } from "../types";
 import type { MiddlewareEngineInstance } from "../middleware";
+import { summarizeInput } from "./shared";
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
@@ -20,6 +21,12 @@ export function createToolExecutor(
   const { toolExecutor, engine, getContext, onVerdict, traceContext } = options;
   const traceId = traceContext?.traceId ?? crypto.randomUUID();
   const sessionId = traceContext?.sessionId ?? "";
+  const eventBase = {
+    traceId,
+    sessionId,
+    ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
+    ...(traceContext?.agentName !== undefined && { actor: { agentName: traceContext.agentName } }),
+  };
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const ctx = getContext?.();
@@ -51,8 +58,7 @@ export function createToolExecutor(
       const reason = preVerdict.reason ?? "middleware";
       Log.warn("tool execution denied", { toolName: call.tool, toolCallId: call.id, reason });
       Bus.publish(ToolExecution.PermissionDenied, {
-        traceId,
-        sessionId,
+        ...eventBase,
         toolCallId: call.id,
         toolName: call.tool,
         reason,
@@ -73,10 +79,10 @@ export function createToolExecutor(
 
     Log.debug("tool execution started", { toolName: call.tool, toolCallId: call.id });
     Bus.publish(ToolExecution.Started, {
-      traceId,
-      sessionId,
+      ...eventBase,
       toolCallId: call.id,
       toolName: call.tool,
+      inputSummary: summarizeInput(effectiveCall.input),
       time: Date.now(),
     });
 
@@ -88,8 +94,7 @@ export function createToolExecutor(
       const durationMs = Date.now() - startMs;
       Log.error("tool execution threw", { toolName: call.tool, toolCallId: call.id, durationMs });
       Bus.publish(ToolExecution.Completed, {
-        traceId,
-        sessionId,
+        ...eventBase,
         toolCallId: call.id,
         toolName: call.tool,
         durationMs,
@@ -107,12 +112,11 @@ export function createToolExecutor(
       isError: result.isError,
     });
     Bus.publish(ToolExecution.Completed, {
-      traceId,
-      sessionId,
+      ...eventBase,
       toolCallId: call.id,
       toolName: call.tool,
       durationMs,
-      isError: result.isError,
+      isError: result.isError ?? false,
       time: Date.now(),
     });
 

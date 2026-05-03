@@ -42,7 +42,7 @@ export function createToolGuardMiddleware(
       }
 
       if (verdict.action === "continue") {
-        config.eventEmitter?.emit("agent.tool.invoked", {
+        config.eventEmitter?.emit("tool.execution.started", {
           sessionId: config.source,
           time: Date.now(),
           toolCallId: ctx.toolCallId,
@@ -53,7 +53,7 @@ export function createToolGuardMiddleware(
       }
 
       if (verdict.reason !== "require_approval") {
-        config.eventEmitter?.emit("agent.tool.blocked", {
+        config.eventEmitter?.emit("tool.execution.permission_denied", {
           sessionId: config.source,
           time: Date.now(),
           toolCallId: ctx.toolCallId,
@@ -82,7 +82,7 @@ export function createToolGuardMiddleware(
         try {
           const guardVerdict = await config.stepGuard(syntheticStep, guardContext);
           if (guardVerdict.action === "continue") {
-            config.eventEmitter?.emit("agent.tool.invoked", {
+            config.eventEmitter?.emit("tool.execution.started", {
               sessionId: config.source,
               time: Date.now(),
               toolCallId: ctx.toolCallId,
@@ -96,7 +96,7 @@ export function createToolGuardMiddleware(
         }
       }
 
-      config.eventEmitter?.emit("agent.tool.blocked", {
+      config.eventEmitter?.emit("tool.execution.permission_denied", {
         sessionId: config.source,
         time: Date.now(),
         toolCallId: ctx.toolCallId,

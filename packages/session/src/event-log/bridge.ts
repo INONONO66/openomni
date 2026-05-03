@@ -195,27 +195,19 @@ function toGenericBusEvent(
 }
 
 const knownEventMappers: Readonly<Record<string, EventMapper>> = {
-  "agent.tool.invoked": ({ payload, base }) => {
-    const toolCallId = getStringField(payload, "toolCallId");
-    const toolName = getStringField(payload, "toolName");
-    if (!toolCallId || !toolName) return undefined;
-
-    const inputSummary = getStringField(payload, "inputSummary");
-    return {
-      type: "tool_started",
-      toolCallId,
-      toolName,
-      ...(inputSummary !== undefined && { args: { inputSummary } }),
-      ...base,
-    };
-  },
-  "agent.tool.blocked": ({ payload, base }) => actionBlocked(payload, base, "agent.tool.blocked"),
   "tool.execution.started": ({ payload, base }) => {
     const toolCallId = getStringField(payload, "toolCallId");
     const toolName = getStringField(payload, "toolName");
     if (!toolCallId || !toolName) return undefined;
 
-    return { type: "tool_started", toolCallId, toolName, ...base };
+    const args = toolStartedArgs(payload);
+    return {
+      type: "tool_started",
+      toolCallId,
+      toolName,
+      ...(args !== undefined && { args }),
+      ...base,
+    };
   },
   "tool.execution.completed": ({ payload, base }) => {
     const toolCallId = getStringField(payload, "toolCallId");
@@ -236,9 +228,19 @@ const knownEventMappers: Readonly<Record<string, EventMapper>> = {
       ...base,
     };
   },
-  "tool.permission.denied": ({ payload, base }) =>
-    actionBlocked(payload, base, "tool.permission.denied"),
+  "tool.execution.permission_denied": ({ payload, base }) =>
+    actionBlocked(payload, base, "tool.execution.permission_denied"),
 };
+
+function toolStartedArgs(payload: unknown): Record<string, unknown> | undefined {
+  const inputSummary = getStringField(payload, "inputSummary");
+  const actor = getRecordField(payload, "actor");
+  const args = {
+    ...(inputSummary !== undefined && { inputSummary }),
+    ...(actor !== undefined && { actor }),
+  };
+  return Object.keys(args).length > 0 ? args : undefined;
+}
 
 function actionBlocked(
   payload: unknown,
@@ -251,13 +253,29 @@ function actionBlocked(
   return {
     type: "action_blocked",
     policyId,
-    actor: {},
+    actor: getActor(payload),
     action: "tool.call",
     resource: toolName,
     verdict: "abort",
     reason: getStringField(payload, "reason") ?? "blocked by bus event",
     ...base,
   };
+}
+
+function getActor(payload: unknown): Record<string, unknown> {
+  return getRecordField(payload, "actor") ?? legacyActor(payload) ?? {};
+}
+
+function legacyActor(payload: unknown): Record<string, unknown> | undefined {
+  const actor = {
+    ...(getStringField(payload, "agentId") !== undefined && {
+      agentId: getStringField(payload, "agentId"),
+    }),
+    ...(getStringField(payload, "agentName") !== undefined && {
+      agentName: getStringField(payload, "agentName"),
+    }),
+  };
+  return Object.keys(actor).length > 0 ? actor : undefined;
 }
 
 function buildActionId(
@@ -284,6 +302,11 @@ function getBooleanField(value: unknown, key: string): boolean | undefined {
   const record = toRecord(value);
   const field = record?.[key];
   return typeof field === "boolean" ? field : undefined;
+}
+
+function getRecordField(value: unknown, key: string): Record<string, unknown> | undefined {
+  const record = toRecord(value);
+  return record ? toRecord(record[key]) : undefined;
 }
 
 function stringFromRecord(record: Record<string, unknown>, key: string): string | undefined {

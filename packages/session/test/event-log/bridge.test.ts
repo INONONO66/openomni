@@ -58,8 +58,10 @@ describe("EventLogBridge", () => {
     Bus.publish(ToolExecution.Started, {
       traceId: "trace-1",
       sessionId: session.id,
+      actor: { agentName: "researcher" },
       toolCallId: "call-1",
       toolName: "search",
+      inputSummary: '{"query":"openomni"}',
       time,
     });
 
@@ -73,6 +75,40 @@ describe("EventLogBridge", () => {
       sequence: 1,
       toolCallId: "call-1",
       toolName: "search",
+      args: {
+        actor: { agentName: "researcher" },
+        inputSummary: '{"query":"openomni"}',
+      },
+    });
+  });
+
+  test("mirrors permission denied actor context", async () => {
+    const session = Session.create({
+      title: "bridge denied",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+
+    stopBridge = EventLogBridge.start();
+    Bus.publish(ToolExecution.PermissionDenied, {
+      traceId: "trace-denied",
+      sessionId: session.id,
+      actor: { agentName: "reviewer" },
+      toolCallId: "call-denied",
+      toolName: "bash",
+      reason: "denied by policy",
+      time: Date.UTC(2026, 4, 4, 12, 1, 0),
+    });
+
+    const events = await waitForReplay(session.id, 1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "action_blocked",
+      policyId: "tool.execution.permission_denied",
+      actor: { agentName: "reviewer" },
+      action: "tool.call",
+      resource: "bash",
+      verdict: "abort",
+      reason: "denied by policy",
     });
   });
 

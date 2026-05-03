@@ -10,7 +10,7 @@ describe("AgentEventEmitter interface", () => {
     };
 
     emitter.emit("agent.turn.start", { sessionId: "test", time: Date.now(), turnIndex: 0 });
-    emitter.emit("agent.tool.invoked", {
+    emitter.emit("tool.execution.started", {
       sessionId: "test",
       time: Date.now(),
       toolCallId: "tc1",
@@ -25,9 +25,10 @@ describe("AgentEventEmitter interface", () => {
     });
 
     expect(emitted).toHaveLength(3);
-    expect(emitted[0].name).toBe("agent.turn.start");
-    expect(emitted[1].name).toBe("agent.tool.invoked");
-    expect(emitted[2].name).toBe("agent.turn.complete");
+    const [turnStart, toolStarted, turnComplete] = emitted;
+    expect(turnStart?.name).toBe("agent.turn.start");
+    expect(toolStarted?.name).toBe("tool.execution.started");
+    expect(turnComplete?.name).toBe("agent.turn.complete");
   });
 
   it("runs without eventEmitter without errors", () => {

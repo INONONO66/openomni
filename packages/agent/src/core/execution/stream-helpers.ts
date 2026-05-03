@@ -30,7 +30,7 @@ import type {
   HookVerdict,
   TokenUsage,
 } from "../types";
-import { summarizeInput, toMessagesWithParts } from "./shared";
+import { toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
 
 type StreamLog = ReturnType<typeof Log.withContext>;
@@ -136,15 +136,6 @@ export function buildMiddlewareEngine(
         stepGuard: config.stepGuard,
         eventEmitter: config.eventEmitter,
         source: "stream-engine",
-        onToolBlocked: (toolCallId, toolName, reason) => {
-          Bus.publish(AgentExecution.ToolBlocked, {
-            ...agentBase,
-            time: Date.now(),
-            toolCallId,
-            toolName,
-            reason,
-          });
-        },
       }),
     );
   }
@@ -392,14 +383,7 @@ export async function buildTurn(
   };
   const turnToolCalls: TurnArtifacts["turnToolCalls"] = [];
   const turnToolResults: TurnArtifacts["turnToolResults"] = [];
-  const trackingSink = createTrackingSink(
-    state,
-    sink,
-    agentBase,
-    turnUsage,
-    turnToolCalls,
-    turnToolResults,
-  );
+  const trackingSink = createTrackingSink(state, sink, turnUsage, turnToolCalls, turnToolResults);
 
   return {
     type: "ready",
@@ -429,7 +413,6 @@ export async function buildTurn(
 export function createTrackingSink(
   state: StreamRunState,
   sink: Sink | undefined,
-  agentBase: StreamAgentBase,
   turnUsage: TokenUsage,
   turnToolCalls: TurnArtifacts["turnToolCalls"],
   turnToolResults: TurnArtifacts["turnToolResults"],
@@ -467,13 +450,6 @@ export function createTrackingSink(
         toolCallId: call.id,
         toolName: call.tool,
         args: call.input,
-      });
-      Bus.publish(AgentExecution.ToolInvoked, {
-        ...agentBase,
-        time: Date.now(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        inputSummary: summarizeInput(call.input),
       });
       sink?.onToolCall(call);
     },

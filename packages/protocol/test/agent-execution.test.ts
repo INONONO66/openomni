@@ -18,26 +18,9 @@ describe("AgentExecution BusEvents", () => {
     ).not.toThrow();
   });
 
-  test("ToolInvoked parses", () => {
-    expect(() =>
-      AgentExecution.ToolInvoked.schema.parse({
-        ...base,
-        toolCallId: "tc1",
-        toolName: "bash",
-        inputSummary: "command: ls",
-      }),
-    ).not.toThrow();
-  });
-
-  test("ToolBlocked parses", () => {
-    expect(() =>
-      AgentExecution.ToolBlocked.schema.parse({
-        ...base,
-        toolCallId: "tc1",
-        toolName: "bash",
-        reason: "denied by policy",
-      }),
-    ).not.toThrow();
+  test("tool execution events are not duplicated under AgentExecution", () => {
+    expect("ToolInvoked" in AgentExecution).toBe(false);
+    expect("ToolBlocked" in AgentExecution).toBe(false);
   });
 
   test("BudgetWarning parses", () => {
