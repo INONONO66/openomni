@@ -57,6 +57,54 @@ const SessionSuspended = z.object({
   ...baseEvent,
 });
 
+const VerdictAction = z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]);
+
+const PolicyEvaluated = z.object({
+  type: z.literal("policy_evaluated"),
+  policyId: z.string(),
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+  verdict: VerdictAction,
+  reason: z.string(),
+  ...baseEvent,
+});
+
+const ActionBlocked = z.object({
+  type: z.literal("action_blocked"),
+  policyId: z.string(),
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+  verdict: VerdictAction,
+  reason: z.string(),
+  ...baseEvent,
+});
+
+const ActionRewritten = z.object({
+  type: z.literal("action_rewritten"),
+  policyId: z.string(),
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+  verdict: VerdictAction,
+  reason: z.string(),
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+  ...baseEvent,
+});
+
+const ActionApproved = z.object({
+  type: z.literal("action_approved"),
+  policyId: z.string(),
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+  verdict: VerdictAction,
+  reason: z.string(),
+  ...baseEvent,
+});
+
 export namespace ExecutionEvent {
   export const Schema = z.discriminatedUnion("type", [
     LlmResponse,
@@ -65,6 +113,10 @@ export namespace ExecutionEvent {
     StepCompleted,
     StepFailed,
     SessionSuspended,
+    PolicyEvaluated,
+    ActionBlocked,
+    ActionRewritten,
+    ActionApproved,
   ]);
 
   export type LlmResponse = z.infer<typeof LlmResponse>;
@@ -73,6 +125,10 @@ export namespace ExecutionEvent {
   export type StepCompleted = z.infer<typeof StepCompleted>;
   export type StepFailed = z.infer<typeof StepFailed>;
   export type SessionSuspended = z.infer<typeof SessionSuspended>;
+  export type PolicyEvaluated = z.infer<typeof PolicyEvaluated>;
+  export type ActionBlocked = z.infer<typeof ActionBlocked>;
+  export type ActionRewritten = z.infer<typeof ActionRewritten>;
+  export type ActionApproved = z.infer<typeof ActionApproved>;
 }
 
 // declaration merging: `ExecutionEvent` is both a namespace and a type

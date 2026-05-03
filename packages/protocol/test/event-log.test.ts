@@ -83,6 +83,82 @@ describe("ExecutionEvent schemas", () => {
     expect(event.type).toBe("session_suspended");
   });
 
+  it("parses policy_evaluated event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "policy_evaluated",
+      policyId: "policy-1",
+      actor: { id: "user-1", role: "admin" },
+      action: "tool.call",
+      resource: "tool.search",
+      verdict: "continue",
+      reason: "actor has permission",
+      ...baseEvent("action-7", 7),
+    });
+    expect(event).toMatchObject({
+      type: "policy_evaluated",
+      policyId: "policy-1",
+      verdict: "continue",
+      resource: "tool.search",
+    });
+  });
+
+  it("parses action_blocked event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "action_blocked",
+      policyId: "policy-2",
+      actor: { id: "user-2", role: "guest" },
+      action: "tool.call",
+      resource: "tool.delete",
+      verdict: "abort",
+      reason: "insufficient permissions",
+      ...baseEvent("action-8", 8),
+    });
+    expect(event).toMatchObject({
+      type: "action_blocked",
+      verdict: "abort",
+      resource: "tool.delete",
+    });
+  });
+
+  it("parses action_rewritten event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "action_rewritten",
+      policyId: "policy-3",
+      actor: { id: "user-3" },
+      action: "tool.call",
+      resource: "tool.search",
+      verdict: "transform",
+      reason: "query sanitized",
+      before: { query: "SELECT * FROM users" },
+      after: { query: "SELECT name FROM users" },
+      ...baseEvent("action-9", 9),
+    });
+    expect(event).toMatchObject({
+      type: "action_rewritten",
+      before: { query: "SELECT * FROM users" },
+      after: { query: "SELECT name FROM users" },
+      resource: "tool.search",
+    });
+  });
+
+  it("parses action_approved event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "action_approved",
+      policyId: "policy-4",
+      actor: { id: "user-4", role: "admin" },
+      action: "tool.call",
+      resource: "tool.admin_tool",
+      verdict: "continue",
+      reason: "admin override approved",
+      ...baseEvent("action-10", 10),
+    });
+    expect(event).toMatchObject({
+      type: "action_approved",
+      reason: "admin override approved",
+      resource: "tool.admin_tool",
+    });
+  });
+
   it("rejects unknown event type", () => {
     expect(() =>
       ExecutionEvent.Schema.parse({
@@ -150,6 +226,124 @@ describe("required field rejection", () => {
         sequence: 1,
       }),
     ).toThrow());
+});
+
+describe("discriminator coverage", () => {
+  it("all event types are supported", () => {
+    const supportedTypes = [
+      "llm_response",
+      "tool_started",
+      "tool_completed",
+      "step_completed",
+      "step_failed",
+      "session_suspended",
+      "policy_evaluated",
+      "action_blocked",
+      "action_rewritten",
+      "action_approved",
+    ];
+
+    for (const type of supportedTypes) {
+      let event: unknown;
+      if (type === "llm_response") {
+        event = {
+          type,
+          turnIndex: 0,
+          text: "test",
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "tool_started") {
+        event = {
+          type,
+          toolCallId: "call-1",
+          toolName: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "tool_completed") {
+        event = {
+          type,
+          toolCallId: "call-1",
+          result: {
+            id: "res-1",
+            toolCallId: "call-1",
+            output: "result",
+            isError: false,
+          },
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "step_completed") {
+        event = {
+          type,
+          stepId: "step-1",
+          output: "done",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "step_failed") {
+        event = {
+          type,
+          stepId: "step-1",
+          error: "failed",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "session_suspended") {
+        event = {
+          type,
+          reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "policy_evaluated") {
+        event = {
+          type,
+          policyId: "p-1",
+          actor: {},
+          action: "test",
+          resource: "test.resource",
+          verdict: "continue",
+          reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "action_blocked") {
+        event = {
+          type,
+          policyId: "p-1",
+          actor: {},
+          action: "test",
+          resource: "test.resource",
+          verdict: "abort",
+          reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "action_rewritten") {
+        event = {
+          type,
+          policyId: "p-1",
+          actor: {},
+          action: "test",
+          resource: "test.resource",
+          verdict: "transform",
+          reason: "test",
+          before: {},
+          after: {},
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "action_approved") {
+        event = {
+          type,
+          policyId: "p-1",
+          actor: {},
+          action: "test",
+          resource: "test.resource",
+          verdict: "continue",
+          reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      }
+
+      expect(() => ExecutionEvent.Schema.parse(event)).not.toThrow(`Failed to parse ${type}`);
+    }
+  });
 });
 
 describe("acceptance (documents current behavior)", () => {
