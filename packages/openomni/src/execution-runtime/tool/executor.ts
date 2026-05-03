@@ -1,5 +1,11 @@
-import { Guardrail, ToolExecution, type Tool } from "@openomni/protocol";
-import { Bus, Log } from "@openomni/session";
+import {
+  Guardrail,
+  ToolExecution,
+  type ExecutionEvent,
+  type Hook,
+  type Tool,
+} from "@openomni/protocol";
+import { Bus, EventLog, Log, Storage } from "@openomni/session";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
   ImplicitInputSource,
@@ -9,6 +15,7 @@ import type {
 } from "./types.js";
 
 const TOOL_CALL_ACTION = "tool.call";
+const TOOL_LEDGER_VISIBILITY = "internal";
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -66,6 +73,53 @@ function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   };
 }
 
+function buildActor(runtime: ToolRuntimeContext | undefined): Record<string, unknown> {
+  return {
+    kind: "agent",
+    ...(runtime?.agentName !== undefined && { agentName: runtime.agentName }),
+    ...(runtime?.sessionId !== undefined && { sessionId: runtime.sessionId }),
+    ...(runtime?.runId !== undefined && { runId: runtime.runId }),
+  };
+}
+
+function ledgerUnavailableReason(sessionId: string): string | undefined {
+  const adapter = Storage.get();
+  if (adapter.eventLog === undefined)
+    return "EventLog adapter unavailable for mandatory tool audit";
+  if (adapter.session.get(sessionId) === undefined) {
+    return "Session unavailable for mandatory tool audit";
+  }
+  return undefined;
+}
+
+function shouldBlockOnPreAppend(
+  riskTier: NativeTool["riskTier"],
+  options: { beforeSideEffect: boolean },
+): boolean {
+  return options.beforeSideEffect && riskTier >= 1;
+}
+
+async function readNextSequence(sessionId: string): Promise<number> {
+  let maxSequence = 0;
+  for await (const event of EventLog.replay(sessionId)) {
+    maxSequence = Math.max(maxSequence, event.sequence);
+  }
+  return maxSequence + 1;
+}
+
+function ledgerActionId(
+  sessionId: string,
+  toolCallId: string,
+  eventType: ExecutionEvent["type"],
+  sequence: number,
+): string {
+  return `${sessionId}:tool.${eventType}:${toolCallId}:${sequence}`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function resolveImplicitValue(
   source: ImplicitInputSource,
   runtime: ToolRuntimeContext,
@@ -106,6 +160,91 @@ export function createToolExecutor(
   const lockOwnerId = crypto.randomUUID();
 
   const runtime = config.runtime;
+  const sequenceReservations = new Map<string, Promise<number>>();
+
+  function reserveSequence(sessionId: string): Promise<number> {
+    const current = sequenceReservations.get(sessionId) ?? readNextSequence(sessionId);
+    sequenceReservations.set(
+      sessionId,
+      current.then(
+        (sequence) => sequence + 1,
+        () => 1,
+      ),
+    );
+    return current;
+  }
+
+  async function appendLedgerEvent(
+    tool: NativeTool,
+    call: Tool.Call,
+    eventType: ExecutionEvent["type"],
+    event: (base: {
+      readonly actionId: string;
+      readonly parentActionId?: string;
+      readonly visibility: typeof TOOL_LEDGER_VISIBILITY;
+      readonly timestamp: string;
+      readonly sequence: number;
+    }) => ExecutionEvent,
+    options: { beforeSideEffect: boolean; parentActionId?: string | undefined },
+  ): Promise<ExecutionEvent | undefined> {
+    const sessionId = runtime?.sessionId;
+    if (!sessionId) return undefined;
+
+    const shouldBlock = shouldBlockOnPreAppend(tool.riskTier, options);
+    const unavailableReason = ledgerUnavailableReason(sessionId);
+    if (unavailableReason !== undefined) {
+      const error = new Error(unavailableReason);
+      if (shouldBlock) throw error;
+      return undefined;
+    }
+
+    try {
+      const sequence = await reserveSequence(sessionId);
+      const row = event({
+        actionId: ledgerActionId(sessionId, call.id, eventType, sequence),
+        ...(options.parentActionId !== undefined && { parentActionId: options.parentActionId }),
+        visibility: TOOL_LEDGER_VISIBILITY,
+        timestamp: new Date().toISOString(),
+        sequence,
+      });
+      await EventLog.append(sessionId, row);
+      return row;
+    } catch (error) {
+      if (shouldBlock) throw error;
+      Log.warn("executor: EventLog append failed", {
+        toolName: tool.spec.name,
+        toolCallId: call.id,
+        sessionId,
+        error: String(error),
+      });
+      return undefined;
+    }
+  }
+
+  async function appendPolicyPostVerdict(
+    tool: NativeTool,
+    call: Tool.Call,
+    toolName: string,
+    verdict: Hook.Verdict,
+    parentActionId: string | undefined,
+  ): Promise<void> {
+    await appendLedgerEvent(
+      tool,
+      call,
+      "policy_evaluated",
+      (base): ExecutionEvent.PolicyEvaluated => ({
+        type: "policy_evaluated",
+        policyId: verdict.policyId ?? "tool.runtime-policy",
+        actor: buildActor(runtime),
+        action: TOOL_CALL_ACTION,
+        resource: toolName,
+        verdict: verdict.action,
+        reason: verdict.reason ?? "runtime policy post-tool evaluated",
+        ...base,
+      }),
+      { beforeSideEffect: false, parentActionId },
+    );
+  }
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
@@ -114,14 +253,90 @@ export function createToolExecutor(
     }
 
     const originalName = tool.spec.name;
+    let parentActionId: string | undefined;
+    try {
+      const requested = await appendLedgerEvent(
+        tool,
+        call,
+        "action_requested",
+        (base): ExecutionEvent.ActionRequested => ({
+          type: "action_requested",
+          actor: buildActor(runtime),
+          action: TOOL_CALL_ACTION,
+          resource: originalName,
+          input: call.input,
+          ...base,
+        }),
+        { beforeSideEffect: true },
+      );
+      parentActionId = requested?.actionId;
+    } catch (error) {
+      return createErrorResult(call, error instanceof Error ? error.message : String(error));
+    }
+
     const permissionResult = evaluatePermission(originalName, call.input, config.permissions);
+    if (config.permissions) {
+      try {
+        await appendLedgerEvent(
+          tool,
+          call,
+          "policy_evaluated",
+          (base): ExecutionEvent.PolicyEvaluated => ({
+            type: "policy_evaluated",
+            policyId: permissionResult.policyId,
+            actor: buildActor(runtime),
+            action: TOOL_CALL_ACTION,
+            resource: originalName,
+            verdict: permissionResult.action,
+            reason: permissionResult.reason,
+            ...base,
+          }),
+          { beforeSideEffect: permissionResult.action === "continue", parentActionId },
+        );
+      } catch (error) {
+        return createErrorResult(call, error instanceof Error ? error.message : String(error));
+      }
+    }
+
     if (permissionResult.action === "abort") {
       Log.warn("executor: permission blocked", {
         toolName: originalName,
         reason: permissionResult.reason,
         matchedPattern: permissionResult.matchedPattern,
       });
-      return createErrorResult(call, permissionErrorMessage(originalName, permissionResult));
+      const result = createErrorResult(
+        call,
+        permissionErrorMessage(originalName, permissionResult),
+      );
+      await appendLedgerEvent(
+        tool,
+        call,
+        "action_blocked",
+        (base): ExecutionEvent.ActionBlocked => ({
+          type: "action_blocked",
+          policyId: permissionResult.policyId,
+          actor: buildActor(runtime),
+          action: TOOL_CALL_ACTION,
+          resource: originalName,
+          verdict: permissionResult.action,
+          reason: permissionResult.reason,
+          ...base,
+        }),
+        { beforeSideEffect: false, parentActionId },
+      );
+      await appendLedgerEvent(
+        tool,
+        call,
+        "tool_completed",
+        (base): ExecutionEvent.ToolCompleted => ({
+          type: "tool_completed",
+          toolCallId: call.id,
+          result,
+          ...base,
+        }),
+        { beforeSideEffect: false, parentActionId },
+      );
+      return result;
     }
 
     const enrichedCall = injectImplicitInputs(call, tool, runtime);
@@ -139,26 +354,103 @@ export function createToolExecutor(
         workspaceRoot,
         lockOwnerId,
       });
+      const prePolicy = policy;
+      await appendLedgerEvent(
+        tool,
+        call,
+        "policy_evaluated",
+        (base): ExecutionEvent.PolicyEvaluated => ({
+          type: "policy_evaluated",
+          policyId: prePolicy.verdict.policyId ?? "tool.runtime-policy",
+          actor: buildActor(runtime),
+          action: TOOL_CALL_ACTION,
+          resource: originalName,
+          verdict: prePolicy.verdict.action,
+          reason: prePolicy.verdict.reason ?? "runtime policy evaluated",
+          ...base,
+        }),
+        { beforeSideEffect: prePolicy.verdict.action === "continue", parentActionId },
+      );
 
-      if (policy.verdict.action !== "continue") {
-        return createErrorResult(call, policy.verdict.reason ?? "tool runtime policy aborted");
+      if (prePolicy.verdict.action !== "continue") {
+        const result = createErrorResult(
+          call,
+          prePolicy.verdict.reason ?? "tool runtime policy aborted",
+        );
+        await appendLedgerEvent(
+          tool,
+          call,
+          "action_blocked",
+          (base): ExecutionEvent.ActionBlocked => ({
+            type: "action_blocked",
+            policyId: prePolicy.verdict.policyId ?? "tool.runtime-policy",
+            actor: buildActor(runtime),
+            action: TOOL_CALL_ACTION,
+            resource: originalName,
+            verdict: prePolicy.verdict.action,
+            reason: prePolicy.verdict.reason ?? "tool runtime policy aborted",
+            ...base,
+          }),
+          { beforeSideEffect: false, parentActionId },
+        );
+        await appendLedgerEvent(
+          tool,
+          call,
+          "tool_completed",
+          (base): ExecutionEvent.ToolCompleted => ({
+            type: "tool_completed",
+            toolCallId: call.id,
+            result,
+            ...base,
+          }),
+          { beforeSideEffect: false, parentActionId },
+        );
+        return result;
       }
+
+      await appendLedgerEvent(
+        tool,
+        call,
+        "tool_started",
+        (base): ExecutionEvent.ToolStarted => ({
+          type: "tool_started",
+          toolCallId: call.id,
+          toolName: originalName,
+          args: dispatchedCall.input,
+          ...base,
+        }),
+        { beforeSideEffect: true, parentActionId },
+      );
 
       const result = await ToolRuntimePolicyMiddleware.enforceTimeout(
         tool.execute(dispatchedCall),
         policy.handle.timeoutMs,
       );
-      await ToolRuntimePolicyMiddleware.evaluatePostTool({
+      const postVerdict = await ToolRuntimePolicyMiddleware.evaluatePostTool({
         toolName: originalName,
         toolCallId: call.id,
         input: dispatchedCall.input,
         output: result.output,
         handle: policy.handle,
       });
+      await appendPolicyPostVerdict(tool, call, originalName, postVerdict, parentActionId);
+      await appendLedgerEvent(
+        tool,
+        call,
+        "tool_completed",
+        (base): ExecutionEvent.ToolCompleted => ({
+          type: "tool_completed",
+          toolCallId: call.id,
+          result,
+          ...base,
+        }),
+        { beforeSideEffect: false, parentActionId },
+      );
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isTimeout = error instanceof ToolRuntimePolicyMiddleware.TimeoutError;
+      const isAbort = isAbortError(error);
 
       if (isTimeout && policy) {
         const timeoutMs = (error as ToolRuntimePolicyMiddleware.TimeoutError).timeoutMs;
@@ -175,15 +467,47 @@ export function createToolExecutor(
       }
 
       if (policy?.verdict.action === "continue") {
-        await ToolRuntimePolicyMiddleware.evaluatePostTool({
+        const postVerdict = await ToolRuntimePolicyMiddleware.evaluatePostTool({
           toolName: originalName,
           toolCallId: call.id,
           input: dispatchedCall.input,
           output: message,
           handle: policy.handle,
         });
+        await appendPolicyPostVerdict(tool, call, originalName, postVerdict, parentActionId);
       }
-      return createErrorResult(call, message);
+      const result = createErrorResult(call, message);
+      if (isTimeout || isAbort) {
+        await appendLedgerEvent(
+          tool,
+          call,
+          "action_blocked",
+          (base): ExecutionEvent.ActionBlocked => ({
+            type: "action_blocked",
+            policyId: isTimeout ? "tool.runtime-policy.timeout" : "tool.runtime-policy.abort",
+            actor: buildActor(runtime),
+            action: TOOL_CALL_ACTION,
+            resource: originalName,
+            verdict: "abort",
+            reason: message,
+            ...base,
+          }),
+          { beforeSideEffect: false, parentActionId },
+        );
+      }
+      await appendLedgerEvent(
+        tool,
+        call,
+        "tool_completed",
+        (base): ExecutionEvent.ToolCompleted => ({
+          type: "tool_completed",
+          toolCallId: call.id,
+          result,
+          ...base,
+        }),
+        { beforeSideEffect: false, parentActionId },
+      );
+      return result;
     }
   };
 }

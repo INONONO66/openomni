@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import type { ExecutionEvent, Tool } from "@openomni/protocol";
+import { Bus, EventLog, Session, SqliteStorageAdapter, Storage } from "@openomni/session";
 import { createToolExecutor } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";
@@ -28,6 +28,39 @@ function makeTool(
     }),
     ...rest,
   };
+}
+
+async function replayEvents(sessionId: string): Promise<ExecutionEvent[]> {
+  const events: ExecutionEvent[] = [];
+  for await (const event of EventLog.replay(sessionId)) events.push(event);
+  return events;
+}
+
+function configureMemoryStorage(): void {
+  Storage.configure(new SqliteStorageAdapter(":memory:"));
+}
+
+function createLedgerSession(): string {
+  return Session.create({
+    title: "tool-ledger-test",
+    model: { providerID: "test", modelID: "test" },
+  }).id;
+}
+
+function configureThrowingEventLogStorage(error: Error): string {
+  const adapter = new SqliteStorageAdapter(":memory:");
+  Storage.configure(adapter);
+  const sessionId = createLedgerSession();
+  adapter.eventLog = {
+    append: () => {
+      throw error;
+    },
+    replay: () => [],
+    listIncomplete: () => [],
+    markComplete: () => undefined,
+    listIncompleteSessions: () => [],
+  };
+  return sessionId;
 }
 
 describe("createToolExecutor", () => {
@@ -293,6 +326,172 @@ describe("createToolExecutor", () => {
     // LLM provides a wrong/stale sessionId — runtime should override
     await executor(makeCall("todo_write", { sessionId: "fake-session", todos: [] }));
     expect(capturedInput.sessionId).toBe("real-session");
+  });
+
+  it("appends action request, tool start, and completion rows in execution order", async () => {
+    configureMemoryStorage();
+    const sessionId = createLedgerSession();
+    let eventsAtExecute: string[] = [];
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("write", {
+            riskTier: 1,
+            execute: async (call) => {
+              eventsAtExecute = (await replayEvents(sessionId)).map((event) => event.type);
+              return { id: "result-1", toolCallId: call.id, output: "written" };
+            },
+          }),
+        ],
+        config: {
+          runtime: { sessionId, runId: "run-ledger-success", agentName: "worker" },
+        },
+      });
+
+      const result = await executor(makeCall("write", { path: "file.txt" }));
+      const events = await replayEvents(sessionId);
+
+      expect(result.output).toBe("written");
+      expect(eventsAtExecute).toContain("tool_started");
+      expect(events.map((event) => event.type)).toEqual([
+        "action_requested",
+        "policy_evaluated",
+        "tool_started",
+        "policy_evaluated",
+        "tool_completed",
+      ]);
+      expect(events[0]).toMatchObject({
+        type: "action_requested",
+        action: "tool.call",
+        resource: "write",
+      });
+      expect(events[2]).toMatchObject({
+        type: "tool_started",
+        toolCallId: "call-1",
+        toolName: "write",
+        args: { path: "file.txt" },
+      });
+      expect(events[4]).toMatchObject({
+        type: "tool_completed",
+        result: { toolCallId: "call-1", output: "written" },
+      });
+    } finally {
+      Storage.reset();
+    }
+  });
+
+  it("does not execute tier one tools when mandatory pre-execution append fails", async () => {
+    const sessionId = configureThrowingEventLogStorage(new Error("ledger down"));
+    let executions = 0;
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("write", {
+            riskTier: 1,
+            execute: async (call) => {
+              executions += 1;
+              return { id: "result-1", toolCallId: call.id, output: "written" };
+            },
+          }),
+        ],
+        config: { runtime: { sessionId, runId: "run-ledger-fail" } },
+      });
+
+      const result = await executor(makeCall("write"));
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("ledger down");
+      expect(executions).toBe(0);
+    } finally {
+      Storage.reset();
+    }
+  });
+
+  it("appends action_blocked with policy reason for permission denial", async () => {
+    configureMemoryStorage();
+    const sessionId = createLedgerSession();
+    let executions = 0;
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("bash", {
+            riskTier: 1,
+            execute: async (call) => {
+              executions += 1;
+              return { id: "result-1", toolCallId: call.id, output: "ran" };
+            },
+          }),
+        ],
+        config: {
+          permissions: { action: "tool.call", denylist: ["bash"] },
+          runtime: { sessionId, runId: "run-ledger-denied" },
+        },
+      });
+
+      const result = await executor(makeCall("bash"));
+      const events = await replayEvents(sessionId);
+
+      expect(result.isError).toBe(true);
+      expect(executions).toBe(0);
+      expect(events.map((event) => event.type)).toEqual([
+        "action_requested",
+        "policy_evaluated",
+        "action_blocked",
+        "tool_completed",
+      ]);
+      expect(events[2]).toMatchObject({
+        type: "action_blocked",
+        policyId: "guardrail.permission",
+        reason: "denylist",
+        resource: "bash",
+      });
+    } finally {
+      Storage.reset();
+    }
+  });
+
+  it("appends action_blocked with timeout reason when timeout fires", async () => {
+    configureMemoryStorage();
+    const sessionId = createLedgerSession();
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("slow", {
+            execute: () =>
+              new Promise<Tool.Result>(() => {
+                // intentional: never resolves to test timeout
+              }),
+          }),
+        ],
+        config: {
+          timeoutMs: { tier0: 10 },
+          runtime: { sessionId, runId: "run-ledger-timeout" },
+        },
+      });
+
+      const result = await executor(makeCall("slow"));
+      const events = await replayEvents(sessionId);
+      const blocked = events.find((event) => event.type === "action_blocked");
+      const completed = events.find((event) => event.type === "tool_completed");
+
+      expect(result.isError).toBe(true);
+      expect(blocked).toMatchObject({
+        type: "action_blocked",
+        policyId: "tool.runtime-policy.timeout",
+        reason: "timeout after 10ms",
+        resource: "slow",
+      });
+      expect(completed).toMatchObject({
+        type: "tool_completed",
+        result: { toolCallId: "call-1", output: "timeout after 10ms", isError: true },
+      });
+    } finally {
+      Storage.reset();
+    }
   });
 
   it("emits ToolExecution.TimedOut event when timeout fires", async () => {
