@@ -6,15 +6,38 @@ export { BusEvent };
 export namespace Bus {
   type Handler = (data: unknown) => void;
 
+  export interface PublishedDescriptor {
+    readonly name: string;
+    readonly schema: unknown;
+    readonly visibility?: BusEvent.Visibility;
+  }
+
+  type Observer = (event: PublishedDescriptor, data: unknown) => void;
+
   interface Subscription {
     handler: Handler;
     match?: Record<string, unknown>;
   }
 
   const subscribers = new Map<string, Set<Subscription>>();
+  const observers = new Set<Observer>();
 
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const subs = subscribers.get(event.name);
+    const observerSnapshot = [...observers];
+
+    if (observerSnapshot.length > 0) {
+      for (const observer of observerSnapshot) {
+        queueMicrotask(() => {
+          try {
+            observer(event, data);
+          } catch (err) {
+            Log.warn("Bus observer error", { event: event.name, error: String(err) });
+          }
+        });
+      }
+    }
+
     if (!subs) return;
 
     const snapshot = [...subs];
@@ -52,8 +75,16 @@ export namespace Bus {
     };
   }
 
+  export function observe(handler: Observer): () => void {
+    observers.add(handler);
+    return () => {
+      observers.delete(handler);
+    };
+  }
+
   export function reset(): void {
     subscribers.clear();
+    observers.clear();
   }
 
   function matches(data: unknown, match: Record<string, unknown>): boolean {

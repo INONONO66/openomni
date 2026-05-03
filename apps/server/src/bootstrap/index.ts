@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, Log } from "@openomni/session";
+import { initialize, Bus, EventLogBridge, Log } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
@@ -112,6 +112,7 @@ export async function main(): Promise<void> {
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
+  const stopEventLogBridge = EventLogBridge.start();
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
@@ -229,5 +230,12 @@ export async function main(): Promise<void> {
     time: Date.now(),
   });
 
-  installShutdownHandlers({ channels, server, mcpProvider, coordinator, traceId });
+  installShutdownHandlers({
+    channels,
+    server,
+    mcpProvider,
+    coordinator,
+    traceId,
+    stopEventLogBridge,
+  });
 }

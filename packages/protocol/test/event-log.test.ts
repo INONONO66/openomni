@@ -83,6 +83,20 @@ describe("ExecutionEvent schemas", () => {
     expect(event.type).toBe("session_suspended");
   });
 
+  it("parses generic mirrored bus_event event", () => {
+    const event = ExecutionEvent.Schema.parse({
+      type: "bus_event",
+      name: "custom.event",
+      payload: { label: "mirrored" },
+      ...baseEvent("action-7", 7),
+    });
+    expect(event).toMatchObject({
+      type: "bus_event",
+      name: "custom.event",
+      payload: { label: "mirrored" },
+    });
+  });
+
   it("parses policy_evaluated event", () => {
     const event = ExecutionEvent.Schema.parse({
       type: "policy_evaluated",
@@ -237,6 +251,7 @@ describe("discriminator coverage", () => {
       "step_completed",
       "step_failed",
       "session_suspended",
+      "bus_event",
       "policy_evaluated",
       "action_blocked",
       "action_rewritten",
@@ -291,6 +306,13 @@ describe("discriminator coverage", () => {
         event = {
           type,
           reason: "test",
+          ...baseEvent("action-1", 1),
+        };
+      } else if (type === "bus_event") {
+        event = {
+          type,
+          name: "custom.event",
+          payload: { label: "test" },
           ...baseEvent("action-1", 1),
         };
       } else if (type === "policy_evaluated") {

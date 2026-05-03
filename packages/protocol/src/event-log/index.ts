@@ -57,6 +57,13 @@ const SessionSuspended = z.object({
   ...baseEvent,
 });
 
+const MirroredBusEvent = z.object({
+  type: z.literal("bus_event"),
+  name: z.string(),
+  payload: z.unknown(),
+  ...baseEvent,
+});
+
 const VerdictAction = z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]);
 
 const PolicyEvaluated = z.object({
@@ -113,6 +120,7 @@ export namespace ExecutionEvent {
     StepCompleted,
     StepFailed,
     SessionSuspended,
+    MirroredBusEvent,
     PolicyEvaluated,
     ActionBlocked,
     ActionRewritten,
@@ -125,6 +133,7 @@ export namespace ExecutionEvent {
   export type StepCompleted = z.infer<typeof StepCompleted>;
   export type StepFailed = z.infer<typeof StepFailed>;
   export type SessionSuspended = z.infer<typeof SessionSuspended>;
+  export type MirroredBusEvent = z.infer<typeof MirroredBusEvent>;
   export type PolicyEvaluated = z.infer<typeof PolicyEvaluated>;
   export type ActionBlocked = z.infer<typeof ActionBlocked>;
   export type ActionRewritten = z.infer<typeof ActionRewritten>;

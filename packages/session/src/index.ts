@@ -5,6 +5,7 @@ export { Session } from "./session";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
 export { SurfaceKey } from "./surface-key";
 export { EventLog } from "./event-log/index.js";
+export { EventLogBridge } from "./event-log/bridge.js";
 export { Artifact } from "./artifact/index";
 export * from "./worker-run/index.js";
 export { Log } from "./log/index";
