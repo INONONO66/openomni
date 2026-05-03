@@ -72,7 +72,7 @@ const AuthLoginCommand: CommandModule = {
     if (providerID === "other") {
       const customId = await prompts.text({
         message: "Enter provider id",
-        validate: (v) => (v && v.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+        validate: (v) => (v?.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       });
       if (prompts.isCancel(customId)) cancel();
 

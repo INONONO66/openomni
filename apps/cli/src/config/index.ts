@@ -80,7 +80,7 @@ export namespace Config {
     const configPath = getConfigPath();
     const dir = dirname(configPath);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", {
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, {
       mode: 0o600,
     });
     secureFile(configPath);
@@ -106,7 +106,7 @@ export namespace Config {
   /** Mask a secret for display: show last 4 chars only. */
   export function mask(value: string): string {
     if (value.length <= 4) return "••••";
-    return "••••" + value.slice(-4);
+    return `••••${value.slice(-4)}`;
   }
 
   /** Secure sensitive files to owner-only read/write (0600). */
