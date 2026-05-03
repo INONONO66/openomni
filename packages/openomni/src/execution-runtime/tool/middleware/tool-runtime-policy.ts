@@ -144,6 +144,16 @@ function createWorkspaceLockRelease(state: ToolRuntimePolicyState): MiddlewareRe
 }
 
 export namespace ToolRuntimePolicyMiddleware {
+  export class TimeoutError extends Error {
+    readonly timeoutMs: number;
+
+    constructor(timeoutMs: number) {
+      super(`timeout after ${timeoutMs}ms`);
+      this.name = "TimeoutError";
+      this.timeoutMs = timeoutMs;
+    }
+  }
+
   export const RiskTier = {
     name: "tool-runtime-policy:risk-tier",
     timing: "pre_tool_use",
@@ -301,7 +311,7 @@ export namespace ToolRuntimePolicyMiddleware {
       promise,
       new Promise<never>((_, reject) => {
         const timer = globalThis.setTimeout(() => {
-          reject(new Error(`timeout after ${ms}ms`));
+          reject(new TimeoutError(ms));
         }, ms);
 
         promise.then(

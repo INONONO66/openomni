@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { createToolExecutor } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";
@@ -292,5 +293,78 @@ describe("createToolExecutor", () => {
     // LLM provides a wrong/stale sessionId — runtime should override
     await executor(makeCall("todo_write", { sessionId: "fake-session", todos: [] }));
     expect(capturedInput.sessionId).toBe("real-session");
+  });
+
+  it("emits ToolExecution.TimedOut event when timeout fires", async () => {
+    const publishedEvents: Array<{ name: string; payload: unknown }> = [];
+    const unsubscribe = Bus.observe((descriptor, payload) => {
+      publishedEvents.push({ name: descriptor.name, payload });
+    });
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("slow", {
+            execute: () =>
+              new Promise<Tool.Result>(() => {
+                // intentional: never resolves to test timeout
+              }),
+          }),
+        ],
+        config: {
+          timeoutMs: { tier0: 10 },
+          runtime: { sessionId: "ses-test", runId: "run-test" },
+        },
+      });
+
+      const result = await executor(makeCall("slow"));
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("timeout after 10ms");
+
+      const timedOutEvent = publishedEvents.find((e) => e.name === "tool.execution.timed_out");
+      expect(timedOutEvent).toBeDefined();
+      expect(timedOutEvent?.payload).toMatchObject({
+        toolCallId: "call-1",
+        toolName: "slow",
+        timeoutMs: 10,
+        sessionId: "ses-test",
+        runId: "run-test",
+      });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("does not emit ToolExecution.TimedOut for a tool that throws timeout-like error message", async () => {
+    const publishedEvents: Array<{ name: string; payload: unknown }> = [];
+    const unsubscribe = Bus.observe((descriptor, payload) => {
+      publishedEvents.push({ name: descriptor.name, payload });
+    });
+
+    try {
+      const executor = createToolExecutor({
+        tools: [
+          makeTool("fake_timeout", {
+            execute: async () => {
+              throw new Error("timeout after 10ms");
+            },
+          }),
+        ],
+        config: {
+          runtime: { sessionId: "ses-test", runId: "run-test" },
+        },
+      });
+
+      const result = await executor(makeCall("fake_timeout"));
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("timeout after 10ms");
+
+      const timedOutEvent = publishedEvents.find((e) => e.name === "tool.execution.timed_out");
+      expect(timedOutEvent).toBeUndefined();
+    } finally {
+      unsubscribe();
+    }
   });
 });

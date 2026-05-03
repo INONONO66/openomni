@@ -1,5 +1,5 @@
-import { Guardrail, type Tool } from "@openomni/protocol";
-import { Log } from "@openomni/session";
+import { Guardrail, ToolExecution, type Tool } from "@openomni/protocol";
+import { Bus, Log } from "@openomni/session";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
   ImplicitInputSource,
@@ -158,6 +158,22 @@ export function createToolExecutor(
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const isTimeout = error instanceof ToolRuntimePolicyMiddleware.TimeoutError;
+
+      if (isTimeout && policy) {
+        const timeoutMs = (error as ToolRuntimePolicyMiddleware.TimeoutError).timeoutMs;
+        const sessionId = runtime?.sessionId ?? "";
+        Bus.publish(ToolExecution.TimedOut, {
+          traceId: crypto.randomUUID(),
+          sessionId,
+          ...(runtime?.runId !== undefined && { runId: runtime.runId }),
+          toolCallId: call.id,
+          toolName: originalName,
+          timeoutMs,
+          time: Date.now(),
+        });
+      }
+
       if (policy?.verdict.action === "continue") {
         await ToolRuntimePolicyMiddleware.evaluatePostTool({
           toolName: originalName,
