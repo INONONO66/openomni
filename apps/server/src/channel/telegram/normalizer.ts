@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
-import { evaluateTriggers, normalizeContent } from "../../shared/trigger";
+import { normalizeContent } from "../../shared/trigger";
 import type { InboundNormalizer } from "../types";
 import type { TelegramMessage } from "./types";
 
@@ -20,19 +20,6 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
 
     const userId = message.from.id;
     const chatId = String(message.chat.id);
-    const isDM = message.chat.type === "private";
-    const mentioned = this.ctx.botUsername !== "" && text.includes(`@${this.ctx.botUsername}`);
-
-    const ctx: Adapter.TriggerContext = {
-      event: "message",
-      mentioned,
-      channelId: chatId,
-      senderId: String(userId),
-      isDM,
-      text,
-    };
-
-    if (!evaluateTriggers(this.ctx.triggers, ctx)) return null;
 
     const content = normalizeContent(text, this.ctx.triggers, this.ctx.botUsername);
     if (!content) return null;

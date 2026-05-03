@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
-import { evaluateTriggers, normalizeContent } from "../../shared/trigger";
+import { normalizeContent } from "../../shared/trigger";
 import type { InboundNormalizer } from "../types";
 import type { DiscordMessage } from "./types";
 
@@ -18,17 +18,6 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
 
     const isDM = !message.guild_id;
     const mentioned = message.mentions?.some((u) => u.id === this.ctx.botId) ?? false;
-
-    const triggerCtx: Adapter.TriggerContext = {
-      event: "message",
-      mentioned,
-      channelId: message.channel_id,
-      senderId: message.author.id,
-      isDM,
-      text: message.content,
-    };
-
-    if (!evaluateTriggers(this.ctx.triggers, triggerCtx)) return null;
 
     let content = message.content;
     if (mentioned && !isDM) {
