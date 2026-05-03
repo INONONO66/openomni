@@ -13,6 +13,10 @@ declare const Bun: {
     exists(): Promise<boolean>;
     text(): Promise<string>;
   };
+  spawn(options: { cmd: string[]; stdout: "pipe"; stderr: "pipe" }): {
+    stdout: ReadableStream;
+    exited: Promise<number>;
+  };
   Glob: new (
     pattern: string,
   ) => {
@@ -239,8 +243,8 @@ async function validateDeepImports(): Promise<string[]> {
     const source = await Bun.file(filePath).text();
     importPattern.lastIndex = 0;
 
-    let match: RegExpExecArray | null = null;
-    while ((match = importPattern.exec(source)) !== null) {
+    let match = importPattern.exec(source);
+    while (match !== null) {
       const importPath = match[1];
       const line = lineNumberForOffset(source, match.index);
       const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
@@ -256,13 +260,13 @@ async function validateDeepImports(): Promise<string[]> {
       } else {
         violations.push(base);
       }
+      match = importPattern.exec(source);
     }
   }
 
   return violations;
 }
 
-// --- Golden Principles Enforcement (Phase 1) ---
 // See docs/golden-principles.md for the full list.
 
 // Allowed `as any` locations:
@@ -280,7 +284,7 @@ const KNOWN_CATCHALL_FILES = new Set(["apps/cli/src/serve/utils.ts"]);
 
 // Known empty catch blocks (pre-existing tech debt — do not extend)
 // Keyed by "file:line" to track exact locations.
-const KNOWN_EMPTY_CATCHES = new Set([]);
+const KNOWN_EMPTY_CATCHES = new Set<string>([]);
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
@@ -330,8 +334,8 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 
     // #5: No empty catch blocks (multi-line aware)
     const emptyCatchPattern = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/gm;
-    let emptyCatchMatch: RegExpExecArray | null = null;
-    while ((emptyCatchMatch = emptyCatchPattern.exec(source)) !== null) {
+    let emptyCatchMatch = emptyCatchPattern.exec(source);
+    while (emptyCatchMatch !== null) {
       const catchLine = lineNumberForOffset(source, emptyCatchMatch.index);
       const key = `${filePath}:${catchLine}`;
       if (KNOWN_EMPTY_CATCHES.has(key)) {
@@ -341,6 +345,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
           `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.md #5`,
         );
       }
+      emptyCatchMatch = emptyCatchPattern.exec(source);
     }
 
     // #7: No catch-all filenames
@@ -358,8 +363,6 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 
   return violations;
 }
-
-// --- Document Freshness Check ---
 
 const TRACKED_DOCS = [
   "AGENTS.md",
