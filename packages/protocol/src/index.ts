@@ -26,3 +26,4 @@ export * from "./task/index.js";
 export * from "./todo/index.js";
 export * from "./storage/index.js";
 export * from "./trace/index.js";
+export * from "./skill/index.js";
