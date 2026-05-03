@@ -1,4 +1,9 @@
-import { ChatAgent, InMemoryCompactor, type ChatAgentConfig } from "@openomni/agent";
+import {
+  ChatAgent,
+  InMemoryCompactor,
+  type ChatAgentConfig,
+  type MiddlewareRegistration,
+} from "@openomni/agent";
 import type { Guardrail } from "@openomni/protocol";
 import type { RuntimeModel, RuntimeMessage } from "./shared";
 import {
@@ -13,6 +18,7 @@ export type RuntimeConfig = {
   tools?: ChatAgentConfig["tools"];
   toolExecutor?: ChatAgentConfig["toolExecutor"];
   budget?: ChatAgentConfig["budget"];
+  middleware?: MiddlewareRegistration[];
 };
 
 export type SendCompactionConfig = {
@@ -81,6 +87,7 @@ export async function runWithTranscript(
     toolExecutor: config.toolExecutor,
     signal,
     permissions,
+    middleware: config.middleware,
   });
 
   return agent.run({ messages });

@@ -1,16 +1,27 @@
 import { describe, test, expect } from "bun:test";
 import type { Guardrail } from "@openomni/protocol";
 import { ToolGuard } from "@openomni/agent/src/core/tool-guard";
+import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
 
 describe("SubagentRuntime permissions", () => {
-  test("default permissions deny subagent tool", () => {
-    const defaultPermissions: Guardrail.Permission = {
-      action: "tool.call",
-      denylist: ["subagent"],
-    };
+  test("default subagent middleware denies recursive subagent tool calls", async () => {
+    const registration = SubagentSpawnPolicyMiddleware.createDefaultDenylist();
 
-    const verdict = ToolGuard.check("subagent", {}, defaultPermissions);
-    expect(verdict).toBe("deny");
+    const verdict = await registration.fn({
+      timing: "pre_tool_use",
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "subagent",
+      toolInput: {},
+    });
+
+    expect(verdict.action).toBe("abort");
+    expect(verdict.reason).toBe("denylist");
+    expect(verdict.policyId).toBe("subagent.default-denylist");
   });
 
   test("explicit allowlist permits specified tools", () => {

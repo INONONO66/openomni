@@ -29,7 +29,12 @@ export { BusTransport } from "./runtime/bus-transport";
 export type { Transport } from "./runtime/bus-transport";
 
 // Subagent runtime
-export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
+export {
+  SubagentRuntime,
+  SubagentSpawnPolicyMiddleware,
+  SubagentConsultation,
+  BackgroundManager,
+} from "./subagent";
 
 // Execution runtime
 export {

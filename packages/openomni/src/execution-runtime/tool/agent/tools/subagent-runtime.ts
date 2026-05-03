@@ -129,6 +129,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         toolExecutor: cfg.toolsRef.toolExecutor,
         parentSessionId: cfg.parentSessionId,
         permissions,
+        middleware: config.middleware,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
     },
@@ -147,6 +148,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         tools: resolveChildTools(cfg, childDefinition, depth),
         toolExecutor: cfg.toolsRef.toolExecutor,
         permissions,
+        middleware: config.middleware,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
     },
