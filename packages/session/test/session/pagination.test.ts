@@ -48,7 +48,8 @@ describe("Session.listMessagesPage", () => {
       "msg-100",
     ]);
 
-    const page2 = Session.listMessagesPage(session.id, { limit: 10, before: page1.nextCursor! });
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = Session.listMessagesPage(session.id, { limit: 10, before: page1.nextCursor });
     expect(page2.items).toHaveLength(10);
     expect(page2.more).toBe(true);
     expect(typeof page2.nextCursor).toBe("string");

@@ -26,7 +26,7 @@ describe("Storage warn-mode", () => {
     const adapter = Storage.get();
     expect(adapter).toBeDefined();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0]![0]).toContain("Storage.get() called before initialize()");
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("Storage.get() called before initialize()");
   });
 
   test("warns only once on repeated get() calls", () => {

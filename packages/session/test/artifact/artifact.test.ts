@@ -47,9 +47,9 @@ describe("Artifact", () => {
 
       const result = await Artifact.get("art-1");
       expect(result).not.toBeNull();
-      expect(result!.meta.id).toBe("art-1");
-      expect(result!.meta.title).toBe("output.txt");
-      expect(result!.content).toBe("hello world");
+      expect(result?.meta.id).toBe("art-1");
+      expect(result?.meta.title).toBe("output.txt");
+      expect(result?.content).toBe("hello world");
     });
 
     it("returns null for missing artifact", async () => {
@@ -67,9 +67,9 @@ describe("Artifact", () => {
 
       const result = await Artifact.get("art-1");
       expect(result).not.toBeNull();
-      expect(result!.meta.version).toBe(2);
-      expect(result!.meta.title).toBe("output-v2.txt");
-      expect(result!.content).toBe("version 2 content");
+      expect(result?.meta.version).toBe(2);
+      expect(result?.meta.title).toBe("output-v2.txt");
+      expect(result?.content).toBe("version 2 content");
     });
   });
 

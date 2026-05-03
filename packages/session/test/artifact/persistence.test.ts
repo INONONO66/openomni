@@ -69,8 +69,8 @@ describe("Artifact persistence (SQLite)", () => {
 
     const result = await Artifact.get("art-1");
     expect(result).not.toBeNull();
-    expect(result!.meta.id).toBe("art-1");
-    expect(result!.content).toBe("hello world");
+    expect(result?.meta.id).toBe("art-1");
+    expect(result?.content).toBe("hello world");
 
     adapter2.close();
   });
@@ -102,9 +102,9 @@ describe("Artifact persistence (SQLite)", () => {
 
     const result = await Artifact.get("art-1");
     expect(result).not.toBeNull();
-    expect(result!.meta.version).toBe(2);
-    expect(result!.meta.title).toBe("updated.txt");
-    expect(result!.content).toBe("v2");
+    expect(result?.meta.version).toBe(2);
+    expect(result?.meta.title).toBe("updated.txt");
+    expect(result?.content).toBe("v2");
 
     adapter2.close();
   });
