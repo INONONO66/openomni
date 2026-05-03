@@ -31,47 +31,28 @@ mock.module("@clack/prompts", () => ({
   }),
 }));
 
-const authSetMock = mock();
-const methodRunMock = mock();
-
-mock.module("@openomni/llm", () => ({
-  Auth: {
-    set: authSetMock,
-    get: mock(async () => undefined),
-    all: mock(async () => ({})),
-    remove: mock(async () => undefined),
-  },
-  getAuthProviders: () => [
-    {
-      id: "test-provider",
-      name: "Test Provider",
-      hint: "test hint",
-      methods: [
-        {
-          id: "api-key",
-          label: "API Key",
-          hint: "Enter key",
-          run: methodRunMock,
-        },
-      ],
-    },
-  ],
-}));
-
 const { ConfigCommand } = await import("../src/cmd/config");
 const { AuthCommand } = await import("../src/cmd/auth");
 const { Config } = await import("../src/config/index");
+const { Auth } = await import("@openomni/llm");
 
 const testBase = join(process.env.TMPDIR ?? "/tmp", `openomni-cmd-test-${process.pid}`);
 const configDir = join(testBase, ".openomni");
 const configFile = join(configDir, "config.json");
+const authFile = join(testBase, "auth.json");
 const savedConfigPath = process.env.OPENOMNI_CONFIG_PATH;
+const savedAuthPath = process.env.OPENOMNI_AUTH_FILE;
 
 function restoreEnv() {
   if (savedConfigPath !== undefined) {
     process.env.OPENOMNI_CONFIG_PATH = savedConfigPath;
   } else {
     delete process.env.OPENOMNI_CONFIG_PATH;
+  }
+  if (savedAuthPath !== undefined) {
+    process.env.OPENOMNI_AUTH_FILE = savedAuthPath;
+  } else {
+    delete process.env.OPENOMNI_AUTH_FILE;
   }
 }
 
@@ -173,38 +154,37 @@ describe("config add handler", () => {
 
 describe("auth login handler", () => {
   beforeEach(() => {
+    process.env.OPENOMNI_AUTH_FILE = authFile;
+    if (existsSync(testBase)) rmSync(testBase, { recursive: true });
+    mkdirSync(testBase, { recursive: true });
     selectMock.mockReset();
     passwordMock.mockReset();
     textMock.mockReset();
-    authSetMock.mockReset();
-    methodRunMock.mockReset();
+  });
+
+  afterEach(() => {
+    if (existsSync(testBase)) rmSync(testBase, { recursive: true });
+    restoreEnv();
   });
 
   it("stores API key for custom 'other' provider", async () => {
     selectMock.mockResolvedValue("other");
     textMock.mockResolvedValue("custom-provider");
     passwordMock.mockResolvedValue("sk-test-key");
-    authSetMock.mockResolvedValue(undefined);
 
     await yargs(["auth", "login"]).command(AuthCommand).exitProcess(false).parseAsync();
 
-    expect(authSetMock).toHaveBeenCalledWith("custom-provider", {
-      type: "api",
-      key: "sk-test-key",
-    });
+    const stored = await Auth.get("custom-provider");
+    expect(stored).toEqual({ type: "api", key: "sk-test-key" });
   });
 
-  it("invokes provider login method for known provider", async () => {
-    selectMock.mockResolvedValue("test-provider");
-    methodRunMock.mockResolvedValue(undefined);
+  it("stores API key through known provider login method", async () => {
+    selectMock.mockResolvedValue("moonshotai");
+    textMock.mockResolvedValue("sk-moonshot");
 
     await yargs(["auth", "login"]).command(AuthCommand).exitProcess(false).parseAsync();
 
-    expect(methodRunMock).toHaveBeenCalledTimes(1);
-    const callbacks = methodRunMock.mock.calls[0]?.[0];
-    expect(callbacks).toBeDefined();
-    expect(typeof callbacks.showUrl).toBe("function");
-    expect(typeof callbacks.getInput).toBe("function");
-    expect(typeof callbacks.showMessage).toBe("function");
+    const stored = await Auth.get("moonshotai");
+    expect(stored).toEqual({ type: "api", key: "sk-moonshot" });
   });
 });
