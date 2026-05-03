@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { join } from "path";
-import { homedir } from "os";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { lazy } from "../util/lazy";
 
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
@@ -75,7 +75,7 @@ export namespace ModelsDev {
 
   async function writeCache(data: Record<string, Provider>): Promise<void> {
     try {
-      const { mkdirSync } = await import("fs");
+      const { mkdirSync } = await import("node:fs");
       const cachePath = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
       const cacheDir = cachePath.substring(0, cachePath.lastIndexOf("/"));
       mkdirSync(cacheDir, { recursive: true });
