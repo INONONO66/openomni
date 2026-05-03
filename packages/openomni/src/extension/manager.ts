@@ -1,0 +1,1095 @@
+import { Extension, Guardrail, type ExecutionEvent } from "@openomni/protocol";
+import { EventLog, Storage } from "@openomni/session";
+import { z } from "zod";
+import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtime-binding";
+
+type ExtensionAction =
+  | "extension.validate"
+  | "extension.requestInstall"
+  | "extension.approve"
+  | "extension.install"
+  | "extension.enable"
+  | "extension.disable"
+  | "extension.rollback"
+  | "extension.list"
+  | "extension.audit";
+
+type AuditVisibility = Extract<ExecutionEvent, { type: "action_approved" }>["visibility"];
+type LifecycleEventName =
+  | "extension.proposed"
+  | "extension.approved"
+  | "extension.installed"
+  | "extension.enabled"
+  | "extension.disabled"
+  | "extension.rolled_back"
+  | "extension.failed";
+
+interface AuditState {
+  readonly sessionId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: ExtensionAction;
+  readonly resource: string;
+  readonly input: Record<string, unknown>;
+  readonly parentActionId?: string;
+  readonly now: () => Date;
+}
+
+interface ReconstructedState {
+  readonly current: Map<string, ExtensionManagerEntry>;
+  readonly versions: Map<string, ExtensionManagerEntry>;
+  readonly installedVersions: Map<string, string[]>;
+  readonly audit: ExtensionAuditEntry[];
+}
+
+export interface ExtensionAuditContext {
+  readonly sessionId: string;
+}
+
+export interface ExtensionOperationOptions {
+  readonly actor: Record<string, unknown>;
+  readonly audit: ExtensionAuditContext;
+  readonly permission?: Guardrail.Permission;
+  readonly now?: () => Date;
+}
+
+export interface ExtensionRequestInstallOptions extends ExtensionOperationOptions {
+  readonly reason?: string;
+}
+
+export interface ExtensionVersionOperationOptions extends ExtensionOperationOptions {
+  readonly version?: string;
+  readonly reason?: string;
+}
+
+export interface ExtensionBindingOperationOptions extends ExtensionVersionOperationOptions {
+  readonly binding?: RuntimeBindingController;
+}
+
+export interface ExtensionRollbackOptions extends ExtensionOperationOptions {
+  readonly version?: string;
+  readonly toVersion?: string;
+  readonly reason?: string;
+}
+
+export interface ExtensionListOptions extends ExtensionOperationOptions {
+  readonly extensionId?: string;
+}
+
+export interface ExtensionAuditOptions extends ExtensionOperationOptions {
+  readonly extensionId?: string;
+}
+
+export interface ExtensionValidationSuccess {
+  readonly success: true;
+  readonly manifest: Extension.Manifest;
+}
+
+export interface ExtensionValidationFailure {
+  readonly success: false;
+  readonly errors: readonly string[];
+}
+
+export type ExtensionValidationResult = ExtensionValidationSuccess | ExtensionValidationFailure;
+
+export interface ExtensionManifestSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly author?: string;
+  readonly homepage?: string;
+  readonly permissionCount: number;
+  readonly contributes?: {
+    readonly agents: number;
+    readonly tools: number;
+    readonly skills: number;
+    readonly mcpServers: number;
+    readonly middlewares: number;
+    readonly surfaces: number;
+  };
+  readonly components?: Extension.Contributes;
+  readonly provenance?: {
+    readonly manifestHash: string;
+    readonly packageHash?: string;
+    readonly signedBy?: string;
+    readonly createdByRunId?: string;
+    readonly sourceSessionId?: string;
+  };
+  readonly compatibility?: {
+    readonly openomni: string;
+  };
+}
+
+export interface ExtensionManagerEntry {
+  readonly id: string;
+  readonly version: string;
+  readonly state: Extension.LifecycleState;
+  readonly actor: string;
+  readonly updatedAt: number;
+  readonly reason?: string;
+  readonly fromVersion?: string;
+  readonly manifest?: ExtensionManifestSummary;
+  readonly error?: string;
+}
+
+export interface ExtensionLifecycleAuditEntry {
+  readonly kind: "lifecycle";
+  readonly actionId: string;
+  readonly parentActionId?: string;
+  readonly visibility: AuditVisibility;
+  readonly timestamp: string;
+  readonly sequence: number;
+  readonly name: LifecycleEventName;
+  readonly extensionId: string;
+  readonly version: string;
+  readonly state: Extension.LifecycleState;
+  readonly actor: string;
+  readonly time: number;
+  readonly reason?: string;
+  readonly fromVersion?: string;
+  readonly manifest?: ExtensionManifestSummary;
+  readonly error?: string;
+}
+
+export interface ExtensionOperationAuditEntry {
+  readonly kind: "operation";
+  readonly actionId: string;
+  readonly parentActionId?: string;
+  readonly visibility: AuditVisibility;
+  readonly timestamp: string;
+  readonly sequence: number;
+  readonly type: Extract<
+    ExecutionEvent,
+    { type: "action_requested" | "policy_evaluated" | "action_approved" | "action_blocked" }
+  >["type"];
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly input?: Record<string, unknown>;
+  readonly policyId?: string;
+  readonly verdict?: string;
+  readonly reason?: string;
+}
+
+export type ExtensionAuditEntry = ExtensionLifecycleAuditEntry | ExtensionOperationAuditEntry;
+
+const AUDIT_VISIBILITY: AuditVisibility = "internal";
+const MAX_AUDIT_TEXT_LENGTH = 256;
+const AUTHORITY_REQUIRED_REASON = "extension_authority_requires_user_main_or_trusted_manager";
+const authorityActorKinds: readonly string[] = ["user", "main", "trusted_manager"];
+const authorityActions = new Set<ExtensionAction>(["extension.approve", "extension.enable"]);
+
+const lifecycleNames = new Set<LifecycleEventName>([
+  "extension.proposed",
+  "extension.approved",
+  "extension.installed",
+  "extension.enabled",
+  "extension.disabled",
+  "extension.rolled_back",
+  "extension.failed",
+]);
+
+const ManifestSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  version: z.string(),
+  description: z.string(),
+  author: z.string().optional(),
+  homepage: z.string().optional(),
+  permissionCount: z.number(),
+  contributes: z
+    .object({
+      agents: z.number(),
+      tools: z.number(),
+      skills: z.number(),
+      mcpServers: z.number(),
+      middlewares: z.number(),
+      surfaces: z.number(),
+    })
+    .optional(),
+  components: Extension.Contributes.optional(),
+  provenance: z
+    .object({
+      manifestHash: z.string(),
+      packageHash: z.string().optional(),
+      signedBy: z.string().optional(),
+      createdByRunId: z.string().optional(),
+      sourceSessionId: z.string().optional(),
+    })
+    .optional(),
+  compatibility: z.object({ openomni: z.string() }).optional(),
+});
+
+const LifecyclePayloadSchema = z.object({
+  extensionId: z.string(),
+  version: z.string(),
+  actor: z.string(),
+  time: z.number(),
+  reason: z.string().optional(),
+  state: Extension.LifecycleState,
+  fromVersion: z.string().optional(),
+  manifest: ManifestSummarySchema.optional(),
+  error: z.string().optional(),
+});
+
+type LifecyclePayload = z.infer<typeof LifecyclePayloadSchema>;
+
+export namespace ExtensionManager {
+  export async function validate(
+    manifest: unknown,
+    options: ExtensionOperationOptions,
+  ): Promise<ExtensionValidationResult> {
+    const operation = await beginOperation(options, {
+      action: "extension.validate",
+      resource: validationResource(manifest),
+      input: validationInput(manifest),
+    });
+    const result = parseManifest(manifest);
+
+    await approveOperation(
+      operation,
+      result.success
+        ? "extension manifest validation passed"
+        : "extension manifest validation failed",
+    );
+    return result;
+  }
+
+  export async function requestInstall(
+    manifest: unknown,
+    options: ExtensionRequestInstallOptions,
+  ): Promise<ExtensionManagerEntry> {
+    const parsed = parseManifest(manifest);
+    if (!parsed.success) {
+      throw new Error(`Invalid extension manifest: ${parsed.errors.join("; ")}`);
+    }
+
+    const input = operationInput({
+      id: parsed.manifest.id,
+      version: parsed.manifest.version,
+      reason: options.reason,
+      manifest: manifestSummary(parsed.manifest),
+    });
+    const operation = await beginOperation(options, {
+      action: "extension.requestInstall",
+      resource: parsed.manifest.id,
+      input,
+    });
+    const state = await reconstructState(operation.sessionId);
+    const existing = state.versions.get(stateKey(parsed.manifest.id, parsed.manifest.version));
+    if (existing && existing.state !== "failed" && existing.state !== "rolled_back") {
+      await blockOperation(
+        operation,
+        "extension.manager.lifecycle",
+        "extension_version_already_requested",
+      );
+      throw new Error(
+        `Extension "${parsed.manifest.id}" version "${parsed.manifest.version}" is already ${existing.state}`,
+      );
+    }
+
+    await approveOperation(operation, "extension install request approved");
+    return appendLifecycleEvent(operation, "extension.proposed", {
+      extensionId: parsed.manifest.id,
+      version: parsed.manifest.version,
+      actor: actorLabel(options.actor),
+      time: operation.now().getTime(),
+      state: "proposed",
+      ...(options.reason !== undefined ? { reason: truncateAuditText(options.reason) } : {}),
+      manifest: manifestSummary(parsed.manifest, { includeComponents: true }),
+    });
+  }
+
+  export async function approve(
+    extensionId: string,
+    options: ExtensionVersionOperationOptions,
+  ): Promise<ExtensionManagerEntry> {
+    return transition(extensionId, options, {
+      action: "extension.approve",
+      eventName: "extension.approved",
+      nextState: "approved",
+      allowedStates: ["proposed"],
+      approvalReason: "extension approval accepted",
+    });
+  }
+
+  export async function install(
+    extensionId: string,
+    options: ExtensionVersionOperationOptions,
+  ): Promise<ExtensionManagerEntry> {
+    return transition(extensionId, options, {
+      action: "extension.install",
+      eventName: "extension.installed",
+      nextState: "installed",
+      allowedStates: ["approved"],
+      approvalReason: "extension install accepted",
+    });
+  }
+
+  export async function enable(
+    extensionId: string,
+    options: ExtensionBindingOperationOptions,
+  ): Promise<ExtensionManagerEntry> {
+    return transition(extensionId, options, {
+      action: "extension.enable",
+      eventName: "extension.enabled",
+      nextState: "enabled",
+      allowedStates: ["installed", "disabled"],
+      approvalReason: "extension enable accepted",
+      binding: options.binding,
+      bindingAction: "enable",
+    });
+  }
+
+  export async function disable(
+    extensionId: string,
+    options: ExtensionBindingOperationOptions,
+  ): Promise<ExtensionManagerEntry> {
+    return transition(extensionId, options, {
+      action: "extension.disable",
+      eventName: "extension.disabled",
+      nextState: "disabled",
+      allowedStates: ["enabled"],
+      approvalReason: "extension disable accepted",
+      binding: options.binding,
+      bindingAction: "disable",
+    });
+  }
+
+  export async function rollback(
+    extensionId: string,
+    options: ExtensionRollbackOptions,
+  ): Promise<ExtensionManagerEntry> {
+    const input = operationInput({
+      id: extensionId,
+      version: options.version,
+      toVersion: options.toVersion,
+      reason: options.reason,
+    });
+    const operation = await beginOperation(options, {
+      action: "extension.rollback",
+      resource: extensionId,
+      input,
+    });
+    const state = await reconstructState(operation.sessionId);
+    const source = resolveEntry(state, extensionId, options.version, [
+      "installed",
+      "enabled",
+      "disabled",
+    ]);
+    if (!source) {
+      await blockOperation(operation, "extension.manager.lifecycle", "extension_not_rollbackable");
+      throw new Error(
+        `Extension "${extensionId}" has no installed, enabled, or disabled version to roll back`,
+      );
+    }
+
+    const targetVersion = resolveRollbackTarget(
+      state,
+      extensionId,
+      source.version,
+      options.toVersion,
+    );
+    if (!targetVersion) {
+      await blockOperation(
+        operation,
+        "extension.manager.lifecycle",
+        "extension_previous_version_missing",
+      );
+      throw new Error(`Extension "${extensionId}" has no previous version to roll back to`);
+    }
+
+    await approveOperation(operation, "extension rollback accepted");
+    return appendLifecycleEvent(operation, "extension.rolled_back", {
+      extensionId,
+      version: targetVersion,
+      actor: actorLabel(options.actor),
+      time: operation.now().getTime(),
+      state: "rolled_back",
+      fromVersion: source.version,
+      ...(options.reason !== undefined ? { reason: truncateAuditText(options.reason) } : {}),
+      manifest: state.versions.get(stateKey(extensionId, targetVersion))?.manifest,
+    });
+  }
+
+  export async function list(options: ExtensionListOptions): Promise<ExtensionManagerEntry[]> {
+    const resource = options.extensionId ?? "all";
+    const operation = await beginOperation(options, {
+      action: "extension.list",
+      resource,
+      input: operationInput({ id: options.extensionId }),
+    });
+    const state = await reconstructState(operation.sessionId);
+    const entries = sortEntries([...state.current.values()]).filter(
+      (entry) => options.extensionId === undefined || entry.id === options.extensionId,
+    );
+
+    await approveOperation(operation, "extension list accepted");
+    return entries;
+  }
+
+  export async function audit(options: ExtensionAuditOptions): Promise<ExtensionAuditEntry[]> {
+    const resource = options.extensionId ?? "all";
+    const operation = await beginOperation(options, {
+      action: "extension.audit",
+      resource,
+      input: operationInput({ id: options.extensionId }),
+    });
+    const state = await reconstructState(operation.sessionId);
+    const entries = state.audit.filter(
+      (entry) =>
+        options.extensionId === undefined ||
+        (entry.kind === "lifecycle"
+          ? entry.extensionId === options.extensionId
+          : entry.resource === options.extensionId),
+    );
+
+    await approveOperation(operation, "extension audit accepted");
+    return entries;
+  }
+}
+
+interface TransitionConfig {
+  readonly action: Extract<
+    ExtensionAction,
+    "extension.approve" | "extension.install" | "extension.enable" | "extension.disable"
+  >;
+  readonly eventName: LifecycleEventName;
+  readonly nextState: Extension.LifecycleState;
+  readonly allowedStates: readonly Extension.LifecycleState[];
+  readonly approvalReason: string;
+  readonly binding?: RuntimeBindingController;
+  readonly bindingAction?: "enable" | "disable";
+}
+
+async function transition(
+  extensionId: string,
+  options: ExtensionVersionOperationOptions,
+  config: TransitionConfig,
+): Promise<ExtensionManagerEntry> {
+  const operation = await beginOperation(options, {
+    action: config.action,
+    resource: extensionId,
+    input: operationInput({ id: extensionId, version: options.version, reason: options.reason }),
+  });
+  const state = await reconstructState(operation.sessionId);
+  const current = resolveEntry(state, extensionId, options.version, config.allowedStates);
+  if (!current) {
+    await blockOperation(operation, "extension.manager.lifecycle", "invalid_lifecycle_transition");
+    throw new Error(
+      `Extension "${extensionId}"${options.version ? ` version "${options.version}"` : ""} cannot ${config.action.replace("extension.", "")} from its current state`,
+    );
+  }
+
+  await approveOperation(operation, config.approvalReason);
+  const payload: LifecyclePayload = {
+    extensionId,
+    version: current.version,
+    actor: actorLabel(options.actor),
+    time: operation.now().getTime(),
+    state: config.nextState,
+    ...(options.reason !== undefined ? { reason: truncateAuditText(options.reason) } : {}),
+    ...(current.manifest !== undefined ? { manifest: current.manifest } : {}),
+  };
+
+  if (config.binding && config.bindingAction) {
+    try {
+      await runBinding(config.binding, config.bindingAction, current);
+    } catch (error) {
+      await appendLifecycleEvent(operation, "extension.failed", {
+        extensionId,
+        version: current.version,
+        actor: actorLabel(options.actor),
+        time: operation.now().getTime(),
+        state: "failed",
+        reason: "runtime_binding_failed",
+        error: truncateAuditText(errorMessage(error)),
+        ...(current.manifest !== undefined ? { manifest: current.manifest } : {}),
+      });
+      throw new Error(`Extension runtime binding failed: ${errorMessage(error)}`);
+    }
+  }
+
+  return appendLifecycleEvent(operation, config.eventName, payload);
+}
+
+async function runBinding(
+  binding: RuntimeBindingController,
+  action: "enable" | "disable",
+  entry: ExtensionManagerEntry,
+): Promise<void> {
+  const extension: RuntimeBindingExtension = {
+    id: entry.id,
+    version: entry.version,
+    ...(entry.manifest?.components !== undefined ? { contributes: entry.manifest.components } : {}),
+  };
+
+  if (action === "enable") {
+    await binding.enable(extension);
+    return;
+  }
+
+  await binding.disable(extension);
+}
+
+async function beginOperation(
+  options: ExtensionOperationOptions,
+  request: {
+    readonly action: ExtensionAction;
+    readonly resource: string;
+    readonly input: Record<string, unknown>;
+  },
+): Promise<AuditState> {
+  const sessionId = requireAuditSession(options);
+  const now = options.now ?? (() => new Date());
+  const requested = await appendAuditEvent(
+    sessionId,
+    "action_requested",
+    (base): ExecutionEvent.ActionRequested => ({
+      type: "action_requested",
+      actor: options.actor,
+      action: request.action,
+      resource: request.resource,
+      input: request.input,
+      ...base,
+    }),
+    now,
+  );
+
+  const state: AuditState = {
+    sessionId,
+    actor: options.actor,
+    action: request.action,
+    resource: request.resource,
+    input: request.input,
+    parentActionId: requested.actionId,
+    now,
+  };
+  const evaluationRequest: Guardrail.EvaluationRequest = {
+    action: request.action,
+    resource: request.resource,
+    input: policyInput(request.input, options.actor),
+    actor: options.actor,
+  };
+
+  const authorityResult = Guardrail.evaluate(
+    extensionAuthorityPermission(request.action),
+    evaluationRequest,
+  );
+  if (authorityActions.has(request.action)) {
+    await appendPolicyEvent(state, authorityResult);
+    if (authorityResult.action === "abort") {
+      await blockOperation(
+        state,
+        authorityResult.policyId,
+        authorityResult.reason,
+        authorityResult.action,
+      );
+      throw new Error(
+        `Extension operation "${request.action}" on "${request.resource}" denied: ${authorityResult.reason}`,
+      );
+    }
+  }
+
+  const result = Guardrail.evaluate(options.permission, evaluationRequest);
+
+  await appendPolicyEvent(state, result);
+  if (result.action === "abort") {
+    await blockOperation(state, result.policyId, result.reason, result.action);
+    throw new Error(
+      `Extension operation "${request.action}" on "${request.resource}" denied: ${result.reason}`,
+    );
+  }
+
+  return state;
+}
+
+function extensionAuthorityPermission(action: ExtensionAction): Guardrail.Permission | undefined {
+  if (!authorityActions.has(action)) {
+    return undefined;
+  }
+
+  return {
+    action,
+    allowlist: ["*"],
+    inputRules: [
+      {
+        toolPattern: "*",
+        field: "actorKind",
+        pattern: `^(?!(?:${authorityActorKinds.join("|")})$).*$`,
+        action: "deny",
+        reason: AUTHORITY_REQUIRED_REASON,
+        priority: 100,
+      },
+    ],
+  };
+}
+
+function policyInput(
+  input: Record<string, unknown>,
+  actor: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...input,
+    actorKind: actorKind(actor),
+  };
+}
+
+function actorKind(actor: Record<string, unknown>): string {
+  return typeof actor.kind === "string" ? truncateAuditText(actor.kind) : "unknown";
+}
+
+async function appendPolicyEvent(
+  state: AuditState,
+  result: Guardrail.EvaluationResult,
+): Promise<void> {
+  await appendAuditEvent(
+    state.sessionId,
+    "policy_evaluated",
+    (base): ExecutionEvent.PolicyEvaluated => ({
+      type: "policy_evaluated",
+      policyId: result.policyId,
+      actor: state.actor,
+      action: state.action,
+      resource: state.resource,
+      verdict: result.action,
+      reason: result.reason,
+      ...base,
+    }),
+    state.now,
+    state.parentActionId,
+  );
+}
+
+async function approveOperation(state: AuditState, reason: string): Promise<void> {
+  await appendAuditEvent(
+    state.sessionId,
+    "action_approved",
+    (base): ExecutionEvent.ActionApproved => ({
+      type: "action_approved",
+      policyId: "extension.manager",
+      actor: state.actor,
+      action: state.action,
+      resource: state.resource,
+      verdict: "continue",
+      reason,
+      ...base,
+    }),
+    state.now,
+    state.parentActionId,
+  );
+}
+
+async function blockOperation(
+  state: AuditState,
+  policyId: string,
+  reason: string,
+  verdict: ExecutionEvent.ActionBlocked["verdict"] = "abort",
+): Promise<void> {
+  await appendAuditEvent(
+    state.sessionId,
+    "action_blocked",
+    (base): ExecutionEvent.ActionBlocked => ({
+      type: "action_blocked",
+      policyId,
+      actor: state.actor,
+      action: state.action,
+      resource: state.resource,
+      verdict,
+      reason,
+      ...base,
+    }),
+    state.now,
+    state.parentActionId,
+  );
+}
+
+async function appendLifecycleEvent(
+  state: AuditState,
+  name: LifecycleEventName,
+  payload: LifecyclePayload,
+): Promise<ExtensionManagerEntry> {
+  const parsed = LifecyclePayloadSchema.parse(payload);
+  const row = await appendAuditEvent(
+    state.sessionId,
+    "bus_event",
+    (base): ExecutionEvent.MirroredBusEvent => ({
+      type: "bus_event",
+      name,
+      payload: parsed,
+      ...base,
+    }),
+    state.now,
+    state.parentActionId,
+  );
+
+  return lifecycleEntry(name, row, parsed);
+}
+
+async function appendAuditEvent<T extends ExecutionEvent>(
+  sessionId: string,
+  eventType: T["type"],
+  event: (base: {
+    readonly actionId: string;
+    readonly parentActionId?: string;
+    readonly visibility: AuditVisibility;
+    readonly timestamp: string;
+    readonly sequence: number;
+  }) => T,
+  now: () => Date,
+  parentActionId?: string,
+): Promise<T> {
+  const sequence = await readNextSequence(sessionId);
+  const row = event({
+    actionId: `${sessionId}:${eventType}:extension:${sequence}`,
+    ...(parentActionId !== undefined ? { parentActionId } : {}),
+    visibility: AUDIT_VISIBILITY,
+    timestamp: now().toISOString(),
+    sequence,
+  });
+
+  await EventLog.append(sessionId, row);
+  return row;
+}
+
+async function readNextSequence(sessionId: string): Promise<number> {
+  let maxSequence = 0;
+  for await (const event of EventLog.replay(sessionId)) {
+    maxSequence = Math.max(maxSequence, event.sequence);
+  }
+  return maxSequence + 1;
+}
+
+function requireAuditSession(options: ExtensionOperationOptions): string {
+  const sessionId = options.audit?.sessionId;
+  if (!sessionId) {
+    throw new Error("ExtensionManager operations require audit.sessionId");
+  }
+
+  const adapter = Storage.get();
+  if (!adapter.eventLog) {
+    throw new Error("EventLog adapter unavailable for mandatory extension audit");
+  }
+  if (!adapter.session.get(sessionId)) {
+    throw new Error(`Audit session "${sessionId}" not found for extension operation`);
+  }
+
+  return sessionId;
+}
+
+async function reconstructState(sessionId: string): Promise<ReconstructedState> {
+  const current = new Map<string, ExtensionManagerEntry>();
+  const versions = new Map<string, ExtensionManagerEntry>();
+  const installedVersions = new Map<string, string[]>();
+  const audit: ExtensionAuditEntry[] = [];
+
+  for await (const event of EventLog.replay(sessionId)) {
+    const operation = operationAuditEntry(event);
+    if (operation) {
+      audit.push(operation);
+    }
+
+    if (event.type !== "bus_event" || !isLifecycleName(event.name)) {
+      continue;
+    }
+
+    const parsed = LifecyclePayloadSchema.safeParse(event.payload);
+    if (!parsed.success) {
+      continue;
+    }
+
+    const entry = lifecycleEntry(event.name, event, parsed.data);
+    current.set(entry.id, entry);
+    versions.set(stateKey(entry.id, entry.version), entry);
+    audit.push(lifecycleAuditEntry(event.name, event, parsed.data));
+
+    if (entry.state === "installed") {
+      const installed = installedVersions.get(entry.id) ?? [];
+      if (!installed.includes(entry.version)) {
+        installed.push(entry.version);
+      }
+      installedVersions.set(entry.id, installed);
+    }
+  }
+
+  return { current, versions, installedVersions, audit };
+}
+
+function operationAuditEntry(event: ExecutionEvent): ExtensionOperationAuditEntry | undefined {
+  if (
+    event.type !== "action_requested" &&
+    event.type !== "policy_evaluated" &&
+    event.type !== "action_approved" &&
+    event.type !== "action_blocked"
+  ) {
+    return undefined;
+  }
+  if (!event.action.startsWith("extension.")) {
+    return undefined;
+  }
+
+  return {
+    kind: "operation",
+    actionId: event.actionId,
+    ...(event.parentActionId !== undefined ? { parentActionId: event.parentActionId } : {}),
+    visibility: event.visibility,
+    timestamp: event.timestamp,
+    sequence: event.sequence,
+    type: event.type,
+    actor: event.actor,
+    action: event.action,
+    resource: event.resource,
+    ...(event.type === "action_requested" && event.input !== undefined
+      ? { input: event.input }
+      : {}),
+    ...(event.type !== "action_requested" ? { policyId: event.policyId } : {}),
+    ...(event.type !== "action_requested" ? { verdict: event.verdict } : {}),
+    ...(event.type !== "action_requested" ? { reason: event.reason } : {}),
+  };
+}
+
+function lifecycleAuditEntry(
+  name: LifecycleEventName,
+  event: ExecutionEvent.MirroredBusEvent,
+  payload: LifecyclePayload,
+): ExtensionLifecycleAuditEntry {
+  return {
+    kind: "lifecycle",
+    actionId: event.actionId,
+    ...(event.parentActionId !== undefined ? { parentActionId: event.parentActionId } : {}),
+    visibility: event.visibility,
+    timestamp: event.timestamp,
+    sequence: event.sequence,
+    name,
+    extensionId: payload.extensionId,
+    version: payload.version,
+    state: payload.state,
+    actor: payload.actor,
+    time: payload.time,
+    ...(payload.reason !== undefined ? { reason: payload.reason } : {}),
+    ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+    ...(payload.manifest !== undefined ? { manifest: payload.manifest } : {}),
+    ...(payload.error !== undefined ? { error: payload.error } : {}),
+  };
+}
+
+function lifecycleEntry(
+  _name: LifecycleEventName,
+  _event: ExecutionEvent.MirroredBusEvent,
+  payload: LifecyclePayload,
+): ExtensionManagerEntry {
+  return {
+    id: payload.extensionId,
+    version: payload.version,
+    state: payload.state,
+    actor: payload.actor,
+    updatedAt: payload.time,
+    ...(payload.reason !== undefined ? { reason: payload.reason } : {}),
+    ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+    ...(payload.manifest !== undefined ? { manifest: payload.manifest } : {}),
+    ...(payload.error !== undefined ? { error: payload.error } : {}),
+  };
+}
+
+function resolveEntry(
+  state: ReconstructedState,
+  extensionId: string,
+  version: string | undefined,
+  allowedStates: readonly Extension.LifecycleState[],
+): ExtensionManagerEntry | undefined {
+  if (version !== undefined) {
+    const entry = state.versions.get(stateKey(extensionId, version));
+    return entry && allowedStates.includes(entry.state) ? entry : undefined;
+  }
+
+  return sortEntries([...state.versions.values()].filter((entry) => entry.id === extensionId))
+    .reverse()
+    .find((entry) => allowedStates.includes(entry.state));
+}
+
+function resolveRollbackTarget(
+  state: ReconstructedState,
+  extensionId: string,
+  fromVersion: string,
+  requestedTarget: string | undefined,
+): string | undefined {
+  const installed = state.installedVersions.get(extensionId) ?? [];
+  if (requestedTarget !== undefined) {
+    return installed.includes(requestedTarget) && requestedTarget !== fromVersion
+      ? requestedTarget
+      : undefined;
+  }
+
+  return [...installed].reverse().find((version) => version !== fromVersion);
+}
+
+function manifestSummary(
+  manifest: Extension.Manifest,
+  options: { readonly includeComponents?: boolean } = {},
+): ExtensionManifestSummary {
+  const contributes = manifest.contributes;
+  return {
+    id: manifest.id,
+    name: truncateAuditText(manifest.name),
+    version: truncateAuditText(manifest.version),
+    description: truncateAuditText(manifest.description),
+    ...(manifest.author !== undefined ? { author: truncateAuditText(manifest.author) } : {}),
+    ...(manifest.homepage !== undefined ? { homepage: truncateAuditText(manifest.homepage) } : {}),
+    permissionCount: manifest.permissions?.length ?? 0,
+    ...(contributes !== undefined
+      ? {
+          contributes: {
+            agents: contributes.agents?.length ?? 0,
+            tools: contributes.tools?.length ?? 0,
+            skills: contributes.skills?.length ?? 0,
+            mcpServers: contributes.mcpServers?.length ?? 0,
+            middlewares: contributes.middlewares?.length ?? 0,
+            surfaces: contributes.surfaces?.length ?? 0,
+          },
+        }
+      : {}),
+    ...(options.includeComponents === true && contributes !== undefined
+      ? { components: contributes }
+      : {}),
+    ...(manifest.provenance !== undefined
+      ? {
+          provenance: {
+            manifestHash: truncateAuditText(manifest.provenance.manifestHash),
+            ...(manifest.provenance.packageHash !== undefined
+              ? { packageHash: truncateAuditText(manifest.provenance.packageHash) }
+              : {}),
+            ...(manifest.provenance.signedBy !== undefined
+              ? { signedBy: truncateAuditText(manifest.provenance.signedBy) }
+              : {}),
+            ...(manifest.provenance.createdByRunId !== undefined
+              ? { createdByRunId: truncateAuditText(manifest.provenance.createdByRunId) }
+              : {}),
+            ...(manifest.provenance.sourceSessionId !== undefined
+              ? { sourceSessionId: truncateAuditText(manifest.provenance.sourceSessionId) }
+              : {}),
+          },
+        }
+      : {}),
+    ...(manifest.compatibility !== undefined
+      ? { compatibility: { openomni: truncateAuditText(manifest.compatibility.openomni) } }
+      : {}),
+  };
+}
+
+function parseManifest(manifest: unknown): ExtensionValidationResult {
+  const parsed = Extension.Manifest.safeParse(manifest);
+  if (parsed.success) {
+    return { success: true, manifest: parsed.data };
+  }
+
+  return { success: false, errors: parsed.error.issues.map((issue) => issue.message) };
+}
+
+function validationResource(manifest: unknown): string {
+  return readStringField(manifest, "id") ?? "unknown";
+}
+
+function validationInput(manifest: unknown): Record<string, unknown> {
+  const record = manifestRecord(manifest);
+  if (!record) {
+    return { valueType: manifest === null ? "null" : typeof manifest };
+  }
+
+  return {
+    ...(readStringField(record, "id") !== undefined
+      ? { id: truncateAuditText(readStringField(record, "id") ?? "") }
+      : {}),
+    ...(readStringField(record, "version") !== undefined
+      ? { version: truncateAuditText(readStringField(record, "version") ?? "") }
+      : {}),
+    ...(readStringField(record, "name") !== undefined
+      ? { name: truncateAuditText(readStringField(record, "name") ?? "") }
+      : {}),
+    fieldCount: Object.keys(record).length,
+    hasContributes: typeof record.contributes === "object" && record.contributes !== null,
+    permissionCount: Array.isArray(record.permissions) ? record.permissions.length : 0,
+  };
+}
+
+function readStringField(value: unknown, field: string): string | undefined {
+  const record = manifestRecord(value);
+  const raw = record?.[field];
+  return typeof raw === "string" ? truncateAuditText(raw) : undefined;
+}
+
+function manifestRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function operationInput(input: {
+  readonly id?: string;
+  readonly version?: string;
+  readonly toVersion?: string;
+  readonly reason?: string;
+  readonly manifest?: ExtensionManifestSummary;
+}): Record<string, unknown> {
+  return {
+    ...(input.id !== undefined ? { id: truncateAuditText(input.id) } : {}),
+    ...(input.version !== undefined ? { version: truncateAuditText(input.version) } : {}),
+    ...(input.toVersion !== undefined ? { toVersion: truncateAuditText(input.toVersion) } : {}),
+    ...(input.reason !== undefined ? { reason: truncateAuditText(input.reason) } : {}),
+    ...(input.manifest !== undefined ? { manifest: input.manifest } : {}),
+  };
+}
+
+function actorLabel(actor: Record<string, unknown>): string {
+  const kind = typeof actor.kind === "string" ? actor.kind : undefined;
+  const id = typeof actor.id === "string" ? actor.id : undefined;
+  if (kind !== undefined && id !== undefined) {
+    return truncateAuditText(`${kind}:${id}`);
+  }
+  if (id !== undefined) {
+    return truncateAuditText(id);
+  }
+
+  return truncateAuditText(stableStringify(actor));
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort((a, b) => a.localeCompare(b))
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(",")}}`;
+}
+
+function truncateAuditText(value: string): string {
+  return value.length <= MAX_AUDIT_TEXT_LENGTH ? value : value.slice(0, MAX_AUDIT_TEXT_LENGTH);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isLifecycleName(name: string): name is LifecycleEventName {
+  return lifecycleNames.has(name as LifecycleEventName);
+}
+
+function stateKey(extensionId: string, version: string): string {
+  return `${extensionId}@${version}`;
+}
+
+function sortEntries(entries: readonly ExtensionManagerEntry[]): ExtensionManagerEntry[] {
+  return [...entries].sort((a, b) => {
+    const idComparison = a.id.localeCompare(b.id);
+    if (idComparison !== 0) return idComparison;
+    if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt;
+    return a.version.localeCompare(b.version);
+  });
+}

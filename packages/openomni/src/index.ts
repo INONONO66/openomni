@@ -43,6 +43,37 @@ export type {
   SkillUninstallOptions,
 } from "./skill";
 
+// Extension lifecycle management
+export { ExtensionManager, RuntimeBinding } from "./extension";
+export type {
+  ExtensionAuditContext,
+  ExtensionAuditEntry,
+  ExtensionAuditOptions,
+  ExtensionBindingOperationOptions,
+  ExtensionLifecycleAuditEntry,
+  ExtensionListOptions,
+  ExtensionManagerEntry,
+  ExtensionManifestSummary,
+  ExtensionOperationAuditEntry,
+  ExtensionOperationOptions,
+  ExtensionRequestInstallOptions,
+  ExtensionRollbackOptions,
+  ExtensionValidationFailure,
+  ExtensionValidationResult,
+  ExtensionValidationSuccess,
+  ExtensionVersionOperationOptions,
+  RuntimeAgentTarget,
+  RuntimeBindingContext,
+  RuntimeBindingController,
+  RuntimeBindingExtension,
+  RuntimeBindingTargets,
+  RuntimeMcpTarget,
+  RuntimeMiddlewareTarget,
+  RuntimeSkillTarget,
+  RuntimeSurfaceTarget,
+  RuntimeToolTarget,
+} from "./extension";
+
 // Subagent runtime
 export {
   SubagentRuntime,
