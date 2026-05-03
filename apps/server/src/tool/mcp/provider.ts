@@ -2,6 +2,7 @@ import { McpClient } from "@openomni/agent";
 import type { McpServerConfig, Tool } from "@openomni/protocol";
 import { Log } from "@openomni/session";
 import type { NativeTool, ToolCategory, ToolProvider } from "@openomni/openomni";
+import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
 
 export class McpToolProvider implements ToolProvider {
   readonly name = "mcp";
@@ -75,38 +76,21 @@ export class McpToolProvider implements ToolProvider {
     this.cachedTools = tools;
   }
 
-  execute(call: Tool.Call): Promise<Tool.Result> {
-    const tool = this.listTools().find(
-      (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
-    );
-    if (!tool) {
-      return Promise.resolve({
+  async execute(call: Tool.Call): Promise<Tool.Result> {
+    const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
+      call,
+      tools: this.listTools(),
+      isServerConnected: (serverName) =>
+        this.clients.has(serverName) && this.connected.has(serverName),
+    });
+    const tool = guard.tool;
+    if (guard.verdict.action !== "continue" || !tool) {
+      return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
-        output: `Unknown tool: ${call.tool}`,
+        output: guard.verdict.reason ?? `Unknown tool: ${call.tool}`,
         isError: true,
-      });
-    }
-
-    const dotIndex = tool.spec.name.indexOf(".");
-    if (dotIndex === -1) {
-      return Promise.resolve({
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `MCP tool name must be prefixed with server name: ${tool.spec.name}`,
-        isError: true,
-      });
-    }
-
-    const serverName = tool.spec.name.slice(0, dotIndex);
-    const client = this.clients.get(serverName);
-    if (!client) {
-      return Promise.resolve({
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `MCP server not found: ${serverName}`,
-        isError: true,
-      });
+      };
     }
 
     return tool.execute({ ...call, tool: tool.spec.name });
