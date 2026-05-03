@@ -1,8 +1,12 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { SqliteStorageAdapter } from "@openomni/session/src/storage/sqlite-storage";
 import { Storage } from "@openomni/session";
 import { BackgroundStore } from "./background-store";
 import { BackgroundManager } from "./background-manager";
+import { BackgroundLimitsMiddleware } from "./middleware/background-limits";
+import { SubagentRuntime } from "./runtime";
+
+let spawnBackgroundSpy: ReturnType<typeof spyOn> | undefined;
 
 function makeTask(id: string): import("@openomni/protocol").Subagent.BackgroundTask {
   return {
@@ -19,11 +23,36 @@ function makeTask(id: string): import("@openomni/protocol").Subagent.BackgroundT
   };
 }
 
+function makeLaunchInput() {
+  return {
+    agentName: "test-agent",
+    prompt: "do something",
+    model: { provider: "test", id: "model" },
+    parentSessionId: "parent-session-1",
+  };
+}
+
+function configureMemoryStorage(): void {
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  Storage.configure(new SqliteStorageAdapter(":memory:"));
+}
+
+function mockSpawnBackground(): void {
+  spawnBackgroundSpy = spyOn(SubagentRuntime, "spawnBackground").mockResolvedValue({
+    sessionId: "worker-session-1",
+    runId: "run-1",
+  });
+}
+
+afterEach(() => {
+  spawnBackgroundSpy?.mockRestore();
+  spawnBackgroundSpy = undefined;
+});
+
 describe("BackgroundStore — SQLite persistence", () => {
   beforeEach(() => {
-    const adapter = new SqliteStorageAdapter(":memory:");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(adapter);
+    configureMemoryStorage();
   });
 
   it("persists a running task and retrieves it", () => {
@@ -85,8 +114,7 @@ describe("BackgroundStore — SQLite persistence", () => {
 
 describe("BackgroundManager — task survives recreation", () => {
   beforeEach(() => {
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(":memory:"));
+    configureMemoryStorage();
   });
 
   it("getTask returns interrupted task after manager is recreated", () => {
@@ -112,5 +140,120 @@ describe("BackgroundManager — task survives recreation", () => {
     const result = manager.getResult("bg_crash02");
     expect(result).toBeDefined();
     expect(result?.status).toBe("failed");
+  });
+});
+
+describe("BackgroundManager — launch limit policy", () => {
+  beforeEach(() => {
+    configureMemoryStorage();
+    mockSpawnBackground();
+  });
+
+  it("rejects per-agent limit before task insertion", async () => {
+    const manager = BackgroundManager.create({ maxConcurrentPerAgent: 0 });
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("max concurrent tasks per agent (0) exceeded");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 0 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("rejects depth limit before task insertion", async () => {
+    const manager = BackgroundManager.create({ maxDepth: 0 });
+    try {
+      const task = await manager.launch({ ...makeLaunchInput(), depth: 1 });
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("max depth (0) exceeded");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 0 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("rejects descendant limit before task insertion", async () => {
+    const manager = BackgroundManager.create({ maxDescendants: 0 });
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("max descendants (0) from same parent exceeded");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 0 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("queues when total concurrency is saturated", async () => {
+    const manager = BackgroundManager.create({ maxConcurrentTotal: 0, maxQueueSize: 1 });
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("pending");
+      expect(manager.stats()).toEqual({ active: 0, pending: 1, total: 1 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("rejects queue limit without mutating task state", async () => {
+    const manager = BackgroundManager.create({ maxConcurrentTotal: 0, maxQueueSize: 1 });
+    try {
+      const first = await manager.launch(makeLaunchInput());
+      const second = await manager.launch({
+        ...makeLaunchInput(),
+        parentSessionId: "parent-session-2",
+      });
+
+      expect(first.status).toBe("pending");
+      expect(second.status).toBe("failed");
+      expect(second.error).toBe("queue full (max 1)");
+      expect(manager.stats()).toEqual({ active: 0, pending: 1, total: 1 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("preserves valid launch behavior", async () => {
+    const manager = BackgroundManager.create();
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("running");
+      expect(task.sessionId).toBe("worker-session-1");
+      expect(task.runId).toBe("run-1");
+      expect(manager.stats()).toEqual({ active: 1, pending: 0, total: 1 });
+      expect(spawnBackgroundSpy).toHaveBeenCalledTimes(1);
+      await manager.cancel(task.id);
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("returns policy metadata on non-continue verdicts", async () => {
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
+      input: makeLaunchInput(),
+      activeTasks: [],
+      activeCount: 0,
+      pendingQueueSize: 0,
+      maxConcurrentPerAgent: 0,
+      maxConcurrentTotal: 10,
+      maxDepth: 5,
+      maxDescendants: 10,
+      maxQueueSize: 100,
+    });
+
+    expect(result.verdict.action).toBe("abort");
+    expect(result.verdict.policyId).toBe("background.limit.per-agent");
+    expect(result.verdict.reason).toBe("max concurrent tasks per agent (0) exceeded");
   });
 });

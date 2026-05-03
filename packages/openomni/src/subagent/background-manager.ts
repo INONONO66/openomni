@@ -2,6 +2,7 @@ import { type Message, Subagent } from "@openomni/protocol";
 import { Bus, Log, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
+import { BackgroundLimitsMiddleware } from "./middleware/background-limits.js";
 import { SubagentRuntime } from "./runtime.js";
 
 type LaunchInput = {
@@ -52,6 +53,7 @@ export const BackgroundManager = {
     const pendingQueue: QueuedItem[] = [];
     // Tracks spawning + running tasks synchronously (incremented before async spawn)
     let activeCount = 0;
+    let launchLock: Promise<void> = Promise.resolve();
 
     for (const interrupted of BackgroundStore.loadInterrupted()) {
       tasks.set(interrupted.id, interrupted);
@@ -60,6 +62,21 @@ export const BackgroundManager = {
 
     function activeTasks(): Subagent.BackgroundTask[] {
       return [...tasks.values()].filter((t) => t.status === "running" || t.status === "pending");
+    }
+
+    async function withLaunchLock<T>(fn: () => Promise<T>): Promise<T> {
+      const previous = launchLock;
+      let releaseLock: (() => void) | undefined;
+      launchLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      await previous;
+
+      try {
+        return await fn();
+      } finally {
+        releaseLock?.();
+      }
     }
 
     function makeFailedTask(input: LaunchInput, error: string): Subagent.BackgroundTask {
@@ -281,77 +298,50 @@ export const BackgroundManager = {
     }
 
     async function launch(input: LaunchInput): Promise<Subagent.BackgroundTask> {
-      const depth = input.depth ?? 0;
-      const active = activeTasks();
-
-      const perAgentCount = active.filter((t) => t.agentName === input.agentName).length;
-      if (perAgentCount >= maxConcurrentPerAgent) {
-        Log.warn("background.limit.per-agent", {
-          agentName: input.agentName,
-          count: perAgentCount,
-          limit: maxConcurrentPerAgent,
+      return withLaunchLock(async () => {
+        const depth = input.depth ?? 0;
+        const policy = await BackgroundLimitsMiddleware.evaluatePreLaunch({
+          input: { ...input, depth },
+          activeTasks: activeTasks(),
+          activeCount,
+          pendingQueueSize: pendingQueue.length,
+          maxConcurrentPerAgent,
+          maxConcurrentTotal,
+          maxDepth,
+          maxDescendants,
+          maxQueueSize,
         });
-        return makeFailedTask(
-          input,
-          `max concurrent tasks per agent (${maxConcurrentPerAgent}) exceeded`,
-        );
-      }
-
-      if (depth > maxDepth) {
-        Log.warn("background.limit.depth", { agentName: input.agentName, depth, limit: maxDepth });
-        return makeFailedTask(input, `max depth (${maxDepth}) exceeded`);
-      }
-
-      const descendantCount = active.filter(
-        (t) => t.parentSessionId === input.parentSessionId,
-      ).length;
-      if (descendantCount >= maxDescendants) {
-        Log.warn("background.limit.descendants", {
-          parentSessionId: input.parentSessionId,
-          count: descendantCount,
-          limit: maxDescendants,
-        });
-        return makeFailedTask(
-          input,
-          `max descendants (${maxDescendants}) from same parent exceeded`,
-        );
-      }
-
-      const id = `bg_${crypto.randomUUID().slice(0, 8)}`;
-      const task: Subagent.BackgroundTask = {
-        id,
-        agentName: input.agentName,
-        prompt: input.prompt,
-        status: "pending",
-        parentSessionId: input.parentSessionId,
-        queuedAt: Date.now(),
-        depth,
-      };
-      tasks.set(id, task);
-
-      if (activeCount >= maxConcurrentTotal) {
-        if (pendingQueue.length >= maxQueueSize) {
-          Log.warn("background.limit.queue-full", {
-            agentName: input.agentName,
-            queueSize: pendingQueue.length,
-            limit: maxQueueSize,
-          });
-          tasks.delete(id);
-          return makeFailedTask(input, `queue full (max ${maxQueueSize})`);
+        if (policy.verdict.action !== "continue") {
+          return makeFailedTask(input, policy.verdict.reason ?? "background launch policy aborted");
         }
-        Log.info("background.task.queued", {
-          taskId: id,
-          agentName: input.agentName,
-          depth,
-          queueDepth: pendingQueue.length + 1,
-        });
-        pendingQueue.push({ input, id });
-        return task;
-      }
 
-      activeCount++;
-      await spawnTask(id, input, task);
-      return tasks.get(id) ?? task;
+        const id = `bg_${crypto.randomUUID().slice(0, 8)}`;
+        const task: Subagent.BackgroundTask = {
+          id,
+          agentName: input.agentName,
+          prompt: input.prompt,
+          status: "pending",
+          parentSessionId: input.parentSessionId,
+          queuedAt: Date.now(),
+          depth,
+        };
+        tasks.set(id, task);
+
+        if (policy.shouldQueue) {
+          Log.info("background.task.queued", {
+            taskId: id,
+            agentName: input.agentName,
+            depth,
+            queueDepth: pendingQueue.length + 1,
+          });
+          pendingQueue.push({ input, id });
+          return task;
+        }
+
+        activeCount++;
+        await spawnTask(id, input, task);
+        return tasks.get(id) ?? task;
+      });
     }
 
     async function cancel(taskId: string): Promise<boolean> {
