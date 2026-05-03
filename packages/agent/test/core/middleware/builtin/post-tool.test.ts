@@ -65,10 +65,10 @@ describe("createPostToolMiddleware", () => {
 
     await middleware.fn(ctx);
 
-    expect(receivedCtx!.toolName).toBe("my-tool");
-    expect(receivedCtx!.toolCallId).toBe("call-456");
-    expect(receivedCtx!.toolInput).toEqual({ param: "test" });
-    expect(receivedCtx!.toolOutput).toBe("result");
+    expect(receivedCtx?.toolName).toBe("my-tool");
+    expect(receivedCtx?.toolCallId).toBe("call-456");
+    expect(receivedCtx?.toolInput).toEqual({ param: "test" });
+    expect(receivedCtx?.toolOutput).toBe("result");
   });
 
   it("enricher throwing → continue verdict (error isolation)", async () => {
