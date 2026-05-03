@@ -1,4 +1,4 @@
-import type { Messenger } from "@openomni/protocol";
+import { Guardrail, type Messenger } from "@openomni/protocol";
 import type { MiddlewareRegistration } from "../types";
 
 export interface MessengerAllowPatternConfig {
@@ -9,6 +9,46 @@ function matchesPattern(pattern: Messenger.AllowPattern, from: string, to: strin
   const fromMatch = pattern.from === "*" || pattern.from === from;
   const toMatch = pattern.to === "*" || pattern.to === to;
   return fromMatch && toMatch;
+}
+
+function evaluateMessengerPermission(input: {
+  readonly fromAgentId: string;
+  readonly toAgentId: string;
+  readonly allowed: boolean;
+  readonly allowReason: string;
+  readonly denyReason: string;
+}) {
+  const action = "messenger.envelope.send";
+  const resource = `${input.fromAgentId}->${input.toAgentId}`;
+  return Guardrail.evaluate(
+    {
+      action,
+      inputRules: [
+        {
+          toolPattern: resource,
+          field: "allowed",
+          pattern: "^true$",
+          action: "allow",
+          reason: input.allowReason,
+          priority: 2,
+        },
+        {
+          toolPattern: resource,
+          field: "allowed",
+          pattern: "^false$",
+          action: "deny",
+          reason: input.denyReason,
+          priority: 1,
+        },
+      ],
+    },
+    {
+      action,
+      resource,
+      actor: { agentId: input.fromAgentId },
+      input: { allowed: String(input.allowed), toAgentId: input.toAgentId },
+    },
+  );
 }
 
 export function createMessengerAllowPatternMiddleware(
@@ -24,38 +64,43 @@ export function createMessengerAllowPatternMiddleware(
       const toAgentId = ctx.envelope?.toAgentId;
 
       if (!fromAgentId || !toAgentId) {
-        return {
-          action: "continue",
-          reason: "no_envelope",
-          policyId: "messenger.allow-pattern",
-        };
+        return Guardrail.evaluate(undefined, {
+          action: "messenger.envelope.send",
+          resource: "messenger.envelope",
+        });
       }
 
       const { allowPatterns } = config;
 
       if (!allowPatterns || allowPatterns.length === 0) {
-        return {
-          action: "continue",
-          reason: "no_allow_patterns_configured",
-          policyId: "messenger.allow-pattern",
-        };
+        return evaluateMessengerPermission({
+          fromAgentId,
+          toAgentId,
+          allowed: true,
+          allowReason: "no_allow_patterns_configured",
+          denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+        });
       }
 
       const isAuthorized = allowPatterns.some((p) => matchesPattern(p, fromAgentId, toAgentId));
 
       if (isAuthorized) {
-        return {
-          action: "continue",
-          reason: "allow_pattern_matched",
-          policyId: "messenger.allow-pattern",
-        };
+        return evaluateMessengerPermission({
+          fromAgentId,
+          toAgentId,
+          allowed: true,
+          allowReason: "allow_pattern_matched",
+          denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+        });
       }
 
-      return {
-        action: "abort",
-        reason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
-        policyId: "messenger.allow-pattern",
-      };
+      return evaluateMessengerPermission({
+        fromAgentId,
+        toAgentId,
+        allowed: false,
+        allowReason: "allow_pattern_matched",
+        denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+      });
     },
   };
 }
