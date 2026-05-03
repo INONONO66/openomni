@@ -88,6 +88,206 @@ describe("Guardrail schemas", () => {
     });
   });
 
+  describe("evaluate", () => {
+    const request = (
+      resource: string,
+      input?: Record<string, unknown>,
+    ): Guardrail.EvaluationRequest => ({
+      action: "tool.call",
+      resource,
+      input,
+    });
+
+    it("allows by default", () => {
+      expect(Guardrail.evaluate({ action: "tool.call" }, request("any_tool"))).toMatchObject({
+        action: "continue",
+        reason: "default_allow",
+        policyId: "guardrail.permission",
+      });
+    });
+
+    it("aborts on action mismatch", () => {
+      expect(Guardrail.evaluate({ action: "task.create" }, request("any_tool"))).toMatchObject({
+        action: "abort",
+        reason: "action_mismatch",
+        policyId: "guardrail.permission",
+      });
+    });
+
+    it("denies resources matched by denylist", () => {
+      expect(
+        Guardrail.evaluate(
+          { action: "tool.call", denylist: ["dangerous_tool"] },
+          request("dangerous_tool"),
+        ),
+      ).toMatchObject({
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "dangerous_tool",
+      });
+    });
+
+    it("allows only resources matched by allowlist", () => {
+      const permission = { action: "tool.call", allowlist: ["safe_tool"] };
+
+      expect(Guardrail.evaluate(permission, request("safe_tool"))).toMatchObject({
+        action: "continue",
+        reason: "allowlist",
+        policyId: "guardrail.permission",
+      });
+      expect(Guardrail.evaluate(permission, request("other_tool"))).toMatchObject({
+        action: "abort",
+        reason: "allowlist_miss",
+        policyId: "guardrail.permission",
+      });
+    });
+
+    it("aborts when allowlist is empty", () => {
+      expect(
+        Guardrail.evaluate({ action: "tool.call", allowlist: [] }, request("safe_tool")),
+      ).toMatchObject({
+        action: "abort",
+        reason: "allowlist_empty",
+        policyId: "guardrail.permission",
+      });
+    });
+
+    it("requires approval for matched resources", () => {
+      expect(
+        Guardrail.evaluate(
+          { action: "tool.call", requireApproval: ["sensitive_tool"] },
+          request("sensitive_tool"),
+        ),
+      ).toMatchObject({
+        action: "abort",
+        reason: "require_approval",
+        policyId: "guardrail.permission",
+        matchedPattern: "sensitive_tool",
+      });
+    });
+
+    it("matches wildcard for all policy lists", () => {
+      expect(
+        Guardrail.evaluate({ action: "tool.call", allowlist: ["*"] }, request("file.read")),
+      ).toMatchObject({
+        action: "continue",
+        reason: "allowlist",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      });
+      expect(
+        Guardrail.evaluate({ action: "tool.call", denylist: ["*"] }, request("file.read")),
+      ).toMatchObject({
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      });
+      expect(
+        Guardrail.evaluate({ action: "tool.call", requireApproval: ["*"] }, request("file.read")),
+      ).toMatchObject({
+        action: "abort",
+        reason: "require_approval",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      });
+    });
+
+    it("matches prefix wildcard for all policy lists", () => {
+      expect(
+        Guardrail.evaluate({ action: "tool.call", allowlist: ["file.*"] }, request("file.read")),
+      ).toMatchObject({
+        action: "continue",
+        reason: "allowlist",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      });
+      expect(
+        Guardrail.evaluate({ action: "tool.call", denylist: ["file.*"] }, request("file.read")),
+      ).toMatchObject({
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      });
+      expect(
+        Guardrail.evaluate(
+          { action: "tool.call", requireApproval: ["file.*"] },
+          request("file.read"),
+        ),
+      ).toMatchObject({
+        action: "abort",
+        reason: "require_approval",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      });
+      expect(
+        Guardrail.evaluate(
+          { action: "tool.call", allowlist: ["file.*"] },
+          request("filesystem.read"),
+        ),
+      ).toMatchObject({
+        action: "abort",
+        reason: "allowlist_miss",
+        policyId: "guardrail.permission",
+      });
+    });
+
+    it("gives denylist precedence over approval and allowlist matches", () => {
+      expect(
+        Guardrail.evaluate(
+          {
+            action: "tool.call",
+            allowlist: ["*"],
+            denylist: ["file.*"],
+            requireApproval: ["file.read"],
+          },
+          request("file.read"),
+        ),
+      ).toMatchObject({
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      });
+    });
+
+    it("uses highest priority matching input rule before list policies", () => {
+      expect(
+        Guardrail.evaluate(
+          {
+            action: "tool.call",
+            denylist: ["bash"],
+            inputRules: [
+              {
+                toolPattern: "bash",
+                field: "command",
+                pattern: "^npm",
+                action: "deny",
+                priority: 1,
+              },
+              {
+                toolPattern: "bash",
+                field: "command",
+                pattern: "^npm test$",
+                action: "allow",
+                reason: "safe command",
+                priority: 10,
+              },
+            ],
+          },
+          request("bash", { command: "npm test" }),
+        ),
+      ).toMatchObject({
+        action: "continue",
+        reason: "safe command",
+        policyId: "guardrail.permission",
+        matchedPattern: "bash",
+      });
+    });
+  });
+
   describe("GuardrailType", () => {
     it("accepts valid enum values", () => {
       expect(() => Guardrail.GuardrailType.parse("output_validation")).not.toThrow();

@@ -1,6 +1,11 @@
 import { z } from "zod";
+import type { Hook } from "../hook/index";
 
 export namespace Guardrail {
+  const MAX_REGEX_PATTERN_LENGTH = 200;
+  const MAX_INPUT_LENGTH = 10_000;
+  const POLICY_ID = "guardrail.permission";
+
   export const InputRule = z.object({
     toolPattern: z.string(),
     field: z.string(),
@@ -29,6 +34,115 @@ export namespace Guardrail {
     inputRules: InputRule.array().optional(),
   });
   export type Permission = z.infer<typeof Permission>;
+
+  export const EvaluationRequest = z.object({
+    action: z.string(),
+    resource: z.string(),
+    input: z.record(z.string(), z.unknown()).optional(),
+    actor: z.record(z.string(), z.unknown()).optional(),
+    resourceMeta: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  });
+  export type EvaluationRequest = z.infer<typeof EvaluationRequest>;
+
+  export const EvaluationResult = z.object({
+    action: z.enum(["continue", "abort"]),
+    reason: z.string(),
+    policyId: z.literal(POLICY_ID),
+    matchedPattern: z.string().optional(),
+  });
+  export type EvaluationResult = z.infer<typeof EvaluationResult> & Hook.Verdict;
+
+  function matchesPattern(resource: string, pattern: string): boolean {
+    if (pattern === "*") return true;
+    if (pattern.endsWith(".*")) return resource.startsWith(`${pattern.slice(0, -2)}.`);
+    return resource === pattern;
+  }
+
+  function matchesInputField(
+    input: Record<string, unknown> | undefined,
+    field: string,
+    pattern: string,
+  ): boolean {
+    if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return false;
+
+    const raw = String(input?.[field] ?? "");
+    const value = raw.length > MAX_INPUT_LENGTH ? raw.slice(0, MAX_INPUT_LENGTH) : raw;
+
+    try {
+      return new RegExp(pattern).test(value);
+    } catch {
+      return false;
+    }
+  }
+
+  function verdict(
+    action: Extract<Hook.Verdict["action"], "continue" | "abort">,
+    reason: string,
+    matchedPattern?: string,
+  ): EvaluationResult {
+    return matchedPattern === undefined
+      ? { action, reason, policyId: POLICY_ID }
+      : { action, reason, policyId: POLICY_ID, matchedPattern };
+  }
+
+  function actionForRule(
+    action: InputRule["action"],
+  ): Extract<Hook.Verdict["action"], "continue" | "abort"> {
+    return action === "allow" ? "continue" : "abort";
+  }
+
+  export function evaluate(
+    permission: Permission | undefined,
+    request: EvaluationRequest,
+  ): EvaluationResult {
+    if (!permission) return verdict("continue", "default_allow");
+    if (permission.action !== request.action) return verdict("abort", "action_mismatch");
+
+    const inputRules = [...(permission.inputRules ?? [])].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    );
+
+    for (const rule of inputRules) {
+      if (
+        matchesPattern(request.resource, rule.toolPattern) &&
+        matchesInputField(request.input, rule.field, rule.pattern)
+      ) {
+        return verdict(
+          actionForRule(rule.action),
+          rule.reason ?? `input_rule_${rule.action}`,
+          rule.toolPattern,
+        );
+      }
+    }
+
+    const deniedBy = permission.denylist?.find((pattern) =>
+      matchesPattern(request.resource, pattern),
+    );
+    if (deniedBy) return verdict("abort", "denylist", deniedBy);
+
+    const requiresApprovalBy = permission.requireApproval?.find((pattern) =>
+      matchesPattern(request.resource, pattern),
+    );
+    if (requiresApprovalBy) {
+      return verdict("abort", "require_approval", requiresApprovalBy);
+    }
+
+    if (permission.allowlist !== undefined) {
+      const allowedBy = permission.allowlist.find((pattern) =>
+        matchesPattern(request.resource, pattern),
+      );
+
+      if (allowedBy) return verdict("continue", "allowlist", allowedBy);
+
+      return verdict(
+        "abort",
+        permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss",
+      );
+    }
+
+    return verdict("continue", "default_allow");
+  }
 
   export const GuardrailType = z.enum([
     "output_validation",
