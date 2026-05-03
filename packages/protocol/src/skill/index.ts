@@ -14,6 +14,7 @@ export namespace Skill {
     scope: Scope,
     layer: Layer,
     path: z.string(),
+    promptFragment: z.string().default(""),
     useWhen: z.string().optional(),
     doNotUseWhen: z.string().optional(),
     finalChecklist: z.array(z.string()).optional(),

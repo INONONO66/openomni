@@ -21,6 +21,7 @@ describe("Skill protocol domain", () => {
         expect(result.data.id).toBe("skill-local-exec");
         expect(result.data.scope).toBe("local");
         expect(result.data.layer).toBe("execution");
+        expect(result.data.promptFragment).toBe("");
       }
     });
 
@@ -32,6 +33,7 @@ describe("Skill protocol domain", () => {
         scope: "global" as const,
         layer: "guarantee" as const,
         path: "~/.openomni/skills/guarantee/SKILL.md",
+        promptFragment: "Always verify the final answer before returning.",
         useWhen: "Always available",
         doNotUseWhen: "Never",
         finalChecklist: ["Check 1", "Check 2"],
@@ -42,6 +44,7 @@ describe("Skill protocol domain", () => {
       if (result.success) {
         expect(result.data.scope).toBe("global");
         expect(result.data.layer).toBe("guarantee");
+        expect(result.data.promptFragment).toBe("Always verify the final answer before returning.");
         expect(result.data.useWhen).toBe("Always available");
         expect(result.data.finalChecklist).toEqual(["Check 1", "Check 2"]);
       }
