@@ -27,7 +27,11 @@ export abstract class NamedError extends Error {
             : name;
         super(message);
         if (options?.cause) {
-          (this as any).cause = options.cause;
+          Object.defineProperty(this, "cause", {
+            value: options.cause,
+            configurable: true,
+            writable: true,
+          });
         }
         this.name = name;
       }

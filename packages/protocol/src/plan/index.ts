@@ -62,7 +62,8 @@ export namespace Plan {
       const queue = stepIds.filter((id) => inDegree.get(id) === 0);
       let visited = 0;
       while (queue.length > 0) {
-        const id = queue.shift()!;
+        const id = queue.shift();
+        if (id === undefined) break;
         visited++;
         for (const step of data.steps) {
           if (step.dependsOn.includes(id)) {

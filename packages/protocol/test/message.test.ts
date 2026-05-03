@@ -26,8 +26,8 @@ describe("Message.TextPart", () => {
       metadata: { source: "user" },
     });
 
-    expect(part.time!.start).toBe(100);
-    expect(part.time!.end).toBe(200);
+    expect(part.time?.start).toBe(100);
+    expect(part.time?.end).toBe(200);
     expect(part.metadata).toEqual({ source: "user" });
   });
 
