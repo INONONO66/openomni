@@ -48,7 +48,7 @@ export class MetricsRegistry {
         lines.push(`${metric.name}${labelStr} ${value}`);
       }
     }
-    return lines.join("\n") + "\n";
+    return `${lines.join("\n")}\n`;
   }
 
   clear(): void {

@@ -16,7 +16,7 @@ export function connectUnixSocket(socketPath: string, timeoutMs = 5000): Promise
     socket.once("connect", () => {
       clearTimeout(timer);
       resolve({
-        send: (msg) => socket.write(JSON.stringify(msg) + "\n"),
+        send: (msg) => socket.write(`${JSON.stringify(msg)}\n`),
         close: () => socket.destroy(),
       });
     });
