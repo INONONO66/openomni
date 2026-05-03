@@ -69,7 +69,12 @@ describe("StepGuard (run path)", () => {
       stepGuard: async () => {
         guardCallCount++;
         if (guardCallCount === 1) {
-          return { action: "inject", message: "Please verify your work." };
+          return {
+            action: "inject",
+            message: "Please verify your work.",
+            reason: "verify-work",
+            policyId: "test.step-guard",
+          };
         }
         return { action: "continue" };
       },
@@ -126,7 +131,12 @@ describe("StepGuard (run path)", () => {
       stepGuard: async (_step, ctx) => {
         capturedCounts.push(ctx.continuationCount);
         if (ctx.continuationCount < 2) {
-          return { action: "inject", message: "keep going" };
+          return {
+            action: "inject",
+            message: "keep going",
+            reason: "continue-work",
+            policyId: "test.step-guard",
+          };
         }
         return { action: "continue" };
       },

@@ -123,7 +123,12 @@ describe("ChatAgent", () => {
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       budget: { maxTurns: 1, maxToolCalls: 10 },
-      stepGuard: () => ({ action: "inject", message: "continue" }),
+      stepGuard: () => ({
+        action: "inject",
+        message: "continue",
+        reason: "continue-after-step",
+        policyId: "test.step-guard",
+      }),
     });
 
     const result = await agent.run({
@@ -200,7 +205,12 @@ describe("ChatAgent", () => {
       stepGuard: () => {
         guardInvocations += 1;
         if (guardInvocations === 1) {
-          return { action: "inject", message: "continue" };
+          return {
+            action: "inject",
+            message: "continue",
+            reason: "continue-after-step",
+            policyId: "test.step-guard",
+          };
         }
         return { action: "continue" };
       },

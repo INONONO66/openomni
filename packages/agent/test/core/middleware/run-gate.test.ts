@@ -121,7 +121,12 @@ describe("pre_run middleware dispatch", () => {
           name: "test:pre_run_inject",
           timing: "pre_run",
           priority: 100,
-          fn: () => ({ action: "inject" as const, message: injectedContent }),
+          fn: () => ({
+            action: "inject" as const,
+            message: injectedContent,
+            reason: "inject-pre-run-context",
+            policyId: "test.pre-run-inject",
+          }),
         },
       ],
     });
@@ -217,7 +222,12 @@ describe("post_run middleware dispatch", () => {
           name: "test:post_run_transform",
           timing: "post_run",
           priority: 100,
-          fn: () => ({ action: "transform" as const, input: { text: transformedText } }),
+          fn: () => ({
+            action: "transform" as const,
+            input: { text: transformedText },
+            reason: "replace-result-text",
+            policyId: "test.post-run-transform",
+          }),
         },
       ],
     });

@@ -69,7 +69,14 @@ describe("StepGuard (stream path)", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       stepGuard: async () => {
         guardCount++;
-        return guardCount === 1 ? { action: "inject", message: "verify" } : { action: "continue" };
+        return guardCount === 1
+          ? {
+              action: "inject",
+              message: "verify",
+              reason: "verify-work",
+              policyId: "test.step-guard",
+            }
+          : { action: "continue" };
       },
     });
 
@@ -85,7 +92,11 @@ describe("StepGuard (stream path)", () => {
   it("emits complete with guardAborted on abort", async () => {
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      stepGuard: async () => ({ action: "abort" }),
+      stepGuard: async () => ({
+        action: "abort",
+        reason: "guard-aborted",
+        policyId: "test.step-guard",
+      }),
     });
 
     const events = await collectEvents(

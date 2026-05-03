@@ -130,8 +130,10 @@ describe("run() delegation contract", () => {
     const result = await agent.run(defaultInput);
 
     expect(result.steps.length).toBeGreaterThanOrEqual(1);
-    expect(result.steps[0].type).toBe("text");
-    expect(result.steps[0].content).toBe("step content");
+    const firstStep = result.steps[0];
+    if (!firstStep) throw new Error("expected first step");
+    expect(firstStep.type).toBe("text");
+    expect(firstStep.content).toBe("step content");
   });
 
   it("accumulates token usage from assistant messages", async () => {
@@ -223,7 +225,14 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       hooks: {
         postTurn: () =>
-          turnCount < 2 ? { action: "inject", message: "continue" } : { action: "continue" },
+          turnCount < 2
+            ? {
+                action: "inject",
+                message: "continue",
+                reason: "continue-for-compaction",
+                policyId: "test.post-turn",
+              }
+            : { action: "continue" },
       },
       middleware: [
         {
@@ -233,6 +242,8 @@ describe("run() delegation contract", () => {
           fn: async () => ({
             action: "transform" as const,
             input: { messages: [] as unknown[] },
+            reason: "force-compaction",
+            policyId: "test.force-compaction",
           }),
         },
       ],

@@ -37,6 +37,8 @@ export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
       return {
         action: "transform",
         input: { appendContext: `[Memory Context]\n${entries}` },
+        reason: "memory_context_available",
+        policyId: "builtin.memory",
       };
     },
   };

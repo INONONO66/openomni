@@ -21,6 +21,8 @@ export function createPostToolMiddleware(enricher: PostToolEnricher): Middleware
       return {
         action: "transform",
         input: { output: base ? `${base}\n${addition}` : addition },
+        reason: "post_tool_enrichment",
+        policyId: "builtin.post_tool",
       };
     },
   };

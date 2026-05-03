@@ -37,6 +37,8 @@ export function createCompactionMiddleware(config: CompactionConfig): Middleware
       return {
         action: "transform",
         input: { messages: result.messages },
+        reason: "compaction_threshold_exceeded",
+        policyId: "builtin.compaction",
       };
     },
   };

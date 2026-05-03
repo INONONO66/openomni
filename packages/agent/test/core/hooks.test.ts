@@ -96,6 +96,7 @@ describe("Execution hooks", () => {
       const call: Tool.Call = { id: "call-skip", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
       const result = await runInput.toolExecutor?.(call);
+      if (!result) throw new Error("expected tool result");
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -145,6 +146,7 @@ describe("Execution hooks", () => {
       const call: Tool.Call = { id: "call-transform", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
       const result = await runInput.toolExecutor?.(call);
+      if (!result) throw new Error("expected tool result");
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -155,7 +157,12 @@ describe("Execution hooks", () => {
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: executor,
       hooks: {
-        preToolUse: () => ({ action: "transform", input: { command: "pwd" } }),
+        preToolUse: () => ({
+          action: "transform",
+          input: { command: "pwd" },
+          reason: "rewrite-tool-input",
+          policyId: "test.pre-tool-use",
+        }),
       },
     });
 
@@ -181,6 +188,7 @@ describe("Execution hooks", () => {
       const call: Tool.Call = { id: "call-usage", tool: "bash", input: { command: "ls" } };
       sink.onToolCall(call);
       const result = await runInput.toolExecutor?.(call);
+      if (!result) throw new Error("expected tool result");
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
       return createStopOutcome();
@@ -229,7 +237,12 @@ describe("Execution hooks", () => {
         postTurn: () => {
           postTurnCalls++;
           return postTurnCalls === 1
-            ? { action: "inject", message: "continue please" }
+            ? {
+                action: "inject",
+                message: "continue please",
+                reason: "continue-after-post-turn",
+                policyId: "test.post-turn",
+              }
             : { action: "continue" };
         },
       },
@@ -363,7 +376,11 @@ describe("Execution hooks", () => {
         return createStopOutcome();
       };
 
-      const stepGuard = mock(() => ({ action: "abort" as const }));
+      const stepGuard = mock(() => ({
+        action: "abort" as const,
+        reason: "step-guard-blocked",
+        policyId: "test.step-guard",
+      }));
       const postTurn = mock(() => ({ action: "continue" as const }));
 
       const agent = ChatAgent.create({

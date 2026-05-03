@@ -34,7 +34,10 @@ export type {
   MiddlewareContext,
   MiddlewareFn,
   MiddlewareRegistration,
+  MiddlewareDecision,
+  MiddlewareEngineConfig,
   MiddlewareEngineInstance,
+  MiddlewareEventLogConfig,
 } from "./core/middleware";
 export { AgentMessenger } from "./runtime/index";
 export type { Transport, AgentMessengerOptions } from "./runtime/index";

@@ -17,7 +17,12 @@ function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
 
 describe("createPostTurnMiddleware", () => {
   it("handler returning inject → middleware returns inject verdict", async () => {
-    const handler = () => ({ action: "inject" as const, message: "injected message" });
+    const handler = () => ({
+      action: "inject" as const,
+      message: "injected message",
+      reason: "injected-message",
+      policyId: "test.post-turn",
+    });
     const middleware = createPostTurnMiddleware(handler);
     const ctx = baseCtx({ turnCount: 1 });
 

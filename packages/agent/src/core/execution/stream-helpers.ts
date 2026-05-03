@@ -117,7 +117,13 @@ export function buildMiddlewareEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): MiddlewareEngineInstance {
-  const engine = MiddlewareEngine.create();
+  const engine = MiddlewareEngine.create({
+    traceContext: {
+      traceId: agentBase.traceId,
+      ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
+      ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
+    },
+  });
   engine.register(createBudgetReassuranceMiddleware());
   engine.register(createBudgetWarningMiddleware());
   for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {

@@ -5,8 +5,8 @@ import type { AgentRuntimeContext } from "./runtime-context";
 
 export type StepGuardVerdict =
   | { action: "continue" }
-  | { action: "inject"; message: string }
-  | { action: "abort"; reason?: string };
+  | { action: "inject"; message: string; reason?: string; policyId?: string }
+  | { action: "abort"; reason?: string; policyId?: string };
 
 export interface StepGuardContext {
   steps: AgentStep[];

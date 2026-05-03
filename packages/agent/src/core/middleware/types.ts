@@ -1,4 +1,4 @@
-import type { Hook, Middleware, Message } from "@openomni/protocol";
+import type { Hook, Middleware, Message, Messenger, TraceContext } from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
 import type { BudgetState } from "../budget";
 
@@ -19,6 +19,8 @@ export interface MiddlewareContext {
   budgetState?: BudgetState;
   eventEmitter?: AgentEventEmitter;
   budget?: AgentBudget;
+  traceContext?: TraceContext.Type;
+  envelope?: Messenger.MessageEnvelope;
 }
 
 export type MiddlewareFn = (ctx: MiddlewareContext) => Promise<Hook.Verdict> | Hook.Verdict;

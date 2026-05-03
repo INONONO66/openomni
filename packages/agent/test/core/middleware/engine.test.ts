@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { Hook } from "@openomni/protocol";
+import type { ExecutionEvent, Hook } from "@openomni/protocol";
+import { EventLog, Log, SqliteStorageAdapter, Storage } from "@openomni/session";
 import { MiddlewareEngine } from "../../../src/core/middleware";
 import type { MiddlewareContext } from "../../../src/core/middleware";
 
@@ -12,6 +13,11 @@ function baseCtx(): Omit<MiddlewareContext, "timing"> {
     continuationCount: 0,
     elapsedMs: 0,
   };
+}
+
+function env(): Record<string, string | undefined> {
+  return (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
+    .env;
 }
 
 describe("MiddlewareEngine", () => {
@@ -182,6 +188,8 @@ describe("MiddlewareEngine", () => {
       fn: () => ({
         action: "transform",
         input: { systemPrompt: "PROMPT_A", appendContext: "append-a" },
+        reason: "prompt-a",
+        policyId: "test.prompt-a",
       }),
     });
     engine.register({
@@ -191,13 +199,20 @@ describe("MiddlewareEngine", () => {
       fn: () => ({
         action: "transform",
         input: { systemPrompt: "PROMPT_B", prependContext: "prepend-b", appendContext: "append-b" },
+        reason: "prompt-b",
+        policyId: "test.prompt-b",
       }),
     });
     engine.register({
       name: "inject-c",
       timing: "on_system_prompt",
       priority: 300,
-      fn: () => ({ action: "inject", message: "append-c" }),
+      fn: () => ({
+        action: "inject",
+        message: "append-c",
+        reason: "inject-c",
+        policyId: "test.inject-c",
+      }),
     });
 
     const result = await engine.dispatchSystemPrompt(baseCtx());
@@ -222,7 +237,12 @@ describe("MiddlewareEngine", () => {
       name: "after",
       timing: "on_system_prompt",
       priority: 200,
-      fn: () => ({ action: "inject", message: "should-not-run" }),
+      fn: () => ({
+        action: "inject",
+        message: "should-not-run",
+        reason: "after",
+        policyId: "test.after",
+      }),
     });
 
     await expect(engine.dispatchSystemPrompt(baseCtx())).rejects.toThrow("system-prompt-error");
@@ -249,13 +269,140 @@ describe("MiddlewareEngine", () => {
         name: "after",
         timing: "on_system_prompt",
         priority: 200,
-        fn: () => ({ action: "inject", message: "append-after" }),
+        fn: () => ({
+          action: "inject",
+          message: "append-after",
+          reason: "after",
+          policyId: "test.after",
+        }),
       });
 
       const result = await engine.dispatchSystemPrompt(baseCtx());
       expect(result.appendContext).toBe("append-after");
     } finally {
       globalObj.console.warn = originalWarn;
+    }
+  });
+
+  it("throws in development when non-continue verdict has no reason", async () => {
+    const previousNodeEnv = env().NODE_ENV;
+    env().NODE_ENV = "development";
+    try {
+      const engine = MiddlewareEngine.create();
+      engine.register({
+        name: "missing-reason",
+        timing: "pre_turn",
+        priority: 100,
+        fn: () => ({ action: "abort" }),
+      });
+
+      await expect(engine.dispatch("pre_turn", baseCtx())).rejects.toThrow(
+        "Middleware missing-reason returned abort without reason at pre_turn",
+      );
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete env().NODE_ENV;
+      } else {
+        env().NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  it("warns once and tags unknown policy in production", async () => {
+    const previousNodeEnv = env().NODE_ENV;
+    env().NODE_ENV = "production";
+    const originalWarn = Log.warn;
+    const warnSpy = mock(() => undefined);
+    (Log as unknown as { warn: typeof Log.warn }).warn = warnSpy;
+    try {
+      const decisions: Array<{ policyId: string; reason?: string }> = [];
+      const engine = MiddlewareEngine.create({
+        onDecision: (decision) => {
+          decisions.push(decision);
+        },
+      });
+      engine.register({
+        name: "prod-metadata",
+        timing: "pre_turn",
+        priority: 100,
+        fn: () => ({ action: "abort" }),
+      });
+
+      const first = await engine.dispatch("pre_turn", baseCtx());
+      const second = await engine.dispatch("pre_turn", baseCtx());
+
+      expect(first).toEqual({ action: "abort", policyId: "unknown" });
+      expect(second).toEqual({ action: "abort", policyId: "unknown" });
+      expect(decisions).toHaveLength(2);
+      expect(decisions[0]?.policyId).toBe("unknown");
+      expect(decisions[0]?.reason).toBeUndefined();
+      expect(decisions[1]?.policyId).toBe("unknown");
+      expect(decisions[1]?.reason).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      (Log as unknown as { warn: typeof Log.warn }).warn = originalWarn;
+      if (previousNodeEnv === undefined) {
+        delete env().NODE_ENV;
+      } else {
+        env().NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  it("writes middleware decisions to EventLog when session context is available", async () => {
+    const adapter = new SqliteStorageAdapter(":memory:");
+    Storage.configure(adapter);
+    adapter.session.set("sess-policy", {
+      id: "sess-policy",
+      title: "Policy session",
+      model: { providerID: "test", modelID: "test-model" },
+      spawnDepth: 0,
+      time: { created: Date.now(), updated: Date.now() },
+    });
+
+    try {
+      const engine = MiddlewareEngine.create({
+        traceContext: {
+          traceId: "trace-policy",
+          sessionId: "sess-policy",
+          runId: "run-policy",
+          agentName: "policy-agent",
+        },
+      });
+      engine.register({
+        name: "policy-check",
+        timing: "pre_tool_use",
+        priority: 100,
+        fn: () => ({
+          action: "abort",
+          reason: "blocked_by_test_policy",
+          policyId: "test.policy",
+        }),
+      });
+
+      await engine.dispatch("pre_tool_use", { ...baseCtx(), toolName: "shell" });
+
+      const events: ExecutionEvent[] = [];
+      for await (const event of EventLog.replay("sess-policy")) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "policy_evaluated",
+        policyId: "test.policy",
+        actor: { kind: "agent", name: "policy-agent", runId: "run-policy" },
+        action: "tool.call",
+        resource: "shell",
+        verdict: "abort",
+        reason: "blocked_by_test_policy",
+        actionId: "sess-policy:middleware.pre_tool_use:policy-check:1",
+        visibility: "internal",
+        sequence: 1,
+      });
+    } finally {
+      Storage.reset();
+      adapter.close();
     }
   });
 });

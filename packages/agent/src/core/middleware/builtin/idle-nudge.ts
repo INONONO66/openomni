@@ -36,7 +36,7 @@ export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): Middlew
       if (idleMs <= idleThresholdMs) return { action: "continue" };
 
       if (nudgeCount >= maxNudges) {
-        return { action: "abort", reason: "stalled" };
+        return { action: "abort", reason: "stalled", policyId: "builtin.idle_nudge" };
       }
 
       nudgeCount++;
@@ -46,6 +46,8 @@ export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): Middlew
       return {
         action: "inject",
         message: `[System] You have been idle for ${idleSecs}s. Report your current status: what are you working on, what is blocking you, and what is your next action. If you are stuck, say so explicitly.`,
+        reason: "idle_nudge",
+        policyId: "builtin.idle_nudge",
       };
     },
   };
