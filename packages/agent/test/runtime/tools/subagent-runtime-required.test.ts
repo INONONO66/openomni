@@ -96,7 +96,7 @@ describe("SubagentTool SubagentRuntime execution", () => {
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
     const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
     expect(middleware).toBeDefined();
-    expect(middleware!.some((m) => m.name === "tracked-mw")).toBe(true);
+    expect(middleware?.some((m) => m.name === "tracked-mw")).toBe(true);
   });
 
   it("forwards only propagate=true middleware to spawn", async () => {
@@ -122,8 +122,8 @@ describe("SubagentTool SubagentRuntime execution", () => {
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
     const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
     expect(middleware).toBeDefined();
-    expect(middleware!.some((m) => m.name === "will-forward")).toBe(true);
-    expect(middleware!.some((m) => m.name === "will-block")).toBe(false);
+    expect(middleware?.some((m) => m.name === "will-forward")).toBe(true);
+    expect(middleware?.some((m) => m.name === "will-block")).toBe(false);
   });
 
   it("does not include propagate=false middleware in spawn config", async () => {
