@@ -3,7 +3,13 @@ import {
   type MiddlewareDecision,
   type MiddlewareRegistration,
 } from "@openomni/agent";
-import type { Hook, Middleware, Subagent, TraceContext } from "@openomni/protocol";
+import {
+  Guardrail,
+  type Hook,
+  type Middleware,
+  type Subagent,
+  type TraceContext,
+} from "@openomni/protocol";
 import { Log } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -34,8 +40,44 @@ function continueVerdict(policyId: string, reason: string): Hook.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function abortVerdict(policyId: string, reason: string): Hook.Verdict {
-  return { action: "abort", policyId, reason };
+function evaluateLimit(input: {
+  readonly action: string;
+  readonly resource: string;
+  readonly field: string;
+  readonly allowed: boolean;
+  readonly allowReason: string;
+  readonly denyReason: string;
+  readonly metadata?: Record<string, unknown>;
+}): Hook.Verdict {
+  return Guardrail.evaluate(
+    {
+      action: input.action,
+      inputRules: [
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^true$",
+          action: "allow",
+          reason: input.allowReason,
+          priority: 2,
+        },
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^false$",
+          action: "deny",
+          reason: input.denyReason,
+          priority: 1,
+        },
+      ],
+    },
+    {
+      action: input.action,
+      resource: input.resource,
+      input: { [input.field]: String(input.allowed) },
+      metadata: input.metadata,
+    },
+  );
 }
 
 function createPerAgentLimit(state: BackgroundLimitState): MiddlewareRegistration {
@@ -50,13 +92,25 @@ function createPerAgentLimit(state: BackgroundLimitState): MiddlewareRegistratio
           count,
           limit: state.maxConcurrentPerAgent,
         });
-        return abortVerdict(
-          "background.limit.per-agent",
-          `max concurrent tasks per agent (${state.maxConcurrentPerAgent}) exceeded`,
-        );
+        return evaluateLimit({
+          action: "background.launch",
+          resource: `agent.${state.input.agentName}`,
+          field: "withinPerAgentLimit",
+          allowed: false,
+          allowReason: "per-agent capacity available",
+          denyReason: `max concurrent tasks per agent (${state.maxConcurrentPerAgent}) exceeded`,
+          metadata: { count, limit: state.maxConcurrentPerAgent },
+        });
       }
 
-      return continueVerdict("background.limit.per-agent", "per-agent capacity available");
+      return evaluateLimit({
+        action: "background.launch",
+        resource: `agent.${state.input.agentName}`,
+        field: "withinPerAgentLimit",
+        allowed: true,
+        allowReason: "per-agent capacity available",
+        denyReason: `max concurrent tasks per agent (${state.maxConcurrentPerAgent}) exceeded`,
+      });
     },
   };
 }
@@ -72,10 +126,25 @@ function createDepthLimit(state: BackgroundLimitState): MiddlewareRegistration {
           depth: state.depth,
           limit: state.maxDepth,
         });
-        return abortVerdict("background.limit.depth", `max depth (${state.maxDepth}) exceeded`);
+        return evaluateLimit({
+          action: "background.launch",
+          resource: `session.${state.input.parentSessionId}`,
+          field: "withinDepthLimit",
+          allowed: false,
+          allowReason: "depth within limit",
+          denyReason: `max depth (${state.maxDepth}) exceeded`,
+          metadata: { depth: state.depth, limit: state.maxDepth },
+        });
       }
 
-      return continueVerdict("background.limit.depth", "depth within limit");
+      return evaluateLimit({
+        action: "background.launch",
+        resource: `session.${state.input.parentSessionId}`,
+        field: "withinDepthLimit",
+        allowed: true,
+        allowReason: "depth within limit",
+        denyReason: `max depth (${state.maxDepth}) exceeded`,
+      });
     },
   };
 }
@@ -94,13 +163,25 @@ function createDescendantLimit(state: BackgroundLimitState): MiddlewareRegistrat
           count,
           limit: state.maxDescendants,
         });
-        return abortVerdict(
-          "background.limit.descendants",
-          `max descendants (${state.maxDescendants}) from same parent exceeded`,
-        );
+        return evaluateLimit({
+          action: "background.launch",
+          resource: `session.${state.input.parentSessionId}`,
+          field: "withinDescendantLimit",
+          allowed: false,
+          allowReason: "descendant capacity available",
+          denyReason: `max descendants (${state.maxDescendants}) from same parent exceeded`,
+          metadata: { count, limit: state.maxDescendants },
+        });
       }
 
-      return continueVerdict("background.limit.descendants", "descendant capacity available");
+      return evaluateLimit({
+        action: "background.launch",
+        resource: `session.${state.input.parentSessionId}`,
+        field: "withinDescendantLimit",
+        allowed: true,
+        allowReason: "descendant capacity available",
+        denyReason: `max descendants (${state.maxDescendants}) from same parent exceeded`,
+      });
     },
   };
 }
@@ -112,13 +193,25 @@ function createTotalLimit(state: BackgroundLimitState): MiddlewareRegistration {
     fn: () => {
       state.shouldQueue = state.activeCount >= state.maxConcurrentTotal;
       if (state.shouldQueue) {
-        return continueVerdict(
-          "background.limit.total",
-          "total concurrency saturated; queue required",
-        );
+        return evaluateLimit({
+          action: "background.launch",
+          resource: "background.total",
+          field: "withinTotalLimit",
+          allowed: true,
+          allowReason: "total concurrency saturated; queue required",
+          denyReason: "total concurrency exceeded",
+          metadata: { activeCount: state.activeCount, limit: state.maxConcurrentTotal },
+        });
       }
 
-      return continueVerdict("background.limit.total", "total concurrency capacity available");
+      return evaluateLimit({
+        action: "background.launch",
+        resource: "background.total",
+        field: "withinTotalLimit",
+        allowed: true,
+        allowReason: "total concurrency capacity available",
+        denyReason: "total concurrency exceeded",
+      });
     },
   };
 }
@@ -138,10 +231,25 @@ function createQueueLimit(state: BackgroundLimitState): MiddlewareRegistration {
           queueSize: state.pendingQueueSize,
           limit: state.maxQueueSize,
         });
-        return abortVerdict("background.limit.queue", `queue full (max ${state.maxQueueSize})`);
+        return evaluateLimit({
+          action: "background.launch",
+          resource: "background.queue",
+          field: "withinQueueLimit",
+          allowed: false,
+          allowReason: "queue capacity available",
+          denyReason: `queue full (max ${state.maxQueueSize})`,
+          metadata: { queueSize: state.pendingQueueSize, limit: state.maxQueueSize },
+        });
       }
 
-      return continueVerdict("background.limit.queue", "queue capacity available");
+      return evaluateLimit({
+        action: "background.launch",
+        resource: "background.queue",
+        field: "withinQueueLimit",
+        allowed: true,
+        allowReason: "queue capacity available",
+        denyReason: `queue full (max ${state.maxQueueSize})`,
+      });
     },
   };
 }

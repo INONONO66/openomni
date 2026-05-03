@@ -3,7 +3,7 @@ import {
   type MiddlewareDecision,
   type MiddlewareRegistration,
 } from "@openomni/agent";
-import type { Hook, Middleware, TraceContext } from "@openomni/protocol";
+import { Guardrail, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
 import { Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -29,8 +29,44 @@ function continueVerdict(policyId: string, reason: string): Hook.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function abortVerdict(policyId: string, reason: string): Hook.Verdict {
-  return { action: "abort", policyId, reason };
+function evaluateBooleanPolicy(input: {
+  readonly action: string;
+  readonly resource: string;
+  readonly field: string;
+  readonly allowed: boolean;
+  readonly allowReason: string;
+  readonly denyReason: string;
+  readonly metadata?: Record<string, unknown>;
+}): Hook.Verdict {
+  return Guardrail.evaluate(
+    {
+      action: input.action,
+      inputRules: [
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^true$",
+          action: "allow",
+          reason: input.allowReason,
+          priority: 2,
+        },
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^false$",
+          action: "deny",
+          reason: input.denyReason,
+          priority: 1,
+        },
+      ],
+    },
+    {
+      action: input.action,
+      resource: input.resource,
+      input: { [input.field]: String(input.allowed) },
+      metadata: input.metadata,
+    },
+  );
 }
 
 function createSessionExistence(state: PreSpawnState): MiddlewareRegistration {
@@ -39,16 +75,37 @@ function createSessionExistence(state: PreSpawnState): MiddlewareRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       if (state.operation === "wait") {
-        return continueVerdict("subagent.session-existence", "wait resolves worker run directly");
+        return evaluateBooleanPolicy({
+          action: "subagent.wait",
+          resource: state.sessionId,
+          field: "sessionCheckRequired",
+          allowed: true,
+          allowReason: "wait resolves worker run directly",
+          denyReason: "wait session check blocked",
+        });
       }
 
       const session = Session.get(state.sessionId);
       if (!session) {
-        return abortVerdict("subagent.session-existence", `Session not found: ${state.sessionId}`);
+        return evaluateBooleanPolicy({
+          action: `subagent.${state.operation}`,
+          resource: state.sessionId,
+          field: "sessionExists",
+          allowed: false,
+          allowReason: "session exists",
+          denyReason: `Session not found: ${state.sessionId}`,
+        });
       }
 
       state.session = session;
-      return continueVerdict("subagent.session-existence", "session exists");
+      return evaluateBooleanPolicy({
+        action: `subagent.${state.operation}`,
+        resource: state.sessionId,
+        field: "sessionExists",
+        allowed: true,
+        allowReason: "session exists",
+        denyReason: `Session not found: ${state.sessionId}`,
+      });
     },
   };
 }
@@ -59,7 +116,14 @@ function createActiveRunGuard(state: PreSpawnState): MiddlewareRegistration {
     failPolicy: "fail-closed",
     async fn() {
       if (state.operation !== "resume") {
-        return continueVerdict("subagent.active-run", "active-run check not required");
+        return evaluateBooleanPolicy({
+          action: `subagent.${state.operation}`,
+          resource: state.sessionId,
+          field: "activeRunAllowed",
+          allowed: true,
+          allowReason: "active-run check not required",
+          denyReason: "Session already has an active run",
+        });
       }
 
       const runs = await WorkerRun.listBySession(state.sessionId);
@@ -68,10 +132,24 @@ function createActiveRunGuard(state: PreSpawnState): MiddlewareRegistration {
       state.latestRun = latestRun;
 
       if (latestRun?.status === "running" || latestRun?.status === "starting") {
-        return abortVerdict("subagent.active-run", "Session already has an active run");
+        return evaluateBooleanPolicy({
+          action: "subagent.resume",
+          resource: state.sessionId,
+          field: "activeRunAllowed",
+          allowed: false,
+          allowReason: "session has no active latest run",
+          denyReason: "Session already has an active run",
+        });
       }
 
-      return continueVerdict("subagent.active-run", "session has no active latest run");
+      return evaluateBooleanPolicy({
+        action: "subagent.resume",
+        resource: state.sessionId,
+        field: "activeRunAllowed",
+        allowed: true,
+        allowReason: "session has no active latest run",
+        denyReason: "Session already has an active run",
+      });
     },
   };
 }
@@ -172,11 +250,18 @@ export namespace SubagentSpawnPolicyMiddleware {
       ...DefaultDenylist,
       failPolicy: "fail-closed",
       fn: (ctx) => {
+        const toolName = ctx.toolName ?? "";
         if (ctx.toolName !== "subagent") {
-          return continueVerdict("subagent.default-denylist", "tool is not subagent");
+          return Guardrail.evaluate(
+            { action: "tool.call", denylist: ["subagent"] },
+            { action: "tool.call", resource: toolName },
+          );
         }
 
-        return abortVerdict("subagent.default-denylist", "denylist");
+        return Guardrail.evaluate(
+          { action: "tool.call", denylist: ["subagent"] },
+          { action: "tool.call", resource: toolName },
+        );
       },
     };
   }

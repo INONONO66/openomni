@@ -42,10 +42,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
 
     const verdict = await registration.fn(middlewareContext("subagent"));
 
-    expect(verdict).toEqual({
+    expect(verdict).toMatchObject({
       action: "abort",
       reason: "denylist",
-      policyId: "subagent.default-denylist",
+      policyId: "guardrail.permission",
     });
   });
 
@@ -55,7 +55,7 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     const verdict = await registration.fn(middlewareContext("read_file"));
 
     expect(verdict.action).toBe("continue");
-    expect(verdict.policyId).toBe("subagent.default-denylist");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   test("session existence policy preserves legacy send error text", async () => {
@@ -64,10 +64,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
       sessionId: "missing-session",
     });
 
-    expect(result.verdict).toEqual({
+    expect(result.verdict).toMatchObject({
       action: "abort",
       reason: "Session not found: missing-session",
-      policyId: "subagent.session-existence",
+      policyId: "guardrail.permission",
     });
   });
 
@@ -95,10 +95,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
       sessionId: session.id,
     });
 
-    expect(result.verdict).toEqual({
+    expect(result.verdict).toMatchObject({
       action: "abort",
       reason: "Session already has an active run",
-      policyId: "subagent.active-run",
+      policyId: "guardrail.permission",
     });
   });
 

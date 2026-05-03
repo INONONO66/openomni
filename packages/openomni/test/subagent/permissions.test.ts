@@ -21,7 +21,7 @@ describe("SubagentRuntime permissions", () => {
 
     expect(verdict.action).toBe("abort");
     expect(verdict.reason).toBe("denylist");
-    expect(verdict.policyId).toBe("subagent.default-denylist");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   test("explicit allowlist permits specified tools", () => {
