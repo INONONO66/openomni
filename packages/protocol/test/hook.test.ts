@@ -13,14 +13,32 @@ describe("Hook.Timing", () => {
 });
 
 describe("Hook.Verdict", () => {
-  test("parses continue", () => {
+  test("parses continue without metadata", () => {
     expect(Hook.Verdict.parse({ action: "continue" })).toEqual({ action: "continue" });
+  });
+
+  test("parses continue with reason and policyId", () => {
+    expect(Hook.Verdict.parse({ action: "continue", reason: "ok", policyId: "test" })).toEqual({
+      action: "continue",
+      reason: "ok",
+      policyId: "test",
+    });
   });
 
   test("parses skip with reason", () => {
     expect(Hook.Verdict.parse({ action: "skip", reason: "test" })).toEqual({
       action: "skip",
       reason: "test",
+    });
+  });
+
+  test("parses skip with reason and policyId", () => {
+    expect(
+      Hook.Verdict.parse({ action: "skip", reason: "test", policyId: "guardrail.permission" }),
+    ).toEqual({
+      action: "skip",
+      reason: "test",
+      policyId: "guardrail.permission",
     });
   });
 
@@ -31,10 +49,42 @@ describe("Hook.Verdict", () => {
     });
   });
 
+  test("parses transform with input, reason, and policyId", () => {
+    expect(
+      Hook.Verdict.parse({
+        action: "transform",
+        input: { key: "val" },
+        reason: "normalized",
+        policyId: "input.transform",
+      }),
+    ).toEqual({
+      action: "transform",
+      input: { key: "val" },
+      reason: "normalized",
+      policyId: "input.transform",
+    });
+  });
+
   test("parses inject with message", () => {
     expect(Hook.Verdict.parse({ action: "inject", message: "hello" })).toEqual({
       action: "inject",
       message: "hello",
+    });
+  });
+
+  test("parses inject with message, reason, and policyId", () => {
+    expect(
+      Hook.Verdict.parse({
+        action: "inject",
+        message: "hello",
+        reason: "injected",
+        policyId: "middleware.inject",
+      }),
+    ).toEqual({
+      action: "inject",
+      message: "hello",
+      reason: "injected",
+      policyId: "middleware.inject",
     });
   });
 
@@ -49,7 +99,27 @@ describe("Hook.Verdict", () => {
     });
   });
 
+  test("parses abort with policyId", () => {
+    expect(
+      Hook.Verdict.parse({ action: "abort", reason: "stop", policyId: "guardrail.permission" }),
+    ).toEqual({
+      action: "abort",
+      reason: "stop",
+      policyId: "guardrail.permission",
+    });
+  });
+
   test("parses retry", () => {
     expect(Hook.Verdict.parse({ action: "retry" })).toEqual({ action: "retry" });
+  });
+
+  test("parses retry with reason and policyId", () => {
+    expect(
+      Hook.Verdict.parse({ action: "retry", reason: "transient", policyId: "retry.policy" }),
+    ).toEqual({
+      action: "retry",
+      reason: "transient",
+      policyId: "retry.policy",
+    });
   });
 });

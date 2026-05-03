@@ -15,17 +15,37 @@ export namespace Hook {
   export type Timing = z.infer<typeof Timing>;
 
   export const Verdict = z.discriminatedUnion("action", [
-    z.object({ action: z.literal("continue") }),
-    z.object({ action: z.literal("skip"), reason: z.string().optional() }),
-    z.object({ action: z.literal("abort"), reason: z.string().optional() }),
-    z.object({ action: z.literal("retry"), reason: z.string().optional() }),
+    z.object({
+      action: z.literal("continue"),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("skip"),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("abort"),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("retry"),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
+    }),
     z.object({
       action: z.literal("transform"),
       input: z.record(z.string(), z.unknown()),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
     }),
     z.object({
       action: z.literal("inject"),
       message: z.string(),
+      reason: z.string().optional(),
+      policyId: z.string().optional(),
     }),
   ]);
   export type Verdict = z.infer<typeof Verdict>;
