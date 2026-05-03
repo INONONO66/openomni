@@ -8,6 +8,12 @@ function makeCall(tool: string, input: Record<string, unknown> = {}): Tool.Call 
   return { id: "call-1", tool, input };
 }
 
+function getTool(provider: PlanToolProvider, name: string) {
+  const tool = provider.listTools().find((item) => item.spec.name === name);
+  if (!tool) throw new Error(`Missing tool: ${name}`);
+  return tool;
+}
+
 describe("PlanToolProvider", () => {
   let provider: PlanToolProvider;
 
@@ -33,19 +39,17 @@ describe("PlanToolProvider", () => {
   });
 
   it("plan_write has riskTier 1 and plan_read/plan_list have riskTier 0", () => {
-    const tools = provider.listTools();
-    const write = tools.find((t) => t.spec.name === "plan_write")!;
-    const read = tools.find((t) => t.spec.name === "plan_read")!;
-    const list = tools.find((t) => t.spec.name === "plan_list")!;
+    const write = getTool(provider, "plan_write");
+    const read = getTool(provider, "plan_read");
+    const list = getTool(provider, "plan_list");
     expect(write.riskTier).toBe(1);
     expect(read.riskTier).toBe(0);
     expect(list.riskTier).toBe(0);
   });
 
   it("plan_read and plan_list are read-only", () => {
-    const tools = provider.listTools();
-    const read = tools.find((t) => t.spec.name === "plan_read")!;
-    const list = tools.find((t) => t.spec.name === "plan_list")!;
+    const read = getTool(provider, "plan_read");
+    const list = getTool(provider, "plan_list");
     expect(read.isReadOnly).toBe(true);
     expect(list.isReadOnly).toBe(true);
   });

@@ -23,6 +23,10 @@ export class PlanToolProvider implements ToolProvider {
   }
 
   execute(call: Tool.Call): Promise<Tool.Result> {
-    return createPlanToolExecutor(Storage.get().plan!)(call);
+    const planSubAdapter = Storage.get().plan;
+    if (!planSubAdapter) {
+      throw new Error("Plan storage adapter is required for plan tool execution");
+    }
+    return createPlanToolExecutor(planSubAdapter)(call);
   }
 }
