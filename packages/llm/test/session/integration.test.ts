@@ -1,4 +1,3 @@
-// @ts-ignore - bun test types are provided at runtime
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Session } from "@openomni/session";
 import { type Message, Tool } from "@openomni/protocol";

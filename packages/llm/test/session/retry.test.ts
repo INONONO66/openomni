@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Retry } from "../../src/session/retry";
 import { APIError, RetryError } from "../../src/error";
 

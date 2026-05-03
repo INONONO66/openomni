@@ -1,4 +1,5 @@
 import z from "zod";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { join, dirname } from "node:path";
 import { mkdirSync, existsSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,8 +16,11 @@ const ProxyAuth = z.object({
 });
 
 const Info = z.discriminatedUnion("type", [ApiAuth, ProxyAuth]);
+const authFilePathContext = new AsyncLocalStorage<string>();
 
 const getAuthFilePath = () => {
+  const scopedPath = authFilePathContext.getStore();
+  if (scopedPath) return scopedPath;
   if (process.env.OPENOMNI_AUTH_FILE) {
     return process.env.OPENOMNI_AUTH_FILE;
   }
@@ -33,6 +37,10 @@ const ensureAuthDir = () => {
 
 export namespace Auth {
   export type Info = z.infer<typeof Info>;
+
+  export async function withFile<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
+    return authFilePathContext.run(filepath, fn);
+  }
 
   export async function get(providerID: string): Promise<Info | undefined> {
     const auth = await all();

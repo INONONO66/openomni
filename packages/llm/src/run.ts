@@ -1,6 +1,5 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
 import { LlmCall } from "@openomni/protocol";
-import { streamText, jsonSchema } from "ai";
 import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
@@ -21,6 +20,7 @@ export interface RunInput {
   system?: string;
   signal?: AbortSignal;
   model?: Provider.Model;
+  auth?: Auth.Info;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
@@ -64,7 +64,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
 
   if (model) {
     createStream = async (streamInput) => {
-      const auth = await Auth.get(model.providerID);
+      const ai = await import("ai");
+      const auth = input.auth ?? (await Auth.get(model.providerID));
       if (!auth) {
         throw new Error(
           `No authentication found for provider: ${model.providerID}. Run 'openomni auth login' first.`,
@@ -85,7 +86,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
           sdkTools[spec.name] = {
             type: "function" as const,
             description: spec.description,
-            inputSchema: jsonSchema(spec.inputSchema),
+            inputSchema: ai.jsonSchema(spec.inputSchema),
             execute: async (args: Record<string, unknown>) => {
               const call: Tool.Call = {
                 id: crypto.randomUUID(),
@@ -104,7 +105,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
           sdkTools[spec.name] = {
             type: "function" as const,
             description: spec.description,
-            inputSchema: jsonSchema(spec.inputSchema),
+            inputSchema: ai.jsonSchema(spec.inputSchema),
           };
         }
       }
@@ -122,7 +123,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
       };
-      const streamResult = streamText(streamArgs as unknown as Parameters<typeof streamText>[0]);
+      const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
 
       async function* adaptStream(): AsyncGenerator<{
         type: string;

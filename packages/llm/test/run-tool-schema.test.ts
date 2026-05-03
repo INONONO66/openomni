@@ -1,32 +1,37 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { Sink, Tool } from "@openomni/protocol";
-import { Auth } from "../src/auth/storage";
 
 const TEST_PROVIDER_ID = "__test_tool_schema__";
-let capturedArgs: Record<string, unknown> | undefined;
+type AiCaptureGlobal = typeof globalThis & {
+  __openomniAiStreamArgs?: Record<string, unknown>;
+};
 
-mock.module("ai", () => ({
-  streamText: (args: Record<string, unknown>) => {
-    capturedArgs = args;
-    return {
-      fullStream: (async function* () {
-        yield { type: "finish" };
-      })(),
-    };
-  },
-  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
-}));
+const aiCapture = globalThis as AiCaptureGlobal;
+
+function getAiStreamArgs(): Record<string, unknown> | undefined {
+  return aiCapture.__openomniAiStreamArgs;
+}
+
+function mockAiModule() {
+  mock.module("ai", () => ({
+    streamText: (args: Record<string, unknown>) => {
+      aiCapture.__openomniAiStreamArgs = args;
+      return {
+        fullStream: (async function* () {
+          yield { type: "finish" };
+        })(),
+      };
+    },
+    jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+  }));
+}
+
+mockAiModule();
 
 let run: typeof import("../src/run").run;
 
 beforeAll(async () => {
-  await Auth.set(TEST_PROVIDER_ID, { type: "api", key: "test-key-unit" });
   ({ run } = await import("../src/run"));
-});
-
-afterAll(async () => {
-  await Auth.remove(TEST_PROVIDER_ID);
-  mock.restore();
 });
 
 describe("run() with model - tool schema conversion", () => {
@@ -38,7 +43,8 @@ describe("run() with model - tool schema conversion", () => {
   };
 
   test("maps Tool.Spec inputSchema to raw function tools via jsonSchema", async () => {
-    capturedArgs = undefined;
+    mockAiModule();
+    aiCapture.__openomniAiStreamArgs = undefined;
 
     await run(
       {
@@ -56,15 +62,19 @@ describe("run() with model - tool schema conversion", () => {
           name: "Claude 3 Haiku Test",
           api: { npm: "@ai-sdk/anthropic" },
         },
+        auth: { type: "api", key: "test-key-unit" },
       },
       mockSink,
     );
 
-    expect(capturedArgs).toBeDefined();
-    const tools = (capturedArgs as { tools?: Record<string, unknown> } | undefined)?.tools;
+    const streamArgs = getAiStreamArgs();
+    expect(streamArgs).toBeDefined();
+    if (!streamArgs) throw new Error("expected stream args");
+    const tools = streamArgs.tools as Record<string, unknown> | undefined;
     expect(tools).toBeDefined();
-    expect(tools!.test_tool).toBeDefined();
-    expect(tools!.test_tool).toEqual({
+    if (!tools) throw new Error("expected stream tools");
+    expect(tools.test_tool).toBeDefined();
+    expect(tools.test_tool).toEqual({
       type: "function",
       description: "A test tool",
       inputSchema: { jsonSchema: { type: "object", properties: { x: { type: "string" } } } },
