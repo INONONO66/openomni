@@ -26,6 +26,16 @@ export namespace Mcp {
     }),
   );
 
+  export const ToolCompleted = BusEvent.define(
+    "mcp.tool.completed",
+    Base.extend({
+      toolName: z.string(),
+      toolCallId: z.string(),
+      durationMs: z.number(),
+      resultSummary: z.string(),
+    }),
+  );
+
   export const ToolFailed = BusEvent.define(
     "mcp.tool.failed",
     Base.extend({
