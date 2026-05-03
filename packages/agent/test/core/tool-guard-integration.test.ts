@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, mock } from "bun:test";
 import type { Run, Sink, Tool } from "@openomni/protocol";
 import {
   createStopOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -12,21 +13,11 @@ let mockRunFn: MockLlmFn = async () => createStopOutcome();
 const mockModelsGet = mock(async () => mockProviderData);
 const mockProviderFromModelsDevModel = mock(() => mockProviderModel);
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: {
-    get: mockModelsGet,
-  },
-  Provider: {
-    fromModelsDevModel: mockProviderFromModelsDevModel,
-  },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+const mockLlm = createMockLlmConfig({
+  getModels: mockModelsGet,
+  fromModelsDevModel: mockProviderFromModelsDevModel,
+  run: (input, sink: Sink) => mockRunFn(input, sink),
+});
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
 
@@ -74,6 +65,12 @@ function createToolCall(id: string, tool = "bash", input: Record<string, unknown
   return { id, tool, input };
 }
 
+async function executeTool(input: unknown, call: Tool.Call): Promise<Tool.Result> {
+  const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
+  if (!runInput.toolExecutor) throw new Error("expected tool executor");
+  return runInput.toolExecutor(call);
+}
+
 function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
 }
@@ -98,9 +95,8 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     let observedToolResult: Tool.Result | undefined;
     mockRunFn = async (input, sink): Promise<Run.Outcome> => {
-      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call = createToolCall("call-deny", "bash", { command: "rm -rf /" });
-      const result = await runInput.toolExecutor!(call);
+      const result = await executeTool(input, call);
       sink.onToolCall(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
@@ -109,6 +105,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [
         {
           name: "bash",
@@ -160,9 +157,8 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     let observedToolResult: Tool.Result | undefined;
     mockRunFn = async (input, sink): Promise<Run.Outcome> => {
-      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call = createToolCall("call-approval", "bash", { command: "ls" });
-      const result = await runInput.toolExecutor!(call);
+      const result = await executeTool(input, call);
       sink.onToolCall(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
@@ -171,6 +167,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [
         {
           name: "bash",
@@ -214,9 +211,8 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     let observedToolResult: Tool.Result | undefined;
     mockRunFn = async (input, sink): Promise<Run.Outcome> => {
-      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call = createToolCall("call-allow", "bash", { command: "ls" });
-      const result = await runInput.toolExecutor!(call);
+      const result = await executeTool(input, call);
       sink.onToolCall(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
@@ -225,6 +221,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [
         {
           name: "bash",
@@ -267,9 +264,8 @@ describe("ToolGuard integration via toolExecutor", () => {
     });
 
     mockRunFn = async (input, sink): Promise<Run.Outcome> => {
-      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call = createToolCall("call-backward", "bash", { command: "rm -rf /" });
-      const result = await runInput.toolExecutor!(call);
+      const result = await executeTool(input, call);
       sink.onToolCall(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
@@ -278,6 +274,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [
         {
           name: "bash",
@@ -304,9 +301,8 @@ describe("ToolGuard integration via toolExecutor", () => {
     });
 
     mockRunFn = async (input, sink): Promise<Run.Outcome> => {
-      const runInput = input as { toolExecutor?: (call: Tool.Call) => Promise<Tool.Result> };
       const call = createToolCall("call-stream-deny", "bash", { command: "rm -rf /" });
-      const result = await runInput.toolExecutor!(call);
+      const result = await executeTool(input, call);
       sink.onToolCall(call);
       sink.onToolResult(result);
       sink.onMessage(createAssistantMessage("done"));
@@ -315,6 +311,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [
         {
           name: "bash",

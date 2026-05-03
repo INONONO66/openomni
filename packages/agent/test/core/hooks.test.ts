@@ -4,6 +4,7 @@ import type { Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentEvent } from "../../src/core/types";
 import {
   createStopOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -11,17 +12,11 @@ import {
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mock(async () => mockProviderData) },
-  Provider: { fromModelsDevModel: mock(() => mockProviderModel) },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+const mockLlm = createMockLlmConfig({
+  getModels: mock(async () => mockProviderData),
+  fromModelsDevModel: mock(() => mockProviderModel),
+  run: (input, sink: Sink) => mockRunFn(input, sink),
+});
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
 
@@ -104,6 +99,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: executor,
       hooks: {
@@ -154,6 +150,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: executor,
       hooks: {
@@ -196,6 +193,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: async (call) => ({
         id: newID("result"),
@@ -233,6 +231,7 @@ describe("Execution hooks", () => {
     let postTurnCalls = 0;
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       hooks: {
         postTurn: () => {
           postTurnCalls++;
@@ -263,6 +262,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       hooks: {
         postTurn: () => ({ action: "abort", reason: "stop now" }),
       },
@@ -303,6 +303,7 @@ describe("Execution hooks", () => {
 
       const agent = ChatAgent.create({
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        llm: mockLlm,
         tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
         toolExecutor: executor,
         hooks: {
@@ -351,6 +352,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: executor,
     });
@@ -385,6 +387,7 @@ describe("Execution hooks", () => {
 
       const agent = ChatAgent.create({
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        llm: mockLlm,
         stepGuard,
         hooks: { postTurn },
       });
@@ -415,6 +418,7 @@ describe("Execution hooks", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
       toolExecutor: async (call) => ({
         id: newID("result"),

@@ -3,6 +3,7 @@ import type { Sink } from "@openomni/protocol";
 import type { StepGuardContext } from "../../src/core/types";
 import {
   createStopOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -10,17 +11,11 @@ import {
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mock(async () => mockProviderData) },
-  Provider: { fromModelsDevModel: mock(() => mockProviderModel) },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+const mockLlm = createMockLlmConfig({
+  getModels: mock(async () => mockProviderData),
+  fromModelsDevModel: mock(() => mockProviderModel),
+  run: (input, sink: Sink) => mockRunFn(input, sink),
+});
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
 
@@ -36,6 +31,7 @@ describe("StepGuard (run path)", () => {
   it("runs normally when no stepGuard configured", async () => {
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
     });
     const result = await agent.run({
       messages: [{ role: "user", content: "hello" }],
@@ -47,6 +43,7 @@ describe("StepGuard (run path)", () => {
   it("stops normally when guard returns continue", async () => {
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async () => ({ action: "continue" }),
     });
     const result = await agent.run({
@@ -66,6 +63,7 @@ describe("StepGuard (run path)", () => {
     let guardCallCount = 0;
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async () => {
         guardCallCount++;
         if (guardCallCount === 1) {
@@ -92,6 +90,7 @@ describe("StepGuard (run path)", () => {
   it("returns with guardAborted when guard aborts", async () => {
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async () => ({ action: "abort", reason: "too long" }),
     });
     const result = await agent.run({
@@ -105,6 +104,7 @@ describe("StepGuard (run path)", () => {
     let capturedContext: StepGuardContext | null = null;
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async (_step, ctx) => {
         capturedContext = ctx;
         return { action: "continue" };
@@ -128,6 +128,7 @@ describe("StepGuard (run path)", () => {
     const capturedCounts: number[] = [];
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async (_step, ctx) => {
         capturedCounts.push(ctx.continuationCount);
         if (ctx.continuationCount < 2) {
@@ -152,6 +153,7 @@ describe("StepGuard (run path)", () => {
     // the error is logged and execution continues rather than propagating.
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       stepGuard: async () => {
         throw new Error("guard error");
       },

@@ -9,6 +9,7 @@ import type {
 import type { MiddlewareContext } from "../../../src/core/middleware";
 import {
   createStopOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -19,21 +20,15 @@ let mockRunFn: MockLlmFn = async () => createStopOutcome();
 const callOrder: string[] = [];
 const capturedRunMessages: unknown[][] = [];
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mock(async () => mockProviderData) },
-  Provider: { fromModelsDevModel: mock(() => mockProviderModel) },
-  run: (input: unknown, sink: Sink) => {
+const mockLlm = createMockLlmConfig({
+  getModels: mock(async () => mockProviderData),
+  fromModelsDevModel: mock(() => mockProviderModel),
+  run: (input, sink: Sink) => {
     callOrder.push("llm_turn");
-    capturedRunMessages.push((input as { messages: unknown[] }).messages);
+    capturedRunMessages.push(Array.from(input.messages ?? []));
     return mockRunFn(input, sink);
   },
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+});
 
 let streamAgent: typeof import("../../../src/core/execution/stream-engine").streamAgent;
 
@@ -43,6 +38,7 @@ beforeAll(async () => {
 
 const defaultConfig: ChatAgentConfig = {
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+  llm: mockLlm,
 };
 
 const defaultInput: ChatAgentInput = {

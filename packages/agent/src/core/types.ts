@@ -1,4 +1,5 @@
 import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
+import type { Provider, RunInput } from "@openomni/llm";
 import type { Memory } from "./memory";
 import type { MiddlewareRegistration } from "./middleware/types";
 import type { AgentRuntimeContext } from "./runtime-context";
@@ -104,6 +105,10 @@ export interface ChatAgentConfig {
   providerOptions?: Record<string, unknown>;
   middleware?: MiddlewareRegistration[];
   context?: AgentRuntimeContext;
+  llm?: {
+    run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
+    resolveProviderModel?: (model: { provider: string; id: string }) => Promise<Provider.Model>;
+  };
 }
 
 export interface ChatAgentInput {

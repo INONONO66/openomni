@@ -574,12 +574,12 @@ export async function* handleContinue(
   return continueFlowDecision(continueDecision(state));
 }
 
-export async function* handleCompact(
+export async function handleCompact(
   state: StreamRunState,
   engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-): AsyncGenerator<AgentEvent, "continue"> {
+): Promise<"continue"> {
   await applyPostCompaction(state, engine, config, agentBase, false);
   state.turnIndex++;
   return continueFlowDecision(continueDecision(state));

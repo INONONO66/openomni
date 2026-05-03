@@ -3,6 +3,7 @@ import type { Sink } from "@openomni/protocol";
 import {
   createStopOutcome,
   createErrorOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -10,17 +11,11 @@ import {
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: { get: mock(async () => mockProviderData) },
-  Provider: { fromModelsDevModel: mock(() => mockProviderModel) },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+const mockLlm = createMockLlmConfig({
+  getModels: mock(async () => mockProviderData),
+  fromModelsDevModel: mock(() => mockProviderModel),
+  run: (input, sink: Sink) => mockRunFn(input, sink),
+});
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
 
@@ -30,6 +25,7 @@ beforeAll(async () => {
 
 const defaultConfig = {
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+  llm: mockLlm,
 };
 
 const defaultInput = {
