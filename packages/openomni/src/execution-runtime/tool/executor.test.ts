@@ -137,6 +137,47 @@ describe("createToolExecutor", () => {
     expect(bashResult.isError).toBeUndefined();
   });
 
+  it("applies canonical star wildcard policy patterns", async () => {
+    const executor = createToolExecutor({
+      tools: [makeTool("read"), makeTool("bash")],
+      config: { permissions: { action: "tool.call", denylist: ["*"] } },
+    });
+
+    const readResult = await executor(makeCall("read"));
+    expect(readResult.isError).toBe(true);
+    expect(readResult.output).toContain("denylist");
+
+    const bashResult = await executor(makeCall("bash"));
+    expect(bashResult.isError).toBe(true);
+    expect(bashResult.output).toContain("denylist");
+  });
+
+  it("applies guardrail input rule decisions", async () => {
+    const executor = createToolExecutor({
+      tools: [makeTool("bash")],
+      config: {
+        permissions: {
+          action: "tool.call",
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "rm -rf",
+              action: "deny",
+              reason: "dangerous_command",
+              priority: 0,
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await executor(makeCall("bash", { command: "rm -rf /tmp/example" }));
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("dangerous_command");
+  });
+
   it("no permissions config allows all tools", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash"), makeTool("read")],

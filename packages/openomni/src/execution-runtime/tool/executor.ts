@@ -1,4 +1,4 @@
-import type { Guardrail, Tool } from "@openomni/protocol";
+import { Guardrail, type Tool } from "@openomni/protocol";
 import { Log } from "@openomni/session";
 import { WorkspaceLock } from "../workspace-lock.js";
 import type {
@@ -15,6 +15,7 @@ const tierTimeouts: Record<number, number> = {
   3: 120_000,
 };
 const DEFAULT_TIER_TIMEOUT_MS = 30_000;
+const TOOL_CALL_ACTION = "tool.call";
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -31,38 +32,36 @@ function buildDispatchTable(tools: NativeTool[]): Map<string, NativeTool> {
   return dispatch;
 }
 
-function matchesPattern(toolName: string, pattern: string): boolean {
-  if (pattern.endsWith(".*")) {
-    return toolName.startsWith(pattern.slice(0, -1));
-  }
-
-  return toolName === pattern;
+function normalizePermission(
+  permission: Guardrail.Permission | undefined,
+): Guardrail.Permission | undefined {
+  if (!permission) return undefined;
+  if (permission.action) return permission;
+  return { ...permission, action: TOOL_CALL_ACTION };
 }
 
-function checkPermission(
+function evaluatePermission(
   toolName: string,
+  input: Record<string, unknown>,
   permission: Guardrail.Permission | undefined,
-): "allow" | "deny" | "require_approval" {
-  if (!permission) {
-    return "allow";
+): Guardrail.EvaluationResult {
+  return Guardrail.evaluate(normalizePermission(permission), {
+    action: TOOL_CALL_ACTION,
+    resource: toolName,
+    input,
+  });
+}
+
+function permissionErrorMessage(toolName: string, result: Guardrail.EvaluationResult): string {
+  if (result.reason === "require_approval" || result.reason === "input_rule_require_approval") {
+    return `[Blocked] Tool "${toolName}" requires approval: ${result.reason}`;
   }
 
-  if (permission.denylist?.some((pattern) => matchesPattern(toolName, pattern))) {
-    return "deny";
+  if (result.reason === "denylist" || result.reason === "input_rule_deny") {
+    return `[Blocked] Tool "${toolName}" denied by policy: ${result.reason}`;
   }
 
-  if (
-    permission.allowlist &&
-    !permission.allowlist.some((pattern) => matchesPattern(toolName, pattern))
-  ) {
-    return "deny";
-  }
-
-  if (permission.requireApproval?.some((pattern) => matchesPattern(toolName, pattern))) {
-    return "require_approval";
-  }
-
-  return "allow";
+  return `[Blocked] Tool "${toolName}" blocked by policy: ${result.reason}`;
 }
 
 function getTimeoutMs(riskTier: number, config: ToolExecutorConfig): number {
@@ -151,15 +150,14 @@ export function createToolExecutor(
     }
 
     const originalName = tool.spec.name;
-    const verdict = checkPermission(originalName, config.permissions);
-    if (verdict === "deny") {
-      Log.warn("executor: permission denied", { toolName: originalName });
-      return createErrorResult(call, `[Blocked] Tool "${originalName}" denied by policy`);
-    }
-
-    if (verdict === "require_approval") {
-      Log.warn("executor: approval required", { toolName: originalName });
-      return createErrorResult(call, `[Blocked] Tool "${originalName}" requires approval`);
+    const permissionResult = evaluatePermission(originalName, call.input, config.permissions);
+    if (permissionResult.action === "abort") {
+      Log.warn("executor: permission blocked", {
+        toolName: originalName,
+        reason: permissionResult.reason,
+        matchedPattern: permissionResult.matchedPattern,
+      });
+      return createErrorResult(call, permissionErrorMessage(originalName, permissionResult));
     }
 
     if (tool.riskTier >= 2) {
