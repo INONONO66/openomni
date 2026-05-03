@@ -16,6 +16,8 @@ function makeEvent(type: string, sequence: number) {
   if (type === "llm_response") {
     return {
       type: "llm_response" as const,
+      actionId: `action-${sequence}`,
+      visibility: "internal" as const,
       turnIndex: 0,
       text: "hello",
       toolCalls: [],
@@ -26,6 +28,8 @@ function makeEvent(type: string, sequence: number) {
   }
   return {
     type: "session_suspended" as const,
+    actionId: `action-${sequence}`,
+    visibility: "internal" as const,
     reason: "test",
     timestamp: now,
     sequence,
@@ -37,6 +41,7 @@ function ensureSession(adapter: SqliteStorageAdapter, id: string): void {
     id,
     title: `Session ${id}`,
     model: { providerID: "test", modelID: "test-model" },
+    spawnDepth: 0,
     time: { created: Date.now(), updated: Date.now() },
   });
 }

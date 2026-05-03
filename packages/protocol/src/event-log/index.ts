@@ -2,6 +2,9 @@ import { z } from "zod";
 import { Tool } from "../tool/index.js";
 
 const baseEvent = {
+  actionId: z.string(),
+  parentActionId: z.string().optional(),
+  visibility: z.enum(["internal", "llm_reason", "user_audit"]),
   timestamp: z.string(),
   sequence: z.number(),
 };

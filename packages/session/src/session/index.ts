@@ -356,11 +356,15 @@ export namespace Session {
       return false;
     }
 
+    const sequence = await nextSequence(id);
+
     await EventLog.append(id, {
       type: "session_suspended",
+      actionId: `${id}:session_suspended:${sequence}`,
+      visibility: "internal",
       reason: "session suspended",
       timestamp: new Date().toISOString(),
-      sequence: await nextSequence(id),
+      sequence,
     });
 
     return true;

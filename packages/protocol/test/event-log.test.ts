@@ -5,6 +5,15 @@ const it = test;
 
 const now = new Date().toISOString();
 
+function baseEvent(actionId: string, sequence: number) {
+  return {
+    actionId,
+    visibility: "internal" as const,
+    timestamp: now,
+    sequence,
+  };
+}
+
 describe("ExecutionEvent schemas", () => {
   it("parses llm_response event", () => {
     const event = ExecutionEvent.Schema.parse({
@@ -13,10 +22,11 @@ describe("ExecutionEvent schemas", () => {
       text: "Hello",
       toolCalls: [],
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-      timestamp: now,
-      sequence: 1,
+      ...baseEvent("action-1", 1),
+      parentActionId: "turn-action-1",
     });
     expect(event.type).toBe("llm_response");
+    expect(event.parentActionId).toBe("turn-action-1");
   });
 
   it("parses tool_started event", () => {
@@ -24,8 +34,7 @@ describe("ExecutionEvent schemas", () => {
       type: "tool_started",
       toolCallId: "call-1",
       toolName: "search",
-      timestamp: now,
-      sequence: 2,
+      ...baseEvent("tool-action-1", 2),
     });
     expect(event.type).toBe("tool_started");
   });
@@ -40,8 +49,7 @@ describe("ExecutionEvent schemas", () => {
         output: "result",
         isError: false,
       },
-      timestamp: now,
-      sequence: 3,
+      ...baseEvent("tool-action-2", 3),
     });
     expect(event.type).toBe("tool_completed");
   });
@@ -51,8 +59,7 @@ describe("ExecutionEvent schemas", () => {
       type: "step_completed",
       stepId: "step-1",
       output: "done",
-      timestamp: now,
-      sequence: 4,
+      ...baseEvent("step-action-1", 4),
     });
     expect(event.type).toBe("step_completed");
   });
@@ -62,8 +69,7 @@ describe("ExecutionEvent schemas", () => {
       type: "step_failed",
       stepId: "step-1",
       error: "something went wrong",
-      timestamp: now,
-      sequence: 5,
+      ...baseEvent("step-action-2", 5),
     });
     expect(event.type).toBe("step_failed");
   });
@@ -72,8 +78,7 @@ describe("ExecutionEvent schemas", () => {
     const event = ExecutionEvent.Schema.parse({
       type: "session_suspended",
       reason: "user requested",
-      timestamp: now,
-      sequence: 6,
+      ...baseEvent("action-6", 6),
     });
     expect(event.type).toBe("session_suspended");
   });
@@ -82,8 +87,7 @@ describe("ExecutionEvent schemas", () => {
     expect(() =>
       ExecutionEvent.Schema.parse({
         type: "unknown_event",
-        timestamp: now,
-        sequence: 1,
+        ...baseEvent("action-unknown", 1),
       }),
     ).toThrow();
   });
@@ -97,6 +101,8 @@ describe("required field rejection", () => {
         turnIndex: 0,
         toolCalls: [],
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        actionId: "action-1",
+        visibility: "internal",
         timestamp: "x",
         sequence: 1,
       }),
@@ -106,6 +112,8 @@ describe("required field rejection", () => {
       ExecutionEvent.Schema.parse({
         type: "tool_started",
         toolName: "x",
+        actionId: "tool-action-1",
+        visibility: "internal",
         timestamp: "x",
         sequence: 1,
       }),
@@ -115,6 +123,29 @@ describe("required field rejection", () => {
       ExecutionEvent.Schema.parse({
         type: "tool_completed",
         toolCallId: "c",
+        actionId: "tool-action-2",
+        visibility: "internal",
+        timestamp: "x",
+        sequence: 1,
+      }),
+    ).toThrow());
+  it("missing actionId rejects", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "session_suspended",
+        reason: "r",
+        visibility: "internal",
+        timestamp: "x",
+        sequence: 1,
+      }),
+    ).toThrow());
+  it("invalid visibility rejects", () =>
+    expect(() =>
+      ExecutionEvent.Schema.parse({
+        type: "session_suspended",
+        reason: "r",
+        actionId: "action-1",
+        visibility: "public",
         timestamp: "x",
         sequence: 1,
       }),
@@ -127,6 +158,8 @@ describe("acceptance (documents current behavior)", () => {
       ExecutionEvent.Schema.parse({
         type: "session_suspended",
         reason: "r",
+        actionId: "action-1",
+        visibility: "internal",
         timestamp: "x",
         sequence: 1.5,
       }),
@@ -136,6 +169,8 @@ describe("acceptance (documents current behavior)", () => {
       ExecutionEvent.Schema.parse({
         type: "session_suspended",
         reason: "r",
+        actionId: "action-1",
+        visibility: "internal",
         timestamp: "x",
         sequence: -1,
       }),
@@ -145,6 +180,8 @@ describe("acceptance (documents current behavior)", () => {
       ExecutionEvent.Schema.parse({
         type: "session_suspended",
         reason: "r",
+        actionId: "action-1",
+        visibility: "internal",
         timestamp: "",
         sequence: 1,
       }),
