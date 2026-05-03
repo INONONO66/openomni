@@ -1,6 +1,6 @@
 import { ChatAgent } from "@openomni/agent";
-import { type Execution, Subagent } from "@openomni/protocol";
-import { Bus, Storage, Log } from "@openomni/session";
+import type { Execution } from "@openomni/protocol";
+import { Storage, Log } from "@openomni/session";
 import {
   type AgentToolProvider,
   PlanToolProvider,
@@ -34,45 +34,7 @@ export namespace LocalRunner {
 }
 
 async function run(config: Config, request: Execution.Request): Promise<Execution.Result> {
-  const { runId, sessionId } = request;
-
-  Bus.publish(Subagent.Events.WorkerRunStarted, {
-    traceId: crypto.randomUUID(),
-    sessionId,
-    runId,
-    time: Date.now(),
-    payload: { sessionId, runId, title: request.prompt.slice(0, 80) },
-  });
-
-  try {
-    const result =
-      request.mode === "direct"
-        ? await runDirect(config, request)
-        : await executePlan(config, request);
-
-    Bus.publish(Subagent.Events.WorkerRunCompleted, {
-      traceId: crypto.randomUUID(),
-      sessionId,
-      runId,
-      time: Date.now(),
-      payload: { sessionId, runId, status: result.status as Subagent.WorkerRunStatus },
-    });
-
-    return result;
-  } catch (err) {
-    Bus.publish(Subagent.Events.WorkerRunFailed, {
-      traceId: crypto.randomUUID(),
-      sessionId,
-      runId,
-      time: Date.now(),
-      payload: {
-        sessionId,
-        runId,
-        error: err instanceof Error ? err.message : String(err),
-      },
-    });
-    throw err;
-  }
+  return request.mode === "direct" ? runDirect(config, request) : executePlan(config, request);
 }
 
 async function runDirect(config: Config, request: Execution.Request): Promise<Execution.Result> {
@@ -147,6 +109,10 @@ async function executePlan(config: Config, request: Execution.Request): Promise<
 
   const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
   const goal = await SessionBridge.buildPlanGoal(sessionId);
+  const planSubAdapter = Storage.get().plan;
+  if (!planSubAdapter) {
+    throw new Error("Plan storage adapter is required for plan mode execution");
+  }
   let planContext = "";
   try {
     planContext = ContextAssembler.assemble({ workspaceRoot: workspaceRoot ?? process.cwd() });
@@ -159,7 +125,7 @@ async function executePlan(config: Config, request: Execution.Request): Promise<
   const planResult = await runPlan(goal, {
     model: request.model,
     systemPrompt: planSystemPrompt,
-    planSubAdapter: Storage.get().plan!,
+    planSubAdapter,
     planId: runId,
     budget: request.budget,
     tools,

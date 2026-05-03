@@ -220,23 +220,30 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
 });
 
 describe("bus bridge — worker lifecycle events reach server Bus", () => {
-  test("dispatch publishes WorkerRunStarted event", async () => {
-    let receivedEvent: { payload: { runId: string; sessionId: string } } | undefined;
+  test("dispatch does not publish worker lifecycle events directly", async () => {
+    const events: unknown[] = [];
 
-    const unsub = Bus.subscribe(Subagent.Events.WorkerRunStarted, (data) => {
-      receivedEvent = data;
+    const unsubscribeStarted = Bus.subscribe(Subagent.Events.WorkerRunStarted, (data) => {
+      events.push(data);
+    });
+    const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+      events.push(data);
+    });
+    const unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+      events.push(data);
     });
 
     const coordinator = createExecutionCoordinator({ workerScript: "unused" });
     const request = makeRequest({ runId: "run-bus-test", sessionId: "session-bus-test" });
 
     await coordinator.dispatch("tree-1", request);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(receivedEvent).toBeDefined();
-    expect(receivedEvent?.payload.runId).toBe("run-bus-test");
-    expect(receivedEvent?.payload.sessionId).toBe("session-bus-test");
+    expect(events).toHaveLength(0);
 
-    unsub();
+    unsubscribeStarted();
+    unsubscribeCompleted();
+    unsubscribeFailed();
   });
 });
 

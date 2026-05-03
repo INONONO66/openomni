@@ -197,6 +197,10 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             planAvailableTools,
           );
           const goal = await SessionBridge.buildPlanGoal(sessionId);
+          const planSubAdapter = Storage.get().plan;
+          if (!planSubAdapter) {
+            throw new Error("Plan storage adapter is required for plan mode execution");
+          }
           let planContext = "";
           try {
             planContext = ContextAssembler.assemble({
@@ -211,7 +215,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           const planResult = await runPlan(goal, {
             model: request.model,
             systemPrompt: planSystemPrompt,
-            planSubAdapter: Storage.get().plan!,
+            planSubAdapter,
             planId: request.runId,
             budget: request.budget,
             tools: planTools,
