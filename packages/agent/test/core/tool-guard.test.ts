@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createToolGuardMiddleware } from "../../src/core/middleware/builtin/tool-guard";
 import { ToolGuard } from "../../src/core/tool-guard";
 
 describe("ToolGuard.check", () => {
@@ -225,5 +226,83 @@ describe("ToolGuard.check", () => {
         },
       ),
     ).toBe("deny");
+  });
+});
+
+describe("ToolGuard.evaluate", () => {
+  it("uses canonical exact matching", () => {
+    expect(
+      ToolGuard.evaluate("bash", {}, { action: "tool.call", allowlist: ["bash"] }),
+    ).toMatchObject({ action: "continue", reason: "allowlist", matchedPattern: "bash" });
+  });
+
+  it("uses canonical wildcard matching", () => {
+    expect(
+      ToolGuard.evaluate("file.read", {}, { action: "tool.call", allowlist: ["*"] }),
+    ).toMatchObject({ action: "continue", reason: "allowlist", matchedPattern: "*" });
+  });
+
+  it("uses canonical prefix matching", () => {
+    expect(
+      ToolGuard.evaluate("mcp.search", {}, { action: "tool.call", allowlist: ["mcp.*"] }),
+    ).toMatchObject({ action: "continue", reason: "allowlist", matchedPattern: "mcp.*" });
+  });
+
+  it("gives denylist precedence over requireApproval and allowlist", () => {
+    expect(
+      ToolGuard.evaluate(
+        "bash",
+        {},
+        {
+          action: "tool.call",
+          denylist: ["bash"],
+          requireApproval: ["bash"],
+          allowlist: ["bash"],
+        },
+      ),
+    ).toMatchObject({ action: "abort", reason: "denylist", matchedPattern: "bash" });
+  });
+
+  it("returns the canonical require-approval abort reason", () => {
+    expect(
+      ToolGuard.evaluate("bash", {}, { action: "tool.call", requireApproval: ["bash"] }),
+    ).toMatchObject({
+      action: "abort",
+      reason: "require_approval",
+      policyId: "guardrail.permission",
+    });
+  });
+
+  it("returns the canonical allowlist miss reason", () => {
+    expect(
+      ToolGuard.evaluate("bash", {}, { action: "tool.call", allowlist: ["file.*"] }),
+    ).toMatchObject({ action: "abort", reason: "allowlist_miss" });
+  });
+});
+
+describe("createToolGuardMiddleware", () => {
+  it("returns Guardrail.evaluate policy details for aborts", async () => {
+    const middleware = createToolGuardMiddleware({
+      permission: { action: "tool.call", allowlist: ["file.*"] },
+    });
+
+    const verdict = await middleware.fn({
+      timing: "pre_tool_use",
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "bash",
+      toolCallId: "call-1",
+      toolInput: {},
+    });
+
+    expect(verdict).toMatchObject({
+      action: "abort",
+      reason: "allowlist_miss",
+      policyId: "guardrail.permission",
+    });
   });
 });

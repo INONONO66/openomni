@@ -144,7 +144,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
-    expect(String(observedToolResult?.output)).toContain("[Blocked:");
+    expect(String(observedToolResult?.output)).toContain("input_rule_deny");
   });
 
   it("require_approval blocks tool execution in run() when no approval flow exists", async () => {
@@ -198,7 +198,7 @@ describe("ToolGuard integration via toolExecutor", () => {
 
     expect(executor).toHaveBeenCalledTimes(0);
     expect(observedToolResult?.isError).toBe(true);
-    expect(String(observedToolResult?.output)).toContain("requires approval");
+    expect(String(observedToolResult?.output)).toContain("require_approval");
   });
 
   it("allow delegates to original toolExecutor", async () => {
@@ -348,6 +348,6 @@ describe("ToolGuard integration via toolExecutor", () => {
     const toolResultEvent = events.find((event) => event.type === "tool_call_complete");
     expect(executor).toHaveBeenCalledTimes(0);
     expect(toolResultEvent?.result?.isError).toBe(true);
-    expect(String(toolResultEvent?.result?.output)).toContain("[Blocked:");
+    expect(String(toolResultEvent?.result?.output)).toContain("input_rule_deny");
   });
 });
