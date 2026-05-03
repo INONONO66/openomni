@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Storage } from "../storage/storage";
 import { BusEvent, Bus } from "../bus";
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 
 export namespace Snapshot {
   export interface Provider {
