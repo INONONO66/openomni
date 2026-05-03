@@ -3,7 +3,13 @@ import {
   type MiddlewareDecision,
   type MiddlewareRegistration,
 } from "@openomni/agent";
-import { Ingress, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
+import {
+  Guardrail,
+  Ingress,
+  type Hook,
+  type Middleware,
+  type TraceContext,
+} from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 
@@ -50,6 +56,41 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   return false;
 }
 
+function evaluateIngressAuthority(event: Ingress.InboundEvent): Hook.Verdict {
+  const action = "ingress.top_level.create";
+  const resource = `ingress.${event.surface}`;
+  return Guardrail.evaluate(
+    {
+      action,
+      inputRules: [
+        {
+          toolPattern: resource,
+          field: "authorized",
+          pattern: "^true$",
+          action: "allow",
+          reason: "actor authorized for top-level inbound work",
+          priority: 2,
+        },
+        {
+          toolPattern: resource,
+          field: "authorized",
+          pattern: "^false$",
+          action: "deny",
+          reason: "actor is not authorized to create top-level inbound work",
+          priority: 1,
+        },
+      ],
+    },
+    {
+      action,
+      resource,
+      actor: getActor(event),
+      input: { authorized: String(isAuthorizedTopLevelActor(event)) },
+      metadata: { mode: event.mode, surface: event.surface },
+    },
+  );
+}
+
 function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {
   if (!state.parsedEvent) {
     throw new Error("ingress event must be schema-validated before authority middleware");
@@ -94,15 +135,7 @@ function createAuthorityCheck(state: PreRunState): MiddlewareRegistration {
     fn: () => {
       const event = requireParsedEvent(state);
 
-      // Guardrail.evaluate is resource-pattern based; this boundary is actor role/trust policy.
-      if (!isAuthorizedTopLevelActor(event)) {
-        return abortVerdict(
-          "ingress.authority",
-          "actor is not authorized to create top-level inbound work",
-        );
-      }
-
-      return continueVerdict("ingress.authority", "actor authorized for top-level inbound work");
+      return evaluateIngressAuthority(event);
     },
   };
 }
