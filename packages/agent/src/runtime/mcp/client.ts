@@ -3,10 +3,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { randomUUID } from "node:crypto";
-import type { Tool } from "@openomni/protocol";
+import type { McpServerConfig, Tool } from "@openomni/protocol";
 import { Mcp } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
-import type { McpServerConfig } from "./types";
 import { convertMcpTool, convertMcpResult } from "./convert";
 
 export class McpClient {
