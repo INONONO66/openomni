@@ -32,34 +32,40 @@ describe("Guardrail schemas", () => {
     });
   });
 
-  describe("ToolPermission", () => {
-    it("parses empty object (all optional)", () => {
-      expect(() => Guardrail.ToolPermission.parse({})).not.toThrow();
+  describe("Permission", () => {
+    it("parses action-only permission", () => {
+      const result = Guardrail.Permission.parse({ action: "tool.call" });
+
+      expect(result.action).toBe("tool.call");
     });
 
     it("parses with allowlist", () => {
-      const result = Guardrail.ToolPermission.parse({
+      const result = Guardrail.Permission.parse({
+        action: "tool.call",
         allowlist: ["tool_a", "tool_b"],
       });
       expect(result.allowlist).toEqual(["tool_a", "tool_b"]);
     });
 
     it("parses with denylist", () => {
-      const result = Guardrail.ToolPermission.parse({
+      const result = Guardrail.Permission.parse({
+        action: "tool.call",
         denylist: ["dangerous"],
       });
       expect(result.denylist).toEqual(["dangerous"]);
     });
 
     it("parses with requireApproval", () => {
-      const result = Guardrail.ToolPermission.parse({
+      const result = Guardrail.Permission.parse({
+        action: "tool.call",
         requireApproval: ["sensitive"],
       });
       expect(result.requireApproval).toEqual(["sensitive"]);
     });
 
     it("parses with inputRules", () => {
-      const result = Guardrail.ToolPermission.parse({
+      const result = Guardrail.Permission.parse({
+        action: "tool.call",
         inputRules: [
           {
             toolPattern: "bash",
@@ -69,6 +75,8 @@ describe("Guardrail schemas", () => {
           },
         ],
       });
+
+      expect(result.action).toBe("tool.call");
 
       expect(result.inputRules?.[0]).toMatchObject({
         toolPattern: "bash",
@@ -169,7 +177,9 @@ describe("Guardrail schemas", () => {
           ).not.toThrow());
       });
       it("empty allowlist accepted", () =>
-        expect(() => Guardrail.ToolPermission.parse({ allowlist: [] })).not.toThrow());
+        expect(() =>
+          Guardrail.Permission.parse({ action: "tool.call", allowlist: [] }),
+        ).not.toThrow());
     });
   });
 });

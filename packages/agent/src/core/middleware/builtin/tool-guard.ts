@@ -6,7 +6,7 @@ import { ToolGuard } from "../../tool-guard";
 import { summarizeInput } from "../../execution/shared";
 
 export interface ToolGuardMiddlewareConfig {
-  permission: Guardrail.ToolPermission;
+  permission: Guardrail.Permission;
   stepGuard?: ChatAgentConfig["stepGuard"];
   eventEmitter?: AgentEventEmitter;
   source?: string;

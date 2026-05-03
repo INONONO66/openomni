@@ -41,7 +41,7 @@ function matchesPattern(toolName: string, pattern: string): boolean {
 
 function checkPermission(
   toolName: string,
-  permission: Guardrail.ToolPermission | undefined,
+  permission: Guardrail.Permission | undefined,
 ): "allow" | "deny" | "require_approval" {
   if (!permission) {
     return "allow";

@@ -35,7 +35,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.ToolPermission;
+    permissions?: Guardrail.Permission;
   }
 
   export interface SendConfig extends RuntimeConfig {
@@ -44,7 +44,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.ToolPermission;
+    permissions?: Guardrail.Permission;
     compaction?: SendCompactionConfig;
   }
 
@@ -125,7 +125,7 @@ export namespace SubagentRuntime {
       });
 
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      const permissions = config.permissions ?? { action: "tool.call", denylist: ["subagent"] };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, config, signal, permissions),
       );
@@ -164,7 +164,7 @@ export namespace SubagentRuntime {
       runId,
     });
 
-    const permissions = config.permissions ?? { denylist: ["subagent"] };
+    const permissions = config.permissions ?? { action: "tool.call", denylist: ["subagent"] };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, config, signal, permissions),
@@ -206,7 +206,7 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      const permissions = config.permissions ?? { action: "tool.call", denylist: ["subagent"] };
       const messages = await maybeCompactSendTranscript(
         session.id,
         buildChildMessagesInternal(session.id),

@@ -79,7 +79,7 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
-  permissions?: Guardrail.ToolPermission;
+  permissions?: Guardrail.Permission;
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;

@@ -36,7 +36,7 @@ describe("buildWorkerMiddleware", () => {
   });
 
   it("passes permissions to tool-guard", () => {
-    const permissions = { allowlist: ["tool:read"] };
+    const permissions = { action: "tool.call", allowlist: ["tool:read"] };
     const registrations = buildWorkerMiddleware({ permissions });
     expect(registrations[0]?.name).toBe("builtin:tool-guard");
   });

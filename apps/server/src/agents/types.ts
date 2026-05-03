@@ -10,7 +10,7 @@ export interface AgentDefinition {
   systemPrompt: string;
   tools: ToolSelection.Selection;
   budget?: AgentBudget;
-  permissions?: Guardrail.ToolPermission;
+  permissions?: Guardrail.Permission;
 }
 
 export type AgentFactory = () => AgentDefinition;

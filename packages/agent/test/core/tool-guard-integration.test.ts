@@ -117,6 +117,7 @@ describe("ToolGuard integration via toolExecutor", () => {
       ],
       toolExecutor: executor,
       permissions: {
+        action: "tool.call",
         inputRules: [
           {
             toolPattern: "bash",
@@ -178,6 +179,7 @@ describe("ToolGuard integration via toolExecutor", () => {
       ],
       toolExecutor: executor,
       permissions: {
+        action: "tool.call",
         requireApproval: ["bash"],
       },
     });
@@ -231,6 +233,7 @@ describe("ToolGuard integration via toolExecutor", () => {
       ],
       toolExecutor: executor,
       permissions: {
+        action: "tool.call",
         allowlist: ["bash"],
       },
     });
@@ -320,6 +323,7 @@ describe("ToolGuard integration via toolExecutor", () => {
       ],
       toolExecutor: executor,
       permissions: {
+        action: "tool.call",
         inputRules: [
           {
             toolPattern: "bash",

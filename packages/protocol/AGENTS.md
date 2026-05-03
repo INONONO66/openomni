@@ -19,7 +19,7 @@ src/
 ├── plan/                 # Plan, PlanStep (DAG), PlanResult with acyclic validation
 ├── ingress/              # InboundEvent (plan | direct), AgentDef, IngressResult
 ├── messenger/            # MessageEnvelope, PersistencePolicy, AllowPattern, AuditEntry
-├── guardrail/            # ToolPermission, InputRule, DelegationPolicy
+├── guardrail/            # Permission, InputRule, DelegationPolicy
 ├── event-log/            # ExecutionEvent discriminated union (LLM / tool / step / session)
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part

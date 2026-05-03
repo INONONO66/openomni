@@ -3,39 +3,53 @@ import { ToolGuard } from "../../src/core/tool-guard";
 
 describe("ToolGuard.check", () => {
   it("allows tool when no restrictions (undefined allowlist)", () => {
-    expect(ToolGuard.check("any_tool", {}, {})).toBe("allow");
+    expect(ToolGuard.check("any_tool", {}, { action: "tool.call" })).toBe("allow");
   });
 
   it("denies tool on denylist", () => {
-    expect(ToolGuard.check("dangerous_tool", {}, { denylist: ["dangerous_tool"] })).toBe("deny");
+    expect(
+      ToolGuard.check("dangerous_tool", {}, { action: "tool.call", denylist: ["dangerous_tool"] }),
+    ).toBe("deny");
   });
 
   it("allows tool not on denylist", () => {
-    expect(ToolGuard.check("safe_tool", {}, { denylist: ["dangerous_tool"] })).toBe("allow");
+    expect(
+      ToolGuard.check("safe_tool", {}, { action: "tool.call", denylist: ["dangerous_tool"] }),
+    ).toBe("allow");
   });
 
   it("denies all tools when allowlist is empty array", () => {
-    expect(ToolGuard.check("any_tool", {}, { allowlist: [] })).toBe("deny");
+    expect(ToolGuard.check("any_tool", {}, { action: "tool.call", allowlist: [] })).toBe("deny");
   });
 
   it("allows all tools when allowlist contains wildcard *", () => {
-    expect(ToolGuard.check("any_tool", {}, { allowlist: ["*"] })).toBe("allow");
+    expect(ToolGuard.check("any_tool", {}, { action: "tool.call", allowlist: ["*"] })).toBe(
+      "allow",
+    );
   });
 
   it("allows tool explicitly in allowlist", () => {
-    expect(ToolGuard.check("allowed_tool", {}, { allowlist: ["allowed_tool"] })).toBe("allow");
+    expect(
+      ToolGuard.check("allowed_tool", {}, { action: "tool.call", allowlist: ["allowed_tool"] }),
+    ).toBe("allow");
   });
 
   it("denies tool not in allowlist", () => {
-    expect(ToolGuard.check("other_tool", {}, { allowlist: ["allowed_tool"] })).toBe("deny");
+    expect(
+      ToolGuard.check("other_tool", {}, { action: "tool.call", allowlist: ["allowed_tool"] }),
+    ).toBe("deny");
   });
 
   it("allows tool matching prefix wildcard mcp.*", () => {
-    expect(ToolGuard.check("mcp.search", {}, { allowlist: ["mcp.*"] })).toBe("allow");
+    expect(ToolGuard.check("mcp.search", {}, { action: "tool.call", allowlist: ["mcp.*"] })).toBe(
+      "allow",
+    );
   });
 
   it("denies tool not matching prefix wildcard", () => {
-    expect(ToolGuard.check("other.search", {}, { allowlist: ["mcp.*"] })).toBe("deny");
+    expect(ToolGuard.check("other.search", {}, { action: "tool.call", allowlist: ["mcp.*"] })).toBe(
+      "deny",
+    );
   });
 
   it("returns require_approval for tool in requireApproval list", () => {
@@ -44,6 +58,7 @@ describe("ToolGuard.check", () => {
         "sensitive_tool",
         {},
         {
+          action: "tool.call",
           requireApproval: ["sensitive_tool"],
         },
       ),
@@ -56,6 +71,7 @@ describe("ToolGuard.check", () => {
         "tool",
         {},
         {
+          action: "tool.call",
           denylist: ["tool"],
           requireApproval: ["tool"],
         },
@@ -69,6 +85,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: "rm -rf /" },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -89,6 +106,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: "ls -la" },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -109,6 +127,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: "sudo apt install" },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -136,6 +155,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: "test" },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -156,6 +176,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: "safe" },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -176,6 +197,7 @@ describe("ToolGuard.check", () => {
         "bash",
         { command: `${"a".repeat(10_000)}b` },
         {
+          action: "tool.call",
           inputRules: [
             {
               toolPattern: "bash",
@@ -196,6 +218,7 @@ describe("ToolGuard.check", () => {
         "file_edit",
         { filePath: "/etc/passwd" },
         {
+          action: "tool.call",
           inputRules: [
             { toolPattern: "*", field: "filePath", pattern: "^/etc/", action: "deny", priority: 5 },
           ],

@@ -21,13 +21,14 @@ export namespace Guardrail {
   });
   export type InputRule = z.infer<typeof InputRule>;
 
-  export const ToolPermission = z.object({
+  export const Permission = z.object({
+    action: z.string(),
     allowlist: z.string().array().optional(),
     denylist: z.string().array().optional(),
     requireApproval: z.string().array().optional(),
     inputRules: InputRule.array().optional(),
   });
-  export type ToolPermission = z.infer<typeof ToolPermission>;
+  export type Permission = z.infer<typeof Permission>;
 
   export const GuardrailType = z.enum([
     "output_validation",

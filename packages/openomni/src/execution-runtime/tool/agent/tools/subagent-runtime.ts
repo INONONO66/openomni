@@ -48,13 +48,14 @@ export function createSubagentRuntime(): SubagentRuntimeInterface {
 }
 
 function intersectPermissions(
-  parent: Guardrail.ToolPermission | undefined,
-  child: Guardrail.ToolPermission | undefined,
-): Guardrail.ToolPermission | undefined {
+  parent: Guardrail.Permission | undefined,
+  child: Guardrail.Permission | undefined,
+): Guardrail.Permission | undefined {
   if (!parent && !child) return undefined;
   if (!parent) return child;
   if (!child) return parent;
   return {
+    action: child.action,
     denylist: [...(parent.denylist ?? []), ...(child.denylist ?? [])],
     allowlist: child.allowlist ?? parent.allowlist,
     requireApproval: child.requireApproval ?? parent.requireApproval,
@@ -66,7 +67,7 @@ type WorkerRuntimeConfig = {
   // Lazily resolved after createExecutionToolContext — filled before any tool call.
   toolsRef: { tools?: ChatAgentConfig["tools"]; toolExecutor?: ChatAgentConfig["toolExecutor"] };
   parentSessionId: string;
-  parentPermissions?: Guardrail.ToolPermission;
+  parentPermissions?: Guardrail.Permission;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
   agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };

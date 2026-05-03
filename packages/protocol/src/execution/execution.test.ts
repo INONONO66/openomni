@@ -32,6 +32,7 @@ describe("Execution", () => {
         workspaceRoot: "/tmp",
       },
       permissions: {
+        action: "tool.call",
         allowlist: ["calculator"],
       },
       credentials: {
@@ -148,7 +149,7 @@ describe("Execution", () => {
     expect(parsed.middleware).toEqual(["budget", "tool-guard", "memory"]);
   });
 
-  test("ExecutionRequest with full Guardrail.ToolPermission", () => {
+  test("ExecutionRequest with full Guardrail.Permission", () => {
     const request: Execution.Request = {
       runId: "run-perms",
       sessionId: "session-perms",
@@ -159,6 +160,7 @@ describe("Execution", () => {
         id: "claude-3-5-sonnet",
       },
       permissions: {
+        action: "tool.call",
         allowlist: ["read_file", "write_file"],
         denylist: ["delete_file"],
         requireApproval: ["execute_command"],
@@ -176,6 +178,7 @@ describe("Execution", () => {
     };
 
     const parsed = Execution.Request.parse(request);
+    expect(parsed.permissions?.action).toBe("tool.call");
     expect(parsed.permissions?.allowlist).toEqual(["read_file", "write_file"]);
     expect(parsed.permissions?.denylist).toEqual(["delete_file"]);
     expect(parsed.permissions?.requireApproval).toEqual(["execute_command"]);
@@ -223,6 +226,7 @@ describe("Execution", () => {
         id: "claude-3-5-sonnet",
       },
       permissions: {
+        action: "tool.call",
         allowlist: ["tool1"],
       },
       budget: {
@@ -231,6 +235,7 @@ describe("Execution", () => {
     };
 
     const parsed = Execution.Request.parse(request);
+    expect(parsed.permissions?.action).toBe("tool.call");
     expect(parsed.permissions?.allowlist).toEqual(["tool1"]);
     expect(parsed.budget?.maxTurns).toBe(5);
   });

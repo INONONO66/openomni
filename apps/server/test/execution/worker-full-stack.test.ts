@@ -3,8 +3,7 @@ import { AgentRegistry } from "@openomni/agent";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
-import type { Execution, WorkerBootstrap } from "@openomni/protocol";
-import type { DirectEvent, Tool } from "@openomni/protocol";
+import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
 
 let capturedOnToolCall:
   | ((params: {
@@ -74,7 +73,7 @@ afterEach(() => {
   IngressEngine.setCoordinator(noopCoordinator);
 });
 
-function makeDirectEvent(): DirectEvent {
+function makeDirectEvent(): Ingress.DirectEvent {
   return {
     id: crypto.randomUUID(),
     surface: "test",
@@ -161,7 +160,9 @@ describe("builtin middleware — tool-guard", () => {
   }
 
   test("blocks tool listed in denylist", async () => {
-    const registrations = buildWorkerMiddleware({ permissions: { denylist: ["bash"] } });
+    const registrations = buildWorkerMiddleware({
+      permissions: { action: "tool.call", denylist: ["bash"] },
+    });
     const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
 
     expect(toolGuard).toBeDefined();
@@ -172,7 +173,9 @@ describe("builtin middleware — tool-guard", () => {
   });
 
   test("allows tool not in denylist", async () => {
-    const registrations = buildWorkerMiddleware({ permissions: { denylist: ["bash"] } });
+    const registrations = buildWorkerMiddleware({
+      permissions: { action: "tool.call", denylist: ["bash"] },
+    });
     const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
 
     if (!toolGuard) throw new Error("tool-guard not found");

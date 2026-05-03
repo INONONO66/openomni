@@ -34,6 +34,7 @@ describe("AgentDef", () => {
         maxTurns: 10,
       },
       permissions: {
+        action: "tool.call",
         allowlist: ["bash"],
       },
       toolConfig: {
@@ -42,8 +43,11 @@ describe("AgentDef", () => {
     });
     expect(agent.systemPrompt).toBe("You are a helpful assistant");
     expect(agent.tools).toHaveLength(1);
-    expect(agent.tools?.[0].name).toBe("bash");
+    const [tool] = agent.tools ?? [];
+    if (!tool) throw new Error("expected parsed tool");
+    expect(tool.name).toBe("bash");
     expect(agent.budget?.maxTurns).toBe(10);
+    expect(agent.permissions?.action).toBe("tool.call");
     expect(agent.permissions?.allowlist).toEqual(["bash"]);
     expect(agent.toolConfig?.workspaceRoot).toBe("/workspace/openomni");
   });

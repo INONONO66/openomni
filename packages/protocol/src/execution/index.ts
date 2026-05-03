@@ -22,7 +22,7 @@ const requestSchema = z.object({
       workspaceRoot: z.string().optional(),
     })
     .optional(),
-  permissions: Guardrail.ToolPermission.optional(),
+  permissions: Guardrail.Permission.optional(),
   credentials: z.record(z.string()).optional(),
   budget: AgentProfile.AgentBudget.optional(),
   skills: z.array(z.string()).optional(),

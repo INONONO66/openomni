@@ -119,7 +119,7 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | `PlanToolProvider` | `@openomni/openomni` | plan-mode tools |
 | `TodoToolProvider` | `@openomni/openomni` | todo list tools |
 
-`createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Guardrail.ToolPermission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
+`createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Guardrail.Permission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
 
 ## CHANNELS
 
@@ -156,7 +156,7 @@ Add a new channel by:
 
 - **Bypassing `createMessageHandler`**: all message handling should flow through the per-surface FIFO queue so one surface cannot interleave runs.
 - **New channel logic in `apps/cli`**: CLI is intentionally minimal (auth + config). All channel work lives here.
-- **Ad-hoc tool permission logic**: if a new policy is needed, extend `Guardrail.ToolPermission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
+- **Ad-hoc tool permission logic**: if a new policy is needed, extend `Guardrail.Permission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
 
 ## KNOWN TECH DEBT
 

@@ -70,7 +70,7 @@ export async function runWithTranscript(
   sessionId: string,
   config: RuntimeConfig,
   signal?: AbortSignal,
-  permissions?: Guardrail.ToolPermission,
+  permissions?: Guardrail.Permission,
   messages = buildChildMessagesInternal(sessionId),
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const agent = ChatAgent.create({

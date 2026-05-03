@@ -57,7 +57,7 @@ describe("createToolExecutor", () => {
   it("denies tools matching the denylist", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash")],
-      config: { permissions: { denylist: ["bash"] } },
+      config: { permissions: { action: "tool.call", denylist: ["bash"] } },
     });
 
     const result = await executor(makeCall("bash"));
@@ -70,7 +70,7 @@ describe("createToolExecutor", () => {
   it("denies tools absent from the allowlist", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("write"), makeTool("read")],
-      config: { permissions: { allowlist: ["read"] } },
+      config: { permissions: { action: "tool.call", allowlist: ["read"] } },
     });
 
     const writeResult = await executor(makeCall("write"));
@@ -84,7 +84,7 @@ describe("createToolExecutor", () => {
   it("blocks tools that require approval", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash")],
-      config: { permissions: { requireApproval: ["bash"] } },
+      config: { permissions: { action: "tool.call", requireApproval: ["bash"] } },
     });
 
     const result = await executor(makeCall("bash"));
@@ -124,7 +124,7 @@ describe("createToolExecutor", () => {
   it("denylist wildcard pattern blocks the entire tool family", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("file.read"), makeTool("file.write"), makeTool("bash")],
-      config: { permissions: { denylist: ["file.*"] } },
+      config: { permissions: { action: "tool.call", denylist: ["file.*"] } },
     });
 
     const readResult = await executor(makeCall("file.read"));

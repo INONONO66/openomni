@@ -27,7 +27,7 @@ export namespace ToolGuard {
   export function check(
     toolName: string,
     input: Record<string, unknown>,
-    permission: Guardrail.ToolPermission,
+    permission: Guardrail.Permission,
   ): "allow" | "deny" | "require_approval" {
     // 1. InputRules (highest priority)
     const inputRules = permission.inputRules ?? [];
