@@ -89,7 +89,7 @@ describe("session mailbox", () => {
     await Promise.resolve();
     expect(getMailboxDepth(SESSION_A)).toBe(2);
 
-    unblock!();
+    unblock?.();
     await Promise.all([first, second, third]);
 
     expect(getMailboxDepth(SESSION_A)).toBe(0);
@@ -107,7 +107,7 @@ describe("session mailbox", () => {
     await Promise.resolve();
     clearMailbox(SESSION_A);
 
-    unblock!();
+    unblock?.();
 
     // The pending entry was cleared; it will never settle on its own.
     // Race with a short timeout to verify it's gone.
@@ -147,7 +147,7 @@ describe("session mailbox", () => {
     }
 
     // Unblock and verify the queued items still process
-    unblock!();
+    unblock?.();
     const settledResults = await Promise.allSettled(promises);
     expect(settledResults.every((r) => r.status === "fulfilled")).toBe(true);
   });

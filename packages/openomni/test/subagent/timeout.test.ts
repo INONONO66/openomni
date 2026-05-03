@@ -22,8 +22,9 @@ function mockSlowAgent(durationMs: number) {
                 resolve({
                   text: "done",
                   steps: [],
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
                   finishReason: "stop",
-                } as AgentResult),
+                }),
               durationMs,
             );
             config.signal?.addEventListener(
@@ -35,7 +36,7 @@ function mockSlowAgent(durationMs: number) {
               { once: true },
             );
           }),
-      }) as ReturnType<typeof ChatAgent.create>,
+      }) as unknown as ReturnType<typeof ChatAgent.create>,
   );
 }
 
@@ -71,7 +72,7 @@ afterEach(() => {
 });
 
 describe("soft/hard timeout for worker runs", () => {
-  it("emits soft timeout warning without aborting the run", async () => {
+  it("does not emit lifecycle failure for soft timeout without a status change", async () => {
     createSpy = mockSlowAgent(200);
 
     const failEvents: Array<{ error?: string }> = [];
@@ -89,7 +90,7 @@ describe("soft/hard timeout for worker runs", () => {
 
     expect(result.output).toBe("done");
     const softWarnings = failEvents.filter((e) => e.error === "soft timeout exceeded");
-    expect(softWarnings).toHaveLength(1);
+    expect(softWarnings).toHaveLength(0);
   });
 
   it("aborts and transitions to interrupted on hard timeout", async () => {
@@ -120,7 +121,7 @@ describe("soft/hard timeout for worker runs", () => {
     expect(hardEvents).toHaveLength(1);
   });
 
-  it("emits soft warning before hard timeout aborts", async () => {
+  it("emits only the hard timeout lifecycle failure when hard timeout aborts", async () => {
     createSpy = mockSlowAgent(500);
 
     const eventLog: string[] = [];
@@ -146,12 +147,8 @@ describe("soft/hard timeout for worker runs", () => {
 
     const run = await WorkerRun.get(sessionId, runId);
     expect(run?.status).toBe("interrupted");
-    expect(eventLog).toContain("soft timeout exceeded");
     expect(eventLog).toContain("hard timeout exceeded");
-
-    const softIdx = eventLog.indexOf("soft timeout exceeded");
-    const hardIdx = eventLog.indexOf("hard timeout exceeded");
-    expect(softIdx).toBeLessThan(hardIdx);
+    expect(eventLog).not.toContain("soft timeout exceeded");
   });
 
   it("clears timers when run completes before timeout", async () => {
@@ -246,6 +243,6 @@ describe("soft/hard timeout for worker runs", () => {
     });
 
     expect(result.output).toBe("done");
-    expect(failEvents.some((e) => e.error === "soft timeout exceeded")).toBe(true);
+    expect(failEvents.some((e) => e.error === "soft timeout exceeded")).toBe(false);
   });
 });

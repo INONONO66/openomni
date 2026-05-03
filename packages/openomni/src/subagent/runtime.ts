@@ -119,12 +119,6 @@ export namespace SubagentRuntime {
         config.hardTimeoutMs,
       );
       await WorkerRun.updateStatus(session.id, runId, "starting");
-      publishEvent(Subagent.Events.WorkerRunStarted, {
-        sessionId: session.id,
-        runId,
-        title: config.title,
-      });
-
       await WorkerRun.updateStatus(session.id, runId, "running");
       const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
         config.middleware,
@@ -157,11 +151,6 @@ export namespace SubagentRuntime {
     const timers = setupRunTimeouts(session.id, runId, config.softTimeoutMs, config.hardTimeoutMs);
 
     await WorkerRun.updateStatus(session.id, runId, "starting");
-    publishEvent(Subagent.Events.WorkerRunStarted, {
-      sessionId: session.id,
-      runId,
-      title: config.title,
-    });
     await WorkerRun.updateStatus(session.id, runId, "running");
     Log.info("subagent.spawn-background", {
       agentName: config.agentName,

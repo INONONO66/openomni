@@ -1,27 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
-import { Subagent, type Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { SubagentRuntime } from "../../src/subagent/runtime";
-
-function publishWorkerRunCompleted(sessionId: string, runId: string) {
-  Bus.publish(Subagent.Events.WorkerRunCompleted, {
-    traceId: crypto.randomUUID(),
-    time: Date.now(),
-    sessionId,
-    runId,
-    payload: { sessionId, runId, status: "succeeded" as const },
-  });
-}
-
-function publishWorkerRunFailed(sessionId: string, runId: string, error?: string) {
-  Bus.publish(Subagent.Events.WorkerRunFailed, {
-    traceId: crypto.randomUUID(),
-    time: Date.now(),
-    sessionId,
-    runId,
-    payload: { sessionId, runId, error },
-  });
-}
 
 async function makeRunningSession(): Promise<{ sessionId: string; runId: string }> {
   const sessionId = crypto.randomUUID();
@@ -56,7 +36,7 @@ async function makeCompletedMessage(sessionId: string, text: string) {
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   };
-  await Session.addMessage(sessionId, msg);
+  Session.addMessage(sessionId, msg);
   Session.addPart(msg.id, {
     id: crypto.randomUUID(),
     sessionID: sessionId,
@@ -90,7 +70,6 @@ describe("wait() — event-driven (no polling)", () => {
         endedAt: Date.now(),
         lastMessageId: msg.id,
       });
-      publishWorkerRunCompleted(sessionId, runId);
     }, 20);
 
     const result = await waitPromise;
@@ -104,8 +83,10 @@ describe("wait() — event-driven (no polling)", () => {
     const waitPromise = SubagentRuntime.wait({ sessionId, runId });
 
     setTimeout(async () => {
-      await WorkerRun.updateStatus(sessionId, runId, "failed", { endedAt: Date.now() });
-      publishWorkerRunFailed(sessionId, runId, "something went wrong");
+      await WorkerRun.updateStatus(sessionId, runId, "failed", {
+        endedAt: Date.now(),
+        error: "something went wrong",
+      });
     }, 20);
 
     const result = await waitPromise;
@@ -153,7 +134,6 @@ describe("wait() — event-driven (no polling)", () => {
     await Promise.all(
       pairs.map(async ({ sessionId, runId }) => {
         await WorkerRun.updateStatus(sessionId, runId, "succeeded", { endedAt: Date.now() });
-        publishWorkerRunCompleted(sessionId, runId);
       }),
     );
 

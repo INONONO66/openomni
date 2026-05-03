@@ -253,7 +253,7 @@ describe("BackgroundManager — launch limit policy", () => {
     });
 
     expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.policyId).toBe("background.limit.per-agent");
+    expect(result.verdict.policyId).toBe("guardrail.permission");
     expect(result.verdict.reason).toBe("max concurrent tasks per agent (0) exceeded");
   });
 });
