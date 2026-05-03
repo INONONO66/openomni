@@ -1,6 +1,6 @@
 import { Guardrail, type Tool } from "@openomni/protocol";
 import { Log } from "@openomni/session";
-import { WorkspaceLock } from "../workspace-lock.js";
+import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
   ImplicitInputSource,
   NativeTool,
@@ -8,13 +8,6 @@ import type {
   ToolRuntimeContext,
 } from "./types.js";
 
-const tierTimeouts: Record<number, number> = {
-  0: 30_000,
-  1: 30_000,
-  2: 60_000,
-  3: 120_000,
-};
-const DEFAULT_TIER_TIMEOUT_MS = 30_000;
 const TOOL_CALL_ACTION = "tool.call";
 
 export interface ToolExecutorContext {
@@ -62,35 +55,6 @@ function permissionErrorMessage(toolName: string, result: Guardrail.EvaluationRe
   }
 
   return `[Blocked] Tool "${toolName}" blocked by policy: ${result.reason}`;
-}
-
-function getTimeoutMs(riskTier: number, config: ToolExecutorConfig): number {
-  const configured =
-    riskTier === 0
-      ? config.timeoutMs?.tier0
-      : riskTier === 1
-        ? config.timeoutMs?.tier1
-        : riskTier === 2
-          ? config.timeoutMs?.tier2
-          : undefined;
-
-  return configured ?? tierTimeouts[riskTier] ?? DEFAULT_TIER_TIMEOUT_MS;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      const timer = globalThis.setTimeout(() => {
-        reject(new Error(`timeout after ${ms}ms`));
-      }, ms);
-
-      promise.then(
-        () => globalThis.clearTimeout(timer),
-        () => globalThis.clearTimeout(timer),
-      );
-    }),
-  ]);
 }
 
 function createErrorResult(call: Tool.Call, message: string): Tool.Result {
@@ -160,32 +124,50 @@ export function createToolExecutor(
       return createErrorResult(call, permissionErrorMessage(originalName, permissionResult));
     }
 
-    if (tool.riskTier >= 2) {
-      Log.warn("executor: high-risk tool execution", {
-        toolName: originalName,
-        tier: tool.riskTier,
-      });
-    } else {
-      Log.debug("executor: risk tier evaluated", { toolName: originalName, tier: tool.riskTier });
-    }
-
-    const timeoutMs = getTimeoutMs(tool.riskTier, config);
     const enrichedCall = injectImplicitInputs(call, tool, runtime);
     const dispatchedCall =
       originalName === enrichedCall.tool ? enrichedCall : { ...enrichedCall, tool: originalName };
+    let policy: ToolRuntimePolicyMiddleware.PreToolResult | undefined;
 
     try {
-      if (tool.riskTier >= 1 && workspaceRoot) {
-        await WorkspaceLock.acquire(workspaceRoot, lockOwnerId);
-        try {
-          return await withTimeout(tool.execute(dispatchedCall), timeoutMs);
-        } finally {
-          WorkspaceLock.release(workspaceRoot, lockOwnerId);
-        }
+      policy = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+        toolName: originalName,
+        toolCallId: call.id,
+        input: dispatchedCall.input,
+        riskTier: tool.riskTier,
+        timeoutConfig: config.timeoutMs,
+        workspaceRoot,
+        lockOwnerId,
+      });
+
+      if (policy.verdict.action !== "continue") {
+        return createErrorResult(call, policy.verdict.reason ?? "tool runtime policy aborted");
       }
-      return await withTimeout(tool.execute(dispatchedCall), timeoutMs);
+
+      const result = await ToolRuntimePolicyMiddleware.enforceTimeout(
+        tool.execute(dispatchedCall),
+        policy.handle.timeoutMs,
+      );
+      await ToolRuntimePolicyMiddleware.evaluatePostTool({
+        toolName: originalName,
+        toolCallId: call.id,
+        input: dispatchedCall.input,
+        output: result.output,
+        handle: policy.handle,
+      });
+      return result;
     } catch (error) {
-      return createErrorResult(call, error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      if (policy?.verdict.action === "continue") {
+        await ToolRuntimePolicyMiddleware.evaluatePostTool({
+          toolName: originalName,
+          toolCallId: call.id,
+          input: dispatchedCall.input,
+          output: message,
+          handle: policy.handle,
+        });
+      }
+      return createErrorResult(call, message);
     }
   };
 }

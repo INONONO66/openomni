@@ -70,9 +70,10 @@ describe("WorkspaceLock", () => {
     const workspace = makeWorkspace();
     await WorkspaceLock.acquire(workspace, "blocker");
 
-    await expect(WorkspaceLock.acquire(workspace, "waiter", 50)).rejects.toThrow(
-      "workspace lock timeout",
-    );
+    const error = await WorkspaceLock.acquire(workspace, "waiter", 50).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("workspace lock timeout");
 
     WorkspaceLock.release(workspace, "blocker");
   });
@@ -139,5 +140,50 @@ describe("createToolExecutor — workspace lock integration", () => {
     order.push("after-tool");
 
     expect(order).toEqual(["before-release", "tool", "after-tool"]);
+  });
+
+  test("tier-1 tools release workspace lock after execution errors", async () => {
+    const workspace = makeWorkspace();
+    const executor = createToolExecutor({
+      tools: [
+        {
+          ...makeTool("write", 1),
+          execute: async () => {
+            throw new Error("boom");
+          },
+        },
+      ],
+      config: { workspaceRoot: workspace },
+    });
+
+    const result = await executor({ id: "c3", tool: "write", input: {} });
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("boom");
+
+    await WorkspaceLock.acquire(workspace, "probe", 50);
+    WorkspaceLock.release(workspace, "probe");
+  });
+
+  test("tier-1 tools release workspace lock after executor timeouts", async () => {
+    const workspace = makeWorkspace();
+    const executor = createToolExecutor({
+      tools: [
+        {
+          ...makeTool("write", 1),
+          execute: () =>
+            new Promise<Tool.Result>(() => {
+              // intentional: never resolves to test timeout
+            }),
+        },
+      ],
+      config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
+    });
+
+    const result = await executor({ id: "c4", tool: "write", input: {} });
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("timeout after 10ms");
+
+    await WorkspaceLock.acquire(workspace, "probe", 50);
+    WorkspaceLock.release(workspace, "probe");
   });
 });

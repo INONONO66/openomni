@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import { createToolExecutor } from "./executor.js";
+import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";
 
 function makeCall(tool: string, input: Record<string, unknown> = {}): Tool.Call {
@@ -110,6 +111,26 @@ describe("createToolExecutor", () => {
     expect(result.output).toBe("boom");
   });
 
+  it("wraps tool timeouts in the legacy error result shape", async () => {
+    const executor = createToolExecutor({
+      tools: [
+        makeTool("slow", {
+          execute: () =>
+            new Promise<Tool.Result>(() => {
+              // intentional: never resolves to test timeout
+            }),
+        }),
+      ],
+      config: { timeoutMs: { tier0: 10 } },
+    });
+
+    const result = await executor(makeCall("slow"));
+
+    expect(result.toolCallId).toBe("call-1");
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("timeout after 10ms");
+  });
+
   it("dispatches to a dotted-name tool via its underscore alias", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("grep.search")],
@@ -185,6 +206,30 @@ describe("createToolExecutor", () => {
 
     expect((await executor(makeCall("bash"))).isError).toBeUndefined();
     expect((await executor(makeCall("read"))).isError).toBeUndefined();
+  });
+
+  it("resolves risk-tier runtime policy with decision metadata", async () => {
+    const decisions: string[] = [];
+
+    const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      toolName: "bash",
+      toolCallId: "call-1",
+      input: {},
+      riskTier: 2,
+      timeoutConfig: { tier2: 15 },
+      lockOwnerId: "owner-1",
+      onDecision: (decision) => {
+        decisions.push(`${decision.policyId}:${decision.reason ?? ""}`);
+      },
+    });
+
+    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.policyId).toBe("tool.runtime-policy");
+    expect(result.verdict.reason).toBe("runtime policy evaluated");
+    expect(result.handle.timeoutMs).toBe(15);
+    expect(decisions).toContain("tool.runtime-policy:high-risk tool execution recorded");
+    expect(decisions).toContain("tool.runtime-policy:timeout resolved");
+    expect(decisions).toContain("tool.runtime-policy:workspace lock not required");
   });
 
   it("injects implicit inputs from runtime context", async () => {

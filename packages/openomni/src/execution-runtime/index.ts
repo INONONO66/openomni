@@ -13,6 +13,7 @@ export {
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,
+  ToolRuntimePolicyMiddleware,
   resolveMeta,
   resolveCategory,
   resolveToolSelection,
