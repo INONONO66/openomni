@@ -6,6 +6,9 @@ export namespace Guardrail {
   const MAX_INPUT_LENGTH = 10_000;
   const POLICY_ID = "guardrail.permission";
 
+  export const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
+  export type PermissionDecision = z.infer<typeof PermissionDecision>;
+
   export const InputRule = z.object({
     toolPattern: z.string(),
     field: z.string(),
@@ -20,7 +23,7 @@ export namespace Guardrail {
       },
       { message: "pattern must be a valid regular expression" },
     ),
-    action: z.enum(["allow", "deny", "require_approval"]),
+    action: PermissionDecision,
     reason: z.string().optional(),
     priority: z.number().default(0),
   });
@@ -47,6 +50,7 @@ export namespace Guardrail {
 
   export const EvaluationResult = z.object({
     action: z.enum(["continue", "abort"]),
+    decision: PermissionDecision.optional(),
     reason: z.string(),
     policyId: z.literal(POLICY_ID),
     matchedPattern: z.string().optional(),
@@ -77,27 +81,23 @@ export namespace Guardrail {
   }
 
   function verdict(
-    action: Extract<Hook.Verdict["action"], "continue" | "abort">,
+    decision: PermissionDecision,
     reason: string,
     matchedPattern?: string,
   ): EvaluationResult {
+    const action: Extract<Hook.Verdict["action"], "continue" | "abort"> =
+      decision === "allow" ? "continue" : "abort";
     return matchedPattern === undefined
-      ? { action, reason, policyId: POLICY_ID }
-      : { action, reason, policyId: POLICY_ID, matchedPattern };
-  }
-
-  function actionForRule(
-    action: InputRule["action"],
-  ): Extract<Hook.Verdict["action"], "continue" | "abort"> {
-    return action === "allow" ? "continue" : "abort";
+      ? { action, decision, reason, policyId: POLICY_ID }
+      : { action, decision, reason, policyId: POLICY_ID, matchedPattern };
   }
 
   export function evaluate(
     permission: Permission | undefined,
     request: EvaluationRequest,
   ): EvaluationResult {
-    if (!permission) return verdict("continue", "default_allow");
-    if (permission.action !== request.action) return verdict("abort", "action_mismatch");
+    if (!permission) return verdict("allow", "default_allow");
+    if (permission.action !== request.action) return verdict("deny", "action_mismatch");
 
     const inputRules = [...(permission.inputRules ?? [])].sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
@@ -108,24 +108,20 @@ export namespace Guardrail {
         matchesPattern(request.resource, rule.toolPattern) &&
         matchesInputField(request.input, rule.field, rule.pattern)
       ) {
-        return verdict(
-          actionForRule(rule.action),
-          rule.reason ?? `input_rule_${rule.action}`,
-          rule.toolPattern,
-        );
+        return verdict(rule.action, rule.reason ?? `input_rule_${rule.action}`, rule.toolPattern);
       }
     }
 
     const deniedBy = permission.denylist?.find((pattern) =>
       matchesPattern(request.resource, pattern),
     );
-    if (deniedBy) return verdict("abort", "denylist", deniedBy);
+    if (deniedBy) return verdict("deny", "denylist", deniedBy);
 
     const requiresApprovalBy = permission.requireApproval?.find((pattern) =>
       matchesPattern(request.resource, pattern),
     );
     if (requiresApprovalBy) {
-      return verdict("abort", "require_approval", requiresApprovalBy);
+      return verdict("require_approval", "require_approval", requiresApprovalBy);
     }
 
     if (permission.allowlist !== undefined) {
@@ -133,15 +129,15 @@ export namespace Guardrail {
         matchesPattern(request.resource, pattern),
       );
 
-      if (allowedBy) return verdict("continue", "allowlist", allowedBy);
+      if (allowedBy) return verdict("allow", "allowlist", allowedBy);
 
       return verdict(
-        "abort",
+        "deny",
         permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss",
       );
     }
 
-    return verdict("continue", "default_allow");
+    return verdict("allow", "default_allow");
   }
 
   export const GuardrailType = z.enum([

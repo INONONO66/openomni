@@ -53,11 +53,11 @@ function evaluatePermission(
 }
 
 function permissionErrorMessage(toolName: string, result: Guardrail.EvaluationResult): string {
-  if (result.reason === "require_approval" || result.reason === "input_rule_require_approval") {
+  if (result.decision === "require_approval") {
     return `[Blocked] Tool "${toolName}" requires approval: ${result.reason}`;
   }
 
-  if (result.reason === "denylist" || result.reason === "input_rule_deny") {
+  if (result.decision === "deny") {
     return `[Blocked] Tool "${toolName}" denied by policy: ${result.reason}`;
   }
 

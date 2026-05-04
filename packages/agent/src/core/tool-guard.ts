@@ -11,11 +11,8 @@ function normalizePermission(permission: Guardrail.Permission): Guardrail.Permis
 function toLegacyDecision(
   result: Guardrail.EvaluationResult,
 ): "allow" | "deny" | "require_approval" {
-  if (result.action === "continue") return "allow";
-  if (result.reason === "require_approval" || result.reason === "input_rule_require_approval") {
-    return "require_approval";
-  }
-  return "deny";
+  if (result.decision !== undefined) return result.decision;
+  return result.action === "continue" ? "allow" : "deny";
 }
 
 function logDecision(toolName: string, result: Guardrail.EvaluationResult): void {

@@ -253,6 +253,70 @@ describe("Guardrail schemas", () => {
       });
     });
 
+    it("populates decision for every result branch", () => {
+      const allowDefault = Guardrail.evaluate(undefined, request("bash"));
+      expect(allowDefault.decision).toBe("allow");
+      expect(allowDefault.action).toBe("continue");
+
+      const allowList = Guardrail.evaluate(
+        { action: "tool.call", allowlist: ["bash"] },
+        request("bash"),
+      );
+      expect(allowList.decision).toBe("allow");
+
+      const denyList = Guardrail.evaluate(
+        { action: "tool.call", denylist: ["bash"] },
+        request("bash"),
+      );
+      expect(denyList.decision).toBe("deny");
+
+      const requireApproval = Guardrail.evaluate(
+        { action: "tool.call", requireApproval: ["bash"] },
+        request("bash"),
+      );
+      expect(requireApproval.decision).toBe("require_approval");
+      expect(requireApproval.action).toBe("abort");
+
+      const allowMiss = Guardrail.evaluate(
+        { action: "tool.call", allowlist: ["other"] },
+        request("bash"),
+      );
+      expect(allowMiss.decision).toBe("deny");
+
+      const actionMismatch = Guardrail.evaluate(
+        { action: "channel.send", allowlist: ["*"] },
+        request("bash"),
+      );
+      expect(actionMismatch.decision).toBe("deny");
+    });
+
+    it("preserves require_approval decision when an input rule supplies a custom reason", () => {
+      const result = Guardrail.evaluate(
+        {
+          action: "tool.call",
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "^sudo",
+              action: "require_approval",
+              reason: "destructive_command",
+              priority: 5,
+            },
+          ],
+        },
+        request("bash", { command: "sudo rm -rf /" }),
+      );
+
+      expect(result).toMatchObject({
+        action: "abort",
+        decision: "require_approval",
+        reason: "destructive_command",
+        policyId: "guardrail.permission",
+        matchedPattern: "bash",
+      });
+    });
+
     it("uses highest priority matching input rule before list policies", () => {
       expect(
         Guardrail.evaluate(

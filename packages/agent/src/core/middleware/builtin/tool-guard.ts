@@ -52,7 +52,7 @@ export function createToolGuardMiddleware(
         return verdict;
       }
 
-      if (verdict.reason !== "require_approval") {
+      if (verdict.decision !== "require_approval") {
         config.eventEmitter?.emit("tool.execution.permission_denied", {
           sessionId: config.source,
           time: Date.now(),

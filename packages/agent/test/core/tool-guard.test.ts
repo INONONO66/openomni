@@ -213,6 +213,28 @@ describe("ToolGuard.check", () => {
     ).toBe("allow");
   });
 
+  it("preserves require_approval when an input rule supplies a custom reason", () => {
+    expect(
+      ToolGuard.check(
+        "bash",
+        { command: "sudo apt install" },
+        {
+          action: "tool.call",
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "sudo",
+              action: "require_approval",
+              reason: "destructive_command",
+              priority: 5,
+            },
+          ],
+        },
+      ),
+    ).toBe("require_approval");
+  });
+
   it("input rule with wildcard toolPattern matches all tools", () => {
     expect(
       ToolGuard.check(
@@ -302,6 +324,49 @@ describe("createToolGuardMiddleware", () => {
     expect(verdict).toMatchObject({
       action: "abort",
       reason: "allowlist_miss",
+      policyId: "guardrail.permission",
+    });
+  });
+
+  it("invokes stepGuard when an input rule with a custom reason requests approval", async () => {
+    let stepGuardCalls = 0;
+    const middleware = createToolGuardMiddleware({
+      permission: {
+        action: "tool.call",
+        inputRules: [
+          {
+            toolPattern: "bash",
+            field: "command",
+            pattern: "sudo",
+            action: "require_approval",
+            reason: "destructive_command",
+            priority: 5,
+          },
+        ],
+      },
+      stepGuard: () => {
+        stepGuardCalls += 1;
+        return { action: "continue" };
+      },
+    });
+
+    const verdict = await middleware.fn({
+      timing: "pre_tool_use",
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "bash",
+      toolCallId: "call-1",
+      toolInput: { command: "sudo apt install" },
+    });
+
+    expect(stepGuardCalls).toBe(1);
+    expect(verdict).toMatchObject({
+      action: "continue",
+      reason: "destructive_command",
       policyId: "guardrail.permission",
     });
   });
