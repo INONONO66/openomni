@@ -16,7 +16,7 @@ export namespace Ingress {
     systemPrompt: z.string().optional(),
     tools: z.array(Tool.Spec).optional(),
     budget: z.object({ maxTurns: z.number().optional() }).optional(),
-    permissions: Guardrail.ToolPermission.optional(),
+    permissions: Guardrail.Permission.optional(),
     toolConfig: AgentToolConfigSchema.optional(),
   });
   // toolExecutor is a runtime callback — can't be expressed in Zod

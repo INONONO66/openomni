@@ -709,6 +709,49 @@ describe("SqliteStorageAdapter", () => {
 
       expect(adapter.eventLog?.replay("s1")).toHaveLength(1);
     });
+
+    test("allocateSequence: hands out monotonic numbers per session", () => {
+      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(1);
+      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(2);
+      expect(adapter.eventLog?.allocateSequence?.("s2")).toBe(1);
+      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(3);
+    });
+
+    test("allocateSequence: primes from durable max sequence on first call", () => {
+      adapter.eventLog?.append("s1", "bus_event", JSON.stringify({ sequence: 7, payload: {} }));
+      adapter.eventLog?.append("s1", "bus_event", JSON.stringify({ sequence: 12, payload: {} }));
+
+      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(13);
+    });
+
+    test("session.remove evicts the per-session sequence cache entry", () => {
+      adapter.eventLog?.allocateSequence?.("s1");
+      adapter.eventLog?.allocateSequence?.("s1");
+
+      adapter.session.remove("s1");
+      adapter.session.set("s1", makeSession("s1"));
+
+      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(1);
+    });
+
+    test("allocateSequence: caps the per-session cache via LRU eviction", () => {
+      const limit = 10_000;
+      for (let i = 0; i < limit; i++) {
+        adapter.session.set(`bulk-${i}`, makeSession(`bulk-${i}`));
+        adapter.eventLog?.allocateSequence?.(`bulk-${i}`);
+      }
+
+      adapter.session.set("hot", makeSession("hot"));
+      adapter.eventLog?.allocateSequence?.("hot");
+
+      adapter.eventLog?.allocateSequence?.("hot");
+      expect(adapter.eventLog?.allocateSequence?.("hot")).toBe(3);
+
+      // The first inserted bulk session should have been evicted to keep the
+      // cache bounded; allocating again therefore re-primes from the durable
+      // log (which has no rows for it) and starts from 1.
+      expect(adapter.eventLog?.allocateSequence?.("bulk-0")).toBe(1);
+    });
   });
 
   describe("clear", () => {

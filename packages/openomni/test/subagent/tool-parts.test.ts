@@ -195,7 +195,8 @@ describe("SubagentRuntime tool parts", () => {
       (message): message is Message.AssistantMessage => message.role === "assistant",
     );
     const latestAssistant = assistantMessages[assistantMessages.length - 1];
-    const latestParts = Session.getParts(latestAssistant!.id);
+    if (!latestAssistant) throw new Error("Expected latest assistant message");
+    const latestParts = Session.getParts(latestAssistant.id);
     const toolPart = latestParts.find((part): part is Message.ToolPart => part.type === "tool");
 
     expect(toolPart).toBeDefined();

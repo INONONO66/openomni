@@ -1,12 +1,13 @@
 import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
+import type { Provider, RunInput } from "@openomni/llm";
 import type { Memory } from "./memory";
 import type { MiddlewareRegistration } from "./middleware/types";
 import type { AgentRuntimeContext } from "./runtime-context";
 
 export type StepGuardVerdict =
   | { action: "continue" }
-  | { action: "inject"; message: string }
-  | { action: "abort"; reason?: string };
+  | { action: "inject"; message: string; reason?: string; policyId?: string }
+  | { action: "abort"; reason?: string; policyId?: string };
 
 export interface StepGuardContext {
   steps: AgentStep[];
@@ -79,7 +80,7 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
-  permissions?: Guardrail.ToolPermission;
+  permissions?: Guardrail.Permission;
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;
@@ -104,6 +105,10 @@ export interface ChatAgentConfig {
   providerOptions?: Record<string, unknown>;
   middleware?: MiddlewareRegistration[];
   context?: AgentRuntimeContext;
+  llm?: {
+    run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
+    resolveProviderModel?: (model: { provider: string; id: string }) => Promise<Provider.Model>;
+  };
 }
 
 export interface ChatAgentInput {

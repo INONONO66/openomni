@@ -52,6 +52,8 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bun run script/check-deps.ts
+      - run: bun run lint:guards
+      - run: bun run lint:side-effects
 
   test:
     name: Test

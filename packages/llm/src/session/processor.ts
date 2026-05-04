@@ -1,8 +1,11 @@
-import type { Sink, Message } from "@openomni/protocol";
+import type { ExecutionEvent, Message, Run, Sink, Tool } from "@openomni/protocol";
+import { EventLog, Log, Storage } from "@openomni/session";
 import { TokenTracker } from "../token";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import type { Provider } from "../provider";
+
+const SINK_LEDGER_VISIBILITY = "internal";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -61,10 +64,12 @@ export namespace Processor {
       sessionID,
       model,
       abort,
-      sink = createNoopSink(),
+      sink: configuredSink = createNoopSink(),
       onToolCall,
       createStream = defaultStream,
     } = options;
+
+    const sink = createProjectedSink(configuredSink, sessionID);
 
     let attempt = 0;
 
@@ -135,7 +140,9 @@ export namespace Processor {
 
                   case "text-delta": {
                     if (currentText) {
-                      (textPartMap[currentText.id] ??= []).push(String(event.text || ""));
+                      const textParts = textPartMap[currentText.id] ?? [];
+                      textPartMap[currentText.id] = textParts;
+                      textParts.push(String(event.text || ""));
                       if (event.providerMetadata) {
                         currentText.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -185,7 +192,9 @@ export namespace Processor {
                     const reasoningId = String(event.id);
                     const part = reasoningMap[reasoningId];
                     if (part != null) {
-                      (reasoningPartMap[part.id] ??= []).push(String(event.text || ""));
+                      const reasoningParts = reasoningPartMap[part.id] ?? [];
+                      reasoningPartMap[part.id] = reasoningParts;
+                      reasoningParts.push(String(event.text || ""));
                       if (event.providerMetadata) {
                         part.metadata = event.providerMetadata as Record<string, unknown>;
                       }
@@ -447,7 +456,142 @@ export namespace Processor {
           cleanupPendingTools(pendingTools, updateMessagePart, sink);
           publishStatus({ type: "idle" });
           throw e;
+        } finally {
+          await sink.flush();
         }
+      },
+    };
+  }
+
+  interface ProjectedSink extends Sink {
+    flush(): Promise<void>;
+  }
+
+  function createProjectedSink(sink: Sink, sessionID: string): ProjectedSink {
+    let appendQueue = Promise.resolve();
+    let nextSequence: number | undefined;
+    const toolActionIds = new Map<string, string>();
+
+    async function readNextSequence(): Promise<number> {
+      let maxSequence = 0;
+      for await (const event of EventLog.replay(sessionID)) {
+        maxSequence = Math.max(maxSequence, event.sequence);
+      }
+      return maxSequence + 1;
+    }
+
+    function hasLedgerTarget(): boolean {
+      if (!sessionID || Storage.initializedDbPath === null) return false;
+
+      const adapter = Storage.get();
+      if (adapter.eventLog === undefined) return false;
+      return adapter.session.get(sessionID) !== undefined;
+    }
+
+    function createActionId(eventType: ExecutionEvent["type"], sequence: number): string {
+      return `${sessionID}:processor.sink.${eventType}:${sequence}`;
+    }
+
+    async function reserveSequence(): Promise<number> {
+      if (nextSequence === undefined) {
+        nextSequence = await readNextSequence();
+      }
+      const sequence = nextSequence;
+      nextSequence += 1;
+      return sequence;
+    }
+
+    function enqueue(
+      eventType: ExecutionEvent["type"],
+      build: (base: {
+        readonly actionId: string;
+        readonly parentActionId?: string;
+        readonly visibility: typeof SINK_LEDGER_VISIBILITY;
+        readonly timestamp: string;
+        readonly sequence: number;
+      }) => ExecutionEvent,
+    ): void {
+      if (!hasLedgerTarget()) return;
+
+      appendQueue = appendQueue.then(async () => {
+        try {
+          const sequence = await reserveSequence();
+          const event = build({
+            actionId: createActionId(eventType, sequence),
+            visibility: SINK_LEDGER_VISIBILITY,
+            timestamp: new Date().toISOString(),
+            sequence,
+          });
+          await EventLog.append(sessionID, event);
+        } catch (error) {
+          Log.warn("processor: EventLog append failed", {
+            sessionID,
+            eventType,
+            error: String(error),
+          });
+        }
+      });
+    }
+
+    return {
+      onMessage(message) {
+        sink.onMessage(message);
+        enqueue(
+          "bus_event",
+          (base): ExecutionEvent.MirroredBusEvent => ({
+            type: "bus_event",
+            name: "processor.sink.message",
+            payload: message,
+            ...base,
+          }),
+        );
+      },
+
+      onToolCall(call: Tool.Call) {
+        sink.onToolCall(call);
+        enqueue("tool_started", (base): ExecutionEvent.ToolStarted => {
+          toolActionIds.set(call.id, base.actionId);
+          return {
+            type: "tool_started",
+            toolCallId: call.id,
+            toolName: call.tool,
+            args: call.input,
+            ...base,
+          };
+        });
+      },
+
+      onToolResult(result: Tool.Result) {
+        sink.onToolResult(result);
+        enqueue(
+          "tool_completed",
+          (base): ExecutionEvent.ToolCompleted => ({
+            type: "tool_completed",
+            toolCallId: result.toolCallId,
+            result,
+            ...(toolActionIds.get(result.toolCallId) !== undefined && {
+              parentActionId: toolActionIds.get(result.toolCallId),
+            }),
+            ...base,
+          }),
+        );
+      },
+
+      onSnapshot(snapshot: Run.Snapshot) {
+        sink.onSnapshot(snapshot);
+        enqueue(
+          "bus_event",
+          (base): ExecutionEvent.MirroredBusEvent => ({
+            type: "bus_event",
+            name: "processor.sink.snapshot",
+            payload: snapshot,
+            ...base,
+          }),
+        );
+      },
+
+      flush() {
+        return appendQueue;
       },
     };
   }

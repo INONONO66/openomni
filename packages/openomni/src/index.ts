@@ -17,6 +17,7 @@ export type { DAGStructure } from "./dag";
 export {
   IngressEngine,
   IngressEventProjector,
+  IngressAuthorityMiddleware,
   IngressHandlers,
   IngressSessionResolver,
   SessionBridge,
@@ -27,8 +28,59 @@ export type { CoordinatorLike } from "./ingress";
 export { BusTransport } from "./runtime/bus-transport";
 export type { Transport } from "./runtime/bus-transport";
 
+// Skill loader and activation
+export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
+export type {
+  SkillAuditContext,
+  SkillActivationMiddlewareOptions,
+  SkillInstallOptions,
+  SkillListOptions,
+  SkillLoaderOptions,
+  SkillManagerEntry,
+  SkillManagerRoots,
+  SkillOperationOptions,
+  SkillRegistryOptions,
+  SkillUninstallOptions,
+} from "./skill";
+
+// Extension lifecycle management
+export { ExtensionManager, RuntimeBinding } from "./extension";
+export type {
+  ExtensionAuditContext,
+  ExtensionAuditEntry,
+  ExtensionAuditOptions,
+  ExtensionBindingOperationOptions,
+  ExtensionLifecycleAuditEntry,
+  ExtensionListOptions,
+  ExtensionManagerEntry,
+  ExtensionManifestSummary,
+  ExtensionOperationAuditEntry,
+  ExtensionOperationOptions,
+  ExtensionRequestInstallOptions,
+  ExtensionRollbackOptions,
+  ExtensionValidationFailure,
+  ExtensionValidationResult,
+  ExtensionValidationSuccess,
+  ExtensionVersionOperationOptions,
+  RuntimeAgentTarget,
+  RuntimeBindingContext,
+  RuntimeBindingController,
+  RuntimeBindingExtension,
+  RuntimeBindingTargets,
+  RuntimeMcpTarget,
+  RuntimeMiddlewareTarget,
+  RuntimeSkillTarget,
+  RuntimeSurfaceTarget,
+  RuntimeToolTarget,
+} from "./extension";
+
 // Subagent runtime
-export { SubagentRuntime, SubagentConsultation, BackgroundManager } from "./subagent";
+export {
+  SubagentRuntime,
+  SubagentSpawnPolicyMiddleware,
+  SubagentConsultation,
+  BackgroundManager,
+} from "./subagent";
 
 // Execution runtime
 export {
@@ -45,6 +97,7 @@ export {
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,
+  ToolRuntimePolicyMiddleware,
   resolveMeta,
   resolveCategory,
   resolveToolSelection,

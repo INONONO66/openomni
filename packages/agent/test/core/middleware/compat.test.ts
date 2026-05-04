@@ -71,11 +71,21 @@ describe("fromExecutionHooks", () => {
 
   it("forwards inject verdict from underlying hook", async () => {
     const hooks: ExecutionHooks = {
-      postTurn: () => ({ action: "inject", message: "try again" }),
+      postTurn: () => ({
+        action: "inject",
+        message: "try again",
+        reason: "try-again",
+        policyId: "test.compat.post-turn",
+      }),
     };
     const [reg] = fromExecutionHooks(hooks);
     const verdict = await reg.fn(baseCtx());
-    expect(verdict).toEqual({ action: "inject", message: "try again" });
+    expect(verdict).toEqual({
+      action: "inject",
+      message: "try again",
+      reason: "try-again",
+      policyId: "test.compat.post-turn",
+    });
   });
 
   it("returns continue when non-preToolUse hook throws", async () => {

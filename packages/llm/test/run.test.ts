@@ -1,23 +1,32 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import { Auth } from "../src/auth/storage";
 
 const TEST_PROVIDER_ID = "__test_run__";
 let run: typeof import("../src/run").run;
 
-let capturedStreamArgs: Record<string, unknown> | undefined;
+type AiCaptureGlobal = typeof globalThis & {
+  __openomniAiStreamArgs?: Record<string, unknown>;
+};
 
-mock.module("ai", () => ({
-  streamText: (args: Record<string, unknown>) => {
-    capturedStreamArgs = args;
-    return {
-      fullStream: (async function* () {
-        yield { type: "finish" };
-      })(),
-    };
-  },
-  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
-}));
+const aiCapture = globalThis as AiCaptureGlobal;
+
+function mockAiModule() {
+  mock.module("ai", () => ({
+    streamText: (args: Record<string, unknown>) => {
+      aiCapture.__openomniAiStreamArgs = args;
+      return {
+        fullStream: (async function* () {
+          yield { type: "finish" };
+        })(),
+      };
+    },
+    jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+  }));
+}
+
+mockAiModule();
+
+const testAuth = { type: "api", key: "test-key-run" } as const;
 
 describe("run", () => {
   let mockSink: Sink;
@@ -27,21 +36,16 @@ describe("run", () => {
   let capturedSnapshots: Run.Snapshot[];
 
   beforeAll(async () => {
-    await Auth.set(TEST_PROVIDER_ID, { type: "api", key: "test-key-run" });
     ({ run } = await import("../src/run"));
   });
 
-  afterAll(async () => {
-    await Auth.remove(TEST_PROVIDER_ID);
-    mock.restore();
-  });
-
   beforeEach(() => {
+    mockAiModule();
     capturedMessages = [];
     capturedToolCalls = [];
     capturedToolResults = [];
     capturedSnapshots = [];
-    capturedStreamArgs = undefined;
+    aiCapture.__openomniAiStreamArgs = undefined;
 
     mockSink = {
       onMessage: (message: Message.WithParts) => {
@@ -177,6 +181,7 @@ describe("run", () => {
       tools: [],
       toolChoice: "required",
       maxSteps: 7,
+      auth: testAuth,
       model: {
         id: "claude-3-haiku",
         providerID: TEST_PROVIDER_ID,
@@ -187,8 +192,8 @@ describe("run", () => {
 
     await run(input, mockSink);
 
-    expect(capturedStreamArgs).toBeDefined();
-    const streamArgs = capturedStreamArgs as {
+    expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
+    const streamArgs = aiCapture.__openomniAiStreamArgs as {
       toolChoice?: unknown;
       stopWhen?: unknown;
       maxRetries?: unknown;
@@ -218,12 +223,13 @@ describe("run", () => {
         name: "Claude 3 Haiku Test",
         api: { npm: "@ai-sdk/anthropic" },
       },
+      auth: testAuth,
     };
 
     await run(input, mockSink);
 
-    expect(capturedStreamArgs).toBeDefined();
-    const streamArgs = capturedStreamArgs as { stopWhen?: unknown };
+    expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
+    const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
     expect(streamArgs.stopWhen).toBeFunction();
 
     const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;

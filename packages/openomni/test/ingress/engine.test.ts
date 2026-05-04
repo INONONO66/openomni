@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { MiddlewareDecision } from "@openomni/agent";
 import type { Ingress } from "@openomni/protocol";
 import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
@@ -43,6 +44,15 @@ beforeEach(() => {
 
 function enqueuePlan(planId?: string): void {
   testState.responseQueue.push(JSON.stringify({ planId: planId ?? crypto.randomUUID() }));
+}
+
+async function catchError(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+    return undefined;
+  } catch (error) {
+    return error;
+  }
 }
 
 describe("IngressEngine", () => {
@@ -96,13 +106,83 @@ describe("IngressEngine", () => {
   });
 
   it("ingest() with invalid event throws", async () => {
-    await expect(
+    const error = await catchError(
       IngressEngine.ingest({
         id: "invalid-1",
         surface: "tui",
         payload: "hello",
       } as unknown as Ingress.InboundEvent),
-    ).rejects.toThrow();
+    );
+
+    expect(error).toBeDefined();
+  });
+
+  it("rejects missing coordinator through ingress middleware", async () => {
+    const decisions: MiddlewareDecision[] = [];
+    IngressEngine.clearCoordinator();
+    IngressEngine.setMiddlewareDecisionObserver((decision) => {
+      decisions.push(decision);
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-no-coordinator-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("coordinator is required");
+    expect(decisions).toContainEqual(
+      expect.objectContaining({
+        name: "ingress:coordinator-presence",
+        policyId: "ingress.coordinator",
+        verdict: "abort",
+        reason: "coordinator is required",
+      }),
+    );
+  });
+
+  it("rejects unauthorized top-level actors before dispatch", async () => {
+    let dispatchCalled = false;
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        dispatchCalled = true;
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output: "should not dispatch",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-unauthorized-1",
+        surface: "internal",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "spawn top-level work",
+        meta: { actor: { role: "sub_persona", trusted: false } },
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain(
+      "actor is not authorized to create top-level inbound work",
+    );
+    expect(dispatchCalled).toBe(false);
   });
 
   it("reuses session for same surface key across calls", async () => {
@@ -180,7 +260,6 @@ describe("IngressEngine", () => {
   });
 
   it("ingest() with unknown mode throws UNKNOWN_INGRESS_MODE error", async () => {
-    // Create an event with an unknown mode
     const event: Ingress.InboundEvent = {
       id: "event-unknown-1",
       surface: "tui",
@@ -192,9 +271,11 @@ describe("IngressEngine", () => {
       },
     } as unknown as Ingress.InboundEvent;
 
-    // Mock the schema parse to allow the unknown mode through so we can test the switch default case
-    const originalParse = IngressNamespace.InboundEventSchema.parse;
-    IngressNamespace.InboundEventSchema.parse = (input: unknown) => input as Ingress.InboundEvent;
+    const schema = IngressNamespace.InboundEventSchema as unknown as {
+      safeParse: (input: unknown) => unknown;
+    };
+    const originalSafeParse = schema.safeParse;
+    schema.safeParse = () => ({ success: true, data: event });
 
     try {
       let caughtError: unknown;
@@ -208,8 +289,7 @@ describe("IngressEngine", () => {
       expect((caughtError as Error).message).toContain("unknown ingress mode");
       expect((caughtError as Error).message).toContain("unknown-mode");
     } finally {
-      // Restore original parse behavior
-      IngressNamespace.InboundEventSchema.parse = originalParse;
+      schema.safeParse = originalSafeParse;
     }
   });
 });

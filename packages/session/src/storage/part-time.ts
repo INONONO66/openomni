@@ -1,4 +1,4 @@
-import { Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 
 export function getPartStartTime(part: Message.Part): number | undefined {
   if ((part.type === "text" || part.type === "reasoning") && part.time?.start !== undefined) {

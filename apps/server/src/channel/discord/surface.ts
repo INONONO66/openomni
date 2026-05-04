@@ -6,6 +6,11 @@ import { sendDiscordMessage } from "./formatter";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import type { DiscordMessage } from "./types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+
+export interface DiscordAuthOptions {
+  readonly onDecision?: ChannelAuthnDecisionObserver;
+}
 
 export class DiscordAdapter implements Adapter.Surface {
   readonly id = "discord";
@@ -20,15 +25,18 @@ export class DiscordAdapter implements Adapter.Surface {
   private readonly gateway: DiscordGateway;
   private readonly dedupe = new Dedupe();
   private normalizer: DiscordNormalizer | null = null;
+  private botId: string | null = null;
   private handler: Adapter.MessageHandler | null = null;
 
   constructor(
     token: string,
     readonly config: Adapter.Config,
+    private readonly authOptions: DiscordAuthOptions = {},
   ) {
     this.client = new DiscordClient(token);
     this.gateway = new DiscordGateway(token, () => this.client.fetchGatewayUrl(), {
       onReady: ({ botId, botUsername }) => {
+        this.botId = botId;
         this.normalizer = new DiscordNormalizer({
           botId,
           triggers: this.config.triggers,
@@ -71,6 +79,29 @@ export class DiscordAdapter implements Adapter.Surface {
   private handleMessageCreate(message: DiscordMessage): void {
     if (!this.normalizer) return;
     if (this.dedupe.isDuplicate(message.id)) return;
+    if (message.author.bot) return;
+    if (!message.content) return;
+
+    const isDM = !message.guild_id;
+    const botId = this.botId;
+    if (!botId) return;
+
+    const mentioned = message.mentions?.some((u) => u.id === botId) ?? false;
+    const auth = ChannelAuthnMiddleware.authenticateDiscordTriggers({
+      triggers: this.config.triggers,
+      ctx: {
+        event: "message",
+        mentioned,
+        channelId: message.channel_id,
+        senderId: message.author.id,
+        isDM,
+        text: message.content,
+      },
+      ...(this.authOptions.onDecision !== undefined
+        ? { onDecision: this.authOptions.onDecision }
+        : {}),
+    });
+    if (auth.verdict.action === "abort") return;
 
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;

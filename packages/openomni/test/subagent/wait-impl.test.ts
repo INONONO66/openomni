@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
-import { Subagent, type Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 describe("SubagentRuntime.wait()", () => {
@@ -50,7 +50,7 @@ describe("SubagentRuntime.wait()", () => {
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     };
-    await Session.addMessage(sessionId, assistantMsg);
+    Session.addMessage(sessionId, assistantMsg);
 
     const textPart: Message.TextPart = {
       id: crypto.randomUUID(),
@@ -102,7 +102,7 @@ describe("SubagentRuntime.wait()", () => {
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     };
-    await Session.addMessage(sessionId, assistantMsg);
+    Session.addMessage(sessionId, assistantMsg);
 
     const textPart: Message.TextPart = {
       id: crypto.randomUUID(),
@@ -119,13 +119,6 @@ describe("SubagentRuntime.wait()", () => {
       await WorkerRun.updateStatus(sessionId, runId, "succeeded", {
         endedAt: Date.now(),
         lastMessageId: assistantMsg.id,
-      });
-      Bus.publish(Subagent.Events.WorkerRunCompleted, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        sessionId,
-        runId,
-        payload: { sessionId, runId, status: "succeeded" as const },
       });
     }, 50);
 
@@ -144,13 +137,7 @@ describe("SubagentRuntime.wait()", () => {
     setTimeout(async () => {
       await WorkerRun.updateStatus(sessionId, runId, "failed", {
         endedAt: Date.now(),
-      });
-      Bus.publish(Subagent.Events.WorkerRunFailed, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        sessionId,
-        runId,
-        payload: { sessionId, runId, error: "Test error" },
+        error: "Test error",
       });
     }, 50);
 
@@ -204,7 +191,7 @@ describe("SubagentRuntime.wait()", () => {
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     };
-    await Session.addMessage(sessionId, assistantMsg);
+    Session.addMessage(sessionId, assistantMsg);
 
     const textPart: Message.TextPart = {
       id: crypto.randomUUID(),
@@ -222,24 +209,9 @@ describe("SubagentRuntime.wait()", () => {
         endedAt: Date.now(),
         lastMessageId: assistantMsg.id,
       });
-      Bus.publish(Subagent.Events.WorkerRunCompleted, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        sessionId,
-        runId,
-        payload: { sessionId, runId, status: "succeeded" as const },
-      });
     }, 50);
 
     await waitPromise;
-
-    Bus.publish(Subagent.Events.WorkerRunCompleted, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      sessionId,
-      runId,
-      payload: { sessionId, runId, status: "succeeded" as const },
-    });
 
     expect(true).toBe(true);
   });

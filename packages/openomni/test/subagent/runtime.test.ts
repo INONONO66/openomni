@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
-import { Session, Storage, WorkerRun } from "@openomni/session";
+import { Subagent } from "@openomni/protocol";
+import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const runCalls: ChatAgentInput[] = [];
@@ -31,6 +32,7 @@ function createParentSession(): string {
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  Bus.reset();
   runCalls.length = 0;
   runResults.length = 0;
   createSpy = spyOn(ChatAgent, "create").mockImplementation(() => {
@@ -51,6 +53,8 @@ beforeEach(() => {
 
 afterEach(() => {
   createSpy.mockRestore();
+  Bus.reset();
+  Storage.reset();
 });
 
 describe("SubagentRuntime", () => {
@@ -84,6 +88,42 @@ describe("SubagentRuntime", () => {
 
     expect(result.output).toBe("spawned answer");
     expect(result.finishReason).toBe("stop");
+  });
+
+  it("spawn emits worker lifecycle events once through WorkerRun.updateStatus", async () => {
+    queueResult("spawned answer");
+    const started: Array<{ payload: { runId: string; sessionId: string; title: string } }> = [];
+    const completed: Array<{ payload: { runId: string; sessionId: string; status: string } }> = [];
+    const unsubscribeStarted = Bus.subscribe(Subagent.Events.WorkerRunStarted, (event) => {
+      started.push(event);
+    });
+    const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (event) => {
+      completed.push(event);
+    });
+
+    const result = await SubagentRuntime.spawn({
+      agentName: "worker",
+      title: "child task",
+      prompt: "solve this",
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    unsubscribeStarted();
+    unsubscribeCompleted();
+
+    expect(started).toHaveLength(1);
+    expect(completed).toHaveLength(1);
+    expect(started[0].payload).toEqual({
+      sessionId: result.sessionId,
+      runId: result.runId,
+      title: "child task",
+    });
+    expect(completed[0].payload).toEqual({
+      sessionId: result.sessionId,
+      runId: result.runId,
+      status: "succeeded",
+    });
   });
 
   it("send reuses the full transcript for the same session", async () => {
@@ -187,9 +227,11 @@ describe("SubagentRuntime", () => {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      await expect(SubagentRuntime.resume({ sessionId: session.id, model })).rejects.toThrow(
-        "Session already has an active run",
+      const error = await SubagentRuntime.resume({ sessionId: session.id, model }).catch(
+        (err) => err,
       );
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("Session already has an active run");
     });
 
     it("returns resumed false for non-existent session", async () => {

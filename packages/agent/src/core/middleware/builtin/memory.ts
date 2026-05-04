@@ -25,7 +25,7 @@ export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
     fn: async (ctx) => {
       const text = getLastUserText(ctx.messages);
       if (!text) return { action: "continue" };
-      let results;
+      let results: Awaited<ReturnType<Memory["retrieve"]>>;
       try {
         results = await memory.retrieve(text);
       } catch (error) {
@@ -37,6 +37,8 @@ export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
       return {
         action: "transform",
         input: { appendContext: `[Memory Context]\n${entries}` },
+        reason: "memory_context_available",
+        policyId: "builtin.memory",
       };
     },
   };

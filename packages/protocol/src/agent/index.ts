@@ -38,7 +38,7 @@ export namespace AgentProfile {
         id: z.string(),
       })
       .optional(),
-    permissions: Guardrail.ToolPermission.optional(),
+    permissions: Guardrail.Permission.optional(),
     variant: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
     budget: AgentBudget.optional(),

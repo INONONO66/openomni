@@ -14,7 +14,8 @@ describe("createPlanToolExecutor (unified Storage.PlanSubAdapter)", () => {
 
   beforeEach(() => {
     const storage = new SqliteStorageAdapter(":memory:");
-    adapter = storage.plan!;
+    if (!storage.plan) throw new Error("Plan storage adapter is required for tests");
+    adapter = storage.plan;
     executor = createPlanToolExecutor(adapter);
   });
 

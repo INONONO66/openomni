@@ -29,24 +29,6 @@ export namespace AgentExecution {
     }),
   );
 
-  export const ToolInvoked = BusEvent.define(
-    "agent.tool.invoked",
-    AgentBase.extend({
-      toolCallId: z.string(),
-      toolName: z.string(),
-      inputSummary: z.string(),
-    }),
-  );
-
-  export const ToolBlocked = BusEvent.define(
-    "agent.tool.blocked",
-    AgentBase.extend({
-      toolCallId: z.string(),
-      toolName: z.string(),
-      reason: z.string(),
-    }),
-  );
-
   export const BudgetWarning = BusEvent.define(
     "agent.budget.warning",
     AgentBase.extend({

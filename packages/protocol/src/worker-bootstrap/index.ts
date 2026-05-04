@@ -16,7 +16,7 @@ export namespace WorkerBootstrap {
       .optional(),
     systemPrompt: z.string().optional(),
     tools: ToolSelection.Selection,
-    permissions: Guardrail.ToolPermission.optional(),
+    permissions: Guardrail.Permission.optional(),
     budget: AgentProfile.AgentBudget.optional(),
   });
   export type RuntimeAgentDefinition = z.infer<typeof RuntimeAgentDefinition>;

@@ -1,0 +1,237 @@
+type SideEffectRuleId =
+  | "tool-ledger-before-execute"
+  | "mcp-ledger-before-execute"
+  | "processor-projected-sink"
+  | "ingress-ledger-before-session-write"
+  | "session-mutation-ledger-before-storage-write";
+
+interface SideEffectViolation {
+  readonly ruleId: SideEffectRuleId;
+  readonly filePath: string;
+  readonly line: number;
+  readonly message: string;
+}
+
+interface SideEffectRule {
+  readonly ruleId: SideEffectRuleId;
+  readonly filePath: string;
+  readonly sideEffect: RegExp;
+  readonly requiredBefore: readonly string[];
+  readonly scopeStart?: RegExp;
+  readonly message: string;
+}
+
+interface SourceMatch {
+  readonly index: number;
+  readonly text: string;
+}
+
+const hotFiles = [
+  "packages/openomni/src/execution-runtime/tool/executor.ts",
+  "apps/server/src/tool/mcp/provider.ts",
+  "packages/llm/src/session/processor.ts",
+  "packages/openomni/src/ingress/event-projector.ts",
+  "packages/openomni/src/ingress/session-bridge.ts",
+  "packages/session/src/session/index.ts",
+];
+
+const rules: readonly SideEffectRule[] = [
+  {
+    ruleId: "tool-ledger-before-execute",
+    filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
+    sideEffect: /tool\.execute\(dispatchedCall\)/g,
+    scopeStart: /return async \(call: Tool\.Call\): Promise<Tool\.Result> => \{/g,
+    requiredBefore: [
+      "appendLedgerEvent(",
+      '"tool_started"',
+      "{ beforeSideEffect: true, parentActionId }",
+    ],
+    message: "tool.execute must be preceded by a before-side-effect tool_started EventLog append",
+  },
+  {
+    ruleId: "mcp-ledger-before-execute",
+    filePath: "apps/server/src/tool/mcp/provider.ts",
+    sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}\)/g,
+    scopeStart: /async execute\(call: Tool\.Call\): Promise<Tool\.Result> \{/g,
+    requiredBefore: [
+      "this.appendLedgerEvent(",
+      '"action_requested"',
+      "{ beforeSideEffect: true, tool }",
+    ],
+    message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
+  },
+  {
+    ruleId: "processor-projected-sink",
+    filePath: "packages/llm/src/session/processor.ts",
+    sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
+    requiredBefore: ["const sink = createProjectedSink(configuredSink, sessionID);"],
+    message: "processor sink side effects must flow through createProjectedSink",
+  },
+  {
+    ruleId: "ingress-ledger-before-session-write",
+    filePath: "packages/openomni/src/ingress/event-projector.ts",
+    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
+    scopeStart: /export function project\(/g,
+    requiredBefore: ["ledger.append(", '"ingress.inbound.message.write"'],
+    message:
+      "projected inbound messages must append ingress.inbound.message.write before Session.addMessage",
+  },
+  {
+    ruleId: "ingress-ledger-before-session-write",
+    filePath: "packages/openomni/src/ingress/event-projector.ts",
+    sideEffect: /Session\.addPart\(message\.id, part\)/g,
+    scopeStart: /export function project\(/g,
+    requiredBefore: ["ledger.append(", '"ingress.inbound.part.write"'],
+    message:
+      "projected inbound parts must append ingress.inbound.part.write before Session.addPart",
+  },
+  {
+    ruleId: "ingress-ledger-before-session-write",
+    filePath: "packages/openomni/src/ingress/session-bridge.ts",
+    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
+    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
+    requiredBefore: ["ledger.append(", '"ingress.writeback.message.write"'],
+    message:
+      "session bridge writebacks must append ingress.writeback.message.write before Session.addMessage",
+  },
+  {
+    ruleId: "ingress-ledger-before-session-write",
+    filePath: "packages/openomni/src/ingress/session-bridge.ts",
+    sideEffect: /Session\.addPart\(message\.id, part\)/g,
+    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
+    requiredBefore: ["ledger.append(", '"ingress.writeback.part.write"'],
+    message:
+      "session bridge writebacks must append ingress.writeback.part.write before Session.addPart",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/session/src/session/index.ts",
+    sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
+    scopeStart: /export function addMessage\(/g,
+    requiredBefore: ["appendMessageMutation(adapter, sessionID, message, status);"],
+    message: "Session.addMessage must append its mutation ledger before adapter.message.set",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/session/src/session/index.ts",
+    sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
+    scopeStart: /export function addMessage\(/g,
+    requiredBefore: ["appendMessageMutation(adapter, sessionID, message, status);"],
+    message: "Session.addMessage must append its mutation ledger before adapter.session.set",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/session/src/session/index.ts",
+    sideEffect: /adapter\.part\.set\(messageID, part\)/g,
+    scopeStart: /export function addPart\(/g,
+    requiredBefore: ["appendPartMutation(adapter, messageID, part);"],
+    message: "Session.addPart must append its mutation ledger before adapter.part.set",
+  },
+];
+
+async function main(): Promise<void> {
+  const violations: SideEffectViolation[] = [];
+
+  await verifyHotFilesExist();
+  for (const filePath of hotFiles) {
+    const source = await Bun.file(filePath).text();
+    const fileRules = rules.filter((rule) => rule.filePath === filePath);
+
+    for (const rule of fileRules) {
+      violations.push(...validateRule(rule, source));
+    }
+  }
+
+  if (violations.length === 0) {
+    process.stdout.write(`OK: side-effect lint scanned ${hotFiles.length} hot files\n`);
+    return;
+  }
+
+  for (const violation of violations) {
+    process.stderr.write(
+      `VIOLATION: ${violation.filePath}:${violation.line} [${violation.ruleId}] — ${violation.message}\n`,
+    );
+  }
+
+  process.exit(1);
+}
+
+async function verifyHotFilesExist(): Promise<void> {
+  for (const filePath of hotFiles) {
+    if (!(await Bun.file(filePath).exists())) {
+      throw new Error(`Missing hot file: ${filePath}`);
+    }
+  }
+}
+
+function validateRule(rule: SideEffectRule, source: string): SideEffectViolation[] {
+  const sideEffects = matches(source, rule.sideEffect);
+
+  if (sideEffects.length === 0) {
+    return [
+      {
+        ruleId: rule.ruleId,
+        filePath: rule.filePath,
+        line: 1,
+        message: `side-effect call pattern not found for rule: ${rule.message}`,
+      },
+    ];
+  }
+
+  return sideEffects.flatMap((sideEffect) => {
+    const searchStart = rule.scopeStart
+      ? lastMatchStartBefore(source, rule.scopeStart, sideEffect.index)
+      : 0;
+    const prefix = source.slice(searchStart, sideEffect.index);
+    const missing = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
+
+    if (missing.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ruleId: rule.ruleId,
+        filePath: rule.filePath,
+        line: lineNumberForOffset(source, sideEffect.index),
+        message: `${rule.message}; missing before call: ${missing.join(", ")}`,
+      },
+    ];
+  });
+}
+
+function matches(source: string, pattern: RegExp): SourceMatch[] {
+  pattern.lastIndex = 0;
+  const results: SourceMatch[] = [];
+
+  let match = pattern.exec(source);
+  while (match !== null) {
+    results.push({ index: match.index, text: match[0] });
+    match = pattern.exec(source);
+  }
+
+  return results;
+}
+
+function lastMatchStartBefore(source: string, pattern: RegExp, offset: number): number {
+  const starts = matches(source, pattern)
+    .map((match) => match.index)
+    .filter((index) => index <= offset);
+  return starts.at(-1) ?? 0;
+}
+
+function lineNumberForOffset(source: string, offset: number): number {
+  let line = 1;
+  for (let index = 0; index < offset; index += 1) {
+    if (source.charCodeAt(index) === 10) {
+      line += 1;
+    }
+  }
+  return line;
+}
+
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`ERROR: ${message}\n`);
+  process.exit(1);
+});

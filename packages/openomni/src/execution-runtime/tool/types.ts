@@ -39,7 +39,7 @@ export interface ToolProvider {
 }
 
 export interface ToolExecutorConfig {
-  permissions?: Guardrail.ToolPermission;
+  permissions?: Guardrail.Permission;
   workspaceRoot?: string;
   runtime?: ToolRuntimeContext;
   timeoutMs?: {

@@ -4,7 +4,11 @@ import { Dedupe } from "../../shared/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
 import type { GitHubEventContent, GitHubIssueCommentPayload, GitHubIssuesPayload } from "./types";
-import { verifyGitHubSignature } from "./webhook";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+
+export interface GitHubAuthOptions {
+  readonly onDecision?: ChannelAuthnDecisionObserver;
+}
 
 export class GitHubAdapter implements Adapter.Surface {
   readonly id = "github";
@@ -24,7 +28,8 @@ export class GitHubAdapter implements Adapter.Surface {
     private readonly secret: string,
     readonly config: Adapter.Config,
     githubToken?: string,
-    botUsername?: string,
+    private readonly botUsername?: string,
+    private readonly authOptions: GitHubAuthOptions = {},
   ) {
     this.client = new GitHubClient(githubToken);
     this.normalizer = new GitHubNormalizer({
@@ -65,12 +70,16 @@ export class GitHubAdapter implements Adapter.Surface {
   }
 
   async handleWebhook(request: Request): Promise<Response> {
-    const signature = request.headers.get("x-hub-signature-256");
-    if (!signature) return new Response("Missing signature", { status: 401 });
+    const auth = await ChannelAuthnMiddleware.authenticateGitHubWebhook({
+      request,
+      secret: this.secret,
+      ...(this.authOptions.onDecision !== undefined
+        ? { onDecision: this.authOptions.onDecision }
+        : {}),
+    });
+    if (auth.response) return auth.response;
 
-    const body = await request.text();
-    const valid = await verifyGitHubSignature(body, signature, this.secret);
-    if (!valid) return new Response("Invalid signature", { status: 401 });
+    const body = auth.body ?? "";
 
     const deliveryId = request.headers.get("x-github-delivery");
     if (deliveryId && this.dedupe.isDuplicate(deliveryId)) {
@@ -86,6 +95,22 @@ export class GitHubAdapter implements Adapter.Surface {
 
     const content = this.extractContent(event, payload);
     if (!content) return new Response("Unsupported event", { status: 200 });
+
+    const triggerAuth = ChannelAuthnMiddleware.authenticateGitHubTriggers({
+      triggers: this.config.triggers,
+      ctx: {
+        event: eventKey,
+        mentioned: this.botUsername ? content.text.includes(`@${this.botUsername}`) : false,
+        senderId: content.sender,
+        channelId: `${content.issueKind}-${content.issueNumber}`,
+        labels: content.labels,
+        text: content.text,
+      },
+      ...(this.authOptions.onDecision !== undefined
+        ? { onDecision: this.authOptions.onDecision }
+        : {}),
+    });
+    if (triggerAuth.verdict.action === "abort") return new Response("Filtered", { status: 200 });
 
     const inbound = this.normalizer.normalize(content, eventKey, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });

@@ -1,8 +1,10 @@
 import type { Adapter } from "@openomni/protocol";
 import { Log } from "@openomni/session";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 
 export interface WebSocketConfig {
   token?: string;
+  onAuthDecision?: ChannelAuthnDecisionObserver;
 }
 
 interface WsConnectionData {
@@ -12,19 +14,6 @@ interface WsConnectionData {
 interface WebSocketUpgradeOptions {
   data: WsConnectionData;
   headers?: Record<string, string>;
-}
-
-function readSubprotocolAuth(req: Request): { token: string; selected: string } | undefined {
-  const header = req.headers.get("sec-websocket-protocol");
-  const protocols = header
-    ?.split(",")
-    .map((protocol) => protocol.trim())
-    .filter(Boolean);
-  if (!protocols) return undefined;
-
-  const authIndex = protocols.indexOf("auth");
-  const token = authIndex >= 0 ? protocols[authIndex + 1] : undefined;
-  return token ? { token, selected: "auth" } : undefined;
 }
 
 export class WebSocketHandler {
@@ -55,27 +44,18 @@ export class WebSocketHandler {
     req: Request,
     server: { upgrade(req: Request, options: WebSocketUpgradeOptions): boolean },
   ): Response | undefined {
-    let headers: Record<string, string> | undefined;
-
-    if (this.config.token) {
-      const url = new URL(req.url);
-      const subprotocolAuth = readSubprotocolAuth(req);
-      const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
-      if (provided !== this.config.token) {
-        Log.warn("websocket auth failure");
-        return new Response("Unauthorized", { status: 401 });
-      }
-
-      if (subprotocolAuth) {
-        headers = { "Sec-WebSocket-Protocol": subprotocolAuth.selected };
-      } else {
-        Log.warn("websocket query token auth is deprecated");
-      }
-    }
+    const auth = ChannelAuthnMiddleware.authenticateWebSocketUpgrade({
+      request: req,
+      ...(this.config.token !== undefined ? { token: this.config.token } : {}),
+      ...(this.config.onAuthDecision !== undefined
+        ? { onDecision: this.config.onAuthDecision }
+        : {}),
+    });
+    if (auth.response) return auth.response;
 
     const ok = server.upgrade(req, {
       data: { surfaceKey: `ws:${crypto.randomUUID()}` } satisfies WsConnectionData,
-      headers,
+      ...(auth.headers !== undefined ? { headers: auth.headers } : {}),
     });
     if (ok) return undefined;
     return new Response("WebSocket upgrade failed", { status: 400 });

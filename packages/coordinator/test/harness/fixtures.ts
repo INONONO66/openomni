@@ -28,9 +28,9 @@ export function createFakeCoordinator(): Promise<FakeCoordinator> {
           try {
             const msg = JSON.parse(line) as object;
             received.push(msg);
-            conn.write(JSON.stringify({ echo: msg }) + "\n");
+            conn.write(`${JSON.stringify({ echo: msg })}\n`);
           } catch {
-            conn.write(JSON.stringify({ error: "parse_error" }) + "\n");
+            conn.write(`${JSON.stringify({ error: "parse_error" })}\n`);
           }
         }
       });
@@ -54,7 +54,7 @@ export function createFakeWorker(socketPath: string): Promise<FakeWorker> {
     const socket = net.createConnection(socketPath);
 
     socket.once("connect", () => {
-      socket.write(JSON.stringify({ type: "heartbeat" }) + "\n");
+      socket.write(`${JSON.stringify({ type: "heartbeat" })}\n`);
       resolve({ close: () => socket.destroy() });
     });
 

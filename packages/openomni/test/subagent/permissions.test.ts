@@ -1,19 +1,32 @@
 import { describe, test, expect } from "bun:test";
 import type { Guardrail } from "@openomni/protocol";
 import { ToolGuard } from "@openomni/agent/src/core/tool-guard";
+import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
 
 describe("SubagentRuntime permissions", () => {
-  test("default permissions deny subagent tool", () => {
-    const defaultPermissions: Guardrail.ToolPermission = {
-      denylist: ["subagent"],
-    };
+  test("default subagent middleware denies recursive subagent tool calls", async () => {
+    const registration = SubagentSpawnPolicyMiddleware.createDefaultDenylist();
 
-    const verdict = ToolGuard.check("subagent", {}, defaultPermissions);
-    expect(verdict).toBe("deny");
+    const verdict = await registration.fn({
+      timing: "pre_tool_use",
+      steps: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      turnCount: 0,
+      isCompletion: false,
+      continuationCount: 0,
+      elapsedMs: 0,
+      toolName: "subagent",
+      toolInput: {},
+    });
+
+    expect(verdict.action).toBe("abort");
+    expect(verdict.reason).toBe("denylist");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   test("explicit allowlist permits specified tools", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       allowlist: ["read_file", "write_file"],
     };
 
@@ -25,7 +38,8 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("denylist blocks specified tools", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       denylist: ["dangerous_tool", "delete_file"],
     };
 
@@ -37,7 +51,8 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("requireApproval verdict is returned correctly", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       requireApproval: ["dangerous_operation"],
     };
 
@@ -46,13 +61,15 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("invalid regex in inputRule does not match, falls through to default allow", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       inputRules: [
         {
           toolPattern: "test_tool",
           field: "input_field",
           pattern: "[invalid regex",
           action: "deny",
+          priority: 0,
         },
       ],
     };
@@ -62,7 +79,8 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("invalid regex with denylist fallback still denies", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       denylist: ["test_tool"],
       inputRules: [
         {
@@ -70,6 +88,7 @@ describe("SubagentRuntime permissions", () => {
           field: "input_field",
           pattern: "[invalid regex",
           action: "allow",
+          priority: 0,
         },
       ],
     };
@@ -79,7 +98,8 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("wildcard allowlist permits all tools", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       allowlist: ["*"],
     };
 
@@ -91,7 +111,8 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("prefix pattern matching in allowlist", () => {
-    const permissions: Guardrail.ToolPermission = {
+    const permissions: Guardrail.Permission = {
+      action: "tool.call",
       allowlist: ["file.*"],
     };
 

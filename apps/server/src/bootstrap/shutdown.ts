@@ -20,6 +20,7 @@ interface ShutdownDeps {
   mcpProvider: McpToolProvider;
   coordinator?: { shutdown(): Promise<void> };
   traceId?: string;
+  stopEventLogBridge?: () => void;
 }
 
 export function installShutdownHandlers(deps: ShutdownDeps): void {
@@ -48,6 +49,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
       deps.server.stop(true);
       await deps.mcpProvider.disconnectAll();
       await new Promise((resolve) => setTimeout(resolve, 5_000));
+      deps.stopEventLogBridge?.();
 
       const storage = Storage.get();
       if (isClosableStorage(storage)) {

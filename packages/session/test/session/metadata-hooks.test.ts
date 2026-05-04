@@ -62,8 +62,8 @@ describe("Session.addMessage metadata hooks", () => {
 
       Session.addMessage(session.id, makeUserMessage(session.id));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.messageCount).toBe(1);
+      const updated = Session.get(session.id);
+      expect(updated?.messageCount).toBe(1);
     });
 
     test("increments messageCount from 1 to 2 on second message", () => {
@@ -75,8 +75,8 @@ describe("Session.addMessage metadata hooks", () => {
       Session.addMessage(session.id, makeUserMessage(session.id));
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 10, output: 5 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.messageCount).toBe(2);
+      const updated = Session.get(session.id);
+      expect(updated?.messageCount).toBe(2);
     });
 
     test("increments for both user and assistant messages", () => {
@@ -90,8 +90,8 @@ describe("Session.addMessage metadata hooks", () => {
       Session.addMessage(session.id, makeUserMessage(session.id));
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 20, output: 10 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.messageCount).toBe(4);
+      const updated = Session.get(session.id);
+      expect(updated?.messageCount).toBe(4);
     });
   });
 
@@ -104,8 +104,8 @@ describe("Session.addMessage metadata hooks", () => {
 
       Session.addMessage(session.id, makeUserMessage(session.id));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.tokens).toBeUndefined();
+      const updated = Session.get(session.id);
+      expect(updated?.tokens).toBeUndefined();
     });
 
     test("accumulates tokens from assistant message when session has no initial tokens", () => {
@@ -116,8 +116,8 @@ describe("Session.addMessage metadata hooks", () => {
 
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 100, output: 50 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.tokens).toEqual({
+      const updated = Session.get(session.id);
+      expect(updated?.tokens).toEqual({
         input: 100,
         output: 50,
         total: 150,
@@ -133,8 +133,8 @@ describe("Session.addMessage metadata hooks", () => {
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 100, output: 50 }));
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 200, output: 80 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.tokens).toEqual({
+      const updated = Session.get(session.id);
+      expect(updated?.tokens).toEqual({
         input: 300,
         output: 130,
         total: 430,
@@ -151,8 +151,8 @@ describe("Session.addMessage metadata hooks", () => {
       Session.addMessage(session.id, makeUserMessage(session.id));
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 200, output: 80 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.tokens).toEqual({
+      const updated = Session.get(session.id);
+      expect(updated?.tokens).toEqual({
         input: 300,
         output: 130,
         total: 430,
@@ -173,10 +173,10 @@ describe("Session.addMessage metadata hooks", () => {
       Session.addMessage(session.id, makeUserMessage(session.id));
       const after = Date.now();
 
-      const updated = Session.get(session.id)!;
-      expect(updated.time.updated).toBeGreaterThanOrEqual(originalUpdated);
-      expect(updated.time.updated).toBeGreaterThanOrEqual(before);
-      expect(updated.time.updated).toBeLessThanOrEqual(after);
+      const updated = Session.get(session.id);
+      expect(updated?.time.updated).toBeGreaterThanOrEqual(originalUpdated);
+      expect(updated?.time.updated).toBeGreaterThanOrEqual(before);
+      expect(updated?.time.updated).toBeLessThanOrEqual(after);
     });
   });
 
@@ -195,13 +195,13 @@ describe("Session.addMessage metadata hooks", () => {
 
       Session.addMessage(session.id, makeAssistantMessage(session.id, { input: 50, output: 25 }));
 
-      const updated = Session.get(session.id)!;
-      expect(updated.title).toBe("Original Title");
-      expect(updated.model).toEqual({
+      const updated = Session.get(session.id);
+      expect(updated?.title).toBe("Original Title");
+      expect(updated?.model).toEqual({
         providerID: "test",
         modelID: "test-model",
       });
-      expect(updated.expiresAt).toBeDefined();
+      expect(updated?.expiresAt).toBeDefined();
     });
   });
 });

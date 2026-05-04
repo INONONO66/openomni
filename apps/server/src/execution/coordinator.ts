@@ -1,5 +1,4 @@
-import { Bus } from "@openomni/session";
-import { Execution, Subagent, type Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Execution, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import {
   createWorkerPool,
   type WorkerPool,
@@ -93,48 +92,9 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
 
       activeRuns.add(request.runId);
 
-      Bus.publish(Subagent.Events.WorkerRunStarted, {
-        traceId: crypto.randomUUID(),
-        sessionId: request.sessionId,
-        runId: request.runId,
-        time: Date.now(),
-        payload: {
-          sessionId: request.sessionId,
-          runId: request.runId,
-          title: request.prompt.slice(0, 80),
-        },
-      });
-
       try {
         const raw = await workerPool.dispatch(sessionTreeId, request.runId, { ...request });
-        const result = Execution.Result.parse(raw);
-
-        Bus.publish(Subagent.Events.WorkerRunCompleted, {
-          traceId: crypto.randomUUID(),
-          sessionId: request.sessionId,
-          runId: request.runId,
-          time: Date.now(),
-          payload: {
-            sessionId: request.sessionId,
-            runId: request.runId,
-            status: result.status as Subagent.WorkerRunStatus,
-          },
-        });
-
-        return result;
-      } catch (err) {
-        Bus.publish(Subagent.Events.WorkerRunFailed, {
-          traceId: crypto.randomUUID(),
-          sessionId: request.sessionId,
-          runId: request.runId,
-          time: Date.now(),
-          payload: {
-            sessionId: request.sessionId,
-            runId: request.runId,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
-        throw err;
+        return Execution.Result.parse(raw);
       } finally {
         activeRuns.delete(request.runId);
       }

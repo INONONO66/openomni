@@ -6,8 +6,13 @@ import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
+
+export interface TelegramAuthOptions {
+  readonly onDecision?: ChannelAuthnDecisionObserver;
+}
 
 export class TelegramAdapter implements Adapter.Surface {
   readonly id = "telegram";
@@ -22,11 +27,13 @@ export class TelegramAdapter implements Adapter.Surface {
   private readonly dedupe = new Dedupe();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
+  private botUsername = "";
   private handler: Adapter.MessageHandler | null = null;
 
   constructor(
     token: string,
     readonly config: Adapter.Config,
+    private readonly authOptions: TelegramAuthOptions = {},
   ) {
     this.client = new TelegramClient(token);
   }
@@ -43,6 +50,7 @@ export class TelegramAdapter implements Adapter.Surface {
     const me = await this.client.getMe();
     const botId = String(me.id);
     const botUsername = me.username ?? "";
+    this.botUsername = botUsername;
     Log.info("telegram bot started", { username: me.username ?? me.first_name, botId: me.id });
 
     this.normalizer = new TelegramNormalizer({
@@ -77,11 +85,30 @@ export class TelegramAdapter implements Adapter.Surface {
 
   private async handleMessage(message: TelegramMessage): Promise<void> {
     if (!this.normalizer) return;
+    const text = message.text;
+    if (!text) return;
+    if (!message.from) return;
+
+    const chatId = String(message.chat.id);
+    const auth = ChannelAuthnMiddleware.authenticateTelegramTriggers({
+      triggers: this.config.triggers,
+      ctx: {
+        event: "message",
+        mentioned: this.botUsername !== "" && text.includes(`@${this.botUsername}`),
+        channelId: chatId,
+        senderId: String(message.from.id),
+        isDM: message.chat.type === "private",
+        text,
+      },
+      ...(this.authOptions.onDecision !== undefined
+        ? { onDecision: this.authOptions.onDecision }
+        : {}),
+    });
+    if (auth.verdict.action === "abort") return;
 
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
-    const chatId = String(message.chat.id);
     Log.debug("telegram message received", { chatId });
 
     const typingInterval = setInterval(() => {

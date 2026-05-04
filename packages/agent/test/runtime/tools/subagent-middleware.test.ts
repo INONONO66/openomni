@@ -61,7 +61,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
     const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
     expect(middleware).toBeDefined();
-    expect(middleware!.some((m) => m.name === "tracked-mw")).toBe(true);
+    expect(middleware?.some((m) => m.name === "tracked-mw")).toBe(true);
   });
 
   it("blocks middleware with propagate=false from spawn", async () => {
@@ -123,8 +123,8 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
     const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
     expect(middleware).toBeDefined();
-    expect(middleware!.some((m) => m.name === "propagated-mw")).toBe(true);
-    expect(middleware!.some((m) => m.name === "blocked-mw")).toBe(false);
+    expect(middleware?.some((m) => m.name === "propagated-mw")).toBe(true);
+    expect(middleware?.some((m) => m.name === "blocked-mw")).toBe(false);
   });
 
   it("passes propagated middleware to send when continuing an existing session", async () => {
@@ -150,6 +150,6 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     const sendArg = send.mock.calls[0]?.[0] as Record<string, unknown>;
     const middleware = sendArg.middleware as MiddlewareRegistration[] | undefined;
     expect(middleware).toBeDefined();
-    expect(middleware!.some((m) => m.name === "send-mw")).toBe(true);
+    expect(middleware?.some((m) => m.name === "send-mw")).toBe(true);
   });
 });

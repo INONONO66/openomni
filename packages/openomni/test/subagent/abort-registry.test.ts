@@ -149,9 +149,9 @@ describe("AbortControllerRegistry — orphan sweep", () => {
     const sessionId = crypto.randomUUID();
     register(sessionId, "old-run");
 
-    // backdate the entry
-    const sessionMap = AbortControllerRegistry.get(sessionId)!;
-    const oldEntry = sessionMap.get("old-run")!;
+    const sessionMap = AbortControllerRegistry.get(sessionId);
+    const oldEntry = sessionMap?.get("old-run");
+    if (!oldEntry) throw new Error("Expected old-run abort registry entry");
     (oldEntry as { createdAt: number }).createdAt = Date.now() - MAX_ENTRY_AGE_MS - 1;
 
     register(sessionId, "fresh-run");
@@ -185,9 +185,9 @@ describe("AbortControllerRegistry — orphan sweep", () => {
     const sessionId = crypto.randomUUID();
     register(sessionId, "run-1");
 
-    // backdate by 5 seconds
-    const sessionMap = AbortControllerRegistry.get(sessionId)!;
-    const entry = sessionMap.get("run-1")!;
+    const sessionMap = AbortControllerRegistry.get(sessionId);
+    const entry = sessionMap?.get("run-1");
+    if (!entry) throw new Error("Expected run-1 abort registry entry");
     (entry as { createdAt: number }).createdAt = Date.now() - 5_000;
 
     expect(sweep(10_000)).toBe(0);

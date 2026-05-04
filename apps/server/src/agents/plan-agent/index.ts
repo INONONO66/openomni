@@ -17,5 +17,5 @@ export const createPlanAgent: AgentFactory = (): AgentDefinition => ({
     allow: ["plan_read", "plan_write", "plan_edit", "plan_list"],
   },
   budget: { maxTurns: 12, maxToolCalls: 30 },
-  permissions: { denylist: ["write", "edit"] },
+  permissions: { action: "tool.call", denylist: ["write", "edit"] },
 });

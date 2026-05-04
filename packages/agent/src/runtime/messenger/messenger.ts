@@ -2,25 +2,12 @@ import { MessengerEvent, type Messenger } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
 import type { AgentRuntimeContext } from "../../core/runtime-context";
 import { getDefaultContext } from "../../core/runtime-context";
+import { MiddlewareEngine } from "../../core/middleware/engine";
+import { createMessengerAllowPatternMiddleware } from "../../core/middleware/builtin/messenger-allow-pattern";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
   subscribe(agentId: string, handler: (env: Messenger.MessageEnvelope) => void): () => void;
-}
-
-function matchesPattern(pattern: Messenger.AllowPattern, from: string, to: string): boolean {
-  const fromMatch = pattern.from === "*" || pattern.from === from;
-  const toMatch = pattern.to === "*" || pattern.to === to;
-  return fromMatch && toMatch;
-}
-
-function isAuthorized(
-  allowPatterns: Messenger.AllowPattern[] | undefined,
-  from: string,
-  to: string,
-): boolean {
-  if (!allowPatterns || allowPatterns.length === 0) return true;
-  return allowPatterns.some((p) => matchesPattern(p, from, to));
 }
 
 export interface AgentMessengerOptions {
@@ -45,16 +32,35 @@ export namespace AgentMessenger {
 
   export function create(transport: Transport, options?: AgentMessengerOptions): Instance {
     const context = options?.context ?? getDefaultContext();
+    const engine = MiddlewareEngine.create();
+
+    if (options?.allowPatterns) {
+      engine.register(
+        createMessengerAllowPatternMiddleware({ allowPatterns: options.allowPatterns }),
+      );
+    }
 
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
-        if (!isAuthorized(options?.allowPatterns, envelope.fromAgentId, envelope.toAgentId)) {
+        const verdict = await engine.dispatch("pre_tool_use", {
+          steps: [],
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          turnCount: 0,
+          isCompletion: false,
+          continuationCount: 0,
+          elapsedMs: 0,
+          envelope,
+        });
+
+        if (verdict.action !== "continue") {
           const traceId = envelope.traceId || crypto.randomUUID();
           Log.warn("messenger send authorization denied", {
             envelopeId: envelope.id,
             traceId,
             fromAgentId: envelope.fromAgentId,
             toAgentId: envelope.toAgentId,
+            reason: verdict.reason,
+            policyId: verdict.policyId,
           });
           Bus.publish(MessengerEvent.DeliveryFailed, {
             traceId,

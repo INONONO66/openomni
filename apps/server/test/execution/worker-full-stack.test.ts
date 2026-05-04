@@ -3,8 +3,7 @@ import { AgentRegistry } from "@openomni/agent";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
-import type { Execution, WorkerBootstrap } from "@openomni/protocol";
-import type { DirectEvent, Tool } from "@openomni/protocol";
+import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
 
 let capturedOnToolCall:
   | ((params: {
@@ -74,7 +73,7 @@ afterEach(() => {
   IngressEngine.setCoordinator(noopCoordinator);
 });
 
-function makeDirectEvent(): DirectEvent {
+function makeDirectEvent(): Ingress.DirectEvent {
   return {
     id: crypto.randomUUID(),
     surface: "test",
@@ -161,7 +160,9 @@ describe("builtin middleware — tool-guard", () => {
   }
 
   test("blocks tool listed in denylist", async () => {
-    const registrations = buildWorkerMiddleware({ permissions: { denylist: ["bash"] } });
+    const registrations = buildWorkerMiddleware({
+      permissions: { action: "tool.call", denylist: ["bash"] },
+    });
     const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
 
     expect(toolGuard).toBeDefined();
@@ -172,7 +173,9 @@ describe("builtin middleware — tool-guard", () => {
   });
 
   test("allows tool not in denylist", async () => {
-    const registrations = buildWorkerMiddleware({ permissions: { denylist: ["bash"] } });
+    const registrations = buildWorkerMiddleware({
+      permissions: { action: "tool.call", denylist: ["bash"] },
+    });
     const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
 
     if (!toolGuard) throw new Error("tool-guard not found");
@@ -217,23 +220,30 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
 });
 
 describe("bus bridge — worker lifecycle events reach server Bus", () => {
-  test("dispatch publishes WorkerRunStarted event", async () => {
-    let receivedEvent: { payload: { runId: string; sessionId: string } } | undefined;
+  test("dispatch does not publish worker lifecycle events directly", async () => {
+    const events: unknown[] = [];
 
-    const unsub = Bus.subscribe(Subagent.Events.WorkerRunStarted, (data) => {
-      receivedEvent = data;
+    const unsubscribeStarted = Bus.subscribe(Subagent.Events.WorkerRunStarted, (data) => {
+      events.push(data);
+    });
+    const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+      events.push(data);
+    });
+    const unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+      events.push(data);
     });
 
     const coordinator = createExecutionCoordinator({ workerScript: "unused" });
     const request = makeRequest({ runId: "run-bus-test", sessionId: "session-bus-test" });
 
     await coordinator.dispatch("tree-1", request);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(receivedEvent).toBeDefined();
-    expect(receivedEvent?.payload.runId).toBe("run-bus-test");
-    expect(receivedEvent?.payload.sessionId).toBe("session-bus-test");
+    expect(events).toHaveLength(0);
 
-    unsub();
+    unsubscribeStarted();
+    unsubscribeCompleted();
+    unsubscribeFailed();
   });
 });
 

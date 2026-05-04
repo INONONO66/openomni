@@ -41,7 +41,9 @@ export async function* streamAgent(
     const state = createStreamRunState(input);
     const engine = buildMiddlewareEngine(config, agentBase);
     try {
-      const providerModel = await resolveProviderModel(config.model);
+      const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
+        config.model,
+      );
       const configuredToolChoice = resolveToolChoice(config);
       assertToolExecutor(config);
 
@@ -76,7 +78,8 @@ export async function* streamAgent(
         if (turnResult.budgetReassuranceEvent) yield turnResult.budgetReassuranceEvent;
         if (turnResult.budgetWarningEvent) yield turnResult.budgetWarningEvent;
 
-        const outcome = await llmRun(turnResult.turn.runInput, turnResult.turn.trackingSink);
+        const runLlm = config.llm?.run ?? llmRun;
+        const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
 
         if (outcome.type === "stop") {
           const decision = yield* handleStop(
@@ -97,7 +100,7 @@ export async function* streamAgent(
         }
 
         if (outcome.type === "compact") {
-          yield* handleCompact(state, engine, config, agentBase);
+          await handleCompact(state, engine, config, agentBase);
           continue;
         }
 

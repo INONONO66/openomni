@@ -1,9 +1,12 @@
 import { z } from "zod";
-import type { Message } from "@openomni/protocol";
+import { ExecutionEvent, type Message } from "@openomni/protocol";
 import { SessionInfo } from "./info";
 import { Storage } from "../storage/storage";
 import { Bus, BusEvent } from "../bus";
 import { EventLog } from "../event-log/index";
+import { Log } from "../log/index";
+
+const TEXT_SUMMARY_LIMIT = 240;
 
 export namespace Session {
   export type RecoveredMessage = {
@@ -222,9 +225,11 @@ export namespace Session {
     const session = adapter.session.get(sessionID);
     if (!session) return;
 
+    const status = options?.status ?? "completed";
+    appendMessageMutation(adapter, sessionID, message, status);
+
     adapter.message.set(sessionID, message);
 
-    const status = options?.status ?? "completed";
     if (status !== "completed" && adapter.message.setStatus) {
       adapter.message.setStatus(message.id, status);
     }
@@ -333,7 +338,9 @@ export namespace Session {
   }
 
   export function addPart(messageID: string, part: Message.Part): void {
-    Storage.getAdapter().part.set(messageID, part);
+    const adapter = Storage.getAdapter();
+    appendPartMutation(adapter, messageID, part);
+    adapter.part.set(messageID, part);
   }
 
   export function getParts(messageID: string): Message.Part[] {
@@ -350,17 +357,155 @@ export namespace Session {
     return maxSequence + 1;
   }
 
+  function appendMessageMutation(
+    adapter: Storage.Adapter,
+    sessionId: string,
+    message: Message.Info,
+    status: "received" | "processing" | "completed",
+  ): void {
+    const sequence = nextMutationSequence(adapter, sessionId);
+    const payload: Record<string, unknown> = {
+      sessionId,
+      messageId: message.id,
+      role: message.role,
+      status,
+      timeCreated: message.time.created,
+    };
+
+    if (message.role === "assistant") {
+      payload.parentMessageId = message.parentID;
+      payload.providerId = message.providerID;
+      payload.modelId = message.modelID;
+    } else {
+      payload.providerId = message.model.providerID;
+      payload.modelId = message.model.modelID;
+    }
+
+    const event: ExecutionEvent.MirroredBusEvent = {
+      type: "bus_event",
+      name: "session.message.added",
+      payload,
+      actionId: messageMutationActionId(sessionId, message.id),
+      ...(message.role === "assistant" && {
+        parentActionId: messageMutationActionId(sessionId, message.parentID),
+      }),
+      visibility: "internal",
+      timestamp: new Date().toISOString(),
+      sequence,
+    };
+
+    appendMutationEvent(adapter, sessionId, event);
+  }
+
+  function appendPartMutation(
+    adapter: Storage.Adapter,
+    messageId: string,
+    part: Message.Part,
+  ): void {
+    const sequence = nextMutationSequence(adapter, part.sessionID);
+    const event: ExecutionEvent.MirroredBusEvent = {
+      type: "bus_event",
+      name: "session.part.added",
+      payload: summarizePartMutation(messageId, part),
+      actionId: `${part.sessionID}:session.addPart:${messageId}:${part.id}`,
+      parentActionId: messageMutationActionId(part.sessionID, messageId),
+      visibility: "internal",
+      timestamp: new Date().toISOString(),
+      sequence,
+    };
+
+    appendMutationEvent(adapter, part.sessionID, event);
+  }
+
+  function appendMutationEvent(
+    adapter: Storage.Adapter,
+    sessionId: string,
+    event: ExecutionEvent.MirroredBusEvent,
+  ): void {
+    const eventLog = adapter.eventLog;
+    if (!eventLog) {
+      throw new Error("Session mutation requires an EventLog adapter");
+    }
+
+    eventLog.append(sessionId, event.type, JSON.stringify(event));
+  }
+
+  function nextMutationSequence(adapter: Storage.Adapter, sessionId: string): number {
+    const eventLog = adapter.eventLog;
+    if (!eventLog) {
+      throw new Error("Session mutation requires an EventLog adapter");
+    }
+
+    if (eventLog.allocateSequence) {
+      return eventLog.allocateSequence(sessionId);
+    }
+
+    let maxSequence = 0;
+    for (const row of eventLog.replay(sessionId)) {
+      try {
+        const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
+        if (parsed.success && parsed.data.sequence > maxSequence) {
+          maxSequence = parsed.data.sequence;
+        }
+      } catch (error) {
+        Log.warn("Session mutation sequence skipped malformed EventLog row", {
+          sessionId,
+          error: String(error),
+        });
+      }
+    }
+
+    return maxSequence + 1;
+  }
+
+  function messageMutationActionId(sessionId: string, messageId: string): string {
+    return `${sessionId}:session.addMessage:${messageId}`;
+  }
+
+  function summarizePartMutation(messageId: string, part: Message.Part): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      sessionId: part.sessionID,
+      messageId,
+      partMessageId: part.messageID,
+      partId: part.id,
+      partType: part.type,
+    };
+
+    if (part.type === "text" || part.type === "reasoning") {
+      payload.text = summarizeText(part.text);
+    }
+    if (part.type === "tool") {
+      payload.tool = part.tool;
+      payload.callId = part.callID;
+      payload.stateStatus = part.state.status;
+    }
+
+    return payload;
+  }
+
+  function summarizeText(text: string): { text: string; length: number; truncated: boolean } {
+    return {
+      text: text.length > TEXT_SUMMARY_LIMIT ? text.slice(0, TEXT_SUMMARY_LIMIT) : text,
+      length: text.length,
+      truncated: text.length > TEXT_SUMMARY_LIMIT,
+    };
+  }
+
   export async function suspend(id: string): Promise<boolean> {
     const session = get(id);
     if (!session) {
       return false;
     }
 
+    const sequence = await nextSequence(id);
+
     await EventLog.append(id, {
       type: "session_suspended",
+      actionId: `${id}:session_suspended:${sequence}`,
+      visibility: "internal",
       reason: "session suspended",
       timestamp: new Date().toISOString(),
-      sequence: await nextSequence(id),
+      sequence,
     });
 
     return true;

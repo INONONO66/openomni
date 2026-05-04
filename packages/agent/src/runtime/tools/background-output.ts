@@ -89,7 +89,7 @@ export namespace BackgroundOutputTool {
         id: crypto.randomUUID(),
         toolCallId: "",
         output: isFailed
-          ? `Task ${taskId} ${current!.status}${current?.error ? `: ${current.error}` : ""}`
+          ? `Task ${taskId} ${current.status}${current.error ? `: ${current.error}` : ""}`
           : `Task ${taskId} status: ${current?.status ?? "unknown"}`,
         isError: isFailed,
       };

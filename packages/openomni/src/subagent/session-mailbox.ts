@@ -29,7 +29,8 @@ async function drainMailbox(sessionId: string): Promise<void> {
       const queue = mailboxes.get(sessionId);
       if (!queue || queue.length === 0) break;
 
-      const entry = queue.shift()!;
+      const entry = queue.shift();
+      if (!entry) continue;
       if (queue.length === 0) mailboxes.delete(sessionId);
 
       try {

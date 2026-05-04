@@ -4,6 +4,7 @@ import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
+  createMockLlmConfig,
   mockProviderData,
   mockProviderModel,
   type MockLlmFn,
@@ -14,21 +15,11 @@ let mockRunFn: MockLlmFn = async () => createStopOutcome();
 const mockModelsGet = mock(async () => mockProviderData);
 const mockProviderFromModelsDevModel = mock(() => mockProviderModel);
 
-mock.module("@openomni/llm", () => ({
-  ModelsDev: {
-    get: mockModelsGet,
-  },
-  Provider: {
-    fromModelsDevModel: mockProviderFromModelsDevModel,
-  },
-  run: (input: unknown, sink: Sink) => mockRunFn(input, sink),
-  TokenTracker: {
-    extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  },
-  ProviderTransform: {
-    resolveVariant: () => ({}),
-  },
-}));
+const mockLlm = createMockLlmConfig({
+  getModels: mockModelsGet,
+  fromModelsDevModel: mockProviderFromModelsDevModel,
+  run: (input, sink: Sink) => mockRunFn(input, sink),
+});
 
 let ChatAgent: typeof import("../src/core/chat-agent").ChatAgent;
 
@@ -79,6 +70,7 @@ function createAssistantMessage(text: string): Message.WithParts {
 function createAgent() {
   return ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
   });
 }
 
@@ -122,8 +114,14 @@ describe("ChatAgent", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       budget: { maxTurns: 1, maxToolCalls: 10 },
-      stepGuard: () => ({ action: "inject", message: "continue" }),
+      stepGuard: () => ({
+        action: "inject",
+        message: "continue",
+        reason: "continue-after-step",
+        policyId: "test.step-guard",
+      }),
     });
 
     const result = await agent.run({
@@ -144,6 +142,7 @@ describe("ChatAgent", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       budget: { maxTurns: 10, maxToolCalls: 7 },
     });
 
@@ -167,6 +166,7 @@ describe("ChatAgent", () => {
 
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       signal: controller.signal,
     });
 
@@ -194,13 +194,19 @@ describe("ChatAgent", () => {
     const stepFinishCalls: AgentStep[] = [];
     const agent = ChatAgent.create({
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
       onStepFinish: (step) => {
         stepFinishCalls.push(step);
       },
       stepGuard: () => {
         guardInvocations += 1;
         if (guardInvocations === 1) {
-          return { action: "inject", message: "continue" };
+          return {
+            action: "inject",
+            message: "continue",
+            reason: "continue-after-step",
+            policyId: "test.step-guard",
+          };
         }
         return { action: "continue" };
       },
@@ -267,6 +273,7 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
 
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     toolExecutor: executor,
   });
 
@@ -302,6 +309,7 @@ it("handles toolExecutor errors by setting isError: true", async () => {
 
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     toolExecutor: async () => {
       throw new Error("Tool execution failed: database connection lost");
     },
@@ -317,6 +325,7 @@ it("handles toolExecutor errors by setting isError: true", async () => {
 it("throws when tools are configured without toolExecutor", async () => {
   const agent = ChatAgent.create({
     model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
     tools: [
       {
         name: "stub_tool",

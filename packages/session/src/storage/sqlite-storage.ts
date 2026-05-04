@@ -90,6 +90,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     remove: (id: string): boolean => {
       const result = this.db.query("DELETE FROM session WHERE id = ?").run(id);
+      this.eventSequenceBySession.delete(id);
       return result.changes > 0;
     },
   };
@@ -305,6 +306,36 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
+  // session-scoped sequence cursor; primed on first lookup from the durable
+  // log and advanced in lock-step with allocateSequence so multiple writers
+  // (ingress projection, session.addMessage) share one monotonic counter
+  // without re-reading every row on each append. bounded with LRU eviction
+  // so a long-lived adapter does not retain entries for stale sessions.
+  private eventSequenceBySession = new Map<string, number>();
+
+  private static readonly MAX_SEQUENCE_CACHE_ENTRIES = 10_000;
+
+  private primeEventSequence(sessionId: string): number {
+    const row = this.db
+      .query(
+        `SELECT MAX(CAST(json_extract(data, '$.sequence') AS INTEGER)) AS max_sequence
+         FROM event_log WHERE session_id = ?`,
+      )
+      .get(sessionId) as { max_sequence: number | null } | undefined;
+    return row?.max_sequence ?? 0;
+  }
+
+  private touchSequenceCache(sessionId: string, value: number): void {
+    // Map iteration order is insertion order; deleting before set keeps the
+    // touched session at the tail so the head is always the LRU candidate.
+    this.eventSequenceBySession.delete(sessionId);
+    this.eventSequenceBySession.set(sessionId, value);
+    if (this.eventSequenceBySession.size > SqliteStorageAdapter.MAX_SEQUENCE_CACHE_ENTRIES) {
+      const oldest = this.eventSequenceBySession.keys().next().value;
+      if (oldest !== undefined) this.eventSequenceBySession.delete(oldest);
+    }
+  }
+
   eventLog = {
     append: (sessionId: string, type: string, data: string): number => {
       const result = this.db
@@ -340,6 +371,16 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         .query("SELECT DISTINCT session_id FROM event_log WHERE status != 'completed'")
         .all() as Array<{ session_id: string }>;
       return rows.map((r) => r.session_id);
+    },
+
+    allocateSequence: (sessionId: string): number => {
+      let current = this.eventSequenceBySession.get(sessionId);
+      if (current === undefined) {
+        current = this.primeEventSequence(sessionId);
+      }
+      const next = current + 1;
+      this.touchSequenceCache(sessionId, next);
+      return next;
     },
   };
 

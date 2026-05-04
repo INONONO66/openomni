@@ -2,6 +2,7 @@ import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Log, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
+import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
 import {
   buildAbortSignal,
   executeRun,
@@ -35,7 +36,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.ToolPermission;
+    permissions?: Guardrail.Permission;
   }
 
   export interface SendConfig extends RuntimeConfig {
@@ -44,7 +45,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.ToolPermission;
+    permissions?: Guardrail.Permission;
     compaction?: SendCompactionConfig;
   }
 
@@ -118,16 +119,14 @@ export namespace SubagentRuntime {
         config.hardTimeoutMs,
       );
       await WorkerRun.updateStatus(session.id, runId, "starting");
-      publishEvent(Subagent.Events.WorkerRunStarted, {
-        sessionId: session.id,
-        runId,
-        title: config.title,
-      });
-
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
+        config.middleware,
+        config.permissions !== undefined,
+      );
+      const runConfig = { ...config, middleware };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, config, signal, permissions),
+        runWithTranscript(session.id, runConfig, signal, config.permissions),
       );
       Log.info("subagent.spawn.complete", {
         agentName: config.agentName,
@@ -152,11 +151,6 @@ export namespace SubagentRuntime {
     const timers = setupRunTimeouts(session.id, runId, config.softTimeoutMs, config.hardTimeoutMs);
 
     await WorkerRun.updateStatus(session.id, runId, "starting");
-    publishEvent(Subagent.Events.WorkerRunStarted, {
-      sessionId: session.id,
-      runId,
-      title: config.title,
-    });
     await WorkerRun.updateStatus(session.id, runId, "running");
     Log.info("subagent.spawn-background", {
       agentName: config.agentName,
@@ -164,10 +158,14 @@ export namespace SubagentRuntime {
       runId,
     });
 
-    const permissions = config.permissions ?? { denylist: ["subagent"] };
+    const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
+      config.middleware,
+      config.permissions !== undefined,
+    );
+    const runConfig = { ...config, middleware };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, config, signal, permissions),
+        runWithTranscript(session.id, runConfig, signal, config.permissions),
       ),
     );
     backgroundRun.catch((err) => {
@@ -181,11 +179,13 @@ export namespace SubagentRuntime {
     return { sessionId: session.id, runId };
   }
 
-  export function send(config: SendConfig): Promise<RunResult> {
-    const session = Session.get(config.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${config.sessionId}`);
-    }
+  export async function send(config: SendConfig): Promise<RunResult> {
+    const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
+      operation: "send",
+      sessionId: config.sessionId,
+    });
+    const session = policy.session;
+    if (!session) throw new Error(`Session not found: ${config.sessionId}`);
     Log.info("subagent.send", { sessionId: config.sessionId });
 
     return sendToMailbox(session.id, async () => {
@@ -206,32 +206,38 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      const permissions = config.permissions ?? { denylist: ["subagent"] };
+      const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
+        config.middleware,
+        config.permissions !== undefined,
+      );
+      const runConfig = { ...config, middleware };
       const messages = await maybeCompactSendTranscript(
         session.id,
         buildChildMessagesInternal(session.id),
         config.compaction,
       );
       return executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, config, signal, permissions, messages),
+        runWithTranscript(session.id, runConfig, signal, config.permissions, messages),
       );
     });
   }
 
   export async function resume(config: ResumeConfig): Promise<ResumeResult> {
-    const session = Session.get(config.sessionId);
-    if (!session) {
-      return { resumed: false, sessionId: config.sessionId, runId: undefined };
-    }
     Log.info("subagent.resume", { sessionId: config.sessionId });
 
     return sendToMailbox(config.sessionId, async () => {
-      const runs = await WorkerRun.listBySession(config.sessionId);
-      const latestRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
-
-      if (latestRun?.status === "running" || latestRun?.status === "starting") {
-        throw new Error("Session already has an active run");
+      const policy = await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
+        operation: "resume",
+        sessionId: config.sessionId,
+      });
+      if (policy.verdict.action !== "continue") {
+        if (policy.verdict.reason === `Session not found: ${config.sessionId}`) {
+          return { resumed: false, sessionId: config.sessionId, runId: undefined };
+        }
+        throw new Error(policy.verdict.reason ?? "subagent resume policy aborted");
       }
+
+      const latestRun = policy.latestRun;
 
       const runId = crypto.randomUUID();
       const title = latestRun?.title ?? "resumed";
@@ -248,19 +254,29 @@ export namespace SubagentRuntime {
       });
 
       await WorkerRun.updateStatus(config.sessionId, runId, "running");
+      const runConfig = {
+        ...config,
+        middleware: SubagentSpawnPolicyMiddleware.childMiddleware(config.middleware, false),
+      };
       const result = await executeRun(config.sessionId, runId, config.model, undefined, () =>
-        runWithTranscript(config.sessionId, config, signal),
+        runWithTranscript(config.sessionId, runConfig, signal),
       );
       return { resumed: true, ...result };
     });
   }
 
   export async function cancel(config: CancelConfig): Promise<void> {
-    const session = Session.get(config.sessionId);
+    const policy = await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
+      operation: "cancel",
+      sessionId: config.sessionId,
+      hardTimeoutMs: config.hardTimeoutMs,
+    });
+    if (policy.verdict.action !== "continue") return;
+    const session = policy.session;
     if (!session) return;
     Log.info("subagent.cancel", { sessionId: config.sessionId, runId: config.runId });
 
-    const hardTimeoutMs = config.hardTimeoutMs ?? 10_000;
+    const hardTimeoutMs = policy.cancelHardTimeoutMs;
 
     if (config.runId) {
       const entry = getAbortEntry(config.sessionId, config.runId);
@@ -310,6 +326,11 @@ export namespace SubagentRuntime {
   }
 
   export async function wait(config: WaitConfig): Promise<WaitResult> {
+    const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
+      operation: "wait",
+      sessionId: config.sessionId,
+      timeoutMs: config.timeoutMs,
+    });
     Log.info("subagent.wait", {
       sessionId: config.sessionId,
       runId: config.runId,
@@ -327,17 +348,37 @@ export namespace SubagentRuntime {
 
     return new Promise<WaitResult>((resolve, reject) => {
       let settled = false;
-      let unsubscribeCompleted: (() => void) | undefined;
-      let unsubscribeFailed: (() => void) | undefined;
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-      const cleanup = () => {
-        unsubscribeCompleted?.();
-        unsubscribeFailed?.();
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-      };
+      const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
+          settle();
+        }
+      });
 
-      const settle = async () => {
+      const unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
+          settle();
+        }
+      });
+
+      const timeoutHandle = SubagentSpawnPolicyMiddleware.enforceWaitTimeout(
+        policy.waitTimeoutMs,
+        () => {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
+          }
+        },
+      );
+
+      function cleanup() {
+        unsubscribeCompleted();
+        unsubscribeFailed();
+        timeoutHandle?.cancel();
+      }
+
+      async function settle() {
         if (settled) return;
         settled = true;
         cleanup();
@@ -347,28 +388,6 @@ export namespace SubagentRuntime {
         } else {
           reject(new Error(`Worker run ${config.runId} disappeared during wait`));
         }
-      };
-
-      unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
-        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
-          settle();
-        }
-      });
-
-      unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
-        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
-          settle();
-        }
-      });
-
-      if (config.timeoutMs) {
-        timeoutHandle = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            cleanup();
-            reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
-          }
-        }, config.timeoutMs);
       }
     });
   }

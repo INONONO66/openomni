@@ -22,6 +22,8 @@ export function createBudgetReassuranceMiddleware(): MiddlewareRegistration {
         return {
           action: "inject",
           message: `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+          reason: "budget_reassurance",
+          policyId: "builtin.budget.reassurance",
         };
       }
       return { action: "continue" };
@@ -50,6 +52,8 @@ export function createBudgetWarningMiddleware(): MiddlewareRegistration {
         return {
           action: "inject",
           message: `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+          reason: "budget_warning",
+          policyId: "builtin.budget.warning",
         };
       }
       return { action: "continue" };

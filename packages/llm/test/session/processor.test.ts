@@ -1,8 +1,100 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { afterEach, describe, expect, test, beforeEach } from "bun:test";
+import type { ExecutionEvent, Run, Sink, Tool } from "@openomni/protocol";
+import { Storage } from "@openomni/session";
 import { Processor } from "../../src/session/processor";
 import type { Message } from "../../src/session";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
+
+interface EventLogRow {
+  id: number;
+  type: string;
+  status: string;
+  data: string;
+}
+
+function configureEventLogSession(sessionId: string, rows: EventLogRow[]): void {
+  const messages = new Map<string, Message.Info>();
+  const parts = new Map<string, Message.Part>();
+  const now = Date.now();
+
+  Storage.configure({
+    session: {
+      get(id) {
+        if (id !== sessionId) return undefined;
+        return {
+          id: sessionId,
+          title: "Processor test session",
+          model: { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
+          spawnDepth: 0,
+          time: { created: now, updated: now },
+        };
+      },
+      set() {
+        return undefined;
+      },
+      list() {
+        return [];
+      },
+      remove() {
+        return false;
+      },
+    },
+    message: {
+      get(_sessionID, messageID) {
+        return messages.get(messageID);
+      },
+      set(_sessionID, message) {
+        messages.set(message.id, message);
+      },
+      list() {
+        return [...messages.values()];
+      },
+      remove(_sessionID, messageID) {
+        return messages.delete(messageID);
+      },
+    },
+    part: {
+      get(_messageID, partID) {
+        return parts.get(partID);
+      },
+      set(_messageID, part) {
+        parts.set(part.id, part);
+      },
+      list() {
+        return [...parts.values()];
+      },
+      remove(_messageID, partID) {
+        return parts.delete(partID);
+      },
+    },
+    eventLog: {
+      append(rowSessionId, type, data) {
+        if (rowSessionId !== sessionId) return rows.length;
+        const id = rows.length + 1;
+        rows.push({ id, type, status: "pending", data });
+        return id;
+      },
+      replay(rowSessionId) {
+        return rowSessionId === sessionId ? rows : [];
+      },
+      listIncomplete(rowSessionId) {
+        return rowSessionId === sessionId ? rows : [];
+      },
+      markComplete(_rowSessionId, eventId) {
+        const row = rows.find((item) => item.id === eventId);
+        if (row) row.status = "completed";
+      },
+      listIncompleteSessions() {
+        return rows.some((row) => row.status !== "completed") ? [sessionId] : [];
+      },
+    },
+  });
+}
+
+function parseRows(rows: EventLogRow[]): ExecutionEvent[] {
+  return rows.map((row) => JSON.parse(row.data) as ExecutionEvent);
+}
 
 describe("Processor", () => {
   let mockAssistantMessage: Message.AssistantMessage;
@@ -46,6 +138,10 @@ describe("Processor", () => {
         npm: "@ai-sdk/anthropic",
       },
     };
+  });
+
+  afterEach(() => {
+    Storage.reset();
   });
 
   describe("Processor.create(input)", () => {
@@ -343,6 +439,108 @@ describe("Processor", () => {
       } as Processor.StreamInput);
 
       expect(result).toBe("stop");
+    });
+
+    test("projects sink callbacks to session EventLog rows", async () => {
+      const rows: EventLogRow[] = [];
+      const sinkEvents: string[] = [];
+      const toolCalls: Tool.Call[] = [];
+      const toolResults: Tool.Result[] = [];
+      const snapshots: Run.Snapshot[] = [];
+      const messages: Message.WithParts[] = [];
+
+      configureEventLogSession("session-456", rows);
+
+      const sink: Sink = {
+        onMessage(message) {
+          sinkEvents.push("message");
+          messages.push(message);
+        },
+        onToolCall(call) {
+          sinkEvents.push("toolCall");
+          toolCalls.push(call);
+        },
+        onToolResult(result) {
+          sinkEvents.push("toolResult");
+          toolResults.push(result);
+        },
+        onSnapshot(snapshot) {
+          sinkEvents.push(`snapshot:${String(snapshot.state.type)}`);
+          snapshots.push(snapshot);
+        },
+      };
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: mockModel,
+        abort: abortController.signal,
+        sink,
+        createStream: async () => ({
+          fullStream: (async function* () {
+            yield { type: "text-start", providerMetadata: {} };
+            yield { type: "text-delta", text: "Hello" };
+            yield { type: "text-end", providerMetadata: {} };
+            yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", args: { q: "x" } };
+            yield { type: "finish" };
+          })(),
+        }),
+        onToolCall: async () => ({ output: "ok", title: "Lookup" }),
+      });
+
+      const result = await processor.process({ messages: [], model: mockModel, system: "" });
+      const events = parseRows(rows);
+
+      expect(result).toBe("stop");
+      expect(sinkEvents).toContain("message");
+      expect(sinkEvents).toContain("toolCall");
+      expect(sinkEvents).toContain("toolResult");
+      expect(sinkEvents).toContain("snapshot:busy");
+      expect(sinkEvents).toContain("snapshot:idle");
+      expect(messages.length).toBeGreaterThan(0);
+      expect(toolCalls).toEqual([{ id: "call-1", tool: "lookup", input: { q: "x" } }]);
+      expect(toolResults).toHaveLength(1);
+      expect(toolResults[0].toolCallId).toBe("call-1");
+      expect(snapshots.map((snapshot) => snapshot.state.type)).toEqual(["busy", "idle"]);
+
+      expect(events.map((event) => event.sequence)).toEqual(
+        Array.from({ length: events.length }, (_value, index) => index + 1),
+      );
+      expect(events.every((event) => event.visibility === "internal")).toBe(true);
+      expect(
+        events.every((event) => event.actionId.startsWith("session-456:processor.sink.")),
+      ).toBe(true);
+      expect(events.every((event) => !Number.isNaN(Date.parse(event.timestamp)))).toBe(true);
+
+      const messageRows = events.filter(
+        (event): event is ExecutionEvent.MirroredBusEvent =>
+          event.type === "bus_event" && event.name === "processor.sink.message",
+      );
+      const snapshotRows = events.filter(
+        (event): event is ExecutionEvent.MirroredBusEvent =>
+          event.type === "bus_event" && event.name === "processor.sink.snapshot",
+      );
+      const toolStarted = events.find(
+        (event): event is ExecutionEvent.ToolStarted => event.type === "tool_started",
+      );
+      const toolCompleted = events.find(
+        (event): event is ExecutionEvent.ToolCompleted => event.type === "tool_completed",
+      );
+
+      expect(messageRows.length).toBe(messages.length);
+      expect(snapshotRows.length).toBe(2);
+      expect(toolStarted).toMatchObject({
+        type: "tool_started",
+        toolCallId: "call-1",
+        toolName: "lookup",
+        args: { q: "x" },
+      });
+      expect(toolCompleted).toMatchObject({
+        type: "tool_completed",
+        toolCallId: "call-1",
+        result: { toolCallId: "call-1", output: "ok" },
+        parentActionId: toolStarted?.actionId,
+      });
     });
 
     test("respects abort signal during stream processing", async () => {

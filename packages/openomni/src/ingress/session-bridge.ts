@@ -1,5 +1,6 @@
 import { Plan, type Message } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
+import { createIngressLedger, summarizeText } from "./event-log-envelope";
 
 const PLAN_ID_MARKER = "__OPENOMNI_PLANID__";
 
@@ -108,8 +109,6 @@ export namespace SessionBridge {
     model: { provider: string; id: string },
   ): void {
     const message = createAssistantMessage(sessionId, model);
-    Session.addMessage(sessionId, message);
-
     const part: Message.TextPart = {
       id: crypto.randomUUID(),
       sessionID: sessionId,
@@ -117,6 +116,46 @@ export namespace SessionBridge {
       type: "text",
       text: PLAN_ID_MARKER + result.planId,
     };
+
+    const ledger = createIngressLedger(sessionId, "session_bridge");
+    const writebackEvent = ledger.append("ingress.writeback.plan_result", {
+      sessionId,
+      mode: "plan",
+      source: "session-bridge",
+      messageId: message.id,
+      partId: part.id,
+      role: message.role,
+      planId: result.planId,
+      marker: PLAN_ID_MARKER,
+    });
+    const messageEvent = ledger.append(
+      "ingress.writeback.message.write",
+      {
+        sessionId,
+        mode: "plan",
+        source: "session-bridge",
+        messageId: message.id,
+        role: message.role,
+      },
+      writebackEvent?.actionId,
+    );
+    Session.addMessage(sessionId, message);
+
+    ledger.append(
+      "ingress.writeback.part.write",
+      {
+        sessionId,
+        mode: "plan",
+        source: "session-bridge",
+        messageId: message.id,
+        partId: part.id,
+        role: message.role,
+        partType: part.type,
+        marker: PLAN_ID_MARKER,
+        planId: result.planId,
+      },
+      messageEvent?.actionId,
+    );
     Session.addPart(message.id, part);
   }
 
@@ -126,8 +165,6 @@ export namespace SessionBridge {
     model: { provider: string; id: string },
   ): void {
     const message = createAssistantMessage(sessionId, model);
-    Session.addMessage(sessionId, message);
-
     const part: Message.TextPart = {
       id: crypto.randomUUID(),
       sessionID: sessionId,
@@ -135,6 +172,44 @@ export namespace SessionBridge {
       type: "text",
       text: output,
     };
+
+    const ledger = createIngressLedger(sessionId, "session_bridge");
+    const writebackEvent = ledger.append("ingress.writeback.direct_result", {
+      sessionId,
+      mode: "direct",
+      source: "session-bridge",
+      messageId: message.id,
+      partId: part.id,
+      role: message.role,
+      text: summarizeText(output),
+    });
+    const messageEvent = ledger.append(
+      "ingress.writeback.message.write",
+      {
+        sessionId,
+        mode: "direct",
+        source: "session-bridge",
+        messageId: message.id,
+        role: message.role,
+      },
+      writebackEvent?.actionId,
+    );
+    Session.addMessage(sessionId, message);
+
+    ledger.append(
+      "ingress.writeback.part.write",
+      {
+        sessionId,
+        mode: "direct",
+        source: "session-bridge",
+        messageId: message.id,
+        partId: part.id,
+        role: message.role,
+        partType: part.type,
+        text: summarizeText(output),
+      },
+      messageEvent?.actionId,
+    );
     Session.addPart(message.id, part);
   }
 }

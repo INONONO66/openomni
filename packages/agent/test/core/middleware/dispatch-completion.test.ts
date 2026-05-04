@@ -80,7 +80,12 @@ describe("post_tool_use middleware dispatch", () => {
       name: "test:transform",
       timing: "post_tool_use",
       priority: 100,
-      fn: () => ({ action: "transform", input: { output: "modified-output" } }),
+      fn: () => ({
+        action: "transform",
+        input: { output: "modified-output" },
+        reason: "modify-output",
+        policyId: "test.transform",
+      }),
     });
 
     const executor = createToolExecutor({
@@ -172,6 +177,8 @@ describe("pre_tool_use middleware dispatch", () => {
       fn: () => ({
         action: "transform",
         input: { command: "echo safe" },
+        reason: "rewrite-input",
+        policyId: "test.transform-input",
       }),
     });
 
@@ -186,7 +193,11 @@ describe("pre_tool_use middleware dispatch", () => {
 
 describe("on_error middleware dispatch (stream-engine level)", () => {
   it("on_error middleware is registered and dispatchable", async () => {
-    const onErrorFn = mock((_ctx: MiddlewareContext) => ({ action: "abort" as const }));
+    const onErrorFn = mock((_ctx: MiddlewareContext) => ({
+      action: "abort" as const,
+      reason: "test-error-abort",
+      policyId: "test.on-error",
+    }));
 
     const engine = MiddlewareEngine.create();
     engine.register({

@@ -31,6 +31,8 @@ describe("Session recovery lifecycle", () => {
 
     await EventLog.append(session.id, {
       type: "llm_response",
+      actionId: "action-1",
+      visibility: "internal",
       turnIndex: 0,
       text: "hello",
       toolCalls: [],
@@ -60,6 +62,8 @@ describe("Session recovery lifecycle", () => {
 
     await EventLog.append(session.id, {
       type: "llm_response",
+      actionId: "action-1",
+      visibility: "internal",
       turnIndex: 0,
       text: "first",
       toolCalls: [],
@@ -69,6 +73,8 @@ describe("Session recovery lifecycle", () => {
     });
     await EventLog.append(session.id, {
       type: "step_failed",
+      actionId: "step-action-1",
+      visibility: "internal",
       stepId: "s1",
       error: "ignored",
       timestamp: new Date().toISOString(),
@@ -76,6 +82,8 @@ describe("Session recovery lifecycle", () => {
     });
     await EventLog.append(session.id, {
       type: "llm_response",
+      actionId: "action-2",
+      visibility: "internal",
       turnIndex: 1,
       text: "second",
       toolCalls: [],
@@ -98,6 +106,8 @@ describe("Session recovery lifecycle", () => {
 
     await EventLog.append(session.id, {
       type: "llm_response",
+      actionId: "action-1",
+      visibility: "internal",
       turnIndex: 0,
       text: "hello",
       toolCalls: [],

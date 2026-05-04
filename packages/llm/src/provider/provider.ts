@@ -6,17 +6,31 @@ import type { Auth } from "../auth/storage";
 import { Provider } from "./index";
 import type { ModelsDev } from "../model";
 
-const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
-  "@ai-sdk/anthropic": createAnthropic,
-  "@ai-sdk/openai": createOpenAI,
+type SdkOptions = {
+  apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  [key: string]: unknown;
 };
 
-type SDK = ReturnType<typeof createAnthropic> | ReturnType<typeof createOpenAI>;
+type ProviderSDK = {
+  languageModel(modelID: string): unknown;
+  responses?: (modelID: string) => unknown;
+};
 
-const SDK_CACHE = new Map<string, SDK>();
+const BUNDLED_PROVIDERS: Record<string, (options: SdkOptions) => ProviderSDK> = {
+  "@ai-sdk/anthropic": (options) => createAnthropic(options),
+  "@ai-sdk/openai": (options) => createOpenAI(options),
+};
+
+const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
 
-type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, unknown>) => any;
+type CustomModelLoader = (
+  sdk: ProviderSDK,
+  modelID: string,
+  options?: Record<string, unknown>,
+) => LanguageModel;
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
@@ -32,14 +46,17 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
     },
   }),
   openai: () => ({
-    getModel(sdk: any, modelID: string) {
-      return sdk.responses(modelID);
+    getModel(sdk: ProviderSDK, modelID: string) {
+      if (!sdk.responses) {
+        throw new Error("OpenAI responses model loader requires responses support");
+      }
+      return sdk.responses(modelID) as LanguageModel;
     },
     options: {},
   }),
 };
 
-export function getSDK(model: Provider.Model, auth: Auth.Info): any {
+export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${JSON.stringify(auth)}`;
   const cached = SDK_CACHE.get(cacheKey);
   if (cached) return cached;
@@ -51,7 +68,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
   const customLoader = CUSTOM_LOADERS[providerID];
   const custom = customLoader ? customLoader() : undefined;
 
-  const sdkOptions: Record<string, any> = {
+  const sdkOptions: SdkOptions = {
     ...(custom?.options ?? {}),
   };
 
@@ -73,11 +90,11 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): any {
       baseURL,
       apiKey: sdkOptions.apiKey,
     });
-    SDK_CACHE.set(cacheKey, sdk as unknown as SDK);
+    SDK_CACHE.set(cacheKey, sdk);
     return sdk;
   }
 
-  const sdk = factory(sdkOptions) as SDK;
+  const sdk = factory(sdkOptions);
   SDK_CACHE.set(cacheKey, sdk);
   return sdk;
 }
@@ -99,7 +116,7 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageMod
     return languageModel;
   }
 
-  const languageModel = sdk.languageModel(modelID);
+  const languageModel = sdk.languageModel(modelID) as LanguageModel;
   LANGUAGE_CACHE.set(cacheKey, languageModel);
   return languageModel;
 }

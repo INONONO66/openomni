@@ -44,7 +44,7 @@ describe("worker-runtime", () => {
     const context = createExecutionToolContext(
       {
         tools: [{ name: "bash", inputSchema: { type: "object" } }],
-        permissions: { denylist: ["bash"] },
+        permissions: { action: "tool.call", denylist: ["bash"] },
         toolConfig: { workspaceRoot: "/workspace/openomni" },
       },
       availableTools,

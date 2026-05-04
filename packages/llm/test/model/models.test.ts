@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
-import { tmpdir } from "os";
-import { join } from "path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ModelsDev } from "../../src/model";
 
 describe("ModelsDev", () => {

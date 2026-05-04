@@ -1,5 +1,4 @@
 import type { ChatAgent } from "@openomni/agent";
-import { Subagent } from "@openomni/protocol";
 import { Log, Session, WorkerRun } from "@openomni/session";
 import {
   abort as abortSession,
@@ -7,7 +6,7 @@ import {
   remove as removeAbortController,
 } from "./abort-registry";
 import { addAssistantResultParts } from "./message-builder";
-import { createAssistantMessage, publishEvent, type RuntimeModel } from "./shared";
+import { createAssistantMessage, type RuntimeModel } from "./shared";
 
 export function buildAbortSignal(controller: AbortController, signal?: AbortSignal): AbortSignal {
   return AbortSignal.any(
@@ -50,10 +49,8 @@ export function resolveMetaStatus(runStatus: string | undefined): string {
 export async function finalizeRun(sessionId: string, runId: string): Promise<void> {
   const run = await WorkerRun.get(sessionId, runId);
   if (run && !isTerminalStatus(run.status) && !(await shouldSkipFailureUpdate(sessionId, runId))) {
-    await WorkerRun.updateStatus(sessionId, runId, "failed", { endedAt: Date.now() });
-    publishEvent(Subagent.Events.WorkerRunFailed, {
-      sessionId,
-      runId,
+    await WorkerRun.updateStatus(sessionId, runId, "failed", {
+      endedAt: Date.now(),
       error: "non-terminal status at finally cleanup",
     });
   }
@@ -97,13 +94,11 @@ export async function raceAbortCompletion(
     removeAbortController(sessionId, runId);
     const run = await WorkerRun.get(sessionId, runId);
     if (run && !isTerminalStatus(run.status)) {
-      await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
+      await WorkerRun.updateStatus(sessionId, runId, "interrupted", {
+        endedAt: Date.now(),
+        error: "cancel timeout exceeded",
+      });
     }
-    publishEvent(Subagent.Events.WorkerRunFailed, {
-      sessionId,
-      runId,
-      error: "cancel timeout exceeded",
-    });
   } else {
     clearTimeout(timeoutId);
     const run = await WorkerRun.get(sessionId, runId);
@@ -130,11 +125,6 @@ export function setupRunTimeouts(
     Log.debug("run.timeout.setup.soft", { sessionId, runId, softTimeoutMs });
     timers.soft = setTimeout(() => {
       Log.debug("run.timeout.soft-fired", { sessionId, runId });
-      publishEvent(Subagent.Events.WorkerRunFailed, {
-        sessionId,
-        runId,
-        error: "soft timeout exceeded",
-      });
     }, softTimeoutMs);
   }
 
@@ -143,15 +133,13 @@ export function setupRunTimeouts(
     timers.hard = setTimeout(async () => {
       Log.debug("run.timeout.hard-fired", { sessionId, runId });
       try {
-        await WorkerRun.updateStatus(sessionId, runId, "interrupted", { endedAt: Date.now() });
+        await WorkerRun.updateStatus(sessionId, runId, "interrupted", {
+          endedAt: Date.now(),
+          error: "hard timeout exceeded",
+        });
       } catch {
         return;
       }
-      publishEvent(Subagent.Events.WorkerRunFailed, {
-        sessionId,
-        runId,
-        error: "hard timeout exceeded",
-      });
       abortSession(sessionId, runId);
     }, hardTimeoutMs);
   }
@@ -187,14 +175,11 @@ export async function executeRun(
       endedAt: Date.now(),
       lastMessageId: assistantMessage.id,
     });
-    publishEvent(Subagent.Events.WorkerRunCompleted, { sessionId, runId, status: "succeeded" });
     return { sessionId, runId, output: result.text, finishReason: result.finishReason };
   } catch (error) {
     if (await shouldSkipFailureUpdate(sessionId, runId)) throw error;
-    await WorkerRun.updateStatus(sessionId, runId, "failed", { endedAt: Date.now() });
-    publishEvent(Subagent.Events.WorkerRunFailed, {
-      sessionId,
-      runId,
+    await WorkerRun.updateStatus(sessionId, runId, "failed", {
+      endedAt: Date.now(),
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;

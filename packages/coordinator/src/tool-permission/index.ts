@@ -1,4 +1,3 @@
-export { logPermissionDecision, type AuditEntry } from "./audit";
 export {
   checkPermission,
   loadPolicy,
