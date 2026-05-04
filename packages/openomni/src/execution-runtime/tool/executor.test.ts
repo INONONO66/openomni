@@ -59,6 +59,7 @@ function configureThrowingEventLogStorage(error: Error): string {
     listIncomplete: () => [],
     markComplete: () => undefined,
     listIncompleteSessions: () => [],
+    allocateSequence: () => 1,
   };
   return sessionId;
 }

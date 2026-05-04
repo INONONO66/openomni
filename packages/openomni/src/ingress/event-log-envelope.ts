@@ -22,7 +22,7 @@ export function summarizeText(text: string): TextSummary {
   };
 }
 
-function readNextSequence(
+function fallbackNextSequence(
   eventLog: NonNullable<Storage.Adapter["eventLog"]>,
   sessionId: string,
 ): number {
@@ -56,7 +56,9 @@ export function createIngressLedger(sessionId: string, scope: string) {
     ): IngressLedgerEvent | undefined {
       let sequence: number;
       try {
-        sequence = readNextSequence(eventLog, sessionId);
+        sequence = eventLog.allocateSequence
+          ? eventLog.allocateSequence(sessionId)
+          : fallbackNextSequence(eventLog, sessionId);
       } catch (error) {
         Log.warn("ingress: EventLog replay failed for sequence allocation", {
           sessionId,

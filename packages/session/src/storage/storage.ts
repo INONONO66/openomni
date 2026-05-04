@@ -51,6 +51,7 @@ export namespace Storage {
       listIncomplete(sessionId: string): Array<{ id: number; type: string; data: string }>;
       markComplete(sessionId: string, eventId: number): void;
       listIncompleteSessions(): string[];
+      allocateSequence?(sessionId: string): number;
     };
     backgroundTask?: {
       upsert(

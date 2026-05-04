@@ -436,6 +436,10 @@ export namespace Session {
       throw new Error("Session mutation requires an EventLog adapter");
     }
 
+    if (eventLog.allocateSequence) {
+      return eventLog.allocateSequence(sessionId);
+    }
+
     let maxSequence = 0;
     for (const row of eventLog.replay(sessionId)) {
       try {

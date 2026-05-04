@@ -305,6 +305,22 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
+  // session-scoped sequence cursor; primed on first lookup from the durable
+  // log and advanced in lock-step with allocateSequence so multiple writers
+  // (ingress projection, session.addMessage) share one monotonic counter
+  // without re-reading every row on each append.
+  private eventSequenceBySession = new Map<string, number>();
+
+  private primeEventSequence(sessionId: string): number {
+    const row = this.db
+      .query(
+        `SELECT MAX(CAST(json_extract(data, '$.sequence') AS INTEGER)) AS max_sequence
+         FROM event_log WHERE session_id = ?`,
+      )
+      .get(sessionId) as { max_sequence: number | null } | undefined;
+    return row?.max_sequence ?? 0;
+  }
+
   eventLog = {
     append: (sessionId: string, type: string, data: string): number => {
       const result = this.db
@@ -340,6 +356,16 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         .query("SELECT DISTINCT session_id FROM event_log WHERE status != 'completed'")
         .all() as Array<{ session_id: string }>;
       return rows.map((r) => r.session_id);
+    },
+
+    allocateSequence: (sessionId: string): number => {
+      let current = this.eventSequenceBySession.get(sessionId);
+      if (current === undefined) {
+        current = this.primeEventSequence(sessionId);
+      }
+      const next = current + 1;
+      this.eventSequenceBySession.set(sessionId, next);
+      return next;
     },
   };
 
