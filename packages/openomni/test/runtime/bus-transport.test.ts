@@ -115,6 +115,37 @@ describe("BusTransport", () => {
       expect(received).toHaveLength(1);
     });
 
+    it("isolates subscriber callback errors so a thrown handler does not abort delivery", async () => {
+      const transport = new BusTransport();
+      const received: Messenger.MessageEnvelope[] = [];
+
+      transport.subscribe("agent-b", () => {
+        throw new Error("first handler threw");
+      });
+      transport.subscribe("agent-b", (env) => {
+        received.push(env);
+      });
+
+      const envelope: Messenger.MessageEnvelope = {
+        id: "env-isolated",
+        traceId: "trace-isolated",
+        correlationId: null,
+        sessionId: "sess-1",
+        runId: "run-1",
+        fromAgentId: "agent-a",
+        toAgentId: "agent-b",
+        sentAt: new Date().toISOString(),
+        schemaRef: "text",
+        payload: "still delivers",
+        persistencePolicy: "both",
+      };
+
+      await expect(transport.send(envelope)).resolves.toBeUndefined();
+
+      expect(received).toHaveLength(1);
+      expect(received[0].id).toBe("env-isolated");
+    });
+
     it("supports multiple subscribers for same agent", async () => {
       const transport = new BusTransport();
       const received1: Messenger.MessageEnvelope[] = [];

@@ -19,7 +19,15 @@ export class BusTransport implements Transport {
     const handlers = this.subscribers.get(envelope.toAgentId);
     if (handlers) {
       for (const handler of handlers) {
-        handler(envelope);
+        try {
+          handler(envelope);
+        } catch (error) {
+          Log.warn("bus transport subscriber handler threw", {
+            envelopeId: envelope.id,
+            toAgentId: envelope.toAgentId,
+            error: String(error),
+          });
+        }
       }
     }
   }
