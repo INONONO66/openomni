@@ -68,7 +68,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       const auth = input.auth ?? (await Auth.get(model.providerID));
       if (!auth) {
         throw new Error(
-          `No authentication found for provider: ${model.providerID}. Run 'openomni auth login' first.`,
+          `No authentication found for provider: ${model.providerID}. Configure provider credentials or use a proxy auth provider first.`,
         );
       }
 

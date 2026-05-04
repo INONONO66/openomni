@@ -15,7 +15,8 @@ src/
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── delegation.ts           # DelegationContext + checkDelegation (depth / circular detection)
 │   ├── memory.ts               # Memory interface + InMemoryMemory (Jaccard retrieval)
-│   ├── tool-guard.ts           # ToolGuard.check — evaluates Guardrail.Permission + InputRule list
+│   ├── runtime-context.ts      # Runtime context helpers for agent execution
+│   ├── tool-guard.ts           # ToolGuard.check — evaluates Guardrail.ToolPermission + InputRule list
 │   ├── prompt-builder.ts       # System prompt composition helpers
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
 │   ├── telemetry.ts            # Telemetry.span / counter / histogram (OpenTelemetry; disabled by default)
@@ -90,7 +91,7 @@ Also exported from `@openomni/agent`:
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call) => Promise<Tool.Result>`         | Custom tool executor; wrapped by `createToolExecutor`                       |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
-| `permissions?`   | `Guardrail.Permission`                   | Evaluated by the built-in `tool-guard` middleware                           |
+| `permissions?`   | `Guardrail.ToolPermission`               | Evaluated by the built-in `tool-guard` middleware                           |
 | `compaction?`    | `{ contextWindowTokens, ... }`           | Trigger message compaction via `InMemoryCompactor`                          |
 | `memory?`        | `Memory`                                 | Memory interface retrieved by the `memory` middleware                       |
 | `middleware?`    | `MiddlewareRegistration[]`               | **Preferred extension mechanism**                                           |
@@ -112,7 +113,7 @@ pre_run → pre_turn → on_system_prompt → pre_tool_use → post_tool_use
 - **Verdict** (`Hook.Verdict`): `continue | skip | abort | retry | transform | inject`. The first non-`continue` verdict terminates the chain for that timing.
 - **System prompt transforms**: `dispatchSystemPrompt()` runs only the `on_system_prompt` chain and supports transform chaining so multiple middlewares can contribute.
 - **Builtins** (priority in parentheses):
-  - `tool-guard` (0, fail-closed) — enforces `Guardrail.Permission` and `InputRule`; returns `skip` / `abort` / `require_approval`
+  - `tool-guard` (0, fail-closed) — enforces `Guardrail.ToolPermission` and `InputRule`; returns `skip` / `abort` / `require_approval`
   - `budget-reassurance` (10) — injects a reassurance system message around 60% budget
   - `budget-warning` (20) — injects a warning around 80% budget
   - `memory` (100) — appends similar memory entries to the system prompt

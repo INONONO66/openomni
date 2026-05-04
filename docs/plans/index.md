@@ -25,7 +25,7 @@ Last updated: 2026-04-17
 | Plan                          | Reason                                                                                     |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | `agent-layer-redesign.md`     | Superseded — split into `agent-package-split.md` (Phase 1) + plan-team-mode (Phase 2)      |
-| `planner-identity-upgrade.md` | Abandoned — target file (`apps/cli/src/agent/planner.ts`) removed during CLI restructuring |
+| `planner-identity-upgrade.md` | Abandoned — target planner belonged to the retired CLI app |
 | `plan-team-mode.md` (Team)    | Superseded — Team mode removed; persistent subagent shipped as `SubagentRuntime` + `BackgroundManager` |
 
 ## Active

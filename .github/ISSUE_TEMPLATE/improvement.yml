@@ -50,7 +50,6 @@ body:
         - agent
         - openomni
         - coordinator
-        - cli
         - server
         - infra (CI, scripts, config)
     validations:

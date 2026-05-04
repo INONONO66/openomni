@@ -95,9 +95,6 @@ jobs:
       - name: Test (server)
         run: bun test
         working-directory: apps/server
-      - name: Test (cli)
-        run: bun test
-        working-directory: apps/cli
       - uses: actions/upload-artifact@v4
         if: always()
         with:
