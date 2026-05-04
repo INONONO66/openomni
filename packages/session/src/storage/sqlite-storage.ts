@@ -90,6 +90,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     remove: (id: string): boolean => {
       const result = this.db.query("DELETE FROM session WHERE id = ?").run(id);
+      this.eventSequenceBySession.delete(id);
       return result.changes > 0;
     },
   };
@@ -308,8 +309,11 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   // session-scoped sequence cursor; primed on first lookup from the durable
   // log and advanced in lock-step with allocateSequence so multiple writers
   // (ingress projection, session.addMessage) share one monotonic counter
-  // without re-reading every row on each append.
+  // without re-reading every row on each append. bounded with LRU eviction
+  // so a long-lived adapter does not retain entries for stale sessions.
   private eventSequenceBySession = new Map<string, number>();
+
+  private static readonly MAX_SEQUENCE_CACHE_ENTRIES = 10_000;
 
   private primeEventSequence(sessionId: string): number {
     const row = this.db
@@ -319,6 +323,17 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       )
       .get(sessionId) as { max_sequence: number | null } | undefined;
     return row?.max_sequence ?? 0;
+  }
+
+  private touchSequenceCache(sessionId: string, value: number): void {
+    // Map iteration order is insertion order; deleting before set keeps the
+    // touched session at the tail so the head is always the LRU candidate.
+    this.eventSequenceBySession.delete(sessionId);
+    this.eventSequenceBySession.set(sessionId, value);
+    if (this.eventSequenceBySession.size > SqliteStorageAdapter.MAX_SEQUENCE_CACHE_ENTRIES) {
+      const oldest = this.eventSequenceBySession.keys().next().value;
+      if (oldest !== undefined) this.eventSequenceBySession.delete(oldest);
+    }
   }
 
   eventLog = {
@@ -364,7 +379,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         current = this.primeEventSequence(sessionId);
       }
       const next = current + 1;
-      this.eventSequenceBySession.set(sessionId, next);
+      this.touchSequenceCache(sessionId, next);
       return next;
     },
   };
