@@ -1,12 +1,11 @@
 import { ChatAgent, AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
-import { initialize, Log, Storage } from "@openomni/session";
+import { initialize, Log } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
   ToolProxyProvider,
-  PlanToolProvider,
   SessionBridge,
   SystemToolProvider,
   TaskToolProvider,
@@ -14,11 +13,10 @@ import {
   buildToolCatalog,
   buildWorkerMiddleware,
   createWorkerSubagentRuntime,
-  runPlan,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
-import { createContextMiddleware, ContextAssembler } from "../context/index";
+import { createContextMiddleware } from "../context/index";
 
 const args = process.argv.slice(2);
 const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
@@ -65,175 +63,115 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
       server.notify("worker.run_started", { runId, sessionId });
 
       try {
-        if (request.mode === "direct") {
-          const messages = SessionBridge.buildDirectMessages(sessionId).filter(
-            (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
-              m.role === "user" || m.role === "assistant",
-          );
-          const workspaceRoot =
-            request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
-          const systemProvider = new SystemToolProvider(workspaceRoot);
+        const messages = SessionBridge.buildDirectMessages(sessionId).filter(
+          (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
+            m.role === "user" || m.role === "assistant",
+        );
+        const workspaceRoot =
+          request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
+        const systemProvider = new SystemToolProvider(workspaceRoot);
 
-          const mcpProxyProvider = ToolProxyProvider.create(
-            workerBootstrap?.toolCatalog ?? [],
-            async (toolName, toolArgs) => {
-              const raw = await server.call("worker.tool_call", {
-                runId,
-                sessionId,
-                callId: crypto.randomUUID(),
-                tool: toolName,
-                input: toolArgs,
-              });
-              return Tool.Result.parse(raw);
-            },
-          );
-
-          // toolsRef and catalogRef are filled after createExecutionToolContext so the subagent
-          // runtime can apply depth-based tool filtering at spawn time.
-          const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
-          const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
-          const agentDefinitionsRef: {
-            definitions?: Map<string, WorkerBootstrap.RuntimeAgentDefinition>;
-          } = {
-            definitions: new Map(
-              (workerBootstrap?.agents ?? []).map((agent) => [agent.name, agent]),
-            ),
-          };
-
-          const agentProvider = new AgentToolProvider({
-            subagentRuntime: createWorkerSubagentRuntime({
-              toolsRef,
-              catalogRef,
-              agentDefinitionsRef,
-              parentSessionId: sessionId,
-              parentPermissions: request.permissions,
-            }),
-            delegationContext: {
-              depth: 0,
-              maxDepth: 3,
-              visitedAgents: new Set([request.agentName ?? "dev"]),
-              parentAbort: new AbortController().signal,
-            },
-            backgroundManager,
-          });
-
-          const taskProvider = new TaskToolProvider();
-          const planProvider = new PlanToolProvider();
-          const todoProvider = new TodoToolProvider();
-
-          const systemTools = systemProvider.listTools();
-          const agentTools = agentProvider.listTools();
-          const proxyTools = mcpProxyProvider.listTools();
-          const taskTools = taskProvider.listTools();
-          const planTools = planProvider.listTools();
-          const todoTools = todoProvider.listTools();
-          const availableTools = [
-            ...systemTools,
-            ...agentTools,
-            ...proxyTools,
-            ...taskTools,
-            ...planTools,
-            ...todoTools,
-          ];
-          const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
-
-          toolsRef.tools = tools;
-          toolsRef.toolExecutor = toolExecutor;
-          catalogRef.catalog = buildToolCatalog([
-            { tools: systemTools, source: "system" },
-            { tools: agentTools, source: "agent" },
-            { tools: proxyTools, source: "mcp" },
-            { tools: taskTools, source: "system" },
-            { tools: planTools, source: "system" },
-            { tools: todoTools, source: "system" },
-          ]);
-
-          const agent = ChatAgent.create({
-            model: request.model,
-            systemPrompt: request.systemPrompt,
-            budget: request.budget,
-            tools,
-            toolExecutor,
-            middleware: [
-              createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
-              ...buildWorkerMiddleware({
-                permissions: request.permissions,
-                budget: request.budget,
-              }),
-            ],
-          });
-          const runResult = await agent.run({
-            messages,
-            ...(request.traceId
-              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
-              : {}),
-          });
-
-          server.notify("worker.run_completed", {
-            runId,
-            sessionId,
-            status: "succeeded",
-            output: runResult.text,
-          });
-
-          respond({
-            runId,
-            sessionId,
-            status: "succeeded",
-            output: runResult.text,
-            finishReason: runResult.finishReason,
-          });
-        } else {
-          const planWorkspaceRoot =
-            request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
-          const planSystemProvider = new SystemToolProvider(planWorkspaceRoot);
-          const planToolProvider = new PlanToolProvider();
-          const planAvailableTools = [
-            ...planSystemProvider.listTools(),
-            ...planToolProvider.listTools(),
-          ];
-          const { tools: planTools, toolExecutor: planToolExecutor } = createExecutionToolContext(
-            request,
-            planAvailableTools,
-          );
-          const goal = await SessionBridge.buildPlanGoal(sessionId);
-          const planSubAdapter = Storage.get().plan;
-          if (!planSubAdapter) {
-            throw new Error("Plan storage adapter is required for plan mode execution");
-          }
-          let planContext = "";
-          try {
-            planContext = ContextAssembler.assemble({
-              workspaceRoot: planWorkspaceRoot ?? process.cwd(),
+        const mcpProxyProvider = ToolProxyProvider.create(
+          workerBootstrap?.toolCatalog ?? [],
+          async (toolName, toolArgs) => {
+            const raw = await server.call("worker.tool_call", {
+              runId,
+              sessionId,
+              callId: crypto.randomUUID(),
+              tool: toolName,
+              input: toolArgs,
             });
-          } catch {
-            Log.warn("context assembly failed, continuing without context");
-          }
-          const planSystemPrompt = planContext
-            ? `${request.systemPrompt}\n\n${planContext}`
-            : request.systemPrompt;
-          const planResult = await runPlan(goal, {
-            model: request.model,
-            systemPrompt: planSystemPrompt,
-            planSubAdapter,
-            planId: request.runId,
-            budget: request.budget,
-            tools: planTools,
-            toolExecutor: planToolExecutor,
-            ...(request.traceId
-              ? { traceContext: { traceId: request.traceId, sessionId, runId } }
-              : {}),
-          });
+            return Tool.Result.parse(raw);
+          },
+        );
 
-          server.notify("worker.run_completed", { runId, sessionId, status: "succeeded" });
+        const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
+        const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
+        const agentDefinitionsRef: {
+          definitions?: Map<string, WorkerBootstrap.RuntimeAgentDefinition>;
+        } = {
+          definitions: new Map((workerBootstrap?.agents ?? []).map((agent) => [agent.name, agent])),
+        };
 
-          respond({
-            runId,
-            sessionId,
-            status: "succeeded",
-            output: JSON.stringify(planResult),
-          });
-        }
+        const agentProvider = new AgentToolProvider({
+          subagentRuntime: createWorkerSubagentRuntime({
+            toolsRef,
+            catalogRef,
+            agentDefinitionsRef,
+            parentSessionId: sessionId,
+            parentPermissions: request.permissions,
+          }),
+          delegationContext: {
+            depth: 0,
+            maxDepth: 3,
+            visitedAgents: new Set([request.agentName ?? "dev"]),
+            parentAbort: new AbortController().signal,
+          },
+          backgroundManager,
+        });
+
+        const taskProvider = new TaskToolProvider();
+        const todoProvider = new TodoToolProvider();
+
+        const systemTools = systemProvider.listTools();
+        const agentTools = agentProvider.listTools();
+        const proxyTools = mcpProxyProvider.listTools();
+        const taskTools = taskProvider.listTools();
+        const todoTools = todoProvider.listTools();
+        const availableTools = [
+          ...systemTools,
+          ...agentTools,
+          ...proxyTools,
+          ...taskTools,
+          ...todoTools,
+        ];
+        const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
+
+        toolsRef.tools = tools;
+        toolsRef.toolExecutor = toolExecutor;
+        catalogRef.catalog = buildToolCatalog([
+          { tools: systemTools, source: "system" },
+          { tools: agentTools, source: "agent" },
+          { tools: proxyTools, source: "mcp" },
+          { tools: taskTools, source: "system" },
+          { tools: todoTools, source: "system" },
+        ]);
+
+        const agent = ChatAgent.create({
+          model: request.model,
+          systemPrompt: request.systemPrompt,
+          budget: request.budget,
+          tools,
+          toolExecutor,
+          middleware: [
+            createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
+            ...buildWorkerMiddleware({
+              permissions: request.permissions,
+              budget: request.budget,
+            }),
+          ],
+        });
+        const runResult = await agent.run({
+          messages,
+          ...(request.traceId
+            ? { traceContext: { traceId: request.traceId, sessionId, runId } }
+            : {}),
+        });
+
+        server.notify("worker.run_completed", {
+          runId,
+          sessionId,
+          status: "succeeded",
+          output: runResult.text,
+        });
+
+        respond({
+          runId,
+          sessionId,
+          status: "succeeded",
+          output: runResult.text,
+          finishReason: runResult.finishReason,
+        });
       } catch (err) {
         server.notify("worker.run_completed", {
           runId,

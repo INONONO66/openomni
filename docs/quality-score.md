@@ -10,7 +10,7 @@ Last updated: 2026-05-01
 | session  | ⭐⭐⭐ (24 test files) | ⭐⭐ (Biome) | ⭐⭐⭐ (strict)            | ⭐⭐⭐ (stable)         | ⭐⭐⭐ (AGENTS.md current)     | **A-**  |
 | llm      | ⭐⭐⭐ (19 test files) | ⭐⭐ (Biome) | ⭐⭐ (noEmit)              | ⭐⭐ (evolving)         | ⭐⭐⭐ (AGENTS.md 52L)         | **B+**  |
 | agent    | ⭐⭐⭐ (41 test files) | ⭐⭐ (Biome) | ⭐⭐ (lint `any` warnings remain) | ⭐⭐ (evolving runtime) | ⭐⭐⭐ (AGENTS.md current) | **B+** |
-| openomni | ⭐⭐⭐ (47 test files) | ⭐⭐ (Biome) | ⭐⭐ (active lint debt)    | ⭐⭐ (active orchestration) | ⭐⭐ (Plan Mode decision pending) | **B** |
+| openomni | ⭐⭐⭐ (47 test files) | ⭐⭐ (Biome) | ⭐⭐ (active lint debt)    | ⭐⭐ (active orchestration) | ⭐⭐ (docs recently updated) | **B** |
 | coordinator | ⭐⭐ (12 test files) | ⭐⭐ (Biome) | ⭐⭐⭐ (strict) | ⭐⭐ (worker runtime evolving) | ⭐⭐ (metrics docs gap) | **B** |
 | server   | ⭐⭐ (23 test files) | ⭐⭐ (Biome) | ⭐⭐ (strict)              | ⭐⭐ (runtime host)      | ⭐⭐⭐ (AGENTS.md current)      | **B-**  |
 
@@ -32,6 +32,5 @@ Last updated: 2026-05-01
 - Some tests still use tautological assertions for no-throw or compile-time checks; convert them to behavioral assertions where possible.
 - `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts` is an empty orphan candidate.
 - `packages/openomni/src/storage/task-types.ts` is a backward-compat shim still used by a migration script.
-- Plan Mode remains active, but ADR-010 proposes removal. Avoid new Plan Mode investment until that decision is resolved.
 - persona workforce runtime contracts are documented but not implemented yet: self-loop kind, inbound authority policy, distilled writeback, persona lifecycle, and memory candidates
 - Biome configured (replaces ESLint + Prettier)

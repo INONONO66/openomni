@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { Guardrail } from "../guardrail/index.js";
 import { Tool } from "../tool/index.js";
-import type { Plan } from "../plan/index.js";
 
 const AgentToolConfigSchema = z.object({
   systemTools: z.array(z.string()).optional(),
@@ -34,13 +33,6 @@ export namespace Ingress {
     meta: z.record(z.unknown()).optional(),
   };
 
-  export const PlanEventSchema = z.object({
-    ...InboundEventBase,
-    mode: z.literal("plan"),
-    agent: AgentDefSchema,
-  });
-  export type PlanEvent = z.infer<typeof PlanEventSchema> & { agent: AgentDef };
-
   export const DirectEventSchema = z.object({
     ...InboundEventBase,
     mode: z.literal("direct"),
@@ -48,18 +40,13 @@ export namespace Ingress {
   });
   export type DirectEvent = z.infer<typeof DirectEventSchema> & { agent: AgentDef };
 
-  export const InboundEventSchema = z.discriminatedUnion("mode", [
-    PlanEventSchema,
-    DirectEventSchema,
-  ]);
-  export type InboundEvent = PlanEvent | DirectEvent;
+  export const InboundEventSchema = DirectEventSchema;
+  export type InboundEvent = DirectEvent;
 
   export type DirectResult = {
     output: string;
     finishReason: string;
   };
 
-  export type IngressResult =
-    | { mode: "plan"; sessionId: string; result: Plan.Result }
-    | { mode: "direct"; sessionId: string; result: DirectResult };
+  export type IngressResult = { mode: "direct"; sessionId: string; result: DirectResult };
 }

@@ -7,7 +7,6 @@ import { initialize, Bus, EventLogBridge, Log } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
-  PlanToolProvider,
   SystemToolProvider,
   TaskToolProvider,
   TodoToolProvider,
@@ -91,7 +90,6 @@ function createRoutingHandler(
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
   taskProvider?: TaskToolProvider,
-  planProvider?: PlanToolProvider,
   todoProvider?: TodoToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
@@ -100,7 +98,6 @@ function createRoutingHandler(
     mcpProvider,
     customProvider,
     taskProvider,
-    planProvider,
     todoProvider,
     defaultModel,
     workspaceRoot,
@@ -119,7 +116,6 @@ export async function main(): Promise<void> {
   const mcpProvider = new McpToolProvider();
   const customProvider = new CustomToolProvider();
   const taskProvider = new TaskToolProvider();
-  const planProvider = new PlanToolProvider();
   const todoProvider = new TodoToolProvider();
 
   const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
@@ -147,12 +143,7 @@ export async function main(): Promise<void> {
     Log.info("server running in coordinator mode");
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
-    const toolDispatcher = buildToolDispatcher([
-      mcpProvider,
-      taskProvider,
-      planProvider,
-      todoProvider,
-    ]);
+    const toolDispatcher = buildToolDispatcher([mcpProvider, taskProvider, todoProvider]);
     coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
     await coordinator.waitUntilReady();
     IngressEngine.setCoordinator(coordinator);
@@ -171,7 +162,6 @@ export async function main(): Promise<void> {
         { provider: model.providerID, id: model.id },
         customProvider,
         taskProvider,
-        planProvider,
         todoProvider,
       )
     : undefined;

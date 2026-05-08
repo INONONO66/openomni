@@ -11,8 +11,7 @@ Priority order:
 1. Keep docs current with code structure.
 2. Keep tests discoverable in both local and CI workflows.
 3. Remove compatibility shims only after all consumers are verified.
-4. Decide whether Plan Mode remains a runtime primitive before investing further in it.
-5. Strengthen security and recovery tests around tool execution, inbound authority, credentials, and persistence.
+4. Strengthen security and recovery tests around tool execution, inbound authority, credentials, and persistence.
 
 ## Source-of-truth hierarchy
 
@@ -25,7 +24,7 @@ Use this order when deciding where a concept belongs:
 | LLM provider behavior | `packages/llm/src/` | Auth, provider SDK wiring, transforms, token/cost tracking. |
 | Stateless agent execution | `packages/agent/src/core/` | No durable session lifecycle or storage ownership. |
 | Agent runtime helpers | `packages/agent/src/runtime/` | Messenger, registry, subagent/background tools, MCP client. |
-| Session-backed orchestration | `packages/openomni/src/` | Ingress, subagent runtime, execution runtime, Plan Mode while active. |
+| Session-backed orchestration | `packages/openomni/src/` | Ingress, subagent runtime, execution runtime. |
 | Multiprocess execution | `packages/coordinator/src/` | Worker pool, IPC, recovery, credentials, non-interactive permissions. |
 | Product-facing host | `apps/server/src/` | Channels, bootstrap, app-local agents, ingress bridge. |
 | Linux daemon packaging | `packaging/` | Systemd user-service scripts and docs. |
@@ -42,24 +41,10 @@ Known watchpoints:
 
 | Item | Current status | Rule |
 | --- | --- | --- |
-| `apps/server/src/ingress/mode.ts` | Duplicates the `direct | plan` mode union in a small app-local helper. | Keep small, or derive from `Ingress.InboundEvent["mode"]` if it grows. |
 | `apps/server/src/agents/types.ts` | Server-local agent definition with trigger metadata. | Keep app-local unless reused outside `apps/server`; promote persistent persona contracts to `protocol`. |
 | `packages/openomni/src/storage/task-types.ts` | Backward-compat task re-export shim. | Remove only after migration scripts import `Task` from `@openomni/protocol` directly. |
 | `packages/agent/src/core/middleware/compat.ts` | Legacy hooks/stepGuard bridge. | No new callers; remove after downstream migration. |
 | Removed CLI auth/config flow | `apps/cli` has been removed. | Keep auth/config setup in proxy/provider configuration or server/operator flows; do not reintroduce a CLI without a new ADR. |
-
-## Plan Mode policy
-
-Plan Mode is still active in code and docs, but [ADR-010](./design-decisions/010-remove-plan-mode-draft.md) proposes removing it.
-
-Until ADR-010 is accepted or rejected:
-
-- Do not add new product surface area to Plan Mode.
-- Keep Plan Mode working only for compatibility and existing tests.
-- Prefer new orchestration work in the persona workforce direction: controlled inbound authority, self-loop sessions, subagent runtime, distilled writeback, and memory candidates.
-- Any Plan Mode change must say whether it preserves compatibility or advances/removes the feature.
-
-If ADR-010 is accepted, remove Plan Mode code, tests, and docs in one coordinated change. If rejected, update the ADR index and document Plan Mode as a supported runtime primitive with clear ownership.
 
 ## Test matrix expectations
 
@@ -121,4 +106,3 @@ Required updates by change type:
 | Medium | Delete empty `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts`. | Strong orphan candidate. |
 | Medium | Replace `packages/openomni/src/storage/task-types.ts` consumers with `@openomni/protocol`. | Removes compatibility shim. |
 | Medium | Reduce lint warnings, especially non-null assertions and `any`. | Keeps type-safety rules credible. |
-| Medium | Decide ADR-010. | Aligns Plan Mode code, docs, and future investment. |

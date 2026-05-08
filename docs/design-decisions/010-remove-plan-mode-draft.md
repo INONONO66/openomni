@@ -1,7 +1,7 @@
-# ADR-010: Remove Plan Mode (DRAFT)
+# ADR-010: Remove Plan Mode
 
-**Status**: Draft
-**Date**: 2026-05-01
+**Status**: Accepted
+**Date**: 2026-05-08
 
 ## Context
 
@@ -11,13 +11,14 @@ The persona workforce direction (ADR-005, `docs/persona-workforce.md`) supersede
 
 ## Decision
 
-Remove plan mode entirely from the codebase.
+Remove plan mode entirely from the codebase. The implementation, tests, and documentation have been deleted or updated so `direct` is the only ingress mode.
 
 ## Scope of Removal
 
 ### Protocol layer (`packages/protocol`)
 - `src/plan/index.ts` — `Plan`, `PlanStep`, `PlanResult` schemas
 - Remove `plan` from protocol barrel export
+- `src/gate/` — gate contracts tied to plan validation
 
 ### Openomni layer (`packages/openomni`)
 - `src/plan/` directory (4 files):
@@ -42,6 +43,7 @@ Remove plan mode entirely from the codebase.
 - `AGENTS.md` — remove plan mode references from mode table and WHERE TO LOOK
 - `README.md` — remove plan mode from ingress mode table
 - `docs/persona-runtime-roadmap.md` — update if referencing plan mode
+- Package and domain docs — remove plan tools, plan storage, and plan handler references
 
 ### Ingress mode
 - Remove `"plan"` from `IngressMode` discriminated union
@@ -56,16 +58,6 @@ No external consumers. Plan mode was never exposed as a public API — it was tr
 - **Low**: No production users depend on plan mode
 - **Medium**: Some plan-related test infrastructure is interleaved with ingress tests — careful deletion needed
 
-## Checklist (for implementation PR)
+## Outcome
 
-- [ ] Delete `packages/protocol/src/plan/`
-- [ ] Delete `packages/openomni/src/plan/`
-- [ ] Delete `packages/openomni/src/execution-runtime/tool/plan/`
-- [ ] Remove `"plan"` case from `IngressEngine` mode switch
-- [ ] Remove `handlePlan` from ingress handlers
-- [ ] Remove `Storage.PlanSubAdapter`
-- [ ] Delete plan-related test files
-- [ ] Update `AGENTS.md`, `README.md` mode tables
-- [ ] `bun run check-types` passes
-- [ ] `bun run test` passes
-- [ ] `bunx biome check .` clean
+Plan mode code, tests, protocol contracts, storage adapters, tool providers, and documentation have been removed. `Ingress.InboundEvent` and `Execution.Request.mode` now accept only `"direct"`.

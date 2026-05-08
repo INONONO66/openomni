@@ -1,4 +1,7 @@
-import type { Plan } from "@openomni/protocol";
+export interface DAGStep {
+  readonly stepId: string;
+  readonly dependsOn: readonly string[];
+}
 
 export interface DAGStructure {
   nodes: Set<string>;
@@ -10,7 +13,7 @@ export interface DAGStructure {
 type AcyclicResult = { valid: true } | { valid: false; cycle: string[] };
 
 export namespace DAG {
-  export function build(steps: Plan.Step[]): DAGStructure {
+  export function build(steps: DAGStep[]): DAGStructure {
     const nodes = new Set<string>();
     const edges = new Map<string, Set<string>>();
     const reverseEdges = new Map<string, Set<string>>();

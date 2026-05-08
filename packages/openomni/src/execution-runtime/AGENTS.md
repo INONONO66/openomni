@@ -1,6 +1,6 @@
 # execution-runtime/
 
-Tool system, workspace safety, and worker middleware for `@openomni/openomni`. This domain is used by server workers and subagent execution, but it must stay independent from high-level ingress and planning policy.
+Tool system, workspace safety, and worker middleware for `@openomni/openomni`. This domain is used by server workers and subagent execution, but it must stay independent from high-level orchestration policy.
 
 ## Files
 
@@ -15,7 +15,7 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
 - Agent delegation tools live under `tool/agent/`.
-- Task, plan, and todo tools live under their own provider directories and read persistence through `@openomni/session` storage sub-adapters.
+- Task and todo tools live under their own provider directories and read persistence through `@openomni/session` storage sub-adapters.
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 ## Safety rules
@@ -29,4 +29,3 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 ## Cleanup notes
 
 - `tool/mcp-proxy-provider.ts` is currently an empty orphan candidate. Delete it once no references exist.
-- Plan tools remain while Plan Mode is active. Avoid expanding Plan Mode until ADR-010 is accepted or rejected.

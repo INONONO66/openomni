@@ -6,7 +6,7 @@ import { AgentProfile } from "../agent/index.js";
 const requestSchema = z.object({
   runId: z.string(),
   sessionId: z.string(),
-  mode: z.enum(["direct", "plan"]),
+  mode: z.literal("direct"),
   prompt: z.string(),
   model: z.object({
     provider: z.string(),

@@ -103,20 +103,20 @@ Each package may depend only on packages to its LEFT. Packages may skip intermed
 When a namespace's primary type conflicts with the namespace name, use declaration merging:
 
 ```typescript
-export namespace Plan {
+export namespace Todo {
   export const Schema = z.object({...});
-  export const StepSchema = z.object({...});
-  export type Step = z.infer<typeof StepSchema>;
+  export const ItemSchema = z.object({...});
+  export type Item = z.infer<typeof ItemSchema>;
 }
-export type Plan = z.infer<typeof Plan.Schema>;
+export type Todo = z.infer<typeof Todo.Schema>;
 ```
 
-This allows `Plan` to work as both a namespace (`Plan.Schema`, `Plan.Step`) and a type (`const p: Plan = ...`).
+This allows `Todo` to work as both a namespace (`Todo.Schema`, `Todo.Item`) and a type (`const todo: Todo = ...`).
 
 ## 9. Runtime Ownership
 
 - `agent` owns stateless execution behavior only. It may use `session` for sanctioned observability primitives but must not create sessions, mutate durable conversation state, or own recovery.
-- `openomni` owns session-backed orchestration: ingress, subagent runtime, execution runtime, and Plan Mode while it remains active.
+- `openomni` owns session-backed orchestration: ingress, subagent runtime, and execution runtime.
 - `coordinator` owns multiprocess execution: worker pools, IPC, recovery, credential injection, and non-interactive permission policy.
 - `apps/server` wires runtime packages to external surfaces. Host-specific payload types may live there, but reusable contracts must move down to `protocol`.
 - `apps/cli` has been removed. Channel adapters, conversation runtime, and operator-facing server setup belong in `apps/server` or documented server/operator flows.

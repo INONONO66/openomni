@@ -5,15 +5,12 @@ import type {
   NativeTool,
   SystemToolProvider,
   TaskToolProvider,
-  PlanToolProvider,
   TodoToolProvider,
 } from "@openomni/openomni";
 import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
-import { detectMode } from "./mode";
-
 const fallbackModel = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
 export interface BridgeDeps {
@@ -22,7 +19,6 @@ export interface BridgeDeps {
   mcpProvider: McpToolProvider;
   customProvider?: { listTools(): NativeTool[] };
   taskProvider?: TaskToolProvider;
-  planProvider?: PlanToolProvider;
   todoProvider?: TodoToolProvider;
   defaultModel?: { provider: string; id: string };
   workspaceRoot: string;
@@ -53,9 +49,6 @@ function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[]
       : []),
     ...(deps.taskProvider
       ? [{ tools: deps.taskProvider.listTools(), source: "system" as const }]
-      : []),
-    ...(deps.planProvider
-      ? [{ tools: deps.planProvider.listTools(), source: "system" as const }]
       : []),
     ...(deps.todoProvider
       ? [{ tools: deps.todoProvider.listTools(), source: "system" as const }]
@@ -115,17 +108,8 @@ export function buildInboundEvent(
   agentName: string,
   deps: BridgeDeps,
 ): Ingress.InboundEvent {
-  const mode = detectMode(message.text);
-  const base = createBaseEvent(message, mode.text);
+  const base = createBaseEvent(message, message.text);
   const agent = buildAgentDef(agentName, deps);
-
-  if (mode.mode === "plan") {
-    return {
-      ...base,
-      mode: "plan",
-      agent,
-    };
-  }
 
   return {
     ...base,

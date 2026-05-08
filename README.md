@@ -91,7 +91,7 @@ openomni/
 │   ├── session/         # Sessions, messages, storage, bus, event log, worker runs
 │   ├── llm/             # Model providers, auth, streaming, retry, token/cost tracking
 │   ├── agent/           # Stateless ChatAgent primitive, middleware, messenger, registry, tools, MCP
-│   ├── openomni/        # Ingress, plan mode, DAG, subagent runtime, background manager, execution runtime
+│   ├── openomni/        # Ingress, DAG, subagent runtime, background manager, execution runtime
 │   └── coordinator/     # Worker pool, IPC, recovery, credentials, tool-permission policy
 ```
 
@@ -112,14 +112,13 @@ Surface event
   → message projection
   → CoordinatorLike.dispatch
   → worker execution runtime
-  → ChatAgent / PlanAgent / SubagentRuntime
+  → ChatAgent / SubagentRuntime
   → result integration
 ```
 
-Ingress currently supports two execution modes:
+Ingress supports a single execution mode:
 
 - **`direct`** — dispatches a persona run against session history and returns the response.
-- **`plan`** — runs `PlanAgent.create()` with plan tools and stores a `{ planId }` reference in `Storage.PlanSubAdapter`.
 
 ## Documentation Map
 
@@ -127,7 +126,7 @@ Ingress currently supports two execution modes:
 - [Persona Runtime Roadmap](docs/persona-runtime-roadmap.md) — staged implementation path for authority, self-loop sessions, persona lifecycle, SNS, and memory readiness.
 - [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) — accepted decision for the persona workforce runtime direction.
 - [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
-- [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, Plan Mode, and cleanup priorities.
+- [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, and cleanup priorities.
 - [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
 - [Quality Score](docs/quality-score.md) — package quality status and known technical debt.
 - [Daemon Packaging](packaging/README.md) — Linux systemd user-service installation and operations notes.

@@ -79,21 +79,11 @@ export namespace IngressEngine {
       activeTrace,
     );
 
-    switch (preRun.mode) {
-      case "plan":
-        return IngressHandlers.handlePlan({
-          sessionId: session.id,
-          event: inboundEvent,
-          coordinator: preRun.coordinator,
-          traceContext: activeTrace,
-        });
-      case "direct":
-        return IngressHandlers.handleDirect({
-          sessionId: session.id,
-          event: inboundEvent,
-          coordinator: preRun.coordinator,
-          traceContext: activeTrace,
-        });
-    }
+    return IngressHandlers.handleDirect({
+      sessionId: session.id,
+      event: inboundEvent,
+      coordinator: preRun.coordinator,
+      traceContext: activeTrace,
+    });
   }
 }

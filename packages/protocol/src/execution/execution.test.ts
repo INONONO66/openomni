@@ -78,8 +78,8 @@ describe("Execution", () => {
     const request: Execution.Request = {
       runId: "run-789",
       sessionId: "session-012",
-      mode: "plan",
-      prompt: "Create a plan",
+      mode: "direct",
+      prompt: "Execute a task",
       model: {
         provider: "openai",
         id: "gpt-4",
@@ -88,7 +88,7 @@ describe("Execution", () => {
 
     const parsed = Execution.Request.parse(request);
     expect(parsed.runId).toBe("run-789");
-    expect(parsed.mode).toBe("plan");
+    expect(parsed.mode).toBe("direct");
     expect(parsed.tools).toBeUndefined();
   });
 

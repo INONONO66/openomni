@@ -52,18 +52,9 @@ describe("local-runner wiring", () => {
     expect(localRunnerSrc).toContain("../context/index");
   });
 
-  it("imports ContextAssembler from context/index", () => {
-    expect(localRunnerSrc).toContain("ContextAssembler");
-  });
-
-  it("uses createContextMiddleware in runDirect middleware array", () => {
+  it("uses createContextMiddleware in middleware array", () => {
     expect(localRunnerSrc).toContain("createContextMiddleware(");
     expect(localRunnerSrc).toContain("...buildWorkerMiddleware(");
-  });
-
-  it("assembles plan context in executePlan", () => {
-    expect(localRunnerSrc).toContain("ContextAssembler.assemble(");
-    expect(localRunnerSrc).toContain("planSystemPrompt");
   });
 });
 
@@ -75,18 +66,9 @@ describe("worker-entry wiring", () => {
     expect(workerEntrySrc).toContain("../context/index");
   });
 
-  it("imports ContextAssembler from context/index", () => {
-    expect(workerEntrySrc).toContain("ContextAssembler");
-  });
-
-  it("uses createContextMiddleware in direct mode middleware array", () => {
+  it("uses createContextMiddleware in middleware array", () => {
     expect(workerEntrySrc).toContain("createContextMiddleware(");
     expect(workerEntrySrc).toContain("...buildWorkerMiddleware(");
-  });
-
-  it("assembles plan context in plan mode", () => {
-    expect(workerEntrySrc).toContain("ContextAssembler.assemble(");
-    expect(workerEntrySrc).toContain("planSystemPrompt");
   });
 });
 
