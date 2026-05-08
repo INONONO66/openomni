@@ -1,6 +1,8 @@
 # Architecture Decision Records (ADR)
 
 > Design decisions that shaped this project. Each record captures **why** a decision was made, not just what.
+>
+> For the overarching design principles, see [Design Philosophy](../design-philosophy.md).
 
 ## Format
 
@@ -15,8 +17,7 @@ Each ADR follows: Context → Decision → Rationale → Consequences.
 | [003](./003-layered-package-architecture.md) | Strict layered package dependency direction      | Accepted   |
 | [004](./004-stateless-chat-agent.md)         | Stateless ChatAgent separated from orchestration | Accepted   |
 | [005](./005-persona-workforce-runtime.md)    | Persona workforce runtime direction              | Accepted   |
-| [009](./009-persistent-subagent-team-orchestration-draft.md) | Persistent subagent sessions (partial ship) | Superseded |
-| [010](./010-remove-plan-mode-draft.md)       | Remove Plan Mode                                 | Accepted   |
+| [006](./006-persistent-subagent-team-orchestration.md) | Persistent subagent sessions (partial ship) | Superseded |
 
 ## Adding a New ADR
 

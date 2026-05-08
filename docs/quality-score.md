@@ -27,7 +27,6 @@ Last updated: 2026-05-01
 ## Known Tech Debt
 
 - Root/package docs recently drifted around protocol domain counts, LLM paths, and server tool-provider locations; keep AGENTS maps updated with structure changes.
-- `apps/cli` has been removed. Auth/config setup now relies on proxy/provider configuration or server/operator flows.
 - `apps/server` tests are run directly in CI; keep local test commands aligned with CI when adding app workspaces.
 - Some tests still use tautological assertions for no-throw or compile-time checks; convert them to behavioral assertions where possible.
 - `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts` is an empty orphan candidate.
