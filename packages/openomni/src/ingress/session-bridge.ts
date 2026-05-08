@@ -2,6 +2,9 @@ import type { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { createIngressLedger, summarizeText } from "./event-log-envelope";
 
+// legacy marker from removed plan mode; filter from history to avoid leaking into model input
+const LEGACY_PLAN_MARKER = "__OPENOMNI_PLANID__";
+
 function createAssistantMessage(
   sessionId: string,
   model: { provider: string; id: string },
@@ -36,7 +39,7 @@ export namespace SessionBridge {
     for (const message of messages) {
       const parts = Session.getParts(message.id);
       for (const part of parts) {
-        if (part.type === "text") {
+        if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
           result.push({ role: message.role, content: part.text });
         }
       }
