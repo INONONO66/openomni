@@ -3,9 +3,11 @@
 
 ## OVERVIEW
 
-OpenOmni — personal AI workforce infrastructure. The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
+OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) for full rationale.
 
-Product direction lives in `docs/persona-workforce.md`; the staged implementation path is `docs/persona-runtime-roadmap.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
+The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
+
+Product direction lives in `docs/persona-workforce.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
 
 ## STRUCTURE
 
@@ -76,7 +78,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
 | Persona workforce direction | `docs/persona-workforce.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Main Persona, Sub Personas, self-loop sessions, controlled inbound authority |
-| Persona runtime roadmap | `docs/persona-runtime-roadmap.md` | Target contracts and staged implementation plan |
+| Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
 ## CONVENTIONS
 
@@ -132,7 +134,6 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 
 - README.md describes product direction, project architecture, dependency graph, and getting started.
 - `packages/protocol` publishes built `dist/` artifacts (`main: ./dist/index.js`). Other packages point `main` at source (`./src/index.ts`) for Bun's native TS support.
-- `apps/cli` was removed. Auth/config setup is now expected to use proxy/provider configuration or server/operator flows rather than a local login command.
 - Lint + format via Biome (`biome.json`). No ESLint.
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.

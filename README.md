@@ -6,6 +6,18 @@
 
 OpenOmni is a runtime for managing AI personas as a personal workforce. The user talks primarily to one Main Persona. That Main Persona understands the user's goals, decides what should be handled directly, delegates specialized work to Sub Personas, and keeps the original user-facing session clean by isolating complex internal work in separate sessions.
 
+## Design Philosophy
+
+OpenOmni is built on the premise that agent capability is no longer the bottleneck — reliability is. Models can research, draft, schedule, and execute. What they cannot do reliably is verify their own work, accumulate evidence from past executions, or operate within constraints they cannot circumvent.
+
+Three principles guide every design decision:
+
+- **Experience is judgment.** Agent decisions are grounded in accumulated outcome evidence, not in pattern-matching from training data. Operational knowledge shapes strategy; outcome evidence grounds truth.
+- **Structure determines behavior.** Agent capabilities are bounded by schemas and guardrails, not by instructions. The same structure that constrains agents also serves as their map of the system — enabling self-extension without code changes.
+- **Execution and judgment are separate concerns.** The agent that performed the work does not evaluate it. Structural checks are deterministic. Semantic evaluation happens in an independent context.
+
+→ [Design Philosophy](docs/design-philosophy.md)
+
 ## Product Model
 
 ```txt
@@ -122,13 +134,13 @@ Ingress supports a single execution mode:
 
 ## Documentation Map
 
+- [Design Philosophy](docs/design-philosophy.md) — why this project exists and the principles behind its design.
 - [Persona Workforce Direction](docs/persona-workforce.md) — product model, runtime concepts, persona lifecycle, and gaps.
-- [Persona Runtime Roadmap](docs/persona-runtime-roadmap.md) — staged implementation path for authority, self-loop sessions, persona lifecycle, SNS, and memory readiness.
-- [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) — accepted decision for the persona workforce runtime direction.
 - [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
 - [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, and cleanup priorities.
 - [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
 - [Quality Score](docs/quality-score.md) — package quality status and known technical debt.
+- [Architecture Decision Records](docs/design-decisions/index.md) — design decisions that shaped this project.
 - [Daemon Packaging](packaging/README.md) — Linux systemd user-service installation and operations notes.
 
 ## Development
