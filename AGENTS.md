@@ -26,7 +26,7 @@ openomni/
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
 │   │       └── mcp/            # McpClient
-│   ├── openomni/        # Orchestration: Plan mode, DAG, Ingress, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
+│   ├── openomni/        # Orchestration: DAG, Ingress, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
 │   └── coordinator/     # Multiprocess execution coordinator: worker pool, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
@@ -50,7 +50,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Add middleware hook timing | `packages/protocol/src/hook/index.ts` | 9 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
-| Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `plan`, `todo`) |
+| Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `todo`) |
 | Session event log | `packages/session/src/event-log/` | `EventLog.append/replay/listIncomplete/markComplete` |
 | Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
 | Worker run records (subagent) | `packages/session/src/worker-run/` | Event-sourced via `Storage.Adapter.eventLog` |
@@ -65,7 +65,6 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
 | Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
-| Plan Mode (PlanAgent) | `packages/openomni/src/plan/` | `runPlan()` → `PlanAgent.create()` (tool-based with `plan_*` tools, stores to `Storage.PlanSubAdapter`) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
 | Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session resolve → project → mode dispatch |
@@ -73,8 +72,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Coordinator (worker pool) | `packages/coordinator/src/worker-pool/` | Worker routing, supervision, session-tree affinity routing |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
-| Plan schemas | `packages/protocol/src/plan/` | `Plan`, `PlanStep`, `PlanResult` |
-| Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent/task/plan/todo providers |
+| Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent/task/todo providers |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
 | Persona workforce direction | `docs/persona-workforce.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Main Persona, Sub Personas, self-loop sessions, controlled inbound authority |
@@ -88,12 +86,7 @@ Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object
 
 ## MODES
 
-Ingress still supports two execution modes in code, but Plan Mode is compatibility-only while ADR-010 remains draft.
-
-| Mode | Trigger | Handler | Policy |
-| --- | --- | --- | --- |
-| `direct` | Default (no prefix) | `handleDirect` → `CoordinatorLike.dispatch()` → worker execution | Primary supported path |
-| `plan` | `/plan` prefix | `handlePlan` → `CoordinatorLike.dispatch()` → `runPlan()` → `PlanAgent.create()` | Compatibility only while ADR-010 is pending; do not add new product surface |
+Ingress supports a single execution mode: `direct`. All inbound events dispatch through `handleDirect` to the coordinator.
 
 Target direction: the user and Main Persona may submit new inbound work; ordinary Sub Personas cannot create new top-level inbound work unless explicitly granted manager authority.
 
@@ -145,8 +138,6 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
 - `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
-- `packages/openomni` orchestrates plans, ingress, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
+- `packages/openomni` orchestrates ingress, DAG utilities, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
 - `packages/coordinator` owns multiprocess execution: worker pool lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
-- **Plan Mode** (`PlanAgent`) remains implemented in `packages/openomni/src/plan/` for compatibility while ADR-010 is pending. Avoid new Plan Mode investment unless the change explicitly preserves or removes the feature.
-- Plan protocol types live in `packages/protocol/src/plan/` — `Plan`, `PlanStep`, `PlanResult`.
 - Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.

@@ -7,12 +7,7 @@ import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
 
 function toResponseText(result: Ingress.IngressResult): string {
-  switch (result.mode) {
-    case "direct":
-      return result.result.output || "(no response)";
-    case "plan":
-      return `Plan generated: ${result.result.planId}`;
-  }
+  return result.result.output || "(no response)";
 }
 
 async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps): Promise<string> {

@@ -16,7 +16,7 @@ Each ADR follows: Context → Decision → Rationale → Consequences.
 | [004](./004-stateless-chat-agent.md)         | Stateless ChatAgent separated from orchestration | Accepted   |
 | [005](./005-persona-workforce-runtime.md)    | Persona workforce runtime direction              | Accepted   |
 | [009](./009-persistent-subagent-team-orchestration-draft.md) | Persistent subagent sessions (partial ship) | Superseded |
-| [010](./010-remove-plan-mode-draft.md)       | Remove Plan Mode                                 | Draft      |
+| [010](./010-remove-plan-mode-draft.md)       | Remove Plan Mode                                 | Accepted   |
 
 ## Adding a New ADR
 

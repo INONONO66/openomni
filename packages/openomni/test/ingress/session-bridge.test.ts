@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { ExecutionEvent, Message, Plan } from "@openomni/protocol";
+import type { ExecutionEvent, Message } from "@openomni/protocol";
 import { EventLog, Session, Storage } from "@openomni/session";
 import { SessionBridge } from "../../src/ingress/session-bridge";
 
@@ -64,29 +64,6 @@ function addAssistantMessage(sessionId: string, text: string): void {
   Session.addPart(message.id, part);
 }
 
-function createTestPlan(): Plan {
-  return {
-    planId: "plan-1",
-    goal: "Build an API",
-    steps: [
-      {
-        stepId: "s1",
-        description: "Design routes",
-        expectedOutput: "Route map",
-        dependsOn: [],
-      },
-      {
-        stepId: "s2",
-        description: "Implement handlers",
-        expectedOutput: "Working endpoints",
-        dependsOn: ["s1"],
-      },
-    ],
-    createdAt: new Date("2025-01-15T10:00:00Z"),
-    version: 1,
-  };
-}
-
 async function replayEvents(sessionId: string): Promise<ExecutionEvent[]> {
   const events: ExecutionEvent[] = [];
   for await (const event of EventLog.replay(sessionId)) events.push(event);
@@ -123,155 +100,13 @@ function expectPayload(event: ExecutionEvent.MirroredBusEvent): Record<string, u
   return Object.fromEntries(Object.entries(event.payload));
 }
 
-async function expectNoPlan(sessionId: string): Promise<void> {
-  try {
-    await SessionBridge.extractPlan(sessionId);
-    throw new Error("Expected extractPlan to reject");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    expect(message).toMatch(/No plan found in session/);
-  }
-}
-
 describe("SessionBridge", () => {
   let sessionId: string;
-
-  function getPlanAdapter() {
-    const adapter = Storage.get().plan;
-    if (!adapter) throw new Error("Plan storage adapter is required for tests");
-    return adapter;
-  }
 
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
     sessionId = createTestSession();
-  });
-
-  describe("storePlanResult + extractPlan round-trip", () => {
-    it("should store and extract Plan with createdAt as Date", async () => {
-      const plan = createTestPlan();
-      getPlanAdapter().write(plan.planId, JSON.stringify(plan));
-      const planResult: Plan.Result = { planId: plan.planId };
-
-      SessionBridge.storePlanResult(sessionId, planResult, TEST_MODEL);
-
-      const extracted = await SessionBridge.extractPlan(sessionId);
-
-      expect(extracted.planId).toBe(plan.planId);
-      expect(extracted.goal).toBe(plan.goal);
-      expect(extracted.steps).toHaveLength(2);
-      expect(extracted.steps[0].stepId).toBe("s1");
-      expect(extracted.steps[1].dependsOn).toEqual(["s1"]);
-      expect(extracted.createdAt).toBeInstanceOf(Date);
-      expect(extracted.createdAt.toISOString()).toBe(plan.createdAt.toISOString());
-      expect(extracted.version).toBe(1);
-    });
-
-    it("should write linked EventLog envelopes for plan result writeback", async () => {
-      const plan = createTestPlan();
-      getPlanAdapter().write(plan.planId, JSON.stringify(plan));
-
-      SessionBridge.storePlanResult(sessionId, { planId: plan.planId }, TEST_MODEL);
-
-      const messages = Session.getMessages(sessionId);
-      const message = messages[0] as Message.AssistantMessage;
-      const part = Session.getParts(message.id)[0] as Message.TextPart;
-      const events = await replayEvents(sessionId);
-
-      expect(events).toHaveLength(5);
-      expect(events.map((row) => row.sequence)).toEqual([1, 2, 3, 4, 5]);
-      expect(events.every((row) => row.visibility === "internal")).toBe(true);
-
-      const writebackEvents = filterBusEvents(events, "ingress.writeback.");
-      expect(writebackEvents.map((row) => row.name)).toEqual([
-        "ingress.writeback.plan_result",
-        "ingress.writeback.message.write",
-        "ingress.writeback.part.write",
-      ]);
-
-      const writeback = expectBusEvent(writebackEvents[0], "ingress.writeback.plan_result");
-      const messageWrite = expectBusEvent(writebackEvents[1], "ingress.writeback.message.write");
-      const partWrite = expectBusEvent(writebackEvents[2], "ingress.writeback.part.write");
-      expect(messageWrite.parentActionId).toBe(writeback.actionId);
-      expect(partWrite.parentActionId).toBe(messageWrite.actionId);
-
-      const sessionMessage = findBusEvent(events, "session.message.added");
-      const sessionPart = findBusEvent(events, "session.part.added");
-      expect(sessionPart.parentActionId).toBe(sessionMessage.actionId);
-      expect(expectPayload(sessionMessage)).toMatchObject({
-        sessionId,
-        messageId: message.id,
-        role: "assistant",
-        status: "completed",
-        providerId: "anthropic",
-        modelId: "claude-3-haiku",
-      });
-      expect(expectPayload(sessionPart)).toMatchObject({
-        sessionId,
-        messageId: message.id,
-        partMessageId: message.id,
-        partId: part.id,
-        partType: "text",
-      });
-      expect(expectPayload(writeback)).toMatchObject({
-        sessionId,
-        mode: "plan",
-        source: "session-bridge",
-        messageId: message.id,
-        partId: part.id,
-        role: "assistant",
-        planId: plan.planId,
-        marker: "__OPENOMNI_PLANID__",
-      });
-      expect(part.text).toBe(`__OPENOMNI_PLANID__${plan.planId}`);
-    });
-  });
-
-  describe("extractPlan", () => {
-    it("should throw Error with 'No plan' when session is empty", async () => {
-      await expectNoPlan(sessionId);
-    });
-
-    it("should throw Error with 'No plan' when session has only user messages", async () => {
-      addUserMessage(sessionId, "Hello");
-      addUserMessage(sessionId, "Build me something");
-
-      await expectNoPlan(sessionId);
-    });
-
-    it("should ignore plan marker in user messages (spoofing prevention)", async () => {
-      addUserMessage(sessionId, "__OPENOMNI_PLANID__fake-plan-id");
-
-      await expectNoPlan(sessionId);
-    });
-  });
-
-  describe("buildPlanGoal", () => {
-    it("should return latest user message text when no plan exists", async () => {
-      addUserMessage(sessionId, "Build me an API gateway");
-
-      const goal = await SessionBridge.buildPlanGoal(sessionId);
-
-      expect(goal).toBe("Build me an API gateway");
-    });
-
-    it("should include 'Previous plan:' and 'User feedback:' when plan + feedback exist", async () => {
-      addUserMessage(sessionId, "Build me an API");
-
-      const plan = createTestPlan();
-      await getPlanAdapter().write(plan.planId, JSON.stringify(plan));
-      SessionBridge.storePlanResult(sessionId, { planId: plan.planId }, TEST_MODEL);
-
-      addUserMessage(sessionId, "Add authentication to the plan");
-
-      const goal = await SessionBridge.buildPlanGoal(sessionId);
-
-      expect(goal).toContain("Previous plan:");
-      expect(goal).toContain("User feedback:");
-      expect(goal).toContain("Add authentication to the plan");
-      expect(goal).toContain(plan.planId);
-    });
   });
 
   describe("buildDirectMessages", () => {
@@ -293,18 +128,6 @@ describe("SessionBridge", () => {
     it("should return empty array for session with no messages", () => {
       const messages = SessionBridge.buildDirectMessages(sessionId);
       expect(messages).toHaveLength(0);
-    });
-
-    it("should exclude plan-id marker parts from direct messages", () => {
-      addUserMessage(sessionId, "Hello");
-      SessionBridge.storePlanResult(sessionId, { planId: "plan-1" }, TEST_MODEL);
-      addUserMessage(sessionId, "Continue chat");
-
-      const messages = SessionBridge.buildDirectMessages(sessionId);
-
-      expect(messages).toHaveLength(2);
-      expect(messages[0]).toEqual({ role: "user", content: "Hello" });
-      expect(messages[1]).toEqual({ role: "user", content: "Continue chat" });
     });
   });
 

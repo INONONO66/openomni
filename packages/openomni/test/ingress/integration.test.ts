@@ -41,49 +41,7 @@ beforeEach(() => {
   });
 });
 
-function enqueuePlan(planId: string): void {
-  testState.responseQueue.push(JSON.stringify({ planId }));
-}
-
 describe("IngressEngine integration pipeline", () => {
-  describe("plan -> re-plan lifecycle", () => {
-    it("reuses session and returns planId reference", async () => {
-      enqueuePlan("plan-1");
-      enqueuePlan("plan-2");
-
-      const first = await IngressEngine.ingest({
-        id: "evt-plan-1",
-        mode: "plan",
-        surface: "tui",
-        workspace: "/project",
-        payload: "Build a REST API",
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      });
-
-      expect(first.mode).toBe("plan");
-      if (first.mode !== "plan") throw new Error("Expected plan mode result");
-      expect(first.result.planId).toBe("plan-1");
-
-      const second = await IngressEngine.ingest({
-        id: "evt-plan-2",
-        mode: "plan",
-        surface: "tui",
-        workspace: "/project",
-        payload: "Add auth to step 2",
-        agent: {
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        },
-      });
-
-      expect(second.mode).toBe("plan");
-      if (second.mode !== "plan") throw new Error("Expected plan mode result");
-      expect(second.result.planId).toBe("plan-2");
-      expect(first.sessionId).toBe(second.sessionId);
-    });
-  });
-
   describe("direct mode conversation history", () => {
     it("sends accumulated user history on second turn", async () => {
       testState.responseQueue.push("Hi there");
@@ -120,16 +78,16 @@ describe("IngressEngine integration pipeline", () => {
   });
 
   describe("session isolation", () => {
-    it("does not leak plan context across different surface keys", async () => {
-      enqueuePlan("plan-a");
-      enqueuePlan("plan-b");
+    it("does not leak context across different surface keys", async () => {
+      testState.responseQueue.push("response-a");
+      testState.responseQueue.push("response-b");
 
       const first = await IngressEngine.ingest({
         id: "evt-isolation-a",
-        mode: "plan",
+        mode: "direct",
         surface: "tui",
         workspace: "/project-a",
-        payload: "Plan A",
+        payload: "Message A",
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -137,21 +95,16 @@ describe("IngressEngine integration pipeline", () => {
 
       const second = await IngressEngine.ingest({
         id: "evt-isolation-b",
-        mode: "plan",
+        mode: "direct",
         surface: "tui",
         workspace: "/project-b",
-        payload: "Plan B",
+        payload: "Message B",
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
       });
 
       expect(first.sessionId).not.toBe(second.sessionId);
-      if (first.mode !== "plan" || second.mode !== "plan") {
-        throw new Error("Expected plan mode results");
-      }
-      expect(first.result.planId).toBe("plan-a");
-      expect(second.result.planId).toBe("plan-b");
     });
   });
 

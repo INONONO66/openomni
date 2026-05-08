@@ -587,67 +587,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
-  plan: ProtocolStorage.PlanSubAdapter = {
-    write: async (id: string, content: string): Promise<void> => {
-      const now = Date.now();
-      this.db
-        .query(
-          `INSERT INTO plan (id, content, version, time_created, time_updated)
-           VALUES (?, ?, 1, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             content = excluded.content,
-             version = plan.version + 1,
-             time_updated = excluded.time_updated`,
-        )
-        .run(id, content, now, now);
-    },
-
-    read: async (
-      id: string,
-    ): Promise<
-      { content: string; version: number; createdAt: number; updatedAt: number } | undefined
-    > => {
-      const row = this.db
-        .query("SELECT content, version, time_created, time_updated FROM plan WHERE id = ?")
-        .get(id) as {
-        content: string;
-        version: number;
-        time_created: number;
-        time_updated: number;
-      } | null;
-      if (!row) return undefined;
-      return {
-        content: row.content,
-        version: row.version,
-        createdAt: row.time_created,
-        updatedAt: row.time_updated,
-      };
-    },
-
-    delete: async (id: string): Promise<void> => {
-      this.db.query("DELETE FROM plan WHERE id = ?").run(id);
-    },
-
-    list: async (): Promise<
-      { id: string; version: number; createdAt: number; updatedAt: number }[]
-    > => {
-      const rows = this.db
-        .query("SELECT id, version, time_created, time_updated FROM plan ORDER BY time_created ASC")
-        .all() as Array<{
-        id: string;
-        version: number;
-        time_created: number;
-        time_updated: number;
-      }>;
-      return rows.map((r) => ({
-        id: r.id,
-        version: r.version,
-        createdAt: r.time_created,
-        updatedAt: r.time_updated,
-      }));
-    },
-  };
-
   todo: ProtocolStorage.TodoSubAdapter = {
     upsertAll: async (sessionId: string, todos: Todo.Info[]): Promise<void> => {
       this.db.transaction(() => {

@@ -1,11 +1,11 @@
 # DAG Module
 
-Pure dependency-graph utilities for plan step scheduling.
-Zero external deps beyond `PlanStep` from protocol. Single file, four functions.
+Pure dependency-graph utilities for dependency scheduling.
+Zero external deps. Single file, four functions.
 
 ## API
 
-- `DAG.build(steps)` — Constructs a `DAGStructure` from a `PlanStep[]`. Validates no duplicate IDs and all dependency references exist. O(V+E).
+- `DAG.build(steps)` — Constructs a `DAGStructure` from a `DAGStep[]`. Validates no duplicate IDs and all dependency references exist. O(V+E).
 - `DAG.validateAcyclic(dag)` — Kahn's algorithm. Returns `{ valid: true }` or `{ valid: false, cycle: string[] }` with the offending cycle path.
 - `DAG.getReady(dag, completed)` — Returns step IDs whose dependencies are all in `completed`. Used to find parallelizable work.
 - `DAG.complete(dag, stepId, completed)` — Returns `{ newlyReady }` — steps unblocked by completing `stepId`. Note: callers own the `completed` set; this function is pure and does not mutate it.

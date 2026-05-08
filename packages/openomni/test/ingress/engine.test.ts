@@ -42,10 +42,6 @@ beforeEach(() => {
   });
 });
 
-function enqueuePlan(planId?: string): void {
-  testState.responseQueue.push(JSON.stringify({ planId: planId ?? crypto.randomUUID() }));
-}
-
 async function catchError(promise: Promise<unknown>): Promise<unknown> {
   try {
     await promise;
@@ -56,30 +52,6 @@ async function catchError(promise: Promise<unknown>): Promise<unknown> {
 }
 
 describe("IngressEngine", () => {
-  it("ingest() with plan mode returns plan result", async () => {
-    enqueuePlan();
-
-    const event: Ingress.InboundEvent = {
-      id: "event-plan-1",
-      surface: "tui",
-      workspace: "/repo",
-      mode: "plan",
-      payload: "Create delivery plan",
-      agent: {
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      },
-    };
-
-    const result = await IngressEngine.ingest(event);
-
-    expect(result.mode).toBe("plan");
-    if (result.mode !== "plan") {
-      throw new Error("Expected plan mode result");
-    }
-    expect(result.sessionId).toBeString();
-    expect(result.result.planId).toBeString();
-  });
-
   it("ingest() with direct mode returns direct result", async () => {
     testState.responseQueue.push("direct response");
 
@@ -98,9 +70,6 @@ describe("IngressEngine", () => {
     const result = await IngressEngine.ingest(event);
 
     expect(result.mode).toBe("direct");
-    if (result.mode !== "direct") {
-      throw new Error("Expected direct mode result");
-    }
     expect(result.result.output).toBe("direct response");
     expect(result.result.finishReason).toBe("stop");
   });
@@ -186,16 +155,16 @@ describe("IngressEngine", () => {
   });
 
   it("reuses session for same surface key across calls", async () => {
-    enqueuePlan();
-    enqueuePlan();
+    testState.responseQueue.push("first response");
+    testState.responseQueue.push("second response");
 
     const eventA: Ingress.InboundEvent = {
       id: "event-reuse-1",
       surface: "tui",
       workspace: "/repo",
       channel: "main",
-      mode: "plan",
-      payload: "First plan",
+      mode: "direct",
+      payload: "First message",
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -206,8 +175,8 @@ describe("IngressEngine", () => {
       surface: "tui",
       workspace: "/repo",
       channel: "main",
-      mode: "plan",
-      payload: "Second plan",
+      mode: "direct",
+      payload: "Second message",
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -220,15 +189,15 @@ describe("IngressEngine", () => {
   });
 
   it("reset() clears session mapping state", async () => {
-    enqueuePlan();
-    enqueuePlan();
+    testState.responseQueue.push("before reset");
+    testState.responseQueue.push("after reset");
 
     const event: Ingress.InboundEvent = {
       id: "event-reset-1",
       surface: "tui",
       workspace: "/repo",
-      mode: "plan",
-      payload: "Plan before reset",
+      mode: "direct",
+      payload: "Before reset",
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -253,7 +222,7 @@ describe("IngressEngine", () => {
     const second = await IngressEngine.ingest({
       ...event,
       id: "event-reset-2",
-      payload: "Plan after reset",
+      payload: "After reset",
     });
 
     expect(first.sessionId).not.toBe(second.sessionId);

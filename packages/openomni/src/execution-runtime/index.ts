@@ -6,7 +6,6 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   TaskToolProvider,
-  PlanToolProvider,
   TodoToolProvider,
   Tool,
   buildToolCatalog,

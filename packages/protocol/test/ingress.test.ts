@@ -53,94 +53,6 @@ describe("AgentDef", () => {
   });
 });
 
-describe("PlanEvent", () => {
-  test("should parse valid plan event with agent", () => {
-    const event = Ingress.PlanEventSchema.parse({
-      id: "event-1",
-      surface: "cli",
-      mode: "plan",
-      payload: { goal: "Build API" },
-      agent: {
-        model: {
-          provider: "anthropic",
-          id: "claude-3-5-sonnet",
-        },
-      },
-    });
-    expect(event.mode).toBe("plan");
-    expect(event.id).toBe("event-1");
-    expect(event.surface).toBe("cli");
-    expect(event.agent.model.provider).toBe("anthropic");
-  });
-
-  test("should parse plan event with optional fields", () => {
-    const event = Ingress.PlanEventSchema.parse({
-      id: "event-2",
-      surface: "api",
-      channel: "webhook",
-      workspace: "workspace-1",
-      userId: "user-123",
-      mode: "plan",
-      payload: { goal: "Deploy service" },
-      meta: { source: "github" },
-      agent: {
-        model: {
-          provider: "openai",
-          id: "gpt-4",
-        },
-        systemPrompt: "You are a planning agent",
-      },
-    });
-    expect(event.channel).toBe("webhook");
-    expect(event.workspace).toBe("workspace-1");
-    expect(event.userId).toBe("user-123");
-    expect(event.meta?.source).toBe("github");
-  });
-
-  test("should reject plan event missing mode", () => {
-    expect(() =>
-      Ingress.PlanEventSchema.parse({
-        id: "event-1",
-        surface: "cli",
-        payload: { goal: "Build API" },
-        agent: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
-      }),
-    ).toThrow();
-  });
-
-  test("should reject plan event missing agent", () => {
-    expect(() =>
-      Ingress.PlanEventSchema.parse({
-        id: "event-1",
-        surface: "cli",
-        mode: "plan",
-        payload: { goal: "Build API" },
-      }),
-    ).toThrow();
-  });
-
-  test("should reject plan event missing surface", () => {
-    expect(() =>
-      Ingress.PlanEventSchema.parse({
-        id: "event-1",
-        mode: "plan",
-        payload: { goal: "Build API" },
-        agent: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
-      }),
-    ).toThrow();
-  });
-});
-
 describe("DirectEvent", () => {
   test("should parse valid direct event with agent", () => {
     const event = Ingress.DirectEventSchema.parse({
@@ -160,24 +72,8 @@ describe("DirectEvent", () => {
   });
 });
 
-describe("InboundEvent (discriminated union)", () => {
-  test("should parse plan event via discriminated union", () => {
-    const event = Ingress.InboundEventSchema.parse({
-      id: "event-1",
-      surface: "cli",
-      mode: "plan",
-      payload: { goal: "Build API" },
-      agent: {
-        model: {
-          provider: "anthropic",
-          id: "claude-3-5-sonnet",
-        },
-      },
-    });
-    expect(event.mode).toBe("plan");
-  });
-
-  test("should parse direct event via discriminated union", () => {
+describe("InboundEvent", () => {
+  test("should parse direct event", () => {
     const event = Ingress.InboundEventSchema.parse({
       id: "event-1",
       surface: "cli",
@@ -214,7 +110,7 @@ describe("InboundEvent (discriminated union)", () => {
     expect(() =>
       Ingress.InboundEventSchema.parse({
         surface: "cli",
-        mode: "plan",
+        mode: "direct",
         payload: { goal: "Build API" },
         agent: {
           model: {

@@ -33,17 +33,6 @@ export namespace Storage {
     sortOrder?: "asc" | "desc";
   }
 
-  export interface PlanSubAdapter {
-    write(id: string, content: string): Promise<void>;
-    read(
-      id: string,
-    ): Promise<
-      { content: string; version: number; createdAt: number; updatedAt: number } | undefined
-    >;
-    delete(id: string): Promise<void>;
-    list(): Promise<{ id: string; version: number; createdAt: number; updatedAt: number }[]>;
-  }
-
   export interface TodoSubAdapter {
     upsertAll(sessionId: string, todos: Todo.Info[]): Promise<void>;
     list(sessionId: string): Promise<Todo.Info[]>;

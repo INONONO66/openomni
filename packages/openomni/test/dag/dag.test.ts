@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { Plan } from "@openomni/protocol";
-import { DAG } from "../../src/dag";
+import { DAG, type DAGStep } from "../../src/dag";
 
-function step(stepId: string, dependsOn: string[] = []): Plan.Step {
-  return {
-    stepId,
-    description: `Step ${stepId}`,
-    expectedOutput: `Output ${stepId}`,
-    dependsOn,
-  };
+function step(stepId: string, dependsOn: string[] = []): DAGStep {
+  return { stepId, dependsOn };
 }
 
 describe("DAG", () => {

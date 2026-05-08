@@ -68,7 +68,6 @@ export namespace Storage {
       delete(id: string): void;
     };
     task?: ProtocolStorage.TaskSubAdapter;
-    plan?: ProtocolStorage.PlanSubAdapter;
     todo?: ProtocolStorage.TodoSubAdapter;
   }
 }

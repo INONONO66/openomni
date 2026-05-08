@@ -1,6 +1,5 @@
 import {
   IngressEvent,
-  Plan,
   type Execution,
   type Ingress,
   type TraceContext as TraceContextProtocol,
@@ -34,7 +33,7 @@ export namespace IngressHandlers {
     return {
       runId: crypto.randomUUID(),
       sessionId: ctx.sessionId,
-      mode: ctx.event.mode,
+      mode: "direct",
       prompt: extractPrompt(ctx.event.payload),
       model: ctx.event.agent.model,
       systemPrompt: ctx.event.agent.systemPrompt,
@@ -48,58 +47,7 @@ export namespace IngressHandlers {
     };
   }
 
-  export async function handlePlan(
-    ctx: HandlerContext,
-  ): Promise<Extract<Ingress.IngressResult, { mode: "plan" }>> {
-    if (ctx.event.mode !== "plan") {
-      throw new Error("handlePlan requires plan mode event");
-    }
-
-    const log = ctx.traceContext ? Log.withContext({ traceId: ctx.traceContext.traceId }) : Log;
-
-    log.info("dispatching plan mode", { sessionId: ctx.sessionId });
-
-    if (ctx.traceContext) {
-      Bus.publish(IngressEvent.ModeDetected, {
-        traceId: ctx.traceContext.traceId,
-        sessionId: ctx.sessionId,
-        mode: "plan",
-        time: Date.now(),
-      });
-    }
-
-    const start = Date.now();
-    const request = buildExecutionRequest(ctx);
-    const coordinatorResult = await ctx.coordinator.dispatch(ctx.sessionId, request);
-    if (coordinatorResult.status !== "succeeded") {
-      throw new Error(
-        `Coordinator dispatch failed: ${coordinatorResult.error ?? coordinatorResult.status}`,
-      );
-    }
-    const raw = JSON.parse(coordinatorResult.output ?? "{}");
-    const planResult = Plan.ResultSchema.parse(raw);
-    SessionBridge.storePlanResult(ctx.sessionId, planResult, ctx.event.agent.model);
-
-    if (ctx.traceContext) {
-      Bus.publish(IngressEvent.Completed, {
-        traceId: ctx.traceContext.traceId,
-        sessionId: ctx.sessionId,
-        mode: "plan",
-        durationMs: Date.now() - start,
-        time: Date.now(),
-      });
-    }
-
-    return { mode: "plan", sessionId: ctx.sessionId, result: planResult };
-  }
-
-  export async function handleDirect(
-    ctx: HandlerContext,
-  ): Promise<Extract<Ingress.IngressResult, { mode: "direct" }>> {
-    if (ctx.event.mode !== "direct") {
-      throw new Error("handleDirect requires direct mode event");
-    }
-
+  export async function handleDirect(ctx: HandlerContext): Promise<Ingress.IngressResult> {
     const log = ctx.traceContext ? Log.withContext({ traceId: ctx.traceContext.traceId }) : Log;
 
     log.info("dispatching direct mode", { sessionId: ctx.sessionId });

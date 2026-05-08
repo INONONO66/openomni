@@ -1,8 +1,9 @@
-import { Plan, type Message } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import type { Message } from "@openomni/protocol";
+import { Session } from "@openomni/session";
 import { createIngressLedger, summarizeText } from "./event-log-envelope";
 
-const PLAN_ID_MARKER = "__OPENOMNI_PLANID__";
+// legacy marker from removed plan mode; filter from history to avoid leaking into model input
+const LEGACY_PLAN_MARKER = "__OPENOMNI_PLANID__";
 
 function createAssistantMessage(
   sessionId: string,
@@ -28,63 +29,7 @@ function createAssistantMessage(
   };
 }
 
-function extractStoredPlanId(sessionId: string): string | undefined {
-  const messages = Session.getMessages(sessionId);
-  let lastPlanId: string | undefined;
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    const parts = Session.getParts(message.id);
-    for (const part of parts) {
-      if (part.type === "text" && part.text.startsWith(PLAN_ID_MARKER)) {
-        lastPlanId = part.text.slice(PLAN_ID_MARKER.length);
-      }
-    }
-  }
-  return lastPlanId;
-}
-
 export namespace SessionBridge {
-  export async function buildPlanGoal(sessionId: string): Promise<string> {
-    const messages = Session.getMessages(sessionId);
-    let latestUserText = "";
-    for (const message of messages) {
-      if (message.role === "user") {
-        const parts = Session.getParts(message.id);
-        for (const part of parts) {
-          if (part.type === "text") latestUserText = part.text;
-        }
-      }
-    }
-
-    const planId = extractStoredPlanId(sessionId);
-    if (!planId) return latestUserText;
-
-    const planAdapter = Storage.get().plan;
-    if (planAdapter) {
-      const doc = await planAdapter.read(planId);
-      if (doc) {
-        return `Previous plan:\n${doc.content}\n\nUser feedback:\n${latestUserText}`;
-      }
-    }
-
-    // Fallback when plan content isn't in storage (e.g. cross-process scenarios)
-    return `Previous plan ID: ${planId}\n\nUser feedback:\n${latestUserText}`;
-  }
-
-  export async function extractPlan(sessionId: string): Promise<Plan> {
-    const planId = extractStoredPlanId(sessionId);
-    if (!planId) throw new Error("No plan found in session");
-
-    const planAdapter = Storage.get().plan;
-    if (!planAdapter) throw new Error("No plan found in session");
-
-    const doc = await planAdapter.read(planId);
-    if (!doc) throw new Error("No plan found in session");
-
-    const parsed = JSON.parse(doc.content);
-    return Plan.Schema.parse(parsed);
-  }
-
   export function buildDirectMessages(
     sessionId: string,
   ): Array<{ role: "user" | "assistant"; content: string }> {
@@ -94,69 +39,13 @@ export namespace SessionBridge {
     for (const message of messages) {
       const parts = Session.getParts(message.id);
       for (const part of parts) {
-        if (part.type === "text" && !part.text.startsWith(PLAN_ID_MARKER)) {
+        if (part.type === "text" && !part.text.startsWith(LEGACY_PLAN_MARKER)) {
           result.push({ role: message.role, content: part.text });
         }
       }
     }
 
     return result;
-  }
-
-  export function storePlanResult(
-    sessionId: string,
-    result: Plan.Result,
-    model: { provider: string; id: string },
-  ): void {
-    const message = createAssistantMessage(sessionId, model);
-    const part: Message.TextPart = {
-      id: crypto.randomUUID(),
-      sessionID: sessionId,
-      messageID: message.id,
-      type: "text",
-      text: PLAN_ID_MARKER + result.planId,
-    };
-
-    const ledger = createIngressLedger(sessionId, "session_bridge");
-    const writebackEvent = ledger.append("ingress.writeback.plan_result", {
-      sessionId,
-      mode: "plan",
-      source: "session-bridge",
-      messageId: message.id,
-      partId: part.id,
-      role: message.role,
-      planId: result.planId,
-      marker: PLAN_ID_MARKER,
-    });
-    const messageEvent = ledger.append(
-      "ingress.writeback.message.write",
-      {
-        sessionId,
-        mode: "plan",
-        source: "session-bridge",
-        messageId: message.id,
-        role: message.role,
-      },
-      writebackEvent?.actionId,
-    );
-    Session.addMessage(sessionId, message);
-
-    ledger.append(
-      "ingress.writeback.part.write",
-      {
-        sessionId,
-        mode: "plan",
-        source: "session-bridge",
-        messageId: message.id,
-        partId: part.id,
-        role: message.role,
-        partType: part.type,
-        marker: PLAN_ID_MARKER,
-        planId: result.planId,
-      },
-      messageEvent?.actionId,
-    );
-    Session.addPart(message.id, part);
   }
 
   export function storeDirectResult(

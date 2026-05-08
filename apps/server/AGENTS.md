@@ -37,20 +37,19 @@ src/
 │   └── skills.ts         # SkillLoader — loads skill definitions from workspace
 ├── execution/
 │   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker pool wrapper
-│   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution, plan execution
+│   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution
 │   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
 │   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls IngressEngine
 ├── ingress/
 │   ├── bridge.ts         # buildInboundEvent() — Adapter.InboundMessage → InboundEvent (+ tool selection, toolExecutor)
-│   └── mode.ts           # detectMode() — "/plan …" prefix → plan mode, else direct
+│   └── mode.ts           # detectMode() — direct mode
 ├── agents/
 │   ├── index.ts          # createAllAgents() — builds the full agent registry map
 │   ├── registry.ts       # Per-server AgentDefinition registry (keyed by name)
 │   ├── types.ts          # AgentDefinition + factory types
 │   ├── model-resolution.ts # resolveRuntimeModel() — alias resolution for per-message models
-│   ├── dev-agent/        # Default "dev" agent factory + prompt
-│   └── plan-agent/       # Compatibility-only Plan Mode agent definition + system prompt
+│   └── dev-agent/        # Default "dev" agent factory + prompt
 ├── tool/
 │   ├── custom/           # CustomToolProvider — user-defined tool provider
 │   └── mcp/              # McpToolProvider — MCP-backed tool provider
@@ -66,12 +65,12 @@ Two execution modes are selected by `OPENOMNI_MODE` env var:
 **Coordinator mode** (default):
 1. `loadConfig()` — read env + config files.
 2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
-3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`, `TaskToolProvider`, `PlanToolProvider`, `TodoToolProvider`.
+3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`, `TaskToolProvider`, `TodoToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` — pick a default model from stored credentials (if any).
-6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP, task, plan, and todo tools.
+6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP, task, and todo tools.
 7. `IngressEngine.setCoordinator(coordinator)`.
-8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, taskProvider, planProvider, todoProvider, defaultModel, workspaceRoot })`.
+8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, taskProvider, todoProvider, defaultModel, workspaceRoot })`.
 9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
 10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
 11. Start each channel (`channel.start()` in parallel).
@@ -94,13 +93,13 @@ Adapter.InboundMessage
         │     ├─ channel trigger       → agent.triggers.channels
         │     └─ else                  → default "dev"
         ├─ buildInboundEvent(message, agentName, deps)
-        │     ├─ detectMode(text) → "plan" | "direct"
+        │     ├─ detectMode(text) → "direct"
         │     ├─ getAgentDefinition(agentName) (falls back to a generic definition)
         │     ├─ selectTools(definition, providers) → Tool.Spec[] (sanitized names)
         │     └─ AgentDef = { model, systemPrompt, tools, budget, toolExecutor }
         ├─ resolveRuntimeModel(event.agent.model, defaultModel)
         ├─ IngressEngine.ingest(event) ← @openomni/openomni
-        └─ toResponseText(result) → "Plan generated: …" | agent output | "(no response)"
+        └─ toResponseText(result) → agent output | "(no response)"
 ```
 
 Errors bubble up as `Error: {message}` strings back to the channel so operators can see failures instead of silent drops.
@@ -116,7 +115,6 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
 | `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
 | `TaskToolProvider` | `@openomni/openomni` | task management tools |
-| `PlanToolProvider` | `@openomni/openomni` | compatibility-only plan tools while ADR-010 is pending |
 | `TodoToolProvider` | `@openomni/openomni` | todo list tools |
 
 `createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Guardrail.ToolPermission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
@@ -141,7 +139,6 @@ Add a new channel by:
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
-- `apps/server/src/agents/plan-agent/` provides the compatibility Plan Mode agent definition and system prompt; do not expand Plan Mode product surface while ADR-010 is pending.
 
 ## CONTEXT SYSTEM
 
@@ -162,4 +159,4 @@ Add a new channel by:
 
 - `recovery.ts` is a thin wrapper around `bootstrap/recovery.ts` — consolidate when the recovery model stabilizes.
 - `resolveRuntimeModel` currently resolves aliases per message; caching is a future optimization once usage patterns are clearer.
-- `execution/worker-entry.ts` is large and handles both direct and plan modes inline; extracting mode handlers would improve readability.
+- `execution/worker-entry.ts` is large; extracting lifecycle helpers would improve readability.

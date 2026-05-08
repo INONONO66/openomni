@@ -37,8 +37,8 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
-- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `plan`, `todo`. Unimplemented optional sub-objects gracefully degrade. The `task`, `plan`, and `todo` sub-adapters satisfy the interfaces defined in `@openomni/protocol`'s `Storage` namespace.
-- **Migration 0006**: Adds `task`, `task_run`, `task_idempotency`, `plan`, and `todo` tables to the SQLite schema, backing the `task`, `plan`, and `todo` optional sub-adapters in `SqliteStorageAdapter`.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `todo`. Unimplemented optional sub-objects gracefully degrade. The `task` and `todo` sub-adapters satisfy the interfaces defined in `@openomni/protocol`'s `Storage` namespace.
+- **Migration 0006**: Adds `task`, `task_run`, `task_idempotency`, and `todo` tables to the SQLite schema, backing the `task` and `todo` optional sub-adapters in `SqliteStorageAdapter`.
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) and `Todo.Updated` flow through the shared `Bus` too.
 - **Todo namespace**: `Todo.update(sessionId, todos)` replaces the full todo list for a session and publishes `Todo.Updated`. `Todo.get(sessionId)` returns the current list. Both degrade gracefully when `Storage.Adapter.todo` is absent.
 - **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.
@@ -49,7 +49,7 @@ src/
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters (`task`, `plan`, `todo`, `backgroundTask`) from outside this package. Use it directly when you need raw sub-adapter access. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific (for example, `Session.*` mutations and `Todo.update()`). `Storage.getAdapter()` is an internal alias — both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters (`task`, `todo`, `backgroundTask`) from outside this package. Use it directly when you need raw sub-adapter access. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific (for example, `Session.*` mutations and `Todo.update()`). `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc subagent state alongside `Session`; use `WorkerRun` so it is event-sourced and replayable.
 - Do NOT call `Storage.get().todo` directly for writes that require bus event publication — go through `Todo.update()` instead. For read-only queries that don't require event notification, direct access is OK (or use `Todo.get()`).

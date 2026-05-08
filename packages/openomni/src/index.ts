@@ -1,17 +1,6 @@
-// Public API for @openomni/openomni — see AGENTS.md for the module map.
-// Plan Mode
-export {
-  Hashline,
-  PLAN_TOOL_SPECS,
-  PlanAgent,
-  createPlanToolExecutor,
-  runPlan,
-} from "./plan";
-export type { RunPlanConfig } from "./plan";
-
 // DAG utilities
 export { DAG } from "./dag";
-export type { DAGStructure } from "./dag";
+export type { DAGStep, DAGStructure } from "./dag";
 
 // Ingress
 export {
@@ -88,7 +77,6 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   TaskToolProvider,
-  PlanToolProvider,
   TodoToolProvider,
   Tool,
   WorkspaceLock,

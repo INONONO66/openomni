@@ -16,18 +16,16 @@ src/
 ├── event/                # Task.*, Agent.* events + event/agent-execution.ts (AgentExecution.*)
 ├── notification/         # NotificationRequest / Result / Severity / DeliveryMode
 ├── adapter/              # Adapter.Surface / Capabilities / TriggerRule / Inbound-OutboundMessage
-├── plan/                 # Plan, PlanStep (DAG), PlanResult with acyclic validation
-├── ingress/              # InboundEvent (plan | direct), AgentDef, IngressResult
+├── ingress/              # InboundEvent (direct), AgentDef, IngressResult
 ├── messenger/            # MessageEnvelope, PersistencePolicy, AllowPattern, AuditEntry
 ├── guardrail/            # Permission, InputRule, DelegationPolicy
 ├── event-log/            # ExecutionEvent discriminated union (LLM / tool / step / session)
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
-├── gate/                 # Gate.Check / Enricher / Verdict / Issue (plan validation)
 ├── hook/                 # Hook.Timing (9), Hook.Verdict (6), Middleware.Definition + FailPolicy
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
-├── storage/              # Storage.TaskSubAdapter, Storage.PlanSubAdapter, Storage.TodoSubAdapter interfaces
+├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
 ├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
 ├── todo/                 # Todo.Info, Todo.Status, Todo.Priority, Todo.Updated BusEvent
 ├── tool-selection/       # ToolSelection schema for choosing tool categories and overrides
@@ -40,13 +38,12 @@ src/
 
 - **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `AuthError`, `ProviderError`, etc. use this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
-- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `InboundEvent` on `mode`, `ExecutionEvent` on `type`, `Hook.Verdict` on `action`.
+- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Hook.Verdict` on `action`. `InboundEvent` currently uses a single `mode: "direct"` variant.
 - **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Tool.Call`, `Tool.Result`, `Run.Snapshot`.
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
 - **Hook timings**: 9 middleware timing points — `pre_run`, `pre_turn`, `on_system_prompt`, `pre_tool_use`, `post_tool_use`, `post_turn`, `post_compaction`, `post_run`, `on_error`. `Hook.Verdict` returns one of `continue | skip | abort | retry | transform | inject`.
 - **Subagent lifecycle**: `Subagent.Events.*` covers worker sessions (`WorkerSessionSpawned/Resumed/Cancelled`), worker runs (`WorkerRunStarted/Completed/Failed`), consultations (`WorkerConsultationRequested/Completed`), and background tasks (`BackgroundTaskLaunched/Completed/Failed/Cancelled`).
-- **Plan DAG validation**: `PlanSchema.superRefine()` enforces unique `stepId` values and acyclic `dependsOn` references.
-- **Storage sub-adapters**: `Storage.TaskSubAdapter`, `Storage.PlanSubAdapter`, and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
+- **Storage sub-adapters**: `Storage.TaskSubAdapter` and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
 - **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.
 - **Todo types**: `Todo.Info` / `Todo.Status` / `Todo.Priority` live in `todo/index.ts`. `Todo.Updated` is a `BusEvent.define()` descriptor published when a session's todo list changes.
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.

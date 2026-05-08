@@ -146,7 +146,7 @@ function createModeDispatch(state: PreRunState): MiddlewareRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       const event = requireParsedEvent(state);
-      if (event.mode !== "plan" && event.mode !== "direct") {
+      if (event.mode !== "direct") {
         const unknownMode = (event as { mode: unknown }).mode;
         return abortVerdict("ingress.mode", `unknown ingress mode: ${unknownMode}`);
       }
