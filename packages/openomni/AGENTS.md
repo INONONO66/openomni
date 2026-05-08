@@ -54,7 +54,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface. `TaskToolProvider` and `TodoToolProvider` live in their own subdirectories (`task/`, `todo/`) and read from `Storage.get()` in `@openomni/session`.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 - Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.
-- Add persona workforce orchestration here when implementing `docs/persona-runtime-roadmap.md`: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
+- Add persona workforce orchestration here when implementing persona runtime contracts: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
 
 ## What This Package Is Not
 

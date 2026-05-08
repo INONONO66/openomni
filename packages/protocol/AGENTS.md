@@ -51,7 +51,7 @@ src/
 
 ## FUTURE PERSONA CONTRACTS
 
-The persona workforce direction is documented in `docs/persona-workforce.md` and `docs/persona-runtime-roadmap.md`. Future schemas should live here when they become implementation work:
+The persona workforce direction is documented in `docs/persona-workforce.md`. Future schemas should live here when they become implementation work:
 
 - persona profile and lifecycle contracts;
 - inbound authority / actor role contracts;

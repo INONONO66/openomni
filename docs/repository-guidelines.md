@@ -44,7 +44,6 @@ Known watchpoints:
 | `apps/server/src/agents/types.ts` | Server-local agent definition with trigger metadata. | Keep app-local unless reused outside `apps/server`; promote persistent persona contracts to `protocol`. |
 | `packages/openomni/src/storage/task-types.ts` | Backward-compat task re-export shim. | Remove only after migration scripts import `Task` from `@openomni/protocol` directly. |
 | `packages/agent/src/core/middleware/compat.ts` | Legacy hooks/stepGuard bridge. | No new callers; remove after downstream migration. |
-| Removed CLI auth/config flow | `apps/cli` has been removed. | Keep auth/config setup in proxy/provider configuration or server/operator flows; do not reintroduce a CLI without a new ADR. |
 
 ## Test matrix expectations
 
@@ -101,7 +100,7 @@ Required updates by change type:
 
 | Priority | Item | Why |
 | --- | --- | --- |
-| High | Keep root/package docs aligned with the single server app topology. | `apps/cli` has been removed. |
+| High | Keep root/package docs aligned with the single server app topology. | Single `apps/server` host. |
 | High | Keep app-level test scripts and CI direct app tests aligned. | Avoid local `turbo run test` ambiguity. |
 | Medium | Delete empty `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts`. | Strong orphan candidate. |
 | Medium | Replace `packages/openomni/src/storage/task-types.ts` consumers with `@openomni/protocol`. | Removes compatibility shim. |

@@ -119,7 +119,6 @@ This allows `Todo` to work as both a namespace (`Todo.Schema`, `Todo.Item`) and 
 - `openomni` owns session-backed orchestration: ingress, subagent runtime, and execution runtime.
 - `coordinator` owns multiprocess execution: worker pools, IPC, recovery, credential injection, and non-interactive permission policy.
 - `apps/server` wires runtime packages to external surfaces. Host-specific payload types may live there, but reusable contracts must move down to `protocol`.
-- `apps/cli` has been removed. Channel adapters, conversation runtime, and operator-facing server setup belong in `apps/server` or documented server/operator flows.
 
 ## 10. Documentation Freshness
 
@@ -128,5 +127,19 @@ This allows `Todo` to work as both a namespace (`Todo.Schema`, `Todo.Item`) and 
 - New ADR files must be added to `docs/design-decisions/index.md`, including drafts.
 - `docs/quality-score.md` must be updated when test counts, lint posture, or package quality materially changes.
 - Local insight files (`*.local.md`) are reference material, not source-of-truth. Promote stable policy into committed docs before relying on it.
+
+## 11. Agent Self-Extensibility
+
+New domain concepts follow a three-step exposure rule so agents can discover and use them without code changes:
+
+1. **Protocol schema** — define the concept as a Zod schema in `@openomni/protocol`. This is the contract.
+2. **Storage adapter** — add CRUD operations to the appropriate `Storage.Adapter` sub-interface. This is the persistence boundary.
+3. **Agent tool** — expose the concept via `defineTool()` so agents can interact with it at runtime. This is the capability surface.
+
+When all three exist, an agent can read the schema to understand the concept, use the tool to interact with it, and the storage adapter ensures persistence regardless of backend. The agent never needs to touch implementation code.
+
+- New tools must declare `riskTier`, `isReadOnly`, and `isDestructive` metadata — these are not prompt decorations but runtime enforcement inputs.
+- Cross-package contracts always live in `@openomni/protocol`. Upper packages must not redefine them.
+- Implicit inputs (sessionId, runId, workspaceRoot) are injected by the executor and stripped from the public schema — agents never see or provide them.
 
 See [Repository Guidelines](./repository-guidelines.md) for the current cleanup backlog and operating guidance.

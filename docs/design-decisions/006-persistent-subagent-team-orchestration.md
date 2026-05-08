@@ -1,4 +1,4 @@
-# 009: Persistent Subagent Sessions for Team Orchestration (Superseded)
+# ADR-006: Persistent Subagent Sessions for Team Orchestration (Superseded)
 
 ## Status
 
