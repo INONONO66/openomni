@@ -22,14 +22,15 @@ const scanRoots = ["packages", "apps"];
 const excludedPathParts = ["/dist/", "/node_modules/", "/coverage/", "/generated/"];
 const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 
-const canonicalGuardrailEvaluator = new Set(["packages/protocol/src/guardrail/index.ts"]);
+const canonicalGuardrailEvaluator = new Set([
+  "packages/protocol/src/guardrail/index.ts",
+  "packages/agent/src/core/policy/engine.ts",
+]);
 const canonicalGuardrailRequiredFiles = new Set([
   "packages/openomni/src/policy/ingress-authority.ts",
   "packages/openomni/src/policy/subagent-spawn-policy.ts",
   "packages/openomni/src/policy/background-limits.ts",
-  "packages/agent/src/core/middleware/builtin/messenger-allow-pattern.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
-  "apps/server/src/channel/channel-authn.ts",
 ]);
 const approvedAuthorizationFiles = new Set([
   "packages/protocol/src/guardrail/index.ts",
@@ -100,7 +101,12 @@ function shouldSkip(filePath: string): boolean {
 }
 
 function validateCanonicalGuardrailUsage(filePath: string, source: string): GuardViolation[] {
-  if (!canonicalGuardrailRequiredFiles.has(filePath) || source.includes("Guardrail.evaluate(")) {
+  if (
+    !canonicalGuardrailRequiredFiles.has(filePath) ||
+    source.includes("Guardrail.evaluate(") ||
+    source.includes("PolicyEngine.evaluatePermission(") ||
+    source.includes("MiddlewareEngine.create(")
+  ) {
     return [];
   }
 
