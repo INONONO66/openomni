@@ -53,8 +53,8 @@ function continueVerdict(policyId: string, reason: string): Hook.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function denyVerdict(reason: string): Hook.Verdict {
-  return { action: "abort", reason };
+function denyVerdict(reason: string, policyId: string): Hook.Verdict {
+  return { action: "abort", reason, policyId };
 }
 
 function triggerMetadata(input: {
@@ -88,7 +88,7 @@ function evaluateChannelTriggers(input: {
   const triggered = evaluateTriggers(input.rules, input.ctx);
   const verdict = triggered
     ? continueVerdict(input.policyId, `${input.surface} trigger accepted`)
-    : denyVerdict(`${input.surface} trigger denied`);
+    : denyVerdict(`${input.surface} trigger denied`, input.policyId);
   void recordDecision(
     input.definition,
     verdict,
@@ -145,7 +145,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Hook.Verdict {
   if (provided !== state.token) {
     Log.warn("websocket auth failure");
     state.response = new Response("Unauthorized", { status: 401 });
-    return denyVerdict("websocket token missing or invalid");
+    return denyVerdict("websocket token missing or invalid", policyId);
   }
 
   if (subprotocolAuth) {
@@ -162,14 +162,14 @@ async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Hook.Verdict>
   const signature = state.request.headers.get("x-hub-signature-256");
   if (!signature) {
     state.response = new Response("Missing signature", { status: 401 });
-    return denyVerdict("github signature missing");
+    return denyVerdict("github signature missing", policyId);
   }
 
   const body = await state.request.text();
   state.body = body;
   if (!(await verifyGitHubSignature(body, signature, state.secret))) {
     state.response = new Response("Invalid signature", { status: 401 });
-    return denyVerdict("github signature invalid");
+    return denyVerdict("github signature invalid", policyId);
   }
 
   return continueVerdict(policyId, "github signature verified");

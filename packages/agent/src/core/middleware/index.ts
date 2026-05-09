@@ -48,7 +48,7 @@ function toMiddlewareDecision(d: PolicyDecision): MiddlewareDecision {
     timing: d.timing as Hook.Timing,
     name: d.label,
     policyId: d.policyId,
-    verdict: d.verdict.action as Hook.Verdict["action"],
+    verdict: (d.verdict.action === "deny" ? "abort" : d.verdict.action) as Hook.Verdict["action"],
     durationMs: d.durationMs,
     ...(d.reason !== undefined && { reason: d.reason }),
     ...(d.traceContext !== undefined && { traceContext: d.traceContext }),

@@ -123,7 +123,7 @@ describe("ChatAgent", () => {
           priority: 250,
           fn: async () => ({
             action: "inject",
-            input: { message: "continue" },
+            message: "continue",
             reason: "continue-after-step",
             policyId: "test.step-guard",
           }),

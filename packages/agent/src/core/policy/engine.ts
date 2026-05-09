@@ -155,12 +155,16 @@ function matchesPattern(resource: string, pattern: string): boolean {
   return resource === pattern;
 }
 
+// reject patterns with obvious backtracking risks: nested quantifiers like (a+)+, (a*)*
+const BACKTRACK_RISK = /([+*]|\{\d)[+*?]|\([^)]*[+*][^)]*\)[+*]/;
+
 function matchesInputField(
   input: Record<string, unknown> | undefined,
   field: string,
   pattern: string,
 ): boolean {
   if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return false;
+  if (BACKTRACK_RISK.test(pattern)) return false;
 
   const raw = String(input?.[field] ?? "");
   const value = raw.length > MAX_INPUT_LENGTH ? raw.slice(0, MAX_INPUT_LENGTH) : raw;

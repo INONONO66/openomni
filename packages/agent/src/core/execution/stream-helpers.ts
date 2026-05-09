@@ -520,7 +520,7 @@ export async function* handleStop(
     return flowDecision(continueDecision(state));
   }
 
-  if (postTurnVerdict.action === "abort") {
+  if (postTurnVerdict.action === "abort" || postTurnVerdict.action === "deny") {
     const event: AgentEvent = {
       type: "complete",
       result: {
