@@ -2,7 +2,7 @@ import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Log, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
-import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
+import { SubagentSpawnPolicyMiddleware } from "../policy/subagent-spawn-policy.js";
 import {
   buildAbortSignal,
   executeRun,

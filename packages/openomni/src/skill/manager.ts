@@ -1,4 +1,5 @@
-import { Guardrail, Skill, type ExecutionEvent } from "@openomni/protocol";
+import { Skill, type Guardrail, type ExecutionEvent } from "@openomni/protocol";
+import { PolicyEngine } from "@openomni/agent";
 import { EventLog, Storage } from "@openomni/session";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -267,7 +268,7 @@ async function beginOperation(
     parentActionId: requested.actionId,
     now,
   };
-  const result = Guardrail.evaluate(options.permission, {
+  const result = PolicyEngine.evaluatePermission(options.permission, {
     action: request.action,
     resource: request.resource,
     input: request.input,

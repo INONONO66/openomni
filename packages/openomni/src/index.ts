@@ -66,6 +66,8 @@ export type {
 // Profile system
 export { Profile } from "./profile";
 
+// Policy
+export * from "./policy/index.js";
 // Subagent runtime
 export {
   SubagentRuntime,
