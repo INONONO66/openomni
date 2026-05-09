@@ -145,7 +145,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           tools,
           toolExecutor,
           middleware: [
-            ...Profile.createMiddleware({ agentName: request.agentName ?? "default" }),
+            ...Profile.createMiddleware({ agentName: request.agentName ?? "dev" }),
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,

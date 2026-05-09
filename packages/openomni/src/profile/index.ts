@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { MEMORY_GUIDANCE } from "./guidance";
 
 const PROFILES_DIR = ".openomni/profiles";
-const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
+const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
 
 export namespace Profile {
   export const MiddlewareConfigSchema = z.object({

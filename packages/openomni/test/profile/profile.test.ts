@@ -162,6 +162,16 @@ describe("Profile", () => {
       });
     });
 
+    it("sanitizes dot-dot segment and returns empty content", async () => {
+      await withTempDir(async (dir) => {
+        const registrations = Profile.createMiddleware({ agentName: "..", homeRoot: dir });
+        for (const reg of registrations) {
+          const verdict = await reg.fn({} as any);
+          expect(verdict).toEqual({ action: "continue" });
+        }
+      });
+    });
+
     it("treats empty files as empty strings", async () => {
       await withTempDir(async (dir) => {
         await createFixture(dir, "test-agent", {
