@@ -55,7 +55,7 @@ describe("WebSocketHandler authentication", () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:websocket-token",
-        policyId: "guardrail.permission",
+        policyId: "channel.authn.websocket-token",
         verdict: "continue",
         reason: "websocket subprotocol token accepted",
       }),

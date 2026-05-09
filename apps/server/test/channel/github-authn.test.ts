@@ -30,7 +30,7 @@ describe("GitHubAdapter channel-authn", () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:github-hmac",
-        policyId: "guardrail.permission",
+        policyId: "channel.authn.github-hmac",
         verdict: "continue",
         reason: "github signature verified",
       }),
