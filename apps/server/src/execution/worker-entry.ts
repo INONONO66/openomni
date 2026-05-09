@@ -5,6 +5,7 @@ import { initialize, Log } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
+  Profile,
   ToolProxyProvider,
   SessionBridge,
   SystemToolProvider,
@@ -144,6 +145,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           tools,
           toolExecutor,
           middleware: [
+            ...Profile.createMiddleware({ agentName: request.agentName ?? "default" }),
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,
