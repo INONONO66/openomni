@@ -6,6 +6,4 @@ export type {
   MiddlewareEngineInstance,
   MiddlewareEventLogConfig,
 } from "./engine";
-export { fromExecutionHooks, fromStepGuard, fromConfig } from "./compat";
-export type { StepGuardFn } from "./compat";
 export * from "./builtin";

@@ -116,12 +116,19 @@ describe("ChatAgent", () => {
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       llm: mockLlm,
       budget: { maxTurns: 1, maxToolCalls: 10 },
-      stepGuard: () => ({
-        action: "inject",
-        message: "continue",
-        reason: "continue-after-step",
-        policyId: "test.step-guard",
-      }),
+      middleware: [
+        {
+          name: "test:inject-continue",
+          timing: "post_turn",
+          priority: 250,
+          fn: async () => ({
+            action: "inject",
+            input: { message: "continue" },
+            reason: "continue-after-step",
+            policyId: "test.step-guard",
+          }),
+        },
+      ],
     });
 
     const result = await agent.run({
@@ -198,18 +205,25 @@ describe("ChatAgent", () => {
       onStepFinish: (step) => {
         stepFinishCalls.push(step);
       },
-      stepGuard: () => {
-        guardInvocations += 1;
-        if (guardInvocations === 1) {
-          return {
-            action: "inject",
-            message: "continue",
-            reason: "continue-after-step",
-            policyId: "test.step-guard",
-          };
-        }
-        return { action: "continue" };
-      },
+      middleware: [
+        {
+          name: "test:conditional-inject",
+          timing: "post_turn",
+          priority: 250,
+          fn: async () => {
+            guardInvocations += 1;
+            if (guardInvocations === 1) {
+              return {
+                action: "inject",
+                input: { message: "continue" },
+                reason: "continue-after-step",
+                policyId: "test.step-guard",
+              };
+            }
+            return { action: "continue" };
+          },
+        },
+      ],
     });
 
     await agent.run({ messages: [{ role: "user", content: "Hello" }] });

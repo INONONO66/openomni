@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
-import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import type { AgentProfile } from "@openomni/protocol";
 import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
 
@@ -34,7 +33,6 @@ function makeDefinition(
 
 function resetState() {
   AgentRegistry.clear();
-  AgentMessenger._resetLog();
   mockChatAgentCreate = mock(() => ({
     run: mock(async () => ({ text: "", usage: undefined })),
   }));

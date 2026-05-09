@@ -20,9 +20,13 @@ export type {
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./runtime-context";
-export {
-  InMemoryMemory,
-  type Memory,
-  type MemoryResult,
-  type MemoryEntry,
-} from "./memory";
+export { MiddlewareEngine } from "./middleware";
+export type {
+  MiddlewareContext,
+  MiddlewareFn,
+  MiddlewareRegistration,
+  MiddlewareDecision,
+  MiddlewareEngineConfig,
+  MiddlewareEngineInstance,
+  MiddlewareEventLogConfig,
+} from "./middleware";

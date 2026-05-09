@@ -1,8 +1,7 @@
-import { run as llmRun } from "@openomni/llm";
+import { run as llmRun, Retry } from "@openomni/llm";
 import type { Sink } from "@openomni/protocol";
 import { Log, TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
-import { DEFAULT_RETRY_POLICY } from "../retry";
 import { resolveProviderModel } from "./shared";
 import {
   assertToolExecutor,
@@ -24,7 +23,7 @@ export async function* streamAgent(
   config: ChatAgentConfig,
   sink?: Sink,
 ): AsyncGenerator<AgentEvent> {
-  const retryPolicy = DEFAULT_RETRY_POLICY;
+  const retryPolicy = Retry.DEFAULT_AGENT_RETRY_POLICY;
   let attempt = 1;
   let lastError = "";
 

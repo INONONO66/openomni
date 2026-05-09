@@ -39,8 +39,6 @@ export type {
   MiddlewareEngineInstance,
   MiddlewareEventLogConfig,
 } from "./core/middleware";
-export { AgentMessenger } from "./runtime/index";
-export type { Transport, AgentMessengerOptions } from "./runtime/index";
 export { AgentRegistry } from "./runtime/index";
 export { SubagentTool } from "./runtime/index";
 export type { SubagentToolOptions } from "./runtime/index";

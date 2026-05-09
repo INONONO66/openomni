@@ -1,4 +1,5 @@
 import type { RunInput } from "@openomni/llm";
+import { Retry } from "@openomni/llm";
 import { AgentExecution } from "@openomni/protocol";
 import type { Message, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus, type Log } from "@openomni/session";
@@ -11,17 +12,15 @@ import {
 } from "../budget";
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { fromConfig, MiddlewareEngine } from "../middleware";
+import { MiddlewareEngine } from "../middleware";
 import type { MiddlewareEngineInstance } from "../middleware";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
-  createMemoryMiddleware,
   createToolGuardMiddleware,
 } from "../middleware/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
-import { calculateBackoffMs, classifyRetryReason, shouldRetry, sleep } from "../retry";
 import type {
   AgentEvent,
   AgentStep,
@@ -126,21 +125,14 @@ export function buildMiddlewareEngine(
   });
   engine.register(createBudgetReassuranceMiddleware());
   engine.register(createBudgetWarningMiddleware());
-  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-    engine.register(reg);
-  }
   if (config.permissions) {
     engine.register(
       createToolGuardMiddleware({
         permission: config.permissions,
-        stepGuard: config.stepGuard,
         eventEmitter: config.eventEmitter,
         source: "stream-engine",
       }),
     );
-  }
-  if (config.memory) {
-    engine.register(createMemoryMiddleware(config.memory));
   }
   if (config.compaction) {
     engine.register(createCompactionMiddleware(config.compaction));
@@ -593,7 +585,7 @@ export async function* handleError(
   log: StreamLog,
   error: unknown,
   attempt: number,
-  retryPolicy: Parameters<typeof shouldRetry>[0],
+  retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
   const onErrorVerdict = await engine.dispatch("on_error", {
@@ -627,10 +619,10 @@ export async function* handleError(
   }
 
   const lastError = normalizedError.message;
-  const retryReason = classifyRetryReason(lastError);
+  const retryReason = Retry.classifyAgentRetryReason(lastError);
 
-  if (shouldRetry(retryPolicy, retryReason, attempt)) {
-    const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+  if (Retry.shouldAgentRetry(retryPolicy, retryReason, attempt)) {
+    const backoffMs = Retry.calculateAgentBackoffMs(retryPolicy, attempt);
     config.eventEmitter?.emit("agent.error.retry", {
       sessionId: "stream-engine",
       time: Date.now(),
@@ -655,7 +647,7 @@ export async function* handleError(
       error: normalizedError,
       willRetry: true,
     };
-    await sleep(backoffMs);
+    await Retry.agentSleep(backoffMs);
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 

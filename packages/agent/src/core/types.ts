@@ -1,6 +1,5 @@
 import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
-import type { Memory } from "./memory";
 import type { MiddlewareRegistration } from "./middleware/types";
 import type { AgentRuntimeContext } from "./runtime-context";
 
@@ -87,20 +86,6 @@ export interface ChatAgentConfig {
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
-  memory?: Memory;
-  /**
-   * @deprecated Use `middleware` array with `post_turn` timing instead.
-   * Register a middleware with `timing: "post_turn"` to replace stepGuard behavior.
-   */
-  stepGuard?: (
-    step: AgentStep,
-    context: StepGuardContext,
-  ) => Promise<StepGuardVerdict> | StepGuardVerdict;
-  /**
-   * @deprecated Use `middleware` array instead.
-   * Register middleware via `ChatAgentConfig.middleware` for all hook behaviors.
-   */
-  hooks?: ExecutionHooks;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
   middleware?: MiddlewareRegistration[];
