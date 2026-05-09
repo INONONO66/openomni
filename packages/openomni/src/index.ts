@@ -63,6 +63,9 @@ export type {
   RuntimeToolTarget,
 } from "./extension";
 
+// Profile system
+export { Profile } from "./profile";
+
 // Subagent runtime
 export {
   SubagentRuntime,
