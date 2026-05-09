@@ -4,7 +4,7 @@ import { Bus, Log, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
-import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
+import { IngressAuthorityMiddleware } from "../policy/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
 
 export type { CoordinatorLike };

@@ -4,7 +4,7 @@ import { ToolExecution } from "@openomni/protocol";
 import { MiddlewareEngine } from "../../../src/core/middleware";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import type { Tool } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+import type { MiddlewareRegistration } from "../../../src/core/middleware";
 
 function makeEngine() {
   return MiddlewareEngine.create();

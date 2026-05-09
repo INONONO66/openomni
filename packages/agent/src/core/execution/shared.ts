@@ -1,7 +1,6 @@
 import { ModelsDev, Provider } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { ChatAgentInput } from "../types";
-import type { MemoryResult } from "../memory";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 
 export async function resolveProviderModel(model: {
@@ -34,11 +33,6 @@ export function getLastUserMessageText(messages: Message.WithParts[]): string | 
     }
   }
   return null;
-}
-
-export function formatMemoryContext(results: MemoryResult[]): string {
-  const entries = results.map((r) => `- ${r.content}`).join("\n");
-  return `[Memory Context]\n${entries}`;
 }
 
 export function prependContextMessage(

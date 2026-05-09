@@ -1,4 +1,5 @@
-import { Extension, Guardrail, type ExecutionEvent } from "@openomni/protocol";
+import { Extension, type Guardrail, type ExecutionEvent } from "@openomni/protocol";
+import { PolicyEngine } from "@openomni/agent";
 import { EventLog, Storage } from "@openomni/session";
 import { z } from "zod";
 import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtime-binding";
@@ -572,7 +573,7 @@ async function beginOperation(
     actor: options.actor,
   };
 
-  const authorityResult = Guardrail.evaluate(
+  const authorityResult = PolicyEngine.evaluatePermission(
     extensionAuthorityPermission(request.action),
     evaluationRequest,
   );
@@ -591,7 +592,7 @@ async function beginOperation(
     }
   }
 
-  const result = Guardrail.evaluate(options.permission, evaluationRequest);
+  const result = PolicyEngine.evaluatePermission(options.permission, evaluationRequest);
 
   await appendPolicyEvent(state, result);
   if (result.action === "abort") {

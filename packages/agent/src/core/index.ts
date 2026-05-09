@@ -20,9 +20,15 @@ export type {
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./runtime-context";
-export {
-  InMemoryMemory,
-  type Memory,
-  type MemoryResult,
-  type MemoryEntry,
-} from "./memory";
+export { PolicyEngine } from "./policy";
+export type {
+  PolicyAuditConfig,
+  PolicyContext,
+  PolicyDecision,
+  PolicyEngineConfig,
+  PolicyEngineInstance,
+  PolicyFn,
+  PolicyRegistration,
+  PolicySystemPromptVerdict,
+  PolicyVerdict,
+} from "./policy";

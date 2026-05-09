@@ -2,12 +2,12 @@ import type { Tool, TraceContext } from "@openomni/protocol";
 import { ToolExecution } from "@openomni/protocol";
 import { Bus, Log } from "@openomni/session";
 import type { HookContext, HookVerdict, TokenUsage } from "../types";
-import type { MiddlewareEngineInstance } from "../middleware";
+import type { PolicyEngineInstance } from "../policy";
 import { summarizeInput } from "./shared";
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
-  engine: MiddlewareEngineInstance;
+  engine: PolicyEngineInstance;
   getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input"> & {
     usage?: TokenUsage;
   };

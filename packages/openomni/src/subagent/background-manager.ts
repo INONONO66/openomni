@@ -2,7 +2,7 @@ import { type Message, Subagent } from "@openomni/protocol";
 import { Bus, Log, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
-import { BackgroundLimitsMiddleware } from "./middleware/background-limits.js";
+import { BackgroundLimitsMiddleware } from "../policy/background-limits.js";
 import { SubagentRuntime } from "./runtime.js";
 
 type LaunchInput = {

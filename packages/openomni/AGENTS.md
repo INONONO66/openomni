@@ -8,6 +8,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | --- | --- | --- |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge` |
+| `src/policy/` | Orchestration-layer policy registrations | `IngressAuthorityMiddleware`, `SubagentSpawnPolicyMiddleware`, `BackgroundLimitsMiddleware`, `ToolRuntimePolicyMiddleware` |
 | `src/runtime/` | Session bus transport bridge | `BusTransport`, `Transport` |
 | `src/storage/` | Shared task type re-exports | `Task` (re-exported from `@openomni/protocol`) |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
@@ -29,6 +30,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 dag/                → no internal deps
 storage/            → no orchestration deps (re-exports from @openomni/protocol)
 runtime/            → @openomni/session + @openomni/agent transport contracts
+policy/             → @openomni/agent (PolicyEngine.evaluatePermission) + @openomni/protocol
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → no sibling deps
 subagent/           → execution-runtime/ (uses @openomni/agent + @openomni/session + protocol directly)
@@ -42,6 +44,7 @@ Consumers should only use `@openomni/openomni` exports:
 
 - DAG helpers from `src/dag/`
 - Ingress orchestration from `src/ingress/`
+- Orchestration policies from `src/policy/` (ingress authority, subagent spawn, background limits, tool runtime)
 - Bus transport bridge from `src/runtime/`
 - Task type re-exports from `src/storage/` (persistence is in `@openomni/session`)
 - Subagent runtime + background manager from `src/subagent/`
@@ -66,6 +69,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 - `src/dag/AGENTS.md` — dependency-graph helpers
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
+- `src/policy/` — orchestration-layer policy registrations (ingress authority, subagent spawn, background limits, tool runtime)
 - `src/storage/AGENTS.md` — task type re-exports (persistence moved to `@openomni/session`)
 - `src/subagent/AGENTS.md` — session-backed subagent runtime and background manager
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware

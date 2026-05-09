@@ -133,7 +133,7 @@ describe("MiddlewareEngine", () => {
     engine.register({ name: "after", timing: "pre_turn", priority: 200, fn: after });
 
     const verdict = await engine.dispatch("pre_turn", baseCtx());
-    expect(verdict).toEqual({ action: "abort", reason: "middleware-error" });
+    expect(verdict).toEqual({ action: "abort", reason: "policy-error", policyId: "boom" });
     expect(after).toHaveBeenCalledTimes(0);
   });
 
@@ -297,7 +297,7 @@ describe("MiddlewareEngine", () => {
       });
 
       await expect(engine.dispatch("pre_turn", baseCtx())).rejects.toThrow(
-        "Middleware missing-reason returned abort without reason at pre_turn",
+        "Policy missing-reason returned abort without reason at pre_turn",
       );
     } finally {
       if (previousNodeEnv === undefined) {
@@ -396,7 +396,7 @@ describe("MiddlewareEngine", () => {
         resource: "shell",
         verdict: "abort",
         reason: "blocked_by_test_policy",
-        actionId: "sess-policy:middleware.pre_tool_use:policy-check:1",
+        actionId: "sess-policy:policy.pre_tool_use:policy-check:1",
         visibility: "internal",
         sequence: 1,
       });

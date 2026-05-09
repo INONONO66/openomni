@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createPostTurnMiddleware } from "../../../../src/core/middleware/builtin/post-turn";
+import { createPostTurnMiddleware } from "../../../../src/core/policy/builtin/post-turn";
 import type { MiddlewareContext } from "../../../../src/core/middleware";
 
 function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {

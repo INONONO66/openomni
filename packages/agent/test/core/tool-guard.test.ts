@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createToolGuardMiddleware } from "../../src/core/middleware/builtin/tool-guard";
+import { createToolGuardMiddleware } from "../../src/core/policy/builtin/tool-guard";
 import { ToolGuard } from "../../src/core/tool-guard";
 
 describe("ToolGuard.check", () => {

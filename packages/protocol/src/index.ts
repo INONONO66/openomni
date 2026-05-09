@@ -11,6 +11,7 @@ export * from "./adapter/index.js";
 export * from "./ingress/index.js";
 export * from "./messenger/index.js";
 export * from "./guardrail/index.js";
+export * from "./policy/index.js";
 export * from "./event-log/index.js";
 export * from "./agent/index.js";
 export * from "./artifact/index.js";

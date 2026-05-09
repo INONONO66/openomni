@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
-import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import type { AgentProfile } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+import type { MiddlewareRegistration } from "../../../src/core/middleware";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 
@@ -24,7 +23,6 @@ function makeDefinition(
 
 function resetState() {
   AgentRegistry.clear();
-  AgentMessenger._resetLog();
 }
 
 function makeMiddleware(name: string, propagate?: boolean): MiddlewareRegistration {

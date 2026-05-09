@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ExecutionEvent, Tool } from "@openomni/protocol";
 import { Bus, EventLog, Session, SqliteStorageAdapter, Storage } from "@openomni/session";
 import { createToolExecutor } from "./executor.js";
-import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
+import { ToolRuntimePolicyMiddleware } from "../../policy/tool-runtime-policy.js";
 import type { NativeTool, ToolRiskTier } from "./types.js";
 
 function makeCall(tool: string, input: Record<string, unknown> = {}): Tool.Call {

@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
-import { AgentMessenger } from "../../../src/runtime/messenger/messenger";
 import { createAgentRuntimeContext } from "../../../src/core/runtime-context";
 import type { AgentProfile } from "@openomni/protocol";
 import type { DelegationContext } from "../../../src/core/delegation";
@@ -42,7 +41,6 @@ function makeOptions(
 
 function resetState() {
   AgentRegistry.clear();
-  AgentMessenger._resetLog();
 }
 
 describe("SubagentTool", () => {

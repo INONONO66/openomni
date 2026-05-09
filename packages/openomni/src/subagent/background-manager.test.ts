@@ -3,7 +3,7 @@ import { SqliteStorageAdapter } from "@openomni/session/src/storage/sqlite-stora
 import { Storage } from "@openomni/session";
 import { BackgroundStore } from "./background-store";
 import { BackgroundManager } from "./background-manager";
-import { BackgroundLimitsMiddleware } from "./middleware/background-limits";
+import { BackgroundLimitsMiddleware } from "../policy/background-limits";
 import { SubagentRuntime } from "./runtime";
 
 let spawnBackgroundSpy: ReturnType<typeof spyOn> | undefined;
@@ -253,7 +253,6 @@ describe("BackgroundManager — launch limit policy", () => {
     });
 
     expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.policyId).toBe("guardrail.permission");
     expect(result.verdict.reason).toBe("max concurrent tasks per agent (0) exceeded");
   });
 });

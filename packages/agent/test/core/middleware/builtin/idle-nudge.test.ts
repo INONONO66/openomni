@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createIdleNudgeMiddleware } from "../../../../src/core/middleware/builtin/idle-nudge";
+import { createIdleNudgeMiddleware } from "../../../../src/core/policy/builtin/idle-nudge";
 import type { MiddlewareContext } from "../../../../src/core/middleware";
 import type { Hook } from "@openomni/protocol";
 

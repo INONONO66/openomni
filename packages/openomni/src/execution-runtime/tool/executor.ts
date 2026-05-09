@@ -1,12 +1,13 @@
 import {
-  Guardrail,
+  type Guardrail,
   ToolExecution,
   type ExecutionEvent,
   type Hook,
   type Tool,
 } from "@openomni/protocol";
+import { PolicyEngine } from "@openomni/agent";
 import { Bus, EventLog, Log, Storage } from "@openomni/session";
-import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
+import { ToolRuntimePolicyMiddleware } from "../../policy/tool-runtime-policy.js";
 import type {
   ImplicitInputSource,
   NativeTool,
@@ -45,7 +46,7 @@ function evaluatePermission(
   input: Record<string, unknown>,
   permission: Guardrail.Permission | undefined,
 ): Guardrail.EvaluationResult {
-  return Guardrail.evaluate(normalizePermission(permission), {
+  return PolicyEngine.evaluatePermission(normalizePermission(permission), {
     action: TOOL_CALL_ACTION,
     resource: toolName,
     input,

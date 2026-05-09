@@ -1,4 +1,5 @@
 import type { RunInput } from "@openomni/llm";
+import { Retry } from "@openomni/llm";
 import { AgentExecution } from "@openomni/protocol";
 import type { Message, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus, type Log } from "@openomni/session";
@@ -11,17 +12,15 @@ import {
 } from "../budget";
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { fromConfig, MiddlewareEngine } from "../middleware";
-import type { MiddlewareEngineInstance } from "../middleware";
+import { PolicyEngine } from "../policy";
+import type { PolicyEngineInstance } from "../policy";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
-  createMemoryMiddleware,
   createToolGuardMiddleware,
-} from "../middleware/builtin";
+} from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
-import { calculateBackoffMs, classifyRetryReason, shouldRetry, sleep } from "../retry";
 import type {
   AgentEvent,
   AgentStep,
@@ -113,11 +112,11 @@ export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   };
 }
 
-export function buildMiddlewareEngine(
+export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-): MiddlewareEngineInstance {
-  const engine = MiddlewareEngine.create({
+): PolicyEngineInstance {
+  const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
       ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
@@ -126,21 +125,14 @@ export function buildMiddlewareEngine(
   });
   engine.register(createBudgetReassuranceMiddleware());
   engine.register(createBudgetWarningMiddleware());
-  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-    engine.register(reg);
-  }
   if (config.permissions) {
     engine.register(
       createToolGuardMiddleware({
         permission: config.permissions,
-        stepGuard: config.stepGuard,
         eventEmitter: config.eventEmitter,
         source: "stream-engine",
       }),
     );
-  }
-  if (config.memory) {
-    engine.register(createMemoryMiddleware(config.memory));
   }
   if (config.compaction) {
     engine.register(createCompactionMiddleware(config.compaction));
@@ -148,6 +140,7 @@ export function buildMiddlewareEngine(
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
   }
+  engine.freeze();
   return engine;
 }
 
@@ -165,7 +158,7 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
 
 export async function dispatchPreRun(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
   const preRunVerdict = await engine.dispatch("pre_run", {
@@ -200,7 +193,7 @@ export async function dispatchPreRun(
 
 export async function dispatchBudgetCheck(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   log: StreamLog,
 ): Promise<AgentEvent | null> {
@@ -296,7 +289,7 @@ export function emitTurnComplete(
 export async function buildTurn(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: TraceContext.Type,
@@ -464,7 +457,7 @@ export function createTrackingSink(
 export async function* handleStop(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   agentBase: StreamAgentBase,
   log: StreamLog,
   turn: TurnArtifacts,
@@ -509,7 +502,9 @@ export async function* handleStop(
   yield {
     type: "hook_verdict",
     timing: "post_turn",
-    action: postTurnVerdict.action,
+    action: (postTurnVerdict.action === "deny"
+      ? "abort"
+      : postTurnVerdict.action) as HookVerdict["action"],
     reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
   };
 
@@ -525,7 +520,7 @@ export async function* handleStop(
     return flowDecision(continueDecision(state));
   }
 
-  if (postTurnVerdict.action === "abort") {
+  if (postTurnVerdict.action === "abort" || postTurnVerdict.action === "deny") {
     const event: AgentEvent = {
       type: "complete",
       result: {
@@ -576,7 +571,7 @@ export async function* handleContinue(
 
 export async function handleCompact(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): Promise<"continue"> {
@@ -587,13 +582,13 @@ export async function handleCompact(
 
 export async function* handleError(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   log: StreamLog,
   error: unknown,
   attempt: number,
-  retryPolicy: Parameters<typeof shouldRetry>[0],
+  retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
   const onErrorVerdict = await engine.dispatch("on_error", {
@@ -627,10 +622,10 @@ export async function* handleError(
   }
 
   const lastError = normalizedError.message;
-  const retryReason = classifyRetryReason(lastError);
+  const retryReason = Retry.classifyAgentRetryReason(lastError);
 
-  if (shouldRetry(retryPolicy, retryReason, attempt)) {
-    const backoffMs = calculateBackoffMs(retryPolicy, attempt);
+  if (Retry.shouldAgentRetry(retryPolicy, retryReason, attempt)) {
+    const backoffMs = Retry.calculateAgentBackoffMs(retryPolicy, attempt);
     config.eventEmitter?.emit("agent.error.retry", {
       sessionId: "stream-engine",
       time: Date.now(),
@@ -655,7 +650,7 @@ export async function* handleError(
       error: normalizedError,
       willRetry: true,
     };
-    await sleep(backoffMs);
+    await Retry.agentSleep(backoffMs);
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 
@@ -689,7 +684,7 @@ function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue"
 async function buildTurnSystemPrompt(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
 ): Promise<string | undefined> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
   const spVerdict = await engine.dispatchSystemPrompt({
@@ -716,7 +711,7 @@ async function buildTurnSystemPrompt(
 
 async function dispatchPostRunTransform(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
   const postRunVerdict = await engine.dispatch("post_run", {
@@ -739,7 +734,7 @@ async function dispatchPostRunTransform(
 
 async function applyPostCompaction(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   isCompletion: boolean,
