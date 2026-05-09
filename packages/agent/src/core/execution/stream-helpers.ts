@@ -12,14 +12,14 @@ import {
 } from "../budget";
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { MiddlewareEngine } from "../middleware";
-import type { MiddlewareEngineInstance } from "../middleware";
+import { PolicyEngine } from "../policy";
+import type { PolicyEngineInstance } from "../policy";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
   createToolGuardMiddleware,
-} from "../middleware/builtin";
+} from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
 import type {
   AgentEvent,
@@ -112,11 +112,11 @@ export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   };
 }
 
-export function buildMiddlewareEngine(
+export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-): MiddlewareEngineInstance {
-  const engine = MiddlewareEngine.create({
+): PolicyEngineInstance {
+  const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
       ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
@@ -140,6 +140,7 @@ export function buildMiddlewareEngine(
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
   }
+  engine.freeze();
   return engine;
 }
 
@@ -157,7 +158,7 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
 
 export async function dispatchPreRun(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
   const preRunVerdict = await engine.dispatch("pre_run", {
@@ -192,7 +193,7 @@ export async function dispatchPreRun(
 
 export async function dispatchBudgetCheck(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   log: StreamLog,
 ): Promise<AgentEvent | null> {
@@ -288,7 +289,7 @@ export function emitTurnComplete(
 export async function buildTurn(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: TraceContext.Type,
@@ -456,7 +457,7 @@ export function createTrackingSink(
 export async function* handleStop(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   agentBase: StreamAgentBase,
   log: StreamLog,
   turn: TurnArtifacts,
@@ -501,7 +502,9 @@ export async function* handleStop(
   yield {
     type: "hook_verdict",
     timing: "post_turn",
-    action: postTurnVerdict.action,
+    action: (postTurnVerdict.action === "deny"
+      ? "abort"
+      : postTurnVerdict.action) as HookVerdict["action"],
     reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
   };
 
@@ -568,7 +571,7 @@ export async function* handleContinue(
 
 export async function handleCompact(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): Promise<"continue"> {
@@ -579,7 +582,7 @@ export async function handleCompact(
 
 export async function* handleError(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   log: StreamLog,
@@ -681,7 +684,7 @@ function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue"
 async function buildTurnSystemPrompt(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
 ): Promise<string | undefined> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
   const spVerdict = await engine.dispatchSystemPrompt({
@@ -708,7 +711,7 @@ async function buildTurnSystemPrompt(
 
 async function dispatchPostRunTransform(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
   const postRunVerdict = await engine.dispatch("post_run", {
@@ -731,7 +734,7 @@ async function dispatchPostRunTransform(
 
 async function applyPostCompaction(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   isCompletion: boolean,
