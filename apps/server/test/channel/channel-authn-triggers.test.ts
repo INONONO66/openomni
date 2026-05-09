@@ -46,7 +46,7 @@ describe("channel-authn trigger policy", () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:telegram-triggers",
-        policyId: "guardrail.permission",
+        policyId: "channel.authn.telegram-triggers",
         verdict: "abort",
         reason: "telegram trigger denied",
         metadata: expect.objectContaining({
