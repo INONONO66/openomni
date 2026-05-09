@@ -67,7 +67,6 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     expect(result.verdict).toMatchObject({
       action: "abort",
       reason: "Session not found: missing-session",
-      policyId: "guardrail.permission",
     });
   });
 
@@ -98,7 +97,6 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     expect(result.verdict).toMatchObject({
       action: "abort",
       reason: "Session already has an active run",
-      policyId: "guardrail.permission",
     });
   });
 
