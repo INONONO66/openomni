@@ -1,5 +1,6 @@
-import { Guardrail } from "@openomni/protocol";
+import type { Guardrail } from "@openomni/protocol";
 import { Log } from "@openomni/session";
+import { PolicyEngine } from "./policy/engine";
 
 const TOOL_CALL_ACTION = "tool.call";
 
@@ -30,7 +31,7 @@ export namespace ToolGuard {
     input: Record<string, unknown>,
     permission: Guardrail.Permission,
   ): Guardrail.EvaluationResult {
-    const result = Guardrail.evaluate(normalizePermission(permission), {
+    const result = PolicyEngine.evaluatePermission(normalizePermission(permission), {
       action: TOOL_CALL_ACTION,
       resource: toolName,
       input,
