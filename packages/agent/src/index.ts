@@ -1,4 +1,4 @@
-// Agent package public API — ChatAgent only
+// Agent package public API
 export { ChatAgent } from "./core/chat-agent";
 export type { ChatAgentInstance } from "./core/chat-agent";
 export type {
@@ -39,6 +39,18 @@ export type {
   MiddlewareEngineConfig,
   MiddlewareEngineInstance,
 } from "./core/middleware";
+export { PolicyEngine } from "./core/policy";
+export type {
+  PolicyAuditConfig,
+  PolicyContext,
+  PolicyDecision,
+  PolicyEngineConfig,
+  PolicyEngineInstance,
+  PolicyFn,
+  PolicyRegistration,
+  PolicySystemPromptVerdict,
+  PolicyVerdict,
+} from "./core/policy";
 export { AgentRegistry } from "./runtime/index";
 export { SubagentTool } from "./runtime/index";
 export type { SubagentToolOptions } from "./runtime/index";

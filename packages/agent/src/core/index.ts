@@ -30,3 +30,15 @@ export type {
   MiddlewareEngineConfig,
   MiddlewareEngineInstance,
 } from "./middleware";
+export { PolicyEngine } from "./policy";
+export type {
+  PolicyAuditConfig,
+  PolicyContext,
+  PolicyDecision,
+  PolicyEngineConfig,
+  PolicyEngineInstance,
+  PolicyFn,
+  PolicyRegistration,
+  PolicySystemPromptVerdict,
+  PolicyVerdict,
+} from "./policy";
