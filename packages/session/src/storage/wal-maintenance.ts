@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
-import { Log } from "../log/index.js";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "../bus/index.js";
 
 export type WalMaintenanceHandle = { stop: () => void };
 
@@ -21,14 +22,26 @@ export namespace WalMaintenance {
         } | null;
 
         if (result && result.busy > 0) {
-          Log.warn("WAL checkpoint had busy pages", {
-            busy: result.busy,
-            log: result.log,
-            checkpointed: result.checkpointed,
+          Bus.publish(Operational.Warn, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "storage.wal",
+            msg: "WAL checkpoint had busy pages",
+            context: {
+              busy: result.busy,
+              log: result.log,
+              checkpointed: result.checkpointed,
+            },
           });
         }
       } catch (err) {
-        Log.warn("WAL checkpoint failed", { error: String(err) });
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "storage.wal",
+          msg: "WAL checkpoint failed",
+          context: { error: String(err) },
+        });
       }
     };
 
