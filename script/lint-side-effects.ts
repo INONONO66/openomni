@@ -17,6 +17,7 @@ interface SideEffectRule {
   readonly filePath: string;
   readonly sideEffect: RegExp;
   readonly requiredBefore: readonly string[];
+  readonly requiredInScope?: readonly string[];
   readonly scopeStart?: RegExp;
   readonly message: string;
 }
@@ -42,9 +43,9 @@ const rules: readonly SideEffectRule[] = [
     sideEffect: /tool\.execute\(dispatchedCall\)/g,
     scopeStart: /return async \(call: Tool\.Call\): Promise<Tool\.Result> => \{/g,
     requiredBefore: [
-      "appendLedgerEvent(",
-      '"tool_started"',
-      "{ beforeSideEffect: true, parentActionId }",
+      "Bus.publish(ToolExecution.Started, {",
+      "toolCallId: call.id",
+      "toolName: originalName",
     ],
     message: "tool.execute must be preceded by a before-side-effect audit publish",
   },
@@ -53,11 +54,7 @@ const rules: readonly SideEffectRule[] = [
     filePath: "apps/server/src/tool/mcp/provider.ts",
     sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}\)/g,
     scopeStart: /async execute\(call: Tool\.Call\): Promise<Tool\.Result> \{/g,
-    requiredBefore: [
-      "this.appendLedgerEvent(",
-      '"action_requested"',
-      "{ beforeSideEffect: true, tool }",
-    ],
+    requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
     message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
   },
   {
@@ -72,7 +69,7 @@ const rules: readonly SideEffectRule[] = [
     filePath: "packages/openomni/src/ingress/event-projector.ts",
     sideEffect: /Session\.addMessage\(sessionId, message\)/g,
     scopeStart: /export function project\(/g,
-    requiredBefore: ["ledger.append(", '"ingress.inbound.message.write"'],
+    requiredBefore: ["audit.append(", '"ingress.inbound.message.write"'],
     message:
       "projected inbound messages must append ingress.inbound.message.write before Session.addMessage",
   },
@@ -81,7 +78,7 @@ const rules: readonly SideEffectRule[] = [
     filePath: "packages/openomni/src/ingress/event-projector.ts",
     sideEffect: /Session\.addPart\(message\.id, part\)/g,
     scopeStart: /export function project\(/g,
-    requiredBefore: ["ledger.append(", '"ingress.inbound.part.write"'],
+    requiredBefore: ["audit.append(", '"ingress.inbound.part.write"'],
     message:
       "projected inbound parts must append ingress.inbound.part.write before Session.addPart",
   },
@@ -90,7 +87,7 @@ const rules: readonly SideEffectRule[] = [
     filePath: "packages/openomni/src/ingress/session-bridge.ts",
     sideEffect: /Session\.addMessage\(sessionId, message\)/g,
     scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["ledger.append(", '"ingress.writeback.message.write"'],
+    requiredBefore: ["audit.append(", '"ingress.writeback.message.write"'],
     message:
       "session bridge writebacks must append ingress.writeback.message.write before Session.addMessage",
   },
@@ -99,7 +96,7 @@ const rules: readonly SideEffectRule[] = [
     filePath: "packages/openomni/src/ingress/session-bridge.ts",
     sideEffect: /Session\.addPart\(message\.id, part\)/g,
     scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["ledger.append(", '"ingress.writeback.part.write"'],
+    requiredBefore: ["audit.append(", '"ingress.writeback.part.write"'],
     message:
       "session bridge writebacks must append ingress.writeback.part.write before Session.addPart",
   },
@@ -108,24 +105,27 @@ const rules: readonly SideEffectRule[] = [
     filePath: "packages/session/src/session/index.ts",
     sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
     scopeStart: /export function addMessage\(/g,
-    requiredBefore: ["appendMessageMutation(adapter, sessionID, message, status);"],
-    message: "Session.addMessage must append its mutation ledger before adapter.message.set",
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    message: "Session.addMessage must publish Event.Updated after adapter.message.set",
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
     filePath: "packages/session/src/session/index.ts",
     sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
     scopeStart: /export function addMessage\(/g,
-    requiredBefore: ["appendMessageMutation(adapter, sessionID, message, status);"],
-    message: "Session.addMessage must append its mutation ledger before adapter.session.set",
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    message: "Session.addMessage must publish Event.Updated after adapter.session.set",
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
     filePath: "packages/session/src/session/index.ts",
     sideEffect: /adapter\.part\.set\(messageID, part\)/g,
     scopeStart: /export function addPart\(/g,
-    requiredBefore: ["appendPartMutation(adapter, messageID, part);"],
-    message: "Session.addPart must append its mutation ledger before adapter.part.set",
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info:"],
+    message: "Session.addPart must publish Event.Updated after adapter.part.set",
   },
 ];
 
@@ -183,7 +183,15 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
       ? lastMatchStartBefore(source, rule.scopeStart, sideEffect.index)
       : 0;
     const prefix = source.slice(searchStart, sideEffect.index);
-    const missing = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
+    const missingBefore = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
+
+    const scopeEnd = source.indexOf("\n  }", sideEffect.index);
+    const scope = source.slice(searchStart, scopeEnd > 0 ? scopeEnd : source.length);
+    const missingInScope = (rule.requiredInScope || []).filter(
+      (snippet) => !scope.includes(snippet),
+    );
+
+    const missing = [...missingBefore, ...missingInScope];
 
     if (missing.length === 0) {
       return [];
@@ -194,7 +202,7 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
         ruleId: rule.ruleId,
         filePath: rule.filePath,
         line: lineNumberForOffset(source, sideEffect.index),
-        message: `${rule.message}; missing before call: ${missing.join(", ")}`,
+        message: `${rule.message}; missing: ${missing.join(", ")}`,
       },
     ];
   });
