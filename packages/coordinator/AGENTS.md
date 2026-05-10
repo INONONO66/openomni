@@ -9,7 +9,6 @@ src/
 ├── index.ts              # Package barrel
 ├── credentials/          # Worker credential filtering and injection
 ├── ipc/                  # Unix socket transport + framing + protocol errors
-├── metrics/              # In-memory metrics registry and event-loop lag measurement
 ├── recovery/             # Interrupted worker run recovery
 ├── tool-permission/      # Non-interactive permission policy + audit log
 └── worker-pool/          # Worker routing, supervision, and worker entrypoint
@@ -26,7 +25,6 @@ Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@o
 | `credentials/store.ts` | Loads stored credentials and filters them by provider prefix |
 | `credentials/injector.ts` | Injects provider-scoped credentials into workers |
 | `ipc/*` | Request/response framing, client/server transport, and protocol errors |
-| `metrics/*` | MetricsRegistry, collectMetrics, and event-loop lag measurement |
 | `recovery/index.ts` | Marks interrupted worker runs failed after restart |
 | `tool-permission/*` | Policy load + audit logging for non-interactive tool decisions |
 | `worker-pool/pool.ts` | Public worker-pool factory |

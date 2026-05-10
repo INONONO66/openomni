@@ -1,48 +1,17 @@
 # Observability Doctrine
 
-Three distinct channels carry observability data in OpenOmni: `Log`, `Bus`, and `Telemetry`. Each serves a different consumer and a different purpose. Mixing them creates noise, missed signals, and wasted compute.
+`Bus` is the single observability layer in OpenOmni. All behavior flows through `Bus.publish()`, gets captured by the `BusPersistence` observer, and lands in the `bus_event` table. There's no separate log module, no telemetry pipeline, no event log bridge. One channel, one storage path, one query API.
 
-## When to Use Log
+## Bus as Universal Layer
 
-`Log` (`packages/session/src/log/index.ts`) writes newline-delimited JSON to stdout. It's for humans: operators reading logs, developers debugging, alerting pipelines scanning for error patterns.
-
-Use `Log` when the audience is a person or a log aggregator, not another module in the process.
-
-```typescript
-import { Log } from "@openomni/session";
-
-// operator needs to know a run started
-Log.info("run started", { sessionId, runId, model: config.model.id });
-
-// something broke and needs attention
-Log.error("LLM request failed", { sessionId, attempt, error: err.message });
-
-// unexpected but we handled it
-Log.warn("retry triggered", { sessionId, attempt, maxAttempts });
-
-// detailed diagnostic, only visible when OPENOMNI_LOG_LEVEL=debug
-Log.debug("middleware verdict", { timing, action, reason });
-```
-
-The `OPENOMNI_LOG_LEVEL` env var controls the minimum level (default: `info`). Debug calls are filtered at the `write()` level before any string interpolation, so they're zero-cost when disabled.
-
-**Do not use `Log` for:**
-- State transitions that other modules need to react to (use `Bus.publish()`)
-- Performance timing across service boundaries (use `Telemetry.span()`)
-- Anything that will be consumed programmatically within the process
-
-## When to Use Event
-
-`Bus` (`packages/session/src/bus/index.ts`) is an in-process pub/sub channel. Events are typed and dispatched via `queueMicrotask` so handlers don't block the publisher. Nothing is persisted by default.
-
-Use `Bus.publish()` when a state transition needs to be observed by other modules in the same process, without creating a direct dependency between them.
+Every module that needs to signal state publishes a typed event through `Bus.publish()`. The `BusPersistence` observer (`packages/session/src/bus-persistence/`) watches the bus and automatically persists non-ephemeral events to the database.
 
 ```typescript
 import { Bus } from "@openomni/session";
 import { AgentExecution } from "@openomni/protocol";
 
-// a turn started — the session layer, metrics collector, and UI bridge
-// can all subscribe without the agent knowing about any of them
+// a turn started — session layer, UI bridge, and any other subscriber
+// can react without the agent knowing about any of them
 Bus.publish(AgentExecution.TurnStart, {
   sessionId,
   agentId,
@@ -67,10 +36,39 @@ export const MyEvent = BusEvent.define(
 );
 ```
 
+**Ephemeral events** are skipped by `BusPersistence`. Mark an event ephemeral when it's only useful in-process and has no value in the historical record:
+
+```typescript
+export const MyEphemeralEvent = BusEvent.define(
+  "my.ephemeral.event",
+  z.object({ sessionId: z.string(), time: z.number() }),
+  { visibility: "ephemeral" },
+);
+```
+
 **Do not use `Bus` for:**
-- Human-readable diagnostics (use `Log`)
 - Cross-process communication (use IPC transport in `packages/coordinator/src/ipc/`)
-- Durable event storage (use `EventLog` in `packages/session/src/event-log/`)
+
+### BusPersistence Observer
+
+`BusPersistence.start()` registers a global observer on the bus. It runs two things for every event:
+
+1. **Stdout output** for operational events (see next section).
+2. **DB persistence** for all non-ephemeral events, serialized as JSON into the `bus_event` table.
+
+The observer chains writes per session ID to preserve ordering without blocking the publisher. If a write fails, it logs a warning and continues; the bus itself is never blocked.
+
+```typescript
+import { BusPersistence } from "@openomni/session";
+
+// call once at startup, before any agents run
+const stop = BusPersistence.start();
+
+// call on shutdown
+stop();
+```
+
+`BusPersistence` requires a SQLite-backed storage adapter. It reads the active adapter from `Storage.getAdapter()` and writes directly to the `bus_event` table.
 
 ### Relationship to `eventEmitter`
 
@@ -84,73 +82,170 @@ interface AgentEventEmitter {
 
 It carries `AgentEvent` variants (`text_chunk`, `tool_call_start`, `turn_complete`, etc.) and is wired by the caller, not the agent. `Bus.publish()` is for cross-module coordination inside the process. `eventEmitter` is for the caller's streaming UI or test harness. They're complementary: the agent emits both, for different audiences.
 
-## When to Use Span
+## Operational Events
 
-`Telemetry` (`packages/session/src/telemetry/index.ts`) wraps the OpenTelemetry API. Spans capture timing with parent-child relationships across async boundaries. Counters and histograms track aggregate metrics.
-
-Telemetry is **disabled by default**. `Telemetry.init({ enabled: false })` is the default state. Spans fall through to a no-op when disabled, so call sites pay no runtime cost.
+`Operational.*` events (`packages/protocol/src/event/operational.ts`) replace the old `Log` module. They're regular bus events with a structured payload, and `BusPersistence` writes them to stdout as newline-delimited JSON.
 
 ```typescript
-import { Telemetry } from "@openomni/session";
+import { Bus } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
 
-// wrap an LLM call to measure latency and capture model attributes
-const result = await Telemetry.span(
-  "llm.request",
-  async (span) => {
-    span.setAttribute("model.id", config.model.id);
-    span.setAttribute("model.provider", config.model.provider);
-    return fetchCompletion(messages);
-  },
-  { "session.id": sessionId },
-);
+// operator needs to know a run started
+Bus.publish(Operational.Info, {
+  traceId,
+  time: Date.now(),
+  component: "agent-runtime",
+  msg: "run started",
+  sessionId,
+  context: { runId, model: config.model.id },
+});
 
-// count tool invocations for aggregate metrics
-const toolCounter = Telemetry.counter("agent.tool.invocations");
-toolCounter.add(1, { tool: toolName });
+// something broke and needs attention
+Bus.publish(Operational.Error, {
+  traceId,
+  time: Date.now(),
+  component: "llm-provider",
+  msg: "LLM request failed",
+  sessionId,
+  error: err.message,
+  context: { attempt },
+});
+
+// unexpected but handled
+Bus.publish(Operational.Warn, {
+  traceId,
+  time: Date.now(),
+  component: "agent-runtime",
+  msg: "retry triggered",
+  sessionId,
+  context: { attempt, maxAttempts },
+});
+
+// detailed diagnostic, only visible when OPENOMNI_LOG_LEVEL=debug
+Bus.publish(Operational.Debug, {
+  traceId,
+  time: Date.now(),
+  component: "middleware",
+  msg: "middleware verdict",
+  context: { timing, action, reason },
+});
 ```
 
-Use `Telemetry.span()` when:
-- You need timing with parent-child relationships (LLM call inside a turn inside a run)
-- The operation crosses a meaningful async boundary
-- You want the data in an OTel-compatible backend (Jaeger, Honeycomb, Datadog)
+The `OPENOMNI_LOG_LEVEL` env var controls the minimum level (default: `info`). Debug events are filtered before stdout output, so they're zero-cost when disabled.
 
-**Do not use `Telemetry` for:**
-- Logging human-readable messages (use `Log`)
-- Triggering reactions in other modules (use `Bus`)
-- Anything that must work without OTel SDK configuration
+### Operational Event Schemas
 
-## Log Levels
+All four log-level events share a common base:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `traceId` | Yes | Trace ID for correlation |
+| `time` | Yes | Unix timestamp in ms |
+| `component` | Yes | Module or subsystem name |
+| `msg` | Yes | Human-readable message |
+| `sessionId` | No | Session this event belongs to |
+| `context` | No | Arbitrary key-value context |
+
+`Operational.Error` adds an optional `error` field for the error message string.
+
+Beyond the four log levels, `Operational.*` also includes lifecycle events:
+
+| Event | When |
+|-------|------|
+| `Operational.BootstrapCompleted` | Server finished startup |
+| `Operational.ShutdownInitiated` | Graceful shutdown started |
+| `Operational.RecoveryStarted` | Crash recovery scan began |
+| `Operational.RecoveryCompleted` | Crash recovery finished |
+
+### Log Levels
 
 | Level | When to use | Examples |
 |-------|-------------|---------|
-| `error` | Something broke and requires operator attention. The system cannot recover without intervention. | LLM request failed after all retries, storage write failed, tool executor threw an unhandled exception |
+| `error` | Something broke and requires operator attention. The system can't recover without intervention. | LLM request failed after all retries, storage write failed, tool executor threw an unhandled exception |
 | `warn` | Unexpected condition, but the system handled it. Worth knowing, not worth waking someone up. | Retry triggered for transient error, budget threshold crossed, compaction fallback used |
 | `info` | Significant lifecycle event. Useful for tracing what happened in a run without debug noise. | Run started, turn completed, session created, subagent spawned |
 | `debug` | Detailed diagnostic. Only useful when actively investigating a specific problem. | Middleware verdict and reason, token count per turn, message hash for dedup check, tool permission check result |
 
-`debug` is the only level where lazy evaluation matters. If constructing the log context is expensive, guard it:
+`debug` is the only level where lazy evaluation matters. If constructing the context is expensive, guard it:
 
 ```typescript
 // fine for cheap context
-Log.debug("tool permission check", { toolName, allowed });
+Bus.publish(Operational.Debug, { traceId, time: Date.now(), component, msg: "tool permission check", context: { toolName, allowed } });
 
 // guard expensive serialization
 if (process.env.OPENOMNI_LOG_LEVEL === "debug") {
-  Log.debug("full message history", { messages: serializeMessages(history) });
+  Bus.publish(Operational.Debug, {
+    traceId,
+    time: Date.now(),
+    component,
+    msg: "full message history",
+    context: { messages: serializeMessages(history) },
+  });
 }
 ```
 
+## Query API
+
+All persisted events are queryable through the `BusQuery` namespace (`packages/session/src/bus-persistence/query.ts`).
+
+```typescript
+import { BusQuery } from "@openomni/session";
+
+// all events for a session, optionally filtered
+const events = await BusQuery.listBySession(sessionId, {
+  category: "agent",
+  after: startTime,
+  limit: 100,
+});
+
+// all events for a specific worker run
+const runEvents = await BusQuery.listByRun(runId);
+
+// only error events for a session
+const errors = await BusQuery.listErrors(sessionId);
+
+// aggregate counts by category and type
+const stats = await BusQuery.getStats(sessionId);
+
+// worker run history with event summaries
+const history = await BusQuery.getWorkerRunHistory(sessionId);
+```
+
+### EventRecord Shape
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique record ID |
+| `sessionId` | Session this event belongs to |
+| `runId` | Worker run ID, if applicable |
+| `eventType` | Event type name (e.g., `agent.execution.started`) |
+| `category` | One of `agent`, `operational`, `system`, `custom` |
+| `data` | Full event payload |
+| `traceId` | Trace ID for correlation |
+| `durationMs` | Duration in ms, if the event carries it |
+| `timeCreated` | Unix timestamp in ms |
+
+### QueryOptions
+
+| Field | Description |
+|-------|-------------|
+| `type` | Filter by exact event type name |
+| `category` | Filter by category |
+| `after` | Only events after this timestamp |
+| `before` | Only events before this timestamp |
+| `limit` | Maximum results to return |
+
 ## Sensitive Data Policy
 
-The log stream is the most likely channel to leak sensitive data. Treat it as potentially visible to anyone with log access.
+The observability stream is the most likely channel to leak sensitive data. Treat it as potentially visible to anyone with log or database access.
 
-**Never log:**
+**Never publish:**
 - API keys, OAuth tokens, or any credential material
 - Full message content (user prompts, assistant responses, tool inputs/outputs)
 - User PII (names, emails, identifiers from external systems)
-- Tool input or output bodies (log the tool name and call ID, not the payload)
+- Tool input or output bodies (publish the tool name and call ID, not the payload)
 
-**Safe to log:**
+**Safe to publish:**
 - Token counts (`inputTokens`, `outputTokens`)
 - Model IDs and provider names
 - Tool names (not arguments)
@@ -161,15 +256,13 @@ The log stream is the most likely channel to leak sensitive data. Treat it as po
 
 The same policy applies to Bus event payloads. `AgentExecution.ToolInvoked` carries `inputSummary` (a short string), not the full input. If you're adding a new event schema in `packages/protocol/src/event/`, keep payloads to identifiers and summaries.
 
-Telemetry span attributes follow the same rules. Span attributes end up in external backends. Never set a span attribute to a full message body or credential.
-
 ## TraceContext Propagation
 
-A trace context ties together all the log lines, bus events, and spans that belong to a single request. The `traceId` field in `Subagent.Events.BaseEvent` (`packages/protocol/src/subagent/index.ts`) is the current anchor point.
+A trace context ties together all the bus events that belong to a single request. The `traceId` field in `Subagent.Events.BaseEvent` (`packages/protocol/src/subagent/index.ts`) is the current anchor point.
 
-**Creation:** A trace context is created once at the ingress entry point, before any session resolution or agent dispatch. Every log line and event emitted during that request carries the same `traceId`.
+**Creation:** A trace context is created once at the ingress entry point, before any session resolution or agent dispatch. Every event emitted during that request carries the same `traceId`.
 
-**Threading:** Trace context is passed explicitly through function parameters. OpenOmni does not use `AsyncLocalStorage` for trace propagation. If a function needs to log with trace context, it receives the context as an argument.
+**Threading:** Trace context is passed explicitly through function parameters. OpenOmni does not use `AsyncLocalStorage` for trace propagation. If a function needs to publish with trace context, it receives the context as an argument.
 
 ```typescript
 // ingress creates the context
@@ -186,7 +279,7 @@ Bus.publish(Subagent.Events.WorkerRunStarted, {
 });
 ```
 
-**Auto-generation:** Call sites that don't have an ingress context (tests, scripts, direct API calls) generate a fresh `traceId` locally. This ensures every log line has a trace ID without requiring callers to thread context manually.
+**Auto-generation:** Call sites that don't have an ingress context (tests, scripts, direct API calls) generate a fresh `traceId` locally. This ensures every event has a trace ID without requiring callers to thread context manually.
 
 **Parent-child chains:** When a subagent spawns a child, the child inherits the parent's `traceId`. The `runId` and `taskId` fields distinguish the child's work within the same trace. This means a single `traceId` can span multiple sessions and multiple worker runs in a multi-agent execution.
 
@@ -200,7 +293,7 @@ Bus.publish(Subagent.Events.WorkerRunStarted, {
 | `taskId` | No | The background task ID, if this is a fire-and-forget execution |
 | `agentName` | No | The agent profile name handling this work |
 
-When adding new bus events or log calls, include `traceId` in the context whenever it's available. It's the primary key for correlating observability data across the system.
+When adding new bus events, include `traceId` in the payload whenever it's available. It's the primary key for correlating observability data across the system.
 
 ## Persona Workforce Observability
 
@@ -217,4 +310,4 @@ Track these relationships with identifiers and summaries, not raw prompt bodies:
 - writeback target session ID;
 - result summary or memory candidate ID.
 
-Do not log full self-loop transcripts, drafts, social content bodies, user prompts, or private memory content. Store internal transcripts in session storage when required, and emit only correlation identifiers through Log, Bus, and Telemetry.
+Do not publish full self-loop transcripts, drafts, social content bodies, user prompts, or private memory content. Store internal transcripts in session storage when required, and emit only correlation identifiers through Bus events.
