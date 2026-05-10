@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
-import type { ExecutionEvent, Run, Sink, Tool } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Operational, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { Bus, Storage } from "@openomni/session";
 import { Processor } from "../../src/session/processor";
 import type { Message } from "../../src/session";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
+
+type OperationalInfoPayload = {
+  traceId: string;
+  time: number;
+  sessionId?: string;
+  component: string;
+  msg: string;
+  context?: Record<string, unknown>;
+};
 
 interface EventLogRow {
   id: number;
@@ -90,10 +99,6 @@ function configureEventLogSession(sessionId: string, rows: EventLogRow[]): void 
       },
     },
   });
-}
-
-function parseRows(rows: EventLogRow[]): ExecutionEvent[] {
-  return rows.map((row) => JSON.parse(row.data) as ExecutionEvent);
 }
 
 describe("Processor", () => {
@@ -441,15 +446,21 @@ describe("Processor", () => {
       expect(result).toBe("stop");
     });
 
-    test("projects sink callbacks to session EventLog rows", async () => {
-      const rows: EventLogRow[] = [];
+    test("projects sink callbacks to Bus events", async () => {
+      const busEvents: OperationalInfoPayload[] = [];
+      const unsub = Bus.subscribe(Operational.Info, (data) => {
+        if (data.component === "llm.processor") {
+          busEvents.push(data);
+        }
+      });
+
       const sinkEvents: string[] = [];
       const toolCalls: Tool.Call[] = [];
       const toolResults: Tool.Result[] = [];
       const snapshots: Run.Snapshot[] = [];
       const messages: Message.WithParts[] = [];
 
-      configureEventLogSession("session-456", rows);
+      configureEventLogSession("session-456", []);
 
       const sink: Sink = {
         onMessage(message) {
@@ -489,7 +500,7 @@ describe("Processor", () => {
       });
 
       const result = await processor.process({ messages: [], model: mockModel, system: "" });
-      const events = parseRows(rows);
+      await new Promise((resolve) => queueMicrotask(resolve));
 
       expect(result).toBe("stop");
       expect(sinkEvents).toContain("message");
@@ -503,44 +514,28 @@ describe("Processor", () => {
       expect(toolResults[0].toolCallId).toBe("call-1");
       expect(snapshots.map((snapshot) => snapshot.state.type)).toEqual(["busy", "idle"]);
 
-      expect(events.map((event) => event.sequence)).toEqual(
-        Array.from({ length: events.length }, (_value, index) => index + 1),
-      );
-      expect(events.every((event) => event.visibility === "internal")).toBe(true);
-      expect(
-        events.every((event) => event.actionId.startsWith("session-456:processor.sink.")),
-      ).toBe(true);
-      expect(events.every((event) => !Number.isNaN(Date.parse(event.timestamp)))).toBe(true);
+      expect(busEvents.every((event) => event.component === "llm.processor")).toBe(true);
+      expect(busEvents.every((event) => event.sessionId === "session-456")).toBe(true);
+      expect(busEvents.every((event) => typeof event.time === "number")).toBe(true);
 
-      const messageRows = events.filter(
-        (event): event is ExecutionEvent.MirroredBusEvent =>
-          event.type === "bus_event" && event.name === "processor.sink.message",
-      );
-      const snapshotRows = events.filter(
-        (event): event is ExecutionEvent.MirroredBusEvent =>
-          event.type === "bus_event" && event.name === "processor.sink.snapshot",
-      );
-      const toolStarted = events.find(
-        (event): event is ExecutionEvent.ToolStarted => event.type === "tool_started",
-      );
-      const toolCompleted = events.find(
-        (event): event is ExecutionEvent.ToolCompleted => event.type === "tool_completed",
-      );
+      const messageEvents = busEvents.filter((event) => event.msg === "sink.message");
+      const snapshotEvents = busEvents.filter((event) => event.msg === "sink.snapshot");
+      const toolStarted = busEvents.find((event) => event.msg === "sink.tool.started");
+      const toolCompleted = busEvents.find((event) => event.msg === "sink.tool.completed");
 
-      expect(messageRows.length).toBe(messages.length);
-      expect(snapshotRows.length).toBe(2);
-      expect(toolStarted).toMatchObject({
-        type: "tool_started",
+      expect(messageEvents.length).toBe(messages.length);
+      expect(snapshotEvents.length).toBe(2);
+      expect(toolStarted?.context).toMatchObject({
         toolCallId: "call-1",
         toolName: "lookup",
         args: { q: "x" },
       });
-      expect(toolCompleted).toMatchObject({
-        type: "tool_completed",
+      expect(toolCompleted?.context).toMatchObject({
         toolCallId: "call-1",
-        result: { toolCallId: "call-1", output: "ok" },
-        parentActionId: toolStarted?.actionId,
+        output: "ok",
       });
+
+      unsub();
     });
 
     test("respects abort signal during stream processing", async () => {
