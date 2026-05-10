@@ -1,6 +1,6 @@
-import { ExecutionEvent, Subagent } from "@openomni/protocol";
+import { Subagent } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
-import { Storage } from "../storage/storage";
+import { WorkerRunStateStore } from "./state-store.js";
 
 // Subagent execution lifecycle per session. Separate from Task.Run in @openomni/openomni,
 // which handles scheduled-task runs (triggers, idempotency, checkpoints).
@@ -28,92 +28,23 @@ export interface WorkerRunRecord {
   resumeCount: number;
 }
 
-type WorkerRunCreatedEvent = {
-  runId: string;
-  title: string;
-  prompt: string;
-  assignedStepId?: string;
-  startedAt: number;
-};
-
-type WorkerRunStatusUpdatedEvent = {
-  runId: string;
-  status: WorkerRunStatus;
-  endedAt?: number;
-  lastMessageId?: string;
-};
-
 type WorkerRunStatusExtra = {
   endedAt?: number;
   lastMessageId?: string;
   error?: string;
 };
 
-const TRANSITIONS: Record<WorkerRunStatus, readonly WorkerRunStatus[]> = {
-  queued: ["starting"],
-  starting: ["running"],
-  running: ["waiting_input", "succeeded", "failed", "cancelled", "interrupted"],
-  waiting_input: ["running"],
-  succeeded: [],
-  failed: [],
-  cancelled: [],
-  interrupted: [],
-};
+const terminalStatuses: ReadonlySet<WorkerRunStatus> = new Set([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "interrupted",
+]);
 
-function getAdapter(): Storage.Adapter["eventLog"] | undefined {
-  return Storage.get().eventLog;
-}
+const runExtras = new Map<string, Pick<WorkerRunRecord, "endedAt" | "lastMessageId">>();
 
-function appendExecutionEvent(sessionId: string, event: ExecutionEvent): void {
-  const adapter = getAdapter();
-  if (adapter) {
-    adapter.append(sessionId, event.type, JSON.stringify(event));
-  }
-}
-
-function parseExecutionEvent(data: string): ExecutionEvent | null {
-  try {
-    const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(data));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseCreatedEvent(data: string): WorkerRunCreatedEvent | null {
-  try {
-    const parsed = JSON.parse(data) as Partial<WorkerRunCreatedEvent>;
-    if (
-      typeof parsed.runId !== "string" ||
-      typeof parsed.title !== "string" ||
-      typeof parsed.prompt !== "string" ||
-      typeof parsed.startedAt !== "number"
-    ) {
-      return null;
-    }
-    return parsed as WorkerRunCreatedEvent;
-  } catch {
-    return null;
-  }
-}
-
-function parseStatusUpdatedEvent(data: string): WorkerRunStatusUpdatedEvent | null {
-  try {
-    const parsed = JSON.parse(data) as Partial<WorkerRunStatusUpdatedEvent>;
-    if (typeof parsed.runId !== "string" || typeof parsed.status !== "string") {
-      return null;
-    }
-    if (!(parsed.status in TRANSITIONS)) {
-      return null;
-    }
-    return parsed as WorkerRunStatusUpdatedEvent;
-  } catch {
-    return null;
-  }
-}
-
-function isValidTransition(current: WorkerRunStatus, next: WorkerRunStatus): boolean {
-  return current === next || TRANSITIONS[current].includes(next);
+function extraKey(sessionId: string, runId: string): string {
+  return `${sessionId}:${runId}`;
 }
 
 function publishLifecycleEvent(
@@ -155,178 +86,61 @@ function publishLifecycleEvent(
   }
 }
 
-function replayRuns(sessionId: string): Map<string, WorkerRunRecord> {
-  const adapter = getAdapter();
-  const runs = new Map<string, WorkerRunRecord>();
-
-  if (!adapter) {
-    return runs;
-  }
-
-  for (const row of adapter.replay(sessionId)) {
-    if (row.type === "worker_run_created") {
-      const event = parseExecutionEvent(row.data);
-      if (!event || event.type !== "worker_run_created") continue;
-
-      runs.set(event.runId, {
-        runId: event.runId,
-        sessionId,
-        title: event.title,
-        prompt: event.prompt,
-        assignedStepId: event.assignedStepId,
-        status: "queued",
-        startedAt: event.startedAt,
-        resumeCount: 0,
-      });
-      continue;
-    }
-
-    if (row.type === "worker_run_status_changed") {
-      const event = parseExecutionEvent(row.data);
-      if (!event || event.type !== "worker_run_status_changed") continue;
-
-      const current = runs.get(event.runId);
-      if (!current || !isValidTransition(current.status, event.status)) {
-        continue;
-      }
-
-      const next: WorkerRunRecord = {
-        ...current,
-        status: event.status,
-        lastMessageId: event.lastMessageId ?? current.lastMessageId,
-        resumeCount:
-          current.status === "waiting_input" && event.status === "running"
-            ? current.resumeCount + 1
-            : current.resumeCount,
-      };
-
-      runs.set(event.runId, next);
-      continue;
-    }
-
-    if (row.type === "worker_run_completed") {
-      const event = parseExecutionEvent(row.data);
-      if (!event || event.type !== "worker_run_completed") continue;
-
-      const current = runs.get(event.runId);
-      if (!current || !isValidTransition(current.status, "succeeded")) {
-        continue;
-      }
-
-      const next: WorkerRunRecord = {
-        ...current,
-        status: "succeeded",
-        endedAt: event.endedAt,
-        lastMessageId: event.lastMessageId ?? current.lastMessageId,
-      };
-
-      runs.set(event.runId, next);
-      continue;
-    }
-
-    if (row.type === "worker_run_failed") {
-      const event = parseExecutionEvent(row.data);
-      if (!event || event.type !== "worker_run_failed") continue;
-
-      const current = runs.get(event.runId);
-      if (!current || !isValidTransition(current.status, event.status)) {
-        continue;
-      }
-
-      const next: WorkerRunRecord = {
-        ...current,
-        status: event.status,
-        endedAt: event.endedAt,
-      };
-
-      runs.set(event.runId, next);
-      continue;
-    }
-
-    // Legacy raw event handling for backward compatibility with old persisted data
-    if (row.type === "worker_run.created") {
-      const event = parseCreatedEvent(row.data);
-      if (!event) continue;
-
-      runs.set(event.runId, {
-        runId: event.runId,
-        sessionId,
-        title: event.title,
-        prompt: event.prompt,
-        assignedStepId: event.assignedStepId,
-        status: "queued",
-        startedAt: event.startedAt,
-        resumeCount: 0,
-      });
-      continue;
-    }
-
-    if (row.type !== "worker_run.status_updated") continue;
-
-    const event = parseStatusUpdatedEvent(row.data);
-    if (!event) continue;
-
-    const current = runs.get(event.runId);
-    if (!current || !isValidTransition(current.status, event.status)) {
-      continue;
-    }
-
-    const next: WorkerRunRecord = {
-      ...current,
-      status: event.status,
-      endedAt: event.endedAt ?? current.endedAt,
-      lastMessageId: event.lastMessageId ?? current.lastMessageId,
-      resumeCount:
-        current.status === "waiting_input" && event.status === "running"
-          ? current.resumeCount + 1
-          : current.resumeCount,
-    };
-
-    runs.set(event.runId, next);
-  }
-
-  return runs;
-}
-
-function hasRun(sessionId: string, runId: string): Promise<WorkerRunRecord | undefined> {
-  return WorkerRun.get(sessionId, runId);
+function toWorkerRunRecord(record: WorkerRunStateStore.Record): WorkerRunRecord {
+  const extras = runExtras.get(extraKey(record.sessionId, record.runId));
+  return {
+    runId: record.runId,
+    sessionId: record.sessionId,
+    title: record.title,
+    prompt: record.prompt,
+    assignedStepId: record.assignedStepId,
+    status: record.status,
+    startedAt: record.timeCreated,
+    endedAt:
+      extras?.endedAt ?? (terminalStatuses.has(record.status) ? record.timeUpdated : undefined),
+    lastMessageId: extras?.lastMessageId,
+    resumeCount: record.resumeCount,
+  };
 }
 
 export namespace WorkerRun {
   export async function create(
     sessionId: string,
-    run: { runId: string; title: string; prompt: string; assignedStepId?: string },
+    run: {
+      runId: string;
+      title: string;
+      prompt: string;
+      assignedStepId?: string;
+      agentName?: string;
+      parentSessionId?: string;
+    },
   ): Promise<void> {
-    if (await hasRun(sessionId, run.runId)) {
-      throw new Error(`Worker run ${run.runId} already exists in session ${sessionId}`);
-    }
-
-    const now = new Date().toISOString();
-    const actionId = `${sessionId}:worker_run_created:${run.runId}`;
-    const event: ExecutionEvent.WorkerRunCreated = {
-      type: "worker_run_created",
+    runExtras.delete(extraKey(sessionId, run.runId));
+    WorkerRunStateStore.create(sessionId, {
       runId: run.runId,
+      parentSessionId: run.parentSessionId,
+      agentName: run.agentName ?? "worker",
+      status: "queued",
       title: run.title,
       prompt: run.prompt,
       assignedStepId: run.assignedStepId,
-      startedAt: Date.now(),
-      actionId,
-      visibility: "internal",
-      timestamp: now,
-      sequence: 0,
-    };
-    appendExecutionEvent(sessionId, event);
+    });
   }
 
   export async function get(
     sessionId: string,
     runId: string,
   ): Promise<WorkerRunRecord | undefined> {
-    return replayRuns(sessionId).get(runId);
+    const run = WorkerRunStateStore.get(sessionId, runId);
+    return run ? toWorkerRunRecord(run) : undefined;
   }
 
   export async function listBySession(sessionId: string): Promise<WorkerRunRecord[]> {
-    return Array.from(replayRuns(sessionId).values());
+    return WorkerRunStateStore.listBySession(sessionId).map(toWorkerRunRecord);
+  }
+
+  export async function listByStatus(status: WorkerRunStatus): Promise<WorkerRunRecord[]> {
+    return WorkerRunStateStore.listByStatus(status).map(toWorkerRunRecord);
   }
 
   export async function updateStatus(
@@ -340,51 +154,15 @@ export namespace WorkerRun {
       throw new Error(`Worker run ${runId} not found in session ${sessionId}`);
     }
 
-    if (!isValidTransition(current.status, status)) {
-      throw new Error(`Invalid worker run status transition from ${current.status} to ${status}`);
-    }
+    WorkerRunStateStore.updateStatus(sessionId, runId, status, { error: extra?.error });
 
-    const now = new Date().toISOString();
-    const actionId = `${sessionId}:worker_run_${status}:${runId}`;
-
-    if (status === "succeeded") {
-      const event: ExecutionEvent.WorkerRunCompleted = {
-        type: "worker_run_completed",
-        runId,
-        status: "succeeded",
-        endedAt: extra?.endedAt,
-        lastMessageId: extra?.lastMessageId,
-        actionId,
-        visibility: "internal",
-        timestamp: now,
-        sequence: 0,
-      };
-      appendExecutionEvent(sessionId, event);
-    } else if (status === "failed" || status === "cancelled" || status === "interrupted") {
-      const event: ExecutionEvent.WorkerRunFailed = {
-        type: "worker_run_failed",
-        runId,
-        status,
-        error: extra?.error,
-        endedAt: extra?.endedAt,
-        actionId,
-        visibility: "internal",
-        timestamp: now,
-        sequence: 0,
-      };
-      appendExecutionEvent(sessionId, event);
-    } else if (status === "starting" || status === "running" || status === "waiting_input") {
-      const event: ExecutionEvent.WorkerRunStatusChanged = {
-        type: "worker_run_status_changed",
-        runId,
-        status,
-        lastMessageId: extra?.lastMessageId,
-        actionId,
-        visibility: "internal",
-        timestamp: now,
-        sequence: 0,
-      };
-      appendExecutionEvent(sessionId, event);
+    if (extra?.endedAt !== undefined || extra?.lastMessageId !== undefined) {
+      const key = extraKey(sessionId, runId);
+      const previous = runExtras.get(key);
+      runExtras.set(key, {
+        endedAt: extra.endedAt ?? previous?.endedAt,
+        lastMessageId: extra.lastMessageId ?? previous?.lastMessageId,
+      });
     }
 
     if (current.status !== status) {

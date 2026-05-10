@@ -1,5 +1,6 @@
 import type { Message, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { SessionInfo } from "../session/info";
+import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { SqliteStorageAdapter } from "./sqlite-storage";
 
 export namespace Storage {
@@ -45,14 +46,6 @@ export namespace Storage {
       list(sessionId: string): Array<{ id: string; meta: string; content: string }>;
       delete(id: string): void;
     };
-    eventLog?: {
-      append(sessionId: string, type: string, data: string): number;
-      replay(sessionId: string): Array<{ id: number; type: string; status: string; data: string }>;
-      listIncomplete(sessionId: string): Array<{ id: number; type: string; data: string }>;
-      markComplete(sessionId: string, eventId: number): void;
-      listIncompleteSessions(): string[];
-      allocateSequence?(sessionId: string): number;
-    };
     backgroundTask?: {
       upsert(
         id: string,
@@ -69,6 +62,7 @@ export namespace Storage {
     };
     task?: ProtocolStorage.TaskSubAdapter;
     todo?: ProtocolStorage.TodoSubAdapter;
+    workerRunState?: WorkerRunStateStore.Adapter;
   }
 }
 
