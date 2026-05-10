@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { MiddlewareRegistration } from "@openomni/agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +42,13 @@ async function loadFile(path: string): Promise<string> {
     if (!(await file.exists())) return "";
     return await file.text();
   } catch (error) {
-    Log.warn("profile: failed to read file", { path, error });
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "profile:loadFile",
+      msg: "profile: failed to read file",
+      context: { path, error },
+    });
     return "";
   }
 }
@@ -98,7 +105,13 @@ function createSoulRegistration(homeRoot: string, agentName: string): Middleware
         if (!snapshot) return { action: "continue" };
         return { action: "transform", input: { prependContext: renderSoul(snapshot) } };
       } catch (error) {
-        Log.warn("profile:soul middleware failed", { error });
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "profile:soul",
+          msg: "profile:soul middleware failed",
+          context: { error },
+        });
         return { action: "continue" };
       }
     },
@@ -119,7 +132,13 @@ function createUserRegistration(homeRoot: string, agentName: string): Middleware
         if (!snapshot) return { action: "continue" };
         return { action: "transform", input: { appendContext: renderUser(snapshot) } };
       } catch (error) {
-        Log.warn("profile:user middleware failed", { error });
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "profile:user",
+          msg: "profile:user middleware failed",
+          context: { error },
+        });
         return { action: "continue" };
       }
     },
@@ -140,7 +159,13 @@ function createMemoryRegistration(homeRoot: string, agentName: string): Middlewa
         if (!snapshot) return { action: "continue" };
         return { action: "transform", input: { appendContext: renderMemory(snapshot) } };
       } catch (error) {
-        Log.warn("profile:memory middleware failed", { error });
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "profile:memory",
+          msg: "profile:memory middleware failed",
+          context: { error },
+        });
         return { action: "continue" };
       }
     },

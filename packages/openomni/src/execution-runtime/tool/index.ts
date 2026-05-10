@@ -2,7 +2,7 @@ export { AgentToolProvider, createWorkerSubagentRuntime } from "./agent/index.js
 export { buildToolCatalog, resolveCategory, resolveToolSelection } from "./catalog.js";
 export { Tool, defineTool, resolveMeta } from "./define.js";
 export { createToolExecutor } from "./executor.js";
-export { ToolRuntimePolicyMiddleware } from "../../policy/tool-runtime-policy.js";
+export { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 export { ToolProxyProvider } from "./tool-proxy-provider.js";
 export { SystemToolProvider } from "./system/index.js";
 export { TaskToolProvider } from "./task/provider.js";

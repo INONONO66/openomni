@@ -1,6 +1,6 @@
 import type { Message } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import { createIngressLedger, summarizeText } from "./event-log-envelope";
+import { createIngressAudit, summarizeText } from "./audit-envelope";
 
 // legacy marker from removed plan mode; filter from history to avoid leaking into model input
 const LEGACY_PLAN_MARKER = "__OPENOMNI_PLANID__";
@@ -62,8 +62,8 @@ export namespace SessionBridge {
       text: output,
     };
 
-    const ledger = createIngressLedger(sessionId, "session_bridge");
-    const writebackEvent = ledger.append("ingress.writeback.direct_result", {
+    const audit = createIngressAudit(sessionId, "session_bridge");
+    const writebackEvent = audit.append("ingress.writeback.direct_result", {
       sessionId,
       mode: "direct",
       source: "session-bridge",
@@ -72,7 +72,7 @@ export namespace SessionBridge {
       role: message.role,
       text: summarizeText(output),
     });
-    const messageEvent = ledger.append(
+    const messageEvent = audit.append(
       "ingress.writeback.message.write",
       {
         sessionId,
@@ -85,7 +85,7 @@ export namespace SessionBridge {
     );
     Session.addMessage(sessionId, message);
 
-    ledger.append(
+    audit.append(
       "ingress.writeback.part.write",
       {
         sessionId,

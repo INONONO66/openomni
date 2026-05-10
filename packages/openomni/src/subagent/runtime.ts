@@ -1,8 +1,8 @@
 import type { ChatAgent } from "@openomni/agent";
 import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
-import { Bus, Log, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
+import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
-import { SubagentSpawnPolicyMiddleware } from "../policy/subagent-spawn-policy.js";
+import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
 import {
   buildAbortSignal,
   executeRun,
@@ -96,12 +96,7 @@ export namespace SubagentRuntime {
 
   export function spawn(config: SpawnConfig): Promise<RunResult> {
     const session = createSpawnSession(config);
-    Log.info("subagent.spawn", {
-      agentName: config.agentName,
-      sessionId: session.id,
-      parentSessionId: config.parentSessionId,
-      titleLen: config.title.length,
-    });
+    void 0;
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -128,11 +123,7 @@ export namespace SubagentRuntime {
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, runConfig, signal, config.permissions),
       );
-      Log.info("subagent.spawn.complete", {
-        agentName: config.agentName,
-        sessionId: session.id,
-        runId,
-      });
+      void 0;
       return result;
     });
   }
@@ -152,11 +143,7 @@ export namespace SubagentRuntime {
 
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
-    Log.info("subagent.spawn-background", {
-      agentName: config.agentName,
-      sessionId: session.id,
-      runId,
-    });
+    void 0;
 
     const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
       config.middleware,
@@ -168,12 +155,8 @@ export namespace SubagentRuntime {
         runWithTranscript(session.id, runConfig, signal, config.permissions),
       ),
     );
-    backgroundRun.catch((err) => {
-      Log.warn("subagent.spawn-background.failed", {
-        sessionId: session.id,
-        runId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    backgroundRun.catch(() => {
+      // no-op
     });
 
     return { sessionId: session.id, runId };
@@ -186,7 +169,7 @@ export namespace SubagentRuntime {
     });
     const session = policy.session;
     if (!session) throw new Error(`Session not found: ${config.sessionId}`);
-    Log.info("subagent.send", { sessionId: config.sessionId });
+    void 0;
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -223,7 +206,7 @@ export namespace SubagentRuntime {
   }
 
   export async function resume(config: ResumeConfig): Promise<ResumeResult> {
-    Log.info("subagent.resume", { sessionId: config.sessionId });
+    void 0;
 
     return sendToMailbox(config.sessionId, async () => {
       const policy = await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
@@ -274,7 +257,7 @@ export namespace SubagentRuntime {
     if (policy.verdict.action !== "continue") return;
     const session = policy.session;
     if (!session) return;
-    Log.info("subagent.cancel", { sessionId: config.sessionId, runId: config.runId });
+    void 0;
 
     const hardTimeoutMs = policy.cancelHardTimeoutMs;
 
@@ -331,11 +314,7 @@ export namespace SubagentRuntime {
       sessionId: config.sessionId,
       timeoutMs: config.timeoutMs,
     });
-    Log.info("subagent.wait", {
-      sessionId: config.sessionId,
-      runId: config.runId,
-      timeoutMs: config.timeoutMs,
-    });
+    void 0;
     const run = await WorkerRun.get(config.sessionId, config.runId);
     if (!run) {
       throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);

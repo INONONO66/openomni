@@ -1,12 +1,17 @@
 import {
   MiddlewareEngine,
-  PolicyEngine,
   type MiddlewareDecision,
   type MiddlewareRegistration,
 } from "@openomni/agent";
-import { Ingress, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
+import {
+  Guardrail,
+  Ingress,
+  type Hook,
+  type Middleware,
+  type TraceContext,
+} from "@openomni/protocol";
 import type { ZodError } from "zod";
-import type { CoordinatorLike } from "../ingress/coordinator-like";
+import type { CoordinatorLike } from "../coordinator-like";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -54,7 +59,7 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
 function evaluateIngressAuthority(event: Ingress.InboundEvent): Hook.Verdict {
   const action = "ingress.top_level.create";
   const resource = `ingress.${event.surface}`;
-  return PolicyEngine.evaluatePermission(
+  return Guardrail.evaluate(
     {
       action,
       inputRules: [

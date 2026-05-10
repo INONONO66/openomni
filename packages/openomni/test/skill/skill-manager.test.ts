@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { ExecutionEvent } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import type { Skill } from "@openomni/protocol";
-import { EventLog, Session, SqliteStorageAdapter, Storage } from "@openomni/session";
+import { Bus, Session, SqliteStorageAdapter, Storage } from "@openomni/session";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,10 +15,24 @@ import {
 const fixedDate = new Date("2026-05-04T00:00:00.000Z");
 const actor = { kind: "user", id: "tester" };
 
+type AuditEvent = {
+  readonly type: string;
+  readonly sequence: number;
+  readonly actor?: Record<string, unknown>;
+  readonly action?: string;
+  readonly resource?: string;
+  readonly verdict?: string;
+  readonly reason?: string;
+  readonly visibility?: string;
+  readonly input?: Record<string, unknown>;
+};
+
 let testRoot: string;
 let projectRoot: string;
 let homeRoot: string;
 let sessionId: string;
+let collectedEvents: AuditEvent[];
+let unsubscribe: () => void;
 
 beforeEach(async () => {
   testRoot = await mkdtemp(join(tmpdir(), "openomni-skill-manager-"));
@@ -32,9 +46,19 @@ beforeEach(async () => {
     title: "skill-manager-test",
     model: { providerID: "test", modelID: "test" },
   }).id;
+
+  collectedEvents = [];
+  unsubscribe = Bus.subscribe(Operational.Info, (data) => {
+    const audit = data.context?.audit;
+    if (data.component === "skill.manager" && audit) {
+      collectedEvents.push(audit as unknown as AuditEvent);
+    }
+  });
 });
 
 afterEach(async () => {
+  unsubscribe();
+  Bus.reset();
   Storage.reset();
   await rm(testRoot, { recursive: true, force: true });
 });
@@ -94,9 +118,7 @@ describe("SkillManager", () => {
       resource: "global-alpha",
       verdict: "continue",
     });
-    expect(Object.keys((events[0] as ExecutionEvent.ActionRequested).input ?? {})).not.toContain(
-      "promptFragment",
-    );
+    expect(Object.keys(events[0].input ?? {})).not.toContain("promptFragment");
   });
 
   it("registers local skills without corrupting the global registry and lists both scopes", async () => {
@@ -201,31 +223,17 @@ describe("SkillManager", () => {
     });
   });
 
-  it("fails closed when mandatory audit append fails before install side effects", async () => {
-    const adapter = Storage.get();
-    adapter.eventLog = {
-      append: () => {
-        throw new Error("audit down");
-      },
-      replay: () => [],
-      listIncomplete: () => [],
-      markComplete: () => undefined,
-      listIncompleteSessions: () => [],
-    };
-
-    await expectRejectsWithMessage(
-      SkillManager.install(
-        skillDefinition("audit-fail", "global", "Do not write without audit."),
-        "file:///audit-fail",
-        operationOptions(),
-      ),
-      "audit down",
+  it("proceeds with operations when Bus audit is fire-and-forget", async () => {
+    const installed = await SkillManager.install(
+      skillDefinition("audit-ok", "global", "Bus audit is best-effort."),
+      "file:///audit-ok",
+      operationOptions(),
     );
 
+    expect(installed.id).toBe("audit-ok");
     expect(
-      await Bun.file(join(homeRoot, ".openomni", "skills", "audit-fail", "SKILL.md")).exists(),
-    ).toBe(false);
-    expect(await SkillRegistry.read({ homeRoot })).toEqual([]);
+      await Bun.file(join(homeRoot, ".openomni", "skills", "audit-ok", "SKILL.md")).exists(),
+    ).toBe(true);
   });
 });
 
@@ -279,12 +287,10 @@ async function writeSkillFile(id: string): Promise<void> {
   );
 }
 
-async function replayEvents(): Promise<ExecutionEvent[]> {
-  const events: ExecutionEvent[] = [];
-  for await (const event of EventLog.replay(sessionId)) {
-    events.push(event);
-  }
-  return events;
+async function replayEvents(): Promise<AuditEvent[]> {
+  // Bus.publish delivers via queueMicrotask; flush pending deliveries
+  await new Promise((resolve) => queueMicrotask(resolve));
+  return collectedEvents;
 }
 
 async function expectRejectsWithMessage(promise: Promise<unknown>, message: string): Promise<void> {

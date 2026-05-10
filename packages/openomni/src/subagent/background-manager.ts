@@ -1,8 +1,8 @@
 import { type Message, Subagent } from "@openomni/protocol";
-import { Bus, Log, Session } from "@openomni/session";
+import { Bus, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
-import { BackgroundLimitsMiddleware } from "../policy/background-limits.js";
+import { BackgroundLimitsMiddleware } from "./middleware/background-limits.js";
 import { SubagentRuntime } from "./runtime.js";
 
 type LaunchInput = {
@@ -198,7 +198,6 @@ export const BackgroundManager = {
               results.set(id, result);
               BackgroundStore.persist(completed, output);
               onTaskComplete?.(result);
-              Log.info("background.task.completed", { taskId: id, sessionId });
 
               Bus.publish(Subagent.Events.BackgroundTaskCompleted, {
                 traceId: crypto.randomUUID(),
@@ -237,11 +236,6 @@ export const BackgroundManager = {
               const result: Subagent.BackgroundTaskResult = { taskId: id, status: "failed" };
               results.set(id, result);
               onTaskComplete?.(result);
-              Log.info("background.task.failed", {
-                taskId: id,
-                sessionId,
-                error: data.payload.error,
-              });
 
               Bus.publish(Subagent.Events.BackgroundTaskFailed, {
                 traceId: crypto.randomUUID(),
@@ -253,12 +247,6 @@ export const BackgroundManager = {
             }),
           );
 
-          Log.info("background.task.launched", {
-            taskId: id,
-            agentName: input.agentName,
-            sessionId,
-            runId,
-          });
           Bus.publish(Subagent.Events.BackgroundTaskLaunched, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -281,11 +269,6 @@ export const BackgroundManager = {
           };
           tasks.set(id, failed);
           BackgroundStore.persist(failed);
-          Log.info("background.task.spawn-failed", {
-            taskId: id,
-            agentName: input.agentName,
-            error: failed.error,
-          });
           Bus.publish(Subagent.Events.BackgroundTaskFailed, {
             traceId: crypto.randomUUID(),
             time: Date.now(),
@@ -328,12 +311,6 @@ export const BackgroundManager = {
         tasks.set(id, task);
 
         if (policy.shouldQueue) {
-          Log.info("background.task.queued", {
-            taskId: id,
-            agentName: input.agentName,
-            depth,
-            queueDepth: pendingQueue.length + 1,
-          });
           pendingQueue.push({ input, id });
           return task;
         }

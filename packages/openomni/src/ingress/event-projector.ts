@@ -1,6 +1,7 @@
 import type { Ingress, Message, TraceContext as TraceContextProtocol } from "@openomni/protocol";
-import { Log, Session } from "@openomni/session";
-import { createIngressLedger, summarizeText } from "./event-log-envelope";
+import { Operational } from "@openomni/protocol";
+import { Bus, Session } from "@openomni/session";
+import { createIngressAudit, summarizeText } from "./audit-envelope";
 
 export namespace IngressEventProjector {
   function extractTextPayload(event: Ingress.InboundEvent): string {
@@ -46,8 +47,8 @@ export namespace IngressEventProjector {
       text: textPayload,
     };
 
-    const ledger = createIngressLedger(sessionId, "event_projector");
-    const inboundEvent = ledger.append("ingress.inbound.project", {
+    const audit = createIngressAudit(sessionId, "event_projector");
+    const inboundEvent = audit.append("ingress.inbound.project", {
       sessionId,
       eventId: event.id,
       mode: event.mode,
@@ -60,7 +61,7 @@ export namespace IngressEventProjector {
       role: message.role,
       text: summarizeText(textPayload),
     });
-    const messageEvent = ledger.append(
+    const messageEvent = audit.append(
       "ingress.inbound.message.write",
       {
         sessionId,
@@ -74,7 +75,7 @@ export namespace IngressEventProjector {
     );
     Session.addMessage(sessionId, message);
 
-    ledger.append(
+    audit.append(
       "ingress.inbound.part.write",
       {
         sessionId,
@@ -92,7 +93,13 @@ export namespace IngressEventProjector {
     Session.addPart(message.id, part);
 
     if (traceContext) {
-      Log.withContext({ traceId: traceContext.traceId }).info("message projected", { sessionId });
+      Bus.publish(Operational.Info, {
+        traceId: traceContext.traceId,
+        time: Date.now(),
+        sessionId,
+        component: "ingress.projector",
+        msg: "message projected",
+      });
     }
   }
 }

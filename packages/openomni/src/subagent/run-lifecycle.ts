@@ -1,5 +1,6 @@
 import type { ChatAgent } from "@openomni/agent";
-import { Log, Session, WorkerRun } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus, Session, WorkerRun } from "@openomni/session";
 import {
   abort as abortSession,
   get as getAbortEntry,
@@ -88,7 +89,13 @@ export async function raceAbortCompletion(
   });
 
   const winner = await Promise.race([abortWait, timeout]);
-  Log.debug("run.abort.settled", { sessionId, runId, outcome: winner });
+  Bus.publish(Operational.Debug, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "subagent.lifecycle",
+    msg: "run.abort.settled",
+    context: { sessionId, runId, outcome: winner },
+  });
 
   if (winner === "timeout") {
     removeAbortController(sessionId, runId);
@@ -122,16 +129,40 @@ export function setupRunTimeouts(
   const timers: TimeoutTimers = {};
 
   if (softTimeoutMs !== undefined) {
-    Log.debug("run.timeout.setup.soft", { sessionId, runId, softTimeoutMs });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "subagent.lifecycle",
+      msg: "run.timeout.setup.soft",
+      context: { sessionId, runId, softTimeoutMs },
+    });
     timers.soft = setTimeout(() => {
-      Log.debug("run.timeout.soft-fired", { sessionId, runId });
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "subagent.lifecycle",
+        msg: "run.timeout.soft-fired",
+        context: { sessionId, runId },
+      });
     }, softTimeoutMs);
   }
 
   if (hardTimeoutMs !== undefined) {
-    Log.debug("run.timeout.setup.hard", { sessionId, runId, hardTimeoutMs });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "subagent.lifecycle",
+      msg: "run.timeout.setup.hard",
+      context: { sessionId, runId, hardTimeoutMs },
+    });
     timers.hard = setTimeout(async () => {
-      Log.debug("run.timeout.hard-fired", { sessionId, runId });
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "subagent.lifecycle",
+        msg: "run.timeout.hard-fired",
+        context: { sessionId, runId },
+      });
       try {
         await WorkerRun.updateStatus(sessionId, runId, "interrupted", {
           endedAt: Date.now(),

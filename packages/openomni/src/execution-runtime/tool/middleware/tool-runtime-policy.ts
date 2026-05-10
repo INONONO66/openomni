@@ -4,9 +4,10 @@ import {
   type MiddlewareRegistration,
 } from "@openomni/agent";
 import type { Hook, Middleware, TraceContext } from "@openomni/protocol";
-import { Log } from "@openomni/session";
-import { WorkspaceLock } from "../execution-runtime/workspace-lock.js";
-import type { ToolExecutorConfig, ToolRiskTier } from "../execution-runtime/tool/types.js";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+import { WorkspaceLock } from "../../workspace-lock.js";
+import type { ToolExecutorConfig, ToolRiskTier } from "../types.js";
 
 const policyId = "tool.runtime-policy";
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -80,16 +81,22 @@ function createRiskTierEvaluation(state: ToolRuntimePolicyState): MiddlewareRegi
     failPolicy: "fail-closed",
     fn: () => {
       if (state.riskTier >= 2) {
-        Log.warn("executor: high-risk tool execution", {
-          toolName: state.toolName,
-          tier: state.riskTier,
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "executor.policy",
+          msg: "executor: high-risk tool execution",
+          context: { toolName: state.toolName, tier: state.riskTier },
         });
         return continueVerdict("high-risk tool execution recorded");
       }
 
-      Log.debug("executor: risk tier evaluated", {
-        toolName: state.toolName,
-        tier: state.riskTier,
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "executor.policy",
+        msg: "executor: risk tier evaluated",
+        context: { toolName: state.toolName, tier: state.riskTier },
       });
       return continueVerdict("risk tier evaluated");
     },
@@ -239,7 +246,7 @@ export namespace ToolRuntimePolicyMiddleware {
     const engine = MiddlewareEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
-      eventLog: false,
+      audit: false,
     });
 
     for (const registration of registrations(state)) {
@@ -284,7 +291,7 @@ export namespace ToolRuntimePolicyMiddleware {
     const engine = MiddlewareEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
-      eventLog: false,
+      audit: false,
     });
     engine.register(createWorkspaceLockRelease(state));
 
