@@ -1,5 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 
 export interface WebSocketConfig {
@@ -27,15 +28,33 @@ export class WebSocketHandler {
     return {
       message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
-        Log.debug("websocket message received", { surfaceKey: ws.data.surfaceKey });
+        Bus.publish(Operational.Debug, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "websocket message received",
+          context: { surfaceKey: ws.data.surfaceKey },
+        });
         void self.handleMessage(ws, raw);
       },
       open(ws: { data: WsConnectionData }) {
         ws.data = { surfaceKey: `ws:${crypto.randomUUID()}` };
-        Log.info("websocket connection opened", { surfaceKey: ws.data.surfaceKey });
+        Bus.publish(Operational.Info, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "websocket connection opened",
+          context: { surfaceKey: ws.data.surfaceKey },
+        });
       },
       close(ws: { data: WsConnectionData }) {
-        Log.info("websocket connection closed", { surfaceKey: ws.data.surfaceKey });
+        Bus.publish(Operational.Info, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "websocket connection closed",
+          context: { surfaceKey: ws.data.surfaceKey },
+        });
       },
     };
   }

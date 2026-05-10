@@ -229,7 +229,7 @@ describe("on_error middleware dispatch (stream-engine level)", () => {
 describe("idle-nudge post_tool_use integration", () => {
   it("idle-nudge fn is dispatched for post_tool_use timing", async () => {
     const { createIdleNudgeMiddleware } = await import(
-      "../../../src/core/policy/builtin/idle-nudge"
+      "../../../src/core/middleware/builtin/idle-nudge"
     );
 
     const idleNudge = createIdleNudgeMiddleware({ idleThresholdMs: -1 });

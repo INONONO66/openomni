@@ -1,8 +1,8 @@
 import type { RunInput } from "@openomni/llm";
 import { Retry } from "@openomni/llm";
-import { AgentExecution } from "@openomni/protocol";
+import { AgentExecution, Operational } from "@openomni/protocol";
 import type { Message, Sink, Tool, TraceContext } from "@openomni/protocol";
-import { Bus, type Log } from "@openomni/session";
+import { Bus } from "@openomni/session";
 import {
   checkBudget,
   createBudgetState,
@@ -12,14 +12,14 @@ import {
 } from "../budget";
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { PolicyEngine } from "../policy";
-import type { PolicyEngineInstance } from "../policy";
+import { fromConfig, MiddlewareEngine } from "../middleware";
+import type { MiddlewareEngineInstance } from "../middleware";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
   createCompactionMiddleware,
   createToolGuardMiddleware,
-} from "../policy/builtin";
+} from "../middleware/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
 import type {
   AgentEvent,
@@ -31,8 +31,6 @@ import type {
 } from "../types";
 import { toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
-
-type StreamLog = ReturnType<typeof Log.withContext>;
 
 export interface StreamAgentBase {
   readonly traceId: string;
@@ -112,11 +110,11 @@ export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   };
 }
 
-export function buildPolicyEngine(
+export function buildMiddlewareEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-): PolicyEngineInstance {
-  const engine = PolicyEngine.create({
+): MiddlewareEngineInstance {
+  const engine = MiddlewareEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
       ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
@@ -125,6 +123,9 @@ export function buildPolicyEngine(
   });
   engine.register(createBudgetReassuranceMiddleware());
   engine.register(createBudgetWarningMiddleware());
+  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
+    engine.register(reg);
+  }
   if (config.permissions) {
     engine.register(
       createToolGuardMiddleware({
@@ -140,7 +141,6 @@ export function buildPolicyEngine(
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
   }
-  engine.freeze();
   return engine;
 }
 
@@ -158,7 +158,7 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
 
 export async function dispatchPreRun(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
   const preRunVerdict = await engine.dispatch("pre_run", {
@@ -193,9 +193,9 @@ export async function dispatchPreRun(
 
 export async function dispatchBudgetCheck(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
-  log: StreamLog,
+  agentBase: StreamAgentBase,
 ): Promise<AgentEvent | null> {
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
@@ -216,10 +216,17 @@ export async function dispatchBudgetCheck(
     const payload = postRunVerdict.input as { text?: unknown };
     if (typeof payload.text === "string") state.lastAssistantText = payload.text;
   }
-  log.info("agent.run.completed", {
-    finishReason: "max-steps",
-    turns: state.budgetState.turns,
-    durationMs: Date.now() - state.startTime,
+  Bus.publish(Operational.Info, {
+    traceId: agentBase.traceId,
+    time: Date.now(),
+    sessionId: agentBase.sessionId || undefined,
+    component: "agent",
+    msg: "agent.run.completed",
+    context: {
+      finishReason: "max-steps",
+      turns: state.budgetState.turns,
+      durationMs: Date.now() - state.startTime,
+    },
   });
   return {
     type: "complete",
@@ -237,7 +244,6 @@ export function emitTurnStart(
   state: StreamRunState,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-  log: StreamLog,
 ): void {
   config.eventEmitter?.emit("agent.turn.start", {
     sessionId: "stream-engine",
@@ -249,14 +255,12 @@ export function emitTurnStart(
     time: Date.now(),
     turnIndex: state.budgetState.turns,
   });
-  log.debug("agent.turn.started", { turnIndex: state.budgetState.turns });
 }
 
 export function emitTurnComplete(
   state: StreamRunState,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-  log: StreamLog,
   turnUsage: TokenUsage,
 ): void {
   config.eventEmitter?.emit("agent.turn.complete", {
@@ -264,9 +268,9 @@ export function emitTurnComplete(
     time: Date.now(),
     turnIndex: state.turnIndex,
     usage: {
-      inputTokens: state.totalUsage.inputTokens,
-      outputTokens: state.totalUsage.outputTokens,
-      totalTokens: state.totalUsage.totalTokens,
+      inputTokens: turnUsage.inputTokens,
+      outputTokens: turnUsage.outputTokens,
+      totalTokens: turnUsage.totalTokens,
     },
   });
   Bus.publish(AgentExecution.TurnComplete, {
@@ -274,22 +278,17 @@ export function emitTurnComplete(
     time: Date.now(),
     turnIndex: state.turnIndex,
     usage: {
-      inputTokens: state.totalUsage.inputTokens,
-      outputTokens: state.totalUsage.outputTokens,
-      totalTokens: state.totalUsage.totalTokens,
+      inputTokens: turnUsage.inputTokens,
+      outputTokens: turnUsage.outputTokens,
+      totalTokens: turnUsage.totalTokens,
     },
-  });
-  log.debug("agent.turn.completed", {
-    turnIndex: state.turnIndex,
-    inputTokens: turnUsage.inputTokens,
-    outputTokens: turnUsage.outputTokens,
   });
 }
 
 export async function buildTurn(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: TraceContext.Type,
@@ -457,12 +456,11 @@ export function createTrackingSink(
 export async function* handleStop(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   agentBase: StreamAgentBase,
-  log: StreamLog,
   turn: TurnArtifacts,
 ): AsyncGenerator<AgentEvent, "complete" | "continue"> {
-  emitTurnComplete(state, config, agentBase, log, turn.turnUsage);
+  emitTurnComplete(state, config, agentBase, turn.turnUsage);
 
   if (state.lastAssistantText) yield { type: "text_chunk", text: state.lastAssistantText };
   for (const toolCall of turn.turnToolCalls) {
@@ -502,9 +500,7 @@ export async function* handleStop(
   yield {
     type: "hook_verdict",
     timing: "post_turn",
-    action: (postTurnVerdict.action === "deny"
-      ? "abort"
-      : postTurnVerdict.action) as HookVerdict["action"],
+    action: postTurnVerdict.action,
     reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
   };
 
@@ -520,7 +516,7 @@ export async function* handleStop(
     return flowDecision(continueDecision(state));
   }
 
-  if (postTurnVerdict.action === "abort" || postTurnVerdict.action === "deny") {
+  if (postTurnVerdict.action === "abort") {
     const event: AgentEvent = {
       type: "complete",
       result: {
@@ -537,10 +533,17 @@ export async function* handleStop(
   }
 
   await dispatchPostRunTransform(state, engine, config);
-  log.info("agent.run.completed", {
-    finishReason: "stop",
-    turns: state.budgetState.turns,
-    durationMs: Date.now() - state.startTime,
+  Bus.publish(Operational.Info, {
+    traceId: agentBase.traceId,
+    time: Date.now(),
+    sessionId: agentBase.sessionId || undefined,
+    component: "agent",
+    msg: "agent.run.completed",
+    context: {
+      finishReason: "stop",
+      turns: state.budgetState.turns,
+      durationMs: Date.now() - state.startTime,
+    },
   });
   const event: AgentEvent = {
     type: "complete",
@@ -560,10 +563,9 @@ export async function* handleContinue(
   state: StreamRunState,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-  log: StreamLog,
   turnUsage: TokenUsage,
 ): AsyncGenerator<AgentEvent, "continue"> {
-  emitTurnComplete(state, config, agentBase, log, turnUsage);
+  emitTurnComplete(state, config, agentBase, turnUsage);
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turnUsage };
   state.turnIndex++;
   return continueFlowDecision(continueDecision(state));
@@ -571,7 +573,7 @@ export async function* handleContinue(
 
 export async function handleCompact(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): Promise<"continue"> {
@@ -582,10 +584,9 @@ export async function handleCompact(
 
 export async function* handleError(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-  log: StreamLog,
   error: unknown,
   attempt: number,
   retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
@@ -640,11 +641,6 @@ export async function* handleError(
       maxAttempts: retryPolicy.maxAttempts,
       error: lastError,
     });
-    log.warn("agent.retry", {
-      attempt,
-      maxAttempts: retryPolicy.maxAttempts,
-      error: lastError,
-    });
     yield {
       type: "error",
       error: normalizedError,
@@ -654,7 +650,14 @@ export async function* handleError(
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 
-  log.error("agent.run.failed", { error: lastError });
+  Bus.publish(Operational.Error, {
+    traceId: agentBase.traceId,
+    time: Date.now(),
+    sessionId: agentBase.sessionId || undefined,
+    component: "agent",
+    msg: "agent.run.failed",
+    error: lastError,
+  });
   yield {
     type: "error",
     error: normalizedError,
@@ -684,7 +687,7 @@ function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue"
 async function buildTurnSystemPrompt(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
 ): Promise<string | undefined> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
   const spVerdict = await engine.dispatchSystemPrompt({
@@ -711,7 +714,7 @@ async function buildTurnSystemPrompt(
 
 async function dispatchPostRunTransform(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
   const postRunVerdict = await engine.dispatch("post_run", {
@@ -734,7 +737,7 @@ async function dispatchPostRunTransform(
 
 async function applyPostCompaction(
   state: StreamRunState,
-  engine: PolicyEngineInstance,
+  engine: MiddlewareEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   isCompletion: boolean,

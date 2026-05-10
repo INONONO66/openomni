@@ -1,6 +1,5 @@
-import { Skill, type Guardrail, type ExecutionEvent } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/agent";
-import { EventLog, Storage } from "@openomni/session";
+import { Guardrail, Operational, Skill } from "@openomni/protocol";
+import { Bus, Storage } from "@openomni/session";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,7 +11,59 @@ type SkillAction =
   | "skill.uninstall"
   | "skill.list";
 
-type AuditVisibility = Extract<ExecutionEvent, { type: "action_approved" }>["visibility"];
+type AuditVisibility = "internal" | "llm_reason" | "user_audit";
+
+interface AuditBase {
+  readonly actionId: string;
+  readonly parentActionId?: string;
+  readonly visibility: AuditVisibility;
+  readonly timestamp: string;
+  readonly sequence: number;
+}
+
+interface AuditActionRequested extends AuditBase {
+  readonly type: "action_requested";
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly input?: Record<string, unknown>;
+}
+
+interface AuditPolicyEvaluated extends AuditBase {
+  readonly type: "policy_evaluated";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly reason: string;
+}
+
+interface AuditActionApproved extends AuditBase {
+  readonly type: "action_approved";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: "continue";
+  readonly reason: string;
+}
+
+interface AuditActionBlocked extends AuditBase {
+  readonly type: "action_blocked";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly reason: string;
+}
+
+type AuditEvent =
+  | AuditActionRequested
+  | AuditPolicyEvaluated
+  | AuditActionApproved
+  | AuditActionBlocked;
 
 interface ErrorWithCode {
   readonly code?: unknown;
@@ -248,7 +299,7 @@ async function beginOperation(
   const requested = await appendAuditEvent(
     sessionId,
     "action_requested",
-    (base): ExecutionEvent.ActionRequested => ({
+    (base): AuditActionRequested => ({
       type: "action_requested",
       actor: options.actor,
       action: request.action,
@@ -268,7 +319,7 @@ async function beginOperation(
     parentActionId: requested.actionId,
     now,
   };
-  const result = PolicyEngine.evaluatePermission(options.permission, {
+  const result = Guardrail.evaluate(options.permission, {
     action: request.action,
     resource: request.resource,
     input: request.input,
@@ -293,7 +344,7 @@ async function appendPolicyEvent(
   await appendAuditEvent(
     state.sessionId,
     "policy_evaluated",
-    (base): ExecutionEvent.PolicyEvaluated => ({
+    (base): AuditPolicyEvaluated => ({
       type: "policy_evaluated",
       policyId: result.policyId,
       actor: state.actor,
@@ -312,7 +363,7 @@ async function approveOperation(state: AuditState, reason: string): Promise<void
   await appendAuditEvent(
     state.sessionId,
     "action_approved",
-    (base): ExecutionEvent.ActionApproved => ({
+    (base): AuditActionApproved => ({
       type: "action_approved",
       policyId: "skill.manager",
       actor: state.actor,
@@ -331,12 +382,12 @@ async function blockOperation(
   state: AuditState,
   policyId: string,
   reason: string,
-  verdict: ExecutionEvent.ActionBlocked["verdict"] = "abort",
+  verdict: AuditActionBlocked["verdict"] = "abort",
 ): Promise<void> {
   await appendAuditEvent(
     state.sessionId,
     "action_blocked",
-    (base): ExecutionEvent.ActionBlocked => ({
+    (base): AuditActionBlocked => ({
       type: "action_blocked",
       policyId,
       actor: state.actor,
@@ -351,7 +402,9 @@ async function blockOperation(
   );
 }
 
-async function appendAuditEvent<T extends ExecutionEvent>(
+const auditSequences = new Map<string, number>();
+
+async function appendAuditEvent<T extends AuditEvent>(
   sessionId: string,
   eventType: T["type"],
   event: (base: {
@@ -364,7 +417,9 @@ async function appendAuditEvent<T extends ExecutionEvent>(
   now: () => Date,
   parentActionId?: string,
 ): Promise<T> {
-  const sequence = await readNextSequence(sessionId);
+  const prev = auditSequences.get(sessionId) ?? 0;
+  const sequence = prev + 1;
+  auditSequences.set(sessionId, sequence);
   const row = event({
     actionId: `${sessionId}:${eventType}:skill:${sequence}`,
     ...(parentActionId !== undefined ? { parentActionId } : {}),
@@ -373,16 +428,15 @@ async function appendAuditEvent<T extends ExecutionEvent>(
     sequence,
   });
 
-  await EventLog.append(sessionId, row);
+  Bus.publish(Operational.Info, {
+    traceId: sessionId,
+    time: Date.now(),
+    sessionId,
+    component: "skill.manager",
+    msg: eventType,
+    context: { audit: row as unknown as Record<string, unknown> },
+  });
   return row;
-}
-
-async function readNextSequence(sessionId: string): Promise<number> {
-  let maxSequence = 0;
-  for await (const event of EventLog.replay(sessionId)) {
-    maxSequence = Math.max(maxSequence, event.sequence);
-  }
-  return maxSequence + 1;
 }
 
 function requireAuditSession(options: SkillOperationOptions): string {
@@ -392,9 +446,6 @@ function requireAuditSession(options: SkillOperationOptions): string {
   }
 
   const adapter = Storage.get();
-  if (!adapter.eventLog) {
-    throw new Error("EventLog adapter unavailable for mandatory skill audit");
-  }
   if (!adapter.session.get(sessionId)) {
     throw new Error(`Audit session "${sessionId}" not found for skill operation`);
   }

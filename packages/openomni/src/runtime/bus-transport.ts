@@ -1,5 +1,5 @@
-import { Log } from "@openomni/session";
-import type { Messenger } from "@openomni/protocol";
+import { Operational, type Messenger } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
@@ -10,10 +10,12 @@ export class BusTransport implements Transport {
   private subscribers = new Map<string, Set<(env: Messenger.MessageEnvelope) => void>>();
 
   async send(envelope: Messenger.MessageEnvelope): Promise<void> {
-    Log.debug("bus transport delivering envelope", {
-      envelopeId: envelope.id,
-      traceId: envelope.traceId,
-      toAgentId: envelope.toAgentId,
+    Bus.publish(Operational.Debug, {
+      traceId: envelope.traceId ?? crypto.randomUUID(),
+      time: Date.now(),
+      component: "runtime.bus-transport",
+      msg: "bus transport delivering envelope",
+      context: { envelopeId: envelope.id, toAgentId: envelope.toAgentId },
     });
 
     const handlers = this.subscribers.get(envelope.toAgentId);
@@ -22,10 +24,16 @@ export class BusTransport implements Transport {
         try {
           handler(envelope);
         } catch (error) {
-          Log.warn("bus transport subscriber handler threw", {
-            envelopeId: envelope.id,
-            toAgentId: envelope.toAgentId,
-            error: String(error),
+          Bus.publish(Operational.Warn, {
+            traceId: envelope.traceId ?? crypto.randomUUID(),
+            time: Date.now(),
+            component: "runtime.bus-transport",
+            msg: "bus transport subscriber handler threw",
+            context: {
+              envelopeId: envelope.id,
+              toAgentId: envelope.toAgentId,
+              error: String(error),
+            },
           });
         }
       }
@@ -44,7 +52,13 @@ export class BusTransport implements Transport {
 
     handlers.add(handler);
 
-    Log.debug("bus transport subscriber registered", { agentId });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "runtime.bus-transport",
+      msg: "bus transport subscriber registered",
+      context: { agentId },
+    });
 
     return () => {
       handlers.delete(handler);

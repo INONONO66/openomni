@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import type { NativeTool } from "@openomni/openomni";
-import type { ExecutionEvent, Tool } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { Mcp } from "@openomni/protocol";
-import { Bus, EventLog, Session, Storage } from "@openomni/session";
+import { Bus, Session, Storage } from "@openomni/session";
 import { McpPrefixGuardMiddleware, McpToolProvider } from "../../../src/tool/mcp";
 
 beforeEach(() => {
@@ -91,12 +91,15 @@ function createLedgerSession(): Session.Info {
   });
 }
 
-async function replayLedger(sessionId: string) {
-  const events: ExecutionEvent[] = [];
-  for await (const event of EventLog.replay(sessionId)) {
-    events.push(event);
-  }
-  return events;
+function collectBusEvents(): {
+  events: Array<{ name: string; payload: Record<string, unknown> }>;
+  stop: () => void;
+} {
+  const events: Array<{ name: string; payload: Record<string, unknown> }> = [];
+  const unsubscribe = Bus.observe((descriptor, payload) => {
+    events.push({ name: descriptor.name, payload: payload as Record<string, unknown> });
+  });
+  return { events, stop: unsubscribe };
 }
 
 describe("McpToolProvider", () => {
@@ -261,54 +264,43 @@ describe("McpToolProvider", () => {
     }
   });
 
-  it("appends successful MCP dispatch ledger rows around tool execution", async () => {
+  it("publishes policy and completion events for successful MCP dispatch", async () => {
     const provider = new McpToolProvider();
     const session = createLedgerSession();
-    const observedDuringExecute: string[][] = [];
-    const execute = mock(async (call: Tool.Call): Promise<Tool.Result> => {
-      const rows = await replayLedger(session.id);
-      observedDuringExecute.push(rows.map((row) => row.type));
-      return {
-        id: call.id,
-        toolCallId: call.id,
-        output: "search ok",
-      };
-    });
-    const tool: NativeTool = {
-      spec: { name: "search.query", description: "search tool", inputSchema: {} },
-      riskTier: 1,
-      isReadOnly: false,
-      isDestructive: false,
-      isConcurrencySafe: false,
-      source: "mcp",
-      execute,
-    };
+    const { tool } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
 
-    const result = await provider.execute({
-      id: "call-ledger-success",
-      tool: "search_query",
-      input: { sessionId: session.id, query: "ledger" },
-    });
+    const { events, stop } = collectBusEvents();
 
-    expect(result.isError).toBeFalsy();
-    expect(observedDuringExecute).toEqual([["action_requested"]]);
-    const rows = await replayLedger(session.id);
-    expect(rows.map((row) => row.type)).toEqual(["action_requested", "tool_completed"]);
-    expect(rows[0]).toMatchObject({
-      type: "action_requested",
-      action: "mcp.tool.call",
-      resource: "search.query",
-      input: { sessionId: session.id, query: "ledger" },
-    });
-    expect(rows[1]).toMatchObject({
-      type: "tool_completed",
-      toolCallId: "call-ledger-success",
-      result: { toolCallId: "call-ledger-success", output: "search ok" },
-    });
+    try {
+      const result = await provider.execute({
+        id: "call-bus-success",
+        tool: "search_query",
+        input: { sessionId: session.id, query: "bus" },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const policyAndToolEvents = events.filter(
+        (e) => e.name === "policy.action.requested" || e.name === "tool.execution.completed",
+      );
+      expect(policyAndToolEvents.map((e) => e.name)).toEqual([
+        "policy.action.requested",
+        "tool.execution.completed",
+      ]);
+      expect(policyAndToolEvents[0].payload).toMatchObject({
+        action: "mcp.tool.call",
+        resource: "search.query",
+      });
+      expect(policyAndToolEvents[1].payload).toMatchObject({
+        toolCallId: "call-bus-success",
+        isError: false,
+      });
+    } finally {
+      stop();
+    }
   });
 
-  it("appends MCP completion ledger rows for error results without success BusEvents", async () => {
+  it("publishes completion events for error results without Mcp.ToolCompleted", async () => {
     const provider = new McpToolProvider();
     const session = createLedgerSession();
     const execute = mock(
@@ -329,32 +321,30 @@ describe("McpToolProvider", () => {
       execute,
     };
     seedProvider(provider, [tool], ["search"]);
-    const publishedEvents: Array<{ name: string; payload: unknown }> = [];
-    const unsubscribe = Bus.subscribe(Mcp.ToolCompleted, (payload) => {
-      publishedEvents.push({ name: "mcp.tool.completed", payload });
-    });
+
+    const { events, stop } = collectBusEvents();
 
     try {
       const result = await provider.execute({
-        id: "call-ledger-error",
+        id: "call-bus-error",
         tool: "search_query",
         input: { sessionId: session.id },
       });
 
       expect(result.isError).toBeTruthy();
-      expect(publishedEvents).toHaveLength(0);
-      const rows = await replayLedger(session.id);
-      expect(rows.map((row) => row.type)).toEqual(["action_requested", "tool_completed"]);
-      expect(rows[1]).toMatchObject({
-        type: "tool_completed",
-        result: { toolCallId: "call-ledger-error", isError: true },
+      const mcpCompleted = events.find((e) => e.name === "mcp.tool.completed");
+      expect(mcpCompleted).toBeUndefined();
+      const toolCompleted = events.find((e) => e.name === "tool.execution.completed");
+      expect(toolCompleted?.payload).toMatchObject({
+        toolCallId: "call-bus-error",
+        isError: true,
       });
     } finally {
-      unsubscribe();
+      stop();
     }
   });
 
-  it("appends action_blocked rows for guarded MCP provider execution failures", async () => {
+  it("publishes action_blocked events for guarded MCP execution failures", async () => {
     const provider = new McpToolProvider();
     const unknownSession = createLedgerSession();
     const disconnectedSession = createLedgerSession();
@@ -362,158 +352,141 @@ describe("McpToolProvider", () => {
     const { tool, execute } = makeTool("search.query");
     const { tool: unprefixedTool } = makeTool("query");
 
-    seedProvider(provider, [tool], ["search"]);
-    await provider.execute({
-      id: "call-ledger-unknown",
-      tool: "ghost_query",
-      input: { sessionId: unknownSession.id },
+    const allEvents: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    const unsubscribe = Bus.observe((descriptor, payload) => {
+      allEvents.push({ name: descriptor.name, payload: payload as Record<string, unknown> });
     });
-
-    seedProvider(provider, [tool]);
-    await provider.execute({
-      id: "call-ledger-disconnected",
-      tool: "search_query",
-      input: { sessionId: disconnectedSession.id },
-    });
-
-    seedProvider(provider, [unprefixedTool], ["query"]);
-    await provider.execute({
-      id: "call-ledger-unprefixed",
-      tool: "query",
-      input: { sessionId: unprefixedSession.id },
-    });
-
-    const unknownRows = await replayLedger(unknownSession.id);
-    const disconnectedRows = await replayLedger(disconnectedSession.id);
-    const unprefixedRows = await replayLedger(unprefixedSession.id);
-    expect(unknownRows).toHaveLength(1);
-    expect(disconnectedRows).toHaveLength(1);
-    expect(unprefixedRows).toHaveLength(1);
-    expect(unknownRows[0]).toMatchObject({
-      type: "action_blocked",
-      resource: "ghost_query",
-      reason: "Unknown tool: ghost_query",
-    });
-    expect(disconnectedRows[0]).toMatchObject({
-      type: "action_blocked",
-      resource: "search.query",
-      reason: "MCP server not found: search",
-    });
-    expect(unprefixedRows[0]).toMatchObject({
-      type: "action_blocked",
-      resource: "query",
-      reason: "MCP tool name must be prefixed with server name: query",
-    });
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("fails closed before side-effecting MCP dispatch when mandatory pre-append fails", async () => {
-    const provider = new McpToolProvider();
-    const session = createLedgerSession();
-    const { tool, execute } = makeTool("search.query");
-    seedProvider(provider, [tool], ["search"]);
-    const eventLog = Storage.get().eventLog;
-    if (!eventLog) throw new Error("eventLog adapter missing");
-    const append = eventLog.append;
-    eventLog.append = () => {
-      throw new Error("ledger unavailable");
-    };
 
     try {
-      const result = await provider.execute({
-        id: "call-ledger-fail-closed",
-        tool: "search_query",
-        input: { sessionId: session.id },
+      seedProvider(provider, [tool], ["search"]);
+      await provider.execute({
+        id: "call-unknown",
+        tool: "ghost_query",
+        input: { sessionId: unknownSession.id },
       });
 
-      expect(result).toMatchObject({
-        toolCallId: "call-ledger-fail-closed",
-        output: "ledger unavailable",
-        isError: true,
+      seedProvider(provider, [tool]);
+      await provider.execute({
+        id: "call-disconnected",
+        tool: "search_query",
+        input: { sessionId: disconnectedSession.id },
+      });
+
+      seedProvider(provider, [unprefixedTool], ["query"]);
+      await provider.execute({
+        id: "call-unprefixed",
+        tool: "query",
+        input: { sessionId: unprefixedSession.id },
+      });
+
+      const blockedEvents = allEvents.filter((e) => e.name === "policy.action.blocked");
+      expect(blockedEvents).toHaveLength(3);
+      expect(blockedEvents[0].payload).toMatchObject({
+        resource: "ghost_query",
+        reason: "Unknown tool: ghost_query",
+      });
+      expect(blockedEvents[1].payload).toMatchObject({
+        resource: "search.query",
+        reason: "MCP server not found: search",
+      });
+      expect(blockedEvents[2].payload).toMatchObject({
+        resource: "query",
+        reason: "MCP tool name must be prefixed with server name: query",
       });
       expect(execute).not.toHaveBeenCalled();
     } finally {
-      eventLog.append = append;
+      unsubscribe();
     }
   });
 
-  it("appends connect lifecycle ledger rows when an audit session is provided", async () => {
+  it("publishes connect lifecycle events when an audit session is provided", async () => {
     const session = createLedgerSession();
     const client = makeClient();
     const provider = new McpToolProvider({ createClient: () => client.client });
 
-    await provider.addServer(
-      {
-        name: "search",
-        transport: "stdio",
-        command: "search-mcp",
-        args: ["--stdio"],
-        headers: { Authorization: "redacted" },
-      },
-      { audit: { sessionId: session.id }, actor: { operator: "test" } },
-    );
+    const { events, stop } = collectBusEvents();
 
-    expect(client.connect).toHaveBeenCalled();
-    const rows = await replayLedger(session.id);
-    expect(rows.map((row) => row.type)).toEqual(["action_requested", "action_approved"]);
-    expect(rows.map((row) => row.sequence)).toEqual([1, 2]);
-    expect(rows[1]?.parentActionId).toBe(rows[0]?.actionId);
-    expect(rows[0]).toMatchObject({
-      type: "action_requested",
-      action: "mcp.server.connect",
-      resource: "search",
-      actor: { kind: "mcp_provider", sessionId: session.id, operator: "test" },
-      input: {
-        serverName: "search",
-        transport: "stdio",
-        command: "search-mcp",
-        argsCount: 1,
-        headerNames: ["Authorization"],
-      },
-    });
-    expect(rows[1]).toMatchObject({
-      type: "action_approved",
-      action: "mcp.server.connect",
-      resource: "search",
-      verdict: "continue",
-      reason: "MCP server connected",
-    });
+    try {
+      await provider.addServer(
+        {
+          name: "search",
+          transport: "stdio",
+          command: "search-mcp",
+          args: ["--stdio"],
+          headers: { Authorization: "redacted" },
+        },
+        { audit: { sessionId: session.id }, actor: { operator: "test" } },
+      );
+
+      expect(client.connect).toHaveBeenCalled();
+      const lifecycleEvents = events.filter(
+        (e) => e.name === "policy.action.requested" || e.name === "policy.action.approved",
+      );
+      expect(lifecycleEvents.map((e) => e.name)).toEqual([
+        "policy.action.requested",
+        "policy.action.approved",
+      ]);
+      expect(lifecycleEvents[0].payload).toMatchObject({
+        action: "mcp.server.connect",
+        resource: "search",
+        actor: { kind: "mcp_provider", sessionId: session.id, operator: "test" },
+        context: {
+          serverName: "search",
+          transport: "stdio",
+          command: "search-mcp",
+          argsCount: 1,
+          headerNames: ["Authorization"],
+        },
+      });
+      expect(lifecycleEvents[1].payload).toMatchObject({
+        action: "mcp.server.connect",
+        resource: "search",
+        verdict: "continue",
+        reason: "MCP server connected",
+      });
+      expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
+    } finally {
+      stop();
+    }
   });
 
-  it("appends remove lifecycle ledger rows when an audit session is provided", async () => {
+  it("publishes remove lifecycle events when an audit session is provided", async () => {
     const session = createLedgerSession();
     const client = makeClient();
     const provider = new McpToolProvider({ createClient: () => client.client });
     await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
 
-    await provider.removeServer("search", { audit: { sessionId: session.id } });
+    const { events, stop } = collectBusEvents();
 
-    expect(client.disconnect).toHaveBeenCalled();
-    expect(provider.serverCount).toBe(0);
-    const rows = await replayLedger(session.id);
-    expect(rows.map((row) => row.type)).toEqual([
-      "action_requested",
-      "action_approved",
-      "action_requested",
-      "action_approved",
-    ]);
-    expect(rows.map((row) => row.sequence)).toEqual([1, 2, 3, 4]);
-    expect(rows[3]?.parentActionId).toBe(rows[2]?.actionId);
-    expect(rows[2]).toMatchObject({
-      type: "action_requested",
-      action: "mcp.server.disconnect",
-      resource: "search",
-      input: { serverName: "search" },
-    });
-    expect(rows[3]).toMatchObject({
-      type: "action_approved",
-      action: "mcp.server.disconnect",
-      resource: "search",
-      verdict: "continue",
-    });
+    try {
+      await provider.removeServer("search", { audit: { sessionId: session.id } });
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(provider.serverCount).toBe(0);
+      const lifecycleEvents = events.filter(
+        (e) => e.name === "policy.action.requested" || e.name === "policy.action.approved",
+      );
+      expect(lifecycleEvents.map((e) => e.name)).toEqual([
+        "policy.action.requested",
+        "policy.action.approved",
+      ]);
+      expect(lifecycleEvents[0].payload).toMatchObject({
+        action: "mcp.server.disconnect",
+        resource: "search",
+        context: { serverName: "search" },
+      });
+      expect(lifecycleEvents[1].payload).toMatchObject({
+        action: "mcp.server.disconnect",
+        resource: "search",
+        verdict: "continue",
+      });
+      expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
+    } finally {
+      stop();
+    }
   });
 
-  it("appends disconnectAll lifecycle ledger rows when an audit session is provided", async () => {
+  it("publishes disconnectAll lifecycle events when an audit session is provided", async () => {
     const session = createLedgerSession();
     const searchClient = makeClient();
     const memoryClient = makeClient();
@@ -531,54 +504,62 @@ describe("McpToolProvider", () => {
     await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
     await provider.addServer({ name: "memory", transport: "stdio", command: "memory-mcp" });
 
-    await provider.disconnectAll({ audit: { sessionId: session.id } });
+    const { events, stop } = collectBusEvents();
 
-    expect(searchClient.disconnect).toHaveBeenCalled();
-    expect(memoryClient.disconnect).toHaveBeenCalled();
-    expect(provider.serverCount).toBe(0);
-    const rows = await replayLedger(session.id);
-    expect(rows.map((row) => row.type)).toEqual([
-      "action_requested",
-      "action_approved",
-      "action_requested",
-      "action_approved",
-      "action_requested",
-      "action_approved",
-    ]);
-    expect(rows.map((row) => row.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(rows[5]?.parentActionId).toBe(rows[4]?.actionId);
-    expect(rows[4]).toMatchObject({
-      type: "action_requested",
-      action: "mcp.server.disconnect_all",
-      resource: "mcp.servers",
-      input: { serverNames: ["search", "memory"] },
-    });
-    expect(rows[5]).toMatchObject({
-      type: "action_approved",
-      action: "mcp.server.disconnect_all",
-      resource: "mcp.servers",
-      verdict: "continue",
-    });
+    try {
+      await provider.disconnectAll({ audit: { sessionId: session.id } });
+
+      expect(searchClient.disconnect).toHaveBeenCalled();
+      expect(memoryClient.disconnect).toHaveBeenCalled();
+      expect(provider.serverCount).toBe(0);
+      const lifecycleEvents = events.filter(
+        (e) => e.name === "policy.action.requested" || e.name === "policy.action.approved",
+      );
+      expect(lifecycleEvents.map((e) => e.name)).toEqual([
+        "policy.action.requested",
+        "policy.action.approved",
+      ]);
+      expect(lifecycleEvents[0].payload).toMatchObject({
+        action: "mcp.server.disconnect_all",
+        resource: "mcp.servers",
+        context: { serverNames: ["search", "memory"] },
+      });
+      expect(lifecycleEvents[1].payload).toMatchObject({
+        action: "mcp.server.disconnect_all",
+        resource: "mcp.servers",
+        verdict: "continue",
+      });
+      expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
+    } finally {
+      stop();
+    }
   });
 
   it("uses the latest session as default lifecycle audit context", async () => {
-    const session = createLedgerSession();
+    createLedgerSession();
     const client = makeClient();
     const provider = new McpToolProvider({ createClient: () => client.client });
 
-    await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
-    await provider.removeServer("search");
+    const { events, stop } = collectBusEvents();
 
-    expect(client.connect).toHaveBeenCalled();
-    expect(client.disconnect).toHaveBeenCalled();
-    const rows = await replayLedger(session.id);
-    expect(rows.map((row) => row.type)).toEqual([
-      "action_requested",
-      "action_approved",
-      "action_requested",
-      "action_approved",
-    ]);
-    expect(rows.map((row) => row.sequence)).toEqual([1, 2, 3, 4]);
+    try {
+      await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
+      await provider.removeServer("search");
+
+      expect(client.connect).toHaveBeenCalled();
+      expect(client.disconnect).toHaveBeenCalled();
+      const lifecycleEvents = events.filter(
+        (e) => e.name === "policy.action.requested" || e.name === "policy.action.approved",
+      );
+      expect(lifecycleEvents.map((e) => e.name)).toEqual([
+        "policy.action.requested",
+        "policy.action.approved",
+        "policy.action.requested",
+        "policy.action.approved",
+      ]);
+    } finally {
+      stop();
+    }
   });
 });
 

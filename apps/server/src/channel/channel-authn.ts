@@ -1,5 +1,6 @@
-import type { Adapter, Hook, Middleware } from "@openomni/protocol";
-import { Log } from "@openomni/session";
+import { Guardrail, type Adapter, type Hook, type Middleware } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { evaluateTriggers } from "../shared/trigger";
 import { verifyGitHubSignature } from "./github/webhook";
 
@@ -49,12 +50,46 @@ interface GitHubAuthState {
 
 const authTiming: Hook.Timing = "pre_run";
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
-  return { action: "continue", policyId, reason };
-}
+function evaluateChannelPermission(input: {
+  readonly action: ChannelAuthnPolicyId;
+  readonly resource: string;
+  readonly field: string;
+  readonly allowed: boolean;
+  readonly allowReason: string;
+  readonly denyReason: string;
+  readonly metadata?: Record<string, unknown>;
+}): Hook.Verdict {
+  const request: Guardrail.EvaluationRequest = {
+    action: input.action,
+    resource: input.resource,
+    input: { [input.field]: String(input.allowed) },
+    ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+  };
 
-function denyVerdict(reason: string, policyId: string): Hook.Verdict {
-  return { action: "abort", reason, policyId };
+  return Guardrail.evaluate(
+    {
+      action: input.action,
+      inputRules: [
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^true$",
+          action: "allow",
+          reason: input.allowReason,
+          priority: 2,
+        },
+        {
+          toolPattern: input.resource,
+          field: input.field,
+          pattern: "^false$",
+          action: "deny",
+          reason: input.denyReason,
+          priority: 1,
+        },
+      ],
+    },
+    request,
+  );
 }
 
 function triggerMetadata(input: {
@@ -85,10 +120,15 @@ function evaluateChannelTriggers(input: {
 }): ChannelTriggerAuthResult {
   const startedAt = Date.now();
   const metadata = triggerMetadata({ surface: input.surface, rules: input.rules, ctx: input.ctx });
-  const triggered = evaluateTriggers(input.rules, input.ctx);
-  const verdict = triggered
-    ? continueVerdict(input.policyId, `${input.surface} trigger accepted`)
-    : denyVerdict(`${input.surface} trigger denied`, input.policyId);
+  const verdict = evaluateChannelPermission({
+    action: input.policyId,
+    resource: input.resource,
+    field: "triggered",
+    allowed: evaluateTriggers(input.rules, input.ctx),
+    allowReason: `${input.surface} trigger accepted`,
+    denyReason: `${input.surface} trigger denied`,
+    metadata,
+  });
   void recordDecision(
     input.definition,
     verdict,
@@ -136,25 +176,63 @@ function recordDecision(
 function evaluateWebSocketToken(state: WebSocketAuthState): Hook.Verdict {
   const policyId = "channel.authn.websocket-token";
   if (!state.token) {
-    return continueVerdict(policyId, "websocket token auth not configured");
+    return evaluateChannelPermission({
+      action: policyId,
+      resource: "websocket.upgrade",
+      field: "authenticated",
+      allowed: true,
+      allowReason: "websocket token auth not configured",
+      denyReason: "websocket token missing or invalid",
+    });
   }
 
   const url = new URL(state.request.url);
   const subprotocolAuth = readSubprotocolAuth(state.request);
   const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
   if (provided !== state.token) {
-    Log.warn("websocket auth failure");
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "websocket auth failure",
+    });
     state.response = new Response("Unauthorized", { status: 401 });
-    return denyVerdict("websocket token missing or invalid", policyId);
+    return evaluateChannelPermission({
+      action: policyId,
+      resource: "websocket.upgrade",
+      field: "authenticated",
+      allowed: false,
+      allowReason: "websocket token accepted",
+      denyReason: "websocket token missing or invalid",
+    });
   }
 
   if (subprotocolAuth) {
     state.headers = { "Sec-WebSocket-Protocol": subprotocolAuth.selected };
-    return continueVerdict(policyId, "websocket subprotocol token accepted");
+    return evaluateChannelPermission({
+      action: policyId,
+      resource: "websocket.upgrade",
+      field: "authenticated",
+      allowed: true,
+      allowReason: "websocket subprotocol token accepted",
+      denyReason: "websocket token missing or invalid",
+    });
   }
 
-  Log.warn("websocket query token auth is deprecated");
-  return continueVerdict(policyId, "websocket query token accepted");
+  Bus.publish(Operational.Warn, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "websocket query token auth is deprecated",
+  });
+  return evaluateChannelPermission({
+    action: policyId,
+    resource: "websocket.upgrade",
+    field: "authenticated",
+    allowed: true,
+    allowReason: "websocket query token accepted",
+    denyReason: "websocket token missing or invalid",
+  });
 }
 
 async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Hook.Verdict> {
@@ -162,17 +240,38 @@ async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Hook.Verdict>
   const signature = state.request.headers.get("x-hub-signature-256");
   if (!signature) {
     state.response = new Response("Missing signature", { status: 401 });
-    return denyVerdict("github signature missing", policyId);
+    return evaluateChannelPermission({
+      action: policyId,
+      resource: "github.webhook",
+      field: "authenticated",
+      allowed: false,
+      allowReason: "github signature verified",
+      denyReason: "github signature missing",
+    });
   }
 
   const body = await state.request.text();
   state.body = body;
   if (!(await verifyGitHubSignature(body, signature, state.secret))) {
     state.response = new Response("Invalid signature", { status: 401 });
-    return denyVerdict("github signature invalid", policyId);
+    return evaluateChannelPermission({
+      action: policyId,
+      resource: "github.webhook",
+      field: "authenticated",
+      allowed: false,
+      allowReason: "github signature verified",
+      denyReason: "github signature invalid",
+    });
   }
 
-  return continueVerdict(policyId, "github signature verified");
+  return evaluateChannelPermission({
+    action: policyId,
+    resource: "github.webhook",
+    field: "authenticated",
+    allowed: true,
+    allowReason: "github signature verified",
+    denyReason: "github signature invalid",
+  });
 }
 
 export namespace ChannelAuthnMiddleware {

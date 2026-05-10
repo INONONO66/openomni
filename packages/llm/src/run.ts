@@ -1,11 +1,11 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
-import { LlmCall } from "@openomni/protocol";
+import { LlmCall, Operational } from "@openomni/protocol";
 import type { SDKMessage } from "./session/convert";
 import { Processor } from "./session/processor";
 import { toModelMessages } from "./session/convert";
 import { type Provider, getLanguage } from "./provider";
 import { Auth } from "./auth/storage";
-import { Bus, Log } from "@openomni/session";
+import { Bus } from "@openomni/session";
 
 /**
  * Input for the run() function.
@@ -118,7 +118,14 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         maxRetries: 0,
         stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
         onError: ({ error }: { error: unknown }) => {
-          Log.error("streamText error", { error: String(error) });
+          Bus.publish(Operational.Error, {
+            traceId: input.trace?.traceId ?? crypto.randomUUID(),
+            time: Date.now(),
+            sessionId: sessionID,
+            component: "llm.stream",
+            msg: "streamText error",
+            error: String(error),
+          });
         },
         abortSignal: abortSignal,
         ...(input.providerOptions ?? {}),
@@ -185,15 +192,6 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const provider = model?.providerID ?? "default";
   const modelId = model?.id ?? "default";
 
-  Log.info("llm call starting", {
-    model: modelId,
-    provider,
-    messageCount: messages.length,
-    toolCount: input.tools.length,
-    traceId,
-    sessionId: sessionID,
-  });
-
   Bus.publish(LlmCall.Started, {
     traceId,
     sessionId: sessionID,
@@ -216,17 +214,6 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     const durationMs = Date.now() - startMs;
     const finalTokens = processor.message.tokens;
     const finishReason = processor.message.finish ?? "unknown";
-
-    Log.info("llm call completed", {
-      model: modelId,
-      provider,
-      durationMs,
-      inputTokens: finalTokens.input,
-      outputTokens: finalTokens.output,
-      finishReason,
-      traceId,
-      sessionId: sessionID,
-    });
 
     Bus.publish(LlmCall.Completed, {
       traceId,

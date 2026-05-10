@@ -17,14 +17,14 @@ openomni/
 │   └── server/          # Hono server — Discord/Telegram/GitHub/WebSocket channels, tool providers, ingress router
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
-│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), EventLog, Artifact, Snapshot, SurfaceKey, WorkerRun, Todo, TraceContext
+│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, Todo, TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + OAuth), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (policy-driven ReAct loop) + multi-agent runtime (registry, subagent/background tools, MCP) — depends on session for observability (Log, Bus, Telemetry, TraceContext)
-│   │   ├── src/core/           # ChatAgent, budget, retry, tool-guard, delegation, telemetry, policy engine
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — depends on session for observability (Bus, TraceContext)
+│   │   ├── src/core/           # ChatAgent, budget, retry, tool-guard, memory, delegation, telemetry, middleware engine
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
-│   │   │   ├── policy/         # PolicyEngine — register, freeze, dispatch, evaluatePermission, deriveChildPolicies
-│   │   │   └── middleware/     # Deprecated compat bridge (wraps PolicyEngine) + builtins (budget, tool-guard, compaction, post-tool, post-turn, idle-nudge)
+│   │   │   └── middleware/     # Engine + builtins (budget, memory, tool-guard, compaction, post-tool, post-turn, idle-nudge) + legacy compat bridge
 │   │   └── src/runtime/        # Multi-agent infrastructure
+│   │       ├── messenger/      # AgentMessenger
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
 │   │       └── mcp/            # McpClient
@@ -40,7 +40,7 @@ openomni/
 protocol ← session ← llm ← agent ← openomni ← coordinator ← server
 ```
 
-Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Log, Bus, Telemetry, TraceContext). `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Bus, TraceContext). `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
 
 ## WHERE TO LOOK
 
@@ -49,28 +49,28 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
 | Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
 | Add subagent lifecycle events | `packages/protocol/src/subagent/index.ts` | `Subagent.Events.*` (worker runs + background tasks) |
-| Add policy timing | `packages/protocol/src/policy/index.ts` | `Policy.Timing` — 21 timings (9 core + 12 orchestration) |
-| Add middleware hook timing _(deprecated)_ | `packages/protocol/src/hook/index.ts` | 9 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error |
+| Add middleware hook timing | `packages/protocol/src/hook/index.ts` | 9 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
 | Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `todo`) |
-| Session event log | `packages/session/src/event-log/` | `EventLog.append/replay/listIncomplete/markComplete` |
+| Bus persistence observer | `packages/session/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
+| Bus query API | `packages/session/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
 | Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
-| Worker run records (subagent) | `packages/session/src/worker-run/` | Event-sourced via `Storage.Adapter.eventLog` |
+| Worker run records (subagent) | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
+| WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
 | Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
-| ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, tool-guard, delegation, telemetry |
-| Policy engine | `packages/agent/src/core/policy/` | `PolicyEngine.create()` — register, freeze, dispatch, evaluatePermission, deriveChildPolicies |
-| Policy schemas | `packages/protocol/src/policy/` | `Policy.Permission`, `Policy.Verdict`, `Policy.Timing`, `Policy.Definition` |
-| Middleware engine _(deprecated)_ | `packages/agent/src/core/middleware/` | Compat bridge wrapping PolicyEngine + builtins in `builtin/` |
+| ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, tool-guard, memory, delegation, telemetry |
+| Middleware engine | `packages/agent/src/core/middleware/` | `MiddlewareEngine.create()` + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
+| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
 | Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
 | Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
-| Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `Transport` interface to the session bus |
+| Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
 | Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session resolve → project → mode dispatch |
 | Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
 | Coordinator (worker pool) | `packages/coordinator/src/worker-pool/` | Worker routing, supervision, session-tree affinity routing |
@@ -86,7 +86,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 
 See [Golden Principles](docs/golden-principles.md) for hard coding invariants and [Repository Guidelines](docs/repository-guidelines.md) for operating rules, cleanup priorities, and documentation/test policy.
 
-Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, PolicyEngine over middleware/hook callbacks for agent extension.
+Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, middleware over hook callbacks for agent extension.
 
 ## MODES
 
@@ -106,7 +106,7 @@ Target direction: the user and Main Persona may submit new inbound work; ordinar
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-- **Deprecated MiddlewareEngine**: `middleware/engine.ts` in `packages/agent/src/core/middleware/` wraps `PolicyEngine` for backward compatibility. Deprecated — new code uses `PolicyEngine` directly with `policies: [...]`.
+- **Backward-compat hook shims**: `compat.ts` in `packages/agent/src/core/middleware/` converts legacy `ExecutionHooks` and `stepGuard` config to middleware. Deprecated — new code uses `middleware: [...]`.
 - **`as any` in protocol**: `NamedError.create()` uses `(this as any).cause = options.cause`. This is the ONE exception; do not add more.
 
 ## COMMANDS
@@ -140,7 +140,7 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. New providers via `@ai-sdk/openai-compatible` fallback.
-- `packages/agent` is organized as `src/core/` (ChatAgent + policy engine) and `src/runtime/` (registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The policy engine (`src/core/policy/`) is the primary extension point; `middleware/engine.ts` is a deprecated compat bridge wrapping PolicyEngine.
+- `packages/agent` is organized as `src/core/` (ChatAgent + middleware) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The middleware engine is the current extension point; legacy hook-based config is routed through `middleware/compat.ts`.
 - `packages/openomni` orchestrates ingress, DAG utilities, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
 - `packages/coordinator` owns multiprocess execution: worker pool lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
 - Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.

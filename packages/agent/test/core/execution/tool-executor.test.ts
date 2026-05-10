@@ -4,7 +4,7 @@ import { ToolExecution } from "@openomni/protocol";
 import { MiddlewareEngine } from "../../../src/core/middleware";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import type { Tool } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware";
+import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
 
 function makeEngine() {
   return MiddlewareEngine.create();
@@ -33,7 +33,11 @@ describe("createToolExecutor bus events", () => {
     const started: unknown[] = [];
     const completed: unknown[] = [];
     const publishedNames: string[] = [];
-    const stopObserve = Bus.observe((event) => publishedNames.push(event.name));
+    const stopObserve = Bus.observe((event) => {
+      if (!event.name.startsWith("operational.")) {
+        publishedNames.push(event.name);
+      }
+    });
     Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
     Bus.subscribe(ToolExecution.Completed, (d) => completed.push(d));
 
@@ -103,7 +107,11 @@ describe("createToolExecutor bus events", () => {
     const started: unknown[] = [];
     const denied: unknown[] = [];
     const publishedNames: string[] = [];
-    const stopObserve = Bus.observe((event) => publishedNames.push(event.name));
+    const stopObserve = Bus.observe((event) => {
+      if (!event.name.startsWith("operational.")) {
+        publishedNames.push(event.name);
+      }
+    });
     Bus.subscribe(ToolExecution.Started, (d) => started.push(d));
     Bus.subscribe(ToolExecution.PermissionDenied, (d) => denied.push(d));
 

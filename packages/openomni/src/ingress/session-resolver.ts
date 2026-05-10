@@ -1,5 +1,5 @@
 import { IngressEvent, type TraceContext as TraceContextProtocol } from "@openomni/protocol";
-import { Bus, Log, Session, SurfaceKey, TraceContext } from "@openomni/session";
+import { Bus, Session, SurfaceKey, TraceContext } from "@openomni/session";
 
 interface ResolvableEvent {
   surface: string;
@@ -57,8 +57,6 @@ export namespace IngressSessionResolver {
     }
 
     if (traceContext) {
-      const log = Log.withContext({ traceId: traceContext.traceId });
-      log.info("session resolved", { sessionId: session.id, isNew });
       Bus.publish(IngressEvent.SessionResolved, {
         traceId: traceContext.traceId,
         sessionId: session.id,

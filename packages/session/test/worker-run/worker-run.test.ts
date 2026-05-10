@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ExecutionEvent, Subagent } from "@openomni/protocol";
+import { Subagent } from "@openomni/protocol";
 import { Bus } from "../../src/bus/index";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkerRun } from "../../src/worker-run/index";
+import { WorkerRunStateStore } from "../../src/worker-run/state-store";
 
 function seedSession(id: string): void {
   Storage.getAdapter().session.set(id, {
@@ -50,6 +51,17 @@ describe("WorkerRun", () => {
     expect(run?.status).toBe("queued");
     expect(run?.resumeCount).toBe(0);
     expect(run?.startedAt).toBeGreaterThan(0);
+
+    const stored = WorkerRunStateStore.get("sess-1", "run-1");
+    expect(stored).toMatchObject({
+      runId: "run-1",
+      sessionId: "sess-1",
+      agentName: "worker",
+      status: "queued",
+      title: "worker task",
+      prompt: "do the thing",
+      assignedStepId: "step-1",
+    });
   });
 
   test("listBySession returns all runs", async () => {
@@ -69,7 +81,7 @@ describe("WorkerRun", () => {
     );
   });
 
-  test("multiple status updates replay correctly", async () => {
+  test("multiple status updates persist through state store", async () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
     await WorkerRun.updateStatus("sess-1", "run-1", "starting");
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
@@ -81,8 +93,24 @@ describe("WorkerRun", () => {
     expect(run).not.toBeUndefined();
     expect(run?.status).toBe("succeeded");
     expect(run?.resumeCount).toBe(1);
-    expect(run?.lastMessageId).toBe("msg-1");
-    expect(run?.endedAt).toBe(1234);
+
+    const stored = WorkerRunStateStore.get("sess-1", "run-1");
+    expect(stored?.status).toBe("succeeded");
+    expect(stored?.resumeCount).toBe(1);
+  });
+
+  test("listByStatus returns state-store recovery results", async () => {
+    await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
+    await WorkerRun.create("sess-1", { runId: "run-2", title: "two", prompt: "b" });
+    await WorkerRun.updateStatus("sess-1", "run-1", "starting");
+    await WorkerRun.updateStatus("sess-1", "run-1", "running");
+    await WorkerRun.updateStatus("sess-1", "run-2", "starting");
+
+    const running = await WorkerRun.listByStatus("running");
+    const starting = await WorkerRun.listByStatus("starting");
+
+    expect(running.map((run) => run.runId)).toEqual(["run-1"]);
+    expect(starting.map((run) => run.runId)).toEqual(["run-2"]);
   });
 
   test("updateStatus publishes WorkerRunStarted when entering starting", async () => {
@@ -156,7 +184,7 @@ describe("WorkerRun", () => {
     expect(events).toHaveLength(0);
   });
 
-  test("all appended events are valid ExecutionEvent rows", async () => {
+  test("WorkerRun state changes do not append legacy event rows", async () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "test", prompt: "do it" });
     await WorkerRun.updateStatus("sess-1", "run-1", "starting");
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
@@ -166,59 +194,6 @@ describe("WorkerRun", () => {
 
     const adapter = Storage.getAdapter();
     const rows = adapter.eventLog?.replay("sess-1") ?? [];
-    const events: ExecutionEvent[] = [];
-    const invalidRows: string[] = [];
-
-    for (const row of rows) {
-      const parsed = ExecutionEvent.Schema.safeParse(JSON.parse(row.data));
-      if (parsed.success) {
-        events.push(parsed.data as ExecutionEvent);
-      } else {
-        invalidRows.push(row.type);
-      }
-    }
-
-    expect(invalidRows).toHaveLength(0);
-    expect(events.length).toBeGreaterThan(0);
-    const types = events.map((e) => e.type);
-    expect(types).toContain("worker_run_created");
-    expect(types).toContain("worker_run_status_changed");
-    expect(types).toContain("worker_run_completed");
-  });
-
-  test("replay skips malformed worker_run_created rows without throwing", async () => {
-    await WorkerRun.create("sess-1", { runId: "run-1", title: "test", prompt: "do it" });
-
-    const adapter = Storage.getAdapter();
-    adapter.eventLog?.append("sess-1", "worker_run_created", "invalid json {");
-
-    const run = await WorkerRun.get("sess-1", "run-1");
-    expect(run).not.toBeUndefined();
-    expect(run?.status).toBe("queued");
-  });
-
-  test("replay skips malformed worker_run_status_changed rows without throwing", async () => {
-    await WorkerRun.create("sess-1", { runId: "run-1", title: "test", prompt: "do it" });
-    await WorkerRun.updateStatus("sess-1", "run-1", "starting");
-
-    const adapter = Storage.getAdapter();
-    adapter.eventLog?.append("sess-1", "worker_run_status_changed", "invalid json {");
-
-    const run = await WorkerRun.get("sess-1", "run-1");
-    expect(run).not.toBeUndefined();
-    expect(run?.status).toBe("starting");
-  });
-
-  test("replay skips malformed worker_run_completed rows without throwing", async () => {
-    await WorkerRun.create("sess-1", { runId: "run-1", title: "test", prompt: "do it" });
-    await WorkerRun.updateStatus("sess-1", "run-1", "starting");
-    await WorkerRun.updateStatus("sess-1", "run-1", "running");
-
-    const adapter = Storage.getAdapter();
-    adapter.eventLog?.append("sess-1", "worker_run_completed", "invalid json {");
-
-    const run = await WorkerRun.get("sess-1", "run-1");
-    expect(run).not.toBeUndefined();
-    expect(run?.status).toBe("running");
+    expect(rows).toHaveLength(0);
   });
 });

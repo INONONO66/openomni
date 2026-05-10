@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { AgentBudget } from "./types";
 
 export interface BudgetState {
@@ -35,39 +36,63 @@ export function checkBudget(
   const elapsed = Date.now() - state.startTime;
 
   if (maxWallTimeMs !== -1 && elapsed >= maxWallTimeMs) {
-    Log.warn("budget exceeded: wall time", {
-      type: "exceeded",
-      turns: state.turns,
-      toolCalls: state.toolCalls,
-      wallTimeMs: elapsed,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget exceeded: wall time",
+      context: {
+        type: "exceeded",
+        turns: state.turns,
+        toolCalls: state.toolCalls,
+        wallTimeMs: elapsed,
+      },
     });
     return "exceeded";
   }
   if (maxTurns !== -1 && state.turns >= maxTurns) {
-    Log.warn("budget exceeded: turns", {
-      type: "exceeded",
-      turns: state.turns,
-      toolCalls: state.toolCalls,
-      wallTimeMs: elapsed,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget exceeded: turns",
+      context: {
+        type: "exceeded",
+        turns: state.turns,
+        toolCalls: state.toolCalls,
+        wallTimeMs: elapsed,
+      },
     });
     return "exceeded";
   }
   if (maxToolCalls !== -1 && state.toolCalls >= maxToolCalls) {
-    Log.warn("budget exceeded: tool calls", {
-      type: "exceeded",
-      turns: state.turns,
-      toolCalls: state.toolCalls,
-      wallTimeMs: elapsed,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget exceeded: tool calls",
+      context: {
+        type: "exceeded",
+        turns: state.turns,
+        toolCalls: state.toolCalls,
+        wallTimeMs: elapsed,
+      },
     });
     return "exceeded";
   }
   if (maxToolRuntimeMs !== -1 && state.toolRuntimeMs >= maxToolRuntimeMs) {
-    Log.warn("budget exceeded: tool runtime", {
-      type: "exceeded",
-      turns: state.turns,
-      toolCalls: state.toolCalls,
-      wallTimeMs: elapsed,
-      toolRuntimeMs: state.toolRuntimeMs,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget exceeded: tool runtime",
+      context: {
+        type: "exceeded",
+        turns: state.turns,
+        toolCalls: state.toolCalls,
+        wallTimeMs: elapsed,
+        toolRuntimeMs: state.toolRuntimeMs,
+      },
     });
     return "exceeded";
   }
@@ -83,18 +108,30 @@ export function checkBudget(
   const maxRatio = Math.max(...ratios);
 
   if (maxRatio >= warningRatio) {
-    Log.warn("budget threshold warning", {
-      type: "warning",
-      remaining: describeBudgetRemaining(state, budget),
-      ratio: maxRatio.toFixed(2),
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget threshold warning",
+      context: {
+        type: "warning",
+        remaining: describeBudgetRemaining(state, budget),
+        ratio: maxRatio.toFixed(2),
+      },
     });
     return "warning";
   }
   if (maxRatio >= reassuranceRatio) {
-    Log.info("budget threshold reassurance", {
-      type: "reassurance",
-      remaining: describeBudgetRemaining(state, budget),
-      ratio: maxRatio.toFixed(2),
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.budget",
+      msg: "budget threshold reassurance",
+      context: {
+        type: "reassurance",
+        remaining: describeBudgetRemaining(state, budget),
+        ratio: maxRatio.toFixed(2),
+      },
     });
     return "reassurance";
   }

@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import matter from "gray-matter";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { findUp } from "./find-up";
 
 const MAX_SKILLS = 200;
@@ -46,7 +47,13 @@ function loadSkillsFromDir(skillsDir: string): SkillMeta[] {
       if (typeof data.description === "string") description = data.description;
     } catch {
       // gray-matter parse failure or unreadable file — fall back to directory name
-      Log.warn("failed to parse skill file, using directory name as fallback", { skillFile });
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "failed to parse skill file, using directory name as fallback",
+        context: { skillFile },
+      });
     }
 
     skills.push({ name, description, path: skillFile });

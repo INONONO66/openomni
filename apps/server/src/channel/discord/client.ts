@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { fetchWithRetry } from "../../shared/fetch-retry";
 import type { ChannelClient } from "../types";
 
@@ -15,7 +16,15 @@ export class DiscordClient implements ChannelClient {
     await fetch(`${BASE_URL}/channels/${channelId}/typing`, {
       method: "POST",
       headers: { Authorization: `Bot ${this.token}` },
-    }).catch((e) => Log.warn("discord typing indicator failed", { err: String(e) }));
+    }).catch((e) =>
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord typing indicator failed",
+        context: { err: String(e) },
+      }),
+    );
   }
 
   async createDmChannel(recipientId: string): Promise<string> {

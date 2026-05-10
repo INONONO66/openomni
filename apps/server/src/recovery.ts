@@ -1,5 +1,6 @@
 import type { Message } from "@openomni/protocol";
-import { Log, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 
 export interface RecoveryItem {
   sessionId: string;
@@ -13,7 +14,12 @@ export interface RecoveryItem {
 export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
   const retryQueue: RecoveryItem[] = [];
 
-  Log.info("checking for interrupted messages");
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "checking for interrupted messages",
+  });
 
   try {
     const adapter = Storage.get();
@@ -22,14 +28,25 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
     const interrupted = [...processing, ...received];
 
     if (interrupted.length === 0) {
-      Log.info("no interrupted messages found");
+      Bus.publish(Operational.Info, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "no interrupted messages found",
+      });
       return retryQueue;
     }
 
-    Log.info("found interrupted messages", {
-      total: interrupted.length,
-      processing: processing.length,
-      received: received.length,
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "found interrupted messages",
+      context: {
+        total: interrupted.length,
+        processing: processing.length,
+        received: received.length,
+      },
     });
 
     let recovered = 0;
@@ -45,13 +62,25 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         if (hasAssistantAfter) {
           Session.updateMessageStatus(messageId, "completed");
           recovered++;
-          Log.info("marked message as completed", { messageId });
+          Bus.publish(Operational.Info, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "marked message as completed",
+            context: { messageId },
+          });
           continue;
         }
 
         const session = Session.get(sessionId);
         if (!session) {
-          Log.warn("session not found, skipping message", { sessionId, messageId });
+          Bus.publish(Operational.Warn, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "session not found, skipping message",
+            context: { sessionId, messageId },
+          });
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -60,7 +89,13 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
         const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
 
         if (!textPart?.text) {
-          Log.warn("no text found for message, skipping retry", { messageId });
+          Bus.publish(Operational.Warn, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "no text found for message, skipping retry",
+            context: { messageId },
+          });
           Session.updateMessageStatus(messageId, "received");
           continue;
         }
@@ -77,15 +112,39 @@ export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
           text: textPart.text,
           resumeExisting: true,
         });
-        Log.info("queued message for retry", { messageId });
+        Bus.publish(Operational.Info, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "queued message for retry",
+          context: { messageId },
+        });
       } catch (err) {
-        Log.error("error processing message", { messageId, err: String(err) });
+        Bus.publish(Operational.Error, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "error processing message",
+          context: { messageId, err: String(err) },
+        });
       }
     }
 
-    Log.info("recovery done", { recovered, queued: retryQueue.length, total: processing.length });
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "recovery done",
+      context: { recovered, queued: retryQueue.length, total: processing.length },
+    });
   } catch (err) {
-    Log.error("recovery failed", { err: String(err) });
+    Bus.publish(Operational.Error, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "recovery failed",
+      context: { err: String(err) },
+    });
   }
 
   return retryQueue;

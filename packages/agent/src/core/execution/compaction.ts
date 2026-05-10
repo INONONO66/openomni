@@ -1,5 +1,5 @@
-import { Log } from "@openomni/session";
-import type { Message } from "@openomni/protocol";
+import { Operational, type Message } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 export interface CompactionOptions {
   contextWindowTokens: number;
@@ -46,11 +46,17 @@ export namespace InMemoryCompactor {
 
     const compacted = [...summaryMessages, ...toKeep];
 
-    Log.info("compaction triggered", {
-      messagesBefore: messages.length,
-      messagesAfter: compacted.length,
-      removedCount: toRemove.length,
-      reason: "context window threshold exceeded",
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.compaction",
+      msg: "compaction triggered",
+      context: {
+        messagesBefore: messages.length,
+        messagesAfter: compacted.length,
+        removedCount: toRemove.length,
+        reason: "context window threshold exceeded",
+      },
     });
 
     return {

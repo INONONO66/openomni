@@ -1,10 +1,10 @@
 import type { MiddlewareDecision } from "@openomni/agent";
 import { type Ingress, IngressEvent } from "@openomni/protocol";
-import { Bus, Log, Storage, SurfaceKey, TraceContext } from "@openomni/session";
+import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
-import { IngressAuthorityMiddleware } from "../policy/ingress-authority";
+import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
 
 export type { CoordinatorLike };
@@ -47,8 +47,6 @@ export namespace IngressEngine {
     });
 
     const inboundEvent = preRun.event;
-    const log = Log.withContext({ traceId: trace.traceId });
-    log.info("ingress received", { surface: inboundEvent.surface, mode: inboundEvent.mode });
 
     const payloadLength =
       typeof inboundEvent.payload === "string"

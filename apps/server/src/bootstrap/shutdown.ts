@@ -1,5 +1,5 @@
 import { Operational } from "@openomni/protocol";
-import { Storage, Bus, Log } from "@openomni/session";
+import { Storage, Bus, BusPersistence } from "@openomni/session";
 import type { McpToolProvider } from "../tool/mcp";
 
 interface ClosableStorage {
@@ -20,7 +20,6 @@ interface ShutdownDeps {
   mcpProvider: McpToolProvider;
   coordinator?: { shutdown(): Promise<void> };
   traceId?: string;
-  stopEventLogBridge?: () => void;
 }
 
 export function installShutdownHandlers(deps: ShutdownDeps): void {
@@ -31,7 +30,12 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     shuttingDown = true;
 
     const traceId = deps.traceId ?? crypto.randomUUID();
-    Log.info("server shutting down");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server shutting down",
+    });
 
     Bus.publish(Operational.ShutdownInitiated, {
       traceId,
@@ -49,7 +53,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
       deps.server.stop(true);
       await deps.mcpProvider.disconnectAll();
       await new Promise((resolve) => setTimeout(resolve, 5_000));
-      deps.stopEventLogBridge?.();
+      BusPersistence.stop();
 
       const storage = Storage.get();
       if (isClosableStorage(storage)) {
@@ -59,7 +63,13 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
         storage.close();
       }
     } catch (err) {
-      Log.error("server error during shutdown", { err: String(err) });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "server error during shutdown",
+        context: { err: String(err) },
+      });
     }
 
     process.exit(0);

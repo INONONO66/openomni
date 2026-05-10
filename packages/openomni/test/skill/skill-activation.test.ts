@@ -7,7 +7,7 @@ const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 describe("createSkillActivationMiddleware", () => {
   it("injects skill prompt fragments in execution, enhancement, guarantee order", async () => {
-    const engine = MiddlewareEngine.create({ eventLog: false });
+    const engine = MiddlewareEngine.create({ audit: false });
     engine.register(
       createSkillActivationMiddleware([
         skill("guard", "guarantee", "Guarantee behavior"),
@@ -37,7 +37,7 @@ describe("createSkillActivationMiddleware", () => {
   it("continues without injection when no skills are active", async () => {
     const decisions: MiddlewareDecision[] = [];
     const engine = MiddlewareEngine.create({
-      eventLog: false,
+      audit: false,
       onDecision: (decision) => {
         decisions.push(decision);
       },
@@ -59,7 +59,7 @@ describe("createSkillActivationMiddleware", () => {
   it("makes same-layer execution conflicts observable while composing deterministically", async () => {
     const decisions: MiddlewareDecision[] = [];
     const engine = MiddlewareEngine.create({
-      eventLog: false,
+      audit: false,
       onDecision: (decision) => {
         decisions.push(decision);
       },

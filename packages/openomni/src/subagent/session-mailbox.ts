@@ -2,7 +2,8 @@
 // operations on the same session are serialized (FIFO) while different sessions
 // run in parallel.
 
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 type MailboxEntry<T> = {
   fn: () => Promise<T>;
@@ -19,9 +20,13 @@ const processing = new Set<string>();
 async function drainMailbox(sessionId: string): Promise<void> {
   if (processing.has(sessionId)) return;
   processing.add(sessionId);
-  Log.debug("mailbox.lock.acquired", {
+  Bus.publish(Operational.Debug, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
     sessionId,
-    queueDepth: mailboxes.get(sessionId)?.length ?? 0,
+    component: "subagent.mailbox",
+    msg: "mailbox.lock.acquired",
+    context: { queueDepth: mailboxes.get(sessionId)?.length ?? 0 },
   });
 
   try {
@@ -42,7 +47,13 @@ async function drainMailbox(sessionId: string): Promise<void> {
     }
   } finally {
     processing.delete(sessionId);
-    Log.debug("mailbox.lock.released", { sessionId });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      sessionId,
+      component: "subagent.mailbox",
+      msg: "mailbox.lock.released",
+    });
     // Items may have been enqueued while we awaited the last entry
     if (mailboxes.has(sessionId)) {
       Promise.resolve().then(() => drainMailbox(sessionId));
@@ -68,14 +79,24 @@ export function sendToMailbox<T>(sessionId: string, fn: () => Promise<T>): Promi
 
     // Warn when queue reaches 80% of max depth
     if (queue.length >= WARN_THRESHOLD) {
-      Log.warn("mailbox.queue.high", {
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
         sessionId,
-        queueDepth: queue.length,
-        maxDepth: MAX_QUEUE_DEPTH,
+        component: "subagent.mailbox",
+        msg: "mailbox.queue.high",
+        context: { queueDepth: queue.length, maxDepth: MAX_QUEUE_DEPTH },
       });
     }
 
-    Log.debug("mailbox.enqueued", { sessionId, queueDepth: queue.length });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      sessionId,
+      component: "subagent.mailbox",
+      msg: "mailbox.enqueued",
+      context: { queueDepth: queue.length },
+    });
     drainMailbox(sessionId);
   });
 }

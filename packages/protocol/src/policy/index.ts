@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { Hook } from "../hook/index";
 
 export namespace Policy {
   export const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
@@ -130,7 +129,10 @@ export namespace Policy {
 
   export const Definition = z.object({
     name: z.string().min(1),
-    timing: z.union([z.string(), z.array(z.string())]),
+    timing: z.union([
+      z.enum(Object.values(Timing) as [string, ...string[]]),
+      z.array(z.enum(Object.values(Timing) as [string, ...string[]])),
+    ]),
     priority: z.number().int().min(0),
     scope: Scope.optional(),
     failPolicy: FailPolicy.optional(),

@@ -1,6 +1,6 @@
 import { APIError, RetryError } from "../error";
-import { Bus, Log } from "@openomni/session";
-import { LlmCall, type Run } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+import { LlmCall, Operational, type Run } from "@openomni/protocol";
 
 export namespace Retry {
   export const RETRY_INITIAL_DELAY = 2000;
@@ -155,14 +155,6 @@ export namespace Retry {
           if (options?.trace) {
             const { traceId, sessionId, provider = "unknown" } = options.trace;
 
-            Log.warn("llm retry decided", {
-              attempt,
-              maxAttempts,
-              reason: retryReason,
-              backoffMs: delayMs,
-              traceId,
-            });
-
             Bus.publish(LlmCall.RetryDecided, {
               traceId,
               sessionId,
@@ -176,12 +168,6 @@ export namespace Retry {
             const isRateLimit =
               retryReason === "Too Many Requests" || retryReason === "Rate Limited";
             if (isRateLimit) {
-              Log.warn("llm rate limited", {
-                provider,
-                retryAfterMs: delayMs,
-                traceId,
-              });
-
               Bus.publish(LlmCall.RateLimited, {
                 traceId,
                 sessionId,
@@ -235,23 +221,41 @@ export namespace Retry {
       normalized.includes("aborted") ||
       normalized.includes("budget exceeded")
     ) {
-      Log.debug("error classified as timeout", { error: errorMessage, reason: "timeout" });
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "error classified as timeout",
+        context: { error: errorMessage, reason: "timeout" },
+      });
       return "timeout";
     }
     if (normalized.includes("tool")) {
-      Log.debug("error classified as tool error", { error: errorMessage, reason: "tool_error" });
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "error classified as tool error",
+        context: { error: errorMessage, reason: "tool_error" },
+      });
       return "tool_error";
     }
     if (normalized.includes("validation")) {
-      Log.debug("error classified as validation error", {
-        error: errorMessage,
-        reason: "validation_error",
+      Bus.publish(Operational.Debug, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "error classified as validation error",
+        context: { error: errorMessage, reason: "validation_error" },
       });
       return "validation_error";
     }
-    Log.debug("error classified as transient error", {
-      error: errorMessage,
-      reason: "transient_error",
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "llm.retry",
+      msg: "error classified as transient error",
+      context: { error: errorMessage, reason: "transient_error" },
     });
     return "transient_error";
   }
@@ -262,41 +266,43 @@ export namespace Retry {
     attempt: number,
   ): boolean {
     if (attempt >= policy.maxAttempts) {
-      Log.warn("retry exhausted: max attempts reached", {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: false,
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "retry exhausted: max attempts reached",
+        context: { attempt, maxAttempts: policy.maxAttempts, reason, shouldRetry: false },
       });
       return false;
     }
     if (!policy.retryOn || policy.retryOn.length === 0) {
       const backoffMs = calculateAgentBackoffMs(policy, attempt + 1);
-      Log.warn("retry decision: will retry (no filter)", {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: true,
-        backoffMs,
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "retry decision: will retry (no filter)",
+        context: { attempt, maxAttempts: policy.maxAttempts, reason, shouldRetry: true, backoffMs },
       });
       return true;
     }
     const willRetry = policy.retryOn.includes(reason);
     if (willRetry) {
       const backoffMs = calculateAgentBackoffMs(policy, attempt + 1);
-      Log.warn("retry decision: will retry (reason allowed)", {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: true,
-        backoffMs,
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "retry decision: will retry (reason allowed)",
+        context: { attempt, maxAttempts: policy.maxAttempts, reason, shouldRetry: true, backoffMs },
       });
     } else {
-      Log.warn("retry decision: will not retry (reason not allowed)", {
-        attempt,
-        maxAttempts: policy.maxAttempts,
-        reason,
-        shouldRetry: false,
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "llm.retry",
+        msg: "retry decision: will not retry (reason not allowed)",
+        context: { attempt, maxAttempts: policy.maxAttempts, reason, shouldRetry: false },
       });
     }
     return willRetry;

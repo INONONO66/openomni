@@ -1,6 +1,5 @@
-import type { Guardrail } from "@openomni/protocol";
-import { Log } from "@openomni/session";
-import { PolicyEngine } from "./policy/engine";
+import { Guardrail, Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 const TOOL_CALL_ACTION = "tool.call";
 
@@ -19,10 +18,22 @@ function toLegacyDecision(
 function logDecision(toolName: string, result: Guardrail.EvaluationResult): void {
   const fields = { toolName, reason: result.reason, matchedPattern: result.matchedPattern };
   if (result.action === "abort") {
-    Log.warn("guardrail: tool blocked", fields);
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "agent.tool-guard",
+      msg: "guardrail: tool blocked",
+      context: fields,
+    });
     return;
   }
-  Log.debug("guardrail: tool allowed", fields);
+  Bus.publish(Operational.Debug, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "agent.tool-guard",
+    msg: "guardrail: tool allowed",
+    context: fields,
+  });
 }
 
 export namespace ToolGuard {
@@ -31,7 +42,7 @@ export namespace ToolGuard {
     input: Record<string, unknown>,
     permission: Guardrail.Permission,
   ): Guardrail.EvaluationResult {
-    const result = PolicyEngine.evaluatePermission(normalizePermission(permission), {
+    const result = Guardrail.evaluate(normalizePermission(permission), {
       action: TOOL_CALL_ACTION,
       resource: toolName,
       input,

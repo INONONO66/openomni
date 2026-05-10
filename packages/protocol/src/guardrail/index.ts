@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { Hook } from "../hook/index";
 
 export namespace Guardrail {
+  const MAX_REGEX_PATTERN_LENGTH = 200;
+  const MAX_INPUT_LENGTH = 10_000;
+  const POLICY_ID = "guardrail.permission";
+
   export const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
   export type PermissionDecision = z.infer<typeof PermissionDecision>;
 
@@ -48,8 +52,112 @@ export namespace Guardrail {
     action: z.enum(["continue", "abort"]),
     decision: PermissionDecision.optional(),
     reason: z.string(),
-    policyId: z.literal("guardrail.permission"),
+    policyId: z.literal(POLICY_ID),
     matchedPattern: z.string().optional(),
   });
   export type EvaluationResult = z.infer<typeof EvaluationResult> & Hook.Verdict;
+
+  function matchesPattern(resource: string, pattern: string): boolean {
+    if (pattern === "*") return true;
+    if (pattern.endsWith(".*")) return resource.startsWith(`${pattern.slice(0, -2)}.`);
+    return resource === pattern;
+  }
+
+  function matchesInputField(
+    input: Record<string, unknown> | undefined,
+    field: string,
+    pattern: string,
+  ): boolean {
+    if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return false;
+
+    const raw = String(input?.[field] ?? "");
+    const value = raw.length > MAX_INPUT_LENGTH ? raw.slice(0, MAX_INPUT_LENGTH) : raw;
+
+    try {
+      return new RegExp(pattern).test(value);
+    } catch {
+      return false;
+    }
+  }
+
+  function verdict(
+    decision: PermissionDecision,
+    reason: string,
+    matchedPattern?: string,
+  ): EvaluationResult {
+    const action: Extract<Hook.Verdict["action"], "continue" | "abort"> =
+      decision === "allow" ? "continue" : "abort";
+    return matchedPattern === undefined
+      ? { action, decision, reason, policyId: POLICY_ID }
+      : { action, decision, reason, policyId: POLICY_ID, matchedPattern };
+  }
+
+  export function evaluate(
+    permission: Permission | undefined,
+    request: EvaluationRequest,
+  ): EvaluationResult {
+    if (!permission) return verdict("allow", "default_allow");
+    if (permission.action !== request.action) return verdict("deny", "action_mismatch");
+
+    const inputRules = [...(permission.inputRules ?? [])].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    );
+
+    for (const rule of inputRules) {
+      if (
+        matchesPattern(request.resource, rule.toolPattern) &&
+        matchesInputField(request.input, rule.field, rule.pattern)
+      ) {
+        return verdict(rule.action, rule.reason ?? `input_rule_${rule.action}`, rule.toolPattern);
+      }
+    }
+
+    const deniedBy = permission.denylist?.find((pattern) =>
+      matchesPattern(request.resource, pattern),
+    );
+    if (deniedBy) return verdict("deny", "denylist", deniedBy);
+
+    const requiresApprovalBy = permission.requireApproval?.find((pattern) =>
+      matchesPattern(request.resource, pattern),
+    );
+    if (requiresApprovalBy) {
+      return verdict("require_approval", "require_approval", requiresApprovalBy);
+    }
+
+    if (permission.allowlist !== undefined) {
+      const allowedBy = permission.allowlist.find((pattern) =>
+        matchesPattern(request.resource, pattern),
+      );
+
+      if (allowedBy) return verdict("allow", "allowlist", allowedBy);
+
+      return verdict(
+        "deny",
+        permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss",
+      );
+    }
+
+    return verdict("allow", "default_allow");
+  }
+
+  export const GuardrailType = z.enum([
+    "output_validation",
+    "content_filter",
+    "cost_limit",
+    "custom",
+  ]);
+  export type GuardrailType = z.infer<typeof GuardrailType>;
+
+  export const GuardrailSchema = z.object({
+    type: GuardrailType,
+    rule: z.string(),
+    action: z.enum(["reject", "retry", "warn", "escalate"]),
+  });
+  export type GuardrailSchema = z.infer<typeof GuardrailSchema>;
+
+  export const DelegationPolicy = z.object({
+    maxDepth: z.number().default(3),
+    abortPropagation: z.boolean(),
+  });
+  export type DelegationPolicy = z.infer<typeof DelegationPolicy>;
 }

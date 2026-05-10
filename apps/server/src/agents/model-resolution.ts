@@ -1,6 +1,7 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { Auth, Provider } from "@openomni/llm";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 const DATE_SUFFIX_RE = /-\d{8}$/;
 
@@ -116,19 +117,31 @@ export async function resolveRuntimeModel(
     : "model not in provider catalog";
 
   if (defaultModel && defaultModel.provider === model.provider) {
-    Log.warn("model resolution failed, falling back to default", {
-      reason,
-      provider: model.provider,
-      id: model.id,
-      fallback: defaultModel.id,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "model resolution failed, falling back to default",
+      context: {
+        reason,
+        provider: model.provider,
+        id: model.id,
+        fallback: defaultModel.id,
+      },
     });
     return defaultModel;
   }
 
-  Log.warn("model resolution failed, passing through unresolved", {
-    reason,
-    provider: model.provider,
-    id: model.id,
+  Bus.publish(Operational.Warn, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "model resolution failed, passing through unresolved",
+    context: {
+      reason,
+      provider: model.provider,
+      id: model.id,
+    },
   });
   return model;
 }
@@ -150,7 +163,13 @@ export async function resolveDefaultProviderModel(): Promise<CatalogModel | unde
     return resolveCatalogModel(preferred.id, models) ?? preferred;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    Log.warn("failed to resolve model", { msg });
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "failed to resolve model",
+      context: { msg },
+    });
     return undefined;
   }
 }

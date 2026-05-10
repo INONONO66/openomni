@@ -1,13 +1,18 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus, Log } from "@openomni/session";
+import { Bus } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
   queue: RecoveryItem[],
   handler: Adapter.MessageHandler,
 ): Promise<void> {
-  Log.info(`recovery processing ${queue.length} retry item(s)`);
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: `recovery processing ${queue.length} retry item(s)`,
+  });
 
   for (const item of queue) {
     try {
@@ -18,11 +23,22 @@ async function processRetryQueue(
         sender: { id: "recovery", name: "recovery" },
       });
     } catch (err) {
-      Log.error(`recovery retry failed for ${item.messageId}`, { err: String(err) });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: `recovery retry failed for ${item.messageId}`,
+        context: { err: String(err) },
+      });
     }
   }
 
-  Log.info("recovery retry processing complete");
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "recovery retry processing complete",
+  });
 }
 
 export async function runRecovery(
@@ -47,7 +63,12 @@ export async function runRecovery(
     if (handler && retryQueue.length > 0) {
       await processRetryQueue(retryQueue, handler);
     } else if (retryQueue.length > 0) {
-      Log.warn(`recovery ${retryQueue.length} message(s) need retry but no handler available`);
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: `recovery ${retryQueue.length} message(s) need retry but no handler available`,
+      });
     }
   } finally {
     const durationMs = Date.now() - startTime;

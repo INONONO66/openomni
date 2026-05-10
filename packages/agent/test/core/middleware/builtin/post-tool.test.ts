@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createPostToolMiddleware } from "../../../../src/core/policy/builtin/post-tool";
+import { createPostToolMiddleware } from "../../../../src/core/middleware/builtin/post-tool";
 import type { MiddlewareContext } from "../../../../src/core/middleware";
 
 function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {

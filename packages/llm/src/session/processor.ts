@@ -1,11 +1,9 @@
-import type { ExecutionEvent, Message, Run, Sink, Tool } from "@openomni/protocol";
-import { EventLog, Log, Storage } from "@openomni/session";
+import { Operational, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { TokenTracker } from "../token";
 import { Retry } from "./retry";
 import { APIError } from "../error";
 import type { Provider } from "../provider";
-
-const SINK_LEDGER_VISIBILITY = "internal";
 
 export namespace Processor {
   export type ProcessResult = "stop" | "continue" | "compact";
@@ -468,130 +466,49 @@ export namespace Processor {
   }
 
   function createProjectedSink(sink: Sink, sessionID: string): ProjectedSink {
-    let appendQueue = Promise.resolve();
-    let nextSequence: number | undefined;
-    const toolActionIds = new Map<string, string>();
-
-    async function readNextSequence(): Promise<number> {
-      let maxSequence = 0;
-      for await (const event of EventLog.replay(sessionID)) {
-        maxSequence = Math.max(maxSequence, event.sequence);
-      }
-      return maxSequence + 1;
-    }
-
-    function hasLedgerTarget(): boolean {
-      if (!sessionID || Storage.initializedDbPath === null) return false;
-
-      const adapter = Storage.get();
-      if (adapter.eventLog === undefined) return false;
-      return adapter.session.get(sessionID) !== undefined;
-    }
-
-    function createActionId(eventType: ExecutionEvent["type"], sequence: number): string {
-      return `${sessionID}:processor.sink.${eventType}:${sequence}`;
-    }
-
-    async function reserveSequence(): Promise<number> {
-      if (nextSequence === undefined) {
-        nextSequence = await readNextSequence();
-      }
-      const sequence = nextSequence;
-      nextSequence += 1;
-      return sequence;
-    }
-
-    function enqueue(
-      eventType: ExecutionEvent["type"],
-      build: (base: {
-        readonly actionId: string;
-        readonly parentActionId?: string;
-        readonly visibility: typeof SINK_LEDGER_VISIBILITY;
-        readonly timestamp: string;
-        readonly sequence: number;
-      }) => ExecutionEvent,
-    ): void {
-      if (!hasLedgerTarget()) return;
-
-      appendQueue = appendQueue.then(async () => {
-        try {
-          const sequence = await reserveSequence();
-          const event = build({
-            actionId: createActionId(eventType, sequence),
-            visibility: SINK_LEDGER_VISIBILITY,
-            timestamp: new Date().toISOString(),
-            sequence,
-          });
-          await EventLog.append(sessionID, event);
-        } catch (error) {
-          Log.warn("processor: EventLog append failed", {
-            sessionID,
-            eventType,
-            error: String(error),
-          });
-        }
+    function publish(message: string, data?: Record<string, unknown>): void {
+      if (!sessionID) return;
+      Bus.publish(Operational.Info, {
+        traceId: sessionID,
+        time: Date.now(),
+        sessionId: sessionID,
+        component: "llm.processor",
+        msg: message,
+        context: data,
       });
     }
 
     return {
       onMessage(message) {
         sink.onMessage(message);
-        enqueue(
-          "bus_event",
-          (base): ExecutionEvent.MirroredBusEvent => ({
-            type: "bus_event",
-            name: "processor.sink.message",
-            payload: message,
-            ...base,
-          }),
-        );
+        publish("sink.message", { payload: message });
       },
 
       onToolCall(call: Tool.Call) {
         sink.onToolCall(call);
-        enqueue("tool_started", (base): ExecutionEvent.ToolStarted => {
-          toolActionIds.set(call.id, base.actionId);
-          return {
-            type: "tool_started",
-            toolCallId: call.id,
-            toolName: call.tool,
-            args: call.input,
-            ...base,
-          };
+        publish("sink.tool.started", {
+          toolCallId: call.id,
+          toolName: call.tool,
+          args: call.input,
         });
       },
 
       onToolResult(result: Tool.Result) {
         sink.onToolResult(result);
-        enqueue(
-          "tool_completed",
-          (base): ExecutionEvent.ToolCompleted => ({
-            type: "tool_completed",
-            toolCallId: result.toolCallId,
-            result,
-            ...(toolActionIds.get(result.toolCallId) !== undefined && {
-              parentActionId: toolActionIds.get(result.toolCallId),
-            }),
-            ...base,
-          }),
-        );
+        publish("sink.tool.completed", {
+          toolCallId: result.toolCallId,
+          output: result.output,
+          isError: result.isError,
+        });
       },
 
       onSnapshot(snapshot: Run.Snapshot) {
         sink.onSnapshot(snapshot);
-        enqueue(
-          "bus_event",
-          (base): ExecutionEvent.MirroredBusEvent => ({
-            type: "bus_event",
-            name: "processor.sink.snapshot",
-            payload: snapshot,
-            ...base,
-          }),
-        );
+        publish("sink.snapshot", { payload: snapshot });
       },
 
       flush() {
-        return appendQueue;
+        return Promise.resolve();
       },
     };
   }

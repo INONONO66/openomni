@@ -1,4 +1,3 @@
-import { Log } from "../log/index.js";
 import { BusEvent } from "@openomni/protocol";
 
 export { BusEvent };
@@ -32,7 +31,7 @@ export namespace Bus {
           try {
             observer(event, data);
           } catch (err) {
-            Log.warn("Bus observer error", { event: event.name, error: String(err) });
+            console.warn("Bus observer error", { event: event.name, error: String(err) });
           }
         });
       }
@@ -48,7 +47,7 @@ export namespace Bus {
           if (sub.match && !matches(data, sub.match)) return;
           sub.handler(data);
         } catch (err) {
-          Log.warn("Bus handler error", { event: event.name, error: String(err) });
+          console.warn("Bus handler error", { event: event.name, error: String(err) });
         }
       });
     }

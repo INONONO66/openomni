@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Message, Task, Todo, Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
+import type { WorkerRunStateStore } from "../worker-run/state-store";
 import type { Storage } from "./storage";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
@@ -16,6 +17,7 @@ const ORDERED_MIGRATIONS = [
   "0005_background_task/migration.sql",
   "0006_task_plan_todo/migration.sql",
   "0007_todo_fk_idempotency_idx/migration.sql",
+  "0008_unified_observability/migration.sql",
 ];
 
 function applyPragmas(db: Database): void {
@@ -90,7 +92,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     remove: (id: string): boolean => {
       const result = this.db.query("DELETE FROM session WHERE id = ?").run(id);
-      this.eventSequenceBySession.delete(id);
       return result.changes > 0;
     },
   };
@@ -306,84 +307,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
-  // session-scoped sequence cursor; primed on first lookup from the durable
-  // log and advanced in lock-step with allocateSequence so multiple writers
-  // (ingress projection, session.addMessage) share one monotonic counter
-  // without re-reading every row on each append. bounded with LRU eviction
-  // so a long-lived adapter does not retain entries for stale sessions.
-  private eventSequenceBySession = new Map<string, number>();
-
-  private static readonly MAX_SEQUENCE_CACHE_ENTRIES = 10_000;
-
-  private primeEventSequence(sessionId: string): number {
-    const row = this.db
-      .query(
-        `SELECT MAX(CAST(json_extract(data, '$.sequence') AS INTEGER)) AS max_sequence
-         FROM event_log WHERE session_id = ?`,
-      )
-      .get(sessionId) as { max_sequence: number | null } | undefined;
-    return row?.max_sequence ?? 0;
-  }
-
-  private touchSequenceCache(sessionId: string, value: number): void {
-    // Map iteration order is insertion order; deleting before set keeps the
-    // touched session at the tail so the head is always the LRU candidate.
-    this.eventSequenceBySession.delete(sessionId);
-    this.eventSequenceBySession.set(sessionId, value);
-    if (this.eventSequenceBySession.size > SqliteStorageAdapter.MAX_SEQUENCE_CACHE_ENTRIES) {
-      const oldest = this.eventSequenceBySession.keys().next().value;
-      if (oldest !== undefined) this.eventSequenceBySession.delete(oldest);
-    }
-  }
-
-  eventLog = {
-    append: (sessionId: string, type: string, data: string): number => {
-      const result = this.db
-        .query("INSERT INTO event_log (session_id, type, data, time_created) VALUES (?, ?, ?, ?)")
-        .run(sessionId, type, data, Date.now());
-      return Number(result.lastInsertRowid);
-    },
-
-    replay: (
-      sessionId: string,
-    ): Array<{ id: number; type: string; status: string; data: string }> => {
-      return this.db
-        .query("SELECT id, type, status, data FROM event_log WHERE session_id = ? ORDER BY id ASC")
-        .all(sessionId) as Array<{ id: number; type: string; status: string; data: string }>;
-    },
-
-    listIncomplete: (sessionId: string): Array<{ id: number; type: string; data: string }> => {
-      return this.db
-        .query(
-          `SELECT id, type, data FROM event_log
-           WHERE session_id = ? AND status != 'completed'
-           ORDER BY id ASC`,
-        )
-        .all(sessionId) as Array<{ id: number; type: string; data: string }>;
-    },
-
-    markComplete: (_sessionId: string, eventId: number): void => {
-      this.db.query("UPDATE event_log SET status = 'completed' WHERE id = ?").run(eventId);
-    },
-
-    listIncompleteSessions: (): string[] => {
-      const rows = this.db
-        .query("SELECT DISTINCT session_id FROM event_log WHERE status != 'completed'")
-        .all() as Array<{ session_id: string }>;
-      return rows.map((r) => r.session_id);
-    },
-
-    allocateSequence: (sessionId: string): number => {
-      let current = this.eventSequenceBySession.get(sessionId);
-      if (current === undefined) {
-        current = this.primeEventSequence(sessionId);
-      }
-      const next = current + 1;
-      this.touchSequenceCache(sessionId, next);
-      return next;
-    },
-  };
-
   backgroundTask = {
     upsert: (
       id: string,
@@ -439,6 +362,105 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     delete: (id: string): void => {
       this.db.query("DELETE FROM background_task WHERE id = ?").run(id);
+    },
+  };
+
+  workerRunState: WorkerRunStateStore.Adapter = {
+    create: (sessionId: string, record: WorkerRunStateStore.CreateRecord): void => {
+      const now = Date.now();
+      const timeCreated = record.timeCreated ?? now;
+      const timeUpdated = record.timeUpdated ?? timeCreated;
+      this.db
+        .query(
+          `INSERT INTO worker_run_state (
+             run_id,
+             session_id,
+             parent_session_id,
+             agent_name,
+             status,
+             title,
+             prompt,
+             resume_count,
+             assigned_step_id,
+             error,
+             time_created,
+             time_updated
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          record.runId,
+          sessionId,
+          record.parentSessionId ?? null,
+          record.agentName,
+          record.status,
+          record.title,
+          record.prompt,
+          record.resumeCount ?? 0,
+          record.assignedStepId ?? null,
+          record.error ?? null,
+          timeCreated,
+          timeUpdated,
+        );
+    },
+
+    updateStatus: (
+      sessionId: string,
+      runId: string,
+      status: WorkerRunStateStore.Status,
+      extra?: WorkerRunStateStore.StatusExtra,
+    ): boolean => {
+      const result = this.db
+        .query(
+          `UPDATE worker_run_state
+           SET status = ?,
+               error = COALESCE(?, error),
+               resume_count = CASE
+                 WHEN status = 'waiting_input' AND ? = 'running' THEN resume_count + 1
+                 ELSE resume_count
+               END,
+               time_updated = ?
+           WHERE session_id = ? AND run_id = ?`,
+        )
+        .run(status, extra?.error ?? null, status, Date.now(), sessionId, runId);
+      return result.changes > 0;
+    },
+
+    get: (sessionId: string, runId: string): WorkerRunStateStore.Record | undefined => {
+      const row = this.db
+        .query(
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+                  resume_count, assigned_step_id, error, time_created, time_updated
+           FROM worker_run_state
+           WHERE session_id = ? AND run_id = ?`,
+        )
+        .get(sessionId, runId) as WorkerRunStateRow | null;
+      return row ? toWorkerRunStateRecord(row) : undefined;
+    },
+
+    listBySession: (sessionId: string): WorkerRunStateStore.Record[] => {
+      const rows = this.db
+        .query(
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+                  resume_count, assigned_step_id, error, time_created, time_updated
+           FROM worker_run_state
+           WHERE session_id = ?
+           ORDER BY time_created ASC, rowid ASC`,
+        )
+        .all(sessionId) as WorkerRunStateRow[];
+      return rows.map(toWorkerRunStateRecord);
+    },
+
+    listByStatus: (status: WorkerRunStateStore.Status): WorkerRunStateStore.Record[] => {
+      const rows = this.db
+        .query(
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+                  resume_count, assigned_step_id, error, time_created, time_updated
+           FROM worker_run_state
+           WHERE status = ?
+           ORDER BY time_created ASC, rowid ASC`,
+        )
+        .all(status) as WorkerRunStateRow[];
+      return rows.map(toWorkerRunStateRecord);
     },
   };
 
@@ -641,11 +663,12 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   };
 
   clear(): void {
+    this.db.exec("DELETE FROM worker_run_state");
+    this.db.exec("DELETE FROM bus_event");
     this.db.exec("DELETE FROM background_task");
     this.db.exec("DELETE FROM todo");
     this.db.exec("DELETE FROM plan");
     this.db.exec("DELETE FROM task");
-    this.db.exec("DELETE FROM event_log");
     this.db.exec("DELETE FROM artifact");
     this.db.exec("DELETE FROM surface_key");
     this.db.exec("DELETE FROM part");
@@ -660,6 +683,38 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   close(): void {
     this.db.close();
   }
+}
+
+type WorkerRunStateRow = {
+  run_id: string;
+  session_id: string;
+  parent_session_id: string | null;
+  agent_name: string;
+  status: WorkerRunStateStore.Status;
+  title: string;
+  prompt: string;
+  resume_count: number;
+  assigned_step_id: string | null;
+  error: string | null;
+  time_created: number;
+  time_updated: number;
+};
+
+function toWorkerRunStateRecord(row: WorkerRunStateRow): WorkerRunStateStore.Record {
+  return {
+    runId: row.run_id,
+    sessionId: row.session_id,
+    parentSessionId: row.parent_session_id ?? undefined,
+    agentName: row.agent_name,
+    status: row.status,
+    title: row.title,
+    prompt: row.prompt,
+    resumeCount: row.resume_count,
+    assignedStepId: row.assigned_step_id ?? undefined,
+    error: row.error ?? undefined,
+    timeCreated: row.time_created,
+    timeUpdated: row.time_updated,
+  };
 }
 
 function encodeCursor(id: string, time: number): string {

@@ -1,6 +1,5 @@
-import { Extension, type Guardrail, type ExecutionEvent } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/agent";
-import { EventLog, Storage } from "@openomni/session";
+import { Extension, Guardrail, Operational } from "@openomni/protocol";
+import { Bus, Storage } from "@openomni/session";
 import { z } from "zod";
 import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtime-binding";
 
@@ -15,7 +14,72 @@ type ExtensionAction =
   | "extension.list"
   | "extension.audit";
 
-type AuditVisibility = Extract<ExecutionEvent, { type: "action_approved" }>["visibility"];
+type AuditVisibility = "internal" | "llm_reason" | "user_audit";
+type AuditOperationType =
+  | "action_requested"
+  | "policy_evaluated"
+  | "action_approved"
+  | "action_blocked";
+
+interface AuditBase {
+  readonly actionId: string;
+  readonly parentActionId?: string;
+  readonly visibility: AuditVisibility;
+  readonly timestamp: string;
+  readonly sequence: number;
+}
+
+interface AuditActionRequested extends AuditBase {
+  readonly type: "action_requested";
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly input?: Record<string, unknown>;
+}
+
+interface AuditPolicyEvaluated extends AuditBase {
+  readonly type: "policy_evaluated";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly reason: string;
+}
+
+interface AuditActionApproved extends AuditBase {
+  readonly type: "action_approved";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: "continue";
+  readonly reason: string;
+}
+
+interface AuditActionBlocked extends AuditBase {
+  readonly type: "action_blocked";
+  readonly policyId: string;
+  readonly actor: Record<string, unknown>;
+  readonly action: string;
+  readonly resource: string;
+  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly reason: string;
+}
+
+interface AuditBusEvent extends AuditBase {
+  readonly type: "bus_event";
+  readonly name: string;
+  readonly payload: unknown;
+}
+
+type AuditEvent =
+  | AuditActionRequested
+  | AuditPolicyEvaluated
+  | AuditActionApproved
+  | AuditActionBlocked
+  | AuditBusEvent;
+
 type LifecycleEventName =
   | "extension.proposed"
   | "extension.approved"
@@ -159,10 +223,7 @@ export interface ExtensionOperationAuditEntry {
   readonly visibility: AuditVisibility;
   readonly timestamp: string;
   readonly sequence: number;
-  readonly type: Extract<
-    ExecutionEvent,
-    { type: "action_requested" | "policy_evaluated" | "action_approved" | "action_blocked" }
-  >["type"];
+  readonly type: AuditOperationType;
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
@@ -546,7 +607,7 @@ async function beginOperation(
   const requested = await appendAuditEvent(
     sessionId,
     "action_requested",
-    (base): ExecutionEvent.ActionRequested => ({
+    (base): AuditActionRequested => ({
       type: "action_requested",
       actor: options.actor,
       action: request.action,
@@ -573,7 +634,7 @@ async function beginOperation(
     actor: options.actor,
   };
 
-  const authorityResult = PolicyEngine.evaluatePermission(
+  const authorityResult = Guardrail.evaluate(
     extensionAuthorityPermission(request.action),
     evaluationRequest,
   );
@@ -592,7 +653,7 @@ async function beginOperation(
     }
   }
 
-  const result = PolicyEngine.evaluatePermission(options.permission, evaluationRequest);
+  const result = Guardrail.evaluate(options.permission, evaluationRequest);
 
   await appendPolicyEvent(state, result);
   if (result.action === "abort") {
@@ -647,7 +708,7 @@ async function appendPolicyEvent(
   await appendAuditEvent(
     state.sessionId,
     "policy_evaluated",
-    (base): ExecutionEvent.PolicyEvaluated => ({
+    (base): AuditPolicyEvaluated => ({
       type: "policy_evaluated",
       policyId: result.policyId,
       actor: state.actor,
@@ -666,7 +727,7 @@ async function approveOperation(state: AuditState, reason: string): Promise<void
   await appendAuditEvent(
     state.sessionId,
     "action_approved",
-    (base): ExecutionEvent.ActionApproved => ({
+    (base): AuditActionApproved => ({
       type: "action_approved",
       policyId: "extension.manager",
       actor: state.actor,
@@ -685,12 +746,12 @@ async function blockOperation(
   state: AuditState,
   policyId: string,
   reason: string,
-  verdict: ExecutionEvent.ActionBlocked["verdict"] = "abort",
+  verdict: AuditActionBlocked["verdict"] = "abort",
 ): Promise<void> {
   await appendAuditEvent(
     state.sessionId,
     "action_blocked",
-    (base): ExecutionEvent.ActionBlocked => ({
+    (base): AuditActionBlocked => ({
       type: "action_blocked",
       policyId,
       actor: state.actor,
@@ -714,7 +775,7 @@ async function appendLifecycleEvent(
   const row = await appendAuditEvent(
     state.sessionId,
     "bus_event",
-    (base): ExecutionEvent.MirroredBusEvent => ({
+    (base): AuditBusEvent => ({
       type: "bus_event",
       name,
       payload: parsed,
@@ -727,7 +788,10 @@ async function appendLifecycleEvent(
   return lifecycleEntry(name, row, parsed);
 }
 
-async function appendAuditEvent<T extends ExecutionEvent>(
+const auditSequences = new Map<string, number>();
+const auditEventsBySession = new Map<string, AuditEvent[]>();
+
+async function appendAuditEvent<T extends AuditEvent>(
   sessionId: string,
   eventType: T["type"],
   event: (base: {
@@ -740,7 +804,9 @@ async function appendAuditEvent<T extends ExecutionEvent>(
   now: () => Date,
   parentActionId?: string,
 ): Promise<T> {
-  const sequence = await readNextSequence(sessionId);
+  const prev = auditSequences.get(sessionId) ?? 0;
+  const sequence = prev + 1;
+  auditSequences.set(sessionId, sequence);
   const row = event({
     actionId: `${sessionId}:${eventType}:extension:${sequence}`,
     ...(parentActionId !== undefined ? { parentActionId } : {}),
@@ -749,16 +815,18 @@ async function appendAuditEvent<T extends ExecutionEvent>(
     sequence,
   });
 
-  await EventLog.append(sessionId, row);
+  Bus.publish(Operational.Info, {
+    traceId: sessionId,
+    time: Date.now(),
+    sessionId,
+    component: "extension.manager",
+    msg: eventType,
+    context: { audit: row as unknown as Record<string, unknown> },
+  });
+  const events = auditEventsBySession.get(sessionId) ?? [];
+  events.push(row);
+  auditEventsBySession.set(sessionId, events);
   return row;
-}
-
-async function readNextSequence(sessionId: string): Promise<number> {
-  let maxSequence = 0;
-  for await (const event of EventLog.replay(sessionId)) {
-    maxSequence = Math.max(maxSequence, event.sequence);
-  }
-  return maxSequence + 1;
 }
 
 function requireAuditSession(options: ExtensionOperationOptions): string {
@@ -768,9 +836,6 @@ function requireAuditSession(options: ExtensionOperationOptions): string {
   }
 
   const adapter = Storage.get();
-  if (!adapter.eventLog) {
-    throw new Error("EventLog adapter unavailable for mandatory extension audit");
-  }
   if (!adapter.session.get(sessionId)) {
     throw new Error(`Audit session "${sessionId}" not found for extension operation`);
   }
@@ -784,7 +849,7 @@ async function reconstructState(sessionId: string): Promise<ReconstructedState> 
   const installedVersions = new Map<string, string[]>();
   const audit: ExtensionAuditEntry[] = [];
 
-  for await (const event of EventLog.replay(sessionId)) {
+  for (const event of auditEventsBySession.get(sessionId) ?? []) {
     const operation = operationAuditEntry(event);
     if (operation) {
       audit.push(operation);
@@ -816,7 +881,7 @@ async function reconstructState(sessionId: string): Promise<ReconstructedState> 
   return { current, versions, installedVersions, audit };
 }
 
-function operationAuditEntry(event: ExecutionEvent): ExtensionOperationAuditEntry | undefined {
+function operationAuditEntry(event: AuditEvent): ExtensionOperationAuditEntry | undefined {
   if (
     event.type !== "action_requested" &&
     event.type !== "policy_evaluated" &&
@@ -851,7 +916,7 @@ function operationAuditEntry(event: ExecutionEvent): ExtensionOperationAuditEntr
 
 function lifecycleAuditEntry(
   name: LifecycleEventName,
-  event: ExecutionEvent.MirroredBusEvent,
+  event: AuditBusEvent,
   payload: LifecyclePayload,
 ): ExtensionLifecycleAuditEntry {
   return {
@@ -876,7 +941,7 @@ function lifecycleAuditEntry(
 
 function lifecycleEntry(
   _name: LifecycleEventName,
-  _event: ExecutionEvent.MirroredBusEvent,
+  _event: AuditBusEvent,
   payload: LifecyclePayload,
 ): ExtensionManagerEntry {
   return {

@@ -4,7 +4,7 @@ import {
   type Ingress,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, Log } from "@openomni/session";
+import { Bus } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
 
@@ -48,10 +48,6 @@ export namespace IngressHandlers {
   }
 
   export async function handleDirect(ctx: HandlerContext): Promise<Ingress.IngressResult> {
-    const log = ctx.traceContext ? Log.withContext({ traceId: ctx.traceContext.traceId }) : Log;
-
-    log.info("dispatching direct mode", { sessionId: ctx.sessionId });
-
     if (ctx.traceContext) {
       Bus.publish(IngressEvent.ModeDetected, {
         traceId: ctx.traceContext.traceId,
