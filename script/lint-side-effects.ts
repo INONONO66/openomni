@@ -46,7 +46,7 @@ const rules: readonly SideEffectRule[] = [
       '"tool_started"',
       "{ beforeSideEffect: true, parentActionId }",
     ],
-    message: "tool.execute must be preceded by a before-side-effect tool_started EventLog append",
+    message: "tool.execute must be preceded by a before-side-effect audit publish",
   },
   {
     ruleId: "mcp-ledger-before-execute",

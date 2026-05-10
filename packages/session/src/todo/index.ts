@@ -1,7 +1,6 @@
-import { Todo as TodoProtocol } from "@openomni/protocol";
+import { Todo as TodoProtocol, Operational } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
 import { Bus } from "../bus/index.js";
-import { Log } from "../log/index.js";
 
 export namespace Todo {
   export type Info = TodoProtocol.Info;
@@ -9,7 +8,13 @@ export namespace Todo {
   export async function update(sessionId: string, todos: TodoProtocol.Info[]): Promise<void> {
     const adapter = Storage.get();
     if (!adapter.todo) {
-      Log.warn("Todo storage not configured, skipping update", { sessionId });
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        sessionId,
+        component: "todo",
+        msg: "Todo storage not configured, skipping update",
+      });
       return;
     }
     const normalized = todos.map((t) => (t.sessionId !== sessionId ? { ...t, sessionId } : t));
