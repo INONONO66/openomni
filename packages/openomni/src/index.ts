@@ -71,6 +71,9 @@ export {
   BackgroundManager,
 } from "./subagent";
 
+// Policy compatibility exports
+export { BackgroundLimitsMiddleware } from "./policy";
+
 // Execution runtime
 export {
   AgentToolProvider,
