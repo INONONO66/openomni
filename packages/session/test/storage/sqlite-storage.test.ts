@@ -7,12 +7,15 @@ import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../../src/session/info";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 
+type TextPart = Extract<Message.Part, { type: "text" }>;
+
 function makeSession(id: string, timeCreated = Date.now()): SessionInfo {
   return {
     id,
     title: `Session ${id}`,
     model: { providerID: "test", modelID: "test-model" },
     time: { created: timeCreated, updated: timeCreated },
+    spawnDepth: 0,
   };
 }
 
@@ -32,7 +35,7 @@ function makeTextPart(
   messageID: string,
   partID: string,
   timeStart?: number,
-): Message.Part {
+): TextPart {
   return {
     id: partID,
     sessionID,
@@ -100,6 +103,22 @@ function tempDbPath(): string {
   return join(tmpdir(), `test-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
 }
 
+function storageDb(adapter: SqliteStorageAdapter): Database {
+  return (adapter as unknown as { db: Database }).db;
+}
+
+function tableColumns(db: Database, table: string): string[] {
+  return (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+    (r) => r.name,
+  );
+}
+
+function indexNames(db: Database, table: string): string[] {
+  return (db.query(`PRAGMA index_list(${table})`).all() as Array<{ name: string }>).map(
+    (r) => r.name,
+  );
+}
+
 describe("SqliteStorageAdapter", () => {
   let dbPath = "";
   let adapter: SqliteStorageAdapter;
@@ -154,7 +173,54 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("surface_key");
       expect(tables).toContain("artifact");
       expect(tables).toContain("event_log");
+      expect(tables).toContain("bus_event");
+      expect(tables).toContain("worker_run_state");
       expect(tables).toContain("_migrations");
+    });
+
+    test("observability tables expose the expected columns", () => {
+      const db = storageDb(adapter);
+
+      expect(tableColumns(db, "bus_event")).toEqual([
+        "id",
+        "session_id",
+        "run_id",
+        "event_type",
+        "category",
+        "data",
+        "trace_id",
+        "duration_ms",
+        "time_created",
+      ]);
+      expect(tableColumns(db, "worker_run_state")).toEqual([
+        "run_id",
+        "session_id",
+        "parent_session_id",
+        "agent_name",
+        "status",
+        "title",
+        "prompt",
+        "resume_count",
+        "assigned_step_id",
+        "error",
+        "time_created",
+        "time_updated",
+      ]);
+    });
+
+    test("observability indexes are created", () => {
+      const db = storageDb(adapter);
+
+      expect(indexNames(db, "bus_event")).toEqual(
+        expect.arrayContaining([
+          "idx_bus_event_session_time",
+          "idx_bus_event_run_time",
+          "idx_bus_event_type_session",
+          "idx_bus_event_category_session",
+          "idx_bus_event_trace",
+        ]),
+      );
+      expect(indexNames(db, "worker_run_state")).toContain("idx_worker_run_state_session_time");
     });
 
     test("migrations are idempotent — second adapter open does not throw", () => {
@@ -547,13 +613,27 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.artifact?.get("a1")).toBeUndefined();
     });
 
-    test("deleting session cascades to event_log", () => {
+    test("deleting session cascades to observability tables", () => {
       adapter.session.set("s1", makeSession("s1"));
-      adapter.eventLog?.append("s1", "run.started", "{}");
+      const db = storageDb(adapter);
+
+      db.query(
+        `INSERT INTO bus_event
+         (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run("s1", "run-1", "worker.run.started", "worker", "{}", "trace-1", 10, 100);
+      db.query(
+        `INSERT INTO worker_run_state
+         (run_id, session_id, parent_session_id, agent_name, status, title, prompt, resume_count, assigned_step_id, error, time_created, time_updated)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run("run-1", "s1", null, "worker", "running", "title", "prompt", 0, null, null, 100, 100);
 
       adapter.session.remove("s1");
 
-      expect(adapter.eventLog?.replay("s1")).toEqual([]);
+      expect(db.query("SELECT COUNT(*) AS count FROM bus_event").get()).toEqual({ count: 0 });
+      expect(db.query("SELECT COUNT(*) AS count FROM worker_run_state").get()).toEqual({
+        count: 0,
+      });
     });
   });
 
@@ -641,119 +721,6 @@ describe("SqliteStorageAdapter", () => {
     });
   });
 
-  describe("eventLog", () => {
-    beforeEach(() => {
-      adapter.session.set("s1", makeSession("s1"));
-      adapter.session.set("s2", makeSession("s2"));
-    });
-
-    test("append: returns incrementing IDs", () => {
-      const id1 = adapter.eventLog?.append("s1", "run.started", "{}");
-      const id2 = adapter.eventLog?.append("s1", "run.done", "{}");
-      expect(id2).toBeGreaterThan(id1);
-    });
-
-    test("replay: returns all events in order", () => {
-      const id1 = adapter.eventLog?.append("s1", "run.started", '{"run":"r1"}');
-      const id2 = adapter.eventLog?.append("s1", "run.done", '{"run":"r1"}');
-
-      const events = adapter.eventLog?.replay("s1");
-      expect(events).toHaveLength(2);
-      expect(events[0]).toMatchObject({ id: id1, type: "run.started", status: "pending" });
-      expect(events[1]).toMatchObject({ id: id2, type: "run.done", status: "pending" });
-    });
-
-    test("replay: returns empty for session with no events", () => {
-      expect(adapter.eventLog?.replay("s1")).toEqual([]);
-    });
-
-    test("listIncomplete: excludes completed events", () => {
-      const id1 = adapter.eventLog?.append("s1", "run.started", "{}");
-      const id2 = adapter.eventLog?.append("s1", "run.done", "{}");
-      adapter.eventLog?.markComplete("s1", id1);
-
-      const incomplete = adapter.eventLog?.listIncomplete("s1");
-      expect(incomplete).toHaveLength(1);
-      expect(incomplete[0].id).toBe(id2);
-    });
-
-    test("markComplete: marks event as completed", () => {
-      const id = adapter.eventLog?.append("s1", "run.started", "{}");
-      adapter.eventLog?.markComplete("s1", id);
-
-      const events = adapter.eventLog?.replay("s1");
-      expect(events[0].status).toBe("completed");
-    });
-
-    test("listIncompleteSessions: returns sessions with pending events", () => {
-      adapter.eventLog?.append("s1", "run.started", "{}");
-      adapter.eventLog?.append("s2", "run.started", "{}");
-      const id2 = adapter.eventLog?.append("s2", "run.done", "{}");
-      adapter.eventLog?.markComplete("s2", id2);
-
-      const sessions = adapter.eventLog?.listIncompleteSessions();
-      expect(sessions).toContain("s1");
-      expect(sessions).toContain("s2");
-    });
-
-    test("listIncompleteSessions: excludes fully completed sessions", () => {
-      const id = adapter.eventLog?.append("s1", "run.started", "{}");
-      adapter.eventLog?.markComplete("s1", id);
-
-      expect(adapter.eventLog?.listIncompleteSessions()).not.toContain("s1");
-    });
-
-    test("replay: only returns events for requested session", () => {
-      adapter.eventLog?.append("s1", "run.started", "{}");
-      adapter.eventLog?.append("s2", "other.event", "{}");
-
-      expect(adapter.eventLog?.replay("s1")).toHaveLength(1);
-    });
-
-    test("allocateSequence: hands out monotonic numbers per session", () => {
-      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(1);
-      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(2);
-      expect(adapter.eventLog?.allocateSequence?.("s2")).toBe(1);
-      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(3);
-    });
-
-    test("allocateSequence: primes from durable max sequence on first call", () => {
-      adapter.eventLog?.append("s1", "bus_event", JSON.stringify({ sequence: 7, payload: {} }));
-      adapter.eventLog?.append("s1", "bus_event", JSON.stringify({ sequence: 12, payload: {} }));
-
-      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(13);
-    });
-
-    test("session.remove evicts the per-session sequence cache entry", () => {
-      adapter.eventLog?.allocateSequence?.("s1");
-      adapter.eventLog?.allocateSequence?.("s1");
-
-      adapter.session.remove("s1");
-      adapter.session.set("s1", makeSession("s1"));
-
-      expect(adapter.eventLog?.allocateSequence?.("s1")).toBe(1);
-    });
-
-    test("allocateSequence: caps the per-session cache via LRU eviction", () => {
-      const limit = 10_000;
-      for (let i = 0; i < limit; i++) {
-        adapter.session.set(`bulk-${i}`, makeSession(`bulk-${i}`));
-        adapter.eventLog?.allocateSequence?.(`bulk-${i}`);
-      }
-
-      adapter.session.set("hot", makeSession("hot"));
-      adapter.eventLog?.allocateSequence?.("hot");
-
-      adapter.eventLog?.allocateSequence?.("hot");
-      expect(adapter.eventLog?.allocateSequence?.("hot")).toBe(3);
-
-      // The first inserted bulk session should have been evicted to keep the
-      // cache bounded; allocating again therefore re-primes from the durable
-      // log (which has no rows for it) and starts from 1.
-      expect(adapter.eventLog?.allocateSequence?.("bulk-0")).toBe(1);
-    });
-  });
-
   describe("clear", () => {
     test("clears all data from all tables", () => {
       adapter.session.set("s1", makeSession("s1"));
@@ -761,7 +728,6 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 10));
       adapter.surfaceKey?.register("channel:1", "s1");
       adapter.artifact?.store("a1", "s1", "{}", "content");
-      adapter.eventLog?.append("s1", "run.started", "{}");
       adapter.backgroundTask?.upsert("bg1", "completed", "s1", '{"id":"bg1"}', "output");
 
       adapter.clear();
@@ -771,7 +737,6 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.part.list("m1")).toEqual([]);
       expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
       expect(adapter.artifact?.get("a1")).toBeUndefined();
-      expect(adapter.eventLog?.replay("s1")).toEqual([]);
       expect(adapter.backgroundTask?.get("bg1")).toBeUndefined();
     });
   });

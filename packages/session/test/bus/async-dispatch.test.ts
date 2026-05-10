@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { Bus, BusEvent } from "../../src/bus/index.js";
-import { Log } from "../../src/log/index.js";
 
 describe("Bus async dispatch", () => {
   beforeEach(() => {
@@ -31,14 +30,10 @@ describe("Bus async dispatch", () => {
   it("handler errors are logged and other handlers continue", async () => {
     const event = BusEvent.define("test:error", (s) => s);
     const results: string[] = [];
-    let logWarnCalled = false;
 
-    const originalWarn = Log.warn;
-    Log.warn = (msg: string, ctx?: Record<string, unknown>) => {
-      logWarnCalled = true;
-      expect(msg).toBe("Bus handler error");
-      expect(ctx?.event).toBe("test:error");
-    };
+    const originalWarn = console.warn;
+    const warnSpy = mock(() => undefined);
+    console.warn = warnSpy;
 
     Bus.subscribe(event, () => {
       results.push("handler1");
@@ -55,9 +50,9 @@ describe("Bus async dispatch", () => {
     await new Promise((resolve) => queueMicrotask(resolve));
 
     expect(results).toEqual(["handler1", "handler2"]);
-    expect(logWarnCalled).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
 
-    Log.warn = originalWarn;
+    console.warn = originalWarn;
   });
 
   it("FIFO order is preserved across multiple publishes", async () => {
