@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createCompactionMiddleware } from "../../../../src/core/policy/builtin/compaction";
+import { createCompactionMiddleware } from "../../../../src/core/middleware/builtin/compaction";
 import type { MiddlewareContext } from "../../../../src/core/middleware";
 
 function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {

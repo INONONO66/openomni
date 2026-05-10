@@ -20,15 +20,13 @@ export type {
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./runtime-context";
-export { PolicyEngine } from "./policy";
+export { MiddlewareEngine } from "./middleware";
 export type {
-  PolicyAuditConfig,
-  PolicyContext,
-  PolicyDecision,
-  PolicyEngineConfig,
-  PolicyEngineInstance,
-  PolicyFn,
-  PolicyRegistration,
-  PolicySystemPromptVerdict,
-  PolicyVerdict,
-} from "./policy";
+  MiddlewareContext,
+  MiddlewareFn,
+  MiddlewareRegistration,
+  MiddlewareDecision,
+  MiddlewareAuditConfig,
+  MiddlewareEngineConfig,
+  MiddlewareEngineInstance,
+} from "./middleware";

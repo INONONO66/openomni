@@ -1,5 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { readFile } from "node:fs/promises";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import type { AgentStep } from "../src/core/types";
 import {
@@ -123,7 +122,7 @@ describe("ChatAgent", () => {
           priority: 250,
           fn: async () => ({
             action: "inject",
-            message: "continue",
+            input: { message: "continue" },
             reason: "continue-after-step",
             policyId: "test.step-guard",
           }),
@@ -252,13 +251,6 @@ describe("ChatAgent", () => {
     expect(retryError).toBeInstanceOf(Error);
     expect((retryError as Error).message).toContain("transient network error");
     expect(attempts).toBe(3);
-  });
-
-  it("imports Telemetry from session package for observability", async () => {
-    const requiredImport = "@openomni/" + "session";
-    const content = await readFile(new URL("../src/core/chat-agent.ts", import.meta.url), "utf8");
-
-    expect(content.includes(requiredImport)).toBe(true);
   });
 });
 

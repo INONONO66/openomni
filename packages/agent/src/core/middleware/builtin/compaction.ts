@@ -1,10 +1,10 @@
 import { InMemoryCompactor } from "../../execution/compaction";
-import type { PolicyRegistration } from "../types";
+import type { MiddlewareRegistration } from "../types";
 import type { ChatAgentConfig } from "../../types";
 
 type CompactionConfig = NonNullable<ChatAgentConfig["compaction"]>;
 
-export function createCompactionMiddleware(config: CompactionConfig): PolicyRegistration {
+export function createCompactionMiddleware(config: CompactionConfig): MiddlewareRegistration {
   return {
     name: "builtin:compaction",
     timing: "post_compaction",

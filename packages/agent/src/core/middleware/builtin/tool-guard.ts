@@ -1,7 +1,7 @@
-import type { Guardrail } from "@openomni/protocol";
+import { Operational, type Guardrail } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { AgentEventEmitter, AgentStep, StepGuardContext, StepGuardVerdict } from "../../types";
-import type { PolicyRegistration } from "../types";
-import { Log } from "@openomni/session";
+import type { MiddlewareRegistration } from "../types";
 import { ToolGuard } from "../../tool-guard";
 import { summarizeInput } from "../../execution/shared";
 
@@ -16,7 +16,9 @@ export interface ToolGuardMiddlewareConfig {
   onToolBlocked?: (toolCallId: string, toolName: string, reason: string) => void;
 }
 
-export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): PolicyRegistration {
+export function createToolGuardMiddleware(
+  config: ToolGuardMiddlewareConfig,
+): MiddlewareRegistration {
   return {
     name: "builtin:tool-guard",
     timing: "pre_tool_use",
@@ -31,7 +33,13 @@ export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): Po
       try {
         verdict = ToolGuard.evaluate(toolName, toolInput ?? {}, config.permission);
       } catch (error) {
-        Log.debug("tool guard evaluation failed", { toolName, error });
+        Bus.publish(Operational.Debug, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "agent.middleware.tool-guard",
+          msg: "tool guard evaluation failed",
+          context: { toolName, error: String(error) },
+        });
         return {
           action: "abort",
           reason: "tool_guard_evaluation_failed",
@@ -69,13 +77,13 @@ export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): Po
           content: `Tool "${toolName}" requires approval`,
           toolCalls: [{ id: ctx.toolCallId ?? "", tool: toolName, input }],
         };
-        const guardContext: StepGuardContext = {
-          steps: ctx.steps ?? [],
-          usage: ctx.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          turnCount: ctx.turnCount ?? 0,
+        const guardContext = {
+          steps: ctx.steps,
+          usage: ctx.usage,
+          turnCount: ctx.turnCount,
           isCompletion: false,
           continuationCount: 0,
-          elapsedMs: ctx.elapsedMs ?? 0,
+          elapsedMs: ctx.elapsedMs,
         };
         try {
           const guardVerdict = await config.stepGuard(syntheticStep, guardContext);
@@ -90,7 +98,13 @@ export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): Po
             return { action: "continue", reason: verdict.reason, policyId: verdict.policyId };
           }
         } catch (error) {
-          Log.debug("tool guard evaluation failed", { toolName, error });
+          Bus.publish(Operational.Debug, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "agent.middleware.tool-guard",
+            msg: "tool guard evaluation failed",
+            context: { toolName, error: String(error) },
+          });
         }
       }
 

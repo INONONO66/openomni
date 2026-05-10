@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
-} from "../../../../src/core/policy/builtin/budget";
+} from "../../../../src/core/middleware/builtin/budget";
 import type { MiddlewareContext } from "../../../../src/core/middleware";
 import type { BudgetState } from "../../../../src/core/budget";
 

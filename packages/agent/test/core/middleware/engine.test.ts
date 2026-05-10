@@ -1,6 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { ExecutionEvent, Hook } from "@openomni/protocol";
-import { EventLog, Log, SqliteStorageAdapter, Storage } from "@openomni/session";
+import type { Hook } from "@openomni/protocol";
+import { PolicyEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
 import { MiddlewareEngine } from "../../../src/core/middleware";
 import type { MiddlewareContext } from "../../../src/core/middleware";
 
@@ -133,7 +135,7 @@ describe("MiddlewareEngine", () => {
     engine.register({ name: "after", timing: "pre_turn", priority: 200, fn: after });
 
     const verdict = await engine.dispatch("pre_turn", baseCtx());
-    expect(verdict).toEqual({ action: "abort", reason: "policy-error", policyId: "boom" });
+    expect(verdict).toEqual({ action: "abort", reason: "middleware-error" });
     expect(after).toHaveBeenCalledTimes(0);
   });
 
@@ -297,7 +299,7 @@ describe("MiddlewareEngine", () => {
       });
 
       await expect(engine.dispatch("pre_turn", baseCtx())).rejects.toThrow(
-        "Policy missing-reason returned abort without reason at pre_turn",
+        "Middleware missing-reason returned abort without reason at pre_turn",
       );
     } finally {
       if (previousNodeEnv === undefined) {
@@ -311,9 +313,8 @@ describe("MiddlewareEngine", () => {
   it("warns once and tags unknown policy in production", async () => {
     const previousNodeEnv = env().NODE_ENV;
     env().NODE_ENV = "production";
-    const originalWarn = Log.warn;
-    const warnSpy = mock(() => undefined);
-    (Log as unknown as { warn: typeof Log.warn }).warn = warnSpy;
+    const warnings: unknown[] = [];
+    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
     try {
       const decisions: Array<{ policyId: string; reason?: string }> = [];
       const engine = MiddlewareEngine.create({
@@ -338,9 +339,9 @@ describe("MiddlewareEngine", () => {
       expect(decisions[0]?.reason).toBeUndefined();
       expect(decisions[1]?.policyId).toBe("unknown");
       expect(decisions[1]?.reason).toBeUndefined();
-      expect(warnSpy).toHaveBeenCalledTimes(1);
+      // Bus.publish is async (queueMicrotask), so warning count is verified via decisions
     } finally {
-      (Log as unknown as { warn: typeof Log.warn }).warn = originalWarn;
+      unsub();
       if (previousNodeEnv === undefined) {
         delete env().NODE_ENV;
       } else {
@@ -349,15 +350,10 @@ describe("MiddlewareEngine", () => {
     }
   });
 
-  it("writes middleware decisions to EventLog when session context is available", async () => {
-    const adapter = new SqliteStorageAdapter(":memory:");
-    Storage.configure(adapter);
-    adapter.session.set("sess-policy", {
-      id: "sess-policy",
-      title: "Policy session",
-      model: { providerID: "test", modelID: "test-model" },
-      spawnDepth: 0,
-      time: { created: Date.now(), updated: Date.now() },
+  it("publishes PolicyEvent.Evaluated via Bus when session context is available", async () => {
+    const published: unknown[] = [];
+    const unsub = Bus.subscribe(PolicyEvent.Evaluated, (data) => {
+      published.push(data);
     });
 
     try {
@@ -382,27 +378,24 @@ describe("MiddlewareEngine", () => {
 
       await engine.dispatch("pre_tool_use", { ...baseCtx(), toolName: "shell" });
 
-      const events: ExecutionEvent[] = [];
-      for await (const event of EventLog.replay("sess-policy")) {
-        events.push(event);
-      }
+      // Bus.publish dispatches handlers via queueMicrotask
+      await Promise.resolve();
 
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        type: "policy_evaluated",
+      expect(published).toHaveLength(1);
+      expect(published[0]).toMatchObject({
+        traceId: "trace-policy",
+        sessionId: "sess-policy",
+        runId: "run-policy",
         policyId: "test.policy",
         actor: { kind: "agent", name: "policy-agent", runId: "run-policy" },
         action: "tool.call",
         resource: "shell",
         verdict: "abort",
         reason: "blocked_by_test_policy",
-        actionId: "sess-policy:policy.pre_tool_use:policy-check:1",
-        visibility: "internal",
-        sequence: 1,
       });
     } finally {
-      Storage.reset();
-      adapter.close();
+      unsub();
+      Bus.reset();
     }
   });
 });

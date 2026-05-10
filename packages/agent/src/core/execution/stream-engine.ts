@@ -1,11 +1,11 @@
 import { run as llmRun, Retry } from "@openomni/llm";
-import type { Sink } from "@openomni/protocol";
-import { Log, TraceContext } from "@openomni/session";
+import { Operational, type Sink } from "@openomni/protocol";
+import { Bus, TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import { resolveProviderModel } from "./shared";
 import {
   assertToolExecutor,
-  buildPolicyEngine,
+  buildMiddlewareEngine,
   buildTurn,
   createStreamRunState,
   dispatchBudgetCheck,
@@ -28,17 +28,23 @@ export async function* streamAgent(
   let lastError = "";
 
   const trace = input.traceContext ?? TraceContext.empty();
-  const log = Log.withContext({ traceId: trace.traceId, sessionId: trace.sessionId });
   const agentBase = {
     traceId: trace.traceId,
     sessionId: trace.sessionId ?? "",
     runId: trace.runId,
   };
-  log.info("agent.run.started", { model: config.model.id });
+  Bus.publish(Operational.Info, {
+    traceId: trace.traceId,
+    time: Date.now(),
+    sessionId: trace.sessionId,
+    component: "agent",
+    msg: "agent.run.started",
+    context: { model: config.model.id },
+  });
 
   while (attempt <= retryPolicy.maxAttempts) {
     const state = createStreamRunState(input);
-    const engine = buildPolicyEngine(config, agentBase);
+    const engine = buildMiddlewareEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
         config.model,
@@ -53,13 +59,13 @@ export async function* streamAgent(
       }
 
       while (true) {
-        const budgetEvent = await dispatchBudgetCheck(state, engine, config, log);
+        const budgetEvent = await dispatchBudgetCheck(state, engine, config, agentBase);
         if (budgetEvent) {
           yield budgetEvent;
           return;
         }
 
-        emitTurnStart(state, config, agentBase, log);
+        emitTurnStart(state, config, agentBase);
         const turnResult = await buildTurn(
           state,
           config,
@@ -81,20 +87,13 @@ export async function* streamAgent(
         const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
 
         if (outcome.type === "stop") {
-          const decision = yield* handleStop(
-            state,
-            config,
-            engine,
-            agentBase,
-            log,
-            turnResult.turn,
-          );
+          const decision = yield* handleStop(state, config, engine, agentBase, turnResult.turn);
           if (decision === "continue") continue;
           return;
         }
 
         if (outcome.type === "continue") {
-          yield* handleContinue(state, config, agentBase, log, turnResult.turn.turnUsage);
+          yield* handleContinue(state, config, agentBase, turnResult.turn.turnUsage);
           continue;
         }
 
@@ -114,7 +113,6 @@ export async function* streamAgent(
         engine,
         config,
         agentBase,
-        log,
         error,
         attempt,
         retryPolicy,

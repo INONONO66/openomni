@@ -1,7 +1,7 @@
 import type { Tool, Subagent } from "@openomni/protocol";
 import { AgentRegistry } from "../registry/registry";
 import { checkDelegation, type DelegationContext } from "../../core/delegation";
-import type { PolicyRegistration } from "../../core/policy/types";
+import type { MiddlewareRegistration } from "../../core/middleware/types";
 import type { AgentRuntimeContext } from "../../core/runtime-context";
 
 export interface SubagentRuntimeSpawnConfig {
@@ -10,7 +10,7 @@ export interface SubagentRuntimeSpawnConfig {
   prompt: string;
   model: { provider: string; id: string };
   systemPrompt?: string;
-  middleware?: PolicyRegistration[];
+  middleware?: MiddlewareRegistration[];
 }
 
 export interface SubagentRuntimeSendConfig {
@@ -18,7 +18,7 @@ export interface SubagentRuntimeSendConfig {
   prompt: string;
   model: { provider: string; id: string };
   systemPrompt?: string;
-  middleware?: PolicyRegistration[];
+  middleware?: MiddlewareRegistration[];
 }
 
 export type SubagentRuntime = {
@@ -34,7 +34,7 @@ export interface SubagentToolOptions {
   context?: AgentRuntimeContext;
   delegationContext?: DelegationContext;
   messengerAllowPatterns?: Array<{ from: string; to: string }>;
-  middleware?: PolicyRegistration[];
+  middleware?: MiddlewareRegistration[];
   defaultModel?: { provider: string; id: string };
   subagentRuntime: SubagentRuntime;
   backgroundManager?: {

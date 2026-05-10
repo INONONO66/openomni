@@ -4,8 +4,8 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, Tool } from "@openomni/protocol";
-import { Mcp } from "@openomni/protocol";
-import { Bus, Log } from "@openomni/session";
+import { Mcp, Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { convertMcpTool, convertMcpResult } from "./convert";
 
 export class McpClient {
@@ -33,12 +33,6 @@ export class McpClient {
 
       const toolCount = tools.tools.length;
 
-      Log.info("MCP server connected", {
-        serverName: this.config.name,
-        transport: transportType,
-        toolCount,
-      });
-
       Bus.publish(Mcp.Connected, {
         traceId,
         serverName: this.config.name,
@@ -48,9 +42,13 @@ export class McpClient {
       });
     } catch (err) {
       this.connected = false;
-      Log.error("MCP connection failed", {
-        serverName: this.config.name,
+      Bus.publish(Operational.Error, {
+        traceId,
+        time: Date.now(),
+        component: "agent.mcp",
+        msg: "MCP connection failed",
         error: String(err),
+        context: { serverName: this.config.name },
       });
       throw err;
     }
@@ -64,19 +62,19 @@ export class McpClient {
         await this.client.close();
         this.connected = false;
 
-        Log.info("MCP server disconnected", {
-          serverName: this.config.name,
-        });
-
         Bus.publish(Mcp.Disconnected, {
           traceId,
           serverName: this.config.name,
           time: Date.now(),
         });
       } catch (err) {
-        Log.error("MCP disconnection failed", {
-          serverName: this.config.name,
+        Bus.publish(Operational.Error, {
+          traceId,
+          time: Date.now(),
+          component: "agent.mcp",
+          msg: "MCP disconnection failed",
           error: String(err),
+          context: { serverName: this.config.name },
         });
         throw err;
       }
@@ -100,12 +98,6 @@ export class McpClient {
 
     const startTime = Date.now();
 
-    Log.debug("MCP tool call started", {
-      serverName: this.config.name,
-      toolName: strippedName,
-      toolCallId,
-    });
-
     Bus.publish(Mcp.ToolCalled, {
       traceId,
       serverName: this.config.name,
@@ -120,14 +112,7 @@ export class McpClient {
         arguments: args,
       });
 
-      const durationMs = Date.now() - startTime;
-
-      Log.debug("MCP tool call completed", {
-        serverName: this.config.name,
-        toolName: strippedName,
-        toolCallId,
-        durationMs,
-      });
+      const _durationMs = Date.now() - startTime;
 
       return convertMcpResult(
         response as {
@@ -137,15 +122,7 @@ export class McpClient {
         toolCallId,
       );
     } catch (err) {
-      const durationMs = Date.now() - startTime;
-
-      Log.error("MCP tool call failed", {
-        serverName: this.config.name,
-        toolName: strippedName,
-        toolCallId,
-        durationMs,
-        error: String(err),
-      });
+      const _durationMs = Date.now() - startTime;
 
       Bus.publish(Mcp.ToolFailed, {
         traceId,

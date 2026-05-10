@@ -94,14 +94,9 @@ describe("run() delegation contract", () => {
 
     const agent = ChatAgent.create({
       ...defaultConfig,
-      middleware: [
-        {
-          name: "test:stall-abort",
-          timing: "post_turn",
-          priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "stalled", policyId: "test.stall" }),
-        },
-      ],
+      hooks: {
+        postTurn: () => ({ action: "abort", reason: "stalled" }),
+      },
     });
     const result = await agent.run(defaultInput);
 
@@ -159,18 +154,9 @@ describe("run() delegation contract", () => {
 
     const agent = ChatAgent.create({
       ...defaultConfig,
-      middleware: [
-        {
-          name: "test:policy-abort",
-          timing: "post_turn",
-          priority: 100,
-          fn: () => ({
-            action: "abort" as const,
-            reason: "policy-violation",
-            policyId: "test.policy",
-          }),
-        },
-      ],
+      hooks: {
+        postTurn: () => ({ action: "abort", reason: "policy-violation" }),
+      },
     });
     const result = await agent.run(defaultInput);
 
@@ -233,21 +219,18 @@ describe("run() delegation contract", () => {
 
     const agent = ChatAgent.create({
       ...defaultConfig,
+      hooks: {
+        postTurn: () =>
+          turnCount < 2
+            ? {
+                action: "inject",
+                message: "continue",
+                reason: "continue-for-compaction",
+                policyId: "test.post-turn",
+              }
+            : { action: "continue" },
+      },
       middleware: [
-        {
-          name: "test:post-turn-inject",
-          timing: "post_turn",
-          priority: 100,
-          fn: () =>
-            turnCount < 2
-              ? {
-                  action: "inject" as const,
-                  message: "continue",
-                  reason: "continue-for-compaction",
-                  policyId: "test.post-turn",
-                }
-              : { action: "continue" as const },
-        },
         {
           name: "test:force-compaction",
           timing: "post_compaction",

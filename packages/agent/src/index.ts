@@ -1,3 +1,4 @@
+// Agent package public API — ChatAgent only
 export { ChatAgent } from "./core/chat-agent";
 export type { ChatAgentInstance } from "./core/chat-agent";
 export type {
@@ -31,21 +32,13 @@ export type {
 export { MiddlewareEngine } from "./core/middleware";
 export type {
   MiddlewareContext,
+  MiddlewareFn,
   MiddlewareRegistration,
   MiddlewareDecision,
+  MiddlewareAuditConfig,
+  MiddlewareEngineConfig,
+  MiddlewareEngineInstance,
 } from "./core/middleware";
-export { PolicyEngine } from "./core/policy";
-export type {
-  PolicyAuditConfig,
-  PolicyContext,
-  PolicyDecision,
-  PolicyEngineConfig,
-  PolicyEngineInstance,
-  PolicyFn,
-  PolicyRegistration,
-  PolicySystemPromptVerdict,
-  PolicyVerdict,
-} from "./core/policy";
 export { AgentRegistry } from "./runtime/index";
 export { SubagentTool } from "./runtime/index";
 export type { SubagentToolOptions } from "./runtime/index";
@@ -56,7 +49,7 @@ export type { McpServerConfig } from "./runtime/mcp/index";
 export {
   createBudgetReassuranceMiddleware,
   createBudgetWarningMiddleware,
-} from "./core/policy/builtin/budget";
-export { createIdleNudgeMiddleware } from "./core/policy/builtin/idle-nudge";
-export { createToolGuardMiddleware } from "./core/policy/builtin/tool-guard";
+} from "./core/middleware/builtin/budget";
+export { createIdleNudgeMiddleware } from "./core/middleware/builtin/idle-nudge";
+export { createToolGuardMiddleware } from "./core/middleware/builtin/tool-guard";
 export { InMemoryCompactor } from "./core/execution/compaction";

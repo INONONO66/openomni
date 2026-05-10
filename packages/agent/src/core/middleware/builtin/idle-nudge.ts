@@ -1,11 +1,11 @@
-import type { PolicyRegistration } from "../types";
+import type { MiddlewareRegistration } from "../types";
 
 export interface IdleNudgeConfig {
   idleThresholdMs?: number;
   maxNudges?: number;
 }
 
-export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): PolicyRegistration {
+export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): MiddlewareRegistration {
   const idleThresholdMs = config.idleThresholdMs ?? 60000;
   const maxNudges = config.maxNudges ?? 3;
 
@@ -23,12 +23,12 @@ export function createIdleNudgeMiddleware(config: IdleNudgeConfig = {}): PolicyR
         return { action: "continue" };
       }
 
-      const turnCount = ctx.turnCount ?? 0;
-      if (turnCount === 0 && lastTurnCount > 0) {
+      // detect new agent run: turnCount resets to 0
+      if (ctx.turnCount === 0 && lastTurnCount > 0) {
         lastProgressAt = Date.now();
         nudgeCount = 0;
       }
-      lastTurnCount = turnCount;
+      lastTurnCount = ctx.turnCount;
 
       if (idleThresholdMs === -1) return { action: "continue" };
 

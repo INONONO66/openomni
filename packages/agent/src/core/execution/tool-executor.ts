@@ -1,13 +1,13 @@
 import type { Tool, TraceContext } from "@openomni/protocol";
 import { ToolExecution } from "@openomni/protocol";
-import { Bus, Log } from "@openomni/session";
+import { Bus } from "@openomni/session";
 import type { HookContext, HookVerdict, TokenUsage } from "../types";
-import type { PolicyEngineInstance } from "../policy";
+import type { MiddlewareEngineInstance } from "../middleware";
 import { summarizeInput } from "./shared";
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
-  engine: PolicyEngineInstance;
+  engine: MiddlewareEngineInstance;
   getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input"> & {
     usage?: TokenUsage;
   };
@@ -56,7 +56,6 @@ export function createToolExecutor(
 
     if (preVerdict.action === "abort") {
       const reason = preVerdict.reason ?? "middleware";
-      Log.warn("tool execution denied", { toolName: call.tool, toolCallId: call.id, reason });
       Bus.publish(ToolExecution.PermissionDenied, {
         ...eventBase,
         toolCallId: call.id,
@@ -77,7 +76,6 @@ export function createToolExecutor(
         ? { ...call, input: preVerdict.input }
         : call;
 
-    Log.debug("tool execution started", { toolName: call.tool, toolCallId: call.id });
     Bus.publish(ToolExecution.Started, {
       ...eventBase,
       toolCallId: call.id,
@@ -92,7 +90,6 @@ export function createToolExecutor(
       result = await toolExecutor(effectiveCall);
     } catch (err) {
       const durationMs = Date.now() - startMs;
-      Log.error("tool execution threw", { toolName: call.tool, toolCallId: call.id, durationMs });
       Bus.publish(ToolExecution.Completed, {
         ...eventBase,
         toolCallId: call.id,
@@ -105,12 +102,6 @@ export function createToolExecutor(
     }
 
     const durationMs = Date.now() - startMs;
-    Log.debug("tool execution completed", {
-      toolName: call.tool,
-      toolCallId: call.id,
-      durationMs,
-      isError: result.isError,
-    });
     Bus.publish(ToolExecution.Completed, {
       ...eventBase,
       toolCallId: call.id,
