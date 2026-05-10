@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
-import type { Guardrail } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/agent";
+import { Guardrail } from "@openomni/protocol";
 
 const TOOL_CALL_ACTION = "tool.call";
 const OVERRIDE_TOOL_FIELD = "__openomniCoordinatorTool";
@@ -119,7 +118,7 @@ function evaluatePolicy(
 ): { result: Guardrail.EvaluationResult; tier?: PermissionDecision["tier"] } {
   const request = buildRequest(tool, context);
   const permission = normalizePolicy(policy);
-  const result = PolicyEngine.evaluatePermission(permission, request);
+  const result = Guardrail.evaluate(permission, request);
 
   if (result.reason !== "default_allow" || RISK_DEFAULTS[tool] !== undefined) {
     return { result };
@@ -127,7 +126,7 @@ function evaluatePolicy(
 
   if ((context.riskTier ?? 0) >= 2) {
     return {
-      result: PolicyEngine.evaluatePermission(normalizePolicy(policy, [tool]), request),
+      result: Guardrail.evaluate(normalizePolicy(policy, [tool]), request),
       tier: "unknown-default",
     };
   }
