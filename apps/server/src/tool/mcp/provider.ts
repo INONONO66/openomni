@@ -1,12 +1,12 @@
 import { McpClient } from "@openomni/agent";
-import type { ExecutionEvent, McpServerConfig, Tool } from "@openomni/protocol";
-import { Mcp } from "@openomni/protocol";
-import { Bus, EventLog, Log, Storage } from "@openomni/session";
+import type { McpServerConfig, Tool } from "@openomni/protocol";
+import { Mcp, PolicyEvent, ToolExecution } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
+import { Bus, Storage } from "@openomni/session";
 import type { NativeTool, ToolCategory, ToolProvider } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
 
 const MCP_TOOL_ACTION = "mcp.tool.call";
-const MCP_LEDGER_VISIBILITY = "internal";
 
 interface McpClientLike {
   connect(): Promise<void>;
@@ -33,26 +33,23 @@ export class McpToolProvider implements ToolProvider {
   private clients = new Map<string, McpClientLike>();
   private connected = new Set<string>();
   private cachedTools: NativeTool[] | null = null;
-  private appendLocks = new Map<string, Promise<void>>();
 
   constructor(private readonly options: McpToolProviderOptions = {}) {}
 
   async addServer(config: McpServerConfig, context?: McpLifecycleAuditContext): Promise<void> {
     const audit = resolveLifecycleAudit(context);
-    const requested = await this.appendLifecycleEvent(
-      audit,
-      "action_requested",
-      `lifecycle.connect.${config.name}`,
-      (base): ExecutionEvent.ActionRequested => ({
-        type: "action_requested",
-        actor: buildActor(audit?.sessionId, audit?.actor),
+    const actionId = crypto.randomUUID();
+
+    if (audit) {
+      Bus.publish(PolicyEvent.ActionRequested, {
+        ...lifecycleBase(audit),
+        actionId,
+        actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.connect",
         resource: config.name,
-        input: summarizeServerConfig(config),
-        ...base,
-      }),
-      { beforeSideEffect: true },
-    );
+        context: summarizeServerConfig(config),
+      });
+    }
 
     const client = this.options.createClient?.(config) ?? new McpClient(config);
     try {
@@ -60,42 +57,39 @@ export class McpToolProvider implements ToolProvider {
       this.clients.set(config.name, client);
       this.connected.add(config.name);
       this.cachedTools = null;
-      await this.appendLifecycleEvent(
-        audit,
-        "action_approved",
-        `lifecycle.connect.${config.name}`,
-        (base): ExecutionEvent.ActionApproved => ({
-          type: "action_approved",
-          policyId: "mcp.lifecycle-audit",
-          actor: buildActor(audit?.sessionId, audit?.actor),
+
+      if (audit) {
+        Bus.publish(PolicyEvent.ActionApproved, {
+          ...lifecycleBase(audit),
+          actionId,
+          actor: buildActor(audit.sessionId, audit.actor),
           action: "mcp.server.connect",
           resource: config.name,
-          verdict: "continue",
+          verdict: "continue" as const,
           reason: "MCP server connected",
-          ...base,
-        }),
-        { beforeSideEffect: false, parentActionId: requested?.actionId },
-      );
+        });
+      }
     } catch (err) {
-      await this.appendLifecycleEvent(
-        audit,
-        "action_blocked",
-        `lifecycle.connect.${config.name}`,
-        (base): ExecutionEvent.ActionBlocked => ({
-          type: "action_blocked",
-          policyId: "mcp.lifecycle-audit",
-          actor: buildActor(audit?.sessionId, audit?.actor),
+      if (audit) {
+        Bus.publish(PolicyEvent.ActionBlocked, {
+          ...lifecycleBase(audit),
+          actionId,
+          actor: buildActor(audit.sessionId, audit.actor),
           action: "mcp.server.connect",
           resource: config.name,
-          verdict: "abort",
+          verdict: "abort" as const,
           reason: err instanceof Error ? err.message : String(err),
-          ...base,
-        }),
-        { beforeSideEffect: false, parentActionId: requested?.actionId },
-      );
-      Log.warn("failed to connect to mcp server", {
-        name: config.name,
-        err: err instanceof Error ? err.message : String(err),
+        });
+      }
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "failed to connect to mcp server",
+        context: {
+          name: config.name,
+          err: err instanceof Error ? err.message : String(err),
+        },
       });
     }
   }
@@ -104,82 +98,72 @@ export class McpToolProvider implements ToolProvider {
     const client = this.clients.get(name);
     if (!client) return;
     const audit = resolveLifecycleAudit(context);
-    const requested = await this.appendLifecycleEvent(
-      audit,
-      "action_requested",
-      `lifecycle.disconnect.${name}`,
-      (base): ExecutionEvent.ActionRequested => ({
-        type: "action_requested",
-        actor: buildActor(audit?.sessionId, audit?.actor),
+    const actionId = crypto.randomUUID();
+
+    if (audit) {
+      Bus.publish(PolicyEvent.ActionRequested, {
+        ...lifecycleBase(audit),
+        actionId,
+        actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect",
         resource: name,
-        input: { serverName: name },
-        ...base,
-      }),
-      { beforeSideEffect: true },
-    );
+        context: { serverName: name },
+      });
+    }
+
     await client.disconnect().catch(() => undefined);
     this.clients.delete(name);
     this.connected.delete(name);
     this.cachedTools = null;
-    await this.appendLifecycleEvent(
-      audit,
-      "action_approved",
-      `lifecycle.disconnect.${name}`,
-      (base): ExecutionEvent.ActionApproved => ({
-        type: "action_approved",
-        policyId: "mcp.lifecycle-audit",
-        actor: buildActor(audit?.sessionId, audit?.actor),
+
+    if (audit) {
+      Bus.publish(PolicyEvent.ActionApproved, {
+        ...lifecycleBase(audit),
+        actionId,
+        actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect",
         resource: name,
-        verdict: "continue",
+        verdict: "continue" as const,
         reason: "MCP server disconnected",
-        ...base,
-      }),
-      { beforeSideEffect: false, parentActionId: requested?.actionId },
-    );
+      });
+    }
   }
 
   async disconnectAll(context?: McpLifecycleAuditContext): Promise<void> {
     const serverNames = [...this.clients.keys()];
     const audit = resolveLifecycleAudit(context);
-    const requested = await this.appendLifecycleEvent(
-      audit,
-      "action_requested",
-      "lifecycle.disconnect_all",
-      (base): ExecutionEvent.ActionRequested => ({
-        type: "action_requested",
-        actor: buildActor(audit?.sessionId, audit?.actor),
+    const actionId = crypto.randomUUID();
+
+    if (audit) {
+      Bus.publish(PolicyEvent.ActionRequested, {
+        ...lifecycleBase(audit),
+        actionId,
+        actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect_all",
         resource: "mcp.servers",
-        input: { serverNames },
-        ...base,
-      }),
-      { beforeSideEffect: true },
-    );
-    const disconnects = [...this.clients.entries()].map(async ([name, client]) => {
+        context: { serverNames },
+      });
+    }
+
+    const disconnects = [...this.clients.entries()].map(async ([clientName, client]) => {
       await client.disconnect().catch(() => undefined);
-      this.connected.delete(name);
+      this.connected.delete(clientName);
     });
     await Promise.all(disconnects);
     this.clients.clear();
     this.cachedTools = null;
-    await this.appendLifecycleEvent(
-      audit,
-      "action_approved",
-      "lifecycle.disconnect_all",
-      (base): ExecutionEvent.ActionApproved => ({
-        type: "action_approved",
-        policyId: "mcp.lifecycle-audit",
-        actor: buildActor(audit?.sessionId, audit?.actor),
+
+    if (audit) {
+      Bus.publish(PolicyEvent.ActionApproved, {
+        ...lifecycleBase(audit),
+        actionId,
+        actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect_all",
         resource: "mcp.servers",
-        verdict: "continue",
+        verdict: "continue" as const,
         reason: "MCP servers disconnected",
-        ...base,
-      }),
-      { beforeSideEffect: false, parentActionId: requested?.actionId },
-    );
+      });
+    }
   }
 
   listTools(): NativeTool[] {
@@ -203,9 +187,15 @@ export class McpToolProvider implements ToolProvider {
           });
         }
       } catch (err) {
-        Log.warn("failed to list tools from mcp server", {
-          serverName,
-          err: err instanceof Error ? err.message : String(err),
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "failed to list tools from mcp server",
+          context: {
+            serverName,
+            err: err instanceof Error ? err.message : String(err),
+          },
         });
       }
     }
@@ -227,52 +217,54 @@ export class McpToolProvider implements ToolProvider {
         output: guard.verdict.reason ?? `Unknown tool: ${call.tool}`,
         isError: true,
       };
-      await this.appendActionBlocked(call, guard.verdict, tool?.spec.name ?? call.tool);
+      const sessionId = readSessionId(call);
+      if (sessionId) {
+        Bus.publish(PolicyEvent.ActionBlocked, {
+          traceId: crypto.randomUUID(),
+          sessionId,
+          time: Date.now(),
+          actionId: crypto.randomUUID(),
+          actor: buildActor(sessionId),
+          action: MCP_TOOL_ACTION,
+          resource: tool?.spec.name ?? call.tool,
+          verdict: "abort" as const,
+          reason: guard.verdict.reason ?? `Unknown tool: ${call.tool}`,
+        });
+      }
       return result;
     }
 
-    let parentActionId: string | undefined;
-    try {
-      const requested = await this.appendLedgerEvent(
-        call,
-        "action_requested",
-        (base): ExecutionEvent.ActionRequested => ({
-          type: "action_requested",
-          actor: buildActor(readSessionId(call)),
-          action: MCP_TOOL_ACTION,
-          resource: tool.spec.name,
-          input: call.input,
-          ...base,
-        }),
-        { beforeSideEffect: true, tool },
-      );
-      parentActionId = requested?.actionId;
-    } catch (error) {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: error instanceof Error ? error.message : String(error),
-        isError: true,
-      };
-    }
+    const sessionId = readSessionId(call) ?? "";
+    const actionId = crypto.randomUUID();
+    const actor = buildActor(sessionId);
+
+    Bus.publish(PolicyEvent.ActionRequested, {
+      traceId: crypto.randomUUID(),
+      sessionId,
+      time: Date.now(),
+      actionId,
+      actor,
+      action: MCP_TOOL_ACTION,
+      resource: tool.spec.name,
+      context: { input: call.input },
+    });
 
     const startTime = Date.now();
     const result = await tool.execute({ ...call, tool: tool.spec.name });
+    const durationMs = Date.now() - startTime;
 
-    await this.appendLedgerEvent(
-      call,
-      "tool_completed",
-      (base): ExecutionEvent.ToolCompleted => ({
-        type: "tool_completed",
-        toolCallId: call.id,
-        result,
-        ...base,
-      }),
-      { beforeSideEffect: false, parentActionId },
-    );
+    Bus.publish(ToolExecution.Completed, {
+      traceId: crypto.randomUUID(),
+      sessionId,
+      time: Date.now(),
+      actor,
+      toolCallId: call.id,
+      toolName: tool.spec.name,
+      durationMs,
+      isError: result.isError ?? false,
+    });
 
     if (!result.isError) {
-      const durationMs = Date.now() - startTime;
       const resultSummary = createResultSummary(result.output);
       const serverName = tool.spec.name.split(".")[0] ?? "unknown";
 
@@ -288,149 +280,6 @@ export class McpToolProvider implements ToolProvider {
     }
 
     return result;
-  }
-
-  private async appendActionBlocked(
-    call: Tool.Call,
-    verdict: { readonly action: string; readonly policyId?: string; readonly reason?: string },
-    resource: string,
-  ): Promise<void> {
-    await this.appendLedgerEvent(
-      call,
-      "action_blocked",
-      (base): ExecutionEvent.ActionBlocked => ({
-        type: "action_blocked",
-        policyId: verdict.policyId ?? "mcp.prefix-guard",
-        actor: buildActor(readSessionId(call)),
-        action: MCP_TOOL_ACTION,
-        resource,
-        verdict: "abort",
-        reason: verdict.reason ?? `Unknown tool: ${call.tool}`,
-        ...base,
-      }),
-      { beforeSideEffect: false },
-    );
-  }
-
-  private async appendLedgerEvent(
-    call: Tool.Call,
-    eventType: ExecutionEvent["type"],
-    event: (base: {
-      readonly actionId: string;
-      readonly parentActionId?: string;
-      readonly visibility: typeof MCP_LEDGER_VISIBILITY;
-      readonly timestamp: string;
-      readonly sequence: number;
-    }) => ExecutionEvent,
-    options: {
-      readonly beforeSideEffect: boolean;
-      readonly parentActionId?: string;
-      readonly tool?: NativeTool;
-    },
-  ): Promise<ExecutionEvent | undefined> {
-    const sessionId = readSessionId(call);
-    if (!sessionId) return undefined;
-
-    const shouldBlock = shouldBlockOnPreAppend(options.tool, options.beforeSideEffect);
-    return this.appendEventWithAudit(
-      {
-        sessionId,
-        correlationId: call.id,
-        eventType,
-        shouldBlock,
-        logContext: { toolCallId: call.id, toolName: call.tool },
-      },
-      event,
-      options.parentActionId,
-    );
-  }
-
-  private async appendLifecycleEvent(
-    audit: ResolvedLifecycleAudit | undefined,
-    eventType: ExecutionEvent["type"],
-    correlationId: string,
-    event: (base: {
-      readonly actionId: string;
-      readonly parentActionId?: string;
-      readonly visibility: typeof MCP_LEDGER_VISIBILITY;
-      readonly timestamp: string;
-      readonly sequence: number;
-    }) => ExecutionEvent,
-    options: { readonly beforeSideEffect: boolean; readonly parentActionId?: string },
-  ): Promise<ExecutionEvent | undefined> {
-    if (!audit) return undefined;
-    return this.appendEventWithAudit(
-      {
-        sessionId: audit.sessionId,
-        correlationId,
-        eventType,
-        shouldBlock: options.beforeSideEffect,
-        logContext: { toolName: correlationId },
-      },
-      event,
-      options.parentActionId,
-    );
-  }
-
-  private async appendEventWithAudit(
-    audit: {
-      readonly sessionId: string;
-      readonly correlationId: string;
-      readonly eventType: ExecutionEvent["type"];
-      readonly shouldBlock: boolean;
-      readonly logContext: { readonly toolCallId?: string; readonly toolName: string };
-    },
-    event: (base: {
-      readonly actionId: string;
-      readonly parentActionId?: string;
-      readonly visibility: typeof MCP_LEDGER_VISIBILITY;
-      readonly timestamp: string;
-      readonly sequence: number;
-    }) => ExecutionEvent,
-    parentActionId: string | undefined,
-  ): Promise<ExecutionEvent | undefined> {
-    const { sessionId, correlationId, eventType, shouldBlock } = audit;
-    const unavailableReason = ledgerUnavailableReason(sessionId);
-    if (unavailableReason !== undefined) {
-      if (shouldBlock) throw new Error(unavailableReason);
-      return undefined;
-    }
-
-    return this.withSessionAppendLock(sessionId, async () => {
-      try {
-        const sequence = await readNextSequence(sessionId);
-        const row = event({
-          actionId: ledgerActionId(sessionId, correlationId, eventType, sequence),
-          ...(parentActionId !== undefined && { parentActionId }),
-          visibility: MCP_LEDGER_VISIBILITY,
-          timestamp: new Date().toISOString(),
-          sequence,
-        });
-        await EventLog.append(sessionId, row);
-        return row;
-      } catch (error) {
-        if (shouldBlock) throw error;
-        Log.warn("mcp provider: EventLog append failed", {
-          ...audit.logContext,
-          sessionId,
-          error: String(error),
-        });
-        return undefined;
-      }
-    });
-  }
-
-  private withSessionAppendLock<T>(sessionId: string, write: () => Promise<T>): Promise<T> {
-    const previous = this.appendLocks.get(sessionId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(write);
-    this.appendLocks.set(
-      sessionId,
-      next.then(
-        () => undefined,
-        () => undefined,
-      ),
-    );
-    return next;
   }
 
   get serverCount(): number {
@@ -480,12 +329,12 @@ function summarizeServerConfig(config: McpServerConfig): Record<string, unknown>
   };
 }
 
-async function readNextSequence(sessionId: string): Promise<number> {
-  let maxSequence = 0;
-  for await (const event of EventLog.replay(sessionId)) {
-    maxSequence = Math.max(maxSequence, event.sequence);
-  }
-  return maxSequence + 1;
+function lifecycleBase(audit: ResolvedLifecycleAudit) {
+  return {
+    traceId: crypto.randomUUID(),
+    sessionId: audit.sessionId,
+    time: Date.now(),
+  };
 }
 
 function readSessionId(call: Tool.Call): string | undefined {
@@ -502,29 +351,6 @@ function buildActor(
     kind: "mcp_provider",
     ...(sessionId !== undefined && { sessionId }),
   };
-}
-
-function ledgerUnavailableReason(sessionId: string): string | undefined {
-  const adapter = Storage.get();
-  if (adapter.eventLog === undefined) return "EventLog adapter unavailable for mandatory MCP audit";
-  if (adapter.session.get(sessionId) === undefined) {
-    return "Session unavailable for mandatory MCP audit";
-  }
-  return undefined;
-}
-
-function shouldBlockOnPreAppend(tool: NativeTool | undefined, beforeSideEffect: boolean): boolean {
-  if (!beforeSideEffect || !tool) return false;
-  return tool.riskTier >= 1 || !tool.isReadOnly;
-}
-
-function ledgerActionId(
-  sessionId: string,
-  toolCallId: string,
-  eventType: ExecutionEvent["type"],
-  sequence: number,
-): string {
-  return `${sessionId}:mcp.${eventType}:${toolCallId}:${sequence}`;
 }
 
 function createResultSummary(output: unknown): string {

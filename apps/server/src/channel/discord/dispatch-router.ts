@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { GatewayOp } from "./types";
 import type { GatewayCallbacks } from "./gateway";
 import type { GatewayPayload, DiscordUser } from "./types";
@@ -43,12 +44,23 @@ export function handleGatewayPayload(
     case GatewayOp.HEARTBEAT_ACK:
       return false;
     case GatewayOp.RECONNECT:
-      Log.info("discord server requested reconnect");
+      Bus.publish(Operational.Info, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord server requested reconnect",
+      });
       actions.closeSocket(4000);
       return false;
     case GatewayOp.INVALID_SESSION: {
       const resumable = payload.d as boolean;
-      Log.warn("discord invalid session", { resumable });
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord invalid session",
+        context: { resumable },
+      });
       if (!resumable) {
         state.sessionId = null;
         state.sequence = null;
@@ -79,15 +91,26 @@ function handleDispatch(
   }
   if (event === "RESUMED") {
     state.reconnectAttempt = 0;
-    Log.info("discord session resumed");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "discord session resumed",
+    });
     return true;
   }
   try {
     actions.callbacks.onDispatch(event, data);
   } catch (err) {
-    Log.error("discord dispatch error", {
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
+    Bus.publish(Operational.Error, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "discord dispatch error",
+      context: {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
     });
   }
   return false;

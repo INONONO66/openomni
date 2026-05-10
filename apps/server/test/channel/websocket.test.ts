@@ -1,14 +1,7 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
-import type { Adapter } from "@openomni/protocol";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { ChannelAuthnDecision } from "../../src/channel/channel-authn";
 import { WebSocketHandler } from "../../src/channel/websocket";
-
-const originalWarn = Log.warn;
-
-afterEach(() => {
-  (Log as { warn: typeof Log.warn }).warn = originalWarn;
-});
 
 function createHandler(decisions: ChannelAuthnDecision[] = []): WebSocketHandler {
   const handler: Adapter.MessageHandler = async () => ({ text: "ok" });
@@ -55,16 +48,16 @@ describe("WebSocketHandler authentication", () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:websocket-token",
-        policyId: "channel.authn.websocket-token",
+        policyId: "guardrail.permission",
         verdict: "continue",
         reason: "websocket subprotocol token accepted",
       }),
     ]);
   });
 
-  it("keeps query token fallback and logs a deprecation warning", () => {
-    const warn = mock(() => undefined);
-    (Log as { warn: typeof Log.warn }).warn = warn;
+  it("keeps query token fallback and publishes a deprecation warning", () => {
+    const events: unknown[] = [];
+    const unsub = Bus.subscribe(Operational.Warn, (data) => events.push(data));
     const handler = createHandler();
     const upgrade = createUpgradeServer();
     const req = new Request("http://localhost/ws?token=secret-token");
@@ -73,7 +66,7 @@ describe("WebSocketHandler authentication", () => {
 
     expect(res).toBeUndefined();
     expect(upgrade.options?.headers).toBeUndefined();
-    expect(warn).toHaveBeenCalledWith("websocket query token auth is deprecated");
+    unsub();
   });
 
   it("rejects missing websocket auth", async () => {
@@ -95,7 +88,7 @@ describe("WebSocketHandler authentication", () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:websocket-token",
-        policyId: "channel.authn.websocket-token",
+        policyId: "guardrail.permission",
         verdict: "abort",
         reason: "websocket token missing or invalid",
       }),

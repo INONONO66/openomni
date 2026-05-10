@@ -1,5 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { splitText } from "../../shared/chunk-text";
 import { TelegramClient } from "./client";
@@ -51,7 +52,13 @@ export class TelegramAdapter implements Adapter.Surface {
     const botId = String(me.id);
     const botUsername = me.username ?? "";
     this.botUsername = botUsername;
-    Log.info("telegram bot started", { username: me.username ?? me.first_name, botId: me.id });
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "telegram bot started",
+      context: { username: me.username ?? me.first_name, botId: me.id },
+    });
 
     this.normalizer = new TelegramNormalizer({
       botId,
@@ -63,7 +70,13 @@ export class TelegramAdapter implements Adapter.Surface {
       onMessage: (message) => {
         if (this.dedupe.isDuplicate(String(message.message_id))) return;
         this.handleMessage(message).catch((err) => {
-          Log.error("telegram message handling failed", { err: String(err) });
+          Bus.publish(Operational.Error, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "telegram message handling failed",
+            context: { err: String(err) },
+          });
         });
       },
     });
@@ -73,7 +86,12 @@ export class TelegramAdapter implements Adapter.Surface {
 
   stop(): void {
     this.poller?.stop();
-    Log.info("telegram bot stopped");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "telegram bot stopped",
+    });
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
@@ -109,7 +127,13 @@ export class TelegramAdapter implements Adapter.Surface {
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
-    Log.debug("telegram message received", { chatId });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "telegram message received",
+      context: { chatId },
+    });
 
     const typingInterval = setInterval(() => {
       this.client.sendTyping(chatId);
@@ -120,7 +144,13 @@ export class TelegramAdapter implements Adapter.Surface {
       const outbound = await this.getHandler()(inbound);
       if (outbound) await this.sendOutbound(chatId, outbound);
     } catch (err) {
-      Log.error("telegram message handler error", { chatId, err: String(err) });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "telegram message handler error",
+        context: { chatId, err: String(err) },
+      });
       await this.sendOutbound(chatId, { text: "Sorry, an error occurred." });
     } finally {
       clearInterval(typingInterval);

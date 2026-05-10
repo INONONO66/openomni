@@ -1,5 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
-import { Log, SurfaceKey } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus, SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { DiscordClient } from "./client";
 import { sendDiscordMessage } from "./formatter";
@@ -41,7 +42,13 @@ export class DiscordAdapter implements Adapter.Surface {
           botId,
           triggers: this.config.triggers,
         });
-        Log.info("discord bot started", { username: botUsername, botId });
+        Bus.publish(Operational.Info, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord bot started",
+          context: { username: botUsername, botId },
+        });
       },
       onDispatch: (event, data) => {
         if (event !== "MESSAGE_CREATE") return;
@@ -63,7 +70,12 @@ export class DiscordAdapter implements Adapter.Surface {
 
   stop(): void {
     this.gateway.stop();
-    Log.info("discord bot stopped");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "discord bot stopped",
+    });
   }
 
   async send(surfaceKey: string, message: Adapter.OutboundMessage): Promise<void> {
@@ -107,12 +119,24 @@ export class DiscordAdapter implements Adapter.Surface {
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id).catch((err) => {
-      Log.error("discord message handling failed", { err: String(err) });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord message handling failed",
+        context: { err: String(err) },
+      });
     });
   }
 
   private async handleIncoming(inbound: Adapter.InboundMessage, channelId: string): Promise<void> {
-    Log.debug("discord message received", { channelId });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "discord message received",
+      context: { channelId },
+    });
 
     const handler = this.handler;
     if (!handler) return;
@@ -126,7 +150,13 @@ export class DiscordAdapter implements Adapter.Surface {
       const outbound = await handler(inbound);
       if (outbound) await sendDiscordMessage(this.client, channelId, outbound);
     } catch (err) {
-      Log.error("discord message handler error", { channelId, err: String(err) });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "discord message handler error",
+        context: { channelId, err: String(err) },
+      });
       await sendDiscordMessage(this.client, channelId, { text: "Sorry, an error occurred." });
     } finally {
       clearInterval(typingInterval);

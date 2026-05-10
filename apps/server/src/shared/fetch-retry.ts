@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { sleep } from "./sleep";
 
 const MAX_API_RETRIES = 3;
@@ -35,11 +36,17 @@ export async function fetchWithRetry(
       }
     }
 
-    Log.warn("rate limited, retrying", {
-      label,
-      retryAfter,
-      attempt: retries + 1,
-      max: MAX_API_RETRIES,
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "rate limited, retrying",
+      context: {
+        label,
+        retryAfter,
+        attempt: retries + 1,
+        max: MAX_API_RETRIES,
+      },
     });
     await sleep(retryAfter * 1000);
 

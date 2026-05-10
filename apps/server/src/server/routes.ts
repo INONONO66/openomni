@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 type Env = { Variables: { requestId: string } };
 
@@ -22,12 +23,18 @@ export function createRouter(
     const start = performance.now();
     await next();
     const duration = Math.round(performance.now() - start);
-    Log.info("http request", {
-      method: c.req.method,
-      path: c.req.path,
-      status: c.res.status,
-      durationMs: duration,
-      requestId: c.get("requestId"),
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "http request",
+      context: {
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: duration,
+        requestId: c.get("requestId"),
+      },
     });
   });
 

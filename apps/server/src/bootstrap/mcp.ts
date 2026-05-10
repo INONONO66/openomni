@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { McpToolProvider } from "../tool/mcp";
 import type { ServerConfig } from "../config";
 
@@ -14,5 +15,10 @@ export async function connectMcpServers(
   }
 
   await provider.refreshTools();
-  Log.info(`mcp connected ${provider.serverCount}/${servers.length} server(s)`);
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: `mcp connected ${provider.serverCount}/${servers.length} server(s)`,
+  });
 }

@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
 import { Heartbeat } from "./heartbeat";
 import { FATAL_CLOSE_CODES, calculateBackoff } from "./reconnect-backoff";
@@ -85,26 +86,50 @@ export class DiscordGateway {
         }
         if (FATAL_CLOSE_CODES.has(event.code)) {
           this.running = false;
-          Log.error("discord gateway fatal close code", { code: event.code });
+          Bus.publish(Operational.Error, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "discord gateway fatal close code",
+            context: { code: event.code },
+          });
           return;
         }
         if (this.running) {
           this.state.reconnectAttempt++;
           const backoffMs = calculateBackoff(this.state.reconnectAttempt);
-          Log.warn("discord connection closed, reconnecting", {
-            code: event.code,
-            backoffMs: Math.round(backoffMs),
+          Bus.publish(Operational.Warn, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            component: "server",
+            msg: "discord connection closed, reconnecting",
+            context: {
+              code: event.code,
+              backoffMs: Math.round(backoffMs),
+            },
           });
           await sleep(backoffMs);
           if (this.running)
             this.reconnect().catch((err) =>
-              Log.error("discord reconnect failed", { err: String(err) }),
+              Bus.publish(Operational.Error, {
+                traceId: crypto.randomUUID(),
+                time: Date.now(),
+                component: "server",
+                msg: "discord reconnect failed",
+                context: { err: String(err) },
+              }),
             );
         }
       });
 
       ws.addEventListener("error", (err) =>
-        Log.error("discord websocket error", { err: String(err) }),
+        Bus.publish(Operational.Error, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord websocket error",
+          context: { err: String(err) },
+        }),
       );
     });
   }

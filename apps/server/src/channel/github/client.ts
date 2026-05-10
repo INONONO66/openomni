@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { fetchWithRetry } from "../../shared/fetch-retry";
 
 export class GitHubClient {
@@ -28,6 +29,12 @@ export class GitHubClient {
       throw new Error(`GitHub API failed (${response.status}): ${text}`);
     }
 
-    Log.debug("github comment posted", { repo, issueNumber });
+    Bus.publish(Operational.Debug, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "github comment posted",
+      context: { repo, issueNumber },
+    });
   }
 }

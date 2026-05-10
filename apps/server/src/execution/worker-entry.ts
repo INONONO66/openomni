@@ -1,11 +1,11 @@
 import { ChatAgent, AgentRegistry } from "@openomni/agent";
 import { createIpcServer } from "@openomni/coordinator";
 import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
-import { initialize, Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { initialize, Bus } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
-  Profile,
   ToolProxyProvider,
   SessionBridge,
   SystemToolProvider,
@@ -24,7 +24,12 @@ const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
 const socketPath = args[args.indexOf("--socket") + 1];
 
 if (!socketPath) {
-  Log.error("worker-entry: missing --socket argument");
+  Bus.publish(Operational.Error, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "worker-entry: missing --socket argument",
+  });
   process.exit(1);
 }
 
@@ -145,7 +150,6 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           tools,
           toolExecutor,
           middleware: [
-            ...Profile.createMiddleware({ agentName: request.agentName ?? "dev" }),
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,
@@ -238,15 +242,27 @@ setInterval(() => {
       budget: agent.budget,
     }));
     AgentRegistry.replaceAll(agentDefs);
-    Log.info("worker bootstrap received", {
-      workerId,
-      agents: bootstrap.agents.length,
-      mcpTools: bootstrap.toolCatalog.length,
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "worker bootstrap received",
+      context: {
+        workerId,
+        agents: bootstrap.agents.length,
+        mcpTools: bootstrap.toolCatalog.length,
+      },
     });
   } catch (err) {
-    Log.error("worker bootstrap failed", {
-      workerId,
-      err: err instanceof Error ? err.message : String(err),
+    Bus.publish(Operational.Error, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "worker bootstrap failed",
+      context: {
+        workerId,
+        err: err instanceof Error ? err.message : String(err),
+      },
     });
   }
 })();
@@ -256,6 +272,12 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-Log.info("worker started", { workerId, pid: process.pid, socketPath });
+Bus.publish(Operational.Info, {
+  traceId: crypto.randomUUID(),
+  time: Date.now(),
+  component: "server",
+  msg: "worker started",
+  context: { workerId, pid: process.pid, socketPath },
+});
 
 export { workerBootstrap };

@@ -1,10 +1,15 @@
 import {
   MiddlewareEngine,
-  PolicyEngine,
   type MiddlewareDecision,
   type MiddlewareRegistration,
 } from "@openomni/agent";
-import type { Hook, Middleware, Tool, TraceContext } from "@openomni/protocol";
+import {
+  Guardrail,
+  type Hook,
+  type Middleware,
+  type Tool,
+  type TraceContext,
+} from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -26,7 +31,7 @@ function evaluatePrefixGuard(input: {
   readonly serverName?: string;
 }): Hook.Verdict {
   const action = "mcp.tool.call";
-  return PolicyEngine.evaluatePermission(
+  return Guardrail.evaluate(
     {
       action,
       inputRules: [
@@ -154,7 +159,7 @@ export namespace McpPrefixGuardMiddleware {
         lastDecision = decision;
         await ctx.onDecision?.(decision);
       },
-      eventLog: false,
+      audit: false,
     });
 
     for (const registration of registrations(state)) {

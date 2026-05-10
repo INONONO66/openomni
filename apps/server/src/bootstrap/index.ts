@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, EventLogBridge, Log } from "@openomni/session";
+import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
@@ -109,7 +109,7 @@ export async function main(): Promise<void> {
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
-  const stopEventLogBridge = EventLogBridge.start();
+  BusPersistence.start();
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
@@ -130,7 +130,12 @@ export async function main(): Promise<void> {
   let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
 
   if (isLocalMode) {
-    Log.info("server running in local mode (no worker pool)");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server running in local mode (no worker pool)",
+    });
     const localRunner = LocalRunner.create({
       systemProvider,
       agentProvider,
@@ -140,7 +145,12 @@ export async function main(): Promise<void> {
     });
     IngressEngine.setCoordinator(localRunner);
   } else {
-    Log.info("server running in coordinator mode");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server running in coordinator mode",
+    });
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
     const toolDispatcher = buildToolDispatcher([mcpProvider, taskProvider, todoProvider]);
@@ -167,9 +177,19 @@ export async function main(): Promise<void> {
     : undefined;
 
   if (model) {
-    Log.info(`server using model: ${model.providerID}/${model.id}`);
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: `server using model: ${model.providerID}/${model.id}`,
+    });
   } else {
-    Log.warn("server no model credentials found; realtime surfaces disabled");
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server no model credentials found; realtime surfaces disabled",
+    });
   }
 
   const { channels, wsHandler, githubWebhookHandler } = createChannelAdapters(
@@ -178,7 +198,12 @@ export async function main(): Promise<void> {
   );
 
   if (hasAnyChannel && !routingHandler) {
-    Log.warn("server channel credentials found but no model credentials; channels disabled");
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server channel credentials found but no model credentials; channels disabled",
+    });
   }
 
   const app = createRouter(githubWebhookHandler);
@@ -203,11 +228,26 @@ export async function main(): Promise<void> {
   await Promise.all(channels.map((channel) => channel.start()));
 
   if (channels.length === 0) {
-    Log.info("server no external channels configured; web and websocket endpoints only");
+    Bus.publish(Operational.Info, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "server",
+      msg: "server no external channels configured; web and websocket endpoints only",
+    });
   }
 
-  Log.info(`server listening on http://${config.server.host}:${server.port}`);
-  Log.info(`server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`);
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: `server listening on http://${config.server.host}:${server.port}`,
+  });
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: `server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`,
+  });
 
   const traceId = crypto.randomUUID();
   const mode = isLocalMode ? "local" : "coordinator";
@@ -226,6 +266,5 @@ export async function main(): Promise<void> {
     mcpProvider,
     coordinator,
     traceId,
-    stopEventLogBridge,
   });
 }

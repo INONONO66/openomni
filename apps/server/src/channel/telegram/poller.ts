@@ -1,4 +1,5 @@
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage, TelegramUpdate } from "./types";
@@ -44,7 +45,13 @@ export class TelegramPoller {
         }
       } catch (err) {
         if (!this.running) break;
-        Log.warn("telegram poll error", { err: String(err) });
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "server",
+          msg: "telegram poll error",
+          context: { err: String(err) },
+        });
         await sleep(5000);
       }
     }

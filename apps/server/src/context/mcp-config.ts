@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Log } from "@openomni/session";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { ServerConfig } from "../config.js";
 
 type McpServerConfig = ServerConfig["mcp"]["servers"][number];
@@ -22,7 +23,13 @@ export namespace McpConfigLoader {
     try {
       parsed = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      Log.warn("failed to parse mcp config", { configPath });
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "failed to parse mcp config",
+        context: { configPath },
+      });
       discoverCache.set(workspaceRoot, { result: null });
       return null;
     }
@@ -42,7 +49,13 @@ export namespace McpConfigLoader {
     ) {
       result = (parsed as { servers: McpServerConfig[] }).servers;
     } else {
-      Log.warn("unexpected format in mcp config", { configPath });
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "unexpected format in mcp config",
+        context: { configPath },
+      });
       result = null;
     }
 
