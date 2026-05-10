@@ -6,7 +6,26 @@ const Base = z.object({
   time: z.number(),
 });
 
+const LogBase = Base.extend({
+  sessionId: z.string().optional(),
+  component: z.string(),
+  msg: z.string(),
+  context: z.record(z.string(), z.unknown()).optional(),
+});
+
 export namespace Operational {
+  export const Debug = BusEvent.define("operational.debug", LogBase);
+
+  export const Info = BusEvent.define("operational.info", LogBase);
+
+  export const Warn = BusEvent.define("operational.warn", LogBase);
+
+  // biome-ignore lint/suspicious/noShadowRestrictedNames: expose Operational.Error to match the namespaced event API
+  export const Error = BusEvent.define(
+    "operational.error",
+    LogBase.extend({ error: z.string().optional() }),
+  );
+
   export const BootstrapCompleted = BusEvent.define(
     "operational.bootstrap.completed",
     Base.extend({
