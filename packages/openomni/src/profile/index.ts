@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { MiddlewareRegistration } from "@openomni/agent";
+import type { PolicyRegistration } from "@openomni/agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_GUIDANCE } from "./guidance";
@@ -16,7 +16,7 @@ export namespace Profile {
   });
   export type MiddlewareConfig = z.infer<typeof MiddlewareConfigSchema>;
 
-  export function createMiddleware(config: MiddlewareConfig): MiddlewareRegistration[] {
+  export function createMiddleware(config: MiddlewareConfig): PolicyRegistration[] {
     const home = config.homeRoot ?? homedir();
     const agent = sanitizeName(config.agentName);
 
@@ -91,7 +91,7 @@ function renderMemory(content: string): string {
   return `═══ DECLARATIVE MEMORY ═══\n${MEMORY_GUIDANCE}\n\n${content}`;
 }
 
-function createSoulRegistration(homeRoot: string, agentName: string): MiddlewareRegistration {
+function createSoulRegistration(homeRoot: string, agentName: string): PolicyRegistration {
   let snapshot: string | null = null;
 
   return {
@@ -118,7 +118,7 @@ function createSoulRegistration(homeRoot: string, agentName: string): Middleware
   };
 }
 
-function createUserRegistration(homeRoot: string, agentName: string): MiddlewareRegistration {
+function createUserRegistration(homeRoot: string, agentName: string): PolicyRegistration {
   let snapshot: string | null = null;
 
   return {
@@ -145,7 +145,7 @@ function createUserRegistration(homeRoot: string, agentName: string): Middleware
   };
 }
 
-function createMemoryRegistration(homeRoot: string, agentName: string): MiddlewareRegistration {
+function createMemoryRegistration(homeRoot: string, agentName: string): PolicyRegistration {
   let snapshot: string | null = null;
 
   return {

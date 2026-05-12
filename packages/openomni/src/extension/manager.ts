@@ -1,4 +1,4 @@
-import { Extension, Guardrail, Operational } from "@openomni/protocol";
+import { Extension, Policy, Operational } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { z } from "zod";
 import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtime-binding";
@@ -43,7 +43,7 @@ interface AuditPolicyEvaluated extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly verdict: Policy.EvaluationResult["action"];
   readonly reason: string;
 }
 
@@ -63,7 +63,7 @@ interface AuditActionBlocked extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly verdict: Policy.EvaluationResult["action"];
   readonly reason: string;
 }
 
@@ -113,7 +113,7 @@ export interface ExtensionAuditContext {
 export interface ExtensionOperationOptions {
   readonly actor: Record<string, unknown>;
   readonly audit: ExtensionAuditContext;
-  readonly permission?: Guardrail.Permission;
+  readonly permission?: Policy.Permission;
   readonly now?: () => Date;
 }
 
@@ -627,14 +627,14 @@ async function beginOperation(
     parentActionId: requested.actionId,
     now,
   };
-  const evaluationRequest: Guardrail.EvaluationRequest = {
+  const evaluationRequest: Policy.EvaluationRequest = {
     action: request.action,
     resource: request.resource,
     input: policyInput(request.input, options.actor),
     actor: options.actor,
   };
 
-  const authorityResult = Guardrail.evaluate(
+  const authorityResult = Policy.evaluate(
     extensionAuthorityPermission(request.action),
     evaluationRequest,
   );
@@ -653,7 +653,7 @@ async function beginOperation(
     }
   }
 
-  const result = Guardrail.evaluate(options.permission, evaluationRequest);
+  const result = Policy.evaluate(options.permission, evaluationRequest);
 
   await appendPolicyEvent(state, result);
   if (result.action === "abort") {
@@ -666,7 +666,7 @@ async function beginOperation(
   return state;
 }
 
-function extensionAuthorityPermission(action: ExtensionAction): Guardrail.Permission | undefined {
+function extensionAuthorityPermission(action: ExtensionAction): Policy.Permission | undefined {
   if (!authorityActions.has(action)) {
     return undefined;
   }
@@ -703,7 +703,7 @@ function actorKind(actor: Record<string, unknown>): string {
 
 async function appendPolicyEvent(
   state: AuditState,
-  result: Guardrail.EvaluationResult,
+  result: Policy.EvaluationResult,
 ): Promise<void> {
   await appendAuditEvent(
     state.sessionId,

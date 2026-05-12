@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { MiddlewareDecision } from "@openomni/agent";
+import type { PolicyDecision } from "@openomni/agent";
 import type { Ingress } from "@openomni/protocol";
 import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
@@ -87,9 +87,9 @@ describe("IngressEngine", () => {
   });
 
   it("rejects missing coordinator through ingress middleware", async () => {
-    const decisions: MiddlewareDecision[] = [];
+    const decisions: PolicyDecision[] = [];
     IngressEngine.clearCoordinator();
-    IngressEngine.setMiddlewareDecisionObserver((decision) => {
+    IngressEngine.setPolicyDecisionObserver((decision) => {
       decisions.push(decision);
     });
 

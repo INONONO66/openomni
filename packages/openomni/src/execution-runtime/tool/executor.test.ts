@@ -70,7 +70,7 @@ describe("createToolExecutor", () => {
     expect(result.output).toContain("Unknown tool: nonexistent");
   });
 
-  it("denies tools matching the denylist", async () => {
+  it("does not enforce authority permissions inside the native executor", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash")],
       config: { permissions: { action: "tool.call", denylist: ["bash"] } },
@@ -78,26 +78,25 @@ describe("createToolExecutor", () => {
 
     const result = await executor(makeCall("bash"));
 
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("[Blocked]");
-    expect(result.output).toContain("denied by policy");
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe("bash-ok");
   });
 
-  it("denies tools absent from the allowlist", async () => {
+  it("leaves allowlist decisions to the agent policy layer", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("write"), makeTool("read")],
       config: { permissions: { action: "tool.call", allowlist: ["read"] } },
     });
 
     const writeResult = await executor(makeCall("write"));
-    expect(writeResult.isError).toBe(true);
-    expect(writeResult.output).toContain("[Blocked]");
+    expect(writeResult.isError).toBeUndefined();
+    expect(writeResult.output).toBe("write-ok");
 
     const readResult = await executor(makeCall("read"));
     expect(readResult.isError).toBeUndefined();
   });
 
-  it("blocks tools that require approval", async () => {
+  it("leaves approval decisions to the agent policy layer", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash")],
       config: { permissions: { action: "tool.call", requireApproval: ["bash"] } },
@@ -105,8 +104,8 @@ describe("createToolExecutor", () => {
 
     const result = await executor(makeCall("bash"));
 
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("requires approval");
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe("bash-ok");
   });
 
   it("wraps tool execution errors in an error result", async () => {
@@ -157,38 +156,36 @@ describe("createToolExecutor", () => {
     expect(result.output).toBe("grep.search-ok");
   });
 
-  it("denylist wildcard pattern blocks the entire tool family", async () => {
+  it("ignores authority wildcard policies in the native executor", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("file.read"), makeTool("file.write"), makeTool("bash")],
       config: { permissions: { action: "tool.call", denylist: ["file.*"] } },
     });
 
     const readResult = await executor(makeCall("file.read"));
-    expect(readResult.isError).toBe(true);
+    expect(readResult.isError).toBeUndefined();
 
     const writeResult = await executor(makeCall("file.write"));
-    expect(writeResult.isError).toBe(true);
+    expect(writeResult.isError).toBeUndefined();
 
     const bashResult = await executor(makeCall("bash"));
     expect(bashResult.isError).toBeUndefined();
   });
 
-  it("applies canonical star wildcard policy patterns", async () => {
+  it("does not apply canonical star wildcard authority patterns", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("read"), makeTool("bash")],
       config: { permissions: { action: "tool.call", denylist: ["*"] } },
     });
 
     const readResult = await executor(makeCall("read"));
-    expect(readResult.isError).toBe(true);
-    expect(readResult.output).toContain("denylist");
+    expect(readResult.isError).toBeUndefined();
 
     const bashResult = await executor(makeCall("bash"));
-    expect(bashResult.isError).toBe(true);
-    expect(bashResult.output).toContain("denylist");
+    expect(bashResult.isError).toBeUndefined();
   });
 
-  it("applies guardrail input rule decisions", async () => {
+  it("does not apply guardrail input rule authority decisions", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("bash")],
       config: {
@@ -210,8 +207,8 @@ describe("createToolExecutor", () => {
 
     const result = await executor(makeCall("bash", { command: "rm -rf /tmp/example" }));
 
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("dangerous_command");
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe("bash-ok");
   });
 
   it("no permissions config allows all tools", async () => {
@@ -356,7 +353,7 @@ describe("createToolExecutor", () => {
     }
   });
 
-  it("publishes action_blocked with policy reason for permission denial", async () => {
+  it("does not publish permission denial events from the native executor", async () => {
     const { events, stop } = collectBusEvents();
     let executions = 0;
 
@@ -380,19 +377,16 @@ describe("createToolExecutor", () => {
       const result = await executor(makeCall("bash"));
       const eventNames = events.map((e) => e.name);
 
-      expect(result.isError).toBe(true);
-      expect(executions).toBe(0);
+      expect(result.isError).toBeUndefined();
+      expect(executions).toBe(1);
       expect(eventNames).toEqual([
         "policy.action.requested",
         "policy.evaluated",
-        "policy.action.blocked",
+        "tool.execution.started",
+        "policy.evaluated",
         "tool.execution.completed",
       ]);
-      const blocked = events.find((e) => e.name === "policy.action.blocked");
-      expect(blocked?.payload).toMatchObject({
-        reason: "denylist",
-        resource: "bash",
-      });
+      expect(events.some((e) => e.name === "policy.action.blocked")).toBe(false);
     } finally {
       stop();
     }

@@ -1,7 +1,7 @@
 import { ChatAgent } from "@openomni/agent";
 import type { SubagentToolOptions, ChatAgentConfig } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
-import type { Guardrail, WorkerBootstrap } from "@openomni/protocol";
+import type { Policy, WorkerBootstrap } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { SubagentRuntime } from "../../../../subagent/runtime.js";
 import { resolveToolSelection } from "../../catalog.js";
@@ -47,27 +47,45 @@ export function createSubagentRuntime(): SubagentRuntimeInterface {
   };
 }
 
-function intersectPermissions(
-  parent: Guardrail.Permission | undefined,
-  child: Guardrail.Permission | undefined,
-): Guardrail.Permission | undefined {
+export function intersectPermissions(
+  parent: Policy.Permission | undefined,
+  child: Policy.Permission | undefined,
+): Policy.Permission | undefined {
   if (!parent && !child) return undefined;
   if (!parent) return child;
   if (!child) return parent;
   return {
     action: child.action,
     denylist: [...(parent.denylist ?? []), ...(child.denylist ?? [])],
-    allowlist: child.allowlist ?? parent.allowlist,
-    requireApproval: child.requireApproval ?? parent.requireApproval,
+    denyLabels: [...(parent.denyLabels ?? []), ...(child.denyLabels ?? [])],
+    allowlist: intersectAllowPatterns(parent.allowlist, child.allowlist),
+    allowLabels: intersectAllowPatterns(parent.allowLabels, child.allowLabels),
+    requireApproval: [...(parent.requireApproval ?? []), ...(child.requireApproval ?? [])],
+    requireApprovalLabels: [
+      ...(parent.requireApprovalLabels ?? []),
+      ...(child.requireApprovalLabels ?? []),
+    ],
     inputRules: [...(parent.inputRules ?? []), ...(child.inputRules ?? [])],
   };
+}
+
+function intersectAllowPatterns(
+  parent: string[] | undefined,
+  child: string[] | undefined,
+): string[] | undefined {
+  if (!parent) return child;
+  if (!child) return parent;
+  if (parent.includes("*")) return child;
+  if (child.includes("*")) return parent;
+  const parentSet = new Set(parent);
+  return child.filter((pattern) => parentSet.has(pattern));
 }
 
 type WorkerRuntimeConfig = {
   // Lazily resolved after createExecutionToolContext — filled before any tool call.
   toolsRef: { tools?: ChatAgentConfig["tools"]; toolExecutor?: ChatAgentConfig["toolExecutor"] };
   parentSessionId: string;
-  parentPermissions?: Guardrail.Permission;
+  parentPermissions?: Policy.Permission;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
   agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };

@@ -1,4 +1,4 @@
-import { Guardrail, Operational, Skill } from "@openomni/protocol";
+import { Policy, Operational, Skill } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -35,7 +35,7 @@ interface AuditPolicyEvaluated extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly verdict: Policy.EvaluationResult["action"];
   readonly reason: string;
 }
 
@@ -55,7 +55,7 @@ interface AuditActionBlocked extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Guardrail.EvaluationResult["action"];
+  readonly verdict: Policy.EvaluationResult["action"];
   readonly reason: string;
 }
 
@@ -94,7 +94,7 @@ export interface SkillAuditContext {
 export interface SkillOperationOptions extends SkillManagerRoots {
   readonly actor: Record<string, unknown>;
   readonly audit: SkillAuditContext;
-  readonly permission?: Guardrail.Permission;
+  readonly permission?: Policy.Permission;
   readonly now?: () => Date;
 }
 
@@ -319,7 +319,7 @@ async function beginOperation(
     parentActionId: requested.actionId,
     now,
   };
-  const result = Guardrail.evaluate(options.permission, {
+  const result = Policy.evaluate(options.permission, {
     action: request.action,
     resource: request.resource,
     input: request.input,
@@ -339,7 +339,7 @@ async function beginOperation(
 
 async function appendPolicyEvent(
   state: AuditState,
-  result: Guardrail.EvaluationResult,
+  result: Policy.EvaluationResult,
 ): Promise<void> {
   await appendAuditEvent(
     state.sessionId,

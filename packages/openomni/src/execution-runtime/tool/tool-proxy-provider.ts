@@ -15,6 +15,7 @@ export namespace ToolProxyProvider {
       isReadOnly: false,
       isDestructive: false,
       isConcurrencySafe: false,
+      labels: entry.spec.labels,
       source: entry.source,
       execute: (call: Tool.Call): Promise<Tool.Result> =>
         callTool(entry.canonicalName, call.input as Record<string, unknown>),

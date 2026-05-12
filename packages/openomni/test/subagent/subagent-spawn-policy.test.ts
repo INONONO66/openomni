@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { MiddlewareContext } from "@openomni/agent";
+import type { PolicyContext } from "@openomni/agent";
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
 
 const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 const noop = () => undefined;
 
-function middlewareContext(toolName: string): MiddlewareContext {
+function middlewareContext(toolName: string): PolicyContext {
   return {
     timing: "pre_tool_use",
     steps: [],

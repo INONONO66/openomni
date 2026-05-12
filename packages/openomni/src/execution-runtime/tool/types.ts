@@ -1,4 +1,4 @@
-import type { Guardrail, Tool, ToolSelection } from "@openomni/protocol";
+import type { Policy, Tool, ToolSelection } from "@openomni/protocol";
 
 export type ToolCategory = "system" | "agent" | "mcp";
 export type ToolMetaValue = boolean | ((input: unknown) => boolean);
@@ -25,6 +25,7 @@ export interface NativeTool {
   isReadOnly: ToolMetaValue;
   isDestructive: ToolMetaValue;
   isConcurrencySafe: ToolMetaValue;
+  labels?: readonly string[];
   source?: ToolSource;
   category?: ToolSelection.Category;
   implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
@@ -39,7 +40,7 @@ export interface ToolProvider {
 }
 
 export interface ToolExecutorConfig {
-  permissions?: Guardrail.Permission;
+  permissions?: Policy.Permission;
   workspaceRoot?: string;
   runtime?: ToolRuntimeContext;
   timeoutMs?: {

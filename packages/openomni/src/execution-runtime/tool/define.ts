@@ -25,6 +25,7 @@ export interface ToolDefinition<TInput = Record<string, unknown>> {
   readonly isReadOnly?: ToolMetaValue;
   readonly isDestructive?: ToolMetaValue;
   readonly isConcurrencySafe?: ToolMetaValue;
+  readonly labels?: readonly string[];
   readonly source?: ToolSource;
   readonly implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
   execute(
@@ -69,19 +70,32 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
     ? new Set(Object.keys(def.implicitInputs))
     : new Set<string>();
   const publicSchema = stripImplicitFields(def.inputSchema, implicitKeys);
+  const labels = [
+    `tool:${def.name}`,
+    `risk:tier-${def.riskTier ?? defaultRiskTier}`,
+    `source:${def.source ?? "system"}`,
+    ...(typeof isReadOnly === "boolean" && isReadOnly ? ["capability:read"] : []),
+    ...(typeof isReadOnly === "boolean" && !isReadOnly ? ["capability:write"] : []),
+    ...(typeof isDestructive === "boolean" && isDestructive ? ["capability:destructive"] : []),
+    ...(def.labels ?? []),
+  ];
+
+  const spec: ProtocolTool.Spec & { labels: string[] } = {
+    name: def.name,
+    ...(def.description ? { description: def.description } : {}),
+    inputSchema: publicSchema,
+    ...(safe !== undefined ? { safe } : {}),
+    labels,
+    ...(def.prompt ? { prompt: def.prompt } : {}),
+  };
 
   return {
-    spec: {
-      name: def.name,
-      ...(def.description ? { description: def.description } : {}),
-      inputSchema: publicSchema,
-      ...(safe !== undefined ? { safe } : {}),
-      ...(def.prompt ? { prompt: def.prompt } : {}),
-    },
+    spec,
     riskTier: def.riskTier ?? defaultRiskTier,
     isReadOnly,
     isDestructive,
     isConcurrencySafe,
+    labels,
     source: def.source ?? "system",
     ...(def.implicitInputs ? { implicitInputs: def.implicitInputs } : {}),
     execute: def.execute as NativeTool["execute"],
