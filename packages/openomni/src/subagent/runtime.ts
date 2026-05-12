@@ -1,5 +1,5 @@
-import type { ChatAgent } from "@openomni/agent";
-import { type Policy, type Message, Subagent } from "@openomni/protocol";
+import { PolicyEngine, type ChatAgent, type PolicyRegistration } from "@openomni/agent";
+import { type Hook, type Policy, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
@@ -25,6 +25,54 @@ import {
   maybeCompactSendTranscript,
   runWithTranscript,
 } from "./transcript";
+
+const emptyDelegationUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+async function dispatchPreDelegation(input: {
+  middleware?: PolicyRegistration[];
+  childAgent: string;
+  parentSessionId?: string;
+  operation: string;
+  prompt: string;
+}): Promise<Hook.Verdict> {
+  if (!input.middleware?.length) return { action: "continue" };
+
+  const engine = PolicyEngine.create({ audit: false });
+  for (const reg of input.middleware) {
+    engine.register(reg);
+  }
+
+  return engine.dispatch("pre_delegation", {
+    steps: [],
+    usage: emptyDelegationUsage,
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    toolName: "subagent",
+    toolInput: {
+      operation: input.operation,
+      childAgent: input.childAgent,
+      prompt: input.prompt,
+      ...(input.parentSessionId !== undefined && { parentSessionId: input.parentSessionId }),
+    },
+    labels: [
+      { value: `actor.child:${input.childAgent}`, source: "system" as const },
+      ...(input.parentSessionId !== undefined
+        ? [{ value: `actor.parent:${input.parentSessionId}`, source: "system" as const }]
+        : []),
+    ],
+  });
+}
+
+function applyDelegationTransform(
+  config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
+  input: Record<string, unknown>,
+): void {
+  if (input.permissions !== undefined) config.permissions = input.permissions as Policy.Permission;
+  if (typeof input.softTimeoutMs === "number") config.softTimeoutMs = input.softTimeoutMs;
+  if (typeof input.hardTimeoutMs === "number") config.hardTimeoutMs = input.hardTimeoutMs;
+}
 
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
@@ -94,7 +142,21 @@ export namespace SubagentRuntime {
     hardTimeoutMs?: number;
   }
 
-  export function spawn(config: SpawnConfig): Promise<RunResult> {
+  export async function spawn(config: SpawnConfig): Promise<RunResult> {
+    const verdict = await dispatchPreDelegation({
+      middleware: config.middleware,
+      childAgent: config.agentName,
+      parentSessionId: config.parentSessionId,
+      operation: "spawn",
+      prompt: config.prompt,
+    });
+    if (verdict.action === "abort") {
+      throw new Error(verdict.reason ?? "pre_delegation policy aborted spawn");
+    }
+    if (verdict.action === "transform") {
+      applyDelegationTransform(config, verdict.input);
+    }
+
     const session = createSpawnSession(config);
     void 0;
 
@@ -129,6 +191,20 @@ export namespace SubagentRuntime {
   }
 
   export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
+    const verdict = await dispatchPreDelegation({
+      middleware: config.middleware,
+      childAgent: config.agentName,
+      parentSessionId: config.parentSessionId,
+      operation: "spawn_background",
+      prompt: config.prompt,
+    });
+    if (verdict.action === "abort") {
+      throw new Error(verdict.reason ?? "pre_delegation policy aborted spawn");
+    }
+    if (verdict.action === "transform") {
+      applyDelegationTransform(config, verdict.input);
+    }
+
     const session = createSpawnSession(config);
 
     const userMessage = createUserMessage(session.id, config.model);
@@ -163,6 +239,24 @@ export namespace SubagentRuntime {
   }
 
   export async function send(config: SendConfig): Promise<RunResult> {
+    const childMeta = Session.getWorkerMeta(config.sessionId);
+    const childAgent =
+      typeof childMeta?.agentName === "string" ? childMeta.agentName : config.sessionId;
+    const childSession = Session.get(config.sessionId);
+    const sendVerdict = await dispatchPreDelegation({
+      middleware: config.middleware,
+      childAgent,
+      parentSessionId: childSession?.parentSessionId,
+      operation: "send",
+      prompt: config.prompt,
+    });
+    if (sendVerdict.action === "abort") {
+      throw new Error(sendVerdict.reason ?? "pre_delegation policy aborted send");
+    }
+    if (sendVerdict.action === "transform") {
+      applyDelegationTransform(config, sendVerdict.input);
+    }
+
     const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
       operation: "send",
       sessionId: config.sessionId,

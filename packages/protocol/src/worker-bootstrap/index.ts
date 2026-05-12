@@ -51,6 +51,7 @@ export namespace WorkerBootstrap {
     agents: RuntimeAgentDefinition.array(),
     toolCatalog: RuntimeToolCatalogEntry.array(),
     credentials: z.record(z.string()).optional(),
+    policyPlan: Policy.PolicyPlan.optional(),
   });
   export type Bootstrap = z.infer<typeof Bootstrap>;
 }

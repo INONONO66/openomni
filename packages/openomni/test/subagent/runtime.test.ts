@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
+import {
+  ChatAgent,
+  type AgentResult,
+  type ChatAgentInput,
+  type PolicyRegistration,
+} from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
@@ -290,6 +295,169 @@ describe("SubagentRuntime", () => {
 
     it("is a no-op for non-existent session", async () => {
       await SubagentRuntime.cancel({ sessionId: "nonexistent" });
+    });
+  });
+
+  describe("pre_delegation policy", () => {
+    const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+
+    it("spawn aborts when pre_delegation policy returns abort", async () => {
+      const abortPolicy: PolicyRegistration = {
+        name: "test:block-delegation",
+        timing: "pre_delegation",
+        priority: 0,
+        fn: () => ({
+          action: "abort" as const,
+          reason: "delegation denied by test policy",
+          policyId: "test:block",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "blocked task",
+        prompt: "should not run",
+        model,
+        middleware: [abortPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("delegation denied by test policy");
+    });
+
+    it("spawn proceeds when pre_delegation policy returns continue", async () => {
+      queueResult("allowed output");
+
+      const allowPolicy: PolicyRegistration = {
+        name: "test:allow-delegation",
+        timing: "pre_delegation",
+        priority: 0,
+        fn: () => ({
+          action: "continue" as const,
+          policyId: "test:allow",
+        }),
+      };
+
+      const result = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "allowed task",
+        prompt: "do work",
+        model,
+        middleware: [allowPolicy],
+      });
+
+      expect(result.output).toBe("allowed output");
+    });
+
+    it("spawn applies transform constraints from pre_delegation verdict", async () => {
+      queueResult("transformed output");
+
+      const transformPolicy: PolicyRegistration = {
+        name: "test:transform-delegation",
+        timing: "pre_delegation",
+        priority: 0,
+        fn: () => ({
+          action: "transform" as const,
+          input: { softTimeoutMs: 5000, hardTimeoutMs: 10000 },
+          reason: "enforce timeout limits",
+          policyId: "test:transform",
+        }),
+      };
+
+      const config: Parameters<typeof SubagentRuntime.spawn>[0] = {
+        agentName: "worker",
+        title: "transformed task",
+        prompt: "do work",
+        model,
+        middleware: [transformPolicy],
+      };
+
+      const result = await SubagentRuntime.spawn(config);
+      expect(result.output).toBe("transformed output");
+      expect(config.softTimeoutMs).toBe(5000);
+      expect(config.hardTimeoutMs).toBe(10000);
+    });
+
+    it("pre_delegation receives parent/child agent labels", async () => {
+      queueResult("labeled output");
+      const parentSessionId = createParentSession();
+
+      let capturedLabels: unknown;
+      let capturedToolInput: unknown;
+      const capturePolicy: PolicyRegistration = {
+        name: "test:capture-ctx",
+        timing: "pre_delegation",
+        priority: 0,
+        fn: (ctx) => {
+          capturedLabels = ctx.labels;
+          capturedToolInput = ctx.toolInput;
+          return { action: "continue" as const, policyId: "test:capture" };
+        },
+      };
+
+      await SubagentRuntime.spawn({
+        parentSessionId,
+        agentName: "child-agent",
+        title: "labeled task",
+        prompt: "test labels",
+        model,
+        middleware: [capturePolicy],
+      });
+
+      expect(capturedToolInput).toEqual({
+        operation: "spawn",
+        childAgent: "child-agent",
+        prompt: "test labels",
+        parentSessionId,
+      });
+      expect(capturedLabels).toEqual([
+        { value: "actor.child:child-agent", source: "system" },
+        { value: `actor.parent:${parentSessionId}`, source: "system" },
+      ]);
+    });
+
+    it("send aborts when pre_delegation policy returns abort", async () => {
+      queueResult("spawned");
+      const spawned = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "child",
+        prompt: "initial",
+        model,
+      });
+
+      const abortPolicy: PolicyRegistration = {
+        name: "test:block-send",
+        timing: "pre_delegation",
+        priority: 0,
+        fn: () => ({
+          action: "abort" as const,
+          reason: "send delegation denied",
+          policyId: "test:block-send",
+        }),
+      };
+
+      const error = await SubagentRuntime.send({
+        sessionId: spawned.sessionId,
+        prompt: "should not run",
+        model,
+        middleware: [abortPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("send delegation denied");
+    });
+
+    it("spawn without middleware proceeds normally (no pre_delegation dispatch)", async () => {
+      queueResult("no middleware output");
+
+      const result = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "no-middleware task",
+        prompt: "do work",
+        model,
+      });
+
+      expect(result.output).toBe("no middleware output");
     });
   });
 });

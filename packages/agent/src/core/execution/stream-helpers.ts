@@ -1,7 +1,7 @@
 import type { RunInput } from "@openomni/llm";
 import { Retry } from "@openomni/llm";
 import { AgentExecution, Operational } from "@openomni/protocol";
-import type { Hook, Message, Sink, Tool, TraceContext } from "@openomni/protocol";
+import type { Hook, Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import {
   checkBudget,
@@ -389,6 +389,50 @@ export async function buildTurn(
     : undefined;
 
   const system = await buildTurnSystemPrompt(state, config, engine);
+
+  // pre_tool_selection — policies can filter/modify tools exposed to LLM
+  const allTools = config.tools ?? [];
+  const catalogLabels: Policy.LabelEntry[] = [];
+  for (const [name, labels] of toolLabels) {
+    for (const label of labels) {
+      catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
+    }
+  }
+  const toolSelectionVerdict = await engine.dispatch("pre_tool_selection", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: false,
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    labels: catalogLabels,
+  });
+
+  let selectedTools = allTools;
+  if (toolSelectionVerdict.action === "transform") {
+    const input = toolSelectionVerdict.input as { tools?: unknown };
+    if (Array.isArray(input.tools)) {
+      const allowed = new Set(input.tools as string[]);
+      selectedTools = allTools.filter((t) => allowed.has(t.name));
+    }
+  } else if (toolSelectionVerdict.action === "abort") {
+    return {
+      type: "complete",
+      event: {
+        type: "complete",
+        result: {
+          text: state.lastAssistantText,
+          steps: state.steps,
+          usage: state.totalUsage,
+          finishReason: "stop",
+          guardAborted: true,
+          compactionCount: getCompactionCount(state),
+        },
+      },
+    };
+  }
+
   const turnUsage: TokenUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -405,7 +449,7 @@ export async function buildTurn(
     turn: {
       runInput: {
         messages: state.messages,
-        tools: config.tools ?? [],
+        tools: selectedTools,
         system,
         signal: config.signal,
         model: providerModel,

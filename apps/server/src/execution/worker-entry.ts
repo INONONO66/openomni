@@ -153,6 +153,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,
+              ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
             }),
           ],
         });

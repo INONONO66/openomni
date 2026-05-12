@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { PolicyDecision } from "@openomni/agent";
-import type { Ingress } from "@openomni/protocol";
+import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
+import type { Hook, Ingress } from "@openomni/protocol";
 import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
@@ -260,5 +260,105 @@ describe("IngressEngine", () => {
     } finally {
       schema.safeParse = originalSafeParse;
     }
+  });
+
+  describe("pre_ingress policy dispatch", () => {
+    function makeEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
+      return {
+        id: "event-policy-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
+        ...overrides,
+      };
+    }
+
+    function abortPolicy(reason: string): PolicyRegistration {
+      return {
+        name: "test:ingress-abort",
+        timing: "pre_ingress",
+        priority: 0,
+        failPolicy: "fail-closed",
+        fn: () => ({ action: "abort" as const, policyId: "test.abort", reason }),
+      };
+    }
+
+    function continuePolicy(): PolicyRegistration {
+      return {
+        name: "test:ingress-continue",
+        timing: "pre_ingress",
+        priority: 0,
+        fn: () => ({ action: "continue" as const, policyId: "test.continue", reason: "ok" }),
+      };
+    }
+
+    it("aborts ingest when pre_ingress policy returns abort", async () => {
+      IngressEngine.registerIngressPolicy(abortPolicy("rate limit exceeded"));
+
+      const error = await catchError(IngressEngine.ingest(makeEvent()));
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("rate limit exceeded");
+    });
+
+    it("proceeds normally when pre_ingress policy returns continue", async () => {
+      testState.responseQueue.push("policy-ok response");
+      IngressEngine.registerIngressPolicy(continuePolicy());
+
+      const result = await IngressEngine.ingest(makeEvent());
+
+      expect(result.mode).toBe("direct");
+      expect(result.result.output).toBe("policy-ok response");
+    });
+
+    it("records pre_ingress decision through observer", async () => {
+      const decisions: PolicyDecision[] = [];
+      IngressEngine.setPolicyDecisionObserver((d) => {
+        decisions.push(d);
+      });
+      IngressEngine.registerIngressPolicy(abortPolicy("blocked"));
+
+      await catchError(IngressEngine.ingest(makeEvent()));
+
+      const ingressDecision = decisions.find((d) => d.timing === "pre_ingress");
+      expect(ingressDecision).toBeDefined();
+      expect(ingressDecision!.name).toBe("test:ingress-abort");
+      expect(ingressDecision!.verdict).toBe("abort");
+      expect(ingressDecision!.reason).toBe("blocked");
+    });
+
+    it("provides surface and actor labels to policy context", async () => {
+      let capturedLabels: unknown;
+      IngressEngine.registerIngressPolicy({
+        name: "test:label-capture",
+        timing: "pre_ingress",
+        priority: 0,
+        fn: (ctx) => {
+          capturedLabels = ctx.labels;
+          return { action: "continue" as const, policyId: "test.labels", reason: "captured" };
+        },
+      });
+      testState.responseQueue.push("ok");
+
+      await IngressEngine.ingest(
+        makeEvent({ surface: "slack", meta: { actor: { role: "user" } } }),
+      );
+
+      expect(capturedLabels).toEqual([
+        { value: "surface.slack", source: "system" },
+        { value: "actor.user", source: "system" },
+      ]);
+    });
+
+    it("skips dispatch when no ingress policies registered", async () => {
+      testState.responseQueue.push("no-policy response");
+
+      const result = await IngressEngine.ingest(makeEvent());
+
+      expect(result.mode).toBe("direct");
+      expect(result.result.output).toBe("no-policy response");
+    });
   });
 });
