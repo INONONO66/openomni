@@ -1,0 +1,224 @@
+import { describe, expect, it } from "bun:test";
+import { Bus } from "@openomni/session";
+import { PolicyEngine } from "../../../src/core/policy";
+import { buildTurn, createStreamRunState } from "../../../src/core/execution/stream-helpers";
+import type { PolicyRegistration } from "../../../src/core/policy/types";
+import type { Tool, TraceContext } from "@openomni/protocol";
+import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+
+function makeTools(...names: string[]): Tool.Spec[] {
+  return names.map((name) => ({
+    name,
+    description: `tool ${name}`,
+    inputSchema: { type: "object", properties: {} },
+  }));
+}
+
+function makeLabeledTool(name: string, labels: string[]): Tool.Spec {
+  return {
+    name,
+    description: `tool ${name}`,
+    inputSchema: { type: "object", properties: {} },
+    labels,
+  };
+}
+
+function makeConfig(tools: Tool.Spec[]): ChatAgentConfig {
+  return {
+    model: { provider: "test", id: "test-model" },
+    tools,
+    systemPrompt: "test system prompt",
+  };
+}
+
+function makeTrace(): TraceContext.Type {
+  return { traceId: "trace-1", sessionId: "sess-1" };
+}
+
+function makeAgentBase() {
+  return { traceId: "trace-1", sessionId: "sess-1" };
+}
+
+function makeState() {
+  const input: ChatAgentInput = {
+    messages: [{ role: "user", content: "hello" }],
+  };
+  return createStreamRunState(input);
+}
+
+function filterPolicy(allowedTools: string[]): PolicyRegistration {
+  return {
+    name: "test-filter",
+    timing: "pre_tool_selection",
+    priority: 0,
+    fn: async () => ({
+      action: "transform" as const,
+      input: { tools: allowedTools },
+      reason: "test-filter",
+      policyId: "test-filter",
+    }),
+  };
+}
+
+function abortSelectionPolicy(reason: string): PolicyRegistration {
+  return {
+    name: "test-abort-selection",
+    timing: "pre_tool_selection",
+    priority: 0,
+    fn: async () => ({
+      action: "abort" as const,
+      reason,
+      policyId: "test-abort-selection",
+    }),
+  };
+}
+
+describe("pre_tool_selection dispatch", () => {
+  it("passes all tools through when no policy is registered", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    const tools = makeTools("bash", "read", "write");
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    const result = await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type !== "ready") return;
+    expect(result.turn.runInput.tools).toHaveLength(3);
+    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "read", "write"]);
+  });
+
+  it("filters tools when transform verdict specifies allowed tools", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register(filterPolicy(["bash", "write"]));
+
+    const tools = makeTools("bash", "read", "write");
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    const result = await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type !== "ready") return;
+    expect(result.turn.runInput.tools).toHaveLength(2);
+    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "write"]);
+  });
+
+  it("returns complete result when abort verdict is returned", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register(abortSelectionPolicy("tools-restricted"));
+
+    const tools = makeTools("bash", "read");
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    const result = await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("complete");
+    if (result.type !== "complete") return;
+    expect(result.event).toMatchObject({
+      type: "complete",
+      result: { guardAborted: true },
+    });
+  });
+
+  it("dispatches with tool catalog labels in context", async () => {
+    Bus.reset();
+    let capturedCtx: Record<string, unknown> | undefined;
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "capture-ctx",
+      timing: "pre_tool_selection",
+      priority: 0,
+      fn: async (ctx) => {
+        capturedCtx = ctx as unknown as Record<string, unknown>;
+        return { action: "continue" as const };
+      },
+    });
+
+    const tools = [
+      makeLabeledTool("bash", ["tool:bash", "capability.execute"]),
+      makeLabeledTool("read", ["tool:read", "capability.read"]),
+    ];
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(capturedCtx).toBeDefined();
+    expect(capturedCtx!.timing).toBe("pre_tool_selection");
+    const labels = capturedCtx!.labels as Array<{ value: string; source: string }>;
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.some((l) => l.value.includes("bash"))).toBe(true);
+    expect(labels.every((l) => l.source === "tool_metadata")).toBe(true);
+  });
+
+  it("keeps all tools when transform verdict has no tools property", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "transform-no-tools",
+      timing: "pre_tool_selection",
+      priority: 0,
+      fn: async () => ({
+        action: "transform" as const,
+        input: { someOtherKey: "value" },
+        reason: "test",
+        policyId: "test",
+      }),
+    });
+
+    const tools = makeTools("bash", "read", "write");
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    const result = await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type !== "ready") return;
+    expect(result.turn.runInput.tools).toHaveLength(3);
+  });
+});

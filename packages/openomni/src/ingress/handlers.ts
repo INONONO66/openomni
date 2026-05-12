@@ -43,6 +43,7 @@ export namespace IngressHandlers {
       credentials: undefined,
       budget: ctx.event.agent.budget,
       workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
+      policyPlan: ctx.event.agent.policyPlan,
       traceId: ctx.traceContext?.traceId,
     };
   }

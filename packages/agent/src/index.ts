@@ -24,7 +24,7 @@ export type {
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./core/runtime-context";
-export { PolicyEngine } from "./core/policy";
+export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
 export type {
   PolicyContext,
   PolicyFn,
@@ -33,6 +33,8 @@ export type {
   PolicyAuditConfig,
   PolicyEngineConfig,
   PolicyEngineInstance,
+  PolicyFactory,
+  PolicyRegistryInstance,
 } from "./core/policy";
 export { AgentRegistry } from "./runtime/index";
 export { SubagentTool } from "./runtime/index";

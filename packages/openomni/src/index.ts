@@ -72,7 +72,13 @@ export {
 } from "./subagent";
 
 // Policy compatibility exports
-export { BackgroundLimitsPolicy } from "./policy";
+export { BackgroundLimitsPolicy, PolicyResolver } from "./policy";
+export type {
+  LabelMatcher,
+  PolicyResolverInstance,
+  PolicyResolverRule,
+  ResolverContext,
+} from "./policy";
 
 // Execution runtime
 export {

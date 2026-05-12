@@ -1,5 +1,5 @@
-import type { PolicyDecision } from "@openomni/agent";
-import { type Ingress, IngressEvent } from "@openomni/protocol";
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { type Ingress, type Policy, IngressEvent } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
@@ -9,8 +9,11 @@ import { IngressSessionResolver } from "./session-resolver";
 
 export type { CoordinatorLike };
 
+const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
 let _coordinator: CoordinatorLike | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
+let _ingressPolicies: PolicyRegistration[] = [];
 
 export namespace IngressEngine {
   export function reset(): void {
@@ -19,6 +22,7 @@ export namespace IngressEngine {
     Bus.reset();
     _coordinator = undefined;
     _middlewareDecisionObserver = undefined;
+    _ingressPolicies = [];
   }
 
   export function setCoordinator(c: CoordinatorLike): void {
@@ -33,6 +37,10 @@ export namespace IngressEngine {
     observer: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
   ): void {
     _middlewareDecisionObserver = observer;
+  }
+
+  export function registerIngressPolicy(reg: PolicyRegistration): void {
+    _ingressPolicies.push(reg);
   }
 
   export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
@@ -58,6 +66,41 @@ export namespace IngressEngine {
       payloadLength,
       time: Date.now(),
     });
+
+    if (_ingressPolicies.length > 0) {
+      const engine = PolicyEngine.create({
+        traceContext: trace,
+        onDecision: _middlewareDecisionObserver,
+      });
+      for (const reg of _ingressPolicies) {
+        engine.register(reg);
+      }
+
+      const labels: Policy.LabelEntry[] = [
+        { value: `surface.${inboundEvent.surface}`, source: "system" },
+      ];
+      const actor = inboundEvent.meta?.actor;
+      if (actor && typeof actor === "object" && !Array.isArray(actor)) {
+        const role = String((actor as Record<string, unknown>).role ?? "");
+        if (role) labels.push({ value: `actor.${role}`, source: "system" });
+      }
+
+      const verdict = await engine.dispatch("pre_ingress", {
+        steps: [],
+        usage: emptyUsage,
+        turnCount: 0,
+        isCompletion: false,
+        continuationCount: 0,
+        elapsedMs: 0,
+        labels,
+        toolInput: { surface: inboundEvent.surface, mode: inboundEvent.mode },
+        traceContext: trace,
+      });
+
+      if (verdict.action !== "continue") {
+        throw new Error(verdict.reason ?? "pre_ingress policy aborted");
+      }
+    }
 
     const agentModel = inboundEvent.agent.model;
     const { session } = IngressSessionResolver.resolve(

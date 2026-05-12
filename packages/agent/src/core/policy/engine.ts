@@ -4,6 +4,7 @@ import {
   PolicyEvent,
   type Hook,
   type Middleware,
+  type Policy,
   type TraceContext,
 } from "@openomni/protocol";
 import type { PolicyContext, PolicyRegistration } from "./types";
@@ -13,7 +14,7 @@ const CONTINUE: Hook.Verdict = { action: "continue" };
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
 
 export interface PolicyDecision {
-  readonly timing: Hook.Timing;
+  readonly timing: Policy.Timing;
   readonly name: string;
   readonly policyId: string;
   readonly verdict: Hook.Verdict["action"];
@@ -38,7 +39,7 @@ export interface PolicyEngineConfig {
   readonly audit?: PolicyAuditConfig | false;
 }
 
-function matchesTiming(reg: PolicyRegistration, timing: Hook.Timing): boolean {
+function matchesTiming(reg: PolicyRegistration, timing: Policy.Timing): boolean {
   return Array.isArray(reg.timing) ? reg.timing.includes(timing) : reg.timing === timing;
 }
 
@@ -51,7 +52,7 @@ function matchesScope(reg: PolicyRegistration, agentType: string | undefined): b
 
 function selectRegistrations(
   registrations: PolicyRegistration[],
-  timing: Hook.Timing,
+  timing: Policy.Timing,
   agentType: string | undefined,
 ): PolicyRegistration[] {
   return registrations
@@ -61,7 +62,7 @@ function selectRegistrations(
 
 export interface PolicyEngineInstance {
   register(reg: PolicyRegistration): void;
-  dispatch(timing: Hook.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Hook.Verdict>;
+  dispatch(timing: Policy.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Hook.Verdict>;
   dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Middleware.SystemPromptVerdict>;
 }
 
@@ -69,13 +70,13 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-function warnKey(timing: Hook.Timing, name: string): string {
+function warnKey(timing: Policy.Timing, name: string): string {
   return `${timing}:${name}`;
 }
 
 function normalizeVerdict(
   verdict: Hook.Verdict,
-  timing: Hook.Timing,
+  timing: Policy.Timing,
   name: string,
   warnedMissingMetadata: Set<string>,
 ): Hook.Verdict {
@@ -112,7 +113,7 @@ function buildActor(traceContext: TraceContext.Type | undefined): Record<string,
   };
 }
 
-function resolveAction(timing: Hook.Timing): string {
+function resolveAction(timing: Policy.Timing): string {
   if (timing === "pre_tool_use" || timing === "post_tool_use") return "tool.call";
   return `middleware.${timing}`;
 }
@@ -181,7 +182,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   }
 
   async function dispatch(
-    timing: Hook.Timing,
+    timing: Policy.Timing,
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Hook.Verdict> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);

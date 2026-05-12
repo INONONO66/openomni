@@ -5,6 +5,24 @@ export namespace Policy {
   const MAX_INPUT_LENGTH = 10_000;
   const POLICY_ID = "guardrail.permission";
 
+  // Label source enumeration: where a label originates from
+  // Labels use source.category naming convention to prevent namespace collisions
+  // Examples: tool.filesystem, actor.owner, surface.github, risk.tier-2, capability.write
+  export const Label = {
+    Source: z.enum(["system", "tool_metadata", "agent_profile", "policy_rule", "operator"]),
+  } as const;
+
+  export type Label = {
+    Source: z.infer<typeof Label.Source>;
+  };
+
+  // Label entry: a labeled value with its source for audit and policy evaluation
+  export const LabelEntry = z.object({
+    value: z.string(),
+    source: Label.Source,
+  });
+  export type LabelEntry = z.infer<typeof LabelEntry>;
+
   export const PermissionDecision = z.enum(["allow", "deny", "require_approval"]);
   export type PermissionDecision = z.infer<typeof PermissionDecision>;
 
@@ -225,17 +243,8 @@ export namespace Policy {
     POST_RUN: "post_run",
     ON_ERROR: "on_error",
     PRE_INGRESS: "pre_ingress",
-    POST_INGRESS: "post_ingress",
-    PRE_DISPATCH: "pre_dispatch",
-    POST_DISPATCH: "post_dispatch",
     PRE_TOOL_SELECTION: "pre_tool_selection",
-    POST_TOOL_SELECTION: "post_tool_selection",
     PRE_DELEGATION: "pre_delegation",
-    POST_DELEGATION: "post_delegation",
-    PRE_MEMORY_ACCESS: "pre_memory_access",
-    POST_MEMORY_ACCESS: "post_memory_access",
-    PRE_ARTIFACT_WRITE: "pre_artifact_write",
-    POST_ARTIFACT_WRITE: "post_artifact_write",
   } as const;
 
   export type Timing = (typeof Timing)[keyof typeof Timing];
@@ -269,4 +278,89 @@ export namespace Policy {
     durationMs: z.number().optional(),
   });
   export type Decision = z.infer<typeof Decision>;
+
+  export const PolicyEffect = z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("prompt.append_context"),
+      context: z.string(),
+    }),
+    z.object({
+      type: z.literal("prompt.inject_message"),
+      message: z.string(),
+      role: z.enum(["user", "assistant"]).optional(),
+    }),
+    z.object({
+      type: z.literal("tool.filter"),
+      toolPattern: z.string(),
+    }),
+    z.object({
+      type: z.literal("tool.rewrite_input"),
+      input: z.record(z.string(), z.unknown()),
+    }),
+    z.object({
+      type: z.literal("tool.require_approval"),
+      reason: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("run.abort"),
+      reason: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("run.continue_with_prompt"),
+      prompt: z.string(),
+    }),
+    z.object({
+      type: z.literal("run.retry_after"),
+      delayMs: z.number().int().min(0),
+      maxRetries: z.number().int().min(1).optional(),
+    }),
+    z.object({
+      type: z.literal("delegation.set_constraints"),
+      constraints: z.record(z.string(), z.unknown()),
+    }),
+    z.object({
+      type: z.literal("delegation.require_approval"),
+      reason: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("audit.annotate"),
+      annotation: z.string(),
+      severity: z.enum(["info", "warning", "error"]).optional(),
+    }),
+  ]);
+  export type PolicyEffect = z.infer<typeof PolicyEffect>;
+
+  export const PolicyPoint = z.object({
+    point: z.enum(Object.values(Timing) as [string, ...string[]]),
+    allowedEffects: z.array(
+      z.enum([
+        "prompt.append_context",
+        "prompt.inject_message",
+        "tool.filter",
+        "tool.rewrite_input",
+        "tool.require_approval",
+        "run.abort",
+        "run.continue_with_prompt",
+        "run.retry_after",
+        "delegation.set_constraints",
+        "delegation.require_approval",
+        "audit.annotate",
+      ] as const),
+    ),
+    defaultFailPolicy: FailPolicy,
+  });
+  export type PolicyPoint = z.infer<typeof PolicyPoint>;
+
+  export const PolicyPlan = z.object({
+    policies: z.array(
+      z.object({
+        id: z.string().min(1),
+        required: z.boolean(),
+        config: z.record(z.string(), z.unknown()).optional(),
+      }),
+    ),
+    labels: z.array(z.string()),
+    registryVersion: z.string().optional(),
+  });
+  export type PolicyPlan = z.infer<typeof PolicyPlan>;
 }

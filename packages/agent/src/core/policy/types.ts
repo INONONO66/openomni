@@ -1,9 +1,16 @@
-import type { Hook, Middleware, Message, Messenger, TraceContext } from "@openomni/protocol";
+import type {
+  Hook,
+  Middleware,
+  Message,
+  Messenger,
+  TraceContext,
+  Policy,
+} from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
 import type { BudgetState } from "../budget";
 
 export interface PolicyContext {
-  timing: Hook.Timing;
+  timing: Policy.Timing;
   steps: AgentStep[];
   usage: TokenUsage;
   turnCount: number;
@@ -22,16 +29,34 @@ export interface PolicyContext {
   budget?: AgentBudget;
   traceContext?: TraceContext.Type;
   envelope?: Messenger.MessageEnvelope;
+  labels?: Policy.LabelEntry[];
 }
 
 export type PolicyFn = (ctx: PolicyContext) => Promise<Hook.Verdict> | Hook.Verdict;
 
 export interface PolicyRegistration {
   name: string;
-  timing: Hook.Timing | Hook.Timing[];
+  timing: Policy.Timing | Policy.Timing[];
   priority: number;
   scope?: Middleware.Scope;
   failPolicy?: Middleware.FailPolicy;
   fn: PolicyFn;
   propagate?: boolean;
+}
+
+export type PolicyRuntimeContext = Record<string, unknown>;
+
+export interface PolicyFactory {
+  readonly id: string;
+  create(config: unknown, runtime: PolicyRuntimeContext): PolicyRegistration;
+}
+
+export interface PolicyRegistry {
+  register(
+    id: string,
+    factory: (config: unknown, runtime: Record<string, unknown>) => PolicyRegistration,
+  ): void;
+  resolve(plan: unknown, runtime: Record<string, unknown>): PolicyRegistration[];
+  has(id: string): boolean;
+  list(): string[];
 }

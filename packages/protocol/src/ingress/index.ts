@@ -16,6 +16,7 @@ export namespace Ingress {
     tools: z.array(Tool.Spec).optional(),
     budget: z.object({ maxTurns: z.number().optional() }).optional(),
     permissions: Policy.Permission.optional(),
+    policyPlan: Policy.PolicyPlan.optional(),
     toolConfig: AgentToolConfigSchema.optional(),
   });
   // toolExecutor is a runtime callback — can't be expressed in Zod

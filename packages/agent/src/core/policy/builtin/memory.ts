@@ -1,5 +1,5 @@
 import type { Memory } from "../../memory";
-import type { PolicyRegistration } from "../types";
+import type { PolicyFactory, PolicyRegistration } from "../types";
 import type { Message } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -50,3 +50,8 @@ export function createMemoryPolicy(memory: Memory): PolicyRegistration {
     },
   };
 }
+
+export const memoryFactory: PolicyFactory = {
+  id: "policy:memory",
+  create: (_config, runtime) => createMemoryPolicy(runtime.memory as Memory),
+};
