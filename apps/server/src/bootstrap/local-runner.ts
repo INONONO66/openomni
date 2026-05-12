@@ -63,7 +63,6 @@ async function run(config: Config, request: Execution.Request): Promise<Executio
       createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
       ...buildWorkerMiddleware({
         permissions: request.permissions,
-        budget: request.budget,
       }),
     ],
   });

@@ -1,5 +1,5 @@
 import type { AgentBudget, ChatAgentConfig } from "@openomni/agent";
-import type { Guardrail, ToolSelection } from "@openomni/protocol";
+import type { Policy, ToolSelection } from "@openomni/protocol";
 
 export interface AgentDefinition {
   name: string;
@@ -10,7 +10,7 @@ export interface AgentDefinition {
   systemPrompt: string;
   tools: ToolSelection.Selection;
   budget?: AgentBudget;
-  permissions?: Guardrail.Permission;
+  permissions?: Policy.Permission;
 }
 
 export type AgentFactory = () => AgentDefinition;

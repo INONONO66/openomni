@@ -1,4 +1,4 @@
-import type { MiddlewareRegistration } from "@openomni/agent";
+import type { PolicyRegistration } from "@openomni/agent";
 import { ContextAssembler } from "./assembler";
 
 export interface ContextMiddlewareConfig {
@@ -6,7 +6,7 @@ export interface ContextMiddlewareConfig {
   globalConfigDir?: string;
 }
 
-export function createContextMiddleware(config: ContextMiddlewareConfig): MiddlewareRegistration {
+export function createContextMiddleware(config: ContextMiddlewareConfig): PolicyRegistration {
   return {
     name: "server:context",
     timing: "on_system_prompt",
