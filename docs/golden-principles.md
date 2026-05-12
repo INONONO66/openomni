@@ -120,6 +120,14 @@ This allows `Todo` to work as both a namespace (`Todo.Schema`, `Todo.Item`) and 
 - `coordinator` owns multiprocess execution: worker pools, IPC, recovery, credential injection, and non-interactive permission policy.
 - `apps/server` wires runtime packages to external surfaces. Host-specific payload types may live there, but reusable contracts must move down to `protocol`.
 
+## 12. Policy Engine
+
+- All agent behavior extensions go through `PolicyEngine`. Do not add ad-hoc hook callbacks or one-off interceptors outside the policy registration system.
+- Register policies via `PolicyRegistration { name, timing, priority, fn }`. Lower `priority` runs first within a timing.
+- `Policy.evaluate()` is the single call site for permission checks. Do not duplicate permission logic inside individual tools or callers.
+- `Policy.Permission` (from `@openomni/protocol`) is the cross-package contract for tool access rules. Upper packages must not define parallel permission schemas.
+- Built-in policies (`tool-permission`, `budget-*`, `memory`, `compaction`, `post-tool`, `post-turn`, `idle-nudge`) are registered automatically by `PolicyEngine.create()`. Custom policies append to this list via `policies: [...]` in `ChatAgentConfig`.
+
 ## 10. Documentation Freshness
 
 - Structure, command, runtime-mode, package-boundary, or public-contract changes must update docs in the same change.
