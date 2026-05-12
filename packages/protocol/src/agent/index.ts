@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Guardrail } from "../guardrail/index.js";
+import { Policy } from "../policy/index.js";
 
 export namespace AgentProfile {
   const budgetLimit = z
@@ -38,7 +38,7 @@ export namespace AgentProfile {
         id: z.string(),
       })
       .optional(),
-    permissions: Guardrail.Permission.optional(),
+    permissions: Policy.Permission.optional(),
     variant: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
     budget: AgentBudget.optional(),

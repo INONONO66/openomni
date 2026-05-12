@@ -4,7 +4,7 @@ import { Tool } from "../tool/index.js";
 import { Skill } from "../skill/index.js";
 import { McpConfig } from "../mcp/index.js";
 import { Middleware } from "../hook/index.js";
-import { Guardrail } from "../guardrail/index.js";
+import { Policy } from "../policy/index.js";
 import { BusEvent } from "../bus/index.js";
 
 export namespace Extension {
@@ -45,7 +45,7 @@ export namespace Extension {
     author: z.string().optional(),
     homepage: z.string().optional(),
     contributes: Contributes.optional(),
-    permissions: z.array(Guardrail.Permission).optional(),
+    permissions: z.array(Policy.Permission).optional(),
     provenance: z
       .object({
         manifestHash: z.string(),

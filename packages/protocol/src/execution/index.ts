@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Tool } from "../tool/index.js";
-import { Guardrail } from "../guardrail/index.js";
+import { Policy } from "../policy/index.js";
 import { AgentProfile } from "../agent/index.js";
 
 const requestSchema = z.object({
@@ -22,7 +22,7 @@ const requestSchema = z.object({
       workspaceRoot: z.string().optional(),
     })
     .optional(),
-  permissions: Guardrail.Permission.optional(),
+  permissions: Policy.Permission.optional(),
   credentials: z.record(z.string()).optional(),
   budget: AgentProfile.AgentBudget.optional(),
   skills: z.array(z.string()).optional(),
