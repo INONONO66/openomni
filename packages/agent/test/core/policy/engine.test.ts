@@ -407,4 +407,61 @@ describe("PolicyEngine", () => {
       Bus.reset();
     }
   });
+
+  it("deny-wins: any deny policy aborts regardless of other effects", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "allow-and-label",
+      timing: "pre_turn",
+      priority: 0,
+      fn: () => ({ action: "continue", reason: "allowed" }),
+    });
+    engine.register({
+      name: "deny-policy",
+      timing: "pre_turn",
+      priority: 10,
+      fn: () => ({ action: "deny", reason: "forbidden" }),
+    });
+    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    expect(verdict.action).toBe("deny");
+    expect(verdict.reason).toBe("forbidden");
+  });
+
+  it("scope filtering: only matching agentType policies execute", async () => {
+    const engine = PolicyEngine.create();
+    const executed: string[] = [];
+
+    engine.register({
+      name: "coder-policy",
+      timing: "pre_turn",
+      priority: 0,
+      scope: { agentType: ["coder"] },
+      fn: () => {
+        executed.push("coder");
+        return { action: "continue" };
+      },
+    });
+    engine.register({
+      name: "reviewer-policy",
+      timing: "pre_turn",
+      priority: 0,
+      scope: { agentType: ["reviewer"] },
+      fn: () => {
+        executed.push("reviewer");
+        return { action: "continue" };
+      },
+    });
+    engine.register({
+      name: "unscoped-policy",
+      timing: "pre_turn",
+      priority: 0,
+      fn: () => {
+        executed.push("unscoped");
+        return { action: "continue" };
+      },
+    });
+
+    await engine.dispatch("pre_turn", { ...baseCtx(), agentType: "coder" });
+    expect(executed).toEqual(["coder", "unscoped"]);
+  });
 });
