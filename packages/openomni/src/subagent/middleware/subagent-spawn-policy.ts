@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
+import { Policy, type Hook, type TraceContext } from "@openomni/protocol";
 import { Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -189,35 +189,35 @@ export namespace SubagentSpawnPolicyMiddleware {
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const SessionExistence = {
     name: "subagent:session-existence",
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const ActiveRun = {
     name: "subagent:active-run",
     timing: "pre_tool_use",
     priority: 10,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const CancelTimeout = {
     name: "subagent:cancel-timeout",
     timing: "pre_tool_use",
     priority: 20,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const WaitTimeout = {
     name: "subagent:wait-timeout",
     timing: "pre_tool_use",
     priority: 30,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export interface PreSpawnContext {
     readonly operation: PreSpawnOperation;

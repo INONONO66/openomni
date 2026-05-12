@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, Ingress, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
+import { Policy, Ingress, type Hook, type TraceContext } from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 
@@ -158,28 +158,28 @@ export namespace IngressAuthorityMiddleware {
     timing: "pre_run",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const SchemaValidation = {
     name: "ingress:schema-validation",
     timing: "pre_run",
     priority: 10,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const AuthorityCheck = {
     name: "ingress:authority",
     timing: "pre_run",
     priority: 20,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const ModeDispatch = {
     name: "ingress:mode-dispatch",
     timing: "pre_run",
     priority: 30,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export interface PreRunContext {
     readonly event: Ingress.InboundEvent;
