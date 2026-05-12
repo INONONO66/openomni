@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { PolicyContext, PolicyRegistration } from "../types";
+import type { PolicyContext, PolicyFactory, PolicyRegistration } from "../types";
 
 export type PostToolEnricher = (ctx: PolicyContext) => string | null | Promise<string | null>;
 
@@ -34,3 +34,8 @@ export function createPostToolPolicy(enricher: PostToolEnricher): PolicyRegistra
     },
   };
 }
+
+export const postToolFactory: PolicyFactory = {
+  id: "policy:post-tool",
+  create: (config) => createPostToolPolicy(config as PostToolEnricher),
+};

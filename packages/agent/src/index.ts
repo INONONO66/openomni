@@ -24,7 +24,7 @@ export type {
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./core/runtime-context";
-export { PolicyEngine } from "./core/policy";
+export { PolicyEngine, defaultRegistry } from "./core/policy";
 export type {
   PolicyContext,
   PolicyFn,

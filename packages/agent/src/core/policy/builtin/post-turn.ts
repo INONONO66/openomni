@@ -1,6 +1,6 @@
 import { Operational, type Hook } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { PolicyContext, PolicyRegistration } from "../types";
+import type { PolicyContext, PolicyFactory, PolicyRegistration } from "../types";
 
 export type PostTurnHandler = (ctx: PolicyContext) => Promise<Hook.Verdict> | Hook.Verdict;
 
@@ -25,3 +25,8 @@ export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistrati
     },
   };
 }
+
+export const postTurnFactory: PolicyFactory = {
+  id: "policy:post-turn",
+  create: (config) => createPostTurnPolicy(config as PostTurnHandler),
+};

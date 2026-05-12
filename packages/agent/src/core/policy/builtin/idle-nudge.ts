@@ -1,4 +1,4 @@
-import type { PolicyRegistration } from "../types";
+import type { PolicyFactory, PolicyRegistration } from "../types";
 
 export interface IdleNudgeConfig {
   idleThresholdMs?: number;
@@ -52,3 +52,8 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): PolicyRegis
     },
   };
 }
+
+export const idleNudgeFactory: PolicyFactory = {
+  id: "policy:idle-nudge",
+  create: (config) => createIdleNudgePolicy(config as IdleNudgeConfig),
+};
