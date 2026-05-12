@@ -6,7 +6,7 @@ import type {
   ChatAgentConfig,
   ChatAgentInput,
 } from "../../../src/core/types";
-import type { MiddlewareContext } from "../../../src/core/middleware";
+import type { PolicyContext } from "../../../src/core/policy";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -69,7 +69,7 @@ beforeEach(() => {
 
 describe("pre_run middleware dispatch", () => {
   it("fires before the first LLM turn", async () => {
-    const preRunFn = mock((_ctx: MiddlewareContext) => {
+    const preRunFn = mock((_ctx: PolicyContext) => {
       callOrder.push("pre_run");
       return { action: "continue" as const };
     });
@@ -140,7 +140,7 @@ describe("pre_run middleware dispatch", () => {
 
 describe("post_run middleware dispatch", () => {
   it("fires after normal completion with result context", async () => {
-    const postRunFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,
@@ -148,14 +148,14 @@ describe("post_run middleware dispatch", () => {
     });
 
     expect(postRunFn).toHaveBeenCalledTimes(1);
-    const ctx = postRunFn.mock.calls[0][0] as MiddlewareContext;
+    const ctx = postRunFn.mock.calls[0][0] as PolicyContext;
     expect(ctx.timing).toBe("post_run");
     expect(ctx.isCompletion).toBe(true);
     expect(Array.isArray(ctx.steps)).toBe(true);
   });
 
   it("fires after budget exceeded (max-steps completion)", async () => {
-    const postRunFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     const events = await collectEvents({
       ...defaultConfig,
@@ -171,7 +171,7 @@ describe("post_run middleware dispatch", () => {
   });
 
   it("does NOT fire after pre_turn abort", async () => {
-    const postRunFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,
@@ -190,7 +190,7 @@ describe("post_run middleware dispatch", () => {
   });
 
   it("does NOT fire after post_turn abort", async () => {
-    const postRunFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,

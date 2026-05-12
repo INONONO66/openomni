@@ -1,5 +1,5 @@
 import type { Memory } from "../../memory";
-import type { MiddlewareRegistration } from "../types";
+import type { PolicyRegistration } from "../types";
 import type { Message } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -18,7 +18,7 @@ function getLastUserText(messages: Message.WithParts[] | undefined): string | nu
   return null;
 }
 
-export function createMemoryMiddleware(memory: Memory): MiddlewareRegistration {
+export function createMemoryPolicy(memory: Memory): PolicyRegistration {
   return {
     name: "builtin:memory",
     timing: "on_system_prompt",

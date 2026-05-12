@@ -1,24 +1,21 @@
-import { Operational, type Guardrail } from "@openomni/protocol";
-import type { AgentEventEmitter, AgentStep, StepGuardContext, StepGuardVerdict } from "../../types";
-import type { PolicyRegistration } from "../types";
+import { Operational, Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { ToolGuard } from "../../tool-guard";
+import type { AgentEventEmitter } from "../../types";
+import type { PolicyRegistration } from "../types";
 import { summarizeInput } from "../../execution/shared";
 
-export interface ToolGuardMiddlewareConfig {
-  permission: Guardrail.Permission;
-  stepGuard?: (
-    step: AgentStep,
-    context: StepGuardContext,
-  ) => Promise<StepGuardVerdict> | StepGuardVerdict;
+const TOOL_CALL_ACTION = "tool.call";
+
+export interface ToolPermissionPolicyConfig {
+  permission: Policy.Permission;
   eventEmitter?: AgentEventEmitter;
   source?: string;
   onToolBlocked?: (toolCallId: string, toolName: string, reason: string) => void;
 }
 
-export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): PolicyRegistration {
+export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): PolicyRegistration {
   return {
-    name: "builtin:tool-guard",
+    name: "builtin:tool-permission",
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
@@ -27,20 +24,29 @@ export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): Po
       const toolInput = ctx.toolInput;
       if (!toolName) return { action: "continue" };
 
-      let verdict: Guardrail.EvaluationResult;
+      const normalizedPermission: Policy.Permission = config.permission.action
+        ? config.permission
+        : { ...config.permission, action: TOOL_CALL_ACTION };
+
+      let verdict: Policy.EvaluationResult;
       try {
-        verdict = ToolGuard.evaluate(toolName, toolInput ?? {}, config.permission);
+        verdict = Policy.evaluate(normalizedPermission, {
+          action: TOOL_CALL_ACTION,
+          resource: toolName,
+          resourceLabels: ctx.toolLabels,
+          input: toolInput ?? {},
+        });
       } catch (error) {
         Bus.publish(Operational.Debug, {
-          traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+          traceId: crypto.randomUUID(),
           time: Date.now(),
-          component: "agent.policy.tool-guard",
-          msg: "tool guard evaluation failed",
+          component: "agent.policy.tool-permission",
+          msg: "tool permission evaluation failed",
           context: { toolName, error: String(error) },
         });
         return {
           action: "abort",
-          reason: "tool_guard_evaluation_failed",
+          reason: "tool_permission_evaluation_failed",
           policyId: "guardrail.permission",
         };
       }
@@ -54,56 +60,6 @@ export function createToolGuardMiddleware(config: ToolGuardMiddlewareConfig): Po
           inputSummary: summarizeInput(toolInput ?? {}),
         });
         return verdict;
-      }
-
-      if (verdict.decision !== "require_approval") {
-        config.eventEmitter?.emit("tool.execution.permission_denied", {
-          sessionId: config.source,
-          time: Date.now(),
-          toolCallId: ctx.toolCallId,
-          toolName,
-          reason: verdict.reason,
-        });
-        config.onToolBlocked?.(ctx.toolCallId ?? "", toolName, verdict.reason);
-        return verdict;
-      }
-
-      if (config.stepGuard) {
-        const input = toolInput ?? {};
-        const syntheticStep = {
-          type: "tool-call" as const,
-          content: `Tool "${toolName}" requires approval`,
-          toolCalls: [{ id: ctx.toolCallId ?? "", tool: toolName, input }],
-        };
-        const guardContext: StepGuardContext = {
-          steps: ctx.steps ?? [],
-          usage: ctx.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          turnCount: ctx.turnCount ?? 0,
-          isCompletion: false,
-          continuationCount: 0,
-          elapsedMs: ctx.elapsedMs ?? 0,
-        };
-        try {
-          const guardVerdict = await config.stepGuard(syntheticStep, guardContext);
-          if (guardVerdict.action === "continue") {
-            config.eventEmitter?.emit("tool.execution.started", {
-              sessionId: config.source,
-              time: Date.now(),
-              toolCallId: ctx.toolCallId,
-              toolName,
-              inputSummary: summarizeInput(input),
-            });
-            return { action: "continue", reason: verdict.reason, policyId: verdict.policyId };
-          }
-        } catch (error) {
-          Bus.publish(Operational.Debug, {
-            traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
-            time: Date.now(),
-            component: "agent.policy.tool-guard",
-            msg: "tool guard evaluation failed",
-            context: { toolName, error: String(error) },
-          });
-        }
       }
 
       config.eventEmitter?.emit("tool.execution.permission_denied", {

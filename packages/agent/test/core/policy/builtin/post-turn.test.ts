@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { createPostTurnMiddleware } from "../../../../src/core/middleware/builtin/post-turn";
-import type { MiddlewareContext } from "../../../../src/core/middleware";
+import { createPostTurnPolicy } from "../../../../src/core/policy/builtin/post-turn";
+import type { PolicyContext } from "../../../../src/core/policy";
 
-function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
+function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "post_turn",
     steps: [],
@@ -15,7 +15,7 @@ function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
   };
 }
 
-describe("createPostTurnMiddleware", () => {
+describe("createPostTurnPolicy", () => {
   it("handler returning inject → middleware returns inject verdict", async () => {
     const handler = () => ({
       action: "inject" as const,
@@ -23,7 +23,7 @@ describe("createPostTurnMiddleware", () => {
       reason: "injected-message",
       policyId: "test.post-turn",
     });
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
@@ -36,7 +36,7 @@ describe("createPostTurnMiddleware", () => {
 
   it("handler returning abort → middleware returns abort verdict", async () => {
     const handler = () => ({ action: "abort" as const, reason: "custom abort reason" });
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
@@ -49,7 +49,7 @@ describe("createPostTurnMiddleware", () => {
 
   it("handler returning continue → middleware returns continue verdict", async () => {
     const handler = () => ({ action: "continue" as const });
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
@@ -61,7 +61,7 @@ describe("createPostTurnMiddleware", () => {
     const handler = () => {
       throw new Error("handler failed");
     };
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
@@ -70,27 +70,27 @@ describe("createPostTurnMiddleware", () => {
   });
 
   it("has priority 250", () => {
-    const middleware = createPostTurnMiddleware(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
     expect(middleware.priority).toBe(250);
   });
 
   it("has timing post_turn", () => {
-    const middleware = createPostTurnMiddleware(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
     expect(middleware.timing).toBe("post_turn");
   });
 
   it("has name builtin:post-turn", () => {
-    const middleware = createPostTurnMiddleware(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
     expect(middleware.name).toBe("builtin:post-turn");
   });
 
   it("handler receives correct context", async () => {
-    let receivedCtx: MiddlewareContext | undefined;
-    const handler = (ctx: MiddlewareContext) => {
+    let receivedCtx: PolicyContext | undefined;
+    const handler = (ctx: PolicyContext) => {
       receivedCtx = ctx;
       return { action: "continue" as const };
     };
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({
       turnCount: 5,
       isCompletion: true,
@@ -111,7 +111,7 @@ describe("createPostTurnMiddleware", () => {
       await Promise.resolve();
       return { action: "continue" as const };
     };
-    const middleware = createPostTurnMiddleware(handler);
+    const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);

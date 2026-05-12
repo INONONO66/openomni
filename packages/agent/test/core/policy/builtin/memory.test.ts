@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { createMemoryMiddleware } from "../../../../src/core/middleware/builtin/memory";
+import { createMemoryPolicy } from "../../../../src/core/policy/builtin/memory";
 import type { Memory, MemoryResult } from "../../../../src/core/memory";
-import type { MiddlewareContext } from "../../../../src/core/middleware/types";
+import type { PolicyContext } from "../../../../src/core/policy/types";
 import { createUserMessage } from "../../../../src/core/message-factory";
 
-describe("createMemoryMiddleware", () => {
+describe("createMemoryPolicy", () => {
   let mockMemory: Memory;
-  let ctx: MiddlewareContext;
+  let ctx: PolicyContext;
 
   beforeEach(() => {
     mockMemory = {
@@ -34,7 +34,7 @@ describe("createMemoryMiddleware", () => {
 
     mockMemory.retrieve = async () => results;
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     const userMsg = createUserMessage("what do I know?", "test");
     ctx.messages = [userMsg];
 
@@ -49,7 +49,7 @@ describe("createMemoryMiddleware", () => {
   it("should continue when no memory results found", async () => {
     mockMemory.retrieve = async () => [];
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     const userMsg = createUserMessage("what do I know?", "test");
     ctx.messages = [userMsg];
 
@@ -61,7 +61,7 @@ describe("createMemoryMiddleware", () => {
   it("should continue when no user message in context", async () => {
     mockMemory.retrieve = async () => [{ key: "k1", content: "memory", score: 0.9 }];
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     ctx.messages = [];
 
     const verdict = await middleware.fn(ctx);
@@ -72,7 +72,7 @@ describe("createMemoryMiddleware", () => {
   it("should continue when messages is undefined", async () => {
     mockMemory.retrieve = async () => [{ key: "k1", content: "memory", score: 0.9 }];
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     ctx.messages = undefined;
 
     const verdict = await middleware.fn(ctx);
@@ -85,7 +85,7 @@ describe("createMemoryMiddleware", () => {
       throw new Error("Memory service error");
     };
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     const userMsg = createUserMessage("what do I know?", "test");
     ctx.messages = [userMsg];
 
@@ -95,7 +95,7 @@ describe("createMemoryMiddleware", () => {
   });
 
   it("should have correct middleware registration properties", () => {
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
 
     expect(middleware.name).toBe("builtin:memory");
     expect(middleware.timing).toBe("on_system_prompt");
@@ -112,7 +112,7 @@ describe("createMemoryMiddleware", () => {
       return results;
     };
 
-    const middleware = createMemoryMiddleware(mockMemory);
+    const middleware = createMemoryPolicy(mockMemory);
     const assistantMsg = createUserMessage("first message", "test");
     assistantMsg.info.role = "assistant";
     const userMsg = createUserMessage("latest question", "test");

@@ -1,10 +1,10 @@
-import type { PolicyContext, PolicyRegistration, PolicyVerdict } from "../types";
-import { Operational } from "@openomni/protocol";
+import { Operational, type Hook } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import type { PolicyContext, PolicyRegistration } from "../types";
 
-export type PostTurnHandler = (ctx: PolicyContext) => Promise<PolicyVerdict> | PolicyVerdict;
+export type PostTurnHandler = (ctx: PolicyContext) => Promise<Hook.Verdict> | Hook.Verdict;
 
-export function createPostTurnMiddleware(handler: PostTurnHandler): PolicyRegistration {
+export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistration {
   return {
     name: "builtin:post-turn",
     timing: "post_turn",
@@ -14,7 +14,7 @@ export function createPostTurnMiddleware(handler: PostTurnHandler): PolicyRegist
         return await handler(ctx);
       } catch (error) {
         Bus.publish(Operational.Debug, {
-          traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+          traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "agent.policy.post-turn",
           msg: "post-turn handler failed",
