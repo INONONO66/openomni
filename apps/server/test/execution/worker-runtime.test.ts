@@ -39,7 +39,7 @@ describe("worker-runtime", () => {
     expect(selected.map((tool) => tool.spec.name)).toEqual(["bash", "grep.search"]);
   });
 
-  it("rebuilds a tool executor that enforces request permissions", async () => {
+  it("rebuilds a tool executor and leaves request permissions to agent policy", async () => {
     const availableTools = new SystemToolProvider("/workspace/openomni").listTools();
     const context = createExecutionToolContext(
       {
@@ -60,7 +60,6 @@ describe("worker-runtime", () => {
       input: { command: "pwd" },
     });
 
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("denied by policy");
+    expect(result.output).not.toContain("denied by policy");
   });
 });

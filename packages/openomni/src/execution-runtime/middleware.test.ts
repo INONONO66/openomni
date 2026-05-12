@@ -2,31 +2,22 @@ import { describe, expect, it } from "bun:test";
 import { buildWorkerMiddleware } from "./middleware";
 
 describe("buildWorkerMiddleware", () => {
-  it("returns array of 4 registrations", () => {
+  it("returns worker-owned registrations", () => {
     const registrations = buildWorkerMiddleware({});
-    expect(registrations).toHaveLength(4);
+    expect(registrations.map((r) => r.name)).toEqual([
+      "builtin:tool-permission",
+      "builtin:idle-nudge",
+    ]);
   });
 
-  it("first registration is tool-guard with fail-closed policy", () => {
+  it("first registration is tool permission with fail-closed policy", () => {
     const registrations = buildWorkerMiddleware({});
-    const toolGuard = registrations[0];
-    if (toolGuard == null) {
-      throw new Error("expected tool-guard registration");
+    const toolPermission = registrations[0];
+    if (toolPermission == null) {
+      throw new Error("expected tool permission registration");
     }
-    expect(toolGuard.name).toBe("builtin:tool-guard");
-    expect(toolGuard.failPolicy).toBe("fail-closed");
-  });
-
-  it("includes budget-reassurance middleware", () => {
-    const registrations = buildWorkerMiddleware({});
-    const budgetReassurance = registrations.find((r) => r.name === "builtin:budget-reassurance");
-    expect(budgetReassurance).toBeDefined();
-  });
-
-  it("includes budget-warning middleware", () => {
-    const registrations = buildWorkerMiddleware({});
-    const budgetWarning = registrations.find((r) => r.name === "builtin:budget-warning");
-    expect(budgetWarning).toBeDefined();
+    expect(toolPermission.name).toBe("builtin:tool-permission");
+    expect(toolPermission.failPolicy).toBe("fail-closed");
   });
 
   it("includes idle-nudge middleware", () => {
@@ -35,9 +26,9 @@ describe("buildWorkerMiddleware", () => {
     expect(idleNudge).toBeDefined();
   });
 
-  it("passes permissions to tool-guard", () => {
+  it("passes permissions to tool permission middleware", () => {
     const permissions = { action: "tool.call", allowlist: ["tool:read"] };
     const registrations = buildWorkerMiddleware({ permissions });
-    expect(registrations[0]?.name).toBe("builtin:tool-guard");
+    expect(registrations[0]?.name).toBe("builtin:tool-permission");
   });
 });

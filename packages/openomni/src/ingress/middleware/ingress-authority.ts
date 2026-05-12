@@ -1,15 +1,5 @@
-import {
-  MiddlewareEngine,
-  type MiddlewareDecision,
-  type MiddlewareRegistration,
-} from "@openomni/agent";
-import {
-  Guardrail,
-  Ingress,
-  type Hook,
-  type Middleware,
-  type TraceContext,
-} from "@openomni/protocol";
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { Policy, Ingress, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 
@@ -59,7 +49,7 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
 function evaluateIngressAuthority(event: Ingress.InboundEvent): Hook.Verdict {
   const action = "ingress.top_level.create";
   const resource = `ingress.${event.surface}`;
-  return Guardrail.evaluate(
+  return Policy.evaluate(
     {
       action,
       inputRules: [
@@ -98,7 +88,7 @@ function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {
   return state.parsedEvent;
 }
 
-function createCoordinatorPresence(state: PreRunState): MiddlewareRegistration {
+function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityMiddleware.CoordinatorPresence,
     failPolicy: "fail-closed",
@@ -111,7 +101,7 @@ function createCoordinatorPresence(state: PreRunState): MiddlewareRegistration {
   };
 }
 
-function createSchemaValidation(state: PreRunState): MiddlewareRegistration {
+function createSchemaValidation(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityMiddleware.SchemaValidation,
     failPolicy: "fail-closed",
@@ -128,7 +118,7 @@ function createSchemaValidation(state: PreRunState): MiddlewareRegistration {
   };
 }
 
-function createAuthorityCheck(state: PreRunState): MiddlewareRegistration {
+function createAuthorityCheck(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityMiddleware.AuthorityCheck,
     failPolicy: "fail-closed",
@@ -140,7 +130,7 @@ function createAuthorityCheck(state: PreRunState): MiddlewareRegistration {
   };
 }
 
-function createModeDispatch(state: PreRunState): MiddlewareRegistration {
+function createModeDispatch(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityMiddleware.ModeDispatch,
     failPolicy: "fail-closed",
@@ -195,7 +185,7 @@ export namespace IngressAuthorityMiddleware {
     readonly event: Ingress.InboundEvent;
     readonly coordinator?: CoordinatorLike;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreRunResult {
@@ -204,7 +194,7 @@ export namespace IngressAuthorityMiddleware {
     readonly mode: Ingress.InboundEvent["mode"];
   }
 
-  export function registrations(state: PreRunState): MiddlewareRegistration[] {
+  export function registrations(state: PreRunState): PolicyRegistration[] {
     return [
       createCoordinatorPresence(state),
       createSchemaValidation(state),
@@ -215,7 +205,7 @@ export namespace IngressAuthorityMiddleware {
 
   export async function runPreRun(ctx: PreRunContext): Promise<PreRunResult> {
     const state: PreRunState = { input: ctx.event, coordinator: ctx.coordinator };
-    const engine = MiddlewareEngine.create({
+    const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
     });

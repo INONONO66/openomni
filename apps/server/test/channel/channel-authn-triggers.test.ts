@@ -31,7 +31,7 @@ describe("channel-authn trigger policy", () => {
     ]);
   });
 
-  it("denies Telegram sender misses through Guardrail.evaluate", () => {
+  it("denies Telegram sender misses through Policy.evaluate", () => {
     const decisions: ChannelAuthnDecision[] = [];
 
     const auth = ChannelAuthnMiddleware.authenticateTelegramTriggers({

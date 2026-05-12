@@ -1,18 +1,10 @@
-import {
-  MiddlewareEngine,
-  type MiddlewareDecision,
-  type MiddlewareRegistration,
-} from "@openomni/agent";
-import {
-  Operational,
-  type Hook,
-  type Middleware,
-  type Subagent,
-  type TraceContext,
-} from "@openomni/protocol";
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { Operational, type Hook, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+type PolicyDefinition = Pick<PolicyRegistration, "name" | "timing" | "priority" | "failPolicy">;
 
 interface LaunchRequest {
   readonly agentName: string;
@@ -44,9 +36,9 @@ function denyVerdict(reason: string): Hook.Verdict {
   return { action: "abort", reason };
 }
 
-function createPerAgentLimit(state: BackgroundLimitState): MiddlewareRegistration {
+function createPerAgentLimit(state: BackgroundLimitState): PolicyRegistration {
   return {
-    ...BackgroundLimitsMiddleware.PerAgent,
+    ...BackgroundLimitsPolicy.PerAgent,
     failPolicy: "fail-closed",
     fn: () => {
       const count = state.activeTasks.filter((t) => t.agentName === state.input.agentName).length;
@@ -72,9 +64,9 @@ function createPerAgentLimit(state: BackgroundLimitState): MiddlewareRegistratio
   };
 }
 
-function createDepthLimit(state: BackgroundLimitState): MiddlewareRegistration {
+function createDepthLimit(state: BackgroundLimitState): PolicyRegistration {
   return {
-    ...BackgroundLimitsMiddleware.Depth,
+    ...BackgroundLimitsPolicy.Depth,
     failPolicy: "fail-closed",
     fn: () => {
       if (state.depth > state.maxDepth) {
@@ -97,9 +89,9 @@ function createDepthLimit(state: BackgroundLimitState): MiddlewareRegistration {
   };
 }
 
-function createDescendantLimit(state: BackgroundLimitState): MiddlewareRegistration {
+function createDescendantLimit(state: BackgroundLimitState): PolicyRegistration {
   return {
-    ...BackgroundLimitsMiddleware.Descendants,
+    ...BackgroundLimitsPolicy.Descendants,
     failPolicy: "fail-closed",
     fn: () => {
       const count = state.activeTasks.filter(
@@ -125,9 +117,9 @@ function createDescendantLimit(state: BackgroundLimitState): MiddlewareRegistrat
   };
 }
 
-function createTotalLimit(state: BackgroundLimitState): MiddlewareRegistration {
+function createTotalLimit(state: BackgroundLimitState): PolicyRegistration {
   return {
-    ...BackgroundLimitsMiddleware.Total,
+    ...BackgroundLimitsPolicy.Total,
     failPolicy: "fail-closed",
     fn: () => {
       state.shouldQueue = state.activeCount >= state.maxConcurrentTotal;
@@ -143,9 +135,9 @@ function createTotalLimit(state: BackgroundLimitState): MiddlewareRegistration {
   };
 }
 
-function createQueueLimit(state: BackgroundLimitState): MiddlewareRegistration {
+function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
   return {
-    ...BackgroundLimitsMiddleware.Queue,
+    ...BackgroundLimitsPolicy.Queue,
     failPolicy: "fail-closed",
     fn: () => {
       if (!state.shouldQueue) {
@@ -172,41 +164,41 @@ function createQueueLimit(state: BackgroundLimitState): MiddlewareRegistration {
   };
 }
 
-export namespace BackgroundLimitsMiddleware {
+export namespace BackgroundLimitsPolicy {
   export const PerAgent = {
     name: "background:per-agent-limit",
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies PolicyDefinition;
 
   export const Depth = {
     name: "background:depth-limit",
     timing: "pre_tool_use",
     priority: 10,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies PolicyDefinition;
 
   export const Descendants = {
     name: "background:descendant-limit",
     timing: "pre_tool_use",
     priority: 20,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies PolicyDefinition;
 
   export const Total = {
     name: "background:total-limit",
     timing: "pre_tool_use",
     priority: 30,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies PolicyDefinition;
 
   export const Queue = {
     name: "background:queue-limit",
     timing: "pre_tool_use",
     priority: 40,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies PolicyDefinition;
 
   export interface PreLaunchContext {
     readonly input: LaunchRequest;
@@ -219,7 +211,7 @@ export namespace BackgroundLimitsMiddleware {
     readonly maxDescendants: number;
     readonly maxQueueSize: number;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreLaunchResult {
@@ -227,7 +219,7 @@ export namespace BackgroundLimitsMiddleware {
     readonly shouldQueue: boolean;
   }
 
-  export function registrations(state: BackgroundLimitState): MiddlewareRegistration[] {
+  export function registrations(state: BackgroundLimitState): PolicyRegistration[] {
     return [
       createPerAgentLimit(state),
       createDepthLimit(state),
@@ -250,7 +242,7 @@ export namespace BackgroundLimitsMiddleware {
       maxDescendants: ctx.maxDescendants,
       maxQueueSize: ctx.maxQueueSize,
     };
-    const engine = MiddlewareEngine.create({
+    const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
       audit: false,

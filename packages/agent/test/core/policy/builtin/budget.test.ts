@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createBudgetReassuranceMiddleware,
-  createBudgetWarningMiddleware,
-} from "../../../../src/core/middleware/builtin/budget";
-import type { MiddlewareContext } from "../../../../src/core/middleware";
+  createBudgetReassurancePolicy,
+  createBudgetWarningPolicy,
+} from "../../../../src/core/policy/builtin/budget";
+import type { PolicyContext } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
 
-function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
+function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "pre_turn",
     steps: [],
@@ -32,9 +32,9 @@ function createBudgetState(overrides?: Partial<BudgetState>): BudgetState {
   };
 }
 
-describe("createBudgetReassuranceMiddleware", () => {
+describe("createBudgetReassurancePolicy", () => {
   it("fires at 0.6 threshold with exact message text", async () => {
-    const middleware = createBudgetReassuranceMiddleware();
+    const middleware = createBudgetReassurancePolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 15 }),
       budget: { maxTurns: 24 },
@@ -52,7 +52,7 @@ describe("createBudgetReassuranceMiddleware", () => {
   });
 
   it("fires exactly once (closure state)", async () => {
-    const middleware = createBudgetReassuranceMiddleware();
+    const middleware = createBudgetReassurancePolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 15 }),
       budget: { maxTurns: 24 },
@@ -66,7 +66,7 @@ describe("createBudgetReassuranceMiddleware", () => {
   });
 
   it("continues below threshold", async () => {
-    const middleware = createBudgetReassuranceMiddleware();
+    const middleware = createBudgetReassurancePolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 5 }),
       budget: { maxTurns: 24 },
@@ -78,7 +78,7 @@ describe("createBudgetReassuranceMiddleware", () => {
   });
 
   it("respects custom reassuranceThreshold", async () => {
-    const middleware = createBudgetReassuranceMiddleware({ reassuranceThreshold: 0.5 });
+    const middleware = createBudgetReassurancePolicy({ reassuranceThreshold: 0.5 });
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 13 }),
       budget: { maxTurns: 24, reassuranceThreshold: 0.5 },
@@ -90,19 +90,19 @@ describe("createBudgetReassuranceMiddleware", () => {
   });
 
   it("has priority 10", () => {
-    const middleware = createBudgetReassuranceMiddleware();
+    const middleware = createBudgetReassurancePolicy();
     expect(middleware.priority).toBe(10);
   });
 
   it("has name builtin:budget-reassurance", () => {
-    const middleware = createBudgetReassuranceMiddleware();
+    const middleware = createBudgetReassurancePolicy();
     expect(middleware.name).toBe("builtin:budget-reassurance");
   });
 });
 
-describe("createBudgetWarningMiddleware", () => {
+describe("createBudgetWarningPolicy", () => {
   it("fires at 0.8 threshold with exact message text", async () => {
-    const middleware = createBudgetWarningMiddleware();
+    const middleware = createBudgetWarningPolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 20 }),
       budget: { maxTurns: 24 },
@@ -119,7 +119,7 @@ describe("createBudgetWarningMiddleware", () => {
   });
 
   it("fires exactly once (closure state)", async () => {
-    const middleware = createBudgetWarningMiddleware();
+    const middleware = createBudgetWarningPolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 20 }),
       budget: { maxTurns: 24 },
@@ -133,7 +133,7 @@ describe("createBudgetWarningMiddleware", () => {
   });
 
   it("continues below threshold", async () => {
-    const middleware = createBudgetWarningMiddleware();
+    const middleware = createBudgetWarningPolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 10 }),
       budget: { maxTurns: 24 },
@@ -145,7 +145,7 @@ describe("createBudgetWarningMiddleware", () => {
   });
 
   it("respects custom warningThreshold", async () => {
-    const middleware = createBudgetWarningMiddleware({ warningThreshold: 0.7 });
+    const middleware = createBudgetWarningPolicy({ warningThreshold: 0.7 });
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 17 }),
       budget: { maxTurns: 24, warningThreshold: 0.7 },
@@ -157,12 +157,12 @@ describe("createBudgetWarningMiddleware", () => {
   });
 
   it("has priority 20", () => {
-    const middleware = createBudgetWarningMiddleware();
+    const middleware = createBudgetWarningPolicy();
     expect(middleware.priority).toBe(20);
   });
 
   it("has name builtin:budget-warning", () => {
-    const middleware = createBudgetWarningMiddleware();
+    const middleware = createBudgetWarningPolicy();
     expect(middleware.name).toBe("builtin:budget-warning");
   });
 });

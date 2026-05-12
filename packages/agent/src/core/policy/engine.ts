@@ -2,31 +2,21 @@ import { Bus } from "@openomni/session";
 import {
   Operational,
   PolicyEvent,
-  type Guardrail,
-  type Policy,
+  type Hook,
+  type Middleware,
   type TraceContext,
 } from "@openomni/protocol";
-import type {
-  PolicyContext,
-  PolicyEngineInstance,
-  PolicyRegistration,
-  PolicySystemPromptVerdict,
-  PolicyVerdict,
-} from "./types";
+import type { PolicyContext, PolicyRegistration } from "./types";
 
-const CONTINUE: Policy.Verdict = { action: "continue" };
-const POLICY_ID = "guardrail.permission";
-const MAX_REGEX_PATTERN_LENGTH = 200;
-const MAX_INPUT_LENGTH = 10_000;
+const CONTINUE: Hook.Verdict = { action: "continue" };
 
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
-type EventVerdict = "continue" | "skip" | "abort" | "retry" | "transform" | "inject";
 
 export interface PolicyDecision {
-  readonly timing: Policy.Timing;
-  readonly label: string;
+  readonly timing: Hook.Timing;
+  readonly name: string;
   readonly policyId: string;
-  readonly verdict: PolicyVerdict;
+  readonly verdict: Hook.Verdict["action"];
   readonly reason?: string;
   readonly durationMs: number;
   readonly traceContext?: TraceContext.Type;
@@ -34,7 +24,6 @@ export interface PolicyDecision {
 }
 
 export interface PolicyAuditConfig {
-  readonly enabled?: boolean;
   readonly sessionId?: string;
   readonly actor?: Record<string, unknown>;
   readonly action?: string;
@@ -49,7 +38,7 @@ export interface PolicyEngineConfig {
   readonly audit?: PolicyAuditConfig | false;
 }
 
-function matchesTiming(reg: PolicyRegistration, timing: Policy.Timing): boolean {
+function matchesTiming(reg: PolicyRegistration, timing: Hook.Timing): boolean {
   return Array.isArray(reg.timing) ? reg.timing.includes(timing) : reg.timing === timing;
 }
 
@@ -62,7 +51,7 @@ function matchesScope(reg: PolicyRegistration, agentType: string | undefined): b
 
 function selectRegistrations(
   registrations: PolicyRegistration[],
-  timing: Policy.Timing,
+  timing: Hook.Timing,
   agentType: string | undefined,
 ): PolicyRegistration[] {
   return registrations
@@ -70,37 +59,43 @@ function selectRegistrations(
     .sort((a, b) => a.priority - b.priority);
 }
 
+export interface PolicyEngineInstance {
+  register(reg: PolicyRegistration): void;
+  dispatch(timing: Hook.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Hook.Verdict>;
+  dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Middleware.SystemPromptVerdict>;
+}
+
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-function warnKey(timing: Policy.Timing, label: string): string {
-  return `${timing}:${label}`;
+function warnKey(timing: Hook.Timing, name: string): string {
+  return `${timing}:${name}`;
 }
 
 function normalizeVerdict(
-  verdict: PolicyVerdict,
-  timing: Policy.Timing,
-  label: string,
+  verdict: Hook.Verdict,
+  timing: Hook.Timing,
+  name: string,
   warnedMissingMetadata: Set<string>,
-): PolicyVerdict {
+): Hook.Verdict {
   const missingReason = verdict.action !== "continue" && !verdict.reason;
   const missingPolicyId = !verdict.policyId;
 
   if (missingReason && !isProduction()) {
-    throw new Error(`Policy ${label} returned ${verdict.action} without reason at ${timing}`);
+    throw new Error(`Middleware ${name} returned ${verdict.action} without reason at ${timing}`);
   }
 
   if (isProduction() && (missingReason || missingPolicyId)) {
-    const key = warnKey(timing, label);
+    const key = warnKey(timing, name);
     if (!warnedMissingMetadata.has(key)) {
       warnedMissingMetadata.add(key);
       Bus.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "agent.policy",
-        msg: "policy verdict missing metadata",
-        context: { timing, label, verdict: verdict.action, missingReason, missingPolicyId },
+        msg: "middleware verdict missing policy metadata",
+        context: { timing, name, verdict: verdict.action, missingReason, missingPolicyId },
       });
     }
   }
@@ -117,152 +112,34 @@ function buildActor(traceContext: TraceContext.Type | undefined): Record<string,
   };
 }
 
-function resolveAction(timing: Policy.Timing, ctx: PolicyContext): string {
-  if (ctx.action) return ctx.action;
+function resolveAction(timing: Hook.Timing): string {
   if (timing === "pre_tool_use" || timing === "post_tool_use") return "tool.call";
-  return `policy.${timing}`;
+  return `middleware.${timing}`;
 }
 
 function resolveResource(reg: PolicyRegistration, ctx: PolicyContext): string {
-  return ctx.resource ?? ctx.toolName ?? reg.name;
+  return ctx.toolName ?? reg.name;
 }
 
 function resolveEventReason(decision: PolicyDecision): string {
   if (decision.reason) return decision.reason;
-  if (decision.verdict.reason) return decision.verdict.reason;
-  return decision.verdict.action === "continue" ? "continue" : "unspecified";
-}
-
-function toEventVerdict(action: PolicyVerdict["action"]): EventVerdict {
-  if (action === "deny") return "abort";
-  return action;
-}
-
-function matchesPattern(resource: string, pattern: string): boolean {
-  if (pattern === "*") return true;
-  if (pattern.endsWith(".*")) return resource.startsWith(`${pattern.slice(0, -2)}.`);
-  return resource === pattern;
-}
-
-// reject patterns with obvious backtracking risks: nested quantifiers like (a+)+, (a*)*
-const BACKTRACK_RISK = /([+*]|\{\d)[+*?]|\([^)]*[+*][^)]*\)[+*]/;
-
-function matchesInputField(
-  input: Record<string, unknown> | undefined,
-  field: string,
-  pattern: string,
-): boolean {
-  if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return false;
-  if (BACKTRACK_RISK.test(pattern)) return false;
-
-  const raw = String(input?.[field] ?? "");
-  const value = raw.length > MAX_INPUT_LENGTH ? raw.slice(0, MAX_INPUT_LENGTH) : raw;
-
-  try {
-    return new RegExp(pattern).test(value);
-  } catch {
-    return false;
-  }
-}
-
-function permissionVerdict(
-  decision: Policy.PermissionDecision,
-  reason: string,
-  matchedPattern?: string,
-): Guardrail.EvaluationResult {
-  const action: Extract<Guardrail.EvaluationResult["action"], "continue" | "abort"> =
-    decision === "allow" ? "continue" : "abort";
-  return matchedPattern === undefined
-    ? { action, decision, reason, policyId: POLICY_ID }
-    : { action, decision, reason, policyId: POLICY_ID, matchedPattern };
-}
-
-function evaluatePermission(
-  permission: Policy.Permission | undefined,
-  request: Policy.EvaluationRequest,
-): Guardrail.EvaluationResult {
-  if (!permission) return permissionVerdict("allow", "default_allow");
-  if (permission.action !== request.action) return permissionVerdict("deny", "action_mismatch");
-
-  const inputRules = [...(permission.inputRules ?? [])].sort(
-    (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
-  );
-
-  for (const rule of inputRules) {
-    if (
-      matchesPattern(request.resource, rule.toolPattern) &&
-      matchesInputField(request.input, rule.field, rule.pattern)
-    ) {
-      return permissionVerdict(
-        rule.action,
-        rule.reason ?? `input_rule_${rule.action}`,
-        rule.toolPattern,
-      );
-    }
-  }
-
-  const deniedBy = permission.denylist?.find((pattern) =>
-    matchesPattern(request.resource, pattern),
-  );
-  if (deniedBy) return permissionVerdict("deny", "denylist", deniedBy);
-
-  const requiresApprovalBy = permission.requireApproval?.find((pattern) =>
-    matchesPattern(request.resource, pattern),
-  );
-  if (requiresApprovalBy) {
-    return permissionVerdict("require_approval", "require_approval", requiresApprovalBy);
-  }
-
-  if (permission.allowlist !== undefined) {
-    const allowedBy = permission.allowlist.find((pattern) =>
-      matchesPattern(request.resource, pattern),
-    );
-
-    if (allowedBy) return permissionVerdict("allow", "allowlist", allowedBy);
-
-    return permissionVerdict(
-      "deny",
-      permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss",
-    );
-  }
-
-  return permissionVerdict("allow", "default_allow");
-}
-
-function cloneRegistration(reg: PolicyRegistration): PolicyRegistration {
-  return {
-    ...reg,
-    timing: Array.isArray(reg.timing) ? [...reg.timing] : reg.timing,
-    ...(reg.scope !== undefined && {
-      scope: {
-        ...reg.scope,
-        ...(reg.scope.agentType !== undefined && { agentType: [...reg.scope.agentType] }),
-      },
-    }),
-  };
+  return decision.verdict === "continue" ? "continue" : "unspecified";
 }
 
 function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   const registrations: PolicyRegistration[] = [];
   const warnedMissingMetadata = new Set<string>();
-  let frozen = false;
-
-  function isAuditEnabled(): boolean {
-    if (options.audit === false) return false;
-    return options.audit?.enabled ?? true;
-  }
 
   function publishPolicyEvent(
     decision: PolicyDecision,
     reg: PolicyRegistration,
     ctx: PolicyContext,
   ): void {
-    if (!isAuditEnabled()) return;
+    if (options.audit === false) return;
 
-    const audit = options.audit === false ? undefined : options.audit;
     const traceContext = decision.traceContext;
     const traceId = traceContext?.traceId;
-    const sessionId = audit?.sessionId ?? traceContext?.sessionId;
+    const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
     if (!sessionId || !traceId) return;
 
     Bus.publish(PolicyEvent.Evaluated, {
@@ -271,34 +148,27 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
       time: Date.now(),
       policyId: decision.policyId,
-      actor: audit?.actor ?? ctx.actor ?? buildActor(traceContext),
-      action: audit?.action ?? resolveAction(decision.timing, ctx),
-      resource: audit?.resource ?? resolveResource(reg, ctx),
-      verdict: toEventVerdict(decision.verdict.action),
+      actor: options.audit?.actor ?? buildActor(traceContext),
+      action: options.audit?.action ?? resolveAction(decision.timing),
+      resource: options.audit?.resource ?? resolveResource(reg, ctx),
+      verdict: decision.verdict,
       reason: resolveEventReason(decision),
-      beforeSideEffect: {
-        timing: decision.timing,
-        label: decision.label,
-        durationMs: decision.durationMs,
-        visibility: audit?.visibility ?? "internal",
-        ...(audit?.parentActionId !== undefined && { parentActionId: audit.parentActionId }),
-      },
     });
   }
 
   async function recordDecision(
     reg: PolicyRegistration,
     ctx: PolicyContext,
-    verdict: PolicyVerdict,
+    verdict: Hook.Verdict,
     durationMs: number,
-  ): Promise<PolicyVerdict> {
+  ): Promise<Hook.Verdict> {
     const normalized = normalizeVerdict(verdict, ctx.timing, reg.name, warnedMissingMetadata);
     const traceContext = ctx.traceContext ?? options.traceContext;
     const decision: PolicyDecision = {
       timing: ctx.timing,
-      label: reg.name,
+      name: reg.name,
       policyId: normalized.policyId ?? "unknown",
-      verdict: normalized,
+      verdict: normalized.action,
       durationMs,
       ...(normalized.reason !== undefined && { reason: normalized.reason }),
       ...(traceContext !== undefined && { traceContext }),
@@ -310,15 +180,15 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     return normalized;
   }
 
-  async function dispatch<T = unknown>(
-    timing: Policy.Timing,
-    ctx: Omit<PolicyContext<T>, "timing">,
-  ): Promise<PolicyVerdict> {
+  async function dispatch(
+    timing: Hook.Timing,
+    ctx: Omit<PolicyContext, "timing">,
+  ): Promise<Hook.Verdict> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx = { ...ctx, timing } as PolicyContext<T>;
+    const fullCtx: PolicyContext = { ...ctx, timing };
 
     for (const reg of selected) {
-      let verdict: PolicyVerdict;
+      let verdict: Hook.Verdict;
       const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
@@ -326,20 +196,14 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         const durationMs = Date.now() - startTime;
         const failPolicy = reg.failPolicy ?? "fail-open";
         Bus.publish(Operational.Warn, {
-          traceId:
-            fullCtx.traceContext?.traceId ?? options.traceContext?.traceId ?? crypto.randomUUID(),
+          traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
           time: Date.now(),
           component: "agent.policy",
-          msg: "policy error",
+          msg: "middleware error",
           context: { timing, name: reg.name, error: String(err), failPolicy, durationMs },
         });
         if (failPolicy === "fail-closed") {
-          return recordDecision(
-            reg,
-            fullCtx,
-            { action: "abort", reason: "policy-error", policyId: reg.name },
-            durationMs,
-          );
+          return { action: "abort", reason: "middleware-error" };
         }
         continue;
       }
@@ -347,11 +211,10 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       const durationMs = Date.now() - startTime;
       verdict = await recordDecision(reg, fullCtx, verdict, durationMs);
       Bus.publish(Operational.Debug, {
-        traceId:
-          fullCtx.traceContext?.traceId ?? options.traceContext?.traceId ?? crypto.randomUUID(),
+        traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
         time: Date.now(),
         component: "agent.policy",
-        msg: "policy dispatch",
+        msg: "middleware dispatch",
         context: { timing, name: reg.name, verdict: verdict.action, durationMs },
       });
 
@@ -363,18 +226,18 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     return CONTINUE;
   }
 
-  async function dispatchSystemPrompt<T = unknown>(
-    ctx: Omit<PolicyContext<T>, "timing">,
-  ): Promise<PolicySystemPromptVerdict> {
+  async function dispatchSystemPrompt(
+    ctx: Omit<PolicyContext, "timing">,
+  ): Promise<Middleware.SystemPromptVerdict> {
     const selected = selectRegistrations(registrations, "on_system_prompt", ctx.agentType);
-    const fullCtx = { ...ctx, timing: "on_system_prompt" } as PolicyContext<T>;
+    const fullCtx: PolicyContext = { ...ctx, timing: "on_system_prompt" };
 
     let systemPrompt: string | undefined;
     const prependParts: string[] = [];
     const appendParts: string[] = [];
 
     for (const reg of selected) {
-      let verdict: PolicyVerdict;
+      let verdict: Hook.Verdict;
       const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
@@ -382,11 +245,10 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         const durationMs = Date.now() - startTime;
         const failPolicy = reg.failPolicy ?? "fail-open";
         Bus.publish(Operational.Warn, {
-          traceId:
-            fullCtx.traceContext?.traceId ?? options.traceContext?.traceId ?? crypto.randomUUID(),
+          traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
           time: Date.now(),
           component: "agent.policy",
-          msg: "policy error",
+          msg: "middleware error",
           context: {
             timing: "on_system_prompt",
             name: reg.name,
@@ -404,11 +266,10 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       const durationMs = Date.now() - startTime;
       verdict = await recordDecision(reg, fullCtx, verdict, durationMs);
       Bus.publish(Operational.Debug, {
-        traceId:
-          fullCtx.traceContext?.traceId ?? options.traceContext?.traceId ?? crypto.randomUUID(),
+        traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
         time: Date.now(),
         component: "agent.policy",
-        msg: "policy dispatch",
+        msg: "middleware dispatch",
         context: {
           timing: "on_system_prompt",
           name: reg.name,
@@ -437,34 +298,20 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       }
     }
 
-    const result: PolicySystemPromptVerdict = {};
+    const result: Middleware.SystemPromptVerdict = {};
     if (systemPrompt !== undefined) result.systemPrompt = systemPrompt;
     if (prependParts.length > 0) result.prependContext = prependParts.join("\n\n");
     if (appendParts.length > 0) result.appendContext = appendParts.join("\n\n");
     return result;
   }
 
-  const instance: PolicyEngineInstance = {
-    register(policy) {
-      if (frozen) {
-        throw new Error("PolicyEngine is frozen; register() cannot be called after freeze()");
-      }
-      registrations.push(policy as PolicyRegistration);
-      return instance;
-    },
-    freeze() {
-      frozen = true;
-      return instance;
+  return {
+    register(reg) {
+      registrations.push(reg);
     },
     dispatch,
     dispatchSystemPrompt,
-    evaluatePermission,
-    deriveChildPolicies() {
-      return registrations.filter((reg) => reg.propagate === true).map(cloneRegistration);
-    },
   };
-
-  return instance;
 }
 
-export const PolicyEngine = { create, evaluatePermission };
+export const PolicyEngine = { create };

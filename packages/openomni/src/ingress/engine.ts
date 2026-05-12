@@ -1,4 +1,4 @@
-import type { MiddlewareDecision } from "@openomni/agent";
+import type { PolicyDecision } from "@openomni/agent";
 import { type Ingress, IngressEvent } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
@@ -10,9 +10,7 @@ import { IngressSessionResolver } from "./session-resolver";
 export type { CoordinatorLike };
 
 let _coordinator: CoordinatorLike | undefined;
-let _middlewareDecisionObserver:
-  | ((decision: MiddlewareDecision) => void | Promise<void>)
-  | undefined;
+let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 
 export namespace IngressEngine {
   export function reset(): void {
@@ -31,8 +29,8 @@ export namespace IngressEngine {
     _coordinator = undefined;
   }
 
-  export function setMiddlewareDecisionObserver(
-    observer: ((decision: MiddlewareDecision) => void | Promise<void>) | undefined,
+  export function setPolicyDecisionObserver(
+    observer: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
   ): void {
     _middlewareDecisionObserver = observer;
   }

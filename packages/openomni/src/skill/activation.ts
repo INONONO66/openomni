@@ -1,4 +1,4 @@
-import type { MiddlewareRegistration } from "@openomni/agent";
+import type { PolicyRegistration } from "@openomni/agent";
 import { type Hook, type Middleware, Skill } from "@openomni/protocol";
 
 const layerOrder: Record<Skill.Layer, number> = {
@@ -17,7 +17,7 @@ export interface SkillActivationMiddlewareOptions {
 export function createSkillActivationMiddleware(
   skills: readonly Skill.Definition[],
   options: SkillActivationMiddlewareOptions = {},
-): MiddlewareRegistration {
+): PolicyRegistration {
   const activeSkills = sortSkills(Skill.Definition.array().parse(skills));
 
   return {

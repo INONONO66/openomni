@@ -2,8 +2,8 @@ import { MessengerEvent, Operational, type Messenger } from "@openomni/protocol"
 import { Bus } from "@openomni/session";
 import type { AgentRuntimeContext } from "../../core/runtime-context";
 import { getDefaultContext } from "../../core/runtime-context";
-import { MiddlewareEngine } from "../../core/middleware/engine";
-import { createMessengerAllowPatternMiddleware } from "../../core/middleware/builtin/messenger-allow-pattern";
+import { PolicyEngine } from "../../core/policy/engine";
+import { createMessengerAllowPatternPolicy } from "../../core/policy/builtin/messenger-allow-pattern";
 
 export interface Transport {
   send(envelope: Messenger.MessageEnvelope): Promise<void>;
@@ -32,12 +32,10 @@ export namespace AgentMessenger {
 
   export function create(transport: Transport, options?: AgentMessengerOptions): Instance {
     const context = options?.context ?? getDefaultContext();
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
 
     if (options?.allowPatterns) {
-      engine.register(
-        createMessengerAllowPatternMiddleware({ allowPatterns: options.allowPatterns }),
-      );
+      engine.register(createMessengerAllowPatternPolicy({ allowPatterns: options.allowPatterns }));
     }
 
     return {

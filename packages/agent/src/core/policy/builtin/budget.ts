@@ -1,7 +1,7 @@
 import { checkBudget, describeBudgetRemaining } from "../../budget";
 import type { PolicyRegistration } from "../types";
 
-export function createBudgetReassuranceMiddleware(): PolicyRegistration {
+export function createBudgetReassurancePolicy(): PolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-reassurance",
@@ -31,7 +31,7 @@ export function createBudgetReassuranceMiddleware(): PolicyRegistration {
   };
 }
 
-export function createBudgetWarningMiddleware(): PolicyRegistration {
+export function createBudgetWarningPolicy(): PolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-warning",

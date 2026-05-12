@@ -1,4 +1,4 @@
-import { Guardrail, PolicyEvent, ToolExecution, type Hook, type Tool } from "@openomni/protocol";
+import { PolicyEvent, ToolExecution, type Hook, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
@@ -23,38 +23,6 @@ function buildDispatchTable(tools: NativeTool[]): Map<string, NativeTool> {
     if (sanitized !== tool.spec.name) dispatch.set(sanitized, tool);
   }
   return dispatch;
-}
-
-function normalizePermission(
-  permission: Guardrail.Permission | undefined,
-): Guardrail.Permission | undefined {
-  if (!permission) return undefined;
-  if (permission.action) return permission;
-  return { ...permission, action: TOOL_CALL_ACTION };
-}
-
-function evaluatePermission(
-  toolName: string,
-  input: Record<string, unknown>,
-  permission: Guardrail.Permission | undefined,
-): Guardrail.EvaluationResult {
-  return Guardrail.evaluate(normalizePermission(permission), {
-    action: TOOL_CALL_ACTION,
-    resource: toolName,
-    input,
-  });
-}
-
-function permissionErrorMessage(toolName: string, result: Guardrail.EvaluationResult): string {
-  if (result.decision === "require_approval") {
-    return `[Blocked] Tool "${toolName}" requires approval: ${result.reason}`;
-  }
-
-  if (result.decision === "deny") {
-    return `[Blocked] Tool "${toolName}" denied by policy: ${result.reason}`;
-  }
-
-  return `[Blocked] Tool "${toolName}" blocked by policy: ${result.reason}`;
 }
 
 function createErrorResult(call: Tool.Call, message: string): Tool.Result {
@@ -163,44 +131,6 @@ export function createToolExecutor(
       resource: originalName,
       context: { input: call.input },
     });
-
-    const permissionResult = evaluatePermission(originalName, call.input, config.permissions);
-    if (config.permissions) {
-      Bus.publish(PolicyEvent.Evaluated, {
-        ...eventBase(),
-        policyId: permissionResult.policyId,
-        actor,
-        action: TOOL_CALL_ACTION,
-        resource: originalName,
-        verdict: permissionResult.action,
-        reason: permissionResult.reason,
-      });
-    }
-
-    if (permissionResult.action === "abort") {
-      const result = createErrorResult(
-        call,
-        permissionErrorMessage(originalName, permissionResult),
-      );
-      Bus.publish(PolicyEvent.ActionBlocked, {
-        ...eventBase(),
-        actionId,
-        actor,
-        action: TOOL_CALL_ACTION,
-        resource: originalName,
-        verdict: permissionResult.action,
-        reason: permissionResult.reason,
-      });
-      Bus.publish(ToolExecution.Completed, {
-        ...eventBase(),
-        actor,
-        toolCallId: call.id,
-        toolName: originalName,
-        durationMs: 0,
-        isError: true,
-      });
-      return result;
-    }
 
     const enrichedCall = injectImplicitInputs(call, tool, runtime);
     const dispatchedCall =

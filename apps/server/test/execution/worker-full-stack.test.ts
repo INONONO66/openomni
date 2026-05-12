@@ -143,7 +143,7 @@ describe("system tool provider — read/glob", () => {
   });
 });
 
-describe("builtin middleware — tool-guard", () => {
+describe("builtin middleware — tool permission", () => {
   function makeToolCtx(toolName: string) {
     return {
       timing: "pre_tool_use" as const,
@@ -163,12 +163,12 @@ describe("builtin middleware — tool-guard", () => {
     const registrations = buildWorkerMiddleware({
       permissions: { action: "tool.call", denylist: ["bash"] },
     });
-    const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
+    const toolPermission = registrations.find((r) => r.name === "builtin:tool-permission");
 
-    expect(toolGuard).toBeDefined();
-    if (!toolGuard) throw new Error("tool-guard not found");
+    expect(toolPermission).toBeDefined();
+    if (!toolPermission) throw new Error("tool permission middleware not found");
 
-    const verdict = await toolGuard.fn(makeToolCtx("bash"));
+    const verdict = await toolPermission.fn(makeToolCtx("bash"));
     expect(verdict.action).toBe("abort");
   });
 
@@ -176,11 +176,11 @@ describe("builtin middleware — tool-guard", () => {
     const registrations = buildWorkerMiddleware({
       permissions: { action: "tool.call", denylist: ["bash"] },
     });
-    const toolGuard = registrations.find((r) => r.name === "builtin:tool-guard");
+    const toolPermission = registrations.find((r) => r.name === "builtin:tool-permission");
 
-    if (!toolGuard) throw new Error("tool-guard not found");
+    if (!toolPermission) throw new Error("tool permission middleware not found");
 
-    const verdict = await toolGuard.fn(makeToolCtx("read"));
+    const verdict = await toolPermission.fn(makeToolCtx("read"));
     expect(verdict.action).toBe("continue");
   });
 });

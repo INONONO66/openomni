@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Tool } from "@openomni/protocol";
-import type { MiddlewareRegistration, MiddlewareContext } from "../../../src/core/middleware";
-import { MiddlewareEngine } from "../../../src/core/middleware";
+import type { PolicyRegistration, PolicyContext } from "../../../src/core/policy";
+import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 
 function newID(prefix: string): string {
@@ -11,9 +11,9 @@ function newID(prefix: string): string {
 describe("post_tool_use middleware dispatch", () => {
   it("fires the middleware fn after tool execution with correct context", async () => {
     const toolOutput = "tool-output-value";
-    const postToolFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postToolFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:post_tool_use",
       timing: "post_tool_use",
@@ -35,16 +35,16 @@ describe("post_tool_use middleware dispatch", () => {
     await executor(call);
 
     expect(postToolFn).toHaveBeenCalledTimes(1);
-    const calledCtx = postToolFn.mock.calls[0][0] as MiddlewareContext;
+    const calledCtx = postToolFn.mock.calls[0][0] as PolicyContext;
     expect(calledCtx.timing).toBe("post_tool_use");
     expect(calledCtx.toolName).toBe("bash");
     expect(calledCtx.toolOutput).toBe(toolOutput);
   });
 
   it("forwards usage from getContext to tool middleware", async () => {
-    const postToolFn = mock((_ctx: MiddlewareContext) => ({ action: "continue" as const }));
+    const postToolFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:post_tool_use",
       timing: "post_tool_use",
@@ -70,12 +70,12 @@ describe("post_tool_use middleware dispatch", () => {
 
     await executor({ id: "call-usage", tool: "bash", input: { command: "ls" } });
 
-    const calledCtx = postToolFn.mock.calls[0][0] as MiddlewareContext;
+    const calledCtx = postToolFn.mock.calls[0][0] as PolicyContext;
     expect(calledCtx.usage).toEqual({ inputTokens: 13, outputTokens: 8, totalTokens: 21 });
   });
 
   it("transform verdict modifies the tool output", async () => {
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:transform",
       timing: "post_tool_use",
@@ -116,7 +116,7 @@ describe("pre_tool_use middleware dispatch", () => {
       }),
     );
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:skip",
       timing: "pre_tool_use",
@@ -144,7 +144,7 @@ describe("pre_tool_use middleware dispatch", () => {
       }),
     );
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:abort",
       timing: "pre_tool_use",
@@ -169,7 +169,7 @@ describe("pre_tool_use middleware dispatch", () => {
       return { id: newID("result"), toolCallId: call.id, output: "ok", isError: false };
     };
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:transform-input",
       timing: "pre_tool_use",
@@ -193,13 +193,13 @@ describe("pre_tool_use middleware dispatch", () => {
 
 describe("on_error middleware dispatch (stream-engine level)", () => {
   it("on_error middleware is registered and dispatchable", async () => {
-    const onErrorFn = mock((_ctx: MiddlewareContext) => ({
+    const onErrorFn = mock((_ctx: PolicyContext) => ({
       action: "abort" as const,
       reason: "test-error-abort",
       policyId: "test.on-error",
     }));
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register({
       name: "test:on_error",
       timing: "on_error",
@@ -220,7 +220,7 @@ describe("on_error middleware dispatch (stream-engine level)", () => {
 
     expect(onErrorFn).toHaveBeenCalledTimes(1);
     expect(verdict.action).toBe("abort");
-    const calledCtx = onErrorFn.mock.calls[0][0] as MiddlewareContext;
+    const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext;
     expect(calledCtx.timing).toBe("on_error");
     expect(calledCtx.toolInput?.error).toBe(error);
   });
@@ -228,22 +228,20 @@ describe("on_error middleware dispatch (stream-engine level)", () => {
 
 describe("idle-nudge post_tool_use integration", () => {
   it("idle-nudge fn is dispatched for post_tool_use timing", async () => {
-    const { createIdleNudgeMiddleware } = await import(
-      "../../../src/core/middleware/builtin/idle-nudge"
-    );
+    const { createIdleNudgePolicy } = await import("../../../src/core/policy/builtin/idle-nudge");
 
-    const idleNudge = createIdleNudgeMiddleware({ idleThresholdMs: -1 });
+    const idleNudge = createIdleNudgePolicy({ idleThresholdMs: -1 });
     let postToolUseCallCount = 0;
     const originalFn = idleNudge.fn;
-    const spiedIdleNudge: MiddlewareRegistration = {
+    const spiedIdleNudge: PolicyRegistration = {
       ...idleNudge,
-      fn: (ctx: MiddlewareContext) => {
+      fn: (ctx: PolicyContext) => {
         if (ctx.timing === "post_tool_use") postToolUseCallCount++;
         return originalFn(ctx);
       },
     };
 
-    const engine = MiddlewareEngine.create();
+    const engine = PolicyEngine.create();
     engine.register(spiedIdleNudge);
 
     const executor = createToolExecutor({

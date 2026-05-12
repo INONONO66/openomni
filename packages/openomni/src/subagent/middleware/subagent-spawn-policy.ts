@@ -1,9 +1,5 @@
-import {
-  MiddlewareEngine,
-  type MiddlewareDecision,
-  type MiddlewareRegistration,
-} from "@openomni/agent";
-import { Guardrail, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { Policy, type Hook, type Middleware, type TraceContext } from "@openomni/protocol";
 import { Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -38,7 +34,7 @@ function evaluateBooleanPolicy(input: {
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
 }): Hook.Verdict {
-  return Guardrail.evaluate(
+  return Policy.evaluate(
     {
       action: input.action,
       inputRules: [
@@ -69,7 +65,7 @@ function evaluateBooleanPolicy(input: {
   );
 }
 
-function createSessionExistence(state: PreSpawnState): MiddlewareRegistration {
+function createSessionExistence(state: PreSpawnState): PolicyRegistration {
   return {
     ...SubagentSpawnPolicyMiddleware.SessionExistence,
     failPolicy: "fail-closed",
@@ -110,7 +106,7 @@ function createSessionExistence(state: PreSpawnState): MiddlewareRegistration {
   };
 }
 
-function createActiveRunGuard(state: PreSpawnState): MiddlewareRegistration {
+function createActiveRunGuard(state: PreSpawnState): PolicyRegistration {
   return {
     ...SubagentSpawnPolicyMiddleware.ActiveRun,
     failPolicy: "fail-closed",
@@ -154,7 +150,7 @@ function createActiveRunGuard(state: PreSpawnState): MiddlewareRegistration {
   };
 }
 
-function createCancelTimeout(state: PreSpawnState): MiddlewareRegistration {
+function createCancelTimeout(state: PreSpawnState): PolicyRegistration {
   return {
     ...SubagentSpawnPolicyMiddleware.CancelTimeout,
     failPolicy: "fail-closed",
@@ -169,7 +165,7 @@ function createCancelTimeout(state: PreSpawnState): MiddlewareRegistration {
   };
 }
 
-function createWaitTimeout(state: PreSpawnState): MiddlewareRegistration {
+function createWaitTimeout(state: PreSpawnState): PolicyRegistration {
   return {
     ...SubagentSpawnPolicyMiddleware.WaitTimeout,
     failPolicy: "fail-closed",
@@ -229,7 +225,7 @@ export namespace SubagentSpawnPolicyMiddleware {
     readonly hardTimeoutMs?: number;
     readonly timeoutMs?: number;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreSpawnResult {
@@ -245,20 +241,20 @@ export namespace SubagentSpawnPolicyMiddleware {
     readonly cancel: () => void;
   }
 
-  export function createDefaultDenylist(): MiddlewareRegistration {
+  export function createDefaultDenylist(): PolicyRegistration {
     return {
       ...DefaultDenylist,
       failPolicy: "fail-closed",
       fn: (ctx) => {
         const toolName = ctx.toolName ?? "";
         if (ctx.toolName !== "subagent") {
-          return Guardrail.evaluate(
+          return Policy.evaluate(
             { action: "tool.call", denylist: ["subagent"] },
             { action: "tool.call", resource: toolName },
           );
         }
 
-        return Guardrail.evaluate(
+        return Policy.evaluate(
           { action: "tool.call", denylist: ["subagent"] },
           { action: "tool.call", resource: toolName },
         );
@@ -267,14 +263,14 @@ export namespace SubagentSpawnPolicyMiddleware {
   }
 
   export function childMiddleware(
-    middleware: MiddlewareRegistration[] | undefined,
+    middleware: PolicyRegistration[] | undefined,
     hasExplicitPermissions: boolean,
-  ): MiddlewareRegistration[] | undefined {
+  ): PolicyRegistration[] | undefined {
     if (hasExplicitPermissions) return middleware;
     return [createDefaultDenylist(), ...(middleware ?? [])];
   }
 
-  export function registrations(state: PreSpawnState): MiddlewareRegistration[] {
+  export function registrations(state: PreSpawnState): PolicyRegistration[] {
     return [
       createSessionExistence(state),
       createActiveRunGuard(state),
@@ -290,7 +286,7 @@ export namespace SubagentSpawnPolicyMiddleware {
       hardTimeoutMs: ctx.hardTimeoutMs,
       timeoutMs: ctx.timeoutMs,
     };
-    const engine = MiddlewareEngine.create({
+    const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
       audit: false,

@@ -4,7 +4,7 @@ import type { ChatAgentConfig } from "../../types";
 
 type CompactionConfig = NonNullable<ChatAgentConfig["compaction"]>;
 
-export function createCompactionMiddleware(config: CompactionConfig): PolicyRegistration {
+export function createCompactionPolicy(config: CompactionConfig): PolicyRegistration {
   return {
     name: "builtin:compaction",
     timing: "post_compaction",

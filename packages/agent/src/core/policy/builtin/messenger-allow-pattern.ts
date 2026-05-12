@@ -1,5 +1,5 @@
-import { Guardrail, type Messenger } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../types";
+import { Policy, type Messenger } from "@openomni/protocol";
+import type { PolicyRegistration } from "../types";
 
 export interface MessengerAllowPatternConfig {
   allowPatterns?: Messenger.AllowPattern[];
@@ -20,7 +20,7 @@ function evaluateMessengerPermission(input: {
 }) {
   const action = "messenger.envelope.send";
   const resource = `${input.fromAgentId}->${input.toAgentId}`;
-  return Guardrail.evaluate(
+  return Policy.evaluate(
     {
       action,
       inputRules: [
@@ -51,9 +51,9 @@ function evaluateMessengerPermission(input: {
   );
 }
 
-export function createMessengerAllowPatternMiddleware(
+export function createMessengerAllowPatternPolicy(
   config: MessengerAllowPatternConfig,
-): MiddlewareRegistration {
+): PolicyRegistration {
   return {
     name: "builtin:messenger-allow-pattern",
     timing: "pre_tool_use",
@@ -64,7 +64,7 @@ export function createMessengerAllowPatternMiddleware(
       const toAgentId = ctx.envelope?.toAgentId;
 
       if (!fromAgentId || !toAgentId) {
-        return Guardrail.evaluate(undefined, {
+        return Policy.evaluate(undefined, {
           action: "messenger.envelope.send",
           resource: "messenger.envelope",
         });

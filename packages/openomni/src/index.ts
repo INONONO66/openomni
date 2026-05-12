@@ -72,7 +72,7 @@ export {
 } from "./subagent";
 
 // Policy compatibility exports
-export { BackgroundLimitsMiddleware } from "./policy";
+export { BackgroundLimitsPolicy } from "./policy";
 
 // Execution runtime
 export {

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
-import { Guardrail } from "@openomni/protocol";
+import { Policy } from "@openomni/protocol";
 
 const TOOL_CALL_ACTION = "tool.call";
 const OVERRIDE_TOOL_FIELD = "__openomniCoordinatorTool";
@@ -35,7 +35,7 @@ export type PermissionDecision = {
   tier: "user-override" | "risk-default" | "unknown-default";
 };
 
-export type PolicyConfig = Partial<Guardrail.Permission> & {
+export type PolicyConfig = Partial<Policy.Permission> & {
   userOverrides?: Record<string, "allow" | "deny">;
 };
 
@@ -67,7 +67,7 @@ function escapeRegex(value: string): string {
 
 function toOverrideRules(
   userOverrides: Record<string, "allow" | "deny"> | undefined,
-): Guardrail.InputRule[] {
+): Policy.InputRule[] {
   return Object.entries(userOverrides ?? {}).map(([tool, decision]) => ({
     toolPattern: tool,
     field: OVERRIDE_TOOL_FIELD,
@@ -78,7 +78,7 @@ function toOverrideRules(
   }));
 }
 
-function normalizePolicy(policy: PolicyConfig, extraDenylist: string[] = []): Guardrail.Permission {
+function normalizePolicy(policy: PolicyConfig, extraDenylist: string[] = []): Policy.Permission {
   const denylist = [...riskDefaultDenylist, ...(policy.denylist ?? []), ...extraDenylist];
   const inputRules = [...toOverrideRules(policy.userOverrides), ...(policy.inputRules ?? [])];
 
@@ -94,7 +94,7 @@ function normalizePolicy(policy: PolicyConfig, extraDenylist: string[] = []): Gu
 function buildRequest(
   tool: string,
   context: PermissionRequestContext = {},
-): Guardrail.EvaluationRequest {
+): Policy.EvaluationRequest {
   const input = { ...(context.input ?? {}), [OVERRIDE_TOOL_FIELD]: tool };
   const resourceMeta = {
     ...(context.resourceMeta ?? {}),
@@ -115,10 +115,10 @@ function evaluatePolicy(
   tool: string,
   policy: PolicyConfig,
   context: PermissionRequestContext,
-): { result: Guardrail.EvaluationResult; tier?: PermissionDecision["tier"] } {
+): { result: Policy.EvaluationResult; tier?: PermissionDecision["tier"] } {
   const request = buildRequest(tool, context);
   const permission = normalizePolicy(policy);
-  const result = Guardrail.evaluate(permission, request);
+  const result = Policy.evaluate(permission, request);
 
   if (result.reason !== "default_allow" || RISK_DEFAULTS[tool] !== undefined) {
     return { result };
@@ -126,7 +126,7 @@ function evaluatePolicy(
 
   if ((context.riskTier ?? 0) >= 2) {
     return {
-      result: Guardrail.evaluate(normalizePolicy(policy, [tool]), request),
+      result: Policy.evaluate(normalizePolicy(policy, [tool]), request),
       tier: "unknown-default",
     };
   }
@@ -134,7 +134,7 @@ function evaluatePolicy(
   return { result };
 }
 
-function decisionTier(tool: string, policy: PolicyConfig, result: Guardrail.EvaluationResult) {
+function decisionTier(tool: string, policy: PolicyConfig, result: Policy.EvaluationResult) {
   if (policy.userOverrides?.[tool] !== undefined) return "user-override";
   if (result.reason !== "default_allow" && RISK_DEFAULTS[tool] === undefined)
     return "user-override";

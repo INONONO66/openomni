@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MiddlewareContext } from "@openomni/agent";
+import type { PolicyContext } from "@openomni/agent";
 import { createContextMiddleware } from "../../src/context/middleware";
 
 let tempRoot: string;
@@ -55,7 +55,7 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    } as unknown as MiddlewareContext;
+    } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });
@@ -72,7 +72,7 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    } as unknown as MiddlewareContext;
+    } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
     expect(result.action).toBe("transform");
@@ -94,7 +94,7 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    } as unknown as MiddlewareContext;
+    } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });
@@ -112,7 +112,7 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    } as unknown as MiddlewareContext;
+    } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
     expect(result.action).toBe("transform");
@@ -133,7 +133,7 @@ describe("createContextMiddleware", () => {
       systemPrompt: "base prompt",
       agentType: undefined,
       timing: "on_system_prompt" as const,
-    } as unknown as MiddlewareContext;
+    } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
     expect(result).toEqual({ action: "continue" });

@@ -140,16 +140,16 @@ describe("Execution", () => {
       },
       agentName: "research-agent",
       workspaceRoot: "/home/user/projects",
-      middleware: ["budget", "tool-guard", "memory"],
+      middleware: ["budget", "tool-permission", "memory"],
     };
 
     const parsed = Execution.Request.parse(request);
     expect(parsed.agentName).toBe("research-agent");
     expect(parsed.workspaceRoot).toBe("/home/user/projects");
-    expect(parsed.middleware).toEqual(["budget", "tool-guard", "memory"]);
+    expect(parsed.middleware).toEqual(["budget", "tool-permission", "memory"]);
   });
 
-  test("ExecutionRequest with full Guardrail.Permission", () => {
+  test("ExecutionRequest with full Policy.Permission", () => {
     const request: Execution.Request = {
       runId: "run-perms",
       sessionId: "session-perms",

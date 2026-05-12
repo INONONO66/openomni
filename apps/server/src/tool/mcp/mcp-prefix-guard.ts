@@ -1,10 +1,6 @@
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import {
-  MiddlewareEngine,
-  type MiddlewareDecision,
-  type MiddlewareRegistration,
-} from "@openomni/agent";
-import {
-  Guardrail,
+  Policy,
   type Hook,
   type Middleware,
   type Tool,
@@ -31,7 +27,7 @@ function evaluatePrefixGuard(input: {
   readonly serverName?: string;
 }): Hook.Verdict {
   const action = "mcp.tool.call";
-  return Guardrail.evaluate(
+  return Policy.evaluate(
     {
       action,
       inputRules: [
@@ -67,7 +63,7 @@ function resolveTool(tools: readonly NativeTool[], name: string): NativeTool | u
   return tools.find((entry) => entry.spec.name === name || entry.spec.name === dottedName);
 }
 
-function createMcpPrefixGuard(state: PrefixGuardState): MiddlewareRegistration {
+function createMcpPrefixGuard(state: PrefixGuardState): PolicyRegistration {
   return {
     ...McpPrefixGuardMiddleware.Definition,
     failPolicy: "fail-closed",
@@ -133,7 +129,7 @@ export namespace McpPrefixGuardMiddleware {
     readonly tools: readonly NativeTool[];
     readonly isServerConnected: (serverName: string) => boolean;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreToolUseResult {
@@ -142,7 +138,7 @@ export namespace McpPrefixGuardMiddleware {
     readonly serverName?: string;
   }
 
-  export function registrations(state: PrefixGuardState): MiddlewareRegistration[] {
+  export function registrations(state: PrefixGuardState): PolicyRegistration[] {
     return [createMcpPrefixGuard(state)];
   }
 
@@ -152,8 +148,8 @@ export namespace McpPrefixGuardMiddleware {
       tools: ctx.tools,
       isServerConnected: ctx.isServerConnected,
     };
-    let lastDecision: MiddlewareDecision | undefined;
-    const engine = MiddlewareEngine.create({
+    let lastDecision: PolicyDecision | undefined;
+    const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: async (decision) => {
         lastDecision = decision;

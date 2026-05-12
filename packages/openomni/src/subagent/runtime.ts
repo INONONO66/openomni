@@ -1,5 +1,5 @@
 import type { ChatAgent } from "@openomni/agent";
-import { type Guardrail, type Message, Subagent } from "@openomni/protocol";
+import { type Policy, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
@@ -36,7 +36,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.Permission;
+    permissions?: Policy.Permission;
   }
 
   export interface SendConfig extends RuntimeConfig {
@@ -45,7 +45,7 @@ export namespace SubagentRuntime {
     signal?: AbortSignal;
     softTimeoutMs?: number;
     hardTimeoutMs?: number;
-    permissions?: Guardrail.Permission;
+    permissions?: Policy.Permission;
     compaction?: SendCompactionConfig;
   }
 

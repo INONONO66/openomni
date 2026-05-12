@@ -1,20 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/session";
 import { ToolExecution } from "@openomni/protocol";
-import { MiddlewareEngine } from "../../../src/core/middleware";
+import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import type { Tool } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+import type { PolicyRegistration } from "../../../src/core/policy/types";
 
 function makeEngine() {
-  return MiddlewareEngine.create();
+  return PolicyEngine.create();
 }
 
 function makeCall(id = "call-1", tool = "bash"): Tool.Call {
   return { id, tool, input: { command: "ls" } };
 }
 
-function abortMiddleware(reason: string): MiddlewareRegistration {
+function abortMiddleware(reason: string): PolicyRegistration {
   return {
     name: "test-abort",
     timing: "pre_tool_use",
@@ -162,6 +162,34 @@ describe("createToolExecutor bus events", () => {
     expect(started).toHaveLength(1);
     expect(completed).toHaveLength(1);
     expect((completed[0] as { isError: boolean }).isError).toBe(true);
+  });
+
+  it("reports tool duration for budget accounting on success and failure", async () => {
+    const durations: number[] = [];
+    const successExecutor = createToolExecutor({
+      toolExecutor: async (call) => ({
+        id: "r1",
+        toolCallId: call.id,
+        output: "ok",
+      }),
+      engine: makeEngine(),
+      onToolComplete: (durationMs) => durations.push(durationMs),
+    });
+
+    await successExecutor(makeCall("call-budget-ok"));
+
+    const failureExecutor = createToolExecutor({
+      toolExecutor: async () => {
+        throw new Error("boom");
+      },
+      engine: makeEngine(),
+      onToolComplete: (durationMs) => durations.push(durationMs),
+    });
+
+    await expect(failureExecutor(makeCall("call-budget-fail"))).rejects.toThrow("boom");
+
+    expect(durations).toHaveLength(2);
+    expect(durations.every((duration) => duration >= 0)).toBe(true);
   });
 
   it("falls back to generated traceId when no traceContext provided", async () => {

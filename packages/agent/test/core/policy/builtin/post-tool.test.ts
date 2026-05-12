@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { createPostToolMiddleware } from "../../../../src/core/middleware/builtin/post-tool";
-import type { MiddlewareContext } from "../../../../src/core/middleware";
+import { createPostToolPolicy } from "../../../../src/core/policy/builtin/post-tool";
+import type { PolicyContext } from "../../../../src/core/policy";
 
-function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
+function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "post_tool_use",
     steps: [],
@@ -15,10 +15,10 @@ function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
   };
 }
 
-describe("createPostToolMiddleware", () => {
+describe("createPostToolPolicy", () => {
   it("enricher returns string → transform verdict with appended output", async () => {
     const enricher = () => "enrichment text";
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "test-tool",
       toolCallId: "call-123",
@@ -36,7 +36,7 @@ describe("createPostToolMiddleware", () => {
 
   it("enricher returns null → continue verdict", async () => {
     const enricher = () => null;
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "test-tool",
       toolCallId: "call-123",
@@ -50,12 +50,12 @@ describe("createPostToolMiddleware", () => {
   });
 
   it("enricher receives correct tool context", async () => {
-    let receivedCtx: MiddlewareContext | undefined;
-    const enricher = (ctx: MiddlewareContext) => {
+    let receivedCtx: PolicyContext | undefined;
+    const enricher = (ctx: PolicyContext) => {
       receivedCtx = ctx;
       return "enrichment";
     };
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "my-tool",
       toolCallId: "call-456",
@@ -75,7 +75,7 @@ describe("createPostToolMiddleware", () => {
     const enricher = () => {
       throw new Error("enricher failed");
     };
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "test-tool",
       toolCallId: "call-123",
@@ -89,7 +89,7 @@ describe("createPostToolMiddleware", () => {
 
   it("enricher returns string with empty toolOutput → transform with enrichment only", async () => {
     const enricher = () => "enrichment text";
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "test-tool",
       toolCallId: "call-123",
@@ -105,17 +105,17 @@ describe("createPostToolMiddleware", () => {
   });
 
   it("has priority 200", () => {
-    const middleware = createPostToolMiddleware(() => null);
+    const middleware = createPostToolPolicy(() => null);
     expect(middleware.priority).toBe(200);
   });
 
   it("has timing post_tool_use", () => {
-    const middleware = createPostToolMiddleware(() => null);
+    const middleware = createPostToolPolicy(() => null);
     expect(middleware.timing).toBe("post_tool_use");
   });
 
   it("has name builtin:post-tool", () => {
-    const middleware = createPostToolMiddleware(() => null);
+    const middleware = createPostToolPolicy(() => null);
     expect(middleware.name).toBe("builtin:post-tool");
   });
 
@@ -124,7 +124,7 @@ describe("createPostToolMiddleware", () => {
       await Promise.resolve();
       return "async enrichment";
     };
-    const middleware = createPostToolMiddleware(enricher);
+    const middleware = createPostToolPolicy(enricher);
     const ctx = baseCtx({
       toolName: "test-tool",
       toolCallId: "call-123",

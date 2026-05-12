@@ -1,4 +1,4 @@
-import { Guardrail, type Adapter, type Hook, type Middleware } from "@openomni/protocol";
+import { Policy, type Adapter, type Hook, type Middleware } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { evaluateTriggers } from "../shared/trigger";
@@ -59,14 +59,14 @@ function evaluateChannelPermission(input: {
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
 }): Hook.Verdict {
-  const request: Guardrail.EvaluationRequest = {
+  const request: Policy.EvaluationRequest = {
     action: input.action,
     resource: input.resource,
     input: { [input.field]: String(input.allowed) },
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
   };
 
-  return Guardrail.evaluate(
+  return Policy.evaluate(
     {
       action: input.action,
       inputRules: [

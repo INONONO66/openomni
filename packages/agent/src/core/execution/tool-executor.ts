@@ -1,24 +1,39 @@
-import type { Tool, TraceContext } from "@openomni/protocol";
+import type { Hook, Tool, TraceContext } from "@openomni/protocol";
 import { ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { HookContext, HookVerdict, TokenUsage } from "../types";
-import type { MiddlewareEngineInstance } from "../middleware";
+import type { AgentStep, TokenUsage } from "../types";
+import type { PolicyEngineInstance } from "../policy";
 import { summarizeInput } from "./shared";
 
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
-  engine: MiddlewareEngineInstance;
-  getContext?: () => Omit<HookContext, "toolName" | "toolCallId" | "input"> & {
+  engine: PolicyEngineInstance;
+  getContext?: () => {
+    steps: AgentStep[];
+    turnCount: number;
+    elapsedMs: number;
     usage?: TokenUsage;
   };
-  onVerdict?: (verdict: HookVerdict) => void;
+  getPolicyToolName?: (toolName: string) => string | undefined;
+  getToolLabels?: (toolName: string) => string[] | undefined;
+  onToolComplete?: (durationMs: number) => void;
+  onVerdict?: (verdict: Hook.Verdict) => void;
   traceContext?: TraceContext.Type;
 }
 
 export function createToolExecutor(
   options: ToolExecutorOptions,
 ): (call: Tool.Call) => Promise<Tool.Result> {
-  const { toolExecutor, engine, getContext, onVerdict, traceContext } = options;
+  const {
+    toolExecutor,
+    engine,
+    getContext,
+    getPolicyToolName,
+    getToolLabels,
+    onToolComplete,
+    onVerdict,
+    traceContext,
+  } = options;
   const traceId = traceContext?.traceId ?? crypto.randomUUID();
   const sessionId = traceContext?.sessionId ?? "";
   const eventBase = {
@@ -30,6 +45,7 @@ export function createToolExecutor(
 
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const ctx = getContext?.();
+    const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const preVerdict = await engine.dispatch("pre_tool_use", {
       steps: ctx?.steps ?? [],
@@ -38,12 +54,13 @@ export function createToolExecutor(
       usage,
       isCompletion: false,
       continuationCount: 0,
-      toolName: call.tool,
+      toolName: policyToolName,
       toolCallId: call.id,
+      toolLabels: getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName),
       toolInput: call.input,
     });
 
-    onVerdict?.(preVerdict as HookVerdict);
+    onVerdict?.(preVerdict);
 
     if (preVerdict.action === "skip") {
       return {
@@ -59,7 +76,7 @@ export function createToolExecutor(
       Bus.publish(ToolExecution.PermissionDenied, {
         ...eventBase,
         toolCallId: call.id,
-        toolName: call.tool,
+        toolName: policyToolName,
         reason,
         time: Date.now(),
       });
@@ -79,7 +96,7 @@ export function createToolExecutor(
     Bus.publish(ToolExecution.Started, {
       ...eventBase,
       toolCallId: call.id,
-      toolName: call.tool,
+      toolName: policyToolName,
       inputSummary: summarizeInput(effectiveCall.input),
       time: Date.now(),
     });
@@ -90,10 +107,11 @@ export function createToolExecutor(
       result = await toolExecutor(effectiveCall);
     } catch (err) {
       const durationMs = Date.now() - startMs;
+      onToolComplete?.(durationMs);
       Bus.publish(ToolExecution.Completed, {
         ...eventBase,
         toolCallId: call.id,
-        toolName: call.tool,
+        toolName: policyToolName,
         durationMs,
         isError: true,
         time: Date.now(),
@@ -102,10 +120,11 @@ export function createToolExecutor(
     }
 
     const durationMs = Date.now() - startMs;
+    onToolComplete?.(durationMs);
     Bus.publish(ToolExecution.Completed, {
       ...eventBase,
       toolCallId: call.id,
-      toolName: call.tool,
+      toolName: policyToolName,
       durationMs,
       isError: result.isError ?? false,
       time: Date.now(),
@@ -118,8 +137,9 @@ export function createToolExecutor(
       usage,
       isCompletion: false,
       continuationCount: 0,
-      toolName: call.tool,
+      toolName: policyToolName,
       toolCallId: call.id,
+      toolLabels: getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName),
       toolOutput: result.output,
     });
 

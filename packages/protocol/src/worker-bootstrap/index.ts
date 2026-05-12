@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
-import { Guardrail } from "../guardrail/index.js";
+import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 import { ToolSelection } from "../tool-selection/index.js";
 
@@ -16,7 +16,7 @@ export namespace WorkerBootstrap {
       .optional(),
     systemPrompt: z.string().optional(),
     tools: ToolSelection.Selection,
-    permissions: Guardrail.Permission.optional(),
+    permissions: Policy.Permission.optional(),
     budget: AgentProfile.AgentBudget.optional(),
   });
   export type RuntimeAgentDefinition = z.infer<typeof RuntimeAgentDefinition>;

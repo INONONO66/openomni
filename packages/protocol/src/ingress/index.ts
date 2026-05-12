@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Guardrail } from "../guardrail/index.js";
+import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 
 const AgentToolConfigSchema = z.object({
@@ -15,7 +15,7 @@ export namespace Ingress {
     systemPrompt: z.string().optional(),
     tools: z.array(Tool.Spec).optional(),
     budget: z.object({ maxTurns: z.number().optional() }).optional(),
-    permissions: Guardrail.Permission.optional(),
+    permissions: Policy.Permission.optional(),
     toolConfig: AgentToolConfigSchema.optional(),
   });
   // toolExecutor is a runtime callback — can't be expressed in Zod

@@ -1,7 +1,21 @@
 import { describe, test, expect } from "bun:test";
-import type { Guardrail } from "@openomni/protocol";
-import { ToolGuard } from "@openomni/agent/src/core/tool-guard";
+import { Policy } from "@openomni/protocol";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
+import { intersectPermissions } from "../../src/execution-runtime/tool/agent/tools/subagent-runtime";
+
+function checkPermission(
+  toolName: string,
+  input: Record<string, unknown>,
+  permission: Policy.Permission,
+): "allow" | "deny" | "require_approval" {
+  const result = Policy.evaluate(permission, {
+    action: "tool.call",
+    resource: toolName,
+    input,
+  });
+  if (result.decision !== undefined) return result.decision;
+  return result.action === "continue" ? "allow" : "deny";
+}
 
 describe("SubagentRuntime permissions", () => {
   test("default subagent middleware denies recursive subagent tool calls", async () => {
@@ -25,43 +39,43 @@ describe("SubagentRuntime permissions", () => {
   });
 
   test("explicit allowlist permits specified tools", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       allowlist: ["read_file", "write_file"],
     };
 
-    const allowedVerdict = ToolGuard.check("read_file", {}, permissions);
+    const allowedVerdict = checkPermission("read_file", {}, permissions);
     expect(allowedVerdict).toBe("allow");
 
-    const deniedVerdict = ToolGuard.check("subagent", {}, permissions);
+    const deniedVerdict = checkPermission("subagent", {}, permissions);
     expect(deniedVerdict).toBe("deny");
   });
 
   test("denylist blocks specified tools", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       denylist: ["dangerous_tool", "delete_file"],
     };
 
-    const deniedVerdict = ToolGuard.check("delete_file", {}, permissions);
+    const deniedVerdict = checkPermission("delete_file", {}, permissions);
     expect(deniedVerdict).toBe("deny");
 
-    const allowedVerdict = ToolGuard.check("read_file", {}, permissions);
+    const allowedVerdict = checkPermission("read_file", {}, permissions);
     expect(allowedVerdict).toBe("allow");
   });
 
   test("requireApproval verdict is returned correctly", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       requireApproval: ["dangerous_operation"],
     };
 
-    const verdict = ToolGuard.check("dangerous_operation", {}, permissions);
+    const verdict = checkPermission("dangerous_operation", {}, permissions);
     expect(verdict).toBe("require_approval");
   });
 
   test("invalid regex in inputRule does not match, falls through to default allow", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       inputRules: [
         {
@@ -74,12 +88,12 @@ describe("SubagentRuntime permissions", () => {
       ],
     };
 
-    const verdict = ToolGuard.check("test_tool", { input_field: "value" }, permissions);
+    const verdict = checkPermission("test_tool", { input_field: "value" }, permissions);
     expect(verdict).toBe("allow");
   });
 
   test("invalid regex with denylist fallback still denies", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       denylist: ["test_tool"],
       inputRules: [
@@ -93,33 +107,55 @@ describe("SubagentRuntime permissions", () => {
       ],
     };
 
-    const verdict = ToolGuard.check("test_tool", { input_field: "value" }, permissions);
+    const verdict = checkPermission("test_tool", { input_field: "value" }, permissions);
     expect(verdict).toBe("deny");
   });
 
   test("wildcard allowlist permits all tools", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       allowlist: ["*"],
     };
 
-    const verdict1 = ToolGuard.check("any_tool", {}, permissions);
+    const verdict1 = checkPermission("any_tool", {}, permissions);
     expect(verdict1).toBe("allow");
 
-    const verdict2 = ToolGuard.check("another_tool", {}, permissions);
+    const verdict2 = checkPermission("another_tool", {}, permissions);
     expect(verdict2).toBe("allow");
   });
 
   test("prefix pattern matching in allowlist", () => {
-    const permissions: Guardrail.Permission = {
+    const permissions: Policy.Permission = {
       action: "tool.call",
       allowlist: ["file.*"],
     };
 
-    const allowedVerdict = ToolGuard.check("file.read", {}, permissions);
+    const allowedVerdict = checkPermission("file.read", {}, permissions);
     expect(allowedVerdict).toBe("allow");
 
-    const deniedVerdict = ToolGuard.check("network.read", {}, permissions);
+    const deniedVerdict = checkPermission("network.read", {}, permissions);
     expect(deniedVerdict).toBe("deny");
+  });
+
+  test("subagent permission intersection preserves parent label constraints", () => {
+    const merged = intersectPermissions(
+      {
+        action: "tool.call",
+        allowLabels: ["capability:read"],
+        denyLabels: ["risk:tier-2"],
+      },
+      {
+        action: "tool.call",
+        allowLabels: ["capability:read", "capability:write"],
+        requireApprovalLabels: ["source:mcp"],
+      },
+    );
+
+    expect(merged).toMatchObject({
+      action: "tool.call",
+      allowLabels: ["capability:read"],
+      denyLabels: ["risk:tier-2"],
+      requireApprovalLabels: ["source:mcp"],
+    });
   });
 });

@@ -31,7 +31,7 @@ describe("defineTool", () => {
       },
     });
 
-    expect(tool.spec).toEqual({
+    expect(tool.spec).toMatchObject({
       name: "test.tool",
       description: "Test tool",
       inputSchema: {
@@ -42,12 +42,19 @@ describe("defineTool", () => {
         required: ["cmd"],
       },
       safe: false,
+      labels: ["tool:test.tool", "risk:tier-1", "source:system", "capability:write"],
     });
     expect(tool.riskTier).toBe(1);
     expect(tool.source).toBe("system");
     expect(tool.isReadOnly).toBe(false);
     expect(tool.isDestructive).toBe(false);
     expect(tool.isConcurrencySafe).toBe(false);
+    expect(tool.labels).toEqual([
+      "tool:test.tool",
+      "risk:tier-1",
+      "source:system",
+      "capability:write",
+    ]);
 
     const result = await tool.execute(makeCall({ cmd: "ls" }));
     expect(result.output).toBe("ls");

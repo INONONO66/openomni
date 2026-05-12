@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { MiddlewareEngine, type MiddlewareDecision } from "@openomni/agent";
+import { PolicyEngine, type PolicyDecision } from "@openomni/agent";
 import type { Skill } from "@openomni/protocol";
 import { createSkillActivationMiddleware } from "../../src/skill";
 
@@ -7,7 +7,7 @@ const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 describe("createSkillActivationMiddleware", () => {
   it("injects skill prompt fragments in execution, enhancement, guarantee order", async () => {
-    const engine = MiddlewareEngine.create({ audit: false });
+    const engine = PolicyEngine.create({ audit: false });
     engine.register(
       createSkillActivationMiddleware([
         skill("guard", "guarantee", "Guarantee behavior"),
@@ -35,8 +35,8 @@ describe("createSkillActivationMiddleware", () => {
   });
 
   it("continues without injection when no skills are active", async () => {
-    const decisions: MiddlewareDecision[] = [];
-    const engine = MiddlewareEngine.create({
+    const decisions: PolicyDecision[] = [];
+    const engine = PolicyEngine.create({
       audit: false,
       onDecision: (decision) => {
         decisions.push(decision);
@@ -57,8 +57,8 @@ describe("createSkillActivationMiddleware", () => {
   });
 
   it("makes same-layer execution conflicts observable while composing deterministically", async () => {
-    const decisions: MiddlewareDecision[] = [];
-    const engine = MiddlewareEngine.create({
+    const decisions: PolicyDecision[] = [];
+    const engine = PolicyEngine.create({
       audit: false,
       onDecision: (decision) => {
         decisions.push(decision);

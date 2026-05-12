@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createCompactionMiddleware } from "../../../../src/core/middleware/builtin/compaction";
-import type { MiddlewareContext } from "../../../../src/core/middleware";
+import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
+import type { PolicyContext } from "../../../../src/core/policy";
 
-function baseCtx(overrides?: Partial<MiddlewareContext>): MiddlewareContext {
+function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing: "post_turn",
     steps: [],
@@ -39,9 +39,9 @@ function createTestMessage(id: string): Message.WithParts {
   };
 }
 
-describe("createCompactionMiddleware", () => {
+describe("createCompactionPolicy", () => {
   it("continues when below threshold", async () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 10000,
       thresholdRatio: 0.8,
     });
@@ -58,7 +58,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("transforms when above threshold", async () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
       protectRecentMessages: 2,
@@ -89,7 +89,7 @@ describe("createCompactionMiddleware", () => {
       },
     };
 
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
       protectRecentMessages: 2,
@@ -112,7 +112,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("continues when no messages in context", async () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -128,7 +128,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("continues when empty messages array", async () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -144,7 +144,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("continues when no budget state", async () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
       thresholdRatio: 0.8,
     });
@@ -161,7 +161,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("has priority 900", () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
     });
 
@@ -169,7 +169,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("has name builtin:compaction", () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
     });
 
@@ -177,7 +177,7 @@ describe("createCompactionMiddleware", () => {
   });
 
   it("has timing post_compaction", () => {
-    const middleware = createCompactionMiddleware({
+    const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
     });
 

@@ -1,16 +1,11 @@
-import {
-  MiddlewareEngine,
-  type MiddlewareDecision,
-  type MiddlewareRegistration,
-} from "@openomni/agent";
-import type { Hook, Middleware, TraceContext } from "@openomni/protocol";
+import type { PolicyDecision } from "@openomni/agent";
+import type { Hook, TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { WorkspaceLock } from "../../workspace-lock.js";
 import type { ToolExecutorConfig, ToolRiskTier } from "../types.js";
 
 const policyId = "tool.runtime-policy";
-const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 const tierTimeouts: Record<number, number> = {
   0: 30_000,
   1: 30_000,
@@ -18,18 +13,6 @@ const tierTimeouts: Record<number, number> = {
   3: 120_000,
 };
 const defaultTierTimeoutMs = 30_000;
-
-interface ToolRuntimePolicyState {
-  readonly toolName: string;
-  readonly toolCallId?: string;
-  readonly input: Record<string, unknown>;
-  readonly riskTier: ToolRiskTier;
-  readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
-  readonly workspaceRoot?: string;
-  readonly lockOwnerId: string;
-  timeoutMs?: number;
-  lockAcquired: boolean;
-}
 
 function continueVerdict(reason: string): Hook.Verdict {
   return { action: "continue", policyId, reason };
@@ -55,99 +38,22 @@ function timeoutForRiskTier(
   return configured ?? tierTimeouts[riskTier] ?? defaultTierTimeoutMs;
 }
 
-function completeDispatchVerdict(verdict: Hook.Verdict, reason: string): Hook.Verdict {
-  if (verdict.action === "continue") {
-    return {
-      action: "continue",
-      policyId: verdict.policyId ?? policyId,
-      reason: verdict.reason ?? reason,
-    };
-  }
-
-  if (verdict.action === "abort") {
-    return {
-      action: "abort",
-      policyId: verdict.policyId ?? policyId,
-      reason: verdict.reason ?? reason,
-    };
-  }
-
-  return verdict;
-}
-
-function createRiskTierEvaluation(state: ToolRuntimePolicyState): MiddlewareRegistration {
-  return {
-    ...ToolRuntimePolicyMiddleware.RiskTier,
-    failPolicy: "fail-closed",
-    fn: () => {
-      if (state.riskTier >= 2) {
-        Bus.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          component: "executor.policy",
-          msg: "executor: high-risk tool execution",
-          context: { toolName: state.toolName, tier: state.riskTier },
-        });
-        return continueVerdict("high-risk tool execution recorded");
-      }
-
-      Bus.publish(Operational.Debug, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        component: "executor.policy",
-        msg: "executor: risk tier evaluated",
-        context: { toolName: state.toolName, tier: state.riskTier },
-      });
-      return continueVerdict("risk tier evaluated");
-    },
-  };
-}
-
-function createTimeoutResolution(state: ToolRuntimePolicyState): MiddlewareRegistration {
-  return {
-    ...ToolRuntimePolicyMiddleware.Timeout,
-    failPolicy: "fail-closed",
-    fn: () => {
-      state.timeoutMs = timeoutForRiskTier(state.riskTier, state.timeoutConfig);
-      return continueVerdict("timeout resolved");
-    },
-  };
-}
-
-function createWorkspaceLockAcquire(state: ToolRuntimePolicyState): MiddlewareRegistration {
-  return {
-    ...ToolRuntimePolicyMiddleware.WorkspaceLockAcquire,
-    failPolicy: "fail-closed",
-    async fn() {
-      if (state.riskTier < 1 || !state.workspaceRoot) {
-        return continueVerdict("workspace lock not required");
-      }
-
-      try {
-        await WorkspaceLock.acquire(state.workspaceRoot, state.lockOwnerId);
-        state.lockAcquired = true;
-        return continueVerdict("workspace lock acquired");
-      } catch (error) {
-        return abortVerdict(error instanceof Error ? error.message : String(error));
-      }
-    },
-  };
-}
-
-function createWorkspaceLockRelease(state: ToolRuntimePolicyState): MiddlewareRegistration {
-  return {
-    ...ToolRuntimePolicyMiddleware.WorkspaceLockRelease,
-    failPolicy: "fail-closed",
-    fn: () => {
-      if (!state.lockAcquired || !state.workspaceRoot) {
-        return continueVerdict("workspace lock release not required");
-      }
-
-      WorkspaceLock.release(state.workspaceRoot, state.lockOwnerId);
-      state.lockAcquired = false;
-      return continueVerdict("workspace lock released");
-    },
-  };
+function recordDecision(
+  timing: "pre_tool_use" | "post_tool_use",
+  name: string,
+  verdict: Hook.Verdict,
+  traceContext: TraceContext.Type | undefined,
+  onDecision: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
+): void {
+  void onDecision?.({
+    timing,
+    name,
+    policyId: verdict.policyId ?? policyId,
+    verdict: verdict.action,
+    durationMs: 0,
+    ...(verdict.reason !== undefined && { reason: verdict.reason }),
+    ...(traceContext !== undefined && { traceContext }),
+  });
 }
 
 export namespace ToolRuntimePolicyMiddleware {
@@ -160,34 +66,6 @@ export namespace ToolRuntimePolicyMiddleware {
       this.timeoutMs = timeoutMs;
     }
   }
-
-  export const RiskTier = {
-    name: "tool-runtime-policy:risk-tier",
-    timing: "pre_tool_use",
-    priority: 0,
-    failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
-
-  export const Timeout = {
-    name: "tool-runtime-policy:timeout",
-    timing: "pre_tool_use",
-    priority: 10,
-    failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
-
-  export const WorkspaceLockAcquire = {
-    name: "tool-runtime-policy:workspace-lock-acquire",
-    timing: "pre_tool_use",
-    priority: 20,
-    failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
-
-  export const WorkspaceLockRelease = {
-    name: "tool-runtime-policy:workspace-lock-release",
-    timing: "post_tool_use",
-    priority: 0,
-    failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
 
   export interface RuntimePolicyHandle {
     readonly timeoutMs: number;
@@ -205,7 +83,7 @@ export namespace ToolRuntimePolicyMiddleware {
     readonly workspaceRoot?: string;
     readonly lockOwnerId: string;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreToolResult {
@@ -220,97 +98,107 @@ export namespace ToolRuntimePolicyMiddleware {
     readonly output?: string;
     readonly handle: RuntimePolicyHandle;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: MiddlewareDecision) => void | Promise<void>;
-  }
-
-  export function registrations(state: ToolRuntimePolicyState): MiddlewareRegistration[] {
-    return [
-      createRiskTierEvaluation(state),
-      createTimeoutResolution(state),
-      createWorkspaceLockAcquire(state),
-      createWorkspaceLockRelease(state),
-    ];
+    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   export async function evaluatePreTool(ctx: PreToolContext): Promise<PreToolResult> {
-    const state: ToolRuntimePolicyState = {
-      toolName: ctx.toolName,
-      ...(ctx.toolCallId !== undefined && { toolCallId: ctx.toolCallId }),
-      input: ctx.input,
-      riskTier: ctx.riskTier,
-      ...(ctx.timeoutConfig !== undefined && { timeoutConfig: ctx.timeoutConfig }),
-      ...(ctx.workspaceRoot !== undefined && { workspaceRoot: ctx.workspaceRoot }),
+    const timeoutMs = timeoutForRiskTier(ctx.riskTier, ctx.timeoutConfig);
+    const handle: RuntimePolicyHandle = {
+      timeoutMs,
       lockOwnerId: ctx.lockOwnerId,
+      ...(ctx.workspaceRoot !== undefined && { workspaceRoot: ctx.workspaceRoot }),
       lockAcquired: false,
     };
-    const engine = MiddlewareEngine.create({
-      traceContext: ctx.traceContext,
-      onDecision: ctx.onDecision,
-      audit: false,
-    });
 
-    for (const registration of registrations(state)) {
-      if (registration.timing === "pre_tool_use") engine.register(registration);
+    const riskVerdict = continueVerdict(
+      ctx.riskTier >= 2 ? "high-risk tool execution recorded" : "risk tier evaluated",
+    );
+    Bus.publish(ctx.riskTier >= 2 ? Operational.Warn : Operational.Debug, {
+      traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+      time: Date.now(),
+      component: "executor.policy",
+      msg:
+        ctx.riskTier >= 2 ? "executor: high-risk tool execution" : "executor: risk tier evaluated",
+      context: { toolName: ctx.toolName, tier: ctx.riskTier },
+    });
+    recordDecision(
+      "pre_tool_use",
+      "tool-runtime-policy:risk-tier",
+      riskVerdict,
+      ctx.traceContext,
+      ctx.onDecision,
+    );
+
+    const timeoutVerdict = continueVerdict("timeout resolved");
+    recordDecision(
+      "pre_tool_use",
+      "tool-runtime-policy:timeout",
+      timeoutVerdict,
+      ctx.traceContext,
+      ctx.onDecision,
+    );
+
+    if (ctx.riskTier < 1 || !ctx.workspaceRoot) {
+      const verdict = continueVerdict("workspace lock not required");
+      recordDecision(
+        "pre_tool_use",
+        "tool-runtime-policy:workspace-lock-acquire",
+        verdict,
+        ctx.traceContext,
+        ctx.onDecision,
+      );
+      return { verdict: continueVerdict("runtime policy evaluated"), handle };
     }
 
-    const verdict = await engine.dispatch("pre_tool_use", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 0,
-      toolName: ctx.toolName,
-      toolCallId: ctx.toolCallId,
-      toolInput: ctx.input,
-      traceContext: ctx.traceContext,
-    });
-
-    return {
-      verdict: completeDispatchVerdict(verdict, "runtime policy evaluated"),
-      handle: {
-        timeoutMs: state.timeoutMs ?? timeoutForRiskTier(ctx.riskTier, ctx.timeoutConfig),
-        lockOwnerId: state.lockOwnerId,
-        ...(state.workspaceRoot !== undefined && { workspaceRoot: state.workspaceRoot }),
-        lockAcquired: state.lockAcquired,
-      },
-    };
+    try {
+      await WorkspaceLock.acquire(ctx.workspaceRoot, ctx.lockOwnerId);
+      handle.lockAcquired = true;
+      const verdict = continueVerdict("workspace lock acquired");
+      recordDecision(
+        "pre_tool_use",
+        "tool-runtime-policy:workspace-lock-acquire",
+        verdict,
+        ctx.traceContext,
+        ctx.onDecision,
+      );
+      return { verdict: continueVerdict("runtime policy evaluated"), handle };
+    } catch (error) {
+      const verdict = abortVerdict(error instanceof Error ? error.message : String(error));
+      recordDecision(
+        "pre_tool_use",
+        "tool-runtime-policy:workspace-lock-acquire",
+        verdict,
+        ctx.traceContext,
+        ctx.onDecision,
+      );
+      return { verdict, handle };
+    }
   }
 
-  export async function evaluatePostTool(ctx: PostToolContext): Promise<Hook.Verdict> {
-    const state: ToolRuntimePolicyState = {
-      toolName: ctx.toolName,
-      ...(ctx.toolCallId !== undefined && { toolCallId: ctx.toolCallId }),
-      input: ctx.input,
-      riskTier: 0,
-      ...(ctx.handle.workspaceRoot !== undefined && { workspaceRoot: ctx.handle.workspaceRoot }),
-      lockOwnerId: ctx.handle.lockOwnerId,
-      timeoutMs: ctx.handle.timeoutMs,
-      lockAcquired: ctx.handle.lockAcquired,
-    };
-    const engine = MiddlewareEngine.create({
-      traceContext: ctx.traceContext,
-      onDecision: ctx.onDecision,
-      audit: false,
-    });
-    engine.register(createWorkspaceLockRelease(state));
+  export function evaluatePostTool(ctx: PostToolContext): Hook.Verdict {
+    if (!ctx.handle.lockAcquired || !ctx.handle.workspaceRoot) {
+      const verdict = continueVerdict("workspace lock release not required");
+      recordDecision(
+        "post_tool_use",
+        "tool-runtime-policy:workspace-lock-release",
+        verdict,
+        ctx.traceContext,
+        ctx.onDecision,
+      );
+      return continueVerdict("runtime policy post-tool evaluated");
+    }
 
-    const verdict = await engine.dispatch("post_tool_use", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 0,
-      toolName: ctx.toolName,
-      toolCallId: ctx.toolCallId,
-      toolInput: ctx.input,
-      toolOutput: ctx.output,
-      traceContext: ctx.traceContext,
-    });
-
-    ctx.handle.lockAcquired = state.lockAcquired;
-    return completeDispatchVerdict(verdict, "runtime policy post-tool evaluated");
+    WorkspaceLock.release(ctx.handle.workspaceRoot, ctx.handle.lockOwnerId);
+    ctx.handle.lockAcquired = false;
+    const verdict = continueVerdict("workspace lock released");
+    recordDecision(
+      "post_tool_use",
+      "tool-runtime-policy:workspace-lock-release",
+      verdict,
+      ctx.traceContext,
+      ctx.onDecision,
+    );
+    return continueVerdict("runtime policy post-tool evaluated");
   }
 
   export function enforceTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

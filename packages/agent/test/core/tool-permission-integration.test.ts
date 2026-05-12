@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { Run, Sink, Tool } from "@openomni/protocol";
+import type { Policy, Run, Sink, Tool } from "@openomni/protocol";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -27,7 +27,7 @@ beforeAll(async () => {
 
 function createAssistantMessage(text: string) {
   const id = `msg-${Math.random().toString(16).slice(2)}`;
-  const sessionID = "tool-guard-integration-test";
+  const sessionID = "tool-permission-integration-test";
   const now = Date.now();
 
   return {
@@ -81,7 +81,7 @@ function resetMocks() {
   mockProviderFromModelsDevModel.mockClear();
 }
 
-describe("ToolGuard integration via toolExecutor", () => {
+describe("tool permission integration via toolExecutor", () => {
   it("deny blocks tool execution in run()", async () => {
     resetMocks();
     const executor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
@@ -250,6 +250,120 @@ describe("ToolGuard integration via toolExecutor", () => {
     expect(executor).toHaveBeenCalledTimes(1);
     expect(observedToolResult?.isError).toBe(false);
     expect(observedToolResult?.output).toBe("executed:bash");
+  });
+
+  it("evaluates permission labels from tool specs", async () => {
+    resetMocks();
+    const executor = mock(
+      async (call: Tool.Call): Promise<Tool.Result> => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: `executed:${call.tool}`,
+        isError: false,
+      }),
+    );
+
+    let observedToolResult: Tool.Result | undefined;
+    mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+      const call = createToolCall("call-label", "write", { path: "file.txt" });
+      const result = await executeTool(input, call);
+      sink.onToolCall(call);
+      sink.onToolResult(result);
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
+    };
+
+    const writeTool: Tool.Spec & { labels: string[] } = {
+      name: "write",
+      inputSchema: { type: "object", properties: { path: { type: "string" } } },
+      labels: ["capability:write", "risk:tier-1"],
+    };
+
+    const labelPermission: Policy.Permission = {
+      action: "tool.call",
+      denyLabels: ["capability:write"],
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
+      tools: [writeTool],
+      toolExecutor: executor,
+      permissions: labelPermission,
+    });
+
+    await agent.run(
+      { messages: [{ role: "user", content: "write file" }] },
+      {
+        onMessage: () => undefined,
+        onToolCall: () => undefined,
+        onToolResult: (result) => {
+          observedToolResult = result;
+        },
+        onSnapshot: () => undefined,
+      },
+    );
+
+    expect(executor).toHaveBeenCalledTimes(0);
+    expect(observedToolResult?.isError).toBe(true);
+    expect(String(observedToolResult?.output)).toContain("deny_label");
+  });
+
+  it("evaluates sanitized tool aliases against canonical policy names", async () => {
+    resetMocks();
+    const executor = mock(
+      async (call: Tool.Call): Promise<Tool.Result> => ({
+        id: newID("result"),
+        toolCallId: call.id,
+        output: `executed:${call.tool}`,
+        isError: false,
+      }),
+    );
+
+    let observedToolResult: Tool.Result | undefined;
+    mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+      const call = createToolCall("call-alias", "grep_search", { pattern: "secret" });
+      const result = await executeTool(input, call);
+      sink.onToolCall(call);
+      sink.onToolResult(result);
+      sink.onMessage(createAssistantMessage("done"));
+      return createStopOutcome();
+    };
+
+    const grepTool: Tool.Spec = {
+      name: "grep_search",
+      inputSchema: { type: "object", properties: { pattern: { type: "string" } } },
+      labels: ["tool:grep.search", "capability:read", "risk:tier-1"],
+    };
+
+    const permission: Policy.Permission = {
+      action: "tool.call",
+      denylist: ["grep.search"],
+    };
+
+    const agent = ChatAgent.create({
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
+      tools: [grepTool],
+      toolExecutor: executor,
+      permissions: permission,
+    });
+
+    await agent.run(
+      { messages: [{ role: "user", content: "search files" }] },
+      {
+        onMessage: () => undefined,
+        onToolCall: () => undefined,
+        onToolResult: (result) => {
+          observedToolResult = result;
+        },
+        onSnapshot: () => undefined,
+      },
+    );
+
+    expect(executor).toHaveBeenCalledTimes(0);
+    expect(observedToolResult?.isError).toBe(true);
+    expect(String(observedToolResult?.output)).toContain("denylist");
   });
 
   it("without permissions uses original executor for backward compatibility", async () => {

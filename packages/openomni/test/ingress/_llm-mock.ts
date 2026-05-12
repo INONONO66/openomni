@@ -99,6 +99,17 @@ mock.module("@openomni/llm", () => ({
     }
     return Promise.resolve({ type: "stop" } as Run.Outcome);
   },
+  Retry: {
+    DEFAULT_AGENT_RETRY_POLICY: {
+      maxAttempts: 1,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+      retryOn: [],
+    },
+    calculateAgentBackoffMs: () => 0,
+    classifyAgentRetryReason: () => "transient_error",
+    shouldAgentRetry: () => false,
+    agentSleep: () => Promise.resolve(),
+  },
   TokenTracker: {
     extractUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
   },

@@ -49,7 +49,6 @@ export function createExecutionToolContext(
     toolExecutor: createToolExecutor({
       tools: selectedTools,
       config: {
-        permissions: request.permissions,
         workspaceRoot: request.toolConfig?.workspaceRoot,
         runtime:
           request.sessionId && request.runId

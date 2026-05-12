@@ -1,10 +1,11 @@
-export { createBudgetReassuranceMiddleware, createBudgetWarningMiddleware } from "./budget";
-export { createCompactionMiddleware } from "./compaction";
-export { createPostToolMiddleware } from "./post-tool";
+export { createBudgetReassurancePolicy, createBudgetWarningPolicy } from "./budget";
+export { createCompactionPolicy } from "./compaction";
+export { createMemoryPolicy } from "./memory";
+export { createPostToolPolicy } from "./post-tool";
 export type { PostToolEnricher } from "./post-tool";
-export { createPostTurnMiddleware } from "./post-turn";
+export { createPostTurnPolicy } from "./post-turn";
 export type { PostTurnHandler } from "./post-turn";
-export { createIdleNudgeMiddleware } from "./idle-nudge";
+export { createIdleNudgePolicy } from "./idle-nudge";
 export type { IdleNudgeConfig } from "./idle-nudge";
-export { createToolGuardMiddleware } from "./tool-guard";
-export type { ToolGuardMiddlewareConfig } from "./tool-guard";
+export { createToolPermissionPolicy } from "./tool-guard";
+export type { ToolPermissionPolicyConfig } from "./tool-guard";

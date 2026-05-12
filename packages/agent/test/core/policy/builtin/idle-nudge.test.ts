@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createIdleNudgeMiddleware } from "../../../../src/core/middleware/builtin/idle-nudge";
-import type { MiddlewareContext } from "../../../../src/core/middleware";
+import { createIdleNudgePolicy } from "../../../../src/core/policy/builtin/idle-nudge";
+import type { PolicyContext } from "../../../../src/core/policy";
 import type { Hook } from "@openomni/protocol";
 
 const originalNow = Date.now;
@@ -9,7 +9,7 @@ function mockNow(ms: number): void {
   Date.now = () => ms;
 }
 
-function baseCtx(timing: Hook.Timing, overrides?: Partial<MiddlewareContext>): MiddlewareContext {
+function baseCtx(timing: Hook.Timing, overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing,
     steps: [],
@@ -26,10 +26,10 @@ afterEach(() => {
   Date.now = originalNow;
 });
 
-describe("createIdleNudgeMiddleware", () => {
+describe("createIdleNudgePolicy", () => {
   it("continues when activity is recent (not idle)", async () => {
     mockNow(1000);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 60000 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
     const verdict = await mw.fn(baseCtx("pre_turn"));
     expect(verdict.action).toBe("continue");
@@ -37,7 +37,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("injects nudge message when idle threshold exceeded", async () => {
     mockNow(1000);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 60000 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
     const verdict = await mw.fn(baseCtx("pre_turn"));
     expect(verdict.action).toBe("inject");
@@ -50,7 +50,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("aborts with 'stalled' after maxNudges exceeded", async () => {
     mockNow(0);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 1000, maxNudges: 2 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 1000, maxNudges: 2 });
 
     mockNow(2000);
     expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("inject");
@@ -68,7 +68,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("post_tool_use resets idle timer", async () => {
     mockNow(0);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 60000 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
 
     mockNow(65000);
     await mw.fn(baseCtx("post_tool_use"));
@@ -80,7 +80,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("is disabled when idleThresholdMs is -1", async () => {
     mockNow(0);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: -1 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
     const verdict = await mw.fn(baseCtx("pre_turn"));
     expect(verdict.action).toBe("continue");
@@ -88,7 +88,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("respects custom idleThresholdMs and maxNudges", async () => {
     mockNow(0);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 5000, maxNudges: 1 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 5000, maxNudges: 1 });
 
     mockNow(3000);
     expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("continue");
@@ -104,7 +104,7 @@ describe("createIdleNudgeMiddleware", () => {
 
   it("nudge message reports idle duration in seconds", async () => {
     mockNow(0);
-    const mw = createIdleNudgeMiddleware({ idleThresholdMs: 10000 });
+    const mw = createIdleNudgePolicy({ idleThresholdMs: 10000 });
     mockNow(125500);
     const verdict = await mw.fn(baseCtx("pre_turn"));
     expect(verdict.action).toBe("inject");
@@ -114,7 +114,7 @@ describe("createIdleNudgeMiddleware", () => {
   });
 
   it("registers for both pre_turn and post_tool_use timings with priority 300", () => {
-    const mw = createIdleNudgeMiddleware();
+    const mw = createIdleNudgePolicy();
     expect(mw.name).toBe("builtin:idle-nudge");
     expect(mw.priority).toBe(300);
     expect(Array.isArray(mw.timing)).toBe(true);

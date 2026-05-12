@@ -1,10 +1,10 @@
-import type { PolicyContext, PolicyRegistration } from "../types";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import type { PolicyContext, PolicyRegistration } from "../types";
 
 export type PostToolEnricher = (ctx: PolicyContext) => string | null | Promise<string | null>;
 
-export function createPostToolMiddleware(enricher: PostToolEnricher): PolicyRegistration {
+export function createPostToolPolicy(enricher: PostToolEnricher): PolicyRegistration {
   return {
     name: "builtin:post-tool",
     timing: "post_tool_use",
@@ -15,7 +15,7 @@ export function createPostToolMiddleware(enricher: PostToolEnricher): PolicyRegi
         addition = await enricher(ctx);
       } catch (error) {
         Bus.publish(Operational.Debug, {
-          traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+          traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "agent.policy.post-tool",
           msg: "post-tool enricher failed",

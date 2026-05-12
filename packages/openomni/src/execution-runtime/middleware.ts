@@ -1,24 +1,16 @@
-import {
-  createBudgetReassuranceMiddleware,
-  createBudgetWarningMiddleware,
-  createIdleNudgeMiddleware,
-  createToolGuardMiddleware,
-} from "@openomni/agent";
-import type { AgentBudget, MiddlewareRegistration } from "@openomni/agent";
-import type { Guardrail } from "@openomni/protocol";
+import { createIdleNudgePolicy, createToolPermissionPolicy } from "@openomni/agent";
+import type { PolicyRegistration } from "@openomni/agent";
+import type { Policy } from "@openomni/protocol";
 
 export interface WorkerMiddlewareConfig {
-  permissions?: Guardrail.Permission;
-  budget?: AgentBudget;
+  permissions?: Policy.Permission;
 }
 
-export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): MiddlewareRegistration[] {
+export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyRegistration[] {
   return [
-    createToolGuardMiddleware({
+    createToolPermissionPolicy({
       permission: config.permissions ?? { action: "tool.call" },
     }),
-    createBudgetReassuranceMiddleware(),
-    createBudgetWarningMiddleware(),
-    createIdleNudgeMiddleware(),
+    createIdleNudgePolicy(),
   ];
 }

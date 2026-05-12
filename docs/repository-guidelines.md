@@ -43,7 +43,6 @@ Known watchpoints:
 | --- | --- | --- |
 | `apps/server/src/agents/types.ts` | Server-local agent definition with trigger metadata. | Keep app-local unless reused outside `apps/server`; promote persistent persona contracts to `protocol`. |
 | `packages/openomni/src/storage/task-types.ts` | Backward-compat task re-export shim. | Remove only after migration scripts import `Task` from `@openomni/protocol` directly. |
-| `packages/agent/src/core/middleware/compat.ts` | Legacy hooks/stepGuard bridge. | No new callers; remove after downstream migration. |
 
 ## Test matrix expectations
 

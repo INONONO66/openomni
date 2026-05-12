@@ -2,9 +2,9 @@ import {
   ChatAgent,
   InMemoryCompactor,
   type ChatAgentConfig,
-  type MiddlewareRegistration,
+  type PolicyRegistration,
 } from "@openomni/agent";
-import type { Guardrail } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 import type { RuntimeModel, RuntimeMessage } from "./shared";
 import {
   buildRuntimeMessages,
@@ -18,7 +18,7 @@ export type RuntimeConfig = {
   tools?: ChatAgentConfig["tools"];
   toolExecutor?: ChatAgentConfig["toolExecutor"];
   budget?: ChatAgentConfig["budget"];
-  middleware?: MiddlewareRegistration[];
+  middleware?: PolicyRegistration[];
 };
 
 export type SendCompactionConfig = {
@@ -76,7 +76,7 @@ export async function runWithTranscript(
   sessionId: string,
   config: RuntimeConfig,
   signal?: AbortSignal,
-  permissions?: Guardrail.Permission,
+  permissions?: Policy.Permission,
   messages = buildChildMessagesInternal(sessionId),
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const agent = ChatAgent.create({
