@@ -4,7 +4,7 @@ type GuardRuleId =
   | "ad-hoc-list-membership"
   | "inline-channel-trigger-evaluation"
   | "inline-authorization-throw"
-  | "missing-canonical-guardrail-evaluator";
+  | "missing-canonical-policy-evaluator";
 
 interface GuardViolation {
   readonly ruleId: GuardRuleId;
@@ -22,17 +22,17 @@ const scanRoots = ["packages", "apps"];
 const excludedPathParts = ["/dist/", "/node_modules/", "/coverage/", "/generated/"];
 const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 
-const canonicalGuardrailEvaluator = new Set(["packages/protocol/src/guardrail/index.ts"]);
-const canonicalGuardrailRequiredFiles = new Set([
+const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/index.ts"]);
+const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/ingress/middleware/ingress-authority.ts",
   "packages/openomni/src/subagent/middleware/subagent-spawn-policy.ts",
   "packages/openomni/src/subagent/middleware/background-limits.ts",
-  "packages/agent/src/core/middleware/builtin/messenger-allow-pattern.ts",
+  "packages/agent/src/core/policy/builtin/messenger-allow-pattern.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "apps/server/src/channel/channel-authn.ts",
 ]);
 const approvedAuthorizationFiles = new Set([
-  "packages/protocol/src/guardrail/index.ts",
+  "packages/protocol/src/policy/index.ts",
   "packages/openomni/src/extension/manager.ts",
   "packages/coordinator/src/tool-permission/policy.ts",
 ]);
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
 
   for (const filePath of files) {
     const source = await Bun.file(filePath).text();
-    violations.push(...validateCanonicalGuardrailUsage(filePath, source));
+    violations.push(...validateCanonicalPolicyUsage(filePath, source));
     violations.push(...validateChannelTriggerEvaluation(filePath, source));
     violations.push(...validateListMembership(filePath, source));
     violations.push(...validateInlineAuthorization(filePath, source));
@@ -99,18 +99,17 @@ function shouldSkip(filePath: string): boolean {
   return excludedPathParts.some((part) => filePath.includes(part));
 }
 
-function validateCanonicalGuardrailUsage(filePath: string, source: string): GuardViolation[] {
-  if (!canonicalGuardrailRequiredFiles.has(filePath) || source.includes("Guardrail.evaluate(")) {
+function validateCanonicalPolicyUsage(filePath: string, source: string): GuardViolation[] {
+  if (!canonicalPolicyRequiredFiles.has(filePath) || source.includes("Policy.evaluate(")) {
     return [];
   }
 
   return [
     {
-      ruleId: "missing-canonical-guardrail-evaluator",
+      ruleId: "missing-canonical-policy-evaluator",
       filePath,
       line: 1,
-      message:
-        "migrated policy middleware must route permission verdicts through Guardrail.evaluate",
+      message: "migrated policy middleware must route permission verdicts through Policy.evaluate",
     },
   ];
 }
@@ -129,7 +128,7 @@ function validateChannelTriggerEvaluation(filePath: string, source: string): Gua
 }
 
 function validateListMembership(filePath: string, source: string): GuardViolation[] {
-  if (canonicalGuardrailEvaluator.has(filePath)) {
+  if (canonicalPolicyEvaluator.has(filePath)) {
     return [];
   }
 
@@ -138,7 +137,7 @@ function validateListMembership(filePath: string, source: string): GuardViolatio
     filePath,
     line: lineNumberForOffset(source, match.index),
     message:
-      "denylist/allowlist membership must go through Guardrail.evaluate instead of inline includes",
+      "denylist/allowlist membership must go through Policy.evaluate instead of inline includes",
   }));
 }
 
@@ -153,7 +152,7 @@ function validateInlineAuthorization(filePath: string, source: string): GuardVio
       filePath,
       line: lineNumberForOffset(source, match.index),
       message:
-        "inline authorization throws belong in approved middleware or guardrail implementation files",
+        "inline authorization throws belong in approved middleware or policy implementation files",
     })),
   );
 }
