@@ -5,7 +5,7 @@ import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import { resolveProviderModel } from "./shared";
 import {
   assertToolExecutor,
-  buildMiddlewareEngine,
+  buildPolicyEngine,
   buildTurn,
   createStreamRunState,
   dispatchBudgetCheck,
@@ -44,7 +44,7 @@ export async function* streamAgent(
 
   while (attempt <= retryPolicy.maxAttempts) {
     const state = createStreamRunState(input);
-    const engine = buildMiddlewareEngine(config, agentBase);
+    const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
         config.model,

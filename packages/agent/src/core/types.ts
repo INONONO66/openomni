@@ -1,53 +1,8 @@
-import type { Tool, Sink, Guardrail, Message, Hook } from "@openomni/protocol";
+import type { Tool, Sink, Policy, Message, Hook } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
-import type { MiddlewareRegistration } from "./middleware/types";
+import type { PolicyRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
-
-export type StepGuardVerdict =
-  | { action: "continue" }
-  | { action: "inject"; message: string; reason?: string; policyId?: string }
-  | { action: "abort"; reason?: string; policyId?: string };
-
-export interface StepGuardContext {
-  steps: AgentStep[];
-  usage: TokenUsage;
-  turnCount: number;
-  isCompletion: boolean;
-  continuationCount: number;
-  elapsedMs: number;
-}
-
-/**
- * @deprecated Use {@link MiddlewareContext} from `./middleware/types` instead.
- * Register middleware via `ChatAgentConfig.middleware` array.
- */
-export interface HookContext {
-  toolName?: string;
-  toolCallId?: string;
-  input?: Record<string, unknown>;
-  output?: string;
-  steps: AgentStep[];
-  turnCount: number;
-  elapsedMs: number;
-}
-
-/**
- * @deprecated Use {@link Hook.Verdict} from `@openomni/protocol` instead.
- * Register middleware via `ChatAgentConfig.middleware` array.
- */
-export type HookVerdict = Hook.Verdict;
-
-/**
- * @deprecated Use {@link MiddlewareRegistration} from `./middleware/types` instead.
- * Register middleware via `ChatAgentConfig.middleware` array.
- */
-export interface ExecutionHooks {
-  preToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
-  postToolUse?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
-  preTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
-  postTurn?: (context: HookContext) => Promise<HookVerdict> | HookVerdict;
-  onError?: (context: HookContext & { error: Error }) => Promise<HookVerdict> | HookVerdict;
-}
+import type { Memory } from "./memory";
 
 export interface AgentEventEmitter {
   emit(eventName: string, data: Record<string, unknown>): void;
@@ -79,29 +34,17 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   signal?: AbortSignal;
-  permissions?: Guardrail.Permission;
+  permissions?: Policy.Permission;
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
-  /**
-   * @deprecated Use `middleware` array with `post_turn` timing instead.
-   * Register a middleware with `timing: "post_turn"` to replace stepGuard behavior.
-   */
-  stepGuard?: (
-    step: AgentStep,
-    context: StepGuardContext,
-  ) => Promise<StepGuardVerdict> | StepGuardVerdict;
-  /**
-   * @deprecated Use `middleware` array instead.
-   * Register middleware via `ChatAgentConfig.middleware` for all hook behaviors.
-   */
-  hooks?: ExecutionHooks;
+  memory?: Memory;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
-  middleware?: MiddlewareRegistration[];
+  middleware?: PolicyRegistration[];
   context?: AgentRuntimeContext;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
@@ -146,6 +89,6 @@ export type AgentEvent =
   | { type: "complete"; result: AgentResult }
   | { type: "budget_warning"; remaining: string }
   | { type: "budget_reassurance"; remaining: string }
-  | { type: "hook_verdict"; timing: Hook.Timing; action: HookVerdict["action"]; reason?: string };
+  | { type: "hook_verdict"; timing: Hook.Timing; action: Hook.Verdict["action"]; reason?: string };
 
 export type { Sink };

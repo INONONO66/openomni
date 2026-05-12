@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
 import type { AgentProfile } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+import type { PolicyRegistration } from "../../../src/core/policy/types";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 
@@ -25,7 +25,7 @@ function resetState() {
   AgentRegistry.clear();
 }
 
-function makeMiddleware(name: string, propagate?: boolean): MiddlewareRegistration {
+function makeMiddleware(name: string, propagate?: boolean): PolicyRegistration {
   return {
     name,
     timing: "pre_run",
@@ -57,7 +57,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
 
     expect(spawn).toHaveBeenCalledTimes(1);
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
+    const middleware = spawnArg.middleware as PolicyRegistration[] | undefined;
     expect(middleware).toBeDefined();
     expect(middleware?.some((m) => m.name === "tracked-mw")).toBe(true);
   });
@@ -78,7 +78,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     await execute({ agentName: "prop-false-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = (spawnArg.middleware ?? []) as MiddlewareRegistration[];
+    const middleware = (spawnArg.middleware ?? []) as PolicyRegistration[];
     expect(middleware.some((m) => m.name === "blocked-mw")).toBe(false);
   });
 
@@ -98,7 +98,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     await execute({ agentName: "default-prop-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = (spawnArg.middleware ?? []) as MiddlewareRegistration[];
+    const middleware = (spawnArg.middleware ?? []) as PolicyRegistration[];
     expect(middleware.some((m) => m.name === "no-field-mw")).toBe(false);
   });
 
@@ -119,7 +119,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
     await execute({ agentName: "mixed-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
+    const middleware = spawnArg.middleware as PolicyRegistration[] | undefined;
     expect(middleware).toBeDefined();
     expect(middleware?.some((m) => m.name === "propagated-mw")).toBe(true);
     expect(middleware?.some((m) => m.name === "blocked-mw")).toBe(false);
@@ -146,7 +146,7 @@ describe("SubagentTool middleware propagation via SubagentRuntime", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     const sendArg = send.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = sendArg.middleware as MiddlewareRegistration[] | undefined;
+    const middleware = sendArg.middleware as PolicyRegistration[] | undefined;
     expect(middleware).toBeDefined();
     expect(middleware?.some((m) => m.name === "send-mw")).toBe(true);
   });

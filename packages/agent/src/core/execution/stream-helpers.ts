@@ -1,34 +1,29 @@
 import type { RunInput } from "@openomni/llm";
 import { Retry } from "@openomni/llm";
 import { AgentExecution, Operational } from "@openomni/protocol";
-import type { Message, Sink, Tool, TraceContext } from "@openomni/protocol";
+import type { Hook, Message, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import {
   checkBudget,
   createBudgetState,
   describeBudgetRemaining,
+  recordToolCall,
   recordTokenUsage,
   recordTurn,
 } from "../budget";
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
-import { fromConfig, MiddlewareEngine } from "../middleware";
-import type { MiddlewareEngineInstance } from "../middleware";
+import { PolicyEngine } from "../policy";
+import type { PolicyEngineInstance } from "../policy";
 import {
-  createBudgetReassuranceMiddleware,
-  createBudgetWarningMiddleware,
-  createCompactionMiddleware,
-  createToolGuardMiddleware,
-} from "../middleware/builtin";
+  createBudgetReassurancePolicy,
+  createBudgetWarningPolicy,
+  createCompactionPolicy,
+  createMemoryPolicy,
+  createToolPermissionPolicy,
+} from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
-import type {
-  AgentEvent,
-  AgentStep,
-  ChatAgentConfig,
-  ChatAgentInput,
-  HookVerdict,
-  TokenUsage,
-} from "../types";
+import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import { toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
 
@@ -63,7 +58,7 @@ export interface TurnArtifacts {
     toolCallId: string;
     result: Tool.Result;
   }>;
-  readonly preToolUseVerdicts: HookVerdict[];
+  readonly preToolUseVerdicts: Hook.Verdict[];
 }
 
 export type BuildTurnResult =
@@ -110,25 +105,22 @@ export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   };
 }
 
-export function buildMiddlewareEngine(
+export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
-): MiddlewareEngineInstance {
-  const engine = MiddlewareEngine.create({
+): PolicyEngineInstance {
+  const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
       ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
       ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
     },
   });
-  engine.register(createBudgetReassuranceMiddleware());
-  engine.register(createBudgetWarningMiddleware());
-  for (const reg of fromConfig({ hooks: config.hooks, stepGuard: config.stepGuard })) {
-    engine.register(reg);
-  }
+  engine.register(createBudgetReassurancePolicy());
+  engine.register(createBudgetWarningPolicy());
   if (config.permissions) {
     engine.register(
-      createToolGuardMiddleware({
+      createToolPermissionPolicy({
         permission: config.permissions,
         eventEmitter: config.eventEmitter,
         source: "stream-engine",
@@ -136,7 +128,10 @@ export function buildMiddlewareEngine(
     );
   }
   if (config.compaction) {
-    engine.register(createCompactionMiddleware(config.compaction));
+    engine.register(createCompactionPolicy(config.compaction));
+  }
+  if (config.memory) {
+    engine.register(createMemoryPolicy(config.memory));
   }
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
@@ -156,9 +151,29 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
   }
 }
 
+function buildToolLabelMap(tools: ChatAgentConfig["tools"]): Map<string, string[]> {
+  const labels = new Map<string, string[]>();
+  for (const tool of tools ?? []) {
+    const labelledTool = tool as typeof tool & { labels?: string[] };
+    if (!labelledTool.labels || labelledTool.labels.length === 0) continue;
+    labels.set(tool.name, labelledTool.labels);
+    const canonical = labelledTool.labels.find((label) => label.startsWith("tool:"))?.slice(5);
+    if (canonical) labels.set(canonical, labelledTool.labels);
+    const dotted = tool.name.replace(/_/g, ".");
+    if (dotted !== tool.name) labels.set(dotted, labelledTool.labels);
+  }
+  return labels;
+}
+
+function resolvePolicyToolName(toolName: string, labels: Map<string, string[]>): string {
+  const toolLabels = labels.get(toolName) ?? labels.get(toolName.replace(/_/g, "."));
+  const canonical = toolLabels?.find((label) => label.startsWith("tool:"));
+  return canonical ? canonical.slice(5) : toolName;
+}
+
 export async function dispatchPreRun(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
   const preRunVerdict = await engine.dispatch("pre_run", {
@@ -193,7 +208,7 @@ export async function dispatchPreRun(
 
 export async function dispatchBudgetCheck(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): Promise<AgentEvent | null> {
@@ -288,7 +303,7 @@ export function emitTurnComplete(
 export async function buildTurn(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: TraceContext.Type,
@@ -351,11 +366,17 @@ export async function buildTurn(
   state.budgetState = recordTurn(state.budgetState);
   if (config.signal?.aborted) throw new Error("aborted");
 
-  const preToolUseVerdicts: HookVerdict[] = [];
+  const preToolUseVerdicts: Hook.Verdict[] = [];
+  const toolLabels = buildToolLabelMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
         toolExecutor: config.toolExecutor,
         engine,
+        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolLabels),
+        getToolLabels: (toolName) => toolLabels.get(toolName),
+        onToolComplete: (durationMs) => {
+          state.budgetState = recordToolCall(state.budgetState, durationMs);
+        },
         getContext: () => ({
           steps: state.steps,
           turnCount: state.budgetState.turns,
@@ -456,7 +477,7 @@ export function createTrackingSink(
 export async function* handleStop(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   agentBase: StreamAgentBase,
   turn: TurnArtifacts,
 ): AsyncGenerator<AgentEvent, "complete" | "continue"> {
@@ -573,7 +594,7 @@ export async function* handleContinue(
 
 export async function handleCompact(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): Promise<"continue"> {
@@ -584,7 +605,7 @@ export async function handleCompact(
 
 export async function* handleError(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   error: unknown,
@@ -687,7 +708,7 @@ function continueFlowDecision(decision: Extract<TurnDecision, { kind: "continue"
 async function buildTurnSystemPrompt(
   state: StreamRunState,
   config: ChatAgentConfig,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
 ): Promise<string | undefined> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
   const spVerdict = await engine.dispatchSystemPrompt({
@@ -714,7 +735,7 @@ async function buildTurnSystemPrompt(
 
 async function dispatchPostRunTransform(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
   const postRunVerdict = await engine.dispatch("post_run", {
@@ -737,7 +758,7 @@ async function dispatchPostRunTransform(
 
 async function applyPostCompaction(
   state: StreamRunState,
-  engine: MiddlewareEngineInstance,
+  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
   isCompletion: boolean,

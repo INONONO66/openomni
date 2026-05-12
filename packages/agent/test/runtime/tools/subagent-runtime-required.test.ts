@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
 import type { AgentProfile } from "@openomni/protocol";
-import type { MiddlewareRegistration } from "../../../src/core/middleware/types";
+import type { PolicyRegistration } from "../../../src/core/policy/types";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 let mockChatAgentCreate: (...args: unknown[]) => unknown;
@@ -38,7 +38,7 @@ function resetState() {
   }));
 }
 
-function makeMiddleware(name: string, propagate?: boolean): MiddlewareRegistration {
+function makeMiddleware(name: string, propagate?: boolean): PolicyRegistration {
   return {
     name,
     timing: "pre_run",
@@ -92,7 +92,7 @@ describe("SubagentTool SubagentRuntime execution", () => {
     await execute({ agentName: "mw-runtime-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
+    const middleware = spawnArg.middleware as PolicyRegistration[] | undefined;
     expect(middleware).toBeDefined();
     expect(middleware?.some((m) => m.name === "tracked-mw")).toBe(true);
   });
@@ -118,7 +118,7 @@ describe("SubagentTool SubagentRuntime execution", () => {
     await execute({ agentName: "propagate-filter-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = spawnArg.middleware as MiddlewareRegistration[] | undefined;
+    const middleware = spawnArg.middleware as PolicyRegistration[] | undefined;
     expect(middleware).toBeDefined();
     expect(middleware?.some((m) => m.name === "will-forward")).toBe(true);
     expect(middleware?.some((m) => m.name === "will-block")).toBe(false);
@@ -144,7 +144,7 @@ describe("SubagentTool SubagentRuntime execution", () => {
     await execute({ agentName: "no-propagate-agent", prompt: "hello" });
 
     const spawnArg = spawn.mock.calls[0]?.[0] as Record<string, unknown>;
-    const middleware = (spawnArg.middleware ?? []) as MiddlewareRegistration[];
+    const middleware = (spawnArg.middleware ?? []) as PolicyRegistration[];
     expect(middleware.some((m) => m.name === "blocked-mw")).toBe(false);
   });
 });
