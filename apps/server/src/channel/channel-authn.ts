@@ -1,4 +1,4 @@
-import { Policy, type Adapter, type Hook, type Middleware } from "@openomni/protocol";
+import { Policy, type Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { evaluateTriggers } from "../shared/trigger";
@@ -7,10 +7,10 @@ import { verifyGitHubSignature } from "./github/webhook";
 type ChannelAuthnPolicyId = string;
 
 export interface ChannelAuthnDecision {
-  readonly timing: Hook.Timing;
+  readonly timing: Policy.Timing;
   readonly name: string;
   readonly policyId: ChannelAuthnPolicyId;
-  readonly verdict: Hook.Verdict["action"];
+  readonly verdict: Policy.Verdict["action"];
   readonly reason: string;
   readonly durationMs: number;
   readonly metadata?: Record<string, unknown>;
@@ -19,19 +19,19 @@ export interface ChannelAuthnDecision {
 export type ChannelAuthnDecisionObserver = (decision: ChannelAuthnDecision) => void | Promise<void>;
 
 export interface WebSocketAuthResult {
-  readonly verdict: Hook.Verdict;
+  readonly verdict: Policy.Verdict;
   readonly headers?: Record<string, string>;
   readonly response?: Response;
 }
 
 export interface GitHubAuthResult {
-  readonly verdict: Hook.Verdict;
+  readonly verdict: Policy.Verdict;
   readonly body?: string;
   readonly response?: Response;
 }
 
 export interface ChannelTriggerAuthResult {
-  readonly verdict: Hook.Verdict;
+  readonly verdict: Policy.Verdict;
 }
 
 interface WebSocketAuthState {
@@ -48,7 +48,7 @@ interface GitHubAuthState {
   response?: Response;
 }
 
-const authTiming: Hook.Timing = "pre_run";
+const authTiming: Policy.Timing = "pre_run";
 
 function evaluateChannelPermission(input: {
   readonly action: ChannelAuthnPolicyId;
@@ -58,7 +58,7 @@ function evaluateChannelPermission(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Hook.Verdict {
+}): Policy.Verdict {
   const request: Policy.EvaluationRequest = {
     action: input.action,
     resource: input.resource,
@@ -110,7 +110,7 @@ function triggerMetadata(input: {
 }
 
 function evaluateChannelTriggers(input: {
-  readonly definition: Middleware.Definition;
+  readonly definition: Policy.Definition;
   readonly policyId: ChannelAuthnPolicyId;
   readonly surface: string;
   readonly resource: string;
@@ -156,8 +156,8 @@ function readSubprotocolAuth(
 }
 
 function recordDecision(
-  definition: Middleware.Definition,
-  verdict: Hook.Verdict,
+  definition: Policy.Definition,
+  verdict: Policy.Verdict,
   durationMs: number,
   onDecision: ChannelAuthnDecisionObserver | undefined,
   metadata?: Record<string, unknown>,
@@ -173,7 +173,7 @@ function recordDecision(
   });
 }
 
-function evaluateWebSocketToken(state: WebSocketAuthState): Hook.Verdict {
+function evaluateWebSocketToken(state: WebSocketAuthState): Policy.Verdict {
   const policyId = "channel.authn.websocket-token";
   if (!state.token) {
     return evaluateChannelPermission({
@@ -235,7 +235,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Hook.Verdict {
   });
 }
 
-async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Hook.Verdict> {
+async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Policy.Verdict> {
   const policyId = "channel.authn.github-hmac";
   const signature = state.request.headers.get("x-hub-signature-256");
   if (!signature) {
@@ -280,35 +280,35 @@ export namespace ChannelAuthnMiddleware {
     timing: authTiming,
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies Policy.Definition;
 
   export const GitHubHmac = {
     name: "channel-authn:github-hmac",
     timing: authTiming,
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies Policy.Definition;
 
   export const DiscordTriggers = {
     name: "channel-authn:discord-triggers",
     timing: authTiming,
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies Policy.Definition;
 
   export const TelegramTriggers = {
     name: "channel-authn:telegram-triggers",
     timing: authTiming,
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies Policy.Definition;
 
   export const GitHubTriggers = {
     name: "channel-authn:github-triggers",
     timing: authTiming,
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } satisfies Policy.Definition;
 
   export function authenticateDiscordTriggers(input: {
     readonly triggers: Adapter.TriggerRule[];

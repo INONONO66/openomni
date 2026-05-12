@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Hook, type TraceContext } from "@openomni/protocol";
+import { Policy, type TraceContext } from "@openomni/protocol";
 import { Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -21,7 +21,7 @@ interface PreSpawnState {
   waitTimeoutMs?: number;
 }
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
+function continueVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
@@ -33,7 +33,7 @@ function evaluateBooleanPolicy(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Hook.Verdict {
+}): Policy.Verdict {
   return Policy.evaluate(
     {
       action: input.action,
@@ -229,7 +229,7 @@ export namespace SubagentSpawnPolicyMiddleware {
   }
 
   export interface PreSpawnResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly session?: SessionRecord;
     readonly runs?: WorkerRunRecord[];
     readonly latestRun?: WorkerRunRecord;

@@ -1,11 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import {
-  Operational,
-  type Policy,
-  type Hook,
-  type Subagent,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Operational, type Policy, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -32,11 +26,11 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
+function continueVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function denyVerdict(reason: string): Hook.Verdict {
+function denyVerdict(reason: string): Policy.Verdict {
   return { action: "abort", reason };
 }
 
@@ -219,7 +213,7 @@ export namespace BackgroundLimitsPolicy {
   }
 
   export interface PreLaunchResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly shouldQueue: boolean;
   }
 

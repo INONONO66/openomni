@@ -1,5 +1,5 @@
 import { PolicyEngine, type ChatAgent, type PolicyRegistration } from "@openomni/agent";
-import { type Hook, type Policy, type Message, Subagent } from "@openomni/protocol";
+import { type Policy, type Message, Subagent } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
@@ -34,7 +34,7 @@ async function dispatchPreDelegation(input: {
   parentSessionId?: string;
   operation: string;
   prompt: string;
-}): Promise<Hook.Verdict> {
+}): Promise<Policy.Verdict> {
   if (!input.middleware?.length) return { action: "continue" };
 
   const engine = PolicyEngine.create({ audit: false });

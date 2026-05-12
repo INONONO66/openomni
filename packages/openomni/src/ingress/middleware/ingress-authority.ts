@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, Ingress, type Hook, type TraceContext } from "@openomni/protocol";
+import { Policy, Ingress, type TraceContext } from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 
@@ -15,11 +15,11 @@ interface PreRunState {
   mode?: Ingress.InboundEvent["mode"];
 }
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
+function continueVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function abortVerdict(policyId: string, reason: string): Hook.Verdict {
+function abortVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "abort", policyId, reason };
 }
 
@@ -46,7 +46,7 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   return false;
 }
 
-function evaluateIngressAuthority(event: Ingress.InboundEvent): Hook.Verdict {
+function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.Verdict {
   const action = "ingress.top_level.create";
   const resource = `ingress.${event.surface}`;
   return Policy.evaluate(
@@ -147,7 +147,7 @@ function createModeDispatch(state: PreRunState): PolicyRegistration {
   };
 }
 
-function throwAbort(verdict: Hook.Verdict, state: PreRunState): never {
+function throwAbort(verdict: Policy.Verdict, state: PreRunState): never {
   if (state.schemaError) throw state.schemaError;
   throw new Error(verdict.reason ?? "ingress pre_run middleware aborted");
 }

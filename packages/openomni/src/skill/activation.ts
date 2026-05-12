@@ -1,5 +1,5 @@
 import type { PolicyRegistration } from "@openomni/agent";
-import { type Hook, type Policy, Skill } from "@openomni/protocol";
+import { type Policy, Skill } from "@openomni/protocol";
 
 const layerOrder: Record<Skill.Layer, number> = {
   execution: 0,
@@ -30,7 +30,7 @@ export function createSkillActivationMiddleware(
   };
 }
 
-function activationVerdict(skills: readonly Skill.Definition[]): Hook.Verdict {
+function activationVerdict(skills: readonly Skill.Definition[]): Policy.Verdict {
   if (skills.length === 0) {
     return {
       action: "continue",

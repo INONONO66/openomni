@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Hook, type Subagent, type TraceContext } from "@openomni/protocol";
+import { Policy, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
@@ -27,7 +27,7 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
+function continueVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
@@ -39,7 +39,7 @@ function evaluateLimit(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Hook.Verdict {
+}): Policy.Verdict {
   return Policy.evaluate(
     {
       action: input.action,
@@ -320,7 +320,7 @@ export namespace BackgroundLimitsMiddleware {
   }
 
   export interface PreLaunchResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly shouldQueue: boolean;
   }
 

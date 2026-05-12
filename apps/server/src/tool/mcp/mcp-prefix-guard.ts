@@ -1,11 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import {
-  Policy,
-  type Hook,
-  type Middleware,
-  type Tool,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Policy, type Tool, type TraceContext } from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -25,7 +19,7 @@ function evaluatePrefixGuard(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly serverName?: string;
-}): Hook.Verdict {
+}): Policy.Verdict {
   const action = "mcp.tool.call";
   return Policy.evaluate(
     {
@@ -122,7 +116,7 @@ export namespace McpPrefixGuardMiddleware {
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export interface PreToolUseContext {
     readonly call: Tool.Call;
@@ -133,7 +127,7 @@ export namespace McpPrefixGuardMiddleware {
   }
 
   export interface PreToolUseResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly tool?: NativeTool;
     readonly serverName?: string;
   }
