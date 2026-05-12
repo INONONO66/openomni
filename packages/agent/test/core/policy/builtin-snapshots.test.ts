@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { Hook, Message } from "@openomni/protocol";
+import type { Message, Policy } from "@openomni/protocol";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { BudgetState } from "../../../src/core/budget";
 import type { Memory, MemoryResult } from "../../../src/core/memory";
@@ -15,9 +15,9 @@ import { createPostTurnPolicy } from "../../../src/core/policy/builtin/post-turn
 import { createIdleNudgePolicy } from "../../../src/core/policy/builtin/idle-nudge";
 import { createUserMessage } from "../../../src/core/message-factory";
 
-type Inject = Extract<Hook.Verdict, { action: "inject" }>;
-type Abort = Extract<Hook.Verdict, { action: "abort" }>;
-type Transform = Extract<Hook.Verdict, { action: "transform" }>;
+type Inject = Extract<Policy.Verdict, { action: "inject" }>;
+type Abort = Extract<Policy.Verdict, { action: "abort" }>;
+type Transform = Extract<Policy.Verdict, { action: "transform" }>;
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {

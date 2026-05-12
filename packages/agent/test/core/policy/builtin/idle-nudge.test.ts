@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createIdleNudgePolicy } from "../../../../src/core/policy/builtin/idle-nudge";
 import type { PolicyContext } from "../../../../src/core/policy";
-import type { Hook } from "@openomni/protocol";
+import type { Policy } from "@openomni/protocol";
 
 const originalNow = Date.now;
 
@@ -9,7 +9,7 @@ function mockNow(ms: number): void {
   Date.now = () => ms;
 }
 
-function baseCtx(timing: Hook.Timing, overrides?: Partial<PolicyContext>): PolicyContext {
+function baseCtx(timing: Policy.Timing, overrides?: Partial<PolicyContext>): PolicyContext {
   return {
     timing,
     steps: [],

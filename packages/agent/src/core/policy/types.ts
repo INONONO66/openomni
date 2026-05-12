@@ -1,11 +1,4 @@
-import type {
-  Hook,
-  Middleware,
-  Message,
-  Messenger,
-  TraceContext,
-  Policy,
-} from "@openomni/protocol";
+import type { Message, Messenger, TraceContext, Policy } from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
 import type { BudgetState } from "../budget";
 
@@ -32,14 +25,14 @@ export interface PolicyContext {
   labels?: Policy.LabelEntry[];
 }
 
-export type PolicyFn = (ctx: PolicyContext) => Promise<Hook.Verdict> | Hook.Verdict;
+export type PolicyFn = (ctx: PolicyContext) => Promise<Policy.Verdict> | Policy.Verdict;
 
 export interface PolicyRegistration {
   name: string;
   timing: Policy.Timing | Policy.Timing[];
   priority: number;
-  scope?: Middleware.Scope;
-  failPolicy?: Middleware.FailPolicy;
+  scope?: Policy.Scope;
+  failPolicy?: Policy.FailPolicy;
   fn: PolicyFn;
   propagate?: boolean;
 }
