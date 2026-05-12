@@ -3,7 +3,6 @@ import { AgentProfile } from "../agent/index.js";
 import { Tool } from "../tool/index.js";
 import { Skill } from "../skill/index.js";
 import { McpConfig } from "../mcp/index.js";
-import { Middleware } from "../hook/index.js";
 import { Policy } from "../policy/index.js";
 import { BusEvent } from "../bus/index.js";
 
@@ -32,7 +31,7 @@ export namespace Extension {
     tools: z.array(Tool.Spec).optional(),
     skills: z.array(Skill.Definition).optional(),
     mcpServers: z.array(McpConfig.ServerConfig).optional(),
-    middlewares: z.array(Middleware.Definition).optional(),
+    middlewares: z.array(Policy.Definition).optional(),
     surfaces: z.array(SurfaceBinding).optional(),
   });
   export type Contributes = z.infer<typeof Contributes>;

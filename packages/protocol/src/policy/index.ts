@@ -363,6 +363,13 @@ export namespace Policy {
     registryVersion: z.string().optional(),
   });
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
+
+  export const SystemPromptResult = z.object({
+    systemPrompt: z.string().optional(),
+    prependContext: z.string().optional(),
+    appendContext: z.string().optional(),
+  });
+  export type SystemPromptResult = z.infer<typeof SystemPromptResult>;
 }
 
 export namespace RuntimeResource {
