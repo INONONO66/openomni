@@ -23,7 +23,7 @@ src/
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
-├── hook/                 # Hook.Timing (9), Hook.Verdict (6), Middleware.Definition + FailPolicy
+├── policy/               # Policy.Timing (13), Policy.Verdict (7), Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
 ├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
@@ -38,10 +38,10 @@ src/
 
 - **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `AuthError`, `ProviderError`, etc. use this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
-- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Hook.Verdict` on `action`. `InboundEvent` currently uses a single `mode: "direct"` variant.
+- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.Verdict` on `action`. `InboundEvent` currently uses a single `mode: "direct"` variant.
 - **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Tool.Call`, `Tool.Result`, `Run.Snapshot`.
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
-- **Hook timings**: 9 policy timing points — `pre_run`, `pre_turn`, `on_system_prompt`, `pre_tool_use`, `post_tool_use`, `post_turn`, `post_compaction`, `post_run`, `on_error`. `Hook.Verdict` returns one of `continue | skip | abort | retry | transform | inject`.
+- **Policy timings**: 13 policy timing points — `pre_run`, `pre_turn`, `on_system_prompt`, `pre_tool_use`, `post_tool_use`, `post_turn`, `post_compaction`, `post_run`, `on_error`, `pre_ingress`, `pre_tool_selection`, `pre_delegation`. `Policy.Verdict` returns one of `continue | skip | abort | retry | transform | inject | deny`.
 - **Subagent lifecycle**: `Subagent.Events.*` covers worker sessions (`WorkerSessionSpawned/Resumed/Cancelled`), worker runs (`WorkerRunStarted/Completed/Failed`), consultations (`WorkerConsultationRequested/Completed`), and background tasks (`BackgroundTaskLaunched/Completed/Failed/Cancelled`).
 - **Storage sub-adapters**: `Storage.TaskSubAdapter` and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
 - **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.
@@ -73,7 +73,7 @@ Keep these as protocol contracts only. Runtime policy and storage implementation
 - Adding a new message part? Add a variant to `Message.Part` in `message/index.ts`.
 - Adding a new tool state? Add to `Tool.State` discriminated union in `tool/index.ts`.
 - Adding a new run type? Add to the `Run` namespace in `run/index.ts`.
-- Adding a new policy timing? Update `Hook.Timing` in `hook/index.ts` and coordinate with `packages/agent/src/core/policy/engine.ts`.
+- Adding a new policy timing? Update `Policy.Timing` in `policy/index.ts` and coordinate with `packages/agent/src/core/policy/engine.ts`.
 - Adding a new subagent event? Extend `Subagent.Events` in `subagent/index.ts` with a `BusEvent.define()` call.
 - Adding a new storage sub-adapter interface? Add it to `storage/index.ts` as a named interface under the `Storage` namespace.
 - Adding a new worker request or IPC field? Update `execution/`, `ipc/`, or `worker-bootstrap/` here first, then adapt coordinator/openomni/server callers.

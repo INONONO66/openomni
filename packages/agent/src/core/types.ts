@@ -1,4 +1,4 @@
-import type { Tool, Sink, Policy, Message, Hook } from "@openomni/protocol";
+import type { Tool, Sink, Policy, Message } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
@@ -89,6 +89,11 @@ export type AgentEvent =
   | { type: "complete"; result: AgentResult }
   | { type: "budget_warning"; remaining: string }
   | { type: "budget_reassurance"; remaining: string }
-  | { type: "hook_verdict"; timing: Hook.Timing; action: Hook.Verdict["action"]; reason?: string };
+  | {
+      type: "hook_verdict";
+      timing: Policy.Timing;
+      action: Policy.Verdict["action"];
+      reason?: string;
+    };
 
 export type { Sink };

@@ -1,8 +1,8 @@
-import { Operational, type Hook } from "@openomni/protocol";
+import { Operational, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { PolicyContext, PolicyFactory, PolicyRegistration } from "../types";
 
-export type PostTurnHandler = (ctx: PolicyContext) => Promise<Hook.Verdict> | Hook.Verdict;
+export type PostTurnHandler = (ctx: PolicyContext) => Promise<Policy.Verdict> | Policy.Verdict;
 
 export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistration {
   return {

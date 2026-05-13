@@ -10,7 +10,7 @@ src/
 ├── core/
 │   ├── index.ts                # Core re-exports (ChatAgent, types, Memory)
 │   ├── chat-agent.ts           # ChatAgent.create() — wraps streamAgent + provides run() / stream()
-│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink, legacy hook types
+│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink, legacy types
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── delegation.ts           # DelegationContext + checkDelegation (depth / circular detection)
@@ -21,7 +21,7 @@ src/
 │   ├── telemetry.ts            # Telemetry.span / counter / histogram (OpenTelemetry; disabled by default)
 │   ├── execution/
 │   │   ├── stream-engine.ts    # streamAgent() — retry loop + turn loop + policy dispatch
-│   │   ├── tool-executor.ts    # Wraps user toolExecutor with pre_tool_use / post_tool_use dispatch
+│   │   ├── tool-executor.ts    # Wraps user toolExecutor with invoke.prepare / invoke.result dispatch
 │   │   └── compaction.ts       # InMemoryCompactor for message compression
 │   └── policy/
 │       ├── engine.ts           # PolicyEngine.create() — register, dispatch, dispatchSystemPrompt
@@ -30,10 +30,10 @@ src/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
 │           ├── memory.ts       # createMemoryPolicy (on_system_prompt)
 │           ├── compaction.ts   # createCompactionPolicy (post_compaction)
-│           ├── post-tool.ts    # createPostToolPolicy (post_tool_use)
+│           ├── post-tool.ts    # createPostToolPolicy (invoke.result)
 │           ├── post-turn.ts    # createPostTurnPolicy (post_turn)
-│           ├── idle-nudge.ts   # createIdleNudgePolicy (pre_turn + post_tool_use)
-│           └── tool-permission.ts # createToolPermissionPolicy (pre_tool_use, fail-closed)
+│           ├── idle-nudge.ts   # createIdleNudgePolicy (pre_turn + invoke.result)
+│           └── tool-permission.ts # createToolPermissionPolicy (invoke.prepare, fail-closed)
 └── runtime/
     ├── index.ts                # Re-exports messenger / registry / tools / mcp
     ├── messenger/
@@ -98,15 +98,15 @@ Also exported from `@openomni/agent`:
 
 ## POLICY ENGINE
 
-The policy engine is the extension surface. Every turn dispatches through 9 timings (defined in `@openomni/protocol` `Hook.Timing`):
+The policy engine is the extension surface. Every turn dispatches through 13 timings (defined in `@openomni/protocol` `Policy.Timing`):
 
 ```
-pre_run → pre_turn → on_system_prompt → pre_tool_use → post_tool_use
+pre_run → pre_turn → on_system_prompt → invoke.prepare → invoke.result
         → post_turn → post_compaction → post_run → on_error
 ```
 
 - **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`.
-- **Verdict** (`Hook.Verdict`): `continue | skip | abort | retry | transform | inject`. The first non-`continue` verdict terminates the chain for that timing.
+- **Verdict** (`Policy.Verdict`): `continue | skip | abort | retry | transform | inject`. The first non-`continue` verdict terminates the chain for that timing.
 - **System prompt transforms**: `dispatchSystemPrompt()` runs only the `on_system_prompt` chain and supports transform chaining so multiple policies can contribute.
 - **Builtins** (priority in parentheses):
   - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns `skip` / `abort` / `require_approval`
@@ -131,9 +131,9 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   │       ├─ dispatch(on_system_prompt)       → memory enrichment, identity
   │       ├─ llmRun via @openomni/llm
   │       │    └─ tool calls flow through createToolExecutor:
-  │       │         ├─ dispatch(pre_tool_use)  → tool-permission (fail-closed)
+  │       │         ├─ dispatch(invoke.prepare)  → tool-permission (fail-closed)
   │       │         ├─ execute tool
-  │       │         └─ dispatch(post_tool_use) → idle-nudge reset, enrichment
+  │       │         └─ dispatch(invoke.result) → idle-nudge reset, enrichment
   │       ├─ outcome === "stop"?
   │       │    ├─ dispatch(post_turn)         → inject (continue) / abort / complete
   │       │    ├─ if inject: dispatch(post_compaction) → loop
@@ -164,4 +164,4 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 
 - Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT extend behavior outside `policies: [...]`. `PolicyEngine` is the single extension surface.
-- Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `pre_tool_use` policy so behavior is uniform.
+- Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `invoke.prepare` policy so behavior is uniform.

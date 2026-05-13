@@ -363,4 +363,34 @@ export namespace Policy {
     registryVersion: z.string().optional(),
   });
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
+
+  export const SystemPromptResult = z.object({
+    systemPrompt: z.string().optional(),
+    prependContext: z.string().optional(),
+    appendContext: z.string().optional(),
+  });
+  export type SystemPromptResult = z.infer<typeof SystemPromptResult>;
+}
+
+export namespace RuntimeResource {
+  export const Descriptor = z.object({
+    id: z.string(),
+    kind: z.union([z.enum(["tool", "skill", "mcpSource", "policy"]), z.string()]),
+    version: z.string().optional(),
+    labels: z.array(z.string()),
+    capabilities: z.array(z.string()),
+    effects: z.array(z.string()),
+    risk: z.number().optional(),
+    source: z
+      .object({
+        type: z.string(),
+        serverId: z.string().optional(),
+        remoteName: z.string().optional(),
+      })
+      .optional(),
+    schemaRef: z.string().optional(),
+    digest: z.string().optional(),
+    owner: z.string().optional(),
+  });
+  export type Descriptor = z.infer<typeof Descriptor>;
 }

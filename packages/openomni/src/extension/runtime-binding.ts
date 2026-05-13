@@ -1,11 +1,4 @@
-import type {
-  AgentProfile,
-  Extension,
-  McpConfig,
-  Middleware,
-  Skill,
-  Tool,
-} from "@openomni/protocol";
+import type { AgentProfile, Extension, McpConfig, Policy, Skill, Tool } from "@openomni/protocol";
 
 type Awaitable<T> = T | Promise<T>;
 
@@ -62,10 +55,10 @@ export interface RuntimeSurfaceTarget {
 }
 
 export interface RuntimeMiddlewareTarget {
-  register(definition: Middleware.Definition, context: RuntimeBindingContext): Awaitable<void>;
+  register(definition: Policy.Definition, context: RuntimeBindingContext): Awaitable<void>;
   unregister(
     name: string,
-    definition: Middleware.Definition,
+    definition: Policy.Definition,
     context: RuntimeBindingContext,
   ): Awaitable<void>;
 }
@@ -251,7 +244,7 @@ export class RuntimeBinding implements RuntimeBindingController {
   }
 
   private async registerMiddlewares(
-    definitions: readonly Middleware.Definition[],
+    definitions: readonly Policy.Definition[],
     context: RuntimeBindingContext,
     registered: RegisteredComponent[],
   ): Promise<void> {

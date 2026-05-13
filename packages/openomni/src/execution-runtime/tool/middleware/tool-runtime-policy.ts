@@ -1,5 +1,5 @@
 import type { PolicyDecision } from "@openomni/agent";
-import type { Hook, TraceContext } from "@openomni/protocol";
+import type { Policy, TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { WorkspaceLock } from "../../workspace-lock.js";
@@ -14,11 +14,11 @@ const tierTimeouts: Record<number, number> = {
 };
 const defaultTierTimeoutMs = 30_000;
 
-function continueVerdict(reason: string): Hook.Verdict {
+function continueVerdict(reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
-function abortVerdict(reason: string): Hook.Verdict {
+function abortVerdict(reason: string): Policy.Verdict {
   return { action: "abort", policyId, reason };
 }
 
@@ -41,7 +41,7 @@ function timeoutForRiskTier(
 function recordDecision(
   timing: "pre_tool_use" | "post_tool_use",
   name: string,
-  verdict: Hook.Verdict,
+  verdict: Policy.Verdict,
   traceContext: TraceContext.Type | undefined,
   onDecision: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
 ): void {
@@ -87,7 +87,7 @@ export namespace ToolRuntimePolicyMiddleware {
   }
 
   export interface PreToolResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly handle: RuntimePolicyHandle;
   }
 
@@ -175,7 +175,7 @@ export namespace ToolRuntimePolicyMiddleware {
     }
   }
 
-  export function evaluatePostTool(ctx: PostToolContext): Hook.Verdict {
+  export function evaluatePostTool(ctx: PostToolContext): Policy.Verdict {
     if (!ctx.handle.lockAcquired || !ctx.handle.workspaceRoot) {
       const verdict = continueVerdict("workspace lock release not required");
       recordDecision(

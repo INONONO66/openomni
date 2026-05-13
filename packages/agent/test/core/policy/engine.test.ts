@@ -1,6 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { Hook } from "@openomni/protocol";
-import { PolicyEvent } from "@openomni/protocol";
+import { Policy, PolicyEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Operational } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -23,7 +22,7 @@ function env(): Record<string, string | undefined> {
 }
 
 describe("PolicyEngine", () => {
-  it("executes middleware in priority order (ascending)", async () => {
+  it("executes policy in priority order (ascending)", async () => {
     const order: number[] = [];
     const engine = PolicyEngine.create();
     engine.register({
@@ -32,7 +31,7 @@ describe("PolicyEngine", () => {
       priority: 300,
       fn: () => {
         order.push(300);
-        return { action: "continue" };
+        return { action: "continue" } as const;
       },
     });
     engine.register({
@@ -41,7 +40,7 @@ describe("PolicyEngine", () => {
       priority: 100,
       fn: () => {
         order.push(100);
-        return { action: "continue" };
+        return { action: "continue" } as const;
       },
     });
     engine.register({
@@ -50,7 +49,7 @@ describe("PolicyEngine", () => {
       priority: 200,
       fn: () => {
         order.push(200);
-        return { action: "continue" };
+        return { action: "continue" } as const;
       },
     });
 
@@ -58,10 +57,10 @@ describe("PolicyEngine", () => {
     expect(order).toEqual([100, 200, 300]);
   });
 
-  it("only runs middleware matching the dispatch timing", async () => {
+  it("only runs policy matching the dispatch timing", async () => {
     const engine = PolicyEngine.create();
-    const postFn = mock(() => ({ action: "continue" }) as Hook.Verdict);
-    const preFn = mock(() => ({ action: "continue" }) as Hook.Verdict);
+    const postFn = mock(() => ({ action: "continue" }) as const);
+    const preFn = mock(() => ({ action: "continue" }) as const);
     engine.register({ name: "post", timing: "post_turn", priority: 100, fn: postFn });
     engine.register({ name: "pre", timing: "pre_turn", priority: 100, fn: preFn });
 
@@ -73,18 +72,18 @@ describe("PolicyEngine", () => {
 
   it("short-circuits on non-continue verdict", async () => {
     const engine = PolicyEngine.create();
-    const third = mock(() => ({ action: "continue" }) as Hook.Verdict);
+    const third = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "a",
       timing: "pre_turn",
       priority: 100,
-      fn: () => ({ action: "continue" }),
+      fn: () => ({ action: "continue" }) as const,
     });
     engine.register({
       name: "b",
       timing: "pre_turn",
       priority: 200,
-      fn: () => ({ action: "abort", reason: "stop" }),
+      fn: () => ({ action: "abort", reason: "stop" }) as const,
     });
     engine.register({ name: "c", timing: "pre_turn", priority: 300, fn: third });
 
@@ -101,7 +100,7 @@ describe("PolicyEngine", () => {
     globalObj.console.warn = mock(() => undefined);
     try {
       const engine = PolicyEngine.create();
-      const after = mock(() => ({ action: "continue" }) as Hook.Verdict);
+      const after = mock(() => ({ action: "continue" }) as const);
       engine.register({
         name: "boom",
         timing: "pre_turn",
@@ -122,7 +121,7 @@ describe("PolicyEngine", () => {
 
   it("fail-closed aborts chain on thrown error", async () => {
     const engine = PolicyEngine.create();
-    const after = mock(() => ({ action: "continue" }) as Hook.Verdict);
+    const after = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "boom",
       timing: "pre_turn",
@@ -139,10 +138,10 @@ describe("PolicyEngine", () => {
     expect(after).toHaveBeenCalledTimes(0);
   });
 
-  it("skips middleware when agentType not in scope.agentType", async () => {
+  it("skips policy when agentType not in scope.agentType", async () => {
     const engine = PolicyEngine.create();
-    const scoped = mock(() => ({ action: "continue" }) as Hook.Verdict);
-    const unscoped = mock(() => ({ action: "continue" }) as Hook.Verdict);
+    const scoped = mock(() => ({ action: "continue" }) as const);
+    const unscoped = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "scoped",
       timing: "pre_turn",
@@ -158,15 +157,15 @@ describe("PolicyEngine", () => {
     expect(unscoped).toHaveBeenCalledTimes(1);
   });
 
-  it("returns continue when no middleware registered", async () => {
+  it("returns continue when no policy registered", async () => {
     const engine = PolicyEngine.create();
     const verdict = await engine.dispatch("pre_turn", baseCtx());
     expect(verdict).toEqual({ action: "continue" });
   });
 
-  it("runs middleware at multiple timings when timing is an array", async () => {
+  it("runs policy at multiple timings when timing is an array", async () => {
     const engine = PolicyEngine.create();
-    const fn = mock(() => ({ action: "continue" }) as Hook.Verdict);
+    const fn = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "multi",
       timing: ["pre_turn", "post_turn"],
@@ -187,34 +186,41 @@ describe("PolicyEngine", () => {
       name: "prompt-a",
       timing: "on_system_prompt",
       priority: 100,
-      fn: () => ({
-        action: "transform",
-        input: { systemPrompt: "PROMPT_A", appendContext: "append-a" },
-        reason: "prompt-a",
-        policyId: "test.prompt-a",
-      }),
+      fn: () =>
+        ({
+          action: "transform",
+          input: { systemPrompt: "PROMPT_A", appendContext: "append-a" },
+          reason: "prompt-a",
+          policyId: "test.prompt-a",
+        }) as const,
     });
     engine.register({
       name: "prompt-b",
       timing: "on_system_prompt",
       priority: 200,
-      fn: () => ({
-        action: "transform",
-        input: { systemPrompt: "PROMPT_B", prependContext: "prepend-b", appendContext: "append-b" },
-        reason: "prompt-b",
-        policyId: "test.prompt-b",
-      }),
+      fn: () =>
+        ({
+          action: "transform",
+          input: {
+            systemPrompt: "PROMPT_B",
+            prependContext: "prepend-b",
+            appendContext: "append-b",
+          },
+          reason: "prompt-b",
+          policyId: "test.prompt-b",
+        }) as const,
     });
     engine.register({
       name: "inject-c",
       timing: "on_system_prompt",
       priority: 300,
-      fn: () => ({
-        action: "inject",
-        message: "append-c",
-        reason: "inject-c",
-        policyId: "test.inject-c",
-      }),
+      fn: () =>
+        ({
+          action: "inject",
+          message: "append-c",
+          reason: "inject-c",
+          policyId: "test.inject-c",
+        }) as const,
     });
 
     const result = await engine.dispatchSystemPrompt(baseCtx());
@@ -239,12 +245,13 @@ describe("PolicyEngine", () => {
       name: "after",
       timing: "on_system_prompt",
       priority: 200,
-      fn: () => ({
-        action: "inject",
-        message: "should-not-run",
-        reason: "after",
-        policyId: "test.after",
-      }),
+      fn: () =>
+        ({
+          action: "inject",
+          message: "should-not-run",
+          reason: "after",
+          policyId: "test.after",
+        }) as const,
     });
 
     await expect(engine.dispatchSystemPrompt(baseCtx())).rejects.toThrow("system-prompt-error");
@@ -271,12 +278,13 @@ describe("PolicyEngine", () => {
         name: "after",
         timing: "on_system_prompt",
         priority: 200,
-        fn: () => ({
-          action: "inject",
-          message: "append-after",
-          reason: "after",
-          policyId: "test.after",
-        }),
+        fn: () =>
+          ({
+            action: "inject",
+            message: "append-after",
+            reason: "after",
+            policyId: "test.after",
+          }) as const,
       });
 
       const result = await engine.dispatchSystemPrompt(baseCtx());
@@ -295,7 +303,7 @@ describe("PolicyEngine", () => {
         name: "missing-reason",
         timing: "pre_turn",
         priority: 100,
-        fn: () => ({ action: "abort" }),
+        fn: () => ({ action: "abort" }) as const,
       });
 
       await expect(engine.dispatch("pre_turn", baseCtx())).rejects.toThrow(
@@ -326,7 +334,7 @@ describe("PolicyEngine", () => {
         name: "prod-metadata",
         timing: "pre_turn",
         priority: 100,
-        fn: () => ({ action: "abort" }),
+        fn: () => ({ action: "abort" }) as const,
       });
 
       const first = await engine.dispatch("pre_turn", baseCtx());
@@ -369,11 +377,12 @@ describe("PolicyEngine", () => {
         name: "policy-check",
         timing: "pre_tool_use",
         priority: 100,
-        fn: () => ({
-          action: "abort",
-          reason: "blocked_by_test_policy",
-          policyId: "test.policy",
-        }),
+        fn: () =>
+          ({
+            action: "abort",
+            reason: "blocked_by_test_policy",
+            policyId: "test.policy",
+          }) as const,
       });
 
       await engine.dispatch("pre_tool_use", { ...baseCtx(), toolName: "shell" });
@@ -397,5 +406,62 @@ describe("PolicyEngine", () => {
       unsub();
       Bus.reset();
     }
+  });
+
+  it("deny-wins: any deny policy aborts regardless of other effects", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "allow-and-label",
+      timing: "pre_turn",
+      priority: 0,
+      fn: () => ({ action: "continue", reason: "allowed" }),
+    });
+    engine.register({
+      name: "deny-policy",
+      timing: "pre_turn",
+      priority: 10,
+      fn: () => ({ action: "deny", reason: "forbidden" }),
+    });
+    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    expect(verdict.action).toBe("deny");
+    expect(verdict.reason).toBe("forbidden");
+  });
+
+  it("scope filtering: only matching agentType policies execute", async () => {
+    const engine = PolicyEngine.create();
+    const executed: string[] = [];
+
+    engine.register({
+      name: "coder-policy",
+      timing: "pre_turn",
+      priority: 0,
+      scope: { agentType: ["coder"] },
+      fn: () => {
+        executed.push("coder");
+        return { action: "continue" };
+      },
+    });
+    engine.register({
+      name: "reviewer-policy",
+      timing: "pre_turn",
+      priority: 0,
+      scope: { agentType: ["reviewer"] },
+      fn: () => {
+        executed.push("reviewer");
+        return { action: "continue" };
+      },
+    });
+    engine.register({
+      name: "unscoped-policy",
+      timing: "pre_turn",
+      priority: 0,
+      fn: () => {
+        executed.push("unscoped");
+        return { action: "continue" };
+      },
+    });
+
+    await engine.dispatch("pre_turn", { ...baseCtx(), agentType: "coder" });
+    expect(executed).toEqual(["coder", "unscoped"]);
   });
 });

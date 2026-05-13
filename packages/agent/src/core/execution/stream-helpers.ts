@@ -1,7 +1,7 @@
 import type { RunInput } from "@openomni/llm";
 import { Retry } from "@openomni/llm";
 import { AgentExecution, Operational } from "@openomni/protocol";
-import type { Hook, Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
+import type { Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import {
   checkBudget,
@@ -58,7 +58,7 @@ export interface TurnArtifacts {
     toolCallId: string;
     result: Tool.Result;
   }>;
-  readonly preToolUseVerdicts: Hook.Verdict[];
+  readonly preToolUseVerdicts: Policy.Verdict[];
 }
 
 export type BuildTurnResult =
@@ -366,7 +366,7 @@ export async function buildTurn(
   state.budgetState = recordTurn(state.budgetState);
   if (config.signal?.aborted) throw new Error("aborted");
 
-  const preToolUseVerdicts: Hook.Verdict[] = [];
+  const preToolUseVerdicts: Policy.Verdict[] = [];
   const toolLabels = buildToolLabelMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({

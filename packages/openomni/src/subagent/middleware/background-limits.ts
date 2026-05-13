@@ -1,11 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import {
-  Policy,
-  type Hook,
-  type Middleware,
-  type Subagent,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Policy, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
@@ -33,7 +27,7 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
-function continueVerdict(policyId: string, reason: string): Hook.Verdict {
+function continueVerdict(policyId: string, reason: string): Policy.Verdict {
   return { action: "continue", policyId, reason };
 }
 
@@ -45,7 +39,7 @@ function evaluateLimit(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Hook.Verdict {
+}): Policy.Verdict {
   return Policy.evaluate(
     {
       action: input.action,
@@ -281,35 +275,35 @@ export namespace BackgroundLimitsMiddleware {
     timing: "pre_tool_use",
     priority: 0,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const Depth = {
     name: "background:depth-limit",
     timing: "pre_tool_use",
     priority: 10,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const Descendants = {
     name: "background:descendant-limit",
     timing: "pre_tool_use",
     priority: 20,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const Total = {
     name: "background:total-limit",
     timing: "pre_tool_use",
     priority: 30,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export const Queue = {
     name: "background:queue-limit",
     timing: "pre_tool_use",
     priority: 40,
     failPolicy: "fail-closed",
-  } satisfies Middleware.Definition;
+  } as const satisfies Policy.Definition;
 
   export interface PreLaunchContext {
     readonly input: LaunchRequest;
@@ -326,7 +320,7 @@ export namespace BackgroundLimitsMiddleware {
   }
 
   export interface PreLaunchResult {
-    readonly verdict: Hook.Verdict;
+    readonly verdict: Policy.Verdict;
     readonly shouldQueue: boolean;
   }
 

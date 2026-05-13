@@ -1,4 +1,4 @@
-import { PolicyEvent, ToolExecution, type Hook, type Tool } from "@openomni/protocol";
+import { PolicyEvent, ToolExecution, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
@@ -9,6 +9,11 @@ import type {
 } from "./types.js";
 
 const TOOL_CALL_ACTION = "tool.call";
+
+type EventVerdict = "continue" | "skip" | "abort" | "retry" | "transform" | "inject";
+function toEventVerdict(action: Policy.Verdict["action"]): EventVerdict {
+  return action === "deny" ? "abort" : action;
+}
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -82,7 +87,7 @@ function publishPolicyEvaluated(
   base: { traceId: string; sessionId: string; runId?: string; time: number },
   actor: Record<string, unknown>,
   resource: string,
-  verdict: Hook.Verdict,
+  verdict: Policy.Verdict,
 ): void {
   Bus.publish(PolicyEvent.Evaluated, {
     ...base,
@@ -90,7 +95,7 @@ function publishPolicyEvaluated(
     actor,
     action: TOOL_CALL_ACTION,
     resource,
-    verdict: verdict.action,
+    verdict: toEventVerdict(verdict.action),
     reason: verdict.reason ?? "runtime policy evaluated",
   });
 }
@@ -161,7 +166,7 @@ export function createToolExecutor(
           actor,
           action: TOOL_CALL_ACTION,
           resource: originalName,
-          verdict: policy.verdict.action,
+          verdict: toEventVerdict(policy.verdict.action),
           reason: policy.verdict.reason ?? "tool runtime policy aborted",
         });
         Bus.publish(ToolExecution.Completed, {

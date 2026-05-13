@@ -1,4 +1,4 @@
-import type { Hook, Tool, TraceContext } from "@openomni/protocol";
+import type { Policy, Tool, TraceContext } from "@openomni/protocol";
 import { ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentStep, TokenUsage } from "../types";
@@ -17,7 +17,7 @@ export interface ToolExecutorOptions {
   getPolicyToolName?: (toolName: string) => string | undefined;
   getToolLabels?: (toolName: string) => string[] | undefined;
   onToolComplete?: (durationMs: number) => void;
-  onVerdict?: (verdict: Hook.Verdict) => void;
+  onVerdict?: (verdict: Policy.Verdict) => void;
   traceContext?: TraceContext.Type;
 }
 

@@ -1,23 +1,17 @@
 import { Bus } from "@openomni/session";
-import {
-  Operational,
-  PolicyEvent,
-  type Hook,
-  type Middleware,
-  type Policy,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Operational, PolicyEvent, type Policy, type TraceContext } from "@openomni/protocol";
 import type { PolicyContext, PolicyRegistration } from "./types";
 
-const CONTINUE: Hook.Verdict = { action: "continue" };
+const CONTINUE: Policy.Verdict = { action: "continue" };
 
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
+type PolicyEventVerdict = Exclude<Policy.Verdict["action"], "deny">;
 
 export interface PolicyDecision {
   readonly timing: Policy.Timing;
   readonly name: string;
   readonly policyId: string;
-  readonly verdict: Hook.Verdict["action"];
+  readonly verdict: Policy.Verdict["action"];
   readonly reason?: string;
   readonly durationMs: number;
   readonly traceContext?: TraceContext.Type;
@@ -62,8 +56,8 @@ function selectRegistrations(
 
 export interface PolicyEngineInstance {
   register(reg: PolicyRegistration): void;
-  dispatch(timing: Policy.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Hook.Verdict>;
-  dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Middleware.SystemPromptVerdict>;
+  dispatch(timing: Policy.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Policy.Verdict>;
+  dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Policy.SystemPromptResult>;
 }
 
 function isProduction(): boolean {
@@ -75,11 +69,11 @@ function warnKey(timing: Policy.Timing, name: string): string {
 }
 
 function normalizeVerdict(
-  verdict: Hook.Verdict,
+  verdict: Policy.Verdict,
   timing: Policy.Timing,
   name: string,
   warnedMissingMetadata: Set<string>,
-): Hook.Verdict {
+): Policy.Verdict {
   const missingReason = verdict.action !== "continue" && !verdict.reason;
   const missingPolicyId = !verdict.policyId;
 
@@ -152,7 +146,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       actor: options.audit?.actor ?? buildActor(traceContext),
       action: options.audit?.action ?? resolveAction(decision.timing),
       resource: options.audit?.resource ?? resolveResource(reg, ctx),
-      verdict: decision.verdict,
+      verdict: decision.verdict as PolicyEventVerdict,
       reason: resolveEventReason(decision),
     });
   }
@@ -160,9 +154,9 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   async function recordDecision(
     reg: PolicyRegistration,
     ctx: PolicyContext,
-    verdict: Hook.Verdict,
+    verdict: Policy.Verdict,
     durationMs: number,
-  ): Promise<Hook.Verdict> {
+  ): Promise<Policy.Verdict> {
     const normalized = normalizeVerdict(verdict, ctx.timing, reg.name, warnedMissingMetadata);
     const traceContext = ctx.traceContext ?? options.traceContext;
     const decision: PolicyDecision = {
@@ -184,12 +178,12 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   async function dispatch(
     timing: Policy.Timing,
     ctx: Omit<PolicyContext, "timing">,
-  ): Promise<Hook.Verdict> {
+  ): Promise<Policy.Verdict> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
     const fullCtx: PolicyContext = { ...ctx, timing };
 
     for (const reg of selected) {
-      let verdict: Hook.Verdict;
+      let verdict: Policy.Verdict;
       const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
@@ -229,7 +223,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
 
   async function dispatchSystemPrompt(
     ctx: Omit<PolicyContext, "timing">,
-  ): Promise<Middleware.SystemPromptVerdict> {
+  ): Promise<Policy.SystemPromptResult> {
     const selected = selectRegistrations(registrations, "on_system_prompt", ctx.agentType);
     const fullCtx: PolicyContext = { ...ctx, timing: "on_system_prompt" };
 
@@ -238,7 +232,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     const appendParts: string[] = [];
 
     for (const reg of selected) {
-      let verdict: Hook.Verdict;
+      let verdict: Policy.Verdict;
       const startTime = Date.now();
       try {
         verdict = await reg.fn(fullCtx);
@@ -299,7 +293,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       }
     }
 
-    const result: Middleware.SystemPromptVerdict = {};
+    const result: Policy.SystemPromptResult = {};
     if (systemPrompt !== undefined) result.systemPrompt = systemPrompt;
     if (prependParts.length > 0) result.prependContext = prependParts.join("\n\n");
     if (appendParts.length > 0) result.appendContext = appendParts.join("\n\n");
