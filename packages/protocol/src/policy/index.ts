@@ -846,29 +846,99 @@ export namespace RuntimeResource {
         });
       }
 
-      if (value.source === undefined && segments.length !== 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["id"],
-          message: "descriptor source metadata requires a three-segment id",
-        });
-      }
+      if (value.kind === "tool") {
+        if (value.source === undefined && segments.length !== 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["id"],
+            message: "descriptor source metadata requires a three-segment id",
+          });
+        }
 
-      if (value.source !== undefined && segments.length !== 3) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["id"],
-          message: "descriptor source metadata must match the id source segment",
-        });
-      }
+        if (value.source !== undefined && segments.length !== 3) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["id"],
+            message: "descriptor source metadata must match the id source segment",
+          });
+        }
 
-      if (value.source !== undefined && segments[1] !== value.source.type) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["id"],
-          message: "id source segment must match source.type",
-        });
+        if (value.source !== undefined && segments[1] !== value.source.type) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["id"],
+            message: "id source segment must match source.type",
+          });
+        }
       }
     });
   export type Descriptor = z.infer<typeof Descriptor>;
+
+  type DescriptorInput = {
+    id: string;
+    kind: Kind;
+    labels?: string[];
+    capabilities?: string[];
+    effects?: string[];
+    source?: Source;
+    schemaRef?: string;
+    digest?: string;
+    owner?: string;
+    version?: string;
+    risk?: number;
+  };
+
+  function createDescriptor(input: DescriptorInput): Descriptor {
+    return Descriptor.parse({
+      labels: [],
+      capabilities: [],
+      effects: [],
+      ...input,
+    });
+  }
+
+  export function createWorkerDescriptor(workerId: string, opts?: { source?: string }): Descriptor {
+    return createDescriptor({
+      id: `worker:coordinator:${workerId}`,
+      kind: "worker",
+      labels: ["source.coordinator", "worker.coordinator"],
+      source:
+        opts?.source === undefined
+          ? { type: "coordinator" }
+          : { type: "coordinator", coordinatorId: opts.source },
+    });
+  }
+
+  export function createCredentialDescriptor(
+    provider: string,
+    credType: string,
+    opts?: { source?: string },
+  ): Descriptor {
+    return createDescriptor({
+      id: `credential:${provider}:${credType}`,
+      kind: "credential",
+      labels: ["source.file", `credential.${provider}`],
+      source: opts?.source === undefined ? { type: "file" } : { type: "file", path: opts.source },
+    });
+  }
+
+  export function createSessionDescriptor(
+    sessionId: string,
+    sessionType: string,
+    opts?: { parentSessionId?: string; ownerActorId?: string },
+  ): Descriptor {
+    const labels = ["source.runtime", `session.${sessionType}`];
+
+    if (opts?.parentSessionId !== undefined) {
+      labels.push(`session.parent:${opts.parentSessionId}`);
+    }
+
+    return createDescriptor({
+      id: `session:${sessionId}`,
+      kind: "session",
+      labels,
+      source: { type: "runtime", runtimeId: sessionId },
+      ...(opts?.ownerActorId === undefined ? {} : { owner: opts.ownerActorId }),
+    });
+  }
 }
