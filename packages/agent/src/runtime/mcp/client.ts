@@ -3,7 +3,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { randomUUID } from "node:crypto";
-import type { McpServerConfig, Tool } from "@openomni/protocol";
+import type { McpServerConfig, RuntimeResource, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { convertMcpTool, convertMcpResult } from "./convert";
@@ -83,7 +83,9 @@ export class McpClient {
 
   async listTools(): Promise<Tool.Spec[]> {
     const response = await this.client.listTools();
-    return response.tools.map((t) => convertMcpTool(t, this.config.name));
+    return response.tools.map((t) =>
+      attachMcpToolDescriptor(convertMcpTool(t, this.config.name), this.config.name, t.name),
+    );
   }
 
   async callTool(
@@ -140,6 +142,39 @@ export class McpClient {
   get serverName(): string {
     return this.config.name;
   }
+}
+
+type McpToolSpec = Tool.Spec & {
+  readonly descriptor: RuntimeResource.Descriptor;
+};
+
+function createMcpToolDescriptor(serverId: string, remoteName: string): RuntimeResource.Descriptor {
+  return {
+    id: `tool:mcp:${serverId}:${remoteName}`,
+    kind: "tool",
+    source: {
+      type: "mcp",
+      serverId,
+      remoteName,
+    },
+    labels: ["source.mcp", `mcp.${serverId}`],
+    capabilities: ["network.write"],
+    effects: ["external.write"],
+  };
+}
+
+function attachMcpToolDescriptor(
+  spec: Tool.Spec,
+  serverId: string,
+  remoteName: string,
+): McpToolSpec {
+  const descriptor = createMcpToolDescriptor(serverId, remoteName);
+
+  return {
+    ...spec,
+    labels: descriptor.labels,
+    descriptor,
+  };
 }
 
 function createTransport(config: McpServerConfig) {
