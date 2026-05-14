@@ -57,6 +57,7 @@ async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBo
       category: resolveCategory(tool.spec.name, "mcp", tool.category),
       riskTier: tool.riskTier,
       spec: tool.spec,
+      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
       mcpServer: tool.spec.name.includes(".") ? tool.spec.name.split(".")[0] : undefined,
     }),
   );
