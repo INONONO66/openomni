@@ -8,7 +8,7 @@ import type { BudgetState } from "../../../../src/core/budget";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
-    timing: "pre_turn",
+    timing: "turn.start",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,

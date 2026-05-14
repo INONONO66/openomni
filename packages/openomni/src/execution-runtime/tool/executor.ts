@@ -148,6 +148,7 @@ export function createToolExecutor(
         toolCallId: call.id,
         input: dispatchedCall.input,
         riskTier: tool.riskTier,
+        ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
         timeoutConfig: config.timeoutMs,
         workspaceRoot,
         lockOwnerId,

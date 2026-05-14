@@ -1,5 +1,5 @@
 import type { PolicyDecision } from "@openomni/agent";
-import type { Policy, TraceContext } from "@openomni/protocol";
+import type { Policy, RuntimeResource, TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { WorkspaceLock } from "../../workspace-lock.js";
@@ -38,8 +38,20 @@ function timeoutForRiskTier(
   return configured ?? tierTimeouts[riskTier] ?? defaultTierTimeoutMs;
 }
 
+function riskTierFromDescriptor(
+  descriptor: RuntimeResource.Descriptor | undefined,
+  fallback: ToolRiskTier,
+): ToolRiskTier {
+  return descriptor?.risk === 0 ||
+    descriptor?.risk === 1 ||
+    descriptor?.risk === 2 ||
+    descriptor?.risk === 3
+    ? descriptor.risk
+    : fallback;
+}
+
 function recordDecision(
-  timing: "pre_tool_use" | "post_tool_use",
+  timing: "invoke.prepare" | "invoke.result",
   name: string,
   verdict: Policy.Verdict,
   traceContext: TraceContext.Type | undefined,
@@ -79,6 +91,7 @@ export namespace ToolRuntimePolicyMiddleware {
     readonly toolCallId?: string;
     readonly input: Record<string, unknown>;
     readonly riskTier: ToolRiskTier;
+    readonly descriptor?: RuntimeResource.Descriptor;
     readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
     readonly workspaceRoot?: string;
     readonly lockOwnerId: string;
@@ -102,7 +115,8 @@ export namespace ToolRuntimePolicyMiddleware {
   }
 
   export async function evaluatePreTool(ctx: PreToolContext): Promise<PreToolResult> {
-    const timeoutMs = timeoutForRiskTier(ctx.riskTier, ctx.timeoutConfig);
+    const riskTier = riskTierFromDescriptor(ctx.descriptor, ctx.riskTier);
+    const timeoutMs = timeoutForRiskTier(riskTier, ctx.timeoutConfig);
     const handle: RuntimePolicyHandle = {
       timeoutMs,
       lockOwnerId: ctx.lockOwnerId,
@@ -111,18 +125,17 @@ export namespace ToolRuntimePolicyMiddleware {
     };
 
     const riskVerdict = continueVerdict(
-      ctx.riskTier >= 2 ? "high-risk tool execution recorded" : "risk tier evaluated",
+      riskTier >= 2 ? "high-risk tool execution recorded" : "risk tier evaluated",
     );
-    Bus.publish(ctx.riskTier >= 2 ? Operational.Warn : Operational.Debug, {
+    Bus.publish(riskTier >= 2 ? Operational.Warn : Operational.Debug, {
       traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
       time: Date.now(),
       component: "executor.policy",
-      msg:
-        ctx.riskTier >= 2 ? "executor: high-risk tool execution" : "executor: risk tier evaluated",
-      context: { toolName: ctx.toolName, tier: ctx.riskTier },
+      msg: riskTier >= 2 ? "executor: high-risk tool execution" : "executor: risk tier evaluated",
+      context: { toolName: ctx.toolName, tier: riskTier, descriptorId: ctx.descriptor?.id },
     });
     recordDecision(
-      "pre_tool_use",
+      "invoke.prepare",
       "tool-runtime-policy:risk-tier",
       riskVerdict,
       ctx.traceContext,
@@ -131,17 +144,17 @@ export namespace ToolRuntimePolicyMiddleware {
 
     const timeoutVerdict = continueVerdict("timeout resolved");
     recordDecision(
-      "pre_tool_use",
+      "invoke.prepare",
       "tool-runtime-policy:timeout",
       timeoutVerdict,
       ctx.traceContext,
       ctx.onDecision,
     );
 
-    if (ctx.riskTier < 1 || !ctx.workspaceRoot) {
+    if (riskTier < 1 || !ctx.workspaceRoot) {
       const verdict = continueVerdict("workspace lock not required");
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -155,7 +168,7 @@ export namespace ToolRuntimePolicyMiddleware {
       handle.lockAcquired = true;
       const verdict = continueVerdict("workspace lock acquired");
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -165,7 +178,7 @@ export namespace ToolRuntimePolicyMiddleware {
     } catch (error) {
       const verdict = abortVerdict(error instanceof Error ? error.message : String(error));
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -179,7 +192,7 @@ export namespace ToolRuntimePolicyMiddleware {
     if (!ctx.handle.lockAcquired || !ctx.handle.workspaceRoot) {
       const verdict = continueVerdict("workspace lock release not required");
       recordDecision(
-        "post_tool_use",
+        "invoke.result",
         "tool-runtime-policy:workspace-lock-release",
         verdict,
         ctx.traceContext,
@@ -192,7 +205,7 @@ export namespace ToolRuntimePolicyMiddleware {
     ctx.handle.lockAcquired = false;
     const verdict = continueVerdict("workspace lock released");
     recordDecision(
-      "post_tool_use",
+      "invoke.result",
       "tool-runtime-policy:workspace-lock-release",
       verdict,
       ctx.traceContext,

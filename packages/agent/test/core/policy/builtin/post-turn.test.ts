@@ -4,7 +4,7 @@ import type { PolicyContext } from "../../../../src/core/policy";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
-    timing: "post_turn",
+    timing: "turn.finish",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -74,9 +74,9 @@ describe("createPostTurnPolicy", () => {
     expect(middleware.priority).toBe(250);
   });
 
-  it("has timing post_turn", () => {
+  it("has timing turn.finish", () => {
     const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
-    expect(middleware.timing).toBe("post_turn");
+    expect(middleware.timing).toBe("turn.finish");
   });
 
   it("has name builtin:post-turn", () => {

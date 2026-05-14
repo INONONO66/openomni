@@ -7,7 +7,7 @@ export type PostTurnHandler = (ctx: PolicyContext) => Promise<Policy.Verdict> | 
 export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistration {
   return {
     name: "builtin:post-turn",
-    timing: "post_turn",
+    timing: "turn.finish",
     priority: 250,
     fn: async (ctx) => {
       try {

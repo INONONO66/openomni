@@ -4,7 +4,7 @@ import type { PolicyContext } from "../../../../src/core/policy";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
-    timing: "post_tool_use",
+    timing: "invoke.result",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -109,9 +109,9 @@ describe("createPostToolPolicy", () => {
     expect(middleware.priority).toBe(200);
   });
 
-  it("has timing post_tool_use", () => {
+  it("has timing invoke.result", () => {
     const middleware = createPostToolPolicy(() => null);
-    expect(middleware.timing).toBe("post_tool_use");
+    expect(middleware.timing).toBe("invoke.result");
   });
 
   it("has name builtin:post-tool", () => {

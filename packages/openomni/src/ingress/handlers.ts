@@ -2,11 +2,15 @@ import {
   IngressEvent,
   type Execution,
   type Ingress,
+  type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
+import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import { Bus } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { SessionBridge } from "./session-bridge";
+
+const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 export namespace IngressHandlers {
   export interface HandlerContext {
@@ -14,6 +18,8 @@ export namespace IngressHandlers {
     event: Ingress.InboundEvent;
     coordinator: CoordinatorLike;
     traceContext?: TraceContextProtocol.Type;
+    policies?: PolicyRegistration[];
+    onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
   function extractPrompt(payload: unknown): string {
@@ -27,6 +33,54 @@ export namespace IngressHandlers {
       return (payload as { text: string }).text;
     }
     return JSON.stringify(payload);
+  }
+
+  async function dispatchWritebackCommit(ctx: HandlerContext, output: string): Promise<string> {
+    if (!ctx.policies?.length) return output;
+
+    const engine = PolicyEngine.create({
+      traceContext: ctx.traceContext,
+      onDecision: ctx.onPolicyDecision,
+    });
+    for (const reg of ctx.policies) {
+      engine.register(reg);
+    }
+
+    const verdict = await engine.dispatchLegacy("writeback.commit", {
+      steps: [],
+      usage: emptyUsage,
+      turnCount: 0,
+      isCompletion: true,
+      continuationCount: 0,
+      elapsedMs: 0,
+      labels: [{ value: `surface.${ctx.event.surface}`, source: "system" }],
+      toolInput: {
+        sessionId: ctx.sessionId,
+        mode: ctx.event.mode,
+        surface: ctx.event.surface,
+        output,
+      },
+      traceContext: ctx.traceContext,
+    });
+
+    return resolveWritebackVerdict(verdict, output);
+  }
+
+  function resolveWritebackVerdict(verdict: Policy.Verdict, output: string): string {
+    switch (verdict.action) {
+      case "continue":
+        return output;
+      case "transform": {
+        const input = verdict.input as { output?: unknown };
+        return typeof input.output === "string" ? input.output : output;
+      }
+      case "skip":
+      case "abort":
+      case "retry":
+      case "inject":
+      case "deny":
+        throw new Error(verdict.reason ?? `writeback.commit policy returned ${verdict.action}`);
+    }
   }
 
   export function buildExecutionRequest(ctx: HandlerContext): Execution.Request {
@@ -66,7 +120,7 @@ export namespace IngressHandlers {
         `Coordinator dispatch failed: ${coordinatorResult.error ?? coordinatorResult.status}`,
       );
     }
-    const output = coordinatorResult.output ?? "";
+    const output = await dispatchWritebackCommit(ctx, coordinatorResult.output ?? "");
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     if (ctx.traceContext) {

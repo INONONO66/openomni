@@ -1,4 +1,4 @@
-import type { Tool as ProtocolTool } from "@openomni/protocol";
+import type { RuntimeResource, Tool as ProtocolTool } from "@openomni/protocol";
 import type {
   ImplicitInputSource,
   NativeTool,
@@ -14,6 +14,10 @@ const TOOL_DEFAULTS = {
 } as const;
 
 const defaultRiskTier: ToolRiskTier = 1;
+
+function descriptorSource(source: ToolSource): RuntimeResource.Source {
+  return { type: source };
+}
 
 export interface ToolDefinition<TInput = Record<string, unknown>> {
   readonly name: string;
@@ -79,6 +83,21 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
     ...(typeof isDestructive === "boolean" && isDestructive ? ["capability:destructive"] : []),
     ...(def.labels ?? []),
   ];
+  const capabilities = [
+    ...(typeof isReadOnly === "boolean" && isReadOnly ? ["read"] : []),
+    ...(typeof isReadOnly === "boolean" && !isReadOnly ? ["write"] : []),
+  ];
+  const effects = [...(typeof isDestructive === "boolean" && isDestructive ? ["destructive"] : [])];
+  const source = def.source ?? "system";
+  const descriptor: RuntimeResource.Descriptor = {
+    id: `tool:${source}:${def.name}`,
+    kind: "tool",
+    source: descriptorSource(source),
+    labels,
+    capabilities,
+    effects,
+    risk: def.riskTier ?? defaultRiskTier,
+  };
 
   const spec: ProtocolTool.Spec & { labels: string[] } = {
     name: def.name,
@@ -96,7 +115,8 @@ export function defineTool<TInput>(def: ToolDefinition<TInput>): NativeTool {
     isDestructive,
     isConcurrencySafe,
     labels,
-    source: def.source ?? "system",
+    descriptor,
+    source,
     ...(def.implicitInputs ? { implicitInputs: def.implicitInputs } : {}),
     execute: def.execute as NativeTool["execute"],
   };

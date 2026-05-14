@@ -1,4 +1,4 @@
-import { MessengerEvent, Operational, type Messenger } from "@openomni/protocol";
+import { MessengerEvent, Operational, type Messenger, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentRuntimeContext } from "../../core/runtime-context";
 import { getDefaultContext } from "../../core/runtime-context";
@@ -18,6 +18,41 @@ export interface AgentMessengerOptions {
 export interface RequestOptions {
   timeout: number;
   signal?: AbortSignal;
+}
+
+function assertSendAllowed(verdict: Policy.Verdict, envelope: Messenger.MessageEnvelope): void {
+  switch (verdict.action) {
+    case "continue":
+      return;
+    case "skip":
+    case "abort":
+    case "retry":
+    case "transform":
+    case "inject":
+    case "deny": {
+      const traceId = envelope.traceId || crypto.randomUUID();
+      Bus.publish(Operational.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "messenger:send",
+        msg: "messenger send authorization denied",
+        context: {
+          envelopeId: envelope.id,
+          fromAgentId: envelope.fromAgentId,
+          toAgentId: envelope.toAgentId,
+          reason: verdict.reason,
+          policyId: verdict.policyId,
+        },
+      });
+      Bus.publish(MessengerEvent.DeliveryFailed, {
+        traceId,
+        envelopeId: envelope.id,
+        reason: `authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`,
+        time: Date.now(),
+      });
+      throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
+    }
+  }
 }
 
 export namespace AgentMessenger {
@@ -40,7 +75,7 @@ export namespace AgentMessenger {
 
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
-        const verdict = await engine.dispatch("pre_tool_use", {
+        const verdict = await engine.dispatchLegacy("invoke.prepare", {
           steps: [],
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
           turnCount: 0,
@@ -50,29 +85,7 @@ export namespace AgentMessenger {
           envelope,
         });
 
-        if (verdict.action !== "continue") {
-          const traceId = envelope.traceId || crypto.randomUUID();
-          Bus.publish(Operational.Warn, {
-            traceId,
-            time: Date.now(),
-            component: "messenger:send",
-            msg: "messenger send authorization denied",
-            context: {
-              envelopeId: envelope.id,
-              fromAgentId: envelope.fromAgentId,
-              toAgentId: envelope.toAgentId,
-              reason: verdict.reason,
-              policyId: verdict.policyId,
-            },
-          });
-          Bus.publish(MessengerEvent.DeliveryFailed, {
-            traceId,
-            envelopeId: envelope.id,
-            reason: `authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`,
-            time: Date.now(),
-          });
-          throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
-        }
+        assertSendAllowed(verdict, envelope);
 
         const traceId = envelope.traceId || crypto.randomUUID();
         const outbound = traceId !== envelope.traceId ? { ...envelope, traceId } : envelope;

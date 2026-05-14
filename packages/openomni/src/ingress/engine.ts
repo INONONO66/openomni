@@ -15,6 +15,20 @@ let _coordinator: CoordinatorLike | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 
+function assertInboundReceiveAllowed(verdict: Policy.Verdict): void {
+  switch (verdict.action) {
+    case "continue":
+      return;
+    case "skip":
+    case "abort":
+    case "retry":
+    case "transform":
+    case "inject":
+    case "deny":
+      throw new Error(verdict.reason ?? `inbound.receive policy returned ${verdict.action}`);
+  }
+}
+
 export namespace IngressEngine {
   export function reset(): void {
     SurfaceKey.clear();
@@ -85,7 +99,7 @@ export namespace IngressEngine {
         if (role) labels.push({ value: `actor.${role}`, source: "system" });
       }
 
-      const verdict = await engine.dispatch("pre_ingress", {
+      const verdict = await engine.dispatchLegacy("inbound.receive", {
         steps: [],
         usage: emptyUsage,
         turnCount: 0,
@@ -97,9 +111,7 @@ export namespace IngressEngine {
         traceContext: trace,
       });
 
-      if (verdict.action !== "continue") {
-        throw new Error(verdict.reason ?? "pre_ingress policy aborted");
-      }
+      assertInboundReceiveAllowed(verdict);
     }
 
     const agentModel = inboundEvent.agent.model;
@@ -123,6 +135,8 @@ export namespace IngressEngine {
       event: inboundEvent,
       coordinator: preRun.coordinator,
       traceContext: activeTrace,
+      policies: _ingressPolicies,
+      onPolicyDecision: _middlewareDecisionObserver,
     });
   }
 }

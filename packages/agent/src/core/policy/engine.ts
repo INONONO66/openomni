@@ -1,11 +1,35 @@
 import { Bus } from "@openomni/session";
-import { Operational, PolicyEvent, type Policy, type TraceContext } from "@openomni/protocol";
+import {
+  Operational,
+  Policy,
+  PolicyEvent,
+  type RuntimeResource,
+  type TraceContext,
+} from "@openomni/protocol";
+import { composeEffects } from "./effect-composition";
 import type { PolicyContext, PolicyRegistration } from "./types";
+import { verdictToDecision } from "./verdict-adapter";
 
 const CONTINUE: Policy.Verdict = { action: "continue" };
+const COMPOSED_POLICY_ID = "agent.policy.composed";
+const EFFECT_VALIDATION_REASON = "policy.effect_not_allowed";
+const POLICY_METADATA_MISSING: Policy.Verdict = {
+  action: "deny",
+  reason: "policy-metadata-missing",
+  policyId: "agent.policy.metadata",
+};
 
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
-type PolicyEventVerdict = Exclude<Policy.Verdict["action"], "deny">;
+type PolicyEventVerdict = Policy.Verdict["action"];
+
+type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
+type AuditDispatchContext = PolicyContext & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
+
+export type DispatchContext = Omit<PolicyContext, "timing"> & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
 
 export interface PolicyDecision {
   readonly timing: Policy.Timing;
@@ -56,7 +80,11 @@ function selectRegistrations(
 
 export interface PolicyEngineInstance {
   register(reg: PolicyRegistration): void;
-  dispatch(timing: Policy.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Policy.Verdict>;
+  dispatch(timing: Policy.Timing, ctx: DispatchContext): Promise<Policy.PolicyDecision>;
+  dispatchLegacy(
+    timing: Policy.Timing,
+    ctx: Omit<PolicyContext, "timing">,
+  ): Promise<Policy.Verdict>;
   dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Policy.SystemPromptResult>;
 }
 
@@ -68,6 +96,50 @@ function warnKey(timing: Policy.Timing, name: string): string {
   return `${timing}:${name}`;
 }
 
+function isPreBoundaryTiming(timing: Policy.Timing): boolean {
+  return (
+    timing === "inbound.receive" ||
+    timing === "run.start" ||
+    timing === "turn.start" ||
+    timing === "context.prepare" ||
+    timing === "resources.prepare" ||
+    timing === "model.request" ||
+    timing === "invoke.prepare" ||
+    timing === "completion.prepare" ||
+    timing === "writeback.commit"
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function immutableSnapshot<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((entry) => immutableSnapshot(entry))) as T;
+  }
+
+  if (isPlainRecord(value)) {
+    const snapshot: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      snapshot[key] = immutableSnapshot(entry);
+    }
+    return Object.freeze(snapshot) as T;
+  }
+
+  return value;
+}
+
+function systemPromptTerminalError(verdict: Policy.Verdict, name: string): Error {
+  const reason = verdict.reason ?? verdict.action;
+  const policyId = verdict.policyId ?? "unknown";
+  return new Error(
+    `System prompt policy ${name} returned ${verdict.action}: ${reason} (${policyId})`,
+  );
+}
+
 function normalizeVerdict(
   verdict: Policy.Verdict,
   timing: Policy.Timing,
@@ -76,6 +148,15 @@ function normalizeVerdict(
 ): Policy.Verdict {
   const missingReason = verdict.action !== "continue" && !verdict.reason;
   const missingPolicyId = !verdict.policyId;
+
+  if (
+    isProduction() &&
+    isPreBoundaryTiming(timing) &&
+    verdict.action !== "continue" &&
+    (missingReason || missingPolicyId)
+  ) {
+    return POLICY_METADATA_MISSING;
+  }
 
   if (missingReason && !isProduction()) {
     throw new Error(`Middleware ${name} returned ${verdict.action} without reason at ${timing}`);
@@ -108,7 +189,7 @@ function buildActor(traceContext: TraceContext.Type | undefined): Record<string,
 }
 
 function resolveAction(timing: Policy.Timing): string {
-  if (timing === "pre_tool_use" || timing === "post_tool_use") return "tool.call";
+  if (timing === "invoke.prepare" || timing === "invoke.result") return "tool.call";
   return `middleware.${timing}`;
 }
 
@@ -116,9 +197,127 @@ function resolveResource(reg: PolicyRegistration, ctx: PolicyContext): string {
   return ctx.toolName ?? reg.name;
 }
 
+function resolveComposedResource(ctx: AuditDispatchContext): string {
+  return ctx.toolName ?? ctx.resourceDescriptor?.id ?? "policy.composed";
+}
+
 function resolveEventReason(decision: PolicyDecision): string {
   if (decision.reason) return decision.reason;
   return decision.verdict === "continue" ? "continue" : "unspecified";
+}
+
+function policyPointIdsForDescriptor(
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+): PolicyPointId[] {
+  const aliases = Policy.PolicyPoint.MigrationMapping[timing];
+  if (descriptor === undefined) return aliases;
+
+  if (timing === "invoke.prepare") {
+    if (descriptor.kind === "worker") return ["delegation.subagent.pre"];
+    if (descriptor.kind === "tool") {
+      return descriptor.source?.type === "mcp" || descriptor.source?.type === "skill-mcp"
+        ? ["tool.mcp.pre"]
+        : ["tool.native.pre"];
+    }
+  }
+
+  if (timing === "invoke.result") {
+    if (descriptor.kind === "worker") return ["delegation.subagent.post"];
+    if (descriptor.kind === "tool") {
+      return descriptor.source?.type === "mcp" || descriptor.source?.type === "skill-mcp"
+        ? ["tool.mcp.post"]
+        : ["tool.native.post"];
+    }
+  }
+
+  return aliases;
+}
+
+function auditPoint(
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+): { readonly pointId?: PolicyPointId; readonly pointVersion?: number } {
+  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
+  if (pointId === undefined) return {};
+
+  return { pointId, pointVersion: Policy.PolicyPoint.Registry[pointId].version };
+}
+
+function auditReason(decision: Policy.PolicyDecision): string {
+  if (decision.reasonCodes.length > 0) return decision.reasonCodes.join(",");
+  return decision.verdict;
+}
+
+function auditDecisionFromVerdict(
+  verdict: Policy.Verdict,
+  ctx: PolicyContext,
+  policyId: string,
+): Policy.PolicyDecision {
+  return verdictToDecision(verdict, {
+    timing: ctx.timing,
+    policyId,
+    ...(ctx.toolName !== undefined && { toolName: ctx.toolName }),
+  });
+}
+
+function totalDurationMs(decisions: readonly Policy.PolicyDecision[]): number {
+  return decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0);
+}
+
+function allowedEffectTypes(
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+): Map<Policy.PolicyEffectType, PolicyPointId> {
+  const allowed = new Map<Policy.PolicyEffectType, PolicyPointId>();
+
+  for (const pointId of policyPointIdsForDescriptor(timing, descriptor)) {
+    const point = Policy.PolicyPoint.Registry[pointId];
+    for (const effectType of point.allowedEffects) {
+      if (!allowed.has(effectType)) allowed.set(effectType, pointId);
+    }
+  }
+
+  return allowed;
+}
+
+function validationFailure(
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+  effects: readonly Policy.PolicyEffect[],
+): Policy.PolicyDecision | undefined {
+  const allowed = allowedEffectTypes(timing, descriptor);
+  const invalid = effects.find((effect) => !allowed.has(effect.type));
+  if (!invalid) return undefined;
+
+  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
+  const annotation =
+    pointId === undefined
+      ? `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${timing}`
+      : `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${pointId}`;
+
+  return {
+    policyId: COMPOSED_POLICY_ID,
+    verdict: "deny",
+    effects: [{ type: "audit.annotate", annotation, severity: "error" }],
+    reasonCodes: [EFFECT_VALIDATION_REASON],
+  };
+}
+
+function composedDecision(
+  effective: Policy.EffectiveDecision,
+  decisions: readonly Policy.PolicyDecision[],
+): Policy.PolicyDecision {
+  const reasonCodes = decisions.flatMap((decision) => decision.reasonCodes);
+  const obligations = effective.obligations.length === 0 ? undefined : effective.obligations;
+
+  return {
+    policyId: COMPOSED_POLICY_ID,
+    verdict: effective.verdict,
+    effects: effective.mergedEffects,
+    ...(obligations !== undefined && { obligations }),
+    reasonCodes: [...new Set(reasonCodes)],
+  };
 }
 
 function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
@@ -128,7 +327,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   function publishPolicyEvent(
     decision: PolicyDecision,
     reg: PolicyRegistration,
-    ctx: PolicyContext,
+    ctx: AuditDispatchContext,
+    verdict: Policy.Verdict,
   ): void {
     if (options.audit === false) return;
 
@@ -136,6 +336,9 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     const traceId = traceContext?.traceId;
     const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
     if (!sessionId || !traceId) return;
+    const eventVerdict: PolicyEventVerdict = decision.verdict;
+    const auditDecision = auditDecisionFromVerdict(verdict, ctx, decision.policyId);
+    const point = auditPoint(ctx.timing, ctx.resourceDescriptor);
 
     Bus.publish(PolicyEvent.Evaluated, {
       traceId,
@@ -146,14 +349,54 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       actor: options.audit?.actor ?? buildActor(traceContext),
       action: options.audit?.action ?? resolveAction(decision.timing),
       resource: options.audit?.resource ?? resolveResource(reg, ctx),
-      verdict: decision.verdict as PolicyEventVerdict,
+      verdict: eventVerdict,
       reason: resolveEventReason(decision),
+      effects: auditDecision.effects,
+      ...(auditDecision.obligations !== undefined && { obligations: auditDecision.obligations }),
+      reasonCodes: auditDecision.reasonCodes,
+      ...(auditDecision.factsUsed !== undefined && { factsUsed: auditDecision.factsUsed }),
+      durationMs: decision.durationMs,
+      ...point,
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
+    });
+  }
+
+  function publishComposedDecision(
+    timing: Policy.Timing,
+    ctx: AuditDispatchContext,
+    decision: Policy.PolicyDecision,
+    sourceDecisions: readonly Policy.PolicyDecision[],
+  ): void {
+    if (options.audit === false) return;
+
+    const traceContext = ctx.traceContext ?? options.traceContext;
+    const traceId = traceContext?.traceId;
+    const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
+    if (!sessionId || !traceId) return;
+
+    Bus.publish(PolicyEvent.DecisionComposed, {
+      traceId,
+      sessionId,
+      ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
+      time: Date.now(),
+      actor: options.audit?.actor ?? buildActor(traceContext),
+      action: options.audit?.action ?? resolveAction(timing),
+      resource: options.audit?.resource ?? resolveComposedResource(ctx),
+      verdict: decision.verdict,
+      reason: auditReason(decision),
+      effects: decision.effects,
+      reasonCodes: decision.reasonCodes,
+      ...(decision.obligations !== undefined && { obligations: decision.obligations }),
+      ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
+      durationMs: totalDurationMs(sourceDecisions),
+      ...auditPoint(timing, ctx.resourceDescriptor),
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
     });
   }
 
   async function recordDecision(
     reg: PolicyRegistration,
-    ctx: PolicyContext,
+    ctx: AuditDispatchContext,
     verdict: Policy.Verdict,
     durationMs: number,
   ): Promise<Policy.Verdict> {
@@ -170,17 +413,17 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       ...(ctx.envelope !== undefined && { envelope: ctx.envelope }),
     };
 
-    publishPolicyEvent(decision, reg, ctx);
+    publishPolicyEvent(decision, reg, ctx, normalized);
     await options.onDecision?.(decision);
     return normalized;
   }
 
-  async function dispatch(
+  async function dispatchLegacy(
     timing: Policy.Timing,
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.Verdict> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing };
+    const fullCtx: AuditDispatchContext = { ...ctx, timing };
 
     for (const reg of selected) {
       let verdict: Policy.Verdict;
@@ -221,11 +464,73 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     return CONTINUE;
   }
 
+  async function dispatch(
+    timing: Policy.Timing,
+    ctx: DispatchContext,
+  ): Promise<Policy.PolicyDecision> {
+    const selected = selectRegistrations(registrations, timing, ctx.agentType);
+    const fullCtx: AuditDispatchContext = immutableSnapshot({ ...ctx, timing });
+    const decisions: Policy.PolicyDecision[] = [];
+
+    function composeAndPublish(): Policy.PolicyDecision {
+      const effective = composeEffects(decisions);
+      const decision =
+        validationFailure(timing, ctx.resourceDescriptor, effective.mergedEffects) ??
+        composedDecision(effective, decisions);
+      publishComposedDecision(timing, fullCtx, decision, decisions);
+      return decision;
+    }
+
+    for (const reg of selected) {
+      let verdict: Policy.Verdict;
+      const startTime = Date.now();
+      try {
+        verdict = await reg.fn(fullCtx);
+      } catch (err) {
+        const durationMs = Date.now() - startTime;
+        const failPolicy = reg.failPolicy ?? "fail-open";
+        Bus.publish(Operational.Warn, {
+          traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
+          time: Date.now(),
+          component: "agent.policy",
+          msg: "middleware error",
+          context: { timing, name: reg.name, error: String(err), failPolicy, durationMs },
+        });
+        if (failPolicy === "fail-open") continue;
+
+        verdict = { action: "abort", reason: "middleware-error", policyId: reg.name };
+      }
+
+      const durationMs = Date.now() - startTime;
+      const normalized = await recordDecision(reg, fullCtx, verdict, durationMs);
+      const decision = verdictToDecision(normalized, {
+        timing,
+        policyId: normalized.policyId ?? reg.name,
+        ...(ctx.toolName !== undefined && { toolName: ctx.toolName }),
+      });
+      const prioritizedDecision = { ...decision, durationMs, priority: reg.priority };
+      decisions.push(prioritizedDecision);
+
+      Bus.publish(Operational.Debug, {
+        traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
+        time: Date.now(),
+        component: "agent.policy",
+        msg: "middleware dispatch",
+        context: { timing, name: reg.name, verdict: decision.verdict, durationMs },
+      });
+
+      if (verdict.action === "abort" && reg.failPolicy === "fail-closed") break;
+      if (normalized.action === "deny") return composeAndPublish();
+    }
+
+    return composeAndPublish();
+  }
+
   async function dispatchSystemPrompt(
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.SystemPromptResult> {
-    const selected = selectRegistrations(registrations, "on_system_prompt", ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing: "on_system_prompt" };
+    const selected = selectRegistrations(registrations, "context.prepare", ctx.agentType);
+    const fullCtx: AuditDispatchContext = { ...ctx, timing: "context.prepare" };
 
     let systemPrompt: string | undefined;
     const prependParts: string[] = [];
@@ -245,7 +550,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
           component: "agent.policy",
           msg: "middleware error",
           context: {
-            timing: "on_system_prompt",
+            timing: "context.prepare",
             name: reg.name,
             error: String(err),
             failPolicy,
@@ -266,7 +571,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         component: "agent.policy",
         msg: "middleware dispatch",
         context: {
-          timing: "on_system_prompt",
+          timing: "context.prepare",
           name: reg.name,
           verdict: verdict.action,
           durationMs,
@@ -290,6 +595,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         }
       } else if (verdict.action === "inject") {
         appendParts.push(verdict.message);
+      } else if (verdict.action === "deny" || verdict.action === "abort") {
+        throw systemPromptTerminalError(verdict, reg.name);
       }
     }
 
@@ -305,6 +612,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       registrations.push(reg);
     },
     dispatch,
+    dispatchLegacy,
     dispatchSystemPrompt,
   };
 }

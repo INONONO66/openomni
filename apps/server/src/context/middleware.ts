@@ -9,7 +9,7 @@ export interface ContextMiddlewareConfig {
 export function createContextMiddleware(config: ContextMiddlewareConfig): PolicyRegistration {
   return {
     name: "server:context",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: 50,
     failPolicy: "fail-open",
     fn: async (_ctx) => {

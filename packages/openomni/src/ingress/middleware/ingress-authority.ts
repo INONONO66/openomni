@@ -149,34 +149,34 @@ function createModeDispatch(state: PreRunState): PolicyRegistration {
 
 function throwAbort(verdict: Policy.Verdict, state: PreRunState): never {
   if (state.schemaError) throw state.schemaError;
-  throw new Error(verdict.reason ?? "ingress pre_run middleware aborted");
+  throw new Error(verdict.reason ?? "ingress run.start middleware aborted");
 }
 
 export namespace IngressAuthorityMiddleware {
   export const CoordinatorPresence = {
     name: "ingress:coordinator-presence",
-    timing: "pre_run",
+    timing: "run.start",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const SchemaValidation = {
     name: "ingress:schema-validation",
-    timing: "pre_run",
+    timing: "run.start",
     priority: 10,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const AuthorityCheck = {
     name: "ingress:authority",
-    timing: "pre_run",
+    timing: "run.start",
     priority: 20,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const ModeDispatch = {
     name: "ingress:mode-dispatch",
-    timing: "pre_run",
+    timing: "run.start",
     priority: 30,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
@@ -214,7 +214,7 @@ export namespace IngressAuthorityMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("pre_run", {
+    const verdict = await engine.dispatchLegacy("run.start", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -227,7 +227,7 @@ export namespace IngressAuthorityMiddleware {
 
     if (verdict.action !== "continue") throwAbort(verdict, state);
     if (!state.parsedEvent || !state.coordinator || !state.mode) {
-      throw new Error("ingress pre_run middleware did not produce dispatch context");
+      throw new Error("ingress run.start middleware did not produce dispatch context");
     }
 
     return {

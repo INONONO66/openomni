@@ -21,7 +21,7 @@ function getLastUserText(messages: Message.WithParts[] | undefined): string | nu
 export function createMemoryPolicy(memory: Memory): PolicyRegistration {
   return {
     name: "builtin:memory",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: 100,
     fn: async (ctx) => {
       const text = getLastUserText(ctx.messages);

@@ -23,7 +23,7 @@ src/
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
-├── policy/               # Policy.Timing (13), Policy.Verdict (7), Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
+├── policy/               # Policy.Timing (14), Policy.Verdict (7), Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
 ├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
@@ -41,7 +41,7 @@ src/
 - **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.Verdict` on `action`. `InboundEvent` currently uses a single `mode: "direct"` variant.
 - **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Tool.Call`, `Tool.Result`, `Run.Snapshot`.
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
-- **Policy timings**: 13 policy timing points — `pre_run`, `pre_turn`, `on_system_prompt`, `pre_tool_use`, `post_tool_use`, `post_turn`, `post_compaction`, `post_run`, `on_error`, `pre_ingress`, `pre_tool_selection`, `pre_delegation`. `Policy.Verdict` returns one of `continue | skip | abort | retry | transform | inject | deny`.
+- **Policy timings**: 14 policy timing points — `inbound.receive`, `run.start`, `turn.start`, `context.prepare`, `resources.prepare`, `model.request`, `model.response`, `invoke.prepare`, `invoke.result`, `turn.finish`, `completion.prepare`, `writeback.commit`, `run.finish`, `error`. `Policy.Verdict` returns one of `continue | skip | abort | retry | transform | inject | deny`.
 - **Subagent lifecycle**: `Subagent.Events.*` covers worker sessions (`WorkerSessionSpawned/Resumed/Cancelled`), worker runs (`WorkerRunStarted/Completed/Failed`), consultations (`WorkerConsultationRequested/Completed`), and background tasks (`BackgroundTaskLaunched/Completed/Failed/Cancelled`).
 - **Storage sub-adapters**: `Storage.TaskSubAdapter` and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
 - **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.

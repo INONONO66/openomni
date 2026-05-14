@@ -1,4 +1,4 @@
-import { Skill } from "@openomni/protocol";
+import { type RuntimeResource, Skill } from "@openomni/protocol";
 import { mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -16,6 +16,7 @@ export type {
 } from "./manager";
 
 type SkillScope = Skill.Definition["scope"];
+type SkillOrigin = "project" | "user" | "global";
 
 interface ErrorWithCode {
   readonly code?: unknown;
@@ -40,6 +41,7 @@ interface SkillMetadata {
   useWhen?: string;
   doNotUseWhen?: string;
   finalChecklist?: string[];
+  mcpTools?: string[];
   promptFragment?: string;
 }
 
@@ -160,7 +162,7 @@ async function loadSkillDefinition(
     );
   }
 
-  return parsed.data;
+  return attachRuntimeDescriptors(parsed.data, skillOrigin(scope), metadata.mcpTools ?? []);
 }
 
 function parseSkillMarkdown(text: string): SkillMetadata {
@@ -176,16 +178,13 @@ function parseSkillMarkdown(text: string): SkillMetadata {
     }
 
     const listItem = /^\s*-\s+(.+)$/.exec(line);
-    if (listItem && currentKey === "finalChecklist") {
-      metadata.finalChecklist = [
-        ...(metadata.finalChecklist ?? []),
-        stripQuotes(listItem[1] ?? ""),
-      ];
+    if (listItem && isListMetadataKey(currentKey)) {
+      metadata = appendSkillMetadataItem(metadata, currentKey, stripQuotes(listItem[1] ?? ""));
       continue;
     }
 
     const continuation = /^\s+(.+)$/.exec(line);
-    if (continuation && currentKey && currentKey !== "finalChecklist") {
+    if (continuation && currentKey && !isListMetadataKey(currentKey)) {
       const previous = metadata[currentKey];
       const next = stripQuotes(continuation[1] ?? "");
       if (typeof previous === "string") {
@@ -207,8 +206,8 @@ function parseSkillMarkdown(text: string): SkillMetadata {
 
     const value = pair[2] ?? "";
     currentKey = key;
-    if (key === "finalChecklist") {
-      metadata.finalChecklist = value.trim().length === 0 ? [] : [stripQuotes(value)];
+    if (isListMetadataKey(key)) {
+      metadata = assignSkillMetadataList(metadata, key, value);
       continue;
     }
 
@@ -250,9 +249,39 @@ function assignSkillMetadata(
       return { ...metadata, doNotUseWhen: value };
     case "finalChecklist":
       return { ...metadata, finalChecklist: [value] };
+    case "mcpTools":
+      return { ...metadata, mcpTools: [value] };
     case "promptFragment":
       return { ...metadata, promptFragment: value };
   }
+}
+
+function isListMetadataKey(
+  key: keyof SkillMetadata | undefined,
+): key is "finalChecklist" | "mcpTools" {
+  return key === "finalChecklist" || key === "mcpTools";
+}
+
+function assignSkillMetadataList(
+  metadata: SkillMetadata,
+  key: "finalChecklist" | "mcpTools",
+  value: string,
+): SkillMetadata {
+  const item = stripQuotes(value);
+  return item.length === 0
+    ? { ...metadata, [key]: [] }
+    : appendSkillMetadataItem(metadata, key, item);
+}
+
+function appendSkillMetadataItem(
+  metadata: SkillMetadata,
+  key: "finalChecklist" | "mcpTools",
+  value: string,
+): SkillMetadata {
+  if (key === "finalChecklist") {
+    return { ...metadata, finalChecklist: [...(metadata.finalChecklist ?? []), value] };
+  }
+  return { ...metadata, mcpTools: [...(metadata.mcpTools ?? []), value] };
 }
 
 function extractMarkdownParts(text: string): SkillMarkdownParts {
@@ -286,6 +315,7 @@ function normalizeSkillKey(key: string): keyof SkillMetadata | undefined {
     case "useWhen":
     case "doNotUseWhen":
     case "finalChecklist":
+    case "mcpTools":
     case "promptFragment":
       return key;
     default:
@@ -357,6 +387,75 @@ function sortSkillDefinitions(skills: readonly Skill.Definition[]): Skill.Defini
     const scopeOrder = a.scope.localeCompare(b.scope);
     return scopeOrder === 0 ? a.id.localeCompare(b.id) : scopeOrder;
   });
+}
+
+function attachRuntimeDescriptors(
+  definition: Skill.Definition,
+  origin: SkillOrigin,
+  mcpTools: readonly string[],
+): Skill.Definition {
+  Object.defineProperties(definition, {
+    descriptor: {
+      value: createSkillDescriptor(definition, origin),
+      enumerable: false,
+    },
+    mcpToolDescriptors: {
+      value: mcpTools.map((toolName) => createSkillMcpToolDescriptor(definition.id, toolName)),
+      enumerable: false,
+    },
+  });
+
+  return definition;
+}
+
+function createSkillDescriptor(
+  definition: Skill.Definition,
+  origin: SkillOrigin,
+): RuntimeResource.Descriptor {
+  return {
+    id: `skill:${definition.id}`,
+    kind: "skill",
+    labels: [`source.${origin}`, `skill.layer.${definition.layer}`],
+    capabilities: ["behavior.inject"],
+    effects: ["prompt.modify"],
+    source: skillDescriptorSource(origin, definition),
+  };
+}
+
+function skillDescriptorSource(
+  origin: SkillOrigin,
+  definition: Skill.Definition,
+): RuntimeResource.Source {
+  switch (origin) {
+    case "project":
+      return { type: "project", path: definition.path };
+    case "user":
+      return { type: "user" };
+    case "global":
+      return { type: "global", scope: "skill" };
+  }
+}
+
+function createSkillMcpToolDescriptor(
+  skillId: string,
+  toolName: string,
+): RuntimeResource.Descriptor {
+  return {
+    id: `tool:skill-mcp:${toolName.split(":").join("/")}`,
+    kind: "tool",
+    labels: ["source.skill-mcp", `skill.${skillId}`],
+    capabilities: ["tool.invoke"],
+    effects: ["external.read"],
+    source: {
+      type: "skill-mcp",
+      skillId,
+      remoteName: toolName,
+    },
+  };
+}
+
+function skillOrigin(scope: SkillScope): SkillOrigin {
+  return scope === "local" ? "project" : "global";
 }
 
 function isEnoent(error: unknown): boolean {

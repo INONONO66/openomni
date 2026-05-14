@@ -67,20 +67,20 @@ beforeEach(() => {
   mockRunFn = async () => createStopOutcome();
 });
 
-describe("pre_run middleware dispatch", () => {
+describe("run.start middleware dispatch", () => {
   it("fires before the first LLM turn", async () => {
     const preRunFn = mock((_ctx: PolicyContext) => {
-      callOrder.push("pre_run");
+      callOrder.push("run.start");
       return { action: "continue" as const };
     });
 
     await collectEvents({
       ...defaultConfig,
-      middleware: [{ name: "test:pre_run", timing: "pre_run", priority: 100, fn: preRunFn }],
+      middleware: [{ name: "test:run.start", timing: "run.start", priority: 100, fn: preRunFn }],
     });
 
     expect(preRunFn).toHaveBeenCalledTimes(1);
-    const preRunIdx = callOrder.indexOf("pre_run");
+    const preRunIdx = callOrder.indexOf("run.start");
     const llmIdx = callOrder.indexOf("llm_turn");
     expect(preRunIdx).toBeGreaterThanOrEqual(0);
     expect(llmIdx).toBeGreaterThanOrEqual(0);
@@ -92,8 +92,8 @@ describe("pre_run middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
-          name: "test:pre_run_abort",
-          timing: "pre_run",
+          name: "test:run.start_abort",
+          timing: "run.start",
           priority: 100,
           fn: () => ({ action: "abort" as const, reason: "blocked" }),
         },
@@ -114,8 +114,8 @@ describe("pre_run middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
-          name: "test:pre_run_inject",
-          timing: "pre_run",
+          name: "test:run.start_inject",
+          timing: "run.start",
           priority: 100,
           fn: () => ({
             action: "inject" as const,
@@ -138,18 +138,18 @@ describe("pre_run middleware dispatch", () => {
   });
 });
 
-describe("post_run middleware dispatch", () => {
+describe("run.finish middleware dispatch", () => {
   it("fires after normal completion with result context", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,
-      middleware: [{ name: "test:post_run", timing: "post_run", priority: 100, fn: postRunFn }],
+      middleware: [{ name: "test:run.finish", timing: "run.finish", priority: 100, fn: postRunFn }],
     });
 
     expect(postRunFn).toHaveBeenCalledTimes(1);
     const ctx = postRunFn.mock.calls[0][0] as PolicyContext;
-    expect(ctx.timing).toBe("post_run");
+    expect(ctx.timing).toBe("run.finish");
     expect(ctx.isCompletion).toBe(true);
     expect(Array.isArray(ctx.steps)).toBe(true);
   });
@@ -161,7 +161,7 @@ describe("post_run middleware dispatch", () => {
       ...defaultConfig,
       budget: { maxTurns: 0 },
       middleware: [
-        { name: "test:post_run_budget", timing: "post_run", priority: 100, fn: postRunFn },
+        { name: "test:run.finish_budget", timing: "run.finish", priority: 100, fn: postRunFn },
       ],
     });
 
@@ -170,38 +170,38 @@ describe("post_run middleware dispatch", () => {
     expect(postRunFn).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT fire after pre_turn abort", async () => {
+  it("does NOT fire after turn.start abort", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,
       middleware: [
         {
-          name: "test:pre_turn_abort",
-          timing: "pre_turn",
+          name: "test:turn.start_abort",
+          timing: "turn.start",
           priority: 100,
           fn: () => ({ action: "abort" as const, reason: "blocked" }),
         },
-        { name: "test:post_run_watcher", timing: "post_run", priority: 100, fn: postRunFn },
+        { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
       ],
     });
 
     expect(postRunFn).toHaveBeenCalledTimes(0);
   });
 
-  it("does NOT fire after post_turn abort", async () => {
+  it("does NOT fire after turn.finish abort", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     await collectEvents({
       ...defaultConfig,
       middleware: [
         {
-          name: "test:post_turn_abort",
-          timing: "post_turn",
+          name: "test:turn.finish_abort",
+          timing: "turn.finish",
           priority: 100,
           fn: () => ({ action: "abort" as const, reason: "blocked" }),
         },
-        { name: "test:post_run_watcher", timing: "post_run", priority: 100, fn: postRunFn },
+        { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
       ],
     });
 
@@ -215,8 +215,8 @@ describe("post_run middleware dispatch", () => {
       ...defaultConfig,
       middleware: [
         {
-          name: "test:post_run_transform",
-          timing: "post_run",
+          name: "test:run.finish_transform",
+          timing: "run.finish",
           priority: 100,
           fn: () => ({
             action: "transform" as const,

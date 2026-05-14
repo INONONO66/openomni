@@ -97,7 +97,7 @@ describe("run() delegation contract", () => {
       middleware: [
         {
           name: "test:post-turn-stalled",
-          timing: "post_turn",
+          timing: "turn.finish",
           priority: 100,
           fn: () => ({ action: "abort" as const, reason: "stalled" }),
         },
@@ -162,7 +162,7 @@ describe("run() delegation contract", () => {
       middleware: [
         {
           name: "test:post-turn-deny",
-          timing: "post_turn",
+          timing: "turn.finish",
           priority: 100,
           fn: () => ({ action: "abort" as const, reason: "policy-violation" }),
         },
@@ -182,7 +182,7 @@ describe("run() delegation contract", () => {
     await expect(agent.run(defaultInput)).rejects.toThrow("connection refused");
   });
 
-  it("preserves accumulated usage when on_error middleware aborts", async () => {
+  it("preserves accumulated usage when error middleware aborts", async () => {
     mockRunFn = async (_input, sink) => {
       sink.onMessage(makeAssistantMessage("partial", 9, 4));
       return createErrorOutcome("connection refused");
@@ -200,8 +200,8 @@ describe("run() delegation contract", () => {
       ...defaultConfig,
       middleware: [
         {
-          name: "test:on_error_abort",
-          timing: "on_error",
+          name: "test:error_abort",
+          timing: "error",
           priority: 100,
           fn: (ctx) => {
             seenUsage = ctx.usage;
@@ -218,7 +218,7 @@ describe("run() delegation contract", () => {
     expect(result.text).toBe("partial");
   });
 
-  it("tracks compactionCount when a post_compaction middleware transforms messages", async () => {
+  it("tracks compactionCount when a completion.prepare middleware transforms messages", async () => {
     let turnCount = 0;
 
     mockRunFn = async (_input, sink) => {
@@ -232,7 +232,7 @@ describe("run() delegation contract", () => {
       middleware: [
         {
           name: "test:post-turn-inject",
-          timing: "post_turn",
+          timing: "turn.finish",
           priority: 100,
           fn: () =>
             turnCount < 2
@@ -246,7 +246,7 @@ describe("run() delegation contract", () => {
         },
         {
           name: "test:force-compaction",
-          timing: "post_compaction",
+          timing: "completion.prepare",
           priority: 1,
           fn: async () => ({
             action: "transform" as const,

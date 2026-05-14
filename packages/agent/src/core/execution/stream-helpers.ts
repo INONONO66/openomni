@@ -1,5 +1,4 @@
 import type { RunInput } from "@openomni/llm";
-import { Retry } from "@openomni/llm";
 import { AgentExecution, Operational } from "@openomni/protocol";
 import type { Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -23,6 +22,7 @@ import {
   createToolPermissionPolicy,
 } from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
+import * as Retry from "../retry";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import { toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
@@ -151,6 +151,57 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
   }
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled policy verdict: ${JSON.stringify(value)}`);
+}
+
+function createGuardCompleteEvent(
+  state: StreamRunState,
+  options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
+): AgentEvent {
+  return {
+    type: "complete",
+    result: {
+      text: options?.text ?? state.lastAssistantText,
+      steps: options?.steps ?? state.steps,
+      usage: state.totalUsage,
+      finishReason: options?.finishReason ?? "stop",
+      guardAborted: true,
+      compactionCount: getCompactionCount(state),
+    },
+  };
+}
+
+function publishDenyDiagnostic(
+  timing: Policy.Timing,
+  verdict: Extract<Policy.Verdict, { action: "deny" }>,
+  state: StreamRunState,
+  config: ChatAgentConfig,
+  agentBase?: StreamAgentBase,
+): void {
+  Bus.publish(Operational.Info, {
+    traceId: agentBase?.traceId ?? "stream-engine",
+    time: Date.now(),
+    sessionId: agentBase?.sessionId || undefined,
+    component: "agent",
+    msg: "agent.policy.deny.diagnostic",
+    context: {
+      timing,
+      reason: verdict.reason,
+      policyId: verdict.policyId,
+      turns: state.budgetState.turns,
+      elapsedMs: Date.now() - state.startTime,
+    },
+  });
+  config.eventEmitter?.emit("agent.policy.deny", {
+    sessionId: "stream-engine",
+    time: Date.now(),
+    timing,
+    reason: verdict.reason,
+    policyId: verdict.policyId,
+  });
+}
+
 function buildToolLabelMap(tools: ChatAgentConfig["tools"]): Map<string, string[]> {
   const labels = new Map<string, string[]>();
   for (const tool of tools ?? []) {
@@ -176,7 +227,7 @@ export async function dispatchPreRun(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const preRunVerdict = await engine.dispatch("pre_run", {
+  const preRunVerdict = await engine.dispatchLegacy("run.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: 0,
@@ -188,22 +239,21 @@ export async function dispatchPreRun(
     budget: config.budget,
     eventEmitter: config.eventEmitter,
   });
-  if (preRunVerdict.action === "abort") {
-    return {
-      type: "complete",
-      result: {
-        text: "",
-        steps: [],
-        usage: state.totalUsage,
-        finishReason: "stop",
-        guardAborted: true,
-      },
-    };
+  switch (preRunVerdict.action) {
+    case "abort":
+    case "deny":
+      return createGuardCompleteEvent(state, { text: "", steps: [] });
+    case "inject":
+      state.messages.push(createUserMessage(preRunVerdict.message, "stream-engine"));
+      return null;
+    case "continue":
+    case "skip":
+    case "retry":
+    case "transform":
+      return null;
+    default:
+      return assertNever(preRunVerdict);
   }
-  if (preRunVerdict.action === "inject") {
-    state.messages.push(createUserMessage(preRunVerdict.message, "stream-engine"));
-  }
-  return null;
 }
 
 export async function dispatchBudgetCheck(
@@ -215,7 +265,7 @@ export async function dispatchBudgetCheck(
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
 
-  const postRunVerdict = await engine.dispatch("post_run", {
+  const postRunVerdict = await engine.dispatchLegacy("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -227,9 +277,23 @@ export async function dispatchBudgetCheck(
     budget: config.budget,
     eventEmitter: config.eventEmitter,
   });
-  if (postRunVerdict.action === "transform") {
-    const payload = postRunVerdict.input as { text?: unknown };
-    if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+  switch (postRunVerdict.action) {
+    case "transform": {
+      const payload = postRunVerdict.input as { text?: unknown };
+      if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+      break;
+    }
+    case "deny":
+      publishDenyDiagnostic("run.finish", postRunVerdict, state, config, agentBase);
+      break;
+    case "continue":
+    case "skip":
+    case "abort":
+    case "retry":
+    case "inject":
+      break;
+    default:
+      assertNever(postRunVerdict);
   }
   Bus.publish(Operational.Info, {
     traceId: agentBase.traceId,
@@ -253,6 +317,80 @@ export async function dispatchBudgetCheck(
       compactionCount: getCompactionCount(state),
     },
   };
+}
+
+export async function dispatchModelRequest(
+  state: StreamRunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+): Promise<AgentEvent | null> {
+  const verdict = await engine.dispatchLegacy("model.request", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: false,
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+  });
+
+  switch (verdict.action) {
+    case "abort":
+    case "deny":
+      return createGuardCompleteEvent(state);
+    case "continue":
+    case "skip":
+    case "retry":
+    case "transform":
+    case "inject":
+      return null;
+    default:
+      return assertNever(verdict);
+  }
+}
+
+export async function dispatchModelResponse(
+  state: StreamRunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+  outcomeType: string,
+): Promise<AgentEvent | null> {
+  const verdict = await engine.dispatchLegacy("model.response", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: outcomeType === "stop",
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+    toolInput: { outcomeType },
+  });
+
+  switch (verdict.action) {
+    case "transform": {
+      const payload = verdict.input as { text?: unknown };
+      if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+      return null;
+    }
+    case "abort":
+      return createGuardCompleteEvent(state);
+    case "deny":
+      publishDenyDiagnostic("model.response", verdict, state, config);
+      return null;
+    case "continue":
+    case "skip":
+    case "retry":
+    case "inject":
+      return null;
+    default:
+      return assertNever(verdict);
+  }
 }
 
 export function emitTurnStart(
@@ -310,7 +448,7 @@ export async function buildTurn(
   agentBase: StreamAgentBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnVerdict = await engine.dispatch("pre_turn", {
+  const preTurnVerdict = await engine.dispatchLegacy("turn.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -325,42 +463,53 @@ export async function buildTurn(
 
   let budgetReassuranceEvent: Extract<AgentEvent, { type: "budget_reassurance" }> | undefined;
   let budgetWarningEvent: Extract<AgentEvent, { type: "budget_warning" }> | undefined;
-  if (preTurnVerdict.action === "inject") {
-    state.messages.push(createUserMessage(preTurnVerdict.message, "stream-engine"));
-    if (preTurnVerdict.message.startsWith("[Budget Status]")) {
-      const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-      Bus.publish(AgentExecution.BudgetReassurance, {
-        ...agentBase,
-        time: Date.now(),
-        remaining,
-        threshold: config.budget?.reassuranceThreshold ?? 0.6,
-      });
-      budgetReassuranceEvent = { type: "budget_reassurance", remaining };
-    } else if (preTurnVerdict.message.startsWith("[Budget Warning]")) {
-      const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-      Bus.publish(AgentExecution.BudgetWarning, {
-        ...agentBase,
-        time: Date.now(),
-        remaining,
-        threshold: config.budget?.warningThreshold ?? 0.8,
-      });
-      budgetWarningEvent = { type: "budget_warning", remaining };
-    }
-  } else if (preTurnVerdict.action === "abort") {
-    return {
-      type: "complete",
-      event: {
+  switch (preTurnVerdict.action) {
+    case "inject":
+      state.messages.push(createUserMessage(preTurnVerdict.message, "stream-engine"));
+      if (preTurnVerdict.message.startsWith("[Budget Status]")) {
+        const remaining = describeBudgetRemaining(state.budgetState, config.budget);
+        Bus.publish(AgentExecution.BudgetReassurance, {
+          ...agentBase,
+          time: Date.now(),
+          remaining,
+          threshold: config.budget?.reassuranceThreshold ?? 0.6,
+        });
+        budgetReassuranceEvent = { type: "budget_reassurance", remaining };
+      } else if (preTurnVerdict.message.startsWith("[Budget Warning]")) {
+        const remaining = describeBudgetRemaining(state.budgetState, config.budget);
+        Bus.publish(AgentExecution.BudgetWarning, {
+          ...agentBase,
+          time: Date.now(),
+          remaining,
+          threshold: config.budget?.warningThreshold ?? 0.8,
+        });
+        budgetWarningEvent = { type: "budget_warning", remaining };
+      }
+      break;
+    case "abort":
+      return {
         type: "complete",
-        result: {
-          text: state.lastAssistantText,
-          steps: state.steps,
-          usage: state.totalUsage,
-          finishReason: preTurnVerdict.reason === "stalled" ? "stalled" : "stop",
-          guardAborted: preTurnVerdict.reason !== "stalled",
-          compactionCount: getCompactionCount(state),
+        event: {
+          type: "complete",
+          result: {
+            text: state.lastAssistantText,
+            steps: state.steps,
+            usage: state.totalUsage,
+            finishReason: preTurnVerdict.reason === "stalled" ? "stalled" : "stop",
+            guardAborted: preTurnVerdict.reason !== "stalled",
+            compactionCount: getCompactionCount(state),
+          },
         },
-      },
-    };
+      };
+    case "deny":
+      return { type: "complete", event: createGuardCompleteEvent(state) };
+    case "continue":
+    case "skip":
+    case "retry":
+    case "transform":
+      break;
+    default:
+      assertNever(preTurnVerdict);
   }
 
   state.budgetState = recordTurn(state.budgetState);
@@ -390,7 +539,7 @@ export async function buildTurn(
 
   const system = await buildTurnSystemPrompt(state, config, engine);
 
-  // pre_tool_selection — policies can filter/modify tools exposed to LLM
+  // resources.prepare — policies can filter/modify tools exposed to LLM
   const allTools = config.tools ?? [];
   const catalogLabels: Policy.LabelEntry[] = [];
   for (const [name, labels] of toolLabels) {
@@ -398,7 +547,7 @@ export async function buildTurn(
       catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
     }
   }
-  const toolSelectionVerdict = await engine.dispatch("pre_tool_selection", {
+  const toolSelectionVerdict = await engine.dispatchLegacy("resources.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -410,27 +559,25 @@ export async function buildTurn(
   });
 
   let selectedTools = allTools;
-  if (toolSelectionVerdict.action === "transform") {
-    const input = toolSelectionVerdict.input as { tools?: unknown };
-    if (Array.isArray(input.tools)) {
-      const allowed = new Set(input.tools as string[]);
-      selectedTools = allTools.filter((t) => allowed.has(t.name));
+  switch (toolSelectionVerdict.action) {
+    case "transform": {
+      const input = toolSelectionVerdict.input as { tools?: unknown };
+      if (Array.isArray(input.tools)) {
+        const allowed = new Set(input.tools as string[]);
+        selectedTools = allTools.filter((t) => allowed.has(t.name));
+      }
+      break;
     }
-  } else if (toolSelectionVerdict.action === "abort") {
-    return {
-      type: "complete",
-      event: {
-        type: "complete",
-        result: {
-          text: state.lastAssistantText,
-          steps: state.steps,
-          usage: state.totalUsage,
-          finishReason: "stop",
-          guardAborted: true,
-          compactionCount: getCompactionCount(state),
-        },
-      },
-    };
+    case "abort":
+    case "deny":
+      return { type: "complete", event: createGuardCompleteEvent(state) };
+    case "continue":
+    case "skip":
+    case "retry":
+    case "inject":
+      break;
+    default:
+      assertNever(toolSelectionVerdict);
   }
 
   const turnUsage: TokenUsage = {
@@ -537,7 +684,7 @@ export async function* handleStop(
   for (const verdict of turn.preToolUseVerdicts) {
     yield {
       type: "hook_verdict",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       action: verdict.action,
       reason: "reason" in verdict ? verdict.reason : undefined,
     };
@@ -549,7 +696,7 @@ export async function* handleStop(
   state.steps.push(step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
-  const postTurnVerdict = await engine.dispatch("post_turn", {
+  const postTurnVerdict = await engine.dispatchLegacy("turn.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -564,37 +711,48 @@ export async function* handleStop(
 
   yield {
     type: "hook_verdict",
-    timing: "post_turn",
+    timing: "turn.finish",
     action: postTurnVerdict.action,
     reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
   };
 
-  if (postTurnVerdict.action === "inject") {
-    const parentID = state.messages.at(-1)?.info.id ?? "";
-    state.messages.push(
-      createAssistantMessage(state.lastAssistantText, parentID, "stream-engine"),
-      createUserMessage(postTurnVerdict.message, "stream-engine"),
-    );
-    await applyPostCompaction(state, engine, config, agentBase, true);
-    state.continuationCount++;
-    state.turnIndex++;
-    return flowDecision(continueDecision(state));
-  }
-
-  if (postTurnVerdict.action === "abort") {
-    const event: AgentEvent = {
-      type: "complete",
-      result: {
-        text: state.lastAssistantText,
-        steps: state.steps,
-        usage: state.totalUsage,
-        finishReason: postTurnVerdict.reason === "stalled" ? "stalled" : "stop",
-        guardAborted: postTurnVerdict.reason !== "stalled",
-        compactionCount: getCompactionCount(state),
-      },
-    };
-    yield event;
-    return flowDecision({ kind: "abort", event });
+  switch (postTurnVerdict.action) {
+    case "inject": {
+      const parentID = state.messages.at(-1)?.info.id ?? "";
+      state.messages.push(
+        createAssistantMessage(state.lastAssistantText, parentID, "stream-engine"),
+        createUserMessage(postTurnVerdict.message, "stream-engine"),
+      );
+      await applyPostCompaction(state, engine, config, agentBase, true);
+      state.continuationCount++;
+      state.turnIndex++;
+      return flowDecision(continueDecision(state));
+    }
+    case "abort": {
+      const event: AgentEvent = {
+        type: "complete",
+        result: {
+          text: state.lastAssistantText,
+          steps: state.steps,
+          usage: state.totalUsage,
+          finishReason: postTurnVerdict.reason === "stalled" ? "stalled" : "stop",
+          guardAborted: postTurnVerdict.reason !== "stalled",
+          compactionCount: getCompactionCount(state),
+        },
+      };
+      yield event;
+      return flowDecision({ kind: "abort", event });
+    }
+    case "deny":
+      publishDenyDiagnostic("turn.finish", postTurnVerdict, state, config, agentBase);
+      break;
+    case "continue":
+    case "skip":
+    case "retry":
+    case "transform":
+      break;
+    default:
+      assertNever(postTurnVerdict);
   }
 
   await dispatchPostRunTransform(state, engine, config);
@@ -647,6 +805,45 @@ export async function handleCompact(
   return continueFlowDecision(continueDecision(state));
 }
 
+export async function dispatchWritebackCommit(
+  state: StreamRunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+  output: string,
+): Promise<string> {
+  const verdict = await engine.dispatchLegacy("writeback.commit", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: true,
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+    toolInput: { output },
+  });
+
+  switch (verdict.action) {
+    case "transform": {
+      const input = verdict.input as { output?: unknown };
+      return typeof input.output === "string" ? input.output : output;
+    }
+    case "abort":
+      throw new Error(verdict.reason ?? "writeback.commit policy aborted");
+    case "deny":
+      throw new Error(verdict.reason ?? "writeback.commit policy denied");
+    case "continue":
+    case "skip":
+    case "retry":
+    case "inject":
+      return output;
+    default:
+      return assertNever(verdict);
+  }
+}
+
 export async function* handleError(
   state: StreamRunState,
   engine: PolicyEngineInstance,
@@ -657,7 +854,7 @@ export async function* handleError(
   retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const onErrorVerdict = await engine.dispatch("on_error", {
+  const onErrorVerdict = await engine.dispatchLegacy("error", {
     toolInput: { error: normalizedError },
     steps: state.steps,
     usage: state.totalUsage,
@@ -671,20 +868,23 @@ export async function* handleError(
     eventEmitter: config.eventEmitter,
   });
 
-  if (onErrorVerdict.action === "abort") {
-    const event: AgentEvent = {
-      type: "complete",
-      result: {
-        text: state.lastAssistantText,
-        steps: state.steps,
-        usage: state.totalUsage,
-        finishReason: "stop",
-        guardAborted: true,
-        compactionCount: getCompactionCount(state),
-      },
-    };
-    yield event;
-    return { action: "complete", kind: "abort", event, errorMessage: normalizedError.message };
+  switch (onErrorVerdict.action) {
+    case "abort": {
+      const event: AgentEvent = createGuardCompleteEvent(state);
+      yield event;
+      return { action: "complete", kind: "abort", event, errorMessage: normalizedError.message };
+    }
+    case "deny":
+      publishDenyDiagnostic("error", onErrorVerdict, state, config, agentBase);
+      break;
+    case "continue":
+    case "skip":
+    case "retry":
+    case "transform":
+    case "inject":
+      break;
+    default:
+      assertNever(onErrorVerdict);
   }
 
   const lastError = normalizedError.message;
@@ -782,7 +982,7 @@ async function dispatchPostRunTransform(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
-  const postRunVerdict = await engine.dispatch("post_run", {
+  const postRunVerdict = await engine.dispatchLegacy("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -794,9 +994,23 @@ async function dispatchPostRunTransform(
     budget: config.budget,
     eventEmitter: config.eventEmitter,
   });
-  if (postRunVerdict.action === "transform") {
-    const payload = postRunVerdict.input as { text?: unknown };
-    if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+  switch (postRunVerdict.action) {
+    case "transform": {
+      const payload = postRunVerdict.input as { text?: unknown };
+      if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+      break;
+    }
+    case "deny":
+      publishDenyDiagnostic("run.finish", postRunVerdict, state, config);
+      break;
+    case "continue":
+    case "skip":
+    case "abort":
+    case "retry":
+    case "inject":
+      break;
+    default:
+      assertNever(postRunVerdict);
   }
 }
 
@@ -807,7 +1021,7 @@ async function applyPostCompaction(
   agentBase: StreamAgentBase,
   isCompletion: boolean,
 ): Promise<void> {
-  const compactionVerdict = await engine.dispatch("post_compaction", {
+  const compactionVerdict = await engine.dispatchLegacy("completion.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -819,19 +1033,33 @@ async function applyPostCompaction(
     budget: config.budget,
     eventEmitter: config.eventEmitter,
   });
-  if (compactionVerdict.action === "transform") {
-    const payload = compactionVerdict.input as Record<string, unknown>;
-    if (Array.isArray(payload.messages)) {
-      const messagesBefore = state.messages.length;
-      state.messages = payload.messages as Message.WithParts[];
-      state.compactionCount += 1;
-      Bus.publish(AgentExecution.Compaction, {
-        ...agentBase,
-        time: Date.now(),
-        messagesBefore,
-        messagesAfter: state.messages.length,
-      });
+  switch (compactionVerdict.action) {
+    case "transform": {
+      const payload = compactionVerdict.input as Record<string, unknown>;
+      if (Array.isArray(payload.messages)) {
+        const messagesBefore = state.messages.length;
+        state.messages = payload.messages as Message.WithParts[];
+        state.compactionCount += 1;
+        Bus.publish(AgentExecution.Compaction, {
+          ...agentBase,
+          time: Date.now(),
+          messagesBefore,
+          messagesAfter: state.messages.length,
+        });
+      }
+      break;
     }
+    case "deny":
+      publishDenyDiagnostic("completion.prepare", compactionVerdict, state, config, agentBase);
+      break;
+    case "continue":
+    case "skip":
+    case "abort":
+    case "retry":
+    case "inject":
+      break;
+    default:
+      assertNever(compactionVerdict);
   }
 }
 

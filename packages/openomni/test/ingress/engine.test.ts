@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
-import type { Hook, Ingress } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
@@ -154,6 +154,94 @@ describe("IngressEngine", () => {
     expect(dispatchCalled).toBe(false);
   });
 
+  it("treats inbound.receive deny verdict as terminal before dispatch", async () => {
+    let dispatchCalled = false;
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        dispatchCalled = true;
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output: "should not dispatch",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    IngressEngine.registerIngressPolicy({
+      name: "test:deny-inbound",
+      timing: "inbound.receive",
+      priority: 0,
+      fn: () => ({
+        action: "deny" as const,
+        reason: "inbound denied by policy",
+        policyId: "test:deny-inbound",
+      }),
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-denied-inbound-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("inbound denied by policy");
+    expect(dispatchCalled).toBe(false);
+  });
+
+  it("fails closed when inbound.receive returns an unsupported verdict", async () => {
+    let dispatchCalled = false;
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        dispatchCalled = true;
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output: "should not dispatch",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    IngressEngine.registerIngressPolicy({
+      name: "test:retry-inbound",
+      timing: "inbound.receive",
+      priority: 0,
+      fn: () => ({
+        action: "retry" as const,
+        reason: "retry is not supported at inbound.receive",
+        policyId: "test:retry-inbound",
+      }),
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-retry-inbound-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("retry is not supported at inbound.receive");
+    expect(dispatchCalled).toBe(false);
+  });
+
   it("reuses session for same surface key across calls", async () => {
     testState.responseQueue.push("first response");
     testState.responseQueue.push("second response");
@@ -262,7 +350,7 @@ describe("IngressEngine", () => {
     }
   });
 
-  describe("pre_ingress policy dispatch", () => {
+  describe("inbound.receive policy dispatch", () => {
     function makeEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
       return {
         id: "event-policy-1",
@@ -278,7 +366,7 @@ describe("IngressEngine", () => {
     function abortPolicy(reason: string): PolicyRegistration {
       return {
         name: "test:ingress-abort",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         failPolicy: "fail-closed",
         fn: () => ({ action: "abort" as const, policyId: "test.abort", reason }),
@@ -288,13 +376,13 @@ describe("IngressEngine", () => {
     function continuePolicy(): PolicyRegistration {
       return {
         name: "test:ingress-continue",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         fn: () => ({ action: "continue" as const, policyId: "test.continue", reason: "ok" }),
       };
     }
 
-    it("aborts ingest when pre_ingress policy returns abort", async () => {
+    it("aborts ingest when inbound.receive policy returns abort", async () => {
       IngressEngine.registerIngressPolicy(abortPolicy("rate limit exceeded"));
 
       const error = await catchError(IngressEngine.ingest(makeEvent()));
@@ -303,7 +391,7 @@ describe("IngressEngine", () => {
       expect((error as Error).message).toBe("rate limit exceeded");
     });
 
-    it("proceeds normally when pre_ingress policy returns continue", async () => {
+    it("proceeds normally when inbound.receive policy returns continue", async () => {
       testState.responseQueue.push("policy-ok response");
       IngressEngine.registerIngressPolicy(continuePolicy());
 
@@ -313,7 +401,7 @@ describe("IngressEngine", () => {
       expect(result.result.output).toBe("policy-ok response");
     });
 
-    it("records pre_ingress decision through observer", async () => {
+    it("records inbound.receive decision through observer", async () => {
       const decisions: PolicyDecision[] = [];
       IngressEngine.setPolicyDecisionObserver((d) => {
         decisions.push(d);
@@ -322,7 +410,7 @@ describe("IngressEngine", () => {
 
       await catchError(IngressEngine.ingest(makeEvent()));
 
-      const ingressDecision = decisions.find((d) => d.timing === "pre_ingress");
+      const ingressDecision = decisions.find((d) => d.timing === "inbound.receive");
       expect(ingressDecision).toBeDefined();
       expect(ingressDecision!.name).toBe("test:ingress-abort");
       expect(ingressDecision!.verdict).toBe("abort");
@@ -333,7 +421,7 @@ describe("IngressEngine", () => {
       let capturedLabels: unknown;
       IngressEngine.registerIngressPolicy({
         name: "test:label-capture",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         fn: (ctx) => {
           capturedLabels = ctx.labels;

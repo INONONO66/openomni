@@ -1,7 +1,9 @@
 export type { PolicyContext, PolicyFn, PolicyRegistration } from "./types";
 export { PolicyEngine } from "./engine";
+export { verdictToDecision } from "./verdict-adapter";
 export type {
   PolicyDecision,
+  DispatchContext,
   PolicyAuditConfig,
   PolicyEngineConfig,
   PolicyEngineInstance,

@@ -186,35 +186,35 @@ function createWaitTimeout(state: PreSpawnState): PolicyRegistration {
 export namespace SubagentSpawnPolicyMiddleware {
   export const DefaultDenylist = {
     name: "subagent:default-denylist",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const SessionExistence = {
     name: "subagent:session-existence",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const ActiveRun = {
     name: "subagent:active-run",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 10,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const CancelTimeout = {
     name: "subagent:cancel-timeout",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 20,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const WaitTimeout = {
     name: "subagent:wait-timeout",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 30,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
@@ -296,7 +296,7 @@ export namespace SubagentSpawnPolicyMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("pre_tool_use", {
+    const verdict = await engine.dispatchLegacy("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

@@ -7,7 +7,7 @@ export type PostToolEnricher = (ctx: PolicyContext) => string | null | Promise<s
 export function createPostToolPolicy(enricher: PostToolEnricher): PolicyRegistration {
   return {
     name: "builtin:post-tool",
-    timing: "post_tool_use",
+    timing: "invoke.result",
     priority: 200,
     fn: async (ctx) => {
       let addition: string | null;

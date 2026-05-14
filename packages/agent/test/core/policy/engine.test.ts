@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { Policy, PolicyEvent } from "@openomni/protocol";
+import { PolicyEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { Operational } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -27,7 +27,7 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "third",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 300,
       fn: () => {
         order.push(300);
@@ -36,7 +36,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "first",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 100,
       fn: () => {
         order.push(100);
@@ -45,7 +45,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "second",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 200,
       fn: () => {
         order.push(200);
@@ -53,7 +53,7 @@ describe("PolicyEngine", () => {
       },
     });
 
-    await engine.dispatch("pre_turn", baseCtx());
+    await engine.dispatchLegacy("turn.start", baseCtx());
     expect(order).toEqual([100, 200, 300]);
   });
 
@@ -61,10 +61,10 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     const postFn = mock(() => ({ action: "continue" }) as const);
     const preFn = mock(() => ({ action: "continue" }) as const);
-    engine.register({ name: "post", timing: "post_turn", priority: 100, fn: postFn });
-    engine.register({ name: "pre", timing: "pre_turn", priority: 100, fn: preFn });
+    engine.register({ name: "post", timing: "turn.finish", priority: 100, fn: postFn });
+    engine.register({ name: "pre", timing: "turn.start", priority: 100, fn: preFn });
 
-    await engine.dispatch("pre_turn", baseCtx());
+    await engine.dispatchLegacy("turn.start", baseCtx());
 
     expect(preFn).toHaveBeenCalledTimes(1);
     expect(postFn).toHaveBeenCalledTimes(0);
@@ -75,19 +75,19 @@ describe("PolicyEngine", () => {
     const third = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "a",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 100,
       fn: () => ({ action: "continue" }) as const,
     });
     engine.register({
       name: "b",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 200,
       fn: () => ({ action: "abort", reason: "stop" }) as const,
     });
-    engine.register({ name: "c", timing: "pre_turn", priority: 300, fn: third });
+    engine.register({ name: "c", timing: "turn.start", priority: 300, fn: third });
 
-    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
     expect(verdict).toEqual({ action: "abort", reason: "stop" });
     expect(third).toHaveBeenCalledTimes(0);
   });
@@ -103,15 +103,15 @@ describe("PolicyEngine", () => {
       const after = mock(() => ({ action: "continue" }) as const);
       engine.register({
         name: "boom",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 100,
         fn: () => {
           throw new Error("boom");
         },
       });
-      engine.register({ name: "after", timing: "pre_turn", priority: 200, fn: after });
+      engine.register({ name: "after", timing: "turn.start", priority: 200, fn: after });
 
-      const verdict = await engine.dispatch("pre_turn", baseCtx());
+      const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
       expect(verdict).toEqual({ action: "continue" });
       expect(after).toHaveBeenCalledTimes(1);
     } finally {
@@ -124,16 +124,16 @@ describe("PolicyEngine", () => {
     const after = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "boom",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 100,
       failPolicy: "fail-closed",
       fn: () => {
         throw new Error("boom");
       },
     });
-    engine.register({ name: "after", timing: "pre_turn", priority: 200, fn: after });
+    engine.register({ name: "after", timing: "turn.start", priority: 200, fn: after });
 
-    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
     expect(verdict).toEqual({ action: "abort", reason: "middleware-error" });
     expect(after).toHaveBeenCalledTimes(0);
   });
@@ -144,14 +144,14 @@ describe("PolicyEngine", () => {
     const unscoped = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "scoped",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 100,
       scope: { agentType: ["subagent"] },
       fn: scoped,
     });
-    engine.register({ name: "unscoped", timing: "pre_turn", priority: 200, fn: unscoped });
+    engine.register({ name: "unscoped", timing: "turn.start", priority: 200, fn: unscoped });
 
-    await engine.dispatch("pre_turn", { ...baseCtx(), agentType: "primary" });
+    await engine.dispatchLegacy("turn.start", { ...baseCtx(), agentType: "primary" });
 
     expect(scoped).toHaveBeenCalledTimes(0);
     expect(unscoped).toHaveBeenCalledTimes(1);
@@ -159,7 +159,7 @@ describe("PolicyEngine", () => {
 
   it("returns continue when no policy registered", async () => {
     const engine = PolicyEngine.create();
-    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
     expect(verdict).toEqual({ action: "continue" });
   });
 
@@ -168,14 +168,14 @@ describe("PolicyEngine", () => {
     const fn = mock(() => ({ action: "continue" }) as const);
     engine.register({
       name: "multi",
-      timing: ["pre_turn", "post_turn"],
+      timing: ["turn.start", "turn.finish"],
       priority: 100,
       fn,
     });
 
-    await engine.dispatch("pre_turn", baseCtx());
-    await engine.dispatch("post_turn", baseCtx());
-    await engine.dispatch("on_error", baseCtx());
+    await engine.dispatchLegacy("turn.start", baseCtx());
+    await engine.dispatchLegacy("turn.finish", baseCtx());
+    await engine.dispatchLegacy("error", baseCtx());
 
     expect(fn).toHaveBeenCalledTimes(2);
   });
@@ -184,7 +184,7 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "prompt-a",
-      timing: "on_system_prompt",
+      timing: "context.prepare",
       priority: 100,
       fn: () =>
         ({
@@ -196,7 +196,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "prompt-b",
-      timing: "on_system_prompt",
+      timing: "context.prepare",
       priority: 200,
       fn: () =>
         ({
@@ -212,7 +212,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "inject-c",
-      timing: "on_system_prompt",
+      timing: "context.prepare",
       priority: 300,
       fn: () =>
         ({
@@ -234,7 +234,7 @@ describe("PolicyEngine", () => {
     const testError = new Error("system-prompt-error");
     engine.register({
       name: "boom",
-      timing: "on_system_prompt",
+      timing: "context.prepare",
       priority: 100,
       failPolicy: "fail-closed",
       fn: () => {
@@ -243,7 +243,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "after",
-      timing: "on_system_prompt",
+      timing: "context.prepare",
       priority: 200,
       fn: () =>
         ({
@@ -254,7 +254,14 @@ describe("PolicyEngine", () => {
         }) as const,
     });
 
-    await expect(engine.dispatchSystemPrompt(baseCtx())).rejects.toThrow("system-prompt-error");
+    let thrown: unknown;
+    try {
+      await engine.dispatchSystemPrompt(baseCtx());
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(testError);
   });
 
   it("dispatchSystemPrompt isolates fail-open errors and continues", async () => {
@@ -267,7 +274,7 @@ describe("PolicyEngine", () => {
       const engine = PolicyEngine.create();
       engine.register({
         name: "boom",
-        timing: "on_system_prompt",
+        timing: "context.prepare",
         priority: 100,
         failPolicy: "fail-open",
         fn: () => {
@@ -276,7 +283,7 @@ describe("PolicyEngine", () => {
       });
       engine.register({
         name: "after",
-        timing: "on_system_prompt",
+        timing: "context.prepare",
         priority: 200,
         fn: () =>
           ({
@@ -301,13 +308,21 @@ describe("PolicyEngine", () => {
       const engine = PolicyEngine.create();
       engine.register({
         name: "missing-reason",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 100,
         fn: () => ({ action: "abort" }) as const,
       });
 
-      await expect(engine.dispatch("pre_turn", baseCtx())).rejects.toThrow(
-        "Middleware missing-reason returned abort without reason at pre_turn",
+      let thrown: unknown;
+      try {
+        await engine.dispatchLegacy("turn.start", baseCtx());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect(String(thrown)).toContain(
+        "Middleware missing-reason returned abort without reason at turn.start",
       );
     } finally {
       if (previousNodeEnv === undefined) {
@@ -332,13 +347,13 @@ describe("PolicyEngine", () => {
       });
       engine.register({
         name: "prod-metadata",
-        timing: "pre_turn",
+        timing: "turn.finish",
         priority: 100,
         fn: () => ({ action: "abort" }) as const,
       });
 
-      const first = await engine.dispatch("pre_turn", baseCtx());
-      const second = await engine.dispatch("pre_turn", baseCtx());
+      const first = await engine.dispatchLegacy("turn.finish", baseCtx());
+      const second = await engine.dispatchLegacy("turn.finish", baseCtx());
 
       expect(first).toEqual({ action: "abort", policyId: "unknown" });
       expect(second).toEqual({ action: "abort", policyId: "unknown" });
@@ -375,7 +390,7 @@ describe("PolicyEngine", () => {
       });
       engine.register({
         name: "policy-check",
-        timing: "pre_tool_use",
+        timing: "invoke.prepare",
         priority: 100,
         fn: () =>
           ({
@@ -385,7 +400,7 @@ describe("PolicyEngine", () => {
           }) as const,
       });
 
-      await engine.dispatch("pre_tool_use", { ...baseCtx(), toolName: "shell" });
+      await engine.dispatchLegacy("invoke.prepare", { ...baseCtx(), toolName: "shell" });
 
       // Bus.publish dispatches handlers via queueMicrotask
       await Promise.resolve();
@@ -412,17 +427,17 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "allow-and-label",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 0,
       fn: () => ({ action: "continue", reason: "allowed" }),
     });
     engine.register({
       name: "deny-policy",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 10,
       fn: () => ({ action: "deny", reason: "forbidden" }),
     });
-    const verdict = await engine.dispatch("pre_turn", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
     expect(verdict.action).toBe("deny");
     expect(verdict.reason).toBe("forbidden");
   });
@@ -433,7 +448,7 @@ describe("PolicyEngine", () => {
 
     engine.register({
       name: "coder-policy",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 0,
       scope: { agentType: ["coder"] },
       fn: () => {
@@ -443,7 +458,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "reviewer-policy",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 0,
       scope: { agentType: ["reviewer"] },
       fn: () => {
@@ -453,7 +468,7 @@ describe("PolicyEngine", () => {
     });
     engine.register({
       name: "unscoped-policy",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 0,
       fn: () => {
         executed.push("unscoped");
@@ -461,7 +476,7 @@ describe("PolicyEngine", () => {
       },
     });
 
-    await engine.dispatch("pre_turn", { ...baseCtx(), agentType: "coder" });
+    await engine.dispatchLegacy("turn.start", { ...baseCtx(), agentType: "coder" });
     expect(executed).toEqual(["coder", "unscoped"]);
   });
 });

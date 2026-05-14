@@ -8,7 +8,7 @@ const noop = () => undefined;
 
 function middlewareContext(toolName: string): PolicyContext {
   return {
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     steps: [],
     usage,
     turnCount: 0,

@@ -1,9 +1,13 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Subagent, type TraceContext } from "@openomni/protocol";
+import { Policy, type RuntimeResource, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+type BackgroundPolicyContext = Parameters<ReturnType<typeof PolicyEngine.create>["dispatch"]>[1] & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
 
 interface LaunchRequest {
   readonly agentName: string;
@@ -272,35 +276,35 @@ function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
 export namespace BackgroundLimitsMiddleware {
   export const PerAgent = {
     name: "background:per-agent-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Depth = {
     name: "background:depth-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 10,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Descendants = {
     name: "background:descendant-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 20,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Total = {
     name: "background:total-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 30,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Queue = {
     name: "background:queue-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 40,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
@@ -316,6 +320,7 @@ export namespace BackgroundLimitsMiddleware {
     readonly maxDescendants: number;
     readonly maxQueueSize: number;
     readonly traceContext?: TraceContext.Type;
+    readonly resourceDescriptor?: RuntimeResource.Descriptor;
     readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
@@ -357,7 +362,7 @@ export namespace BackgroundLimitsMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("pre_tool_use", {
+    const policyContext: BackgroundPolicyContext = {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -365,6 +370,7 @@ export namespace BackgroundLimitsMiddleware {
       continuationCount: 0,
       elapsedMs: 0,
       toolName: "subagent",
+      toolLabels: ctx.resourceDescriptor?.labels,
       toolInput: {
         operation: "background.launch",
         agentName: ctx.input.agentName,
@@ -374,7 +380,10 @@ export namespace BackgroundLimitsMiddleware {
         pendingQueueSize: ctx.pendingQueueSize,
       },
       traceContext: ctx.traceContext,
-    });
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
+    };
+
+    const verdict = await engine.dispatchLegacy("invoke.prepare", policyContext);
 
     return { verdict, shouldQueue: state.shouldQueue ?? false };
   }

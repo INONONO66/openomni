@@ -298,13 +298,13 @@ describe("SubagentRuntime", () => {
     });
   });
 
-  describe("pre_delegation policy", () => {
+  describe("invoke.prepare policy", () => {
     const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
-    it("spawn aborts when pre_delegation policy returns abort", async () => {
+    it("spawn aborts when invoke.prepare policy returns abort", async () => {
       const abortPolicy: PolicyRegistration = {
         name: "test:block-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "abort" as const,
@@ -325,12 +325,62 @@ describe("SubagentRuntime", () => {
       expect((error as Error).message).toBe("delegation denied by test policy");
     });
 
-    it("spawn proceeds when pre_delegation policy returns continue", async () => {
+    it("spawn treats invoke.prepare deny verdict as terminal", async () => {
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "delegation denied by policy",
+          policyId: "test:deny-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "denied task",
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("delegation denied by policy");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawn fails closed when invoke.prepare returns an unsupported verdict", async () => {
+      const retryPolicy: PolicyRegistration = {
+        name: "test:retry-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "retry" as const,
+          reason: "retry is not supported for delegation prepare",
+          policyId: "test:retry-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "retry task",
+        prompt: "should not run",
+        model,
+        middleware: [retryPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("retry is not supported for delegation prepare");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawn proceeds when invoke.prepare policy returns continue", async () => {
       queueResult("allowed output");
 
       const allowPolicy: PolicyRegistration = {
         name: "test:allow-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "continue" as const,
@@ -349,12 +399,12 @@ describe("SubagentRuntime", () => {
       expect(result.output).toBe("allowed output");
     });
 
-    it("spawn applies transform constraints from pre_delegation verdict", async () => {
+    it("spawn applies transform constraints from invoke.prepare verdict", async () => {
       queueResult("transformed output");
 
       const transformPolicy: PolicyRegistration = {
         name: "test:transform-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "transform" as const,
@@ -378,7 +428,7 @@ describe("SubagentRuntime", () => {
       expect(config.hardTimeoutMs).toBe(10000);
     });
 
-    it("pre_delegation receives parent/child agent labels", async () => {
+    it("invoke.prepare receives parent/child agent labels", async () => {
       queueResult("labeled output");
       const parentSessionId = createParentSession();
 
@@ -386,7 +436,7 @@ describe("SubagentRuntime", () => {
       let capturedToolInput: unknown;
       const capturePolicy: PolicyRegistration = {
         name: "test:capture-ctx",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: (ctx) => {
           capturedLabels = ctx.labels;
@@ -416,7 +466,7 @@ describe("SubagentRuntime", () => {
       ]);
     });
 
-    it("send aborts when pre_delegation policy returns abort", async () => {
+    it("send aborts when invoke.prepare policy returns abort", async () => {
       queueResult("spawned");
       const spawned = await SubagentRuntime.spawn({
         agentName: "worker",
@@ -427,7 +477,7 @@ describe("SubagentRuntime", () => {
 
       const abortPolicy: PolicyRegistration = {
         name: "test:block-send",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "abort" as const,
@@ -447,7 +497,65 @@ describe("SubagentRuntime", () => {
       expect((error as Error).message).toBe("send delegation denied");
     });
 
-    it("spawn without middleware proceeds normally (no pre_delegation dispatch)", async () => {
+    it("send treats invoke.prepare deny verdict as terminal", async () => {
+      queueResult("spawned");
+      const spawned = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "child",
+        prompt: "initial",
+        model,
+      });
+      runCalls.length = 0;
+
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-send",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "send denied by policy",
+          policyId: "test:deny-send",
+        }),
+      };
+
+      const error = await SubagentRuntime.send({
+        sessionId: spawned.sessionId,
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("send denied by policy");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawnBackground treats invoke.prepare deny verdict as terminal", async () => {
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-background-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "background delegation denied by policy",
+          policyId: "test:deny-background-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawnBackground({
+        agentName: "worker",
+        title: "denied background task",
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("background delegation denied by policy");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawn without middleware proceeds normally (no invoke.prepare dispatch)", async () => {
       queueResult("no middleware output");
 
       const result = await SubagentRuntime.spawn({

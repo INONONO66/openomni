@@ -5,7 +5,7 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-reassurance",
-    timing: "pre_turn",
+    timing: "turn.start",
     priority: 10,
     fn: (ctx) => {
       if (issued || !ctx.budgetState) return { action: "continue" };
@@ -40,7 +40,7 @@ export function createBudgetWarningPolicy(): PolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-warning",
-    timing: "pre_turn",
+    timing: "turn.start",
     priority: 20,
     fn: (ctx) => {
       if (issued || !ctx.budgetState) return { action: "continue" };

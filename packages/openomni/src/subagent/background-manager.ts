@@ -1,4 +1,4 @@
-import { type Message, Subagent } from "@openomni/protocol";
+import { type Message, type Policy, Subagent, type RuntimeResource } from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
@@ -33,6 +33,31 @@ type BackgroundManagerInstance = {
   stats(): { active: number; pending: number; total: number };
   dispose(): void;
 };
+
+function createBackgroundLaunchDescriptor(agentName: string): RuntimeResource.Descriptor {
+  return {
+    id: "tool:agent:background_launch",
+    kind: "tool",
+    source: { type: "agent", agentId: agentName },
+    labels: ["source.agent", "delegation.background"],
+    capabilities: ["delegation.background"],
+    effects: ["session.create"],
+  };
+}
+
+function backgroundLaunchFailureReason(verdict: Policy.Verdict): string | undefined {
+  switch (verdict.action) {
+    case "continue":
+      return undefined;
+    case "skip":
+    case "abort":
+    case "retry":
+    case "transform":
+    case "inject":
+    case "deny":
+      return verdict.reason ?? `background launch policy returned ${verdict.action}`;
+  }
+}
 
 export const BackgroundManager = {
   create(config?: Config): BackgroundManagerInstance {
@@ -283,6 +308,7 @@ export const BackgroundManager = {
     async function launch(input: LaunchInput): Promise<Subagent.BackgroundTask> {
       return withLaunchLock(async () => {
         const depth = input.depth ?? 0;
+        const resourceDescriptor = createBackgroundLaunchDescriptor(input.agentName);
         const policy = await BackgroundLimitsMiddleware.evaluatePreLaunch({
           input: { ...input, depth },
           activeTasks: activeTasks(),
@@ -293,9 +319,11 @@ export const BackgroundManager = {
           maxDepth,
           maxDescendants,
           maxQueueSize,
+          resourceDescriptor,
         });
-        if (policy.verdict.action !== "continue") {
-          return makeFailedTask(input, policy.verdict.reason ?? "background launch policy aborted");
+        const launchFailureReason = backgroundLaunchFailureReason(policy.verdict);
+        if (launchFailureReason !== undefined) {
+          return makeFailedTask(input, launchFailureReason);
         }
 
         const id = `bg_${crypto.randomUUID().slice(0, 8)}`;

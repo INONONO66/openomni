@@ -165,7 +165,7 @@ describe("Extension protocol domain", () => {
           middlewares: [
             {
               name: "rate-limiter",
-              timing: "pre_tool_use",
+              timing: "invoke.prepare",
               priority: 10,
             },
           ],

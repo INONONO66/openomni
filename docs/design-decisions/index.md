@@ -18,6 +18,7 @@ Each ADR follows: Context → Decision → Rationale → Consequences.
 | [004](./004-stateless-chat-agent.md)         | Stateless ChatAgent separated from orchestration | Accepted   |
 | [005](./005-persona-workforce-runtime.md)    | Persona workforce runtime direction              | Accepted   |
 | [006](./006-persistent-subagent-team-orchestration.md) | Persistent subagent sessions (partial ship) | Superseded |
+| [007](./007-policy-kernel-v2.md)             | Policy Kernel v2 as resource/effect governance VM | Proposed   |
 
 ## Adding a New ADR
 

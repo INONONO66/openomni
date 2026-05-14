@@ -28,10 +28,10 @@ describe("createContextMiddleware", () => {
     expect(middleware.name).toBe("server:context");
   });
 
-  it("has timing 'on_system_prompt'", () => {
+  it("has timing 'context.prepare'", () => {
     const ws = makeWorkspace("test-timing");
     const middleware = createContextMiddleware({ workspaceRoot: ws });
-    expect(middleware.timing).toBe("on_system_prompt");
+    expect(middleware.timing).toBe("context.prepare");
   });
 
   it("has priority 50", () => {
@@ -54,7 +54,7 @@ describe("createContextMiddleware", () => {
       messages: [],
       systemPrompt: "base prompt",
       agentType: undefined,
-      timing: "on_system_prompt" as const,
+      timing: "context.prepare" as const,
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
@@ -71,7 +71,7 @@ describe("createContextMiddleware", () => {
       messages: [],
       systemPrompt: "base prompt",
       agentType: undefined,
-      timing: "on_system_prompt" as const,
+      timing: "context.prepare" as const,
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
@@ -93,7 +93,7 @@ describe("createContextMiddleware", () => {
       messages: [],
       systemPrompt: "base prompt",
       agentType: undefined,
-      timing: "on_system_prompt" as const,
+      timing: "context.prepare" as const,
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
@@ -111,7 +111,7 @@ describe("createContextMiddleware", () => {
       messages: [],
       systemPrompt: "base prompt",
       agentType: undefined,
-      timing: "on_system_prompt" as const,
+      timing: "context.prepare" as const,
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
@@ -132,7 +132,7 @@ describe("createContextMiddleware", () => {
       messages: [],
       systemPrompt: "base prompt",
       agentType: undefined,
-      timing: "on_system_prompt" as const,
+      timing: "context.prepare" as const,
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);

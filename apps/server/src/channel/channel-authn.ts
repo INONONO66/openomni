@@ -48,7 +48,7 @@ interface GitHubAuthState {
   response?: Response;
 }
 
-const authTiming: Policy.Timing = "pre_run";
+const authTiming: Policy.Timing = "run.start";
 
 function evaluateChannelPermission(input: {
   readonly action: ChannelAuthnPolicyId;

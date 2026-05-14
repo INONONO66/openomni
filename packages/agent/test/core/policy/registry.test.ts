@@ -33,7 +33,7 @@ describe("PolicyRegistry", () => {
     const registry = PolicyRegistry.create();
     const factory: PolicyFactory = (config, runtime) => ({
       name: `test:${runtime.agentName}:${(config as { mode: string }).mode}`,
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 10,
       fn: () => ({ action: "continue" }),
     });
@@ -67,7 +67,7 @@ describe("PolicyRegistry", () => {
       const registry = PolicyRegistry.create();
       registry.register("present.policy", () => ({
         name: "present.policy",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 10,
         fn: () => ({ action: "continue" }),
       }));

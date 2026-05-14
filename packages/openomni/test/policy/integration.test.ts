@@ -48,7 +48,7 @@ describe("policy pipeline integration", () => {
     const registry = defaultRegistry();
     registry.register("test:github-surface-guard", () => ({
       name: "test:github-surface-guard",
-      timing: "pre_turn",
+      timing: "turn.start",
       priority: 0,
       failPolicy: "fail-closed",
       fn: (ctx) => {
@@ -73,8 +73,8 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
-      "pre_turn",
+    const verdict = await engine.dispatchLegacy(
+      "turn.start",
       baseCtx({ agentType: "reviewer", labels: labelEntries(plan.labels) }),
     );
 
@@ -103,7 +103,7 @@ describe("policy pipeline integration", () => {
     const registry = defaultRegistry();
     registry.register("policy:github-review-readonly", () => ({
       name: "policy:github-review-readonly",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       priority: -10,
       failPolicy: "fail-closed",
       fn: (ctx) => {
@@ -124,8 +124,8 @@ describe("policy pipeline integration", () => {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch(
-      "pre_tool_use",
+    const verdict = await engine.dispatchLegacy(
+      "invoke.prepare",
       baseCtx({
         agentType: "reviewer",
         labels: labelEntries(plan.labels),
@@ -150,8 +150,8 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
-      "pre_tool_use",
+    const verdict = await engine.dispatchLegacy(
+      "invoke.prepare",
       baseCtx({
         toolName: "github.create_issue_comment",
         toolCallId: "call-comment",

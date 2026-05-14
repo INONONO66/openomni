@@ -49,7 +49,7 @@ function makeState() {
 function filterPolicy(allowedTools: string[]): PolicyRegistration {
   return {
     name: "test-filter",
-    timing: "pre_tool_selection",
+    timing: "resources.prepare",
     priority: 0,
     fn: async () => ({
       action: "transform" as const,
@@ -63,7 +63,7 @@ function filterPolicy(allowedTools: string[]): PolicyRegistration {
 function abortSelectionPolicy(reason: string): PolicyRegistration {
   return {
     name: "test-abort-selection",
-    timing: "pre_tool_selection",
+    timing: "resources.prepare",
     priority: 0,
     fn: async () => ({
       action: "abort" as const,
@@ -73,7 +73,7 @@ function abortSelectionPolicy(reason: string): PolicyRegistration {
   };
 }
 
-describe("pre_tool_selection dispatch", () => {
+describe("resources.prepare dispatch", () => {
   it("passes all tools through when no policy is registered", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
@@ -155,7 +155,7 @@ describe("pre_tool_selection dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "capture-ctx",
-      timing: "pre_tool_selection",
+      timing: "resources.prepare",
       priority: 0,
       fn: async (ctx) => {
         capturedCtx = ctx as unknown as Record<string, unknown>;
@@ -181,7 +181,7 @@ describe("pre_tool_selection dispatch", () => {
     );
 
     expect(capturedCtx).toBeDefined();
-    expect(capturedCtx!.timing).toBe("pre_tool_selection");
+    expect(capturedCtx!.timing).toBe("resources.prepare");
     const labels = capturedCtx!.labels as Array<{ value: string; source: string }>;
     expect(labels.length).toBeGreaterThan(0);
     expect(labels.some((l) => l.value.includes("bash"))).toBe(true);
@@ -193,7 +193,7 @@ describe("pre_tool_selection dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "transform-no-tools",
-      timing: "pre_tool_selection",
+      timing: "resources.prepare",
       priority: 0,
       fn: async () => ({
         action: "transform" as const,

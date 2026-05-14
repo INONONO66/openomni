@@ -28,11 +28,11 @@ src/
 │       ├── types.ts            # PolicyContext, PolicyFn, PolicyRegistration
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
-│           ├── memory.ts       # createMemoryPolicy (on_system_prompt)
-│           ├── compaction.ts   # createCompactionPolicy (post_compaction)
+│           ├── memory.ts       # createMemoryPolicy (context.prepare)
+│           ├── compaction.ts   # createCompactionPolicy (completion.prepare)
 │           ├── post-tool.ts    # createPostToolPolicy (invoke.result)
-│           ├── post-turn.ts    # createPostTurnPolicy (post_turn)
-│           ├── idle-nudge.ts   # createIdleNudgePolicy (pre_turn + invoke.result)
+│           ├── post-turn.ts    # createPostTurnPolicy (turn.finish)
+│           ├── idle-nudge.ts   # createIdleNudgePolicy (turn.start + invoke.result)
 │           └── tool-permission.ts # createToolPermissionPolicy (invoke.prepare, fail-closed)
 └── runtime/
     ├── index.ts                # Re-exports messenger / registry / tools / mcp
@@ -98,16 +98,18 @@ Also exported from `@openomni/agent`:
 
 ## POLICY ENGINE
 
-The policy engine is the extension surface. Every turn dispatches through 13 timings (defined in `@openomni/protocol` `Policy.Timing`):
+The policy engine is the extension surface. Agent execution dispatches through the core `Policy.Timing` points defined in `@openomni/protocol`:
 
 ```
-pre_run → pre_turn → on_system_prompt → invoke.prepare → invoke.result
-        → post_turn → post_compaction → post_run → on_error
+run.start → turn.start → context.prepare → resources.prepare
+        → model.request → model.response
+        → invoke.prepare → invoke.result
+        → turn.finish → completion.prepare → run.finish → error
 ```
 
 - **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`.
 - **Verdict** (`Policy.Verdict`): `continue | skip | abort | retry | transform | inject`. The first non-`continue` verdict terminates the chain for that timing.
-- **System prompt transforms**: `dispatchSystemPrompt()` runs only the `on_system_prompt` chain and supports transform chaining so multiple policies can contribute.
+- **System prompt transforms**: `dispatchSystemPrompt()` runs only the `context.prepare` chain and supports transform chaining so multiple policies can contribute.
 - **Builtins** (priority in parentheses):
   - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns `skip` / `abort` / `require_approval`
   - `budget-reassurance` (10) — injects a reassurance system message around 60% budget
@@ -124,22 +126,25 @@ pre_run → pre_turn → on_system_prompt → invoke.prepare → invoke.result
 streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   ├─ retry loop (maxAttempts)
   │   ├─ build PolicyEngine (builtins + config.policies)
-  │   ├─ dispatch(pre_run)                    → inject / abort / continue
+  │   ├─ dispatch(run.start)                    → inject / abort / continue
   │   └─ turn loop (while budget ok)
-  │       ├─ checkBudget → if exceeded, dispatch(post_run) + yield complete
-  │       ├─ dispatch(pre_turn)               → budget warnings, idle-nudge
-  │       ├─ dispatch(on_system_prompt)       → memory enrichment, identity
+  │       ├─ checkBudget → if exceeded, dispatch(run.finish) + yield complete
+  │       ├─ dispatch(turn.start)               → budget warnings, idle-nudge
+  │       ├─ dispatch(context.prepare)          → memory enrichment, identity
+  │       ├─ dispatch(resources.prepare)        → filter/modify tools exposed to LLM
+  │       ├─ dispatch(model.request)
   │       ├─ llmRun via @openomni/llm
+  │       ├─ dispatch(model.response)
   │       │    └─ tool calls flow through createToolExecutor:
   │       │         ├─ dispatch(invoke.prepare)  → tool-permission (fail-closed)
   │       │         ├─ execute tool
   │       │         └─ dispatch(invoke.result) → idle-nudge reset, enrichment
   │       ├─ outcome === "stop"?
-  │       │    ├─ dispatch(post_turn)         → inject (continue) / abort / complete
-  │       │    ├─ if inject: dispatch(post_compaction) → loop
-  │       │    └─ else: dispatch(post_run) + yield complete
+  │       │    ├─ dispatch(turn.finish)         → inject (continue) / abort / complete
+  │       │    ├─ if inject: dispatch(completion.prepare) → loop
+  │       │    └─ else: dispatch(run.finish) + yield complete
   │       └─ outcome === "error"/"aborted"?
-  │            └─ dispatch(on_error) → retry (shouldRetry) or throw
+  │            └─ dispatch(error) → retry (shouldRetry) or throw
 ```
 
 ## RUNTIME (MULTI-AGENT)

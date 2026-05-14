@@ -139,6 +139,7 @@ Ingress supports a single execution mode:
 - [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
 - [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, and cleanup priorities.
 - [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
+- [Policy Kernel v2 Specification](docs/policy-kernel-spec.md) — resource/effect governance VM semantics and conformance requirements.
 - [Quality Score](docs/quality-score.md) — package quality status and known technical debt.
 - [Architecture Decision Records](docs/design-decisions/index.md) — design decisions that shaped this project.
 - [Daemon Packaging](packaging/README.md) — Linux systemd user-service installation and operations notes.

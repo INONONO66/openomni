@@ -21,7 +21,7 @@ type Transform = Extract<Policy.Verdict, { action: "transform" }>;
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
-    timing: "pre_turn",
+    timing: "turn.start",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -177,7 +177,7 @@ describe("snapshot: tool-permission", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
-        timing: "pre_tool_use",
+        timing: "invoke.prepare",
         toolName: "read_file",
         toolCallId: "call-1",
         toolInput: { path: "/tmp/test" },
@@ -192,7 +192,7 @@ describe("snapshot: tool-permission", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
-        timing: "pre_tool_use",
+        timing: "invoke.prepare",
         toolName: "shell_exec",
         toolCallId: "call-2",
         toolInput: { cmd: "rm -rf /" },
@@ -210,7 +210,7 @@ describe("snapshot: tool-permission", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
-        timing: "pre_tool_use",
+        timing: "invoke.prepare",
         toolName: "dangerous_tool",
         toolCallId: "call-3",
         toolInput: {},
@@ -224,7 +224,7 @@ describe("snapshot: tool-permission", () => {
     const mw = createToolPermissionPolicy({
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
-    const verdict = await mw.fn(baseCtx({ timing: "pre_tool_use" }));
+    const verdict = await mw.fn(baseCtx({ timing: "invoke.prepare" }));
     expect(verdict).toEqual({ action: "continue" });
   });
 });
@@ -237,7 +237,7 @@ describe("snapshot: memory", () => {
     ];
     const mw = createMemoryPolicy(mockMemory(results));
     const userMsg = createUserMessage("what are my preferences?", "test");
-    const verdict = await mw.fn(baseCtx({ timing: "on_system_prompt", messages: [userMsg] }));
+    const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
 
     expect(verdict.action).toBe("transform");
     const v = verdict as Transform;
@@ -251,13 +251,13 @@ describe("snapshot: memory", () => {
   it("continue — no memory results", async () => {
     const mw = createMemoryPolicy(mockMemory([]));
     const userMsg = createUserMessage("hello", "test");
-    const verdict = await mw.fn(baseCtx({ timing: "on_system_prompt", messages: [userMsg] }));
+    const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
     expect(verdict).toEqual({ action: "continue" });
   });
 
   it("continue — no messages in context", async () => {
     const mw = createMemoryPolicy(mockMemory([{ key: "k1", content: "data", score: 1.0 }]));
-    const verdict = await mw.fn(baseCtx({ timing: "on_system_prompt" }));
+    const verdict = await mw.fn(baseCtx({ timing: "context.prepare" }));
     expect(verdict).toEqual({ action: "continue" });
   });
 
@@ -268,7 +268,7 @@ describe("snapshot: memory", () => {
     };
     const mw = createMemoryPolicy(mem);
     const userMsg = createUserMessage("test", "test");
-    const verdict = await mw.fn(baseCtx({ timing: "on_system_prompt", messages: [userMsg] }));
+    const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
     expect(verdict).toEqual({ action: "continue" });
   });
 });
@@ -331,7 +331,7 @@ describe("snapshot: post-tool", () => {
     const mw = createPostToolPolicy(() => "enrichment");
     const verdict = await mw.fn(
       baseCtx({
-        timing: "post_tool_use",
+        timing: "invoke.result",
         toolName: "read_file",
         toolCallId: "call-1",
         toolOutput: "file contents here",
@@ -348,7 +348,7 @@ describe("snapshot: post-tool", () => {
     const mw = createPostToolPolicy(() => null);
     const verdict = await mw.fn(
       baseCtx({
-        timing: "post_tool_use",
+        timing: "invoke.result",
         toolName: "read_file",
         toolOutput: "content",
       }),
@@ -362,7 +362,7 @@ describe("snapshot: post-tool", () => {
     });
     const verdict = await mw.fn(
       baseCtx({
-        timing: "post_tool_use",
+        timing: "invoke.result",
         toolName: "test-tool",
         toolOutput: "content",
       }),
@@ -374,7 +374,7 @@ describe("snapshot: post-tool", () => {
     const mw = createPostToolPolicy(() => "standalone enrichment");
     const verdict = await mw.fn(
       baseCtx({
-        timing: "post_tool_use",
+        timing: "invoke.result",
         toolName: "test-tool",
         toolOutput: "",
       }),
@@ -391,9 +391,9 @@ describe("snapshot: post-turn", () => {
       action: "inject" as const,
       message: "reminder to user",
       reason: "turn_reminder",
-      policyId: "test.post_turn",
+      policyId: "test.turn.finish",
     }));
-    const verdict = await mw.fn(baseCtx({ timing: "post_turn", turnCount: 3 }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 3 }));
     expect(verdict.action).toBe("inject");
     const v = verdict as Inject;
     expect(v.message).toBe("reminder to user");
@@ -402,7 +402,7 @@ describe("snapshot: post-turn", () => {
 
   it("continue — handler returns continue", async () => {
     const mw = createPostTurnPolicy(() => ({ action: "continue" as const }));
-    const verdict = await mw.fn(baseCtx({ timing: "post_turn", turnCount: 1 }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 1 }));
     expect(verdict).toEqual({ action: "continue" });
   });
 
@@ -411,7 +411,7 @@ describe("snapshot: post-turn", () => {
       action: "abort" as const,
       reason: "max_turns_reached",
     }));
-    const verdict = await mw.fn(baseCtx({ timing: "post_turn", turnCount: 10 }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 10 }));
     expect(verdict.action).toBe("abort");
     expect((verdict as Abort).reason).toBe("max_turns_reached");
   });
@@ -420,7 +420,7 @@ describe("snapshot: post-turn", () => {
     const mw = createPostTurnPolicy(() => {
       throw new Error("handler exploded");
     });
-    const verdict = await mw.fn(baseCtx({ timing: "post_turn", turnCount: 1 }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 1 }));
     expect(verdict).toEqual({ action: "continue" });
   });
 });
@@ -430,7 +430,7 @@ describe("snapshot: idle-nudge", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
-    const verdict = await mw.fn(baseCtx({ timing: "pre_turn" }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
     expect(verdict).toEqual({ action: "continue" });
   });
 
@@ -438,7 +438,7 @@ describe("snapshot: idle-nudge", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx({ timing: "pre_turn" }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
     expect(verdict.action).toBe("inject");
     const v = verdict as Inject;
     expect(v.message).toContain("[System]");
@@ -451,24 +451,24 @@ describe("snapshot: idle-nudge", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 1000, maxNudges: 2 });
     mockNow(2000);
-    await mw.fn(baseCtx({ timing: "pre_turn" }));
+    await mw.fn(baseCtx({ timing: "turn.start" }));
     mockNow(4000);
-    await mw.fn(baseCtx({ timing: "pre_turn" }));
+    await mw.fn(baseCtx({ timing: "turn.start" }));
     mockNow(6000);
-    const verdict = await mw.fn(baseCtx({ timing: "pre_turn" }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
     expect(verdict.action).toBe("abort");
     const v = verdict as Abort;
     expect(v.reason).toBe("stalled");
     expect(v.policyId).toBe("builtin.idle_nudge");
   });
 
-  it("continue — post_tool_use resets idle timer", async () => {
+  it("continue — invoke.result resets idle timer", async () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(65000);
-    await mw.fn(baseCtx({ timing: "post_tool_use" }));
+    await mw.fn(baseCtx({ timing: "invoke.result" }));
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx({ timing: "pre_turn" }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
     expect(verdict).toEqual({ action: "continue" });
   });
 
@@ -476,7 +476,7 @@ describe("snapshot: idle-nudge", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
-    const verdict = await mw.fn(baseCtx({ timing: "pre_turn" }));
+    const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
     expect(verdict).toEqual({ action: "continue" });
   });
 });
@@ -485,21 +485,21 @@ describe("snapshot: registration metadata", () => {
   it("budget-reassurance: name, timing, priority", () => {
     const mw = createBudgetReassurancePolicy();
     expect(mw.name).toBe("builtin:budget-reassurance");
-    expect(mw.timing).toBe("pre_turn");
+    expect(mw.timing).toBe("turn.start");
     expect(mw.priority).toBe(10);
   });
 
   it("budget-warning: name, timing, priority", () => {
     const mw = createBudgetWarningPolicy();
     expect(mw.name).toBe("builtin:budget-warning");
-    expect(mw.timing).toBe("pre_turn");
+    expect(mw.timing).toBe("turn.start");
     expect(mw.priority).toBe(20);
   });
 
   it("tool-permission: name, timing, priority, failPolicy", () => {
     const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
-    expect(mw.timing).toBe("pre_tool_use");
+    expect(mw.timing).toBe("invoke.prepare");
     expect(mw.priority).toBe(0);
     expect(mw.failPolicy).toBe("fail-closed");
   });
@@ -507,35 +507,35 @@ describe("snapshot: registration metadata", () => {
   it("memory: name, timing, priority", () => {
     const mw = createMemoryPolicy(mockMemory());
     expect(mw.name).toBe("builtin:memory");
-    expect(mw.timing).toBe("on_system_prompt");
+    expect(mw.timing).toBe("context.prepare");
     expect(mw.priority).toBe(100);
   });
 
   it("compaction: name, timing, priority", () => {
     const mw = createCompactionPolicy({ contextWindowTokens: 1000 });
     expect(mw.name).toBe("builtin:compaction");
-    expect(mw.timing).toBe("post_compaction");
+    expect(mw.timing).toBe("completion.prepare");
     expect(mw.priority).toBe(900);
   });
 
   it("post-tool: name, timing, priority", () => {
     const mw = createPostToolPolicy(() => null);
     expect(mw.name).toBe("builtin:post-tool");
-    expect(mw.timing).toBe("post_tool_use");
+    expect(mw.timing).toBe("invoke.result");
     expect(mw.priority).toBe(200);
   });
 
   it("post-turn: name, timing, priority", () => {
     const mw = createPostTurnPolicy(() => ({ action: "continue" }));
     expect(mw.name).toBe("builtin:post-turn");
-    expect(mw.timing).toBe("post_turn");
+    expect(mw.timing).toBe("turn.finish");
     expect(mw.priority).toBe(250);
   });
 
   it("idle-nudge: name, timing (array), priority", () => {
     const mw = createIdleNudgePolicy();
     expect(mw.name).toBe("builtin:idle-nudge");
-    expect(mw.timing).toEqual(["pre_turn", "post_tool_use"]);
+    expect(mw.timing).toEqual(["turn.start", "invoke.result"]);
     expect(mw.priority).toBe(300);
   });
 });

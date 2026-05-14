@@ -22,7 +22,7 @@ export function createSkillActivationMiddleware(
 
   return {
     name: options.name ?? "skill:activation",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: options.priority ?? 90,
     ...(options.scope !== undefined && { scope: options.scope }),
     ...(options.propagate !== undefined && { propagate: options.propagate }),

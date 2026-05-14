@@ -179,6 +179,6 @@ function contributions(): Extension.Contributes {
       },
     ],
     surfaces: [{ surfaceId: "discord", adapterType: "discord" }],
-    middlewares: [{ name: "content-guard", timing: "pre_tool_use", priority: 10 }],
+    middlewares: [{ name: "content-guard", timing: "invoke.prepare", priority: 10 }],
   };
 }

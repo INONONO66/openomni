@@ -56,7 +56,7 @@ export function createMessengerAllowPatternPolicy(
 ): PolicyRegistration {
   return {
     name: "builtin:messenger-allow-pattern",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
     fn: async (ctx) => {
