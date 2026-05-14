@@ -186,10 +186,27 @@
 - Effect validation is enforced against `PolicyPoint.Registry` allow-lists after composition; descriptor-aware tool dispatch narrows `invoke.prepare` / `invoke.result` to native or MCP policy points when resource metadata is available.
 - Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
 
+### Task 24 Findings (2026-05-14)
+- No-bypass conformance tests now cover native tool invoke, MCP tool invoke via agent executor, messenger send, system prompt composition, writeback commit, subagent spawn/send, background launch, and ingress receive.
+- Current background launch governance is exercised through the registered background limits policy chain; there is no external custom policy registration seam on `BackgroundManager.create()` yet.
+- Bun exposes skipped tests at runtime, but the local type surface does not include `it.skip`, so the conformance file uses a typed `Reflect.get(it, "skip")` binding to keep exactly ten explicit skipped ungoverned-path cases without `as any`.
+- Verification passed with LSP diagnostics and `bun test packages/agent && bun test packages/openomni`.
+
 ### Task 23 Findings (2026-05-14)
 - Determinism conformance coverage now freezes golden request/decision fixtures and checks same-input replay, priority-sorted registration permutations, concurrent dispatch isolation, and mutation rejection.
 - `dispatchV2()` snapshots are recursively cloned and frozen before policy execution so policy functions cannot mutate nested request state shared by callers or parallel evaluations.
 - Evidence file: `.sisyphus/evidence/task-23-determinism.txt`; verification passed with LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
+
+### Task 26 Findings (2026-05-14)
+- Versioning conformance can stay protocol-local by replaying persisted `PolicyDecision` fixtures through schemas and checking fixture metadata against current `PolicyPoint` contracts before parse.
+- Explicit migration errors should be raised when a fixture's point contract version or `inputSchema` diverges from the current registry, preventing silent reinterpretation.
+- `policyKernelVersion`, `Policy.PolicyPoint.version`, and `RuntimeResource.schemaVersion` now share the same numeric kernel version anchor for conformance tests.
+- Verification passed with changed-file LSP diagnostics, `bun test packages/protocol`, and `bun run check-types`.
+
+### Task 22 Findings (2026-05-14)
+- Composition conformance coverage now exercises precedence edges (empty, single, all-allow, pending-over-allow, deny-over-pending, all-deny) through composeEffects().
+- Conflict matrix coverage verifies fail-closed pre-boundary conflicts for rewrites, filter/approval, prompt replacement, plus post-boundary writeback diagnostics.
+- Full agent package verification passed with 421 tests after audit emission was kept aligned with composed policy decisions.
 
 ### Task 21 Findings (2026-05-14)
 - PolicyEngine now emits `policy.evaluated` audit events with adapted effects, reason codes, duration, 3-tier point id/version, and resource descriptors when trace/session context is present.
@@ -197,7 +214,19 @@
 - Request trace context takes precedence over engine-level trace context for policy audit Bus events.
 - Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
 
+### Task 27 Findings (2026-05-14)
+- "Known Ungoverned Paths" appendix added to `docs/policy-kernel-spec.md` after the Implementation Sequence section.
+- All 10 ungoverned paths from the Task 24 `no-bypass.test.ts` skipped tests are documented with: gap description, spec requirement reference, and v2 integration approach.
+- Integration priority order: worker spawn/IPC first (high blast radius), then credential injection (security-critical), then MCP client (external network), then skill activation, then tool permission wiring, then session/artifact/todo writes, then direct LLM run.
+- The appendix explicitly states these are not bugs — the kernel is not yet wired to these call sites. This framing prevents confusion during migration.
+- Evidence file: `.sisyphus/evidence/task-27-ungoverned-docs.txt`; commit: `18998e5 docs: document coordinator ungoverned paths`.
+
 ### Plan Compliance Audit Fixes (2026-05-14)
 - `dispatchV2()` must publish the composed audit decision before returning from a terminal deny path; a local compose/publish helper keeps normal and early-return paths aligned.
 - MCP tool descriptor ids should stay canonical at three segments (`tool:mcp:{remoteName}`); server attribution belongs in `source.serverId` and labels.
 - Empty `void 0;` statements in subagent runtime provided no sequencing guarantee and can be removed without changing mailbox or WorkerRun behavior.
+
+### Task 28 Findings (2026-05-14)
+- `dispatchSystemPrompt()` safety coverage now lives in its own file: abort and deny both stop `context.prepare` composition before later policies run.
+- Transform-only coverage confirms `dispatchSystemPrompt()` still returns composed `systemPrompt`, `prependContext`, and `appendContext` when no terminal verdict occurs.
+- `bun test packages/agent` passed after splitting the sysprompt safety tests out of `engine-deny-terminal.test.ts`.
