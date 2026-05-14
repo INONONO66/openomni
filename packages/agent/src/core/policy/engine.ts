@@ -20,7 +20,7 @@ const POLICY_METADATA_MISSING: Policy.Verdict = {
 };
 
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
-type PolicyEventVerdict = Exclude<Policy.Verdict["action"], "deny">;
+type PolicyEventVerdict = Policy.Verdict["action"];
 
 type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
 type AuditDispatchContext = PolicyContext & {
@@ -149,7 +149,12 @@ function normalizeVerdict(
   const missingReason = verdict.action !== "continue" && !verdict.reason;
   const missingPolicyId = !verdict.policyId;
 
-  if (isProduction() && isPreBoundaryTiming(timing) && (missingReason || missingPolicyId)) {
+  if (
+    isProduction() &&
+    isPreBoundaryTiming(timing) &&
+    verdict.action !== "continue" &&
+    (missingReason || missingPolicyId)
+  ) {
     return POLICY_METADATA_MISSING;
   }
 
@@ -331,6 +336,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     const traceId = traceContext?.traceId;
     const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
     if (!sessionId || !traceId) return;
+    const eventVerdict: PolicyEventVerdict = decision.verdict;
     const auditDecision = auditDecisionFromVerdict(verdict, ctx, decision.policyId);
     const point = auditPoint(ctx.timing, ctx.resourceDescriptor);
 
@@ -343,7 +349,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       actor: options.audit?.actor ?? buildActor(traceContext),
       action: options.audit?.action ?? resolveAction(decision.timing),
       resource: options.audit?.resource ?? resolveResource(reg, ctx),
-      verdict: decision.verdict as PolicyEventVerdict,
+      verdict: eventVerdict,
       reason: resolveEventReason(decision),
       effects: auditDecision.effects,
       ...(auditDecision.obligations !== undefined && { obligations: auditDecision.obligations }),

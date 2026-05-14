@@ -822,7 +822,10 @@ export namespace RuntimeResource {
     })
     .superRefine((value, ctx) => {
       const segments = value.id.split(":");
-      const hasValidSegments = segments.length === 2 || segments.length === 3;
+      const hasValidSegments =
+        segments.length === 2 ||
+        segments.length === 3 ||
+        (value.kind === "tool" && segments.length === 4);
 
       if (!hasValidSegments) {
         ctx.addIssue({
@@ -858,11 +861,11 @@ export namespace RuntimeResource {
           });
         }
 
-        if (value.source !== undefined && segments.length !== 3) {
+        if (value.source !== undefined && segments.length !== 3 && segments.length !== 4) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["id"],
-            message: "descriptor source metadata must match the id source segment",
+            message: "descriptor source metadata requires a three- or four-segment id",
           });
         }
 

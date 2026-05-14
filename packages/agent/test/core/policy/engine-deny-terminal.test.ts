@@ -37,7 +37,7 @@ describe("PolicyEngine deny terminal dispatch", () => {
     expect(after).toHaveBeenCalledTimes(0);
   });
 
-  it("fails closed at pre-boundary timings when policyId is missing", async () => {
+  it("allows continue verdicts without policy metadata at pre-boundary timings", async () => {
     const previousNodeEnv = env().NODE_ENV;
     env().NODE_ENV = "production";
     try {
@@ -54,12 +54,8 @@ describe("PolicyEngine deny terminal dispatch", () => {
 
       const verdict = await engine.dispatchLegacy("invoke.prepare", baseCtx());
 
-      expect(verdict).toEqual({
-        action: "deny",
-        reason: "policy-metadata-missing",
-        policyId: "agent.policy.metadata",
-      });
-      expect(after).toHaveBeenCalledTimes(0);
+      expect(verdict).toEqual({ action: "continue" });
+      expect(after).toHaveBeenCalledTimes(1);
     } finally {
       if (previousNodeEnv === undefined) {
         delete env().NODE_ENV;

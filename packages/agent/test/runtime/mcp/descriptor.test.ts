@@ -47,7 +47,7 @@ describe("McpClient tool descriptors", () => {
     expect(tool?.name).toBe("filesystem.write_file");
     expect(tool?.labels).toEqual(["source.mcp", "mcp.filesystem"]);
     expect(tool?.descriptor).toEqual({
-      id: "tool:mcp:write_file",
+      id: "tool:mcp:filesystem:write_file",
       kind: "tool",
       source: {
         type: "mcp",
@@ -71,7 +71,7 @@ describe("McpClient tool descriptors", () => {
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
 
     expect(tool?.name).toBe("search-server.search");
-    expect(tool?.descriptor?.id).toBe("tool:mcp:search");
+    expect(tool?.descriptor?.id).toBe("tool:mcp:search-server:search");
     expect(tool?.descriptor?.source).toEqual({
       type: "mcp",
       serverId: "search-server",

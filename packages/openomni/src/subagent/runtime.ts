@@ -37,7 +37,23 @@ type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
   readonly resourceDescriptor: RuntimeResource.Descriptor;
 };
 
-function createSubagentSpawnDescriptor(childAgent: string): RuntimeResource.Descriptor {
+type PreDelegationOperation = "spawn" | "spawn_background" | "send";
+
+function createSubagentDescriptor(
+  childAgent: string,
+  operation: PreDelegationOperation,
+): RuntimeResource.Descriptor {
+  if (operation === "send") {
+    return {
+      id: "tool:agent:subagent_send",
+      kind: "tool",
+      source: { type: "agent", agentId: childAgent },
+      labels: ["source.agent", "delegation.subagent"],
+      capabilities: ["delegation.send"],
+      effects: ["session.message"],
+    };
+  }
+
   return {
     id: "tool:agent:subagent_spawn",
     kind: "tool",
@@ -52,7 +68,7 @@ async function dispatchPreDelegation(input: {
   middleware?: PolicyRegistration[];
   childAgent: string;
   parentSessionId?: string;
-  operation: string;
+  operation: PreDelegationOperation;
   prompt: string;
 }): Promise<Policy.Verdict> {
   if (!input.middleware?.length) return { action: "continue" };
@@ -62,7 +78,7 @@ async function dispatchPreDelegation(input: {
     engine.register(reg);
   }
 
-  const resourceDescriptor = createSubagentSpawnDescriptor(input.childAgent);
+  const resourceDescriptor = createSubagentDescriptor(input.childAgent, input.operation);
   const policyContext: ResourcePolicyContext = {
     steps: [],
     usage: emptyDelegationUsage,

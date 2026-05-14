@@ -135,16 +135,20 @@ describe("deny-wins composition", () => {
 
   it("deny-wins across all Policy.Timing values", async () => {
     const timings: Policy.Timing[] = [
+      "inbound.receive",
       "run.start",
       "turn.start",
+      "context.prepare",
+      "resources.prepare",
+      "model.request",
+      "model.response",
       "invoke.prepare",
       "invoke.result",
       "turn.finish",
       "completion.prepare",
+      "writeback.commit",
       "run.finish",
       "error",
-      "resources.prepare",
-      "invoke.prepare",
     ];
 
     for (const timing of timings) {

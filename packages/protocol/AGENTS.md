@@ -23,7 +23,7 @@ src/
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
-├── policy/               # Policy.Timing (13), Policy.Verdict (7), Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
+├── policy/               # Policy.Timing (14), Policy.Verdict (7), Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
 ├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
