@@ -408,7 +408,7 @@ export namespace Policy {
   });
   export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
 
-  export type PolicyPointResolveFromLegacy = (
+  export type PolicyPointResolver = (
     timing: Timing,
     context?: { resourceKind?: string },
   ) => string[];
@@ -684,13 +684,11 @@ export namespace Policy {
     RegistrySchema: z.record(PolicyPointId, PolicyPointContract),
     Registry: PolicyPointRegistry,
     MigrationMapping: policyPointMigrationMapping,
-    TimingAliases: policyPointMigrationMapping,
-    resolveFromLegacy: undefined as unknown as PolicyPointResolveFromLegacy,
+    resolve: undefined as unknown as PolicyPointResolver,
   });
   export type PolicyPoint = z.infer<typeof policyPoint> & {
     MigrationMapping: Record<Timing, RegisteredPolicyPointId[]>;
-    TimingAliases: Record<Timing, RegisteredPolicyPointId[]>;
-    resolveFromLegacy: PolicyPointResolveFromLegacy;
+    resolve: PolicyPointResolver;
   };
 
   export const PolicyPlan = z.object({

@@ -227,7 +227,7 @@ export async function dispatchPreRun(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const preRunVerdict = await engine.dispatch("run.start", {
+  const preRunVerdict = await engine.dispatchLegacy("run.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: 0,
@@ -265,7 +265,7 @@ export async function dispatchBudgetCheck(
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
 
-  const postRunVerdict = await engine.dispatch("run.finish", {
+  const postRunVerdict = await engine.dispatchLegacy("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -324,7 +324,7 @@ export async function dispatchModelRequest(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const verdict = await engine.dispatch("model.request", {
+  const verdict = await engine.dispatchLegacy("model.request", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -358,7 +358,7 @@ export async function dispatchModelResponse(
   config: ChatAgentConfig,
   outcomeType: string,
 ): Promise<AgentEvent | null> {
-  const verdict = await engine.dispatch("model.response", {
+  const verdict = await engine.dispatchLegacy("model.response", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -448,7 +448,7 @@ export async function buildTurn(
   agentBase: StreamAgentBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnVerdict = await engine.dispatch("turn.start", {
+  const preTurnVerdict = await engine.dispatchLegacy("turn.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -547,7 +547,7 @@ export async function buildTurn(
       catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
     }
   }
-  const toolSelectionVerdict = await engine.dispatch("resources.prepare", {
+  const toolSelectionVerdict = await engine.dispatchLegacy("resources.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -696,7 +696,7 @@ export async function* handleStop(
   state.steps.push(step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
-  const postTurnVerdict = await engine.dispatch("turn.finish", {
+  const postTurnVerdict = await engine.dispatchLegacy("turn.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -811,7 +811,7 @@ export async function dispatchWritebackCommit(
   config: ChatAgentConfig,
   output: string,
 ): Promise<string> {
-  const verdict = await engine.dispatch("writeback.commit", {
+  const verdict = await engine.dispatchLegacy("writeback.commit", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -854,7 +854,7 @@ export async function* handleError(
   retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const onErrorVerdict = await engine.dispatch("error", {
+  const onErrorVerdict = await engine.dispatchLegacy("error", {
     toolInput: { error: normalizedError },
     steps: state.steps,
     usage: state.totalUsage,
@@ -982,7 +982,7 @@ async function dispatchPostRunTransform(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
-  const postRunVerdict = await engine.dispatch("run.finish", {
+  const postRunVerdict = await engine.dispatchLegacy("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -1021,7 +1021,7 @@ async function applyPostCompaction(
   agentBase: StreamAgentBase,
   isCompletion: boolean,
 ): Promise<void> {
-  const compactionVerdict = await engine.dispatch("completion.prepare", {
+  const compactionVerdict = await engine.dispatchLegacy("completion.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,

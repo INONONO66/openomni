@@ -75,7 +75,7 @@ export namespace AgentMessenger {
 
     return {
       async send(envelope: Messenger.MessageEnvelope): Promise<void> {
-        const verdict = await engine.dispatch("invoke.prepare", {
+        const verdict = await engine.dispatchLegacy("invoke.prepare", {
           steps: [],
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
           turnCount: 0,

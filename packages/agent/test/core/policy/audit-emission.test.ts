@@ -75,7 +75,7 @@ describe("PolicyEngine audit emission", () => {
         },
       };
 
-      await engine.dispatch("invoke.prepare", ctx);
+      await engine.dispatchLegacy("invoke.prepare", ctx);
       await flushBus();
 
       expect(evaluated).toHaveLength(1);
@@ -102,7 +102,7 @@ describe("PolicyEngine audit emission", () => {
     }
   });
 
-  it("emits policy.decision.composed after dispatchV2 effect composition", async () => {
+  it("emits policy.decision.composed after dispatch effect composition", async () => {
     const descriptor = nativeToolDescriptor("shell");
     const evaluated: PolicyEvaluatedEvent[] = [];
     const composed: PolicyDecisionComposedEvent[] = [];
@@ -137,7 +137,7 @@ describe("PolicyEngine audit emission", () => {
         }),
       });
 
-      const decision = await engine.dispatchV2("invoke.prepare", {
+      const decision = await engine.dispatch("invoke.prepare", {
         ...baseCtx(),
         toolName: "shell",
         resourceDescriptor: descriptor,

@@ -538,7 +538,7 @@ describe("completion.prepare dispatch", () => {
       }),
     });
 
-    const verdict = await engine.dispatch("completion.prepare", {
+    const verdict = await engine.dispatchLegacy("completion.prepare", {
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 1,
@@ -565,7 +565,7 @@ describe("completion.prepare dispatch", () => {
       fn,
     });
 
-    const verdict = await engine.dispatch("completion.prepare", {
+    const verdict = await engine.dispatchLegacy("completion.prepare", {
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 1,

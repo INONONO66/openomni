@@ -99,7 +99,7 @@ export namespace IngressEngine {
         if (role) labels.push({ value: `actor.${role}`, source: "system" });
       }
 
-      const verdict = await engine.dispatch("inbound.receive", {
+      const verdict = await engine.dispatchLegacy("inbound.receive", {
         steps: [],
         usage: emptyUsage,
         turnCount: 0,

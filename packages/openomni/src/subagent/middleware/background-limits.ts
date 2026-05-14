@@ -383,7 +383,7 @@ export namespace BackgroundLimitsMiddleware {
       ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
     };
 
-    const verdict = await engine.dispatch("invoke.prepare", policyContext);
+    const verdict = await engine.dispatchLegacy("invoke.prepare", policyContext);
 
     return { verdict, shouldQueue: state.shouldQueue ?? false };
   }

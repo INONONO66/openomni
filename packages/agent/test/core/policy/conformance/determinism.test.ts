@@ -94,7 +94,7 @@ function deterministicOrder(seed: number): PolicyRegistration[] {
 }
 
 async function evaluate(registrations = policySet()): Promise<PolicyDecision> {
-  return registerPolicies(registrations).dispatchV2("model.request", cloneGoldenRequest());
+  return registerPolicies(registrations).dispatch("model.request", cloneGoldenRequest());
 }
 
 describe("policy determinism conformance", () => {
@@ -119,7 +119,7 @@ describe("policy determinism conformance", () => {
   it("keeps concurrent dispatch evaluations isolated", async () => {
     const engine = registerPolicies(policySet());
     const decisions = await Promise.all(
-      Array.from({ length: 16 }, () => engine.dispatchV2("model.request", cloneGoldenRequest())),
+      Array.from({ length: 16 }, () => engine.dispatch("model.request", cloneGoldenRequest())),
     );
 
     for (const decision of decisions) {
@@ -147,7 +147,7 @@ describe("policy determinism conformance", () => {
       },
     ]);
 
-    const decision = await engine.dispatchV2("model.request", request);
+    const decision = await engine.dispatch("model.request", request);
 
     expect(mutationRejected).toBe(true);
     expect(request).toEqual(cloneGoldenRequest());

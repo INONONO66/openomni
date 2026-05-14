@@ -80,7 +80,7 @@ describe("PolicyPoint registry", () => {
   });
 
   test("maps all 14 legacy timings to registered 3-tier point IDs", () => {
-    const aliases = Policy.PolicyPoint.TimingAliases;
+    const aliases = Policy.PolicyPoint.MigrationMapping;
 
     expect(Object.keys(aliases).sort()).toEqual(Object.values(Policy.Timing).sort());
     expect(aliases[Policy.Timing.INBOUND_RECEIVE]).toEqual(["session.inbound.pre"]);

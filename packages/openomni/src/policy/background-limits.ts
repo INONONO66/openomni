@@ -250,7 +250,7 @@ export namespace BackgroundLimitsPolicy {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchLegacy("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

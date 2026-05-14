@@ -32,13 +32,13 @@ describe("PolicyPoint migration mapping", () => {
     expect(mapping[Policy.Timing.ERROR]).toEqual(["run.error.error"]);
   });
 
-  test("exposes a legacy resolver type signature", () => {
-    const resolveFromLegacy: Policy.PolicyPointResolveFromLegacy = (timing, context) => {
+  test("exposes a point resolver type signature", () => {
+    const resolve: Policy.PolicyPointResolver = (timing, context) => {
       void context?.resourceKind;
       return Policy.PolicyPoint.MigrationMapping[timing];
     };
 
-    expect(resolveFromLegacy(Policy.Timing.INVOKE_PREPARE, { resourceKind: "tool" })).toEqual(
+    expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "tool" })).toEqual(
       Policy.PolicyPoint.MigrationMapping[Policy.Timing.INVOKE_PREPARE],
     );
   });

@@ -87,7 +87,7 @@ async function dispatchPreDelegation(input: {
     resourceDescriptor,
   };
 
-  return engine.dispatch("invoke.prepare", policyContext);
+  return engine.dispatchLegacy("invoke.prepare", policyContext);
 }
 
 function applyDelegationTransform(

@@ -31,7 +31,7 @@ describe("PolicyEngine deny terminal dispatch", () => {
     });
     engine.register({ name: "after", timing: "invoke.prepare", priority: 10, fn: after });
 
-    const verdict = await engine.dispatch("invoke.prepare", baseCtx());
+    const verdict = await engine.dispatchLegacy("invoke.prepare", baseCtx());
 
     expect(verdict).toEqual({ action: "deny", reason: "blocked", policyId: "test.deny-first" });
     expect(after).toHaveBeenCalledTimes(0);
@@ -52,7 +52,7 @@ describe("PolicyEngine deny terminal dispatch", () => {
       });
       engine.register({ name: "after", timing: "invoke.prepare", priority: 10, fn: after });
 
-      const verdict = await engine.dispatch("invoke.prepare", baseCtx());
+      const verdict = await engine.dispatchLegacy("invoke.prepare", baseCtx());
 
       expect(verdict).toEqual({
         action: "deny",

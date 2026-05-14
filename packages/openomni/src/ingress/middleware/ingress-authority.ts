@@ -214,7 +214,7 @@ export namespace IngressAuthorityMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("run.start", {
+    const verdict = await engine.dispatchLegacy("run.start", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

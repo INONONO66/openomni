@@ -46,7 +46,7 @@ export namespace IngressHandlers {
       engine.register(reg);
     }
 
-    const verdict = await engine.dispatch("writeback.commit", {
+    const verdict = await engine.dispatchLegacy("writeback.commit", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

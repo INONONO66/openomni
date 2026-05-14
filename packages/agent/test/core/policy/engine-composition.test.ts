@@ -36,7 +36,7 @@ describe("deny-wins composition", () => {
       fn: () => ({ action: "deny", reason: "blocked-by-deny", policyId: "test.deny" }),
     });
 
-    const verdict = await engine.dispatch("turn.start", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
 
     expect(verdict.action).toBe("deny");
     expect(verdict.reason).toBe("blocked-by-deny");
@@ -74,7 +74,7 @@ describe("deny-wins composition", () => {
       },
     });
 
-    const verdict = await engine.dispatch("invoke.prepare", baseCtx());
+    const verdict = await engine.dispatchLegacy("invoke.prepare", baseCtx());
 
     expect(verdict.action).toBe("deny");
     expect(executed).toEqual(["deny-first"]);
@@ -112,7 +112,7 @@ describe("deny-wins composition", () => {
       },
     });
 
-    const verdict = await engine.dispatch("turn.finish", baseCtx());
+    const verdict = await engine.dispatchLegacy("turn.finish", baseCtx());
 
     expect(verdict.action).toBe("abort");
     expect(executed).toEqual(["allow-first", "abort-second"]);
@@ -129,7 +129,7 @@ describe("deny-wins composition", () => {
       });
     }
 
-    const verdict = await engine.dispatch("run.start", baseCtx());
+    const verdict = await engine.dispatchLegacy("run.start", baseCtx());
     expect(verdict.action).toBe("continue");
   });
 
@@ -162,7 +162,7 @@ describe("deny-wins composition", () => {
         fn: () => ({ action: "deny", reason: `denied-at-${timing}`, policyId: "test.deny" }),
       });
 
-      const verdict = await engine.dispatch(timing, baseCtx());
+      const verdict = await engine.dispatchLegacy(timing, baseCtx());
       expect(verdict.action).toBe("deny");
       expect(verdict.reason).toBe(`denied-at-${timing}`);
     }
@@ -202,7 +202,7 @@ describe("scope filtering with 100 policies", () => {
       engine.register(reg);
     }
 
-    await engine.dispatch("turn.start", { ...baseCtx(), agentType: "coder" });
+    await engine.dispatchLegacy("turn.start", { ...baseCtx(), agentType: "coder" });
 
     expect(executed.length).toBe(10);
     expect(executed.every((name) => name.includes("coder"))).toBe(true);
@@ -242,12 +242,12 @@ describe("scope filtering with 100 policies", () => {
       });
     }
 
-    await engine.dispatch("invoke.prepare", { ...baseCtx(), agentType: "reviewer" });
+    await engine.dispatchLegacy("invoke.prepare", { ...baseCtx(), agentType: "reviewer" });
 
     expect(executed.length).toBe(100);
 
     executed.length = 0;
-    await engine.dispatch("invoke.prepare", { ...baseCtx(), agentType: "coder" });
+    await engine.dispatchLegacy("invoke.prepare", { ...baseCtx(), agentType: "coder" });
 
     expect(executed.length).toBe(50);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -282,7 +282,7 @@ describe("scope filtering with 100 policies", () => {
       });
     }
 
-    await engine.dispatch("turn.finish", baseCtx());
+    await engine.dispatchLegacy("turn.finish", baseCtx());
 
     expect(executed.length).toBe(20);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -306,7 +306,7 @@ describe("scope filtering with 100 policies", () => {
       });
     }
 
-    await engine.dispatch("error", { ...baseCtx(), agentType: "reviewer" });
+    await engine.dispatchLegacy("error", { ...baseCtx(), agentType: "reviewer" });
 
     const expectedCount = Math.ceil(100 / 3);
     expect(executed.length).toBe(expectedCount);

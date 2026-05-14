@@ -27,7 +27,7 @@ type AuditDispatchContext = PolicyContext & {
   readonly resourceDescriptor?: RuntimeResource.Descriptor;
 };
 
-export type DispatchV2Context = Omit<PolicyContext, "timing"> & {
+export type DispatchContext = Omit<PolicyContext, "timing"> & {
   readonly resourceDescriptor?: RuntimeResource.Descriptor;
 };
 
@@ -80,8 +80,11 @@ function selectRegistrations(
 
 export interface PolicyEngineInstance {
   register(reg: PolicyRegistration): void;
-  dispatch(timing: Policy.Timing, ctx: Omit<PolicyContext, "timing">): Promise<Policy.Verdict>;
-  dispatchV2(timing: Policy.Timing, ctx: DispatchV2Context): Promise<Policy.PolicyDecision>;
+  dispatch(timing: Policy.Timing, ctx: DispatchContext): Promise<Policy.PolicyDecision>;
+  dispatchLegacy(
+    timing: Policy.Timing,
+    ctx: Omit<PolicyContext, "timing">,
+  ): Promise<Policy.Verdict>;
   dispatchSystemPrompt(ctx: Omit<PolicyContext, "timing">): Promise<Policy.SystemPromptResult>;
 }
 
@@ -409,7 +412,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     return normalized;
   }
 
-  async function dispatch(
+  async function dispatchLegacy(
     timing: Policy.Timing,
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.Verdict> {
@@ -455,9 +458,9 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     return CONTINUE;
   }
 
-  async function dispatchV2(
+  async function dispatch(
     timing: Policy.Timing,
-    ctx: DispatchV2Context,
+    ctx: DispatchContext,
   ): Promise<Policy.PolicyDecision> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
     const fullCtx: AuditDispatchContext = immutableSnapshot({ ...ctx, timing });
@@ -506,7 +509,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
         time: Date.now(),
         component: "agent.policy",
-        msg: "middleware dispatch.v2",
+        msg: "middleware dispatch",
         context: { timing, name: reg.name, verdict: decision.verdict, durationMs },
       });
 
@@ -603,7 +606,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       registrations.push(reg);
     },
     dispatch,
-    dispatchV2,
+    dispatchLegacy,
     dispatchSystemPrompt,
   };
 }

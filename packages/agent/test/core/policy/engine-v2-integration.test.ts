@@ -26,7 +26,7 @@ function systemToolDescriptor(name: string): RuntimeResource.Descriptor {
   };
 }
 
-describe("PolicyEngine.dispatchV2", () => {
+describe("PolicyEngine.dispatch", () => {
   it("adapts legacy verdicts and returns the composed policy decision", async () => {
     const engine = PolicyEngine.create();
     engine.register({
@@ -42,7 +42,7 @@ describe("PolicyEngine.dispatchV2", () => {
       fn: () => ({ action: "continue", policyId: "policy.request-budget" }),
     });
 
-    const decision = await engine.dispatchV2("model.request", baseCtx());
+    const decision = await engine.dispatch("model.request", baseCtx());
 
     expect(decision).toEqual({
       policyId: "agent.policy.composed",
@@ -66,7 +66,7 @@ describe("PolicyEngine.dispatchV2", () => {
       }),
     });
 
-    const decision = await engine.dispatchV2("run.start", baseCtx());
+    const decision = await engine.dispatch("run.start", baseCtx());
 
     expect(decision.verdict).toBe("deny");
     expect(decision.policyId).toBe("agent.policy.composed");
@@ -101,7 +101,7 @@ describe("PolicyEngine.dispatchV2", () => {
       fn: received,
     });
 
-    const decision = await engine.dispatchV2("invoke.prepare", {
+    const decision = await engine.dispatch("invoke.prepare", {
       ...baseCtx(),
       toolName: "shell",
       resourceDescriptor: descriptor,
@@ -143,7 +143,7 @@ describe("PolicyEngine.dispatchV2", () => {
         fn: afterDeny,
       });
 
-      const decision = await engine.dispatchV2("invoke.prepare", {
+      const decision = await engine.dispatch("invoke.prepare", {
         ...baseCtx(),
         toolName: "shell",
         resourceDescriptor: descriptor,

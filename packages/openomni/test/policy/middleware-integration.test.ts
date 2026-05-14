@@ -589,7 +589,7 @@ describe("cross-middleware deny-wins", () => {
     const engine = PolicyEngine.create({ audit: false });
     engine.register(denylistReg);
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchLegacy("invoke.prepare", {
       ...baseCtx(),
       toolName: "subagent",
       toolInput: { operation: "spawn" },
@@ -648,7 +648,7 @@ describe("cross-middleware deny-wins", () => {
     engine.register(allowPolicy);
     engine.register(denyPolicy);
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchLegacy("invoke.prepare", {
       ...baseCtx(),
       toolName: "some_tool",
       toolInput: {},
@@ -666,7 +666,7 @@ describe("cross-middleware deny-wins", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const reg of workerRegs) engine.register(reg);
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const verdict = await engine.dispatchLegacy("invoke.prepare", {
       ...baseCtx(),
       toolName: "bash",
       toolCallId: "call-bash",

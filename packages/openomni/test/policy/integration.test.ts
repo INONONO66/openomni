@@ -73,7 +73,7 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
+    const verdict = await engine.dispatchLegacy(
       "turn.start",
       baseCtx({ agentType: "reviewer", labels: labelEntries(plan.labels) }),
     );
@@ -124,7 +124,7 @@ describe("policy pipeline integration", () => {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch(
+    const verdict = await engine.dispatchLegacy(
       "invoke.prepare",
       baseCtx({
         agentType: "reviewer",
@@ -150,7 +150,7 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatch(
+    const verdict = await engine.dispatchLegacy(
       "invoke.prepare",
       baseCtx({
         toolName: "github.create_issue_comment",
