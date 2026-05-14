@@ -80,6 +80,11 @@
 - `policy.decision.composed` should use the composed verdict set (`allow | deny | pending`), not the legacy agent verdict set.
 - Bun test diagnostics in this repo are happier with explicit no-throw assertions than `.toThrow()` / `.toBeDefined()` matchers.
 
+### Task 7 Findings (2026-05-14)
+- `PolicyPoint.MigrationMapping` should be the canonical legacy-timing bridge, while `TimingAliases` can remain as a compatibility alias.
+- The legacy resolver belongs in protocol as a type signature only; runtime resolution stays in the policy engine above protocol.
+- `invoke.prepare` and `invoke.result` remain the only 1:N migration cases, each fanning out to four 3-tier point IDs.
+
 ### Task 2 Findings (2026-05-14)
 
 #### ADR-007 Update

@@ -406,6 +406,11 @@ export namespace Policy {
   });
   export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
 
+  export type PolicyPointResolveFromLegacy = (
+    timing: Timing,
+    context?: { resourceKind?: string },
+  ) => string[];
+
   const policyPointIds = [
     "session.inbound.pre",
     "run.lifecycle.pre",
@@ -643,39 +648,47 @@ export namespace Policy {
     ),
   } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>;
 
+  const policyPointMigrationMapping = {
+    [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
+    [Timing.RUN_START]: ["run.lifecycle.pre"],
+    [Timing.TURN_START]: ["run.turn.pre"],
+    [Timing.CONTEXT_PREPARE]: ["prompt.context.pre"],
+    [Timing.RESOURCES_PREPARE]: ["tool.catalog.pre"],
+    [Timing.MODEL_REQUEST]: ["connection.llm.pre"],
+    [Timing.MODEL_RESPONSE]: ["connection.llm.post"],
+    [Timing.INVOKE_PREPARE]: [
+      "tool.native.pre",
+      "tool.mcp.pre",
+      "delegation.subagent.pre",
+      "delegation.background.pre",
+    ],
+    [Timing.INVOKE_RESULT]: [
+      "tool.native.post",
+      "tool.mcp.post",
+      "delegation.subagent.post",
+      "delegation.background.post",
+    ],
+    [Timing.TURN_FINISH]: ["run.turn.post"],
+    [Timing.COMPLETION_PREPARE]: ["run.completion.pre"],
+    [Timing.WRITEBACK_COMMIT]: ["session.writeback.pre"],
+    [Timing.RUN_FINISH]: ["run.lifecycle.post"],
+    [Timing.ERROR]: ["run.error.error"],
+  } satisfies Record<Timing, RegisteredPolicyPointId[]>;
+
   export const PolicyPoint = Object.assign(policyPoint, {
     Id: PolicyPointId,
     Contract: PolicyPointContract,
     RegistrySchema: z.record(PolicyPointId, PolicyPointContract),
     Registry: PolicyPointRegistry,
-    TimingAliases: {
-      [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
-      [Timing.RUN_START]: ["run.lifecycle.pre"],
-      [Timing.TURN_START]: ["run.turn.pre"],
-      [Timing.CONTEXT_PREPARE]: ["prompt.context.pre"],
-      [Timing.RESOURCES_PREPARE]: ["tool.catalog.pre"],
-      [Timing.MODEL_REQUEST]: ["connection.llm.pre"],
-      [Timing.MODEL_RESPONSE]: ["connection.llm.post"],
-      [Timing.INVOKE_PREPARE]: [
-        "tool.native.pre",
-        "tool.mcp.pre",
-        "delegation.subagent.pre",
-        "delegation.background.pre",
-      ],
-      [Timing.INVOKE_RESULT]: [
-        "tool.native.post",
-        "tool.mcp.post",
-        "delegation.subagent.post",
-        "delegation.background.post",
-      ],
-      [Timing.TURN_FINISH]: ["run.turn.post"],
-      [Timing.COMPLETION_PREPARE]: ["run.completion.pre"],
-      [Timing.WRITEBACK_COMMIT]: ["session.writeback.pre"],
-      [Timing.RUN_FINISH]: ["run.lifecycle.post"],
-      [Timing.ERROR]: ["run.error.error"],
-    } satisfies Record<Timing, RegisteredPolicyPointId[]>,
+    MigrationMapping: policyPointMigrationMapping,
+    TimingAliases: policyPointMigrationMapping,
+    resolveFromLegacy: undefined as unknown as PolicyPointResolveFromLegacy,
   });
-  export type PolicyPoint = z.infer<typeof policyPoint>;
+  export type PolicyPoint = z.infer<typeof policyPoint> & {
+    MigrationMapping: Record<Timing, RegisteredPolicyPointId[]>;
+    TimingAliases: Record<Timing, RegisteredPolicyPointId[]>;
+    resolveFromLegacy: PolicyPointResolveFromLegacy;
+  };
 
   export const PolicyPlan = z.object({
     policies: z.array(
