@@ -1,4 +1,4 @@
-import { type Message, Subagent, type RuntimeResource } from "@openomni/protocol";
+import { type Message, type Policy, Subagent, type RuntimeResource } from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
@@ -43,6 +43,20 @@ function createBackgroundLaunchDescriptor(agentName: string): RuntimeResource.De
     capabilities: ["delegation.background"],
     effects: ["session.create"],
   };
+}
+
+function backgroundLaunchFailureReason(verdict: Policy.Verdict): string | undefined {
+  switch (verdict.action) {
+    case "continue":
+      return undefined;
+    case "skip":
+    case "abort":
+    case "retry":
+    case "transform":
+    case "inject":
+    case "deny":
+      return verdict.reason ?? `background launch policy returned ${verdict.action}`;
+  }
 }
 
 export const BackgroundManager = {
@@ -307,8 +321,9 @@ export const BackgroundManager = {
           maxQueueSize,
           resourceDescriptor,
         });
-        if (policy.verdict.action !== "continue") {
-          return makeFailedTask(input, policy.verdict.reason ?? "background launch policy aborted");
+        const launchFailureReason = backgroundLaunchFailureReason(policy.verdict);
+        if (launchFailureReason !== undefined) {
+          return makeFailedTask(input, launchFailureReason);
         }
 
         const id = `bg_${crypto.randomUUID().slice(0, 8)}`;

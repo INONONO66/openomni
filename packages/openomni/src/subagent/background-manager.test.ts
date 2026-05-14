@@ -256,4 +256,50 @@ describe("BackgroundManager — launch limit policy", () => {
     expect(result.verdict.policyId).toBe("guardrail.permission");
     expect(result.verdict.reason).toBe("max concurrent tasks per agent (0) exceeded");
   });
+
+  it("treats background launch deny verdict as terminal", async () => {
+    const evaluateSpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockResolvedValue({
+      verdict: {
+        action: "deny",
+        reason: "background launch denied by policy",
+        policyId: "test:deny-background-launch",
+      },
+      shouldQueue: false,
+    });
+    const manager = BackgroundManager.create();
+
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("background launch denied by policy");
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      evaluateSpy.mockRestore();
+      manager.dispose();
+    }
+  });
+
+  it("fails closed when background launch returns an unsupported verdict", async () => {
+    const evaluateSpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockResolvedValue({
+      verdict: {
+        action: "retry",
+        reason: "retry is not supported for background launch",
+        policyId: "test:retry-background-launch",
+      },
+      shouldQueue: false,
+    });
+    const manager = BackgroundManager.create();
+
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("retry is not supported for background launch");
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      evaluateSpy.mockRestore();
+      manager.dispose();
+    }
+  });
 });

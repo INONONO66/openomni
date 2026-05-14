@@ -99,6 +99,26 @@ function applyDelegationTransform(
   if (typeof input.hardTimeoutMs === "number") config.hardTimeoutMs = input.hardTimeoutMs;
 }
 
+function applyPreDelegationVerdict(
+  config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
+  verdict: Policy.Verdict,
+  fallbackReason: string,
+): void {
+  switch (verdict.action) {
+    case "continue":
+      return;
+    case "transform":
+      applyDelegationTransform(config, verdict.input);
+      return;
+    case "skip":
+    case "abort":
+    case "retry":
+    case "inject":
+    case "deny":
+      throw new Error(verdict.reason ?? fallbackReason);
+  }
+}
+
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
     parentSessionId?: string;
@@ -175,12 +195,7 @@ export namespace SubagentRuntime {
       operation: "spawn",
       prompt: config.prompt,
     });
-    if (verdict.action === "abort") {
-      throw new Error(verdict.reason ?? "invoke.prepare policy aborted spawn");
-    }
-    if (verdict.action === "transform") {
-      applyDelegationTransform(config, verdict.input);
-    }
+    applyPreDelegationVerdict(config, verdict, "invoke.prepare policy aborted spawn");
 
     const session = createSpawnSession(config);
     void 0;
@@ -223,12 +238,7 @@ export namespace SubagentRuntime {
       operation: "spawn_background",
       prompt: config.prompt,
     });
-    if (verdict.action === "abort") {
-      throw new Error(verdict.reason ?? "invoke.prepare policy aborted spawn");
-    }
-    if (verdict.action === "transform") {
-      applyDelegationTransform(config, verdict.input);
-    }
+    applyPreDelegationVerdict(config, verdict, "invoke.prepare policy aborted spawn");
 
     const session = createSpawnSession(config);
 
@@ -275,12 +285,7 @@ export namespace SubagentRuntime {
       operation: "send",
       prompt: config.prompt,
     });
-    if (sendVerdict.action === "abort") {
-      throw new Error(sendVerdict.reason ?? "invoke.prepare policy aborted send");
-    }
-    if (sendVerdict.action === "transform") {
-      applyDelegationTransform(config, sendVerdict.input);
-    }
+    applyPreDelegationVerdict(config, sendVerdict, "invoke.prepare policy aborted send");
 
     const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
       operation: "send",

@@ -2,6 +2,7 @@ import {
   IngressEvent,
   type Execution,
   type Ingress,
+  type Policy,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
@@ -62,16 +63,24 @@ export namespace IngressHandlers {
       traceContext: ctx.traceContext,
     });
 
-    if (verdict.action === "abort") {
-      throw new Error(verdict.reason ?? "writeback.commit policy aborted");
-    }
+    return resolveWritebackVerdict(verdict, output);
+  }
 
-    if (verdict.action === "transform") {
-      const input = verdict.input as { output?: unknown };
-      if (typeof input.output === "string") return input.output;
+  function resolveWritebackVerdict(verdict: Policy.Verdict, output: string): string {
+    switch (verdict.action) {
+      case "continue":
+        return output;
+      case "transform": {
+        const input = verdict.input as { output?: unknown };
+        return typeof input.output === "string" ? input.output : output;
+      }
+      case "skip":
+      case "abort":
+      case "retry":
+      case "inject":
+      case "deny":
+        throw new Error(verdict.reason ?? `writeback.commit policy returned ${verdict.action}`);
     }
-
-    return output;
   }
 
   export function buildExecutionRequest(ctx: HandlerContext): Execution.Request {

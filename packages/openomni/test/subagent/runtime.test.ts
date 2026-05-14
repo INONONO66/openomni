@@ -325,6 +325,56 @@ describe("SubagentRuntime", () => {
       expect((error as Error).message).toBe("delegation denied by test policy");
     });
 
+    it("spawn treats invoke.prepare deny verdict as terminal", async () => {
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "delegation denied by policy",
+          policyId: "test:deny-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "denied task",
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("delegation denied by policy");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawn fails closed when invoke.prepare returns an unsupported verdict", async () => {
+      const retryPolicy: PolicyRegistration = {
+        name: "test:retry-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "retry" as const,
+          reason: "retry is not supported for delegation prepare",
+          policyId: "test:retry-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "retry task",
+        prompt: "should not run",
+        model,
+        middleware: [retryPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("retry is not supported for delegation prepare");
+      expect(runCalls).toHaveLength(0);
+    });
+
     it("spawn proceeds when invoke.prepare policy returns continue", async () => {
       queueResult("allowed output");
 
@@ -445,6 +495,64 @@ describe("SubagentRuntime", () => {
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe("send delegation denied");
+    });
+
+    it("send treats invoke.prepare deny verdict as terminal", async () => {
+      queueResult("spawned");
+      const spawned = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "child",
+        prompt: "initial",
+        model,
+      });
+      runCalls.length = 0;
+
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-send",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "send denied by policy",
+          policyId: "test:deny-send",
+        }),
+      };
+
+      const error = await SubagentRuntime.send({
+        sessionId: spawned.sessionId,
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("send denied by policy");
+      expect(runCalls).toHaveLength(0);
+    });
+
+    it("spawnBackground treats invoke.prepare deny verdict as terminal", async () => {
+      const denyPolicy: PolicyRegistration = {
+        name: "test:deny-background-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "background delegation denied by policy",
+          policyId: "test:deny-background-delegation",
+        }),
+      };
+
+      const error = await SubagentRuntime.spawnBackground({
+        agentName: "worker",
+        title: "denied background task",
+        prompt: "should not run",
+        model,
+        middleware: [denyPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("background delegation denied by policy");
+      expect(runCalls).toHaveLength(0);
     });
 
     it("spawn without middleware proceeds normally (no invoke.prepare dispatch)", async () => {

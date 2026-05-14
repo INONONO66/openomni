@@ -154,6 +154,94 @@ describe("IngressEngine", () => {
     expect(dispatchCalled).toBe(false);
   });
 
+  it("treats inbound.receive deny verdict as terminal before dispatch", async () => {
+    let dispatchCalled = false;
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        dispatchCalled = true;
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output: "should not dispatch",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    IngressEngine.registerIngressPolicy({
+      name: "test:deny-inbound",
+      timing: "inbound.receive",
+      priority: 0,
+      fn: () => ({
+        action: "deny" as const,
+        reason: "inbound denied by policy",
+        policyId: "test:deny-inbound",
+      }),
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-denied-inbound-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("inbound denied by policy");
+    expect(dispatchCalled).toBe(false);
+  });
+
+  it("fails closed when inbound.receive returns an unsupported verdict", async () => {
+    let dispatchCalled = false;
+    IngressEngine.setCoordinator({
+      async dispatch(_sessionId, request) {
+        dispatchCalled = true;
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "succeeded" as const,
+          output: "should not dispatch",
+          finishReason: "stop" as const,
+        };
+      },
+    });
+
+    IngressEngine.registerIngressPolicy({
+      name: "test:retry-inbound",
+      timing: "inbound.receive",
+      priority: 0,
+      fn: () => ({
+        action: "retry" as const,
+        reason: "retry is not supported at inbound.receive",
+        policyId: "test:retry-inbound",
+      }),
+    });
+
+    const error = await catchError(
+      IngressEngine.ingest({
+        id: "event-retry-inbound-1",
+        surface: "tui",
+        workspace: "/repo",
+        mode: "direct",
+        payload: "hello",
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("retry is not supported at inbound.receive");
+    expect(dispatchCalled).toBe(false);
+  });
+
   it("reuses session for same surface key across calls", async () => {
     testState.responseQueue.push("first response");
     testState.responseQueue.push("second response");

@@ -1,25 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Ingress } from "@openomni/protocol";
+import type { Execution, Message, Ingress } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
+import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 
 let IngressHandlers: typeof import("../../src/ingress/handlers").IngressHandlers;
 let SessionBridge: typeof import("../../src/ingress/session-bridge").SessionBridge;
-
-type CoordinatorLike = {
-  dispatch(
-    sessionId: string,
-    request: { runId: string; sessionId: string },
-  ): Promise<{
-    runId: string;
-    sessionId: string;
-    status: string;
-    output?: string;
-    finishReason?: string;
-    error?: string;
-  }>;
-};
 
 const originalFns: {
   storeDirectResult?: typeof import("../../src/ingress/session-bridge").SessionBridge.storeDirectResult;
@@ -112,11 +99,11 @@ function addTextMessage(sessionId: string, role: "user" | "assistant", text: str
 
 function makeDirectCoordinator(output: string): CoordinatorLike {
   return {
-    async dispatch(_sessionId, request) {
+    async dispatch(_sessionId: string, request: Execution.Request) {
       return {
         runId: request.runId,
         sessionId: request.sessionId,
-        status: "succeeded",
+        status: "succeeded" as const,
         output,
         finishReason: "stop",
       };
@@ -127,7 +114,7 @@ function makeDirectCoordinator(output: string): CoordinatorLike {
 describe("IngressHandlers", () => {
   it("buildExecutionRequest preserves tool execution config", () => {
     const toolConfig = { workspaceRoot: "/workspace/openomni" };
-    const permissions = { denylist: ["bash"] };
+    const permissions = { action: "tool.call", denylist: ["bash"] };
     const event: Ingress.InboundEvent = {
       id: "event-request-1",
       surface: "tui",
@@ -233,5 +220,83 @@ describe("IngressHandlers", () => {
       event.agent.model,
     );
     expect(result.result.output).toBe("policy output");
+  });
+
+  it("treats writeback.commit deny verdict as terminal before storing output", async () => {
+    const sessionId = createSession();
+    const storeDirectResultMock = mock(() => undefined);
+    SessionBridge.storeDirectResult = storeDirectResultMock;
+
+    const event: Ingress.InboundEvent = {
+      id: "event-direct-deny-writeback",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+    const policies: PolicyRegistration[] = [
+      {
+        name: "test-deny-writeback",
+        timing: "writeback.commit",
+        priority: 0,
+        fn: () => ({
+          action: "deny" as const,
+          reason: "writeback denied by policy",
+          policyId: "test:deny-writeback",
+        }),
+      },
+    ];
+
+    const error = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: makeDirectCoordinator("direct output"),
+      policies,
+    }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("writeback denied by policy");
+    expect(storeDirectResultMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when writeback.commit returns an unsupported verdict", async () => {
+    const sessionId = createSession();
+    const storeDirectResultMock = mock(() => undefined);
+    SessionBridge.storeDirectResult = storeDirectResultMock;
+
+    const event: Ingress.InboundEvent = {
+      id: "event-direct-retry-writeback",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+    const policies: PolicyRegistration[] = [
+      {
+        name: "test-retry-writeback",
+        timing: "writeback.commit",
+        priority: 0,
+        fn: () => ({
+          action: "retry" as const,
+          reason: "retry is not supported at writeback.commit",
+          policyId: "test:retry-writeback",
+        }),
+      },
+    ];
+
+    const error = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: makeDirectCoordinator("direct output"),
+      policies,
+    }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("retry is not supported at writeback.commit");
+    expect(storeDirectResultMock).not.toHaveBeenCalled();
   });
 });
