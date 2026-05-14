@@ -5,6 +5,15 @@ import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import { summarizeInput } from "./shared";
 
+type BlockedResultMetadata = {
+  verdict: Policy.Verdict["action"];
+  reason: string;
+  retryAfterMs?: number;
+  policyId?: string;
+};
+
+type BlockedToolResult = Tool.Result & { metadata?: BlockedResultMetadata };
+
 export interface ToolExecutorOptions {
   toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
   engine: PolicyEngineInstance;
@@ -43,6 +52,31 @@ export function createToolExecutor(
     ...(traceContext?.agentName !== undefined && { actor: { agentName: traceContext.agentName } }),
   };
 
+  function publishBlocked(call: Tool.Call, toolName: string, reason: string): void {
+    Bus.publish(ToolExecution.PermissionDenied, {
+      ...eventBase,
+      toolCallId: call.id,
+      toolName,
+      reason,
+      time: Date.now(),
+    });
+  }
+
+  function blockedResult(
+    call: Tool.Call,
+    output: string,
+    metadata?: BlockedResultMetadata,
+  ): Tool.Result {
+    const result: BlockedToolResult = {
+      id: crypto.randomUUID(),
+      toolCallId: call.id,
+      output,
+      isError: true,
+    };
+    if (metadata !== undefined) result.metadata = metadata;
+    return result;
+  }
+
   return async (call: Tool.Call): Promise<Tool.Result> => {
     const ctx = getContext?.();
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
@@ -62,36 +96,53 @@ export function createToolExecutor(
 
     onVerdict?.(preVerdict);
 
-    if (preVerdict.action === "skip") {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: `[Skipped: ${preVerdict.reason ?? "middleware"}]`,
-        isError: false,
-      };
+    let effectiveCall = call;
+    switch (preVerdict.action) {
+      case "continue":
+        break;
+      case "transform":
+        effectiveCall = { ...call, input: preVerdict.input };
+        break;
+      case "skip":
+        return {
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: `[Skipped: ${preVerdict.reason ?? "middleware"}]`,
+          isError: false,
+        };
+      case "abort": {
+        const reason = preVerdict.reason ?? "middleware";
+        publishBlocked(call, policyToolName, reason);
+        return blockedResult(
+          call,
+          reason.startsWith("Blocked:") ? `[${reason}]` : `[Aborted: ${reason}]`,
+        );
+      }
+      case "deny": {
+        const reason = preVerdict.reason ?? "middleware";
+        publishBlocked(call, policyToolName, reason);
+        return blockedResult(call, `[Denied: ${reason}]`);
+      }
+      case "inject": {
+        const reason = "inject verdict is not valid for invoke.prepare";
+        publishBlocked(call, policyToolName, reason);
+        return blockedResult(call, `[Denied: ${reason}]`);
+      }
+      case "retry": {
+        const reason = preVerdict.reason ?? "middleware";
+        publishBlocked(call, policyToolName, reason);
+        return blockedResult(call, `[Retry requested: ${reason}]`, {
+          verdict: "retry",
+          reason,
+          retryAfterMs: 0,
+          ...(preVerdict.policyId !== undefined && { policyId: preVerdict.policyId }),
+        });
+      }
+      default: {
+        const exhaustive: never = preVerdict;
+        return exhaustive;
+      }
     }
-
-    if (preVerdict.action === "abort") {
-      const reason = preVerdict.reason ?? "middleware";
-      Bus.publish(ToolExecution.PermissionDenied, {
-        ...eventBase,
-        toolCallId: call.id,
-        toolName: policyToolName,
-        reason,
-        time: Date.now(),
-      });
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: reason.startsWith("Blocked:") ? `[${reason}]` : `[Aborted: ${reason}]`,
-        isError: true,
-      };
-    }
-
-    const effectiveCall =
-      preVerdict.action === "transform" && preVerdict.input
-        ? { ...call, input: preVerdict.input }
-        : call;
 
     Bus.publish(ToolExecution.Started, {
       ...eventBase,
@@ -143,13 +194,23 @@ export function createToolExecutor(
       toolOutput: result.output,
     });
 
-    if (postVerdict.action === "transform") {
-      const input = postVerdict.input as Record<string, unknown>;
-      if (typeof input.output === "string") {
-        return { ...result, output: input.output };
+    switch (postVerdict.action) {
+      case "transform":
+        if (typeof postVerdict.input.output === "string") {
+          return { ...result, output: postVerdict.input.output };
+        }
+        return result;
+      case "continue":
+      case "skip":
+      case "abort":
+      case "retry":
+      case "inject":
+      case "deny":
+        return result;
+      default: {
+        const exhaustive: never = postVerdict;
+        return exhaustive;
       }
     }
-
-    return result;
   };
 }
