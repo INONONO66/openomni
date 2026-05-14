@@ -39,7 +39,7 @@ function timeoutForRiskTier(
 }
 
 function recordDecision(
-  timing: "pre_tool_use" | "post_tool_use",
+  timing: "invoke.prepare" | "invoke.result",
   name: string,
   verdict: Policy.Verdict,
   traceContext: TraceContext.Type | undefined,
@@ -122,7 +122,7 @@ export namespace ToolRuntimePolicyMiddleware {
       context: { toolName: ctx.toolName, tier: ctx.riskTier },
     });
     recordDecision(
-      "pre_tool_use",
+      "invoke.prepare",
       "tool-runtime-policy:risk-tier",
       riskVerdict,
       ctx.traceContext,
@@ -131,7 +131,7 @@ export namespace ToolRuntimePolicyMiddleware {
 
     const timeoutVerdict = continueVerdict("timeout resolved");
     recordDecision(
-      "pre_tool_use",
+      "invoke.prepare",
       "tool-runtime-policy:timeout",
       timeoutVerdict,
       ctx.traceContext,
@@ -141,7 +141,7 @@ export namespace ToolRuntimePolicyMiddleware {
     if (ctx.riskTier < 1 || !ctx.workspaceRoot) {
       const verdict = continueVerdict("workspace lock not required");
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -155,7 +155,7 @@ export namespace ToolRuntimePolicyMiddleware {
       handle.lockAcquired = true;
       const verdict = continueVerdict("workspace lock acquired");
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -165,7 +165,7 @@ export namespace ToolRuntimePolicyMiddleware {
     } catch (error) {
       const verdict = abortVerdict(error instanceof Error ? error.message : String(error));
       recordDecision(
-        "pre_tool_use",
+        "invoke.prepare",
         "tool-runtime-policy:workspace-lock-acquire",
         verdict,
         ctx.traceContext,
@@ -179,7 +179,7 @@ export namespace ToolRuntimePolicyMiddleware {
     if (!ctx.handle.lockAcquired || !ctx.handle.workspaceRoot) {
       const verdict = continueVerdict("workspace lock release not required");
       recordDecision(
-        "post_tool_use",
+        "invoke.result",
         "tool-runtime-policy:workspace-lock-release",
         verdict,
         ctx.traceContext,
@@ -192,7 +192,7 @@ export namespace ToolRuntimePolicyMiddleware {
     ctx.handle.lockAcquired = false;
     const verdict = continueVerdict("workspace lock released");
     recordDecision(
-      "post_tool_use",
+      "invoke.result",
       "tool-runtime-policy:workspace-lock-release",
       verdict,
       ctx.traceContext,

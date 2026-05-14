@@ -96,7 +96,7 @@ function createSoulRegistration(homeRoot: string, agentName: string): PolicyRegi
 
   return {
     name: "profile:soul",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: 25,
     failPolicy: "fail-open",
     fn: async () => {
@@ -123,7 +123,7 @@ function createUserRegistration(homeRoot: string, agentName: string): PolicyRegi
 
   return {
     name: "profile:user",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: 30,
     failPolicy: "fail-open",
     fn: async () => {
@@ -150,7 +150,7 @@ function createMemoryRegistration(homeRoot: string, agentName: string): PolicyRe
 
   return {
     name: "profile:memory",
-    timing: "on_system_prompt",
+    timing: "context.prepare",
     priority: 35,
     failPolicy: "fail-open",
     fn: async () => {

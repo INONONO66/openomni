@@ -42,7 +42,7 @@ async function dispatchPreDelegation(input: {
     engine.register(reg);
   }
 
-  return engine.dispatch("pre_delegation", {
+  return engine.dispatch("invoke.prepare", {
     steps: [],
     usage: emptyDelegationUsage,
     turnCount: 0,
@@ -151,7 +151,7 @@ export namespace SubagentRuntime {
       prompt: config.prompt,
     });
     if (verdict.action === "abort") {
-      throw new Error(verdict.reason ?? "pre_delegation policy aborted spawn");
+      throw new Error(verdict.reason ?? "invoke.prepare policy aborted spawn");
     }
     if (verdict.action === "transform") {
       applyDelegationTransform(config, verdict.input);
@@ -199,7 +199,7 @@ export namespace SubagentRuntime {
       prompt: config.prompt,
     });
     if (verdict.action === "abort") {
-      throw new Error(verdict.reason ?? "pre_delegation policy aborted spawn");
+      throw new Error(verdict.reason ?? "invoke.prepare policy aborted spawn");
     }
     if (verdict.action === "transform") {
       applyDelegationTransform(config, verdict.input);
@@ -251,7 +251,7 @@ export namespace SubagentRuntime {
       prompt: config.prompt,
     });
     if (sendVerdict.action === "abort") {
-      throw new Error(sendVerdict.reason ?? "pre_delegation policy aborted send");
+      throw new Error(sendVerdict.reason ?? "invoke.prepare policy aborted send");
     }
     if (sendVerdict.action === "transform") {
       applyDelegationTransform(config, sendVerdict.input);

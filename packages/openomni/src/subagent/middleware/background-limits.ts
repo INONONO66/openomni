@@ -272,35 +272,35 @@ function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
 export namespace BackgroundLimitsMiddleware {
   export const PerAgent = {
     name: "background:per-agent-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Depth = {
     name: "background:depth-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 10,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Descendants = {
     name: "background:descendant-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 20,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Total = {
     name: "background:total-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 30,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const Queue = {
     name: "background:queue-limit",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 40,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
@@ -357,7 +357,7 @@ export namespace BackgroundLimitsMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("pre_tool_use", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

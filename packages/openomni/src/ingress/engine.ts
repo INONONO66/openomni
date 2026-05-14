@@ -85,7 +85,7 @@ export namespace IngressEngine {
         if (role) labels.push({ value: `actor.${role}`, source: "system" });
       }
 
-      const verdict = await engine.dispatch("pre_ingress", {
+      const verdict = await engine.dispatch("inbound.receive", {
         steps: [],
         usage: emptyUsage,
         turnCount: 0,
@@ -98,7 +98,7 @@ export namespace IngressEngine {
       });
 
       if (verdict.action !== "continue") {
-        throw new Error(verdict.reason ?? "pre_ingress policy aborted");
+        throw new Error(verdict.reason ?? "inbound.receive policy aborted");
       }
     }
 
@@ -123,6 +123,8 @@ export namespace IngressEngine {
       event: inboundEvent,
       coordinator: preRun.coordinator,
       traceContext: activeTrace,
+      policies: _ingressPolicies,
+      onPolicyDecision: _middlewareDecisionObserver,
     });
   }
 }
