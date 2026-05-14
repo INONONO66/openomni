@@ -254,7 +254,14 @@ describe("PolicyEngine", () => {
         }) as const,
     });
 
-    await expect(engine.dispatchSystemPrompt(baseCtx())).rejects.toThrow("system-prompt-error");
+    let thrown: unknown;
+    try {
+      await engine.dispatchSystemPrompt(baseCtx());
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(testError);
   });
 
   it("dispatchSystemPrompt isolates fail-open errors and continues", async () => {
@@ -306,7 +313,15 @@ describe("PolicyEngine", () => {
         fn: () => ({ action: "abort" }) as const,
       });
 
-      await expect(engine.dispatch("turn.start", baseCtx())).rejects.toThrow(
+      let thrown: unknown;
+      try {
+        await engine.dispatch("turn.start", baseCtx());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect(String(thrown)).toContain(
         "Middleware missing-reason returned abort without reason at turn.start",
       );
     } finally {
@@ -332,13 +347,13 @@ describe("PolicyEngine", () => {
       });
       engine.register({
         name: "prod-metadata",
-        timing: "turn.start",
+        timing: "turn.finish",
         priority: 100,
         fn: () => ({ action: "abort" }) as const,
       });
 
-      const first = await engine.dispatch("turn.start", baseCtx());
-      const second = await engine.dispatch("turn.start", baseCtx());
+      const first = await engine.dispatch("turn.finish", baseCtx());
+      const second = await engine.dispatch("turn.finish", baseCtx());
 
       expect(first).toEqual({ action: "abort", policyId: "unknown" });
       expect(second).toEqual({ action: "abort", policyId: "unknown" });

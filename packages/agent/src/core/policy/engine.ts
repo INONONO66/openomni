@@ -3,6 +3,11 @@ import { Operational, PolicyEvent, type Policy, type TraceContext } from "@openo
 import type { PolicyContext, PolicyRegistration } from "./types";
 
 const CONTINUE: Policy.Verdict = { action: "continue" };
+const POLICY_METADATA_MISSING: Policy.Verdict = {
+  action: "deny",
+  reason: "policy-metadata-missing",
+  policyId: "agent.policy.metadata",
+};
 
 type AuditVisibility = "internal" | "llm_reason" | "user_audit";
 type PolicyEventVerdict = Exclude<Policy.Verdict["action"], "deny">;
@@ -68,6 +73,28 @@ function warnKey(timing: Policy.Timing, name: string): string {
   return `${timing}:${name}`;
 }
 
+function isPreBoundaryTiming(timing: Policy.Timing): boolean {
+  return (
+    timing === "inbound.receive" ||
+    timing === "run.start" ||
+    timing === "turn.start" ||
+    timing === "context.prepare" ||
+    timing === "resources.prepare" ||
+    timing === "model.request" ||
+    timing === "invoke.prepare" ||
+    timing === "completion.prepare" ||
+    timing === "writeback.commit"
+  );
+}
+
+function systemPromptTerminalError(verdict: Policy.Verdict, name: string): Error {
+  const reason = verdict.reason ?? verdict.action;
+  const policyId = verdict.policyId ?? "unknown";
+  return new Error(
+    `System prompt policy ${name} returned ${verdict.action}: ${reason} (${policyId})`,
+  );
+}
+
 function normalizeVerdict(
   verdict: Policy.Verdict,
   timing: Policy.Timing,
@@ -76,6 +103,10 @@ function normalizeVerdict(
 ): Policy.Verdict {
   const missingReason = verdict.action !== "continue" && !verdict.reason;
   const missingPolicyId = !verdict.policyId;
+
+  if (isProduction() && isPreBoundaryTiming(timing) && (missingReason || missingPolicyId)) {
+    return POLICY_METADATA_MISSING;
+  }
 
   if (missingReason && !isProduction()) {
     throw new Error(`Middleware ${name} returned ${verdict.action} without reason at ${timing}`);
@@ -290,6 +321,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         }
       } else if (verdict.action === "inject") {
         appendParts.push(verdict.message);
+      } else if (verdict.action === "deny" || verdict.action === "abort") {
+        throw systemPromptTerminalError(verdict, reg.name);
       }
     }
 

@@ -1,0 +1,137 @@
+import { describe, expect, it, mock } from "bun:test";
+import { PolicyEngine } from "../../../src/core/policy";
+import type { PolicyContext } from "../../../src/core/policy";
+
+function baseCtx(): Omit<PolicyContext, "timing"> {
+  return {
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+  };
+}
+
+function env(): Record<string, string | undefined> {
+  return (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
+    .env;
+}
+
+describe("PolicyEngine deny terminal dispatch", () => {
+  it("stops dispatch on deny and preserves reason and policyId", async () => {
+    const engine = PolicyEngine.create();
+    const after = mock(() => ({ action: "abort", reason: "late", policyId: "test.late" }) as const);
+
+    engine.register({
+      name: "deny-first",
+      timing: "invoke.prepare",
+      priority: 0,
+      fn: () => ({ action: "deny", reason: "blocked", policyId: "test.deny-first" }) as const,
+    });
+    engine.register({ name: "after", timing: "invoke.prepare", priority: 10, fn: after });
+
+    const verdict = await engine.dispatch("invoke.prepare", baseCtx());
+
+    expect(verdict).toEqual({ action: "deny", reason: "blocked", policyId: "test.deny-first" });
+    expect(after).toHaveBeenCalledTimes(0);
+  });
+
+  it("stops system prompt composition on deny", async () => {
+    const engine = PolicyEngine.create();
+    const after = mock(
+      () =>
+        ({
+          action: "inject",
+          message: "should-not-append",
+          reason: "late",
+          policyId: "test.late",
+        }) as const,
+    );
+
+    engine.register({
+      name: "deny-context",
+      timing: "context.prepare",
+      priority: 0,
+      fn: () =>
+        ({ action: "deny", reason: "context-denied", policyId: "test.context-denied" }) as const,
+    });
+    engine.register({ name: "after", timing: "context.prepare", priority: 10, fn: after });
+
+    let thrown: unknown;
+    try {
+      await engine.dispatchSystemPrompt(baseCtx());
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(String(thrown)).toContain("context-denied");
+    expect(after).toHaveBeenCalledTimes(0);
+  });
+
+  it("stops system prompt composition on abort", async () => {
+    const engine = PolicyEngine.create();
+    const after = mock(
+      () =>
+        ({
+          action: "inject",
+          message: "should-not-append",
+          reason: "late",
+          policyId: "test.late",
+        }) as const,
+    );
+
+    engine.register({
+      name: "abort-context",
+      timing: "context.prepare",
+      priority: 0,
+      fn: () =>
+        ({ action: "abort", reason: "context-aborted", policyId: "test.context-aborted" }) as const,
+    });
+    engine.register({ name: "after", timing: "context.prepare", priority: 10, fn: after });
+
+    let thrown: unknown;
+    try {
+      await engine.dispatchSystemPrompt(baseCtx());
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(String(thrown)).toContain("context-aborted");
+    expect(after).toHaveBeenCalledTimes(0);
+  });
+
+  it("fails closed at pre-boundary timings when policyId is missing", async () => {
+    const previousNodeEnv = env().NODE_ENV;
+    env().NODE_ENV = "production";
+    try {
+      const engine = PolicyEngine.create();
+      const after = mock(() => ({ action: "continue" }) as const);
+
+      engine.register({
+        name: "missing-policy-id",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({ action: "continue" }) as const,
+      });
+      engine.register({ name: "after", timing: "invoke.prepare", priority: 10, fn: after });
+
+      const verdict = await engine.dispatch("invoke.prepare", baseCtx());
+
+      expect(verdict).toEqual({
+        action: "deny",
+        reason: "policy-metadata-missing",
+        policyId: "agent.policy.metadata",
+      });
+      expect(after).toHaveBeenCalledTimes(0);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete env().NODE_ENV;
+      } else {
+        env().NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+});
