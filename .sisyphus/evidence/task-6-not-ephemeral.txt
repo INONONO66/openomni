@@ -1,0 +1,8 @@
+Policy audit events are not ephemeral.
+
+Verification:
+- `PolicyEvent.Evaluated.visibility !== "ephemeral"`
+- `PolicyEvent.DecisionComposed.visibility !== "ephemeral"`
+
+Result:
+- Both descriptors are persisted by default through the BusEvent.define() default visibility behavior.

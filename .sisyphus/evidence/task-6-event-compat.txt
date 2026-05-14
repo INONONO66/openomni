@@ -1,0 +1,11 @@
+Policy audit event schemas extended in packages/protocol/src/event/policy.ts.
+
+Targeted verification:
+- `bun test packages/protocol/test/policy-event.test.ts` PASS
+
+Full package verification:
+- `bun test packages/protocol` FAILS on pre-existing unrelated policy point registry tests in `packages/protocol/test/policy/point-registry.test.ts`
+
+Notes:
+- `policy.evaluated` now accepts optional audit context fields.
+- `policy.decision.composed` was added for composed effective decisions.
