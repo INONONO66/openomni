@@ -118,7 +118,7 @@ describe("ChatAgent", () => {
       middleware: [
         {
           name: "test:inject-continue",
-          timing: "post_turn",
+          timing: "turn.finish",
           priority: 250,
           fn: async () => ({
             action: "inject",
@@ -207,7 +207,7 @@ describe("ChatAgent", () => {
       middleware: [
         {
           name: "test:conditional-inject",
-          timing: "post_turn",
+          timing: "turn.finish",
           priority: 250,
           fn: async () => {
             guardInvocations += 1;

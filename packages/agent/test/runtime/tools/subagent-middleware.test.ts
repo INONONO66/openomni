@@ -28,7 +28,7 @@ function resetState() {
 function makeMiddleware(name: string, propagate?: boolean): PolicyRegistration {
   return {
     name,
-    timing: "pre_run",
+    timing: "run.start",
     priority: 100,
     propagate,
     fn: async () => ({ action: "continue" as const }),

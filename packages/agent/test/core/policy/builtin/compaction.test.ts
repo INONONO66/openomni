@@ -5,7 +5,7 @@ import type { PolicyContext } from "../../../../src/core/policy";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
-    timing: "post_turn",
+    timing: "turn.finish",
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 0,
@@ -176,11 +176,11 @@ describe("createCompactionPolicy", () => {
     expect(middleware.name).toBe("builtin:compaction");
   });
 
-  it("has timing post_compaction", () => {
+  it("has timing completion.prepare", () => {
     const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
     });
 
-    expect(middleware.timing).toBe("post_compaction");
+    expect(middleware.timing).toBe("completion.prepare");
   });
 });

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
-import type { Hook, Ingress } from "@openomni/protocol";
+import type { Ingress } from "@openomni/protocol";
 import { Ingress as IngressNamespace } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
@@ -262,7 +262,7 @@ describe("IngressEngine", () => {
     }
   });
 
-  describe("pre_ingress policy dispatch", () => {
+  describe("inbound.receive policy dispatch", () => {
     function makeEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
       return {
         id: "event-policy-1",
@@ -278,7 +278,7 @@ describe("IngressEngine", () => {
     function abortPolicy(reason: string): PolicyRegistration {
       return {
         name: "test:ingress-abort",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         failPolicy: "fail-closed",
         fn: () => ({ action: "abort" as const, policyId: "test.abort", reason }),
@@ -288,13 +288,13 @@ describe("IngressEngine", () => {
     function continuePolicy(): PolicyRegistration {
       return {
         name: "test:ingress-continue",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         fn: () => ({ action: "continue" as const, policyId: "test.continue", reason: "ok" }),
       };
     }
 
-    it("aborts ingest when pre_ingress policy returns abort", async () => {
+    it("aborts ingest when inbound.receive policy returns abort", async () => {
       IngressEngine.registerIngressPolicy(abortPolicy("rate limit exceeded"));
 
       const error = await catchError(IngressEngine.ingest(makeEvent()));
@@ -303,7 +303,7 @@ describe("IngressEngine", () => {
       expect((error as Error).message).toBe("rate limit exceeded");
     });
 
-    it("proceeds normally when pre_ingress policy returns continue", async () => {
+    it("proceeds normally when inbound.receive policy returns continue", async () => {
       testState.responseQueue.push("policy-ok response");
       IngressEngine.registerIngressPolicy(continuePolicy());
 
@@ -313,7 +313,7 @@ describe("IngressEngine", () => {
       expect(result.result.output).toBe("policy-ok response");
     });
 
-    it("records pre_ingress decision through observer", async () => {
+    it("records inbound.receive decision through observer", async () => {
       const decisions: PolicyDecision[] = [];
       IngressEngine.setPolicyDecisionObserver((d) => {
         decisions.push(d);
@@ -322,7 +322,7 @@ describe("IngressEngine", () => {
 
       await catchError(IngressEngine.ingest(makeEvent()));
 
-      const ingressDecision = decisions.find((d) => d.timing === "pre_ingress");
+      const ingressDecision = decisions.find((d) => d.timing === "inbound.receive");
       expect(ingressDecision).toBeDefined();
       expect(ingressDecision!.name).toBe("test:ingress-abort");
       expect(ingressDecision!.verdict).toBe("abort");
@@ -333,7 +333,7 @@ describe("IngressEngine", () => {
       let capturedLabels: unknown;
       IngressEngine.registerIngressPolicy({
         name: "test:label-capture",
-        timing: "pre_ingress",
+        timing: "inbound.receive",
         priority: 0,
         fn: (ctx) => {
           capturedLabels = ctx.labels;

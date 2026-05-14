@@ -218,13 +218,13 @@ describe("Profile", () => {
       expect(registrations.map((r) => r.priority)).toEqual([25, 30, 35]);
     });
 
-    it("all have on_system_prompt timing and fail-open policy", () => {
+    it("all have context.prepare timing and fail-open policy", () => {
       const registrations = Profile.createMiddleware({
         agentName: "test",
         homeRoot: "/tmp/nonexistent",
       });
       for (const reg of registrations) {
-        expect(reg.timing).toBe("on_system_prompt");
+        expect(reg.timing).toBe("context.prepare");
         expect(reg.failPolicy).toBe("fail-open");
       }
     });

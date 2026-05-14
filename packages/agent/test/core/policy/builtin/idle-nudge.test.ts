@@ -31,7 +31,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
-    const verdict = await mw.fn(baseCtx("pre_turn"));
+    const verdict = await mw.fn(baseCtx("turn.start"));
     expect(verdict.action).toBe("continue");
   });
 
@@ -39,7 +39,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(1000);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx("pre_turn"));
+    const verdict = await mw.fn(baseCtx("turn.start"));
     expect(verdict.action).toBe("inject");
     if (verdict.action === "inject") {
       expect(verdict.message).toContain("[System]");
@@ -53,28 +53,28 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 1000, maxNudges: 2 });
 
     mockNow(2000);
-    expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("inject");
+    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
 
     mockNow(4000);
-    expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("inject");
+    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
 
     mockNow(6000);
-    const third = await mw.fn(baseCtx("pre_turn"));
+    const third = await mw.fn(baseCtx("turn.start"));
     expect(third.action).toBe("abort");
     if (third.action === "abort") {
       expect(third.reason).toBe("stalled");
     }
   });
 
-  it("post_tool_use resets idle timer", async () => {
+  it("invoke.result resets idle timer", async () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
 
     mockNow(65000);
-    await mw.fn(baseCtx("post_tool_use"));
+    await mw.fn(baseCtx("invoke.result"));
 
     mockNow(70000);
-    const verdict = await mw.fn(baseCtx("pre_turn"));
+    const verdict = await mw.fn(baseCtx("turn.start"));
     expect(verdict.action).toBe("continue");
   });
 
@@ -82,7 +82,7 @@ describe("createIdleNudgePolicy", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
-    const verdict = await mw.fn(baseCtx("pre_turn"));
+    const verdict = await mw.fn(baseCtx("turn.start"));
     expect(verdict.action).toBe("continue");
   });
 
@@ -91,13 +91,13 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 5000, maxNudges: 1 });
 
     mockNow(3000);
-    expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("continue");
+    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("continue");
 
     mockNow(10000);
-    expect((await mw.fn(baseCtx("pre_turn"))).action).toBe("inject");
+    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
 
     mockNow(20000);
-    const next = await mw.fn(baseCtx("pre_turn"));
+    const next = await mw.fn(baseCtx("turn.start"));
     expect(next.action).toBe("abort");
     if (next.action === "abort") expect(next.reason).toBe("stalled");
   });
@@ -106,19 +106,19 @@ describe("createIdleNudgePolicy", () => {
     mockNow(0);
     const mw = createIdleNudgePolicy({ idleThresholdMs: 10000 });
     mockNow(125500);
-    const verdict = await mw.fn(baseCtx("pre_turn"));
+    const verdict = await mw.fn(baseCtx("turn.start"));
     expect(verdict.action).toBe("inject");
     if (verdict.action === "inject") {
       expect(verdict.message).toContain("126s");
     }
   });
 
-  it("registers for both pre_turn and post_tool_use timings with priority 300", () => {
+  it("registers for both turn.start and invoke.result timings with priority 300", () => {
     const mw = createIdleNudgePolicy();
     expect(mw.name).toBe("builtin:idle-nudge");
     expect(mw.priority).toBe(300);
     expect(Array.isArray(mw.timing)).toBe(true);
-    expect(mw.timing).toContain("pre_turn");
-    expect(mw.timing).toContain("post_tool_use");
+    expect(mw.timing).toContain("turn.start");
+    expect(mw.timing).toContain("invoke.result");
   });
 });

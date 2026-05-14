@@ -298,13 +298,13 @@ describe("SubagentRuntime", () => {
     });
   });
 
-  describe("pre_delegation policy", () => {
+  describe("invoke.prepare policy", () => {
     const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 
-    it("spawn aborts when pre_delegation policy returns abort", async () => {
+    it("spawn aborts when invoke.prepare policy returns abort", async () => {
       const abortPolicy: PolicyRegistration = {
         name: "test:block-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "abort" as const,
@@ -325,12 +325,12 @@ describe("SubagentRuntime", () => {
       expect((error as Error).message).toBe("delegation denied by test policy");
     });
 
-    it("spawn proceeds when pre_delegation policy returns continue", async () => {
+    it("spawn proceeds when invoke.prepare policy returns continue", async () => {
       queueResult("allowed output");
 
       const allowPolicy: PolicyRegistration = {
         name: "test:allow-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "continue" as const,
@@ -349,12 +349,12 @@ describe("SubagentRuntime", () => {
       expect(result.output).toBe("allowed output");
     });
 
-    it("spawn applies transform constraints from pre_delegation verdict", async () => {
+    it("spawn applies transform constraints from invoke.prepare verdict", async () => {
       queueResult("transformed output");
 
       const transformPolicy: PolicyRegistration = {
         name: "test:transform-delegation",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "transform" as const,
@@ -378,7 +378,7 @@ describe("SubagentRuntime", () => {
       expect(config.hardTimeoutMs).toBe(10000);
     });
 
-    it("pre_delegation receives parent/child agent labels", async () => {
+    it("invoke.prepare receives parent/child agent labels", async () => {
       queueResult("labeled output");
       const parentSessionId = createParentSession();
 
@@ -386,7 +386,7 @@ describe("SubagentRuntime", () => {
       let capturedToolInput: unknown;
       const capturePolicy: PolicyRegistration = {
         name: "test:capture-ctx",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: (ctx) => {
           capturedLabels = ctx.labels;
@@ -416,7 +416,7 @@ describe("SubagentRuntime", () => {
       ]);
     });
 
-    it("send aborts when pre_delegation policy returns abort", async () => {
+    it("send aborts when invoke.prepare policy returns abort", async () => {
       queueResult("spawned");
       const spawned = await SubagentRuntime.spawn({
         agentName: "worker",
@@ -427,7 +427,7 @@ describe("SubagentRuntime", () => {
 
       const abortPolicy: PolicyRegistration = {
         name: "test:block-send",
-        timing: "pre_delegation",
+        timing: "invoke.prepare",
         priority: 0,
         fn: () => ({
           action: "abort" as const,
@@ -447,7 +447,7 @@ describe("SubagentRuntime", () => {
       expect((error as Error).message).toBe("send delegation denied");
     });
 
-    it("spawn without middleware proceeds normally (no pre_delegation dispatch)", async () => {
+    it("spawn without middleware proceeds normally (no invoke.prepare dispatch)", async () => {
       queueResult("no middleware output");
 
       const result = await SubagentRuntime.spawn({

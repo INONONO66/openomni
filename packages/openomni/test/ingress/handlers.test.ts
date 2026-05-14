@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Ingress } from "@openomni/protocol";
+import type { PolicyRegistration } from "@openomni/agent";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 
@@ -192,5 +193,45 @@ describe("IngressHandlers", () => {
         finishReason: "stop",
       },
     });
+  });
+
+  it("handleDirect dispatches writeback.commit before storing output", async () => {
+    const sessionId = createSession();
+    const storeDirectResultMock = mock(() => undefined);
+    const policyFn = mock(() => ({
+      action: "transform" as const,
+      input: { output: "policy output" },
+      reason: "rewrite-writeback",
+      policyId: "test.writeback",
+    }));
+    SessionBridge.storeDirectResult = storeDirectResultMock;
+
+    const event: Ingress.InboundEvent = {
+      id: "event-direct-policy",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+    const policies: PolicyRegistration[] = [
+      { name: "test-writeback", timing: "writeback.commit", priority: 100, fn: policyFn },
+    ];
+
+    const result = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: makeDirectCoordinator("direct output"),
+      policies,
+    });
+
+    expect(policyFn).toHaveBeenCalledTimes(1);
+    expect(storeDirectResultMock).toHaveBeenCalledWith(
+      sessionId,
+      "policy output",
+      event.agent.model,
+    );
+    expect(result.result.output).toBe("policy output");
   });
 });

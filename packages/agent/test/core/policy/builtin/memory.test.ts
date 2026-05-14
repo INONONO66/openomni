@@ -16,7 +16,7 @@ describe("createMemoryPolicy", () => {
     };
 
     ctx = {
-      timing: "pre_turn",
+      timing: "turn.start",
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       turnCount: 0,
@@ -98,7 +98,7 @@ describe("createMemoryPolicy", () => {
     const middleware = createMemoryPolicy(mockMemory);
 
     expect(middleware.name).toBe("builtin:memory");
-    expect(middleware.timing).toBe("on_system_prompt");
+    expect(middleware.timing).toBe("context.prepare");
     expect(middleware.priority).toBe(100);
     expect(typeof middleware.fn).toBe("function");
   });

@@ -8,15 +8,15 @@ function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
 }
 
-describe("post_tool_use middleware dispatch", () => {
+describe("invoke.result middleware dispatch", () => {
   it("fires the middleware fn after tool execution with correct context", async () => {
     const toolOutput = "tool-output-value";
     const postToolFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
 
     const engine = PolicyEngine.create();
     engine.register({
-      name: "test:post_tool_use",
-      timing: "post_tool_use",
+      name: "test:invoke.result",
+      timing: "invoke.result",
       priority: 100,
       fn: postToolFn,
     });
@@ -36,7 +36,7 @@ describe("post_tool_use middleware dispatch", () => {
 
     expect(postToolFn).toHaveBeenCalledTimes(1);
     const calledCtx = postToolFn.mock.calls[0][0] as PolicyContext;
-    expect(calledCtx.timing).toBe("post_tool_use");
+    expect(calledCtx.timing).toBe("invoke.result");
     expect(calledCtx.toolName).toBe("bash");
     expect(calledCtx.toolOutput).toBe(toolOutput);
   });
@@ -46,8 +46,8 @@ describe("post_tool_use middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
-      name: "test:post_tool_use",
-      timing: "post_tool_use",
+      name: "test:invoke.result",
+      timing: "invoke.result",
       priority: 100,
       fn: postToolFn,
     });
@@ -78,7 +78,7 @@ describe("post_tool_use middleware dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "test:transform",
-      timing: "post_tool_use",
+      timing: "invoke.result",
       priority: 100,
       fn: () => ({
         action: "transform",
@@ -105,7 +105,7 @@ describe("post_tool_use middleware dispatch", () => {
   });
 });
 
-describe("pre_tool_use middleware dispatch", () => {
+describe("invoke.prepare middleware dispatch", () => {
   it("skip verdict prevents tool execution", async () => {
     const baseExecutor = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
@@ -119,7 +119,7 @@ describe("pre_tool_use middleware dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "test:skip",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       priority: 100,
       fn: () => ({ action: "skip", reason: "test-skip" }),
     });
@@ -147,7 +147,7 @@ describe("pre_tool_use middleware dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "test:abort",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       priority: 100,
       fn: () => ({ action: "abort", reason: "Blocked: test-deny" }),
     });
@@ -172,7 +172,7 @@ describe("pre_tool_use middleware dispatch", () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "test:transform-input",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       priority: 100,
       fn: () => ({
         action: "transform",
@@ -191,8 +191,8 @@ describe("pre_tool_use middleware dispatch", () => {
   });
 });
 
-describe("on_error middleware dispatch (stream-engine level)", () => {
-  it("on_error middleware is registered and dispatchable", async () => {
+describe("error middleware dispatch (stream-engine level)", () => {
+  it("error middleware is registered and dispatchable", async () => {
     const onErrorFn = mock((_ctx: PolicyContext) => ({
       action: "abort" as const,
       reason: "test-error-abort",
@@ -201,14 +201,14 @@ describe("on_error middleware dispatch (stream-engine level)", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
-      name: "test:on_error",
-      timing: "on_error",
+      name: "test:error",
+      timing: "error",
       priority: 100,
       fn: onErrorFn,
     });
 
     const error = new Error("test-error");
-    const verdict = await engine.dispatch("on_error", {
+    const verdict = await engine.dispatch("error", {
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
@@ -221,13 +221,13 @@ describe("on_error middleware dispatch (stream-engine level)", () => {
     expect(onErrorFn).toHaveBeenCalledTimes(1);
     expect(verdict.action).toBe("abort");
     const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext;
-    expect(calledCtx.timing).toBe("on_error");
+    expect(calledCtx.timing).toBe("error");
     expect(calledCtx.toolInput?.error).toBe(error);
   });
 });
 
-describe("idle-nudge post_tool_use integration", () => {
-  it("idle-nudge fn is dispatched for post_tool_use timing", async () => {
+describe("idle-nudge invoke.result integration", () => {
+  it("idle-nudge fn is dispatched for invoke.result timing", async () => {
     const { createIdleNudgePolicy } = await import("../../../src/core/policy/builtin/idle-nudge");
 
     const idleNudge = createIdleNudgePolicy({ idleThresholdMs: -1 });
@@ -236,7 +236,7 @@ describe("idle-nudge post_tool_use integration", () => {
     const spiedIdleNudge: PolicyRegistration = {
       ...idleNudge,
       fn: (ctx: PolicyContext) => {
-        if (ctx.timing === "post_tool_use") postToolUseCallCount++;
+        if (ctx.timing === "invoke.result") postToolUseCallCount++;
         return originalFn(ctx);
       },
     };

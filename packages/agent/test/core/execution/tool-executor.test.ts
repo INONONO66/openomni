@@ -17,7 +17,7 @@ function makeCall(id = "call-1", tool = "bash"): Tool.Call {
 function abortMiddleware(reason: string): PolicyRegistration {
   return {
     name: "test-abort",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     fn: async () => ({ action: "abort", reason }),
   };

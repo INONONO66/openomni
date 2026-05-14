@@ -1,0 +1,243 @@
+import { describe, expect, it } from "bun:test";
+import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
+import type { PolicyContext } from "../../../../src/core/policy";
+import type { Policy } from "@openomni/protocol";
+
+type Abort = Extract<Policy.Verdict, { action: "abort" }>;
+
+function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
+  return {
+    timing: "invoke.prepare",
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    ...overrides,
+  };
+}
+
+describe("createToolPermissionPolicy", () => {
+  it("continue — tool on allowlist", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", allowlist: ["read_file", "write_file"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "read_file",
+        toolCallId: "call-1",
+        toolInput: { path: "/tmp/test" },
+      }),
+    );
+    expect(verdict.action).toBe("continue");
+    expect(verdict.policyId).toBe("guardrail.permission");
+  });
+
+  it("abort — tool not on allowlist (allowlist_miss)", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", allowlist: ["read_file"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "shell_exec",
+        toolCallId: "call-2",
+        toolInput: { cmd: "rm -rf /" },
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect((verdict as Abort).reason).toBe("allowlist_miss");
+    expect((verdict as Abort).policyId).toBe("guardrail.permission");
+  });
+
+  it("abort — tool on denylist", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", denylist: ["dangerous_tool"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "dangerous_tool",
+        toolCallId: "call-3",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect((verdict as Abort).reason).toBe("denylist");
+    expect((verdict as Abort).policyId).toBe("guardrail.permission");
+  });
+
+  it("abort — empty allowlist denies everything (allowlist_empty)", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", allowlist: [] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "any_tool",
+        toolCallId: "call-4",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect((verdict as Abort).reason).toBe("allowlist_empty");
+  });
+
+  it("continue — no toolName in context", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", allowlist: ["read_file"] },
+    });
+    const verdict = await mw.fn(baseCtx());
+    expect(verdict).toEqual({ action: "continue" });
+  });
+
+  it("continue — wildcard allowlist allows everything", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", allowlist: ["*"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "anything",
+        toolCallId: "call-5",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("continue");
+  });
+
+  it("abort — inputRule deny overrides allowlist", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: {
+        action: "tool.call",
+        allowlist: ["shell_exec"],
+        inputRules: [
+          {
+            toolPattern: "shell_exec",
+            field: "cmd",
+            pattern: "^rm\\s",
+            action: "deny",
+            reason: "destructive_command",
+            priority: 10,
+          },
+        ],
+      },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "shell_exec",
+        toolCallId: "call-6",
+        toolInput: { cmd: "rm -rf /tmp" },
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect((verdict as Abort).reason).toBe("destructive_command");
+  });
+
+  it("continue — permission without explicit action gets normalized to tool.call", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "", allowlist: ["read_file"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "read_file",
+        toolCallId: "call-7",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("continue");
+  });
+
+  it("emits tool.execution.permission_denied event on deny", async () => {
+    const events: Array<{ name: string; data: unknown }> = [];
+    const mockEmitter = {
+      emit: (name: string, data: unknown) => {
+        events.push({ name, data });
+      },
+    };
+
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", denylist: ["blocked_tool"] },
+      eventEmitter: mockEmitter as unknown as Parameters<
+        typeof createToolPermissionPolicy
+      >[0]["eventEmitter"],
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "blocked_tool",
+        toolCallId: "call-8",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect(events.some((e) => e.name === "tool.execution.permission_denied")).toBe(true);
+  });
+
+  it("calls onToolBlocked callback on deny", async () => {
+    let blocked: { toolCallId: string; toolName: string; reason: string } | undefined;
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", denylist: ["blocked_tool"] },
+      onToolBlocked: (toolCallId, toolName, reason) => {
+        blocked = { toolCallId, toolName, reason };
+      },
+    });
+    await mw.fn(
+      baseCtx({
+        toolName: "blocked_tool",
+        toolCallId: "call-9",
+        toolInput: {},
+      }),
+    );
+    expect(blocked).toBeDefined();
+    expect(blocked!.toolName).toBe("blocked_tool");
+    expect(blocked!.reason).toBe("denylist");
+  });
+
+  it("has name builtin:tool-permission", () => {
+    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    expect(mw.name).toBe("builtin:tool-permission");
+  });
+
+  it("has timing invoke.prepare", () => {
+    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    expect(mw.timing).toBe("invoke.prepare");
+  });
+
+  it("has priority 0", () => {
+    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    expect(mw.priority).toBe(0);
+  });
+
+  it("has failPolicy fail-closed", () => {
+    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    expect(mw.failPolicy).toBe("fail-closed");
+  });
+
+  it("abort — denyLabels match blocks tool", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call", denyLabels: ["risk.tier-3"] },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "some_tool",
+        toolCallId: "call-10",
+        toolInput: {},
+        toolLabels: ["risk.tier-3", "capability.write"],
+      }),
+    );
+    expect(verdict.action).toBe("abort");
+    expect((verdict as Abort).reason).toBe("deny_label");
+  });
+
+  it("continue — no permission rules means default allow", async () => {
+    const mw = createToolPermissionPolicy({
+      permission: { action: "tool.call" },
+    });
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "any_tool",
+        toolCallId: "call-11",
+        toolInput: {},
+      }),
+    );
+    expect(verdict.action).toBe("continue");
+    expect(verdict.reason).toBe("default_allow");
+  });
+});

@@ -22,7 +22,7 @@ describe("SubagentRuntime permissions", () => {
     const registration = SubagentSpawnPolicyMiddleware.createDefaultDenylist();
 
     const verdict = await registration.fn({
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
