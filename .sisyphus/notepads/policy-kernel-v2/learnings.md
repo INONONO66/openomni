@@ -168,3 +168,20 @@
 - `writeback.commit` remains the only audited call site here that accepts `transform`; all other non-`continue` verdicts block before the boundary side effect.
 - Subagent `spawn`, `spawnBackground`, and `send` share one pre-delegation verdict handler, which prevents deny/unsupported verdict drift across child-session entry points.
 - Verification passed for changed-file LSP diagnostics, targeted verdict tests, and `bun run check-types`; full `bun test packages/agent` remains blocked by unrelated pre-existing untracked execution tests in the shared worktree.
+
+### Task 25 Findings (2026-05-14)
+- Descriptor conformance coverage now exercises every current `RuntimeResource.Kind`, with tool fixtures split across system, MCP, skill-MCP, agent, and server sources.
+- Digest assertions should hash canonical descriptor content without the existing `digest` field, so repeated construction stays stable while label/source changes alter the digest.
+- Credential descriptor serialization needs an audit redaction pass before persistence/logging; file-backed source paths should serialize as `[REDACTED]` while still validating against `RuntimeResource.Descriptor`.
+
+### Task 18 Findings (2026-05-14)
+- `verdictToDecision()` stays pure in `packages/agent` and returns protocol `Policy.PolicyDecision` objects without changing PolicyEngine dispatch yet.
+- Legacy unsupported verdicts now share one boundary helper: pre-boundary and error timings deny with an error audit, while post-boundary timings allow with a warning diagnostic.
+- Transform adaptation is intentionally narrow: `context.prepare` maps to `prompt.replace`, `invoke.prepare` maps to `tool.rewrite_input`, and all other timings emit the unsupported-transform diagnostic.
+- Verification passed with LSP diagnostics and `bun test packages/agent`.
+
+### Task 19 Findings (2026-05-14)
+- `PolicyEngine.dispatchV2()` now preserves legacy policy functions while adapting their verdicts through `verdictToDecision()` into canonical `PolicyDecision` objects.
+- The v2 dispatch path composes adapted decisions with `composeEffects()` and returns a composed decision under `agent.policy.composed`, leaving legacy `dispatch()` unchanged.
+- Effect validation is enforced against `PolicyPoint.Registry` allow-lists after composition; descriptor-aware tool dispatch narrows `invoke.prepare` / `invoke.result` to native or MCP policy points when resource metadata is available.
+- Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
