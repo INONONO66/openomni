@@ -146,7 +146,7 @@ describe("PolicyEvent BusEvents", () => {
   });
 
   test("all verdict types are accepted", () => {
-    const verdicts = ["continue", "skip", "abort", "retry", "transform", "inject"] as const;
+    const verdicts = ["continue", "skip", "abort", "retry", "transform", "inject", "deny"] as const;
 
     for (const verdict of verdicts) {
       expectParseOk(() =>
@@ -161,6 +161,20 @@ describe("PolicyEvent BusEvents", () => {
         }),
       );
     }
+  });
+
+  test("Evaluated parses with deny verdict", () => {
+    expectParseOk(() =>
+      PolicyEvent.Evaluated.schema.parse({
+        ...base,
+        policyId: "policy-deny",
+        actor,
+        action: "tool.execute",
+        resource: "tool:shell",
+        verdict: "deny",
+        reason: "access denied by policy",
+      }),
+    );
   });
 
   test("ActionRequested includes runId when provided", () => {
