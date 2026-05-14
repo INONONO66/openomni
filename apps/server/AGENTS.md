@@ -33,7 +33,7 @@ src/
 │   ├── find-up.ts        # findUp() — walks up directory tree to locate config files
 │   ├── instructions.ts   # InstructionLoader — loads AGENTS.md / CLAUDE.md instruction files
 │   ├── mcp-config.ts     # McpConfigLoader.discover() / merge() — project-level MCP server config
-│   ├── middleware.ts      # createContextMiddleware() — on_system_prompt middleware that appends context
+│   ├── middleware.ts      # createContextMiddleware() — context.prepare middleware that appends context
 │   └── skills.ts         # SkillLoader — loads skill definitions from workspace
 ├── execution/
 │   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker pool wrapper
@@ -145,7 +145,7 @@ Add a new channel by:
 `src/context/` assembles the system prompt context injected into each agent run:
 
 - `ContextAssembler.assemble({ workspaceRoot })` — reads AGENTS.md, CLAUDE.md, skill files, and MCP config from the workspace tree.
-- `createContextMiddleware(config)` — wraps the assembler as an `on_system_prompt` middleware registration for `ChatAgent`.
+- `createContextMiddleware(config)` — wraps the assembler as an `context.prepare` middleware registration for `ChatAgent`.
 - `McpConfigLoader.discover(root)` / `merge(...)` — finds and merges project-level MCP server configs.
 - `InstructionLoader` / `SkillLoader` — load instruction and skill files from the workspace.
 

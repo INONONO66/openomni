@@ -113,7 +113,7 @@ function createMcpPrefixGuard(state: PrefixGuardState): PolicyRegistration {
 export namespace McpPrefixGuardMiddleware {
   export const Definition = {
     name: "mcp-prefix-guard",
-    timing: "pre_tool_use",
+    timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
@@ -156,7 +156,7 @@ export namespace McpPrefixGuardMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("pre_tool_use", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,

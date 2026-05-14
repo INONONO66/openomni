@@ -146,7 +146,7 @@ describe("system tool provider — read/glob", () => {
 describe("builtin middleware — tool permission", () => {
   function makeToolCtx(toolName: string) {
     return {
-      timing: "pre_tool_use" as const,
+      timing: "invoke.prepare" as const,
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
