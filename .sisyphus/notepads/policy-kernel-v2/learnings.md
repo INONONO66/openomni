@@ -190,3 +190,9 @@
 - Determinism conformance coverage now freezes golden request/decision fixtures and checks same-input replay, priority-sorted registration permutations, concurrent dispatch isolation, and mutation rejection.
 - `dispatchV2()` snapshots are recursively cloned and frozen before policy execution so policy functions cannot mutate nested request state shared by callers or parallel evaluations.
 - Evidence file: `.sisyphus/evidence/task-23-determinism.txt`; verification passed with LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
+
+### Task 21 Findings (2026-05-14)
+- PolicyEngine now emits `policy.evaluated` audit events with adapted effects, reason codes, duration, 3-tier point id/version, and resource descriptors when trace/session context is present.
+- `dispatchV2()` emits `policy.decision.composed` after effect composition without changing the returned composed decision shape.
+- Request trace context takes precedence over engine-level trace context for policy audit Bus events.
+- Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.

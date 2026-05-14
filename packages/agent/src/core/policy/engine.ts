@@ -23,6 +23,9 @@ type AuditVisibility = "internal" | "llm_reason" | "user_audit";
 type PolicyEventVerdict = Exclude<Policy.Verdict["action"], "deny">;
 
 type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
+type AuditDispatchContext = PolicyContext & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
 
 export type DispatchV2Context = Omit<PolicyContext, "timing"> & {
   readonly resourceDescriptor?: RuntimeResource.Descriptor;
@@ -186,6 +189,10 @@ function resolveResource(reg: PolicyRegistration, ctx: PolicyContext): string {
   return ctx.toolName ?? reg.name;
 }
 
+function resolveComposedResource(ctx: AuditDispatchContext): string {
+  return ctx.toolName ?? ctx.resourceDescriptor?.id ?? "policy.composed";
+}
+
 function resolveEventReason(decision: PolicyDecision): string {
   if (decision.reason) return decision.reason;
   return decision.verdict === "continue" ? "continue" : "unspecified";
@@ -217,6 +224,37 @@ function policyPointIdsForDescriptor(
   }
 
   return aliases;
+}
+
+function auditPoint(
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+): { readonly pointId?: PolicyPointId; readonly pointVersion?: number } {
+  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
+  if (pointId === undefined) return {};
+
+  return { pointId, pointVersion: Policy.PolicyPoint.Registry[pointId].version };
+}
+
+function auditReason(decision: Policy.PolicyDecision): string {
+  if (decision.reasonCodes.length > 0) return decision.reasonCodes.join(",");
+  return decision.verdict;
+}
+
+function auditDecisionFromVerdict(
+  verdict: Policy.Verdict,
+  ctx: PolicyContext,
+  policyId: string,
+): Policy.PolicyDecision {
+  return verdictToDecision(verdict, {
+    timing: ctx.timing,
+    policyId,
+    ...(ctx.toolName !== undefined && { toolName: ctx.toolName }),
+  });
+}
+
+function totalDurationMs(decisions: readonly Policy.PolicyDecision[]): number {
+  return decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0);
 }
 
 function allowedEffectTypes(
@@ -281,7 +319,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   function publishPolicyEvent(
     decision: PolicyDecision,
     reg: PolicyRegistration,
-    ctx: PolicyContext,
+    ctx: AuditDispatchContext,
+    verdict: Policy.Verdict,
   ): void {
     if (options.audit === false) return;
 
@@ -289,6 +328,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     const traceId = traceContext?.traceId;
     const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
     if (!sessionId || !traceId) return;
+    const auditDecision = auditDecisionFromVerdict(verdict, ctx, decision.policyId);
+    const point = auditPoint(ctx.timing, ctx.resourceDescriptor);
 
     Bus.publish(PolicyEvent.Evaluated, {
       traceId,
@@ -301,12 +342,52 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       resource: options.audit?.resource ?? resolveResource(reg, ctx),
       verdict: decision.verdict as PolicyEventVerdict,
       reason: resolveEventReason(decision),
+      effects: auditDecision.effects,
+      ...(auditDecision.obligations !== undefined && { obligations: auditDecision.obligations }),
+      reasonCodes: auditDecision.reasonCodes,
+      ...(auditDecision.factsUsed !== undefined && { factsUsed: auditDecision.factsUsed }),
+      durationMs: decision.durationMs,
+      ...point,
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
+    });
+  }
+
+  function publishComposedDecision(
+    timing: Policy.Timing,
+    ctx: AuditDispatchContext,
+    decision: Policy.PolicyDecision,
+    sourceDecisions: readonly Policy.PolicyDecision[],
+  ): void {
+    if (options.audit === false) return;
+
+    const traceContext = ctx.traceContext ?? options.traceContext;
+    const traceId = traceContext?.traceId;
+    const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
+    if (!sessionId || !traceId) return;
+
+    Bus.publish(PolicyEvent.DecisionComposed, {
+      traceId,
+      sessionId,
+      ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
+      time: Date.now(),
+      actor: options.audit?.actor ?? buildActor(traceContext),
+      action: options.audit?.action ?? resolveAction(timing),
+      resource: options.audit?.resource ?? resolveComposedResource(ctx),
+      verdict: decision.verdict,
+      reason: auditReason(decision),
+      effects: decision.effects,
+      reasonCodes: decision.reasonCodes,
+      ...(decision.obligations !== undefined && { obligations: decision.obligations }),
+      ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
+      durationMs: totalDurationMs(sourceDecisions),
+      ...auditPoint(timing, ctx.resourceDescriptor),
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
     });
   }
 
   async function recordDecision(
     reg: PolicyRegistration,
-    ctx: PolicyContext,
+    ctx: AuditDispatchContext,
     verdict: Policy.Verdict,
     durationMs: number,
   ): Promise<Policy.Verdict> {
@@ -323,7 +404,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       ...(ctx.envelope !== undefined && { envelope: ctx.envelope }),
     };
 
-    publishPolicyEvent(decision, reg, ctx);
+    publishPolicyEvent(decision, reg, ctx, normalized);
     await options.onDecision?.(decision);
     return normalized;
   }
@@ -333,7 +414,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.Verdict> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing };
+    const fullCtx: AuditDispatchContext = { ...ctx, timing };
 
     for (const reg of selected) {
       let verdict: Policy.Verdict;
@@ -379,7 +460,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     ctx: DispatchV2Context,
   ): Promise<Policy.PolicyDecision> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx: PolicyContext = immutableSnapshot({ ...ctx, timing });
+    const fullCtx: AuditDispatchContext = immutableSnapshot({ ...ctx, timing });
     const decisions: Policy.PolicyDecision[] = [];
 
     for (const reg of selected) {
@@ -424,17 +505,18 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     }
 
     const effective = composeEffects(decisions);
-    return (
+    const decision =
       validationFailure(timing, ctx.resourceDescriptor, effective.mergedEffects) ??
-      composedDecision(effective, decisions)
-    );
+      composedDecision(effective, decisions);
+    publishComposedDecision(timing, fullCtx, decision, decisions);
+    return decision;
   }
 
   async function dispatchSystemPrompt(
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.SystemPromptResult> {
     const selected = selectRegistrations(registrations, "context.prepare", ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing: "context.prepare" };
+    const fullCtx: AuditDispatchContext = { ...ctx, timing: "context.prepare" };
 
     let systemPrompt: string | undefined;
     const prependParts: string[] = [];
