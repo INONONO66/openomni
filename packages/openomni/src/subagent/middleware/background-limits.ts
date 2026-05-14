@@ -1,9 +1,13 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Subagent, type TraceContext } from "@openomni/protocol";
+import { Policy, type RuntimeResource, type Subagent, type TraceContext } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+type BackgroundPolicyContext = Parameters<ReturnType<typeof PolicyEngine.create>["dispatch"]>[1] & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
 
 interface LaunchRequest {
   readonly agentName: string;
@@ -316,6 +320,7 @@ export namespace BackgroundLimitsMiddleware {
     readonly maxDescendants: number;
     readonly maxQueueSize: number;
     readonly traceContext?: TraceContext.Type;
+    readonly resourceDescriptor?: RuntimeResource.Descriptor;
     readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
   }
 
@@ -357,7 +362,7 @@ export namespace BackgroundLimitsMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatch("invoke.prepare", {
+    const policyContext: BackgroundPolicyContext = {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -365,6 +370,7 @@ export namespace BackgroundLimitsMiddleware {
       continuationCount: 0,
       elapsedMs: 0,
       toolName: "subagent",
+      toolLabels: ctx.resourceDescriptor?.labels,
       toolInput: {
         operation: "background.launch",
         agentName: ctx.input.agentName,
@@ -374,7 +380,10 @@ export namespace BackgroundLimitsMiddleware {
         pendingQueueSize: ctx.pendingQueueSize,
       },
       traceContext: ctx.traceContext,
-    });
+      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
+    };
+
+    const verdict = await engine.dispatch("invoke.prepare", policyContext);
 
     return { verdict, shouldQueue: state.shouldQueue ?? false };
   }

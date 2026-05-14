@@ -1,5 +1,10 @@
-import { PolicyEngine, type ChatAgent, type PolicyRegistration } from "@openomni/agent";
-import { type Policy, type Message, Subagent } from "@openomni/protocol";
+import {
+  PolicyEngine,
+  type ChatAgent,
+  type PolicyContext,
+  type PolicyRegistration,
+} from "@openomni/agent";
+import { type Policy, type Message, Subagent, type RuntimeResource } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
@@ -28,6 +33,21 @@ import {
 
 const emptyDelegationUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
+  readonly resourceDescriptor: RuntimeResource.Descriptor;
+};
+
+function createSubagentSpawnDescriptor(childAgent: string): RuntimeResource.Descriptor {
+  return {
+    id: "tool:agent:subagent_spawn",
+    kind: "tool",
+    source: { type: "agent", agentId: childAgent },
+    labels: ["source.agent", "delegation.subagent"],
+    capabilities: ["delegation.spawn"],
+    effects: ["session.create"],
+  };
+}
+
 async function dispatchPreDelegation(input: {
   middleware?: PolicyRegistration[];
   childAgent: string;
@@ -42,7 +62,8 @@ async function dispatchPreDelegation(input: {
     engine.register(reg);
   }
 
-  return engine.dispatch("invoke.prepare", {
+  const resourceDescriptor = createSubagentSpawnDescriptor(input.childAgent);
+  const policyContext: ResourcePolicyContext = {
     steps: [],
     usage: emptyDelegationUsage,
     turnCount: 0,
@@ -50,6 +71,7 @@ async function dispatchPreDelegation(input: {
     continuationCount: 0,
     elapsedMs: 0,
     toolName: "subagent",
+    toolLabels: resourceDescriptor.labels,
     toolInput: {
       operation: input.operation,
       childAgent: input.childAgent,
@@ -62,7 +84,10 @@ async function dispatchPreDelegation(input: {
         ? [{ value: `actor.parent:${input.parentSessionId}`, source: "system" as const }]
         : []),
     ],
-  });
+    resourceDescriptor,
+  };
+
+  return engine.dispatch("invoke.prepare", policyContext);
 }
 
 function applyDelegationTransform(
