@@ -150,7 +150,7 @@ type McpToolSpec = Tool.Spec & {
 
 function createMcpToolDescriptor(serverId: string, remoteName: string): RuntimeResource.Descriptor {
   return {
-    id: `tool:mcp:${serverId}:${remoteName}`,
+    id: `tool:mcp:${remoteName}`,
     kind: "tool",
     source: {
       type: "mcp",

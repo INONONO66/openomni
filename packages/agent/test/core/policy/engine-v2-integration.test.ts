@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { RuntimeResource } from "@openomni/protocol";
+import { PolicyEvent, type RuntimeResource } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
 
@@ -113,5 +114,59 @@ describe("PolicyEngine.dispatchV2", () => {
       effects: [{ type: "tool.rewrite_input", input: { command: "pwd" } }],
       reasonCodes: ["rewrite-shell"],
     });
+  });
+
+  it("stops evaluation after deny while still emitting audit events", async () => {
+    const descriptor = systemToolDescriptor("shell");
+    const evaluated: unknown[] = [];
+    const composed: unknown[] = [];
+    const unsubEvaluated = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
+      evaluated.push(event);
+    });
+    const unsubComposed = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+      composed.push(event);
+    });
+
+    try {
+      const afterDeny = mock(() => ({ action: "continue" as const }));
+      const engine = PolicyEngine.create();
+      engine.register({
+        name: "deny-shell",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({ action: "deny", reason: "blocked-shell", policyId: "policy.deny-shell" }),
+      });
+      engine.register({
+        name: "after-deny",
+        timing: "invoke.prepare",
+        priority: 10,
+        fn: afterDeny,
+      });
+
+      const decision = await engine.dispatchV2("invoke.prepare", {
+        ...baseCtx(),
+        toolName: "shell",
+        resourceDescriptor: descriptor,
+        traceContext: {
+          traceId: "trace-deny",
+          sessionId: "sess-deny",
+        },
+      });
+      await Promise.resolve();
+
+      expect(afterDeny).toHaveBeenCalledTimes(0);
+      expect(decision).toEqual({
+        policyId: "agent.policy.composed",
+        verdict: "deny",
+        effects: [{ type: "audit.annotate", annotation: "blocked-shell", severity: "error" }],
+        reasonCodes: ["blocked-shell"],
+      });
+      expect(evaluated).toHaveLength(1);
+      expect(composed).toHaveLength(1);
+    } finally {
+      unsubEvaluated();
+      unsubComposed();
+      Bus.reset();
+    }
   });
 });

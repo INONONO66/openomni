@@ -196,3 +196,8 @@
 - `dispatchV2()` emits `policy.decision.composed` after effect composition without changing the returned composed decision shape.
 - Request trace context takes precedence over engine-level trace context for policy audit Bus events.
 - Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
+
+### Plan Compliance Audit Fixes (2026-05-14)
+- `dispatchV2()` must publish the composed audit decision before returning from a terminal deny path; a local compose/publish helper keeps normal and early-return paths aligned.
+- MCP tool descriptor ids should stay canonical at three segments (`tool:mcp:{remoteName}`); server attribution belongs in `source.serverId` and labels.
+- Empty `void 0;` statements in subagent runtime provided no sequencing guarantee and can be removed without changing mailbox or WorkerRun behavior.

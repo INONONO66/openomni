@@ -463,6 +463,15 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     const fullCtx: AuditDispatchContext = immutableSnapshot({ ...ctx, timing });
     const decisions: Policy.PolicyDecision[] = [];
 
+    function composeAndPublish(): Policy.PolicyDecision {
+      const effective = composeEffects(decisions);
+      const decision =
+        validationFailure(timing, ctx.resourceDescriptor, effective.mergedEffects) ??
+        composedDecision(effective, decisions);
+      publishComposedDecision(timing, fullCtx, decision, decisions);
+      return decision;
+    }
+
     for (const reg of selected) {
       let verdict: Policy.Verdict;
       const startTime = Date.now();
@@ -502,14 +511,10 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       });
 
       if (verdict.action === "abort" && reg.failPolicy === "fail-closed") break;
+      if (normalized.action === "deny") return composeAndPublish();
     }
 
-    const effective = composeEffects(decisions);
-    const decision =
-      validationFailure(timing, ctx.resourceDescriptor, effective.mergedEffects) ??
-      composedDecision(effective, decisions);
-    publishComposedDecision(timing, fullCtx, decision, decisions);
-    return decision;
+    return composeAndPublish();
   }
 
   async function dispatchSystemPrompt(

@@ -198,7 +198,6 @@ export namespace SubagentRuntime {
     applyPreDelegationVerdict(config, verdict, "invoke.prepare policy aborted spawn");
 
     const session = createSpawnSession(config);
-    void 0;
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -225,7 +224,6 @@ export namespace SubagentRuntime {
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, runConfig, signal, config.permissions),
       );
-      void 0;
       return result;
     });
   }
@@ -254,7 +252,6 @@ export namespace SubagentRuntime {
 
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
-    void 0;
 
     const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
       config.middleware,
@@ -293,7 +290,6 @@ export namespace SubagentRuntime {
     });
     const session = policy.session;
     if (!session) throw new Error(`Session not found: ${config.sessionId}`);
-    void 0;
 
     return sendToMailbox(session.id, async () => {
       const userMessage = createUserMessage(session.id, config.model);
@@ -330,8 +326,6 @@ export namespace SubagentRuntime {
   }
 
   export async function resume(config: ResumeConfig): Promise<ResumeResult> {
-    void 0;
-
     return sendToMailbox(config.sessionId, async () => {
       const policy = await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
         operation: "resume",
@@ -381,7 +375,6 @@ export namespace SubagentRuntime {
     if (policy.verdict.action !== "continue") return;
     const session = policy.session;
     if (!session) return;
-    void 0;
 
     const hardTimeoutMs = policy.cancelHardTimeoutMs;
 
@@ -438,7 +431,6 @@ export namespace SubagentRuntime {
       sessionId: config.sessionId,
       timeoutMs: config.timeoutMs,
     });
-    void 0;
     const run = await WorkerRun.get(config.sessionId, config.runId);
     if (!run) {
       throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);
