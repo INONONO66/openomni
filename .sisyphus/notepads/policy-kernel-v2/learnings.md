@@ -80,6 +80,11 @@
 - `policy.decision.composed` should use the composed verdict set (`allow | deny | pending`), not the legacy agent verdict set.
 - Bun test diagnostics in this repo are happier with explicit no-throw assertions than `.toThrow()` / `.toBeDefined()` matchers.
 
+### Task 17 Findings (2026-05-14)
+- Descriptor helpers are safest when they funnel through a tiny internal constructor that fills `labels`, `capabilities`, and `effects` before parsing.
+- `RuntimeResource.Descriptor` validation needs to stay strict for tool source segments, but worker/credential/session helpers can attach source metadata without forcing the id to mirror that source type.
+- The credential helper should keep file provenance in `source.path`, while the session helper can preserve session lineage in labels and owner metadata without changing the canonical `session:{id}` shape.
+
 ### Task 7 Findings (2026-05-14)
 - `PolicyPoint.MigrationMapping` should be the canonical legacy-timing bridge, while `TimingAliases` can remain as a compatibility alias.
 - The legacy resolver belongs in protocol as a type signature only; runtime resolution stays in the policy engine above protocol.
@@ -104,3 +109,62 @@
 #### Commit
 - `fc1c66d docs: update ADR-007 to reflect 3-tier point system`
 - 1 file changed, 15 insertions(+), 6 deletions(-)
+
+### Task 16 Findings (2026-05-14)
+
+- `SkillLoader` can attach runtime descriptors without changing `Skill.Definition` serialization by using non-enumerable properties on loaded skill objects.
+- Local skills map to `source.project`; global registry skills map to `source.global`; skill layers map into `skill.layer.{layer}` labels.
+- Skill-provided MCP tool descriptors use `source.type: "skill-mcp"` plus `skillId`, keeping tool origin attributable to the behavior injection that contributed it.
+- Verification passed with `lsp_diagnostics`, `bun test packages/openomni`, and `bun run check-types`.
+
+### Task 15 Findings (2026-05-14)
+
+- Subagent and background delegation now attach `RuntimeResource.Descriptor` objects to `invoke.prepare` policy contexts without changing the public `SubagentRuntime` API.
+- Descriptor labels are also mirrored into `toolLabels`, keeping existing permission label checks usable while the richer descriptor context is available to newer policy gates.
+- Background launch descriptors are created at `BackgroundManager.launch()` and forwarded through `BackgroundLimitsMiddleware.evaluatePreLaunch()` into the existing launch gate.
+- Verification passed with LSP diagnostics on changed files, `bun test packages/openomni`, and `bun run check-types`.
+
+### Task 14 Findings (2026-05-14)
+
+- MCP tool registration now attaches a `RuntimeResource.Descriptor` directly to each `Tool.Spec` returned by `McpClient.listTools()`.
+- MCP descriptor ids follow the plan-specific four-segment format: `tool:mcp:{serverId}:{remoteName}`.
+- MCP descriptor labels are mirrored onto `Tool.Spec.labels`, so existing label-based policy paths can see `source.mcp` and `mcp.{serverId}` before deeper descriptor enforcement lands.
+- Arbitrary remote MCP tools are conservatively classified with `network.write` capability and `external.write` effect until per-tool read/write metadata exists.
+- Evidence file: `.sisyphus/evidence/task-14-mcp-descriptor.txt`.
+
+### Task 13 Findings (2026-05-14)
+- `Tool.define()` now creates native tool `RuntimeResource.Descriptor` metadata from canonical labels, derived read/write capabilities, destructive effects, risk tier, and source type.
+- Worker bootstrap catalog entries carry optional descriptors so `ToolProxyProvider` can preserve policy metadata across the coordinator/worker boundary without changing tool execution behavior.
+- `ToolRuntimePolicyMiddleware` prefers descriptor risk when present and falls back to legacy `riskTier` for backward compatibility.
+- Verification passed with `bun test packages/openomni` and `bun run check-types`.
+
+### Task 20 Findings (2026-05-14)
+- `composeEffects()` lives in `packages/agent` because protocol owns only the PolicyDecision/PolicyEffect schemas; runtime merge behavior stays above the schema layer.
+- Policy priority is not part of `Policy.PolicyDecision`, so the composer reads optional runtime `priority` metadata when present and otherwise falls back to deterministic `policyId` ordering.
+- Pre-boundary conflicts fail closed as `deny` plus an `audit.annotate` diagnostic; writeback conflicts are treated as post-boundary diagnostics and keep the composed verdict.
+- Verification passed with LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
+
+### Task 11 Findings (2026-05-14)
+- Stream helper deny handling now follows the boundary rule: pre-boundary denies fail closed, while post-boundary denies publish diagnostics and preserve the prior flow.
+- Exhaustive `Policy.Verdict` switches are useful in stream helpers because unsupported verdicts must be explicit no-ops rather than accidental fallthroughs.
+- `writeback.commit` deny handling is fail-closed in the new stream helper regression path, while transform preserves output rewrite behavior.
+- Verification note: focused verdict regression and `bun run check-types` pass; full `bun test packages/agent` is blocked by a pre-existing missing module import in `packages/agent/test/core/policy/effect-composition.test.ts`.
+- Follow-up verification: after the pre-existing effect-composition source appeared in the worktree, `bun test packages/agent` passed with 375 tests.
+
+### Task 10 Findings (2026-05-14)
+- `createToolExecutor` should treat `deny`, `inject`, and `retry` from `invoke.prepare` as pre-boundary blocking verdicts, so the tool function is never called and no Started event is emitted.
+- `inject` is only meaningful for message/control-flow boundaries; at `invoke.prepare` it must fail closed with an explicit denial reason.
+- `Tool.Result` has no protocol-level metadata field, so retry-after data is attached only on the blocked retry result while keeping normal success results unchanged.
+- Verification passed with LSP diagnostics, `bun test packages/agent/test/core/execution/tool-executor-verdicts.test.ts`, and `bun run check-types`; full `bun test packages/agent` is currently blocked by unrelated `stream-helpers-verdicts.test.ts` export failure in the shared worktree.
+
+### Task 8 Findings (2026-05-14)
+- `PolicyEngine.dispatch()` now preserves terminal `deny` verdicts with their original `reason` and `policyId`; later policies are not executed after the first terminal verdict.
+- `dispatchSystemPrompt()` now treats `deny` and `abort` as terminal errors instead of continuing prompt composition silently.
+- Production pre-boundary verdicts with missing metadata fail closed as `agent.policy.metadata` / `policy-metadata-missing`; post-boundary production warning behavior is preserved.
+- Verification: changed-file LSP diagnostics and `bun run check-types` passed. `bun test packages/agent` is currently blocked by unrelated pre-existing untracked execution tests (`tool-executor-verdicts`, `stream-helpers-verdicts`).
+
+### Task 12 Findings (2026-05-14)
+- Messenger, inbound receive, writeback commit, subagent pre-delegation, and background launch gates now use exhaustive verdict switches so `deny` is terminal and unsupported verdicts fail closed.
+- `writeback.commit` remains the only audited call site here that accepts `transform`; all other non-`continue` verdicts block before the boundary side effect.
+- Subagent `spawn`, `spawnBackground`, and `send` share one pre-delegation verdict handler, which prevents deny/unsupported verdict drift across child-session entry points.
+- Verification passed for changed-file LSP diagnostics, targeted verdict tests, and `bun run check-types`; full `bun test packages/agent` remains blocked by unrelated pre-existing untracked execution tests in the shared worktree.
