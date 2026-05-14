@@ -46,7 +46,7 @@ describe("PolicyPoint registry", () => {
     });
 
     expect(contract.id).toBe("tool.native.pre");
-    expect(contract.allowedEffects).toContain("tool.rewrite_input");
+    expect(contract.allowedEffects.includes("tool.rewrite_input")).toBe(true);
   });
 
   test("rejects effects that are not PolicyEffect types", () => {
@@ -67,6 +67,9 @@ describe("PolicyPoint registry", () => {
 
   test("exports an initial contract for every required 3-tier point", () => {
     expect(Object.keys(Policy.PolicyPoint.Registry).sort()).toEqual([...expectedPointIds].sort());
+    expect(Policy.PolicyPoint.RegistrySchema.parse(Policy.PolicyPoint.Registry)).toEqual(
+      Policy.PolicyPoint.Registry,
+    );
 
     for (const pointId of expectedPointIds) {
       const contract = Policy.PolicyPoint.Registry[pointId];
@@ -96,7 +99,7 @@ describe("PolicyPoint registry", () => {
 
     for (const pointIds of Object.values(aliases)) {
       for (const pointId of pointIds) {
-        expect(Policy.PolicyPoint.Registry[pointId]).toBeDefined();
+        expect(Policy.PolicyPoint.Registry[pointId] !== undefined).toBe(true);
       }
     }
   });

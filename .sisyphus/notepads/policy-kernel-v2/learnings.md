@@ -62,6 +62,13 @@
 
 ## Problems
 
+### Task 3 Findings (2026-05-14)
+
+- `Policy.PolicyPoint` now preserves the legacy Zod schema while exposing `Id`, `Contract`, `Registry`, and `TimingAliases` through `Object.assign`.
+- The registry uses 20 concrete contracts because `invoke.prepare` and `invoke.result` each fan out to four resource-specific 3-tier points.
+- `PolicyPoint.Id` validates the general 3-tier shape, while `PolicyPoint.Registry` is limited to the required initial contracts.
+- Package verification passed with `bun test packages/protocol` and `bun run check-types`.
+
 ### Task 4 Findings (2026-05-14)
 
 - `Policy.PolicyEffectType` is now the shared discriminator enum for effect allow-lists and the `PolicyEffect` union, keeping point contracts aligned with supported effects.

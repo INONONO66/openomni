@@ -646,6 +646,7 @@ export namespace Policy {
   export const PolicyPoint = Object.assign(policyPoint, {
     Id: PolicyPointId,
     Contract: PolicyPointContract,
+    RegistrySchema: z.record(PolicyPointId, PolicyPointContract),
     Registry: PolicyPointRegistry,
     TimingAliases: {
       [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
