@@ -233,18 +233,20 @@ export namespace Policy {
   export type Verdict = z.infer<typeof Verdict>;
 
   export const Timing = {
-    PRE_RUN: "pre_run",
-    PRE_TURN: "pre_turn",
-    ON_SYSTEM_PROMPT: "on_system_prompt",
-    PRE_TOOL_USE: "pre_tool_use",
-    POST_TOOL_USE: "post_tool_use",
-    POST_TURN: "post_turn",
-    POST_COMPACTION: "post_compaction",
-    POST_RUN: "post_run",
-    ON_ERROR: "on_error",
-    PRE_INGRESS: "pre_ingress",
-    PRE_TOOL_SELECTION: "pre_tool_selection",
-    PRE_DELEGATION: "pre_delegation",
+    INBOUND_RECEIVE: "inbound.receive",
+    RUN_START: "run.start",
+    TURN_START: "turn.start",
+    CONTEXT_PREPARE: "context.prepare",
+    RESOURCES_PREPARE: "resources.prepare",
+    MODEL_REQUEST: "model.request",
+    MODEL_RESPONSE: "model.response",
+    INVOKE_PREPARE: "invoke.prepare",
+    INVOKE_RESULT: "invoke.result",
+    TURN_FINISH: "turn.finish",
+    COMPLETION_PREPARE: "completion.prepare",
+    WRITEBACK_COMMIT: "writeback.commit",
+    RUN_FINISH: "run.finish",
+    ERROR: "error",
   } as const;
 
   export type Timing = (typeof Timing)[keyof typeof Timing];

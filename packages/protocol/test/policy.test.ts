@@ -391,41 +391,45 @@ describe("Policy schemas", () => {
   });
 
   describe("Policy.Timing", () => {
-    it("parses all 12 valid timing values", () => {
+    it("parses all 14 valid timing values", () => {
       const timingValues = [
-        Policy.Timing.PRE_RUN,
-        Policy.Timing.PRE_TURN,
-        Policy.Timing.ON_SYSTEM_PROMPT,
-        Policy.Timing.PRE_TOOL_USE,
-        Policy.Timing.POST_TOOL_USE,
-        Policy.Timing.POST_TURN,
-        Policy.Timing.POST_COMPACTION,
-        Policy.Timing.POST_RUN,
-        Policy.Timing.ON_ERROR,
-        Policy.Timing.PRE_INGRESS,
-        Policy.Timing.PRE_TOOL_SELECTION,
-        Policy.Timing.PRE_DELEGATION,
+        Policy.Timing.INBOUND_RECEIVE,
+        Policy.Timing.RUN_START,
+        Policy.Timing.TURN_START,
+        Policy.Timing.CONTEXT_PREPARE,
+        Policy.Timing.RESOURCES_PREPARE,
+        Policy.Timing.MODEL_REQUEST,
+        Policy.Timing.MODEL_RESPONSE,
+        Policy.Timing.INVOKE_PREPARE,
+        Policy.Timing.INVOKE_RESULT,
+        Policy.Timing.TURN_FINISH,
+        Policy.Timing.COMPLETION_PREPARE,
+        Policy.Timing.WRITEBACK_COMMIT,
+        Policy.Timing.RUN_FINISH,
+        Policy.Timing.ERROR,
       ];
 
       expect(timingValues).toEqual([
-        "pre_run",
-        "pre_turn",
-        "on_system_prompt",
-        "pre_tool_use",
-        "post_tool_use",
-        "post_turn",
-        "post_compaction",
-        "post_run",
-        "on_error",
-        "pre_ingress",
-        "pre_tool_selection",
-        "pre_delegation",
+        "inbound.receive",
+        "run.start",
+        "turn.start",
+        "context.prepare",
+        "resources.prepare",
+        "model.request",
+        "model.response",
+        "invoke.prepare",
+        "invoke.result",
+        "turn.finish",
+        "completion.prepare",
+        "writeback.commit",
+        "run.finish",
+        "error",
       ]);
     });
 
-    it("has all 12 timing values as constants", () => {
+    it("has all 14 timing values as constants", () => {
       const timingKeys = Object.keys(Policy.Timing);
-      expect(timingKeys.length).toBe(12);
+      expect(timingKeys.length).toBe(14);
     });
 
     it("rejects invalid timing value", () => {
@@ -502,27 +506,27 @@ describe("Policy schemas", () => {
     it("parses definition with single timing", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 100,
       });
       expect(result.name).toBe("test-policy");
-      expect(result.timing).toBe("pre_turn");
+      expect(result.timing).toBe("turn.start");
       expect(result.priority).toBe(100);
     });
 
     it("parses definition with multiple timings", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: ["pre_turn", "post_turn"],
+        timing: ["turn.start", "turn.finish"],
         priority: 100,
       });
-      expect(result.timing).toEqual(["pre_turn", "post_turn"]);
+      expect(result.timing).toEqual(["turn.start", "turn.finish"]);
     });
 
     it("parses definition with scope", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 100,
         scope: { agentType: ["subagent", "worker"] },
       });
@@ -532,7 +536,7 @@ describe("Policy schemas", () => {
     it("parses definition with failPolicy", () => {
       const result = Policy.Definition.parse({
         name: "test-policy",
-        timing: "pre_turn",
+        timing: "turn.start",
         priority: 100,
         failPolicy: "fail-closed",
       });
@@ -543,7 +547,7 @@ describe("Policy schemas", () => {
       expect(() =>
         Policy.Definition.parse({
           name: "",
-          timing: "pre_turn",
+          timing: "turn.start",
           priority: 100,
         }),
       ).toThrow();
@@ -553,7 +557,7 @@ describe("Policy schemas", () => {
       expect(() =>
         Policy.Definition.parse({
           name: "test",
-          timing: "pre_turn",
+          timing: "turn.start",
           priority: -1,
         }),
       ).toThrow();
@@ -670,11 +674,11 @@ describe("Policy schemas", () => {
   describe("Policy.PolicyPoint", () => {
     it("parses policy point with timing and allowed effects", () => {
       const result = Policy.PolicyPoint.parse({
-        point: "pre_turn",
+        point: "turn.start",
         allowedEffects: ["prompt.append_context", "tool.filter"],
         defaultFailPolicy: "fail-open",
       });
-      expect(result.point).toBe("pre_turn");
+      expect(result.point).toBe("turn.start");
       expect(result.allowedEffects).toContain("prompt.append_context");
       expect(result.defaultFailPolicy).toBe("fail-open");
     });
@@ -695,7 +699,7 @@ describe("Policy schemas", () => {
       ] as const;
 
       const result = Policy.PolicyPoint.parse({
-        point: "pre_tool_use",
+        point: "invoke.prepare",
         allowedEffects: allEffects,
         defaultFailPolicy: "fail-closed",
       });
