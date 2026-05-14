@@ -518,3 +518,139 @@ If a `PolicyRequest` arrives with a point ID that is not registered in the kerne
 6. Convert high-risk policies first: tool permission, ingress authority, subagent/background limits, MCP prefix guard, worker bootstrap, credential injection.
 7. Convert prompt-shaping policies after the safety boundary is stable: memory, skills, compaction, post-turn, persistence enforcement.
 8. Remove legacy verdict support only after conformance tests cover every governed operation.
+
+## Appendix: Known Ungoverned Paths
+
+These paths bypass the policy kernel today. Each is documented as a skipped test in `packages/agent/test/core/policy/conformance/no-bypass.test.ts`. They are not bugs in the current implementation — the kernel is not yet wired to these call sites. They are tracked here so the v2 integration sequence is explicit and auditable.
+
+### 1. Direct MCP client
+
+**Location**: `packages/agent/src/runtime/mcp/client.ts` — `McpClient.callTool()`
+
+**Gap**: `callTool()` sends the MCP request directly to the remote server without constructing a `PolicyRequest` or passing through a `tool.mcp.pre` point. Any policy registered at `invoke.prepare` or `tool.mcp.pre` is not consulted.
+
+**Spec requirement**: `tool.mcp.pre` must gate every remote MCP tool call before the network side effect occurs (see Required Governance Coverage — MCP).
+
+**v2 integration**: Wrap `callTool()` in a facade that builds a `RuntimeResource.Descriptor` with `kind: "tool"` and `source.type: "mcp"`, then dispatches `tool.mcp.pre` before forwarding to the raw client. The facade lives in `packages/agent/src/runtime/mcp/` and is the only public call site.
+
+---
+
+### 2. Worker spawn
+
+**Location**: `packages/coordinator/src/worker-pool/supervisor.ts` — `doStart()`
+
+**Gap**: `doStart()` forks the worker process without a policy check. No `worker.spawn` point fires before the process is created.
+
+**Spec requirement**: `worker.spawn` must gate every worker process creation (see Required Governance Coverage — Worker).
+
+**v2 integration**: `coordinator` owns worker process policy points per the Runtime Ownership section. A `worker.spawn` pre-boundary check must be inserted in `doStart()` before the fork, using a `RuntimeResource.Descriptor` with `kind: "worker"`.
+
+---
+
+### 3. Worker IPC dispatch
+
+**Location**: `packages/coordinator/src/ipc/server.ts`
+
+**Gap**: Inbound IPC messages are dispatched to handlers without a `worker.ipc.send` policy check. Any message arriving on the Unix socket is processed immediately.
+
+**Spec requirement**: `worker.ipc.send` must gate IPC dispatch (see Required Governance Coverage — Worker).
+
+**v2 integration**: The IPC server should construct a `PolicyRequest` from the envelope actor and session context before routing to the handler. The `coordinator` package owns this gate.
+
+---
+
+### 4. Credential injection
+
+**Location**: `packages/coordinator/src/credentials/injector.ts`
+
+**Gap**: Credentials are injected into worker environments without a `credential.inject` policy check. No policy can deny or audit credential delivery.
+
+**Spec requirement**: `credential.inject` must gate every credential injection (see Required Governance Coverage — Worker).
+
+**v2 integration**: The injector must dispatch `credential.inject` pre-boundary before writing credentials into the worker environment. The `RuntimeResource.Descriptor` should use `kind: "credential"` with the credential id and source metadata. Secrets must not appear in the descriptor.
+
+---
+
+### 5. Tool permission (partial)
+
+**Location**: `packages/coordinator/src/tool-permission/policy.ts`
+
+**Gap**: A tool permission policy exists in the coordinator but it is not wired to the v2 `PolicyEngine` or the `tool.native.pre` / `tool.mcp.pre` points. It operates as a standalone check disconnected from the composed decision pipeline.
+
+**Spec requirement**: Tool permission enforcement must flow through the canonical policy composition path so deny verdicts are absorbing and audit effects are emitted consistently.
+
+**v2 integration**: The coordinator tool permission policy should be registered as a `PolicyRegistration` at `tool.native.pre` (and `tool.mcp.pre` for MCP tools) so it participates in the standard composition and audit pipeline.
+
+---
+
+### 6. Direct LLM run
+
+**Location**: `packages/llm/src/run.ts`
+
+**Gap**: `run()` calls the LLM provider directly without a `connection.llm.pre` policy check. The agent-mediated path through `StreamEngine` does dispatch `model.request`, but callers that import `run()` directly bypass it entirely.
+
+**Spec requirement**: `connection.llm.pre` must gate every LLM generation request (see Required Governance Coverage — Core Execution).
+
+**v2 integration**: Direct callers of `packages/llm/src/run.ts` should be audited and migrated to go through `StreamEngine` or a policy-aware facade. The `llm` package itself should not own the policy check — the boundary belongs in the agent or openomni layer that constructs the `PolicyRequest`.
+
+---
+
+### 7. Session direct writes
+
+**Location**: `packages/session/src/session/index.ts` — `Session.addMessage()`, `Session.addPart()`
+
+**Gap**: Session write methods accept data and persist it without a `session.write` policy check. Any caller can write to a session without policy mediation.
+
+**Spec requirement**: `session.write` must gate session-visible output mutations (see Required Governance Coverage — Core Execution).
+
+**v2 integration**: Session writes that originate from governed operations should go through a policy-aware facade in `packages/openomni` rather than calling `Session.addMessage()` directly. The `session` package remains a raw storage layer; the governance boundary lives one layer up.
+
+---
+
+### 8. Artifact writes
+
+**Location**: `packages/session/src/artifact/index.ts` — `Artifact.store()`
+
+**Gap**: `Artifact.store()` persists artifact data without an `artifact.write` policy check. Artifacts can be written from any call site without policy mediation.
+
+**Spec requirement**: `artifact.write` is a governed side effect under Core Execution coverage.
+
+**v2 integration**: Same pattern as session writes. Artifact storage that originates from governed operations should route through a policy-aware facade in `packages/openomni`. The `session` package stays as raw storage.
+
+---
+
+### 9. Todo writes
+
+**Location**: `packages/session/src/todo/index.ts` — `Todo.update()`
+
+**Gap**: `Todo.update()` mutates todo state without a policy check. Todo mutations are session-visible side effects with no governance gate.
+
+**Spec requirement**: Todo writes are session-visible mutations and fall under the `session.write` governance requirement.
+
+**v2 integration**: Same pattern as session and artifact writes. Governed callers should route through a policy-aware facade. The `session` package stays as raw storage.
+
+---
+
+### 10. Skill load and activation
+
+**Location**: `packages/openomni/src/skill/index.ts` — `SkillLoader.discover()`, `SkillLoader.load()`
+
+**Gap**: Skill discovery and loading do not dispatch `skill.resolve`, `skill.load`, or `skill.activate` policy points. Skills are loaded and injected into agent context without authorization.
+
+**Spec requirement**: `skill.resolve`, `skill.load`, and `skill.activate` must gate skill lifecycle operations (see Required Governance Coverage — Skill).
+
+**v2 integration**: `SkillLoader` should dispatch `skill.resolve` before resolving a skill path, `skill.load` before reading skill content, and `skill.activate` before injecting the skill into an agent's context. `RuntimeResource.Descriptor` with `kind: "skill"` and appropriate source labels is already defined in the descriptor helpers.
+
+---
+
+### Integration Priority
+
+The no-bypass rule (see No-bypass Rule section) requires all ten paths to be covered before legacy verdict support is removed. The recommended order follows the Implementation Sequence:
+
+1. Worker spawn and IPC dispatch (coordinator owns these; high blast radius if ungoverned)
+2. Credential injection (security-critical; no policy audit today)
+3. Direct MCP client (external network side effect; `tool.mcp.pre` already specified)
+4. Skill load and activation (behavior injection; `skill.activate` already specified)
+5. Tool permission wiring (coordinator policy already exists; needs v2 registration)
+6. Session, artifact, and todo writes (facade pattern; lower urgency than network/process paths)
+7. Direct LLM run (audit callers; migrate to agent-mediated path)
