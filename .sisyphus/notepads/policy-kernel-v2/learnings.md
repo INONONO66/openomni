@@ -39,6 +39,13 @@
 - Unknown point ID = immediate block (prevents ad-hoc bypass)
 - Descriptor validation failure = pre-boundary deny
 
+### Task 5 Findings (2026-05-14)
+
+- `RuntimeResource.Kind` should stay closed over the governance kinds used by policy routing: tool, skill, mcpSource, worker, credential, session, policy.
+- `RuntimeResource.Descriptor` should validate the id shape against both the kind segment and optional source segment so descriptors stay canonical and replayable.
+- `ActorDescriptor` and `SessionDescriptor` belong beside `RuntimeResource.Descriptor` as plain serializable Zod contracts; runtime construction stays in upper packages.
+- `PolicyPoint` now exposes `Id`, `Contract`, `Registry`, and `TimingAliases` on the schema object, which keeps legacy timing tests and the new point-registry contract aligned.
+
 #### Spec Structure After Task 1
 - Total lines: ~520 (was 358)
 - New sections added: PolicyPoint Contract Registry, Per-Effect Merge Rules, Obligation Lifecycle, ActorDescriptor, SessionDescriptor, Error Point Semantics, Edge Cases
@@ -54,6 +61,12 @@
 ## Issues
 
 ## Problems
+
+### Task 4 Findings (2026-05-14)
+
+- `Policy.PolicyEffectType` is now the shared discriminator enum for effect allow-lists and the `PolicyEffect` union, keeping point contracts aligned with supported effects.
+- `Policy.PolicyDecision`, `Policy.PolicyObligation`, and `Policy.EffectiveDecision` are schemas only; execution and merge behavior remain outside `@openomni/protocol`.
+- Protocol tests import both source and generated `dist` artifacts in this workspace, so `bun run --cwd packages/protocol build` was needed before the package test reflected schema updates consistently.
 
 ### Task 6 Findings (2026-05-14)
 - `policy.evaluated` can stay backward-compatible by adding optional audit context fields instead of changing the core verdict shape.

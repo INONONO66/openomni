@@ -1,0 +1,9 @@
+Task 5 evidence: descriptor kinds
+
+- RuntimeResource.Kind is now constrained to: tool, skill, mcpSource, worker, credential, session, policy.
+- RuntimeResource.Descriptor requires canonical ids in kind:name or kind:source:name form and validates source.type against the id source segment.
+- PolicyPoint registry is wired with canonical 3-tier point ids and legacy timing aliases.
+
+Verification:
+- bun test packages/protocol
+- Result: 399 pass, 0 fail

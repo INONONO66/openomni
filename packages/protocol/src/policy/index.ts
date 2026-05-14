@@ -281,6 +281,27 @@ export namespace Policy {
   });
   export type Decision = z.infer<typeof Decision>;
 
+  export const PolicyEffectType = z.enum([
+    "prompt.append_context",
+    "prompt.inject_message",
+    "prompt.replace",
+    "tool.filter",
+    "tool.rewrite_input",
+    "tool.skip_invocation",
+    "tool.require_approval",
+    "run.abort",
+    "run.continue_with_prompt",
+    "run.retry_after",
+    "delegation.set_constraints",
+    "delegation.require_approval",
+    "audit.annotate",
+    "writeback.rewrite",
+    "writeback.suppress",
+    "runtime.set_timeout",
+    "runtime.workspace_lock",
+  ]);
+  export type PolicyEffectType = z.infer<typeof PolicyEffectType>;
+
   export const PolicyEffect = z.discriminatedUnion("type", [
     z.object({
       type: z.literal("prompt.append_context"),
@@ -292,12 +313,20 @@ export namespace Policy {
       role: z.enum(["user", "assistant"]).optional(),
     }),
     z.object({
+      type: z.literal("prompt.replace"),
+      prompt: z.string(),
+    }),
+    z.object({
       type: z.literal("tool.filter"),
       toolPattern: z.string(),
     }),
     z.object({
       type: z.literal("tool.rewrite_input"),
       input: z.record(z.string(), z.unknown()),
+    }),
+    z.object({
+      type: z.literal("tool.skip_invocation"),
+      reason: z.string().optional(),
     }),
     z.object({
       type: z.literal("tool.require_approval"),
@@ -329,29 +358,323 @@ export namespace Policy {
       annotation: z.string(),
       severity: z.enum(["info", "warning", "error"]).optional(),
     }),
+    z.object({
+      type: z.literal("writeback.rewrite"),
+      output: z.string(),
+    }),
+    z.object({
+      type: z.literal("writeback.suppress"),
+      reason: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("runtime.set_timeout"),
+      timeoutMs: z.number().int().min(0),
+    }),
+    z.object({
+      type: z.literal("runtime.workspace_lock"),
+      required: z.boolean(),
+    }),
   ]);
   export type PolicyEffect = z.infer<typeof PolicyEffect>;
 
-  export const PolicyPoint = z.object({
+  export const PolicyObligation = z.object({
+    obligationId: z.string(),
+    type: z.enum(["humanApproval", "evidenceRequired", "credentialConfirm"]),
+    description: z.string(),
+    timeoutMs: z.number().int().min(0).optional(),
+    resolvedBy: z.string().optional(),
+  });
+  export type PolicyObligation = z.infer<typeof PolicyObligation>;
+
+  export const PolicyDecision = z.object({
+    policyId: z.string(),
+    policyVersion: z.string().optional(),
+    verdict: z.enum(["allow", "deny", "pending"]),
+    effects: z.array(PolicyEffect),
+    obligations: z.array(PolicyObligation).optional(),
+    reasonCodes: z.array(z.string()),
+    factsUsed: z.array(z.string()).optional(),
+    durationMs: z.number().min(0).optional(),
+  });
+  export type PolicyDecision = z.infer<typeof PolicyDecision>;
+
+  export const EffectiveDecision = z.object({
+    verdict: z.enum(["allow", "deny", "pending"]),
+    mergedEffects: z.array(PolicyEffect),
+    obligations: z.array(PolicyObligation),
+    contributingPolicies: z.array(z.string()),
+  });
+  export type EffectiveDecision = z.infer<typeof EffectiveDecision>;
+
+  const policyPointIds = [
+    "session.inbound.pre",
+    "run.lifecycle.pre",
+    "run.turn.pre",
+    "prompt.context.pre",
+    "tool.catalog.pre",
+    "connection.llm.pre",
+    "connection.llm.post",
+    "tool.native.pre",
+    "tool.mcp.pre",
+    "delegation.subagent.pre",
+    "delegation.background.pre",
+    "tool.native.post",
+    "tool.mcp.post",
+    "delegation.subagent.post",
+    "delegation.background.post",
+    "run.turn.post",
+    "run.completion.pre",
+    "session.writeback.pre",
+    "run.lifecycle.post",
+    "run.error.error",
+  ] as const;
+
+  const policyPoint = z.object({
     point: z.enum(Object.values(Timing) as [string, ...string[]]),
-    allowedEffects: z.array(
-      z.enum([
-        "prompt.append_context",
-        "prompt.inject_message",
-        "tool.filter",
-        "tool.rewrite_input",
-        "tool.require_approval",
-        "run.abort",
-        "run.continue_with_prompt",
-        "run.retry_after",
-        "delegation.set_constraints",
-        "delegation.require_approval",
-        "audit.annotate",
-      ] as const),
-    ),
+    allowedEffects: z.array(PolicyEffectType),
     defaultFailPolicy: FailPolicy,
   });
-  export type PolicyPoint = z.infer<typeof PolicyPoint>;
+
+  type RegisteredPolicyPointId = (typeof policyPointIds)[number];
+
+  const PolicyPointId = z
+    .string()
+    .regex(
+      /^(tool|prompt|delegation|session|credential|connection|run)\.[a-z][a-z0-9-]*\.(load|pre|post|error)$/,
+    );
+  const PolicyPointContract = z.object({
+    id: PolicyPointId,
+    version: z.number().int().min(1),
+    phase: z.enum(["pre", "post", "error"]),
+    resourceKinds: z.array(z.string()),
+    inputSchema: z.string(),
+    requiredContext: z.array(z.string()),
+    allowedEffects: z.array(PolicyEffectType),
+    defaultFailPolicy: FailPolicy,
+    sideEffectBoundary: z.boolean(),
+  });
+  type PolicyPointContract = z.infer<typeof PolicyPointContract>;
+
+  const contract = (
+    id: RegisteredPolicyPointId,
+    phase: PolicyPointContract["phase"],
+    resourceKinds: readonly string[],
+    requiredContext: readonly string[],
+    allowedEffects: readonly PolicyEffectType[],
+    defaultFailPolicy: PolicyPointContract["defaultFailPolicy"],
+    sideEffectBoundary: boolean,
+  ): PolicyPointContract => ({
+    id,
+    version: 1,
+    phase,
+    resourceKinds: [...resourceKinds],
+    inputSchema: `policy.point.${id}.input.v1`,
+    requiredContext: [...requiredContext],
+    allowedEffects: [...allowedEffects],
+    defaultFailPolicy,
+    sideEffectBoundary,
+  });
+
+  const preBoundary = ["fail-closed", true] as const;
+  const postBoundary = ["fail-open", false] as const;
+
+  const PolicyPointRegistry = {
+    "session.inbound.pre": contract(
+      "session.inbound.pre",
+      "pre",
+      ["session"],
+      ["actorId", "sessionId", "inboundEvent"],
+      ["audit.annotate", "run.abort", "delegation.set_constraints"],
+      ...preBoundary,
+    ),
+    "run.lifecycle.pre": contract(
+      "run.lifecycle.pre",
+      "pre",
+      ["run"],
+      ["actorId", "sessionId", "runId"],
+      ["audit.annotate", "run.abort", "delegation.set_constraints", "prompt.append_context"],
+      ...preBoundary,
+    ),
+    "run.turn.pre": contract(
+      "run.turn.pre",
+      "pre",
+      ["run"],
+      ["sessionId", "runId", "turnIndex"],
+      ["audit.annotate", "run.abort", "run.retry_after", "prompt.append_context"],
+      ...preBoundary,
+    ),
+    "prompt.context.pre": contract(
+      "prompt.context.pre",
+      "pre",
+      ["prompt"],
+      ["sessionId", "runId", "turnIndex"],
+      ["prompt.append_context", "prompt.inject_message", "audit.annotate"],
+      "fail-open",
+      true,
+    ),
+    "tool.catalog.pre": contract(
+      "tool.catalog.pre",
+      "pre",
+      ["tool"],
+      ["sessionId", "runId", "availableTools"],
+      ["tool.filter", "audit.annotate", "run.abort"],
+      ...preBoundary,
+    ),
+    "connection.llm.pre": contract(
+      "connection.llm.pre",
+      "pre",
+      ["connection"],
+      ["sessionId", "runId", "modelId"],
+      ["prompt.append_context", "prompt.inject_message", "run.abort", "audit.annotate"],
+      ...preBoundary,
+    ),
+    "connection.llm.post": contract(
+      "connection.llm.post",
+      "post",
+      ["connection"],
+      ["sessionId", "runId", "modelId", "responseTokens"],
+      ["audit.annotate", "run.abort", "run.continue_with_prompt"],
+      ...postBoundary,
+    ),
+    "tool.native.pre": contract(
+      "tool.native.pre",
+      "pre",
+      ["tool"],
+      ["sessionId", "runId", "toolId", "toolInput"],
+      ["tool.filter", "tool.rewrite_input", "tool.require_approval", "run.abort", "audit.annotate"],
+      ...preBoundary,
+    ),
+    "tool.mcp.pre": contract(
+      "tool.mcp.pre",
+      "pre",
+      ["tool"],
+      ["sessionId", "runId", "toolId", "mcpServerId", "toolInput"],
+      ["tool.filter", "tool.rewrite_input", "tool.require_approval", "run.abort", "audit.annotate"],
+      ...preBoundary,
+    ),
+    "delegation.subagent.pre": contract(
+      "delegation.subagent.pre",
+      "pre",
+      ["worker"],
+      ["sessionId", "runId", "subagentId", "subagentProfile"],
+      ["delegation.set_constraints", "delegation.require_approval", "run.abort", "audit.annotate"],
+      ...preBoundary,
+    ),
+    "delegation.background.pre": contract(
+      "delegation.background.pre",
+      "pre",
+      ["worker"],
+      ["sessionId", "runId", "backgroundTaskId"],
+      ["delegation.set_constraints", "delegation.require_approval", "run.abort", "audit.annotate"],
+      ...preBoundary,
+    ),
+    "tool.native.post": contract(
+      "tool.native.post",
+      "post",
+      ["tool"],
+      ["sessionId", "runId", "toolId", "toolResult"],
+      ["audit.annotate", "run.abort"],
+      ...postBoundary,
+    ),
+    "tool.mcp.post": contract(
+      "tool.mcp.post",
+      "post",
+      ["tool"],
+      ["sessionId", "runId", "toolId", "mcpServerId", "toolResult"],
+      ["audit.annotate", "run.abort"],
+      ...postBoundary,
+    ),
+    "delegation.subagent.post": contract(
+      "delegation.subagent.post",
+      "post",
+      ["worker"],
+      ["sessionId", "runId", "subagentId", "subagentResult"],
+      ["audit.annotate"],
+      ...postBoundary,
+    ),
+    "delegation.background.post": contract(
+      "delegation.background.post",
+      "post",
+      ["worker"],
+      ["sessionId", "runId", "backgroundTaskId", "taskResult"],
+      ["audit.annotate"],
+      ...postBoundary,
+    ),
+    "run.turn.post": contract(
+      "run.turn.post",
+      "post",
+      ["run"],
+      ["sessionId", "runId", "turnIndex", "turnResult"],
+      ["audit.annotate", "run.abort", "run.continue_with_prompt"],
+      ...postBoundary,
+    ),
+    "run.completion.pre": contract(
+      "run.completion.pre",
+      "pre",
+      ["run"],
+      ["sessionId", "runId", "completionCandidate"],
+      ["audit.annotate", "run.abort", "prompt.append_context"],
+      ...preBoundary,
+    ),
+    "session.writeback.pre": contract(
+      "session.writeback.pre",
+      "pre",
+      ["session"],
+      ["sessionId", "runId", "writebackPayload"],
+      ["audit.annotate", "run.abort"],
+      ...preBoundary,
+    ),
+    "run.lifecycle.post": contract(
+      "run.lifecycle.post",
+      "post",
+      ["run"],
+      ["sessionId", "runId", "runOutcome"],
+      ["audit.annotate"],
+      ...postBoundary,
+    ),
+    "run.error.error": contract(
+      "run.error.error",
+      "error",
+      ["run"],
+      ["sessionId", "runId", "errorCode", "errorPhase"],
+      ["audit.annotate", "run.abort", "run.retry_after"],
+      "fail-closed",
+      false,
+    ),
+  } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>;
+
+  export const PolicyPoint = Object.assign(policyPoint, {
+    Id: PolicyPointId,
+    Contract: PolicyPointContract,
+    Registry: PolicyPointRegistry,
+    TimingAliases: {
+      [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
+      [Timing.RUN_START]: ["run.lifecycle.pre"],
+      [Timing.TURN_START]: ["run.turn.pre"],
+      [Timing.CONTEXT_PREPARE]: ["prompt.context.pre"],
+      [Timing.RESOURCES_PREPARE]: ["tool.catalog.pre"],
+      [Timing.MODEL_REQUEST]: ["connection.llm.pre"],
+      [Timing.MODEL_RESPONSE]: ["connection.llm.post"],
+      [Timing.INVOKE_PREPARE]: [
+        "tool.native.pre",
+        "tool.mcp.pre",
+        "delegation.subagent.pre",
+        "delegation.background.pre",
+      ],
+      [Timing.INVOKE_RESULT]: [
+        "tool.native.post",
+        "tool.mcp.post",
+        "delegation.subagent.post",
+        "delegation.background.post",
+      ],
+      [Timing.TURN_FINISH]: ["run.turn.post"],
+      [Timing.COMPLETION_PREPARE]: ["run.completion.pre"],
+      [Timing.WRITEBACK_COMMIT]: ["session.writeback.pre"],
+      [Timing.RUN_FINISH]: ["run.lifecycle.post"],
+      [Timing.ERROR]: ["run.error.error"],
+    } satisfies Record<Timing, RegisteredPolicyPointId[]>,
+  });
+  export type PolicyPoint = z.infer<typeof policyPoint>;
 
   export const PolicyPlan = z.object({
     policies: z.array(
@@ -375,24 +698,163 @@ export namespace Policy {
 }
 
 export namespace RuntimeResource {
-  export const Descriptor = z.object({
-    id: z.string(),
-    kind: z.union([z.enum(["tool", "skill", "mcpSource", "policy"]), z.string()]),
-    version: z.string().optional(),
-    labels: z.array(z.string()),
-    capabilities: z.array(z.string()),
-    effects: z.array(z.string()),
-    risk: z.number().optional(),
-    source: z
-      .object({
-        type: z.string(),
-        serverId: z.string().optional(),
-        remoteName: z.string().optional(),
-      })
-      .optional(),
-    schemaRef: z.string().optional(),
+  export const Kind = z.enum([
+    "tool",
+    "skill",
+    "mcpSource",
+    "worker",
+    "credential",
+    "session",
+    "policy",
+  ]);
+  export type Kind = z.infer<typeof Kind>;
+
+  export const Source = z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("system"),
+    }),
+    z.object({
+      type: z.literal("mcp"),
+      serverId: z.string().optional(),
+      remoteName: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("skill-mcp"),
+      serverId: z.string().optional(),
+      remoteName: z.string().optional(),
+      skillId: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("agent"),
+      agentId: z.string().optional(),
+      agentProfileRef: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("server"),
+      serverId: z.string().optional(),
+      remoteName: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("project"),
+      projectId: z.string().optional(),
+      path: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("user"),
+      userId: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("global"),
+      scope: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("coordinator"),
+      coordinatorId: z.string().optional(),
+      workerId: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("runtime"),
+      runtimeId: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal("file"),
+      path: z.string().optional(),
+      filePath: z.string().optional(),
+    }),
+  ]);
+  export type Source = z.infer<typeof Source>;
+
+  export const ActorType = z.enum(["user", "agent", "system"]);
+  export type ActorType = z.infer<typeof ActorType>;
+
+  export const SessionType = z.enum(["root", "child", "self-loop"]);
+  export type SessionType = z.infer<typeof SessionType>;
+
+  export const ActorDescriptor = z.object({
+    actorId: z.string().min(1),
+    actorType: ActorType,
+    agentProfileRef: z.string().optional(),
+    permissions: z.array(z.string()),
+    labels: z.array(z.string()).optional(),
     digest: z.string().optional(),
-    owner: z.string().optional(),
   });
+  export type ActorDescriptor = z.infer<typeof ActorDescriptor>;
+
+  export const SessionDescriptor = z.object({
+    sessionId: z.string().min(1),
+    parentSessionId: z.string().optional(),
+    sessionType: SessionType,
+    ownerActorId: z.string().min(1),
+    digest: z.string().optional(),
+  });
+  export type SessionDescriptor = z.infer<typeof SessionDescriptor>;
+
+  export const Descriptor = z
+    .object({
+      id: z.string().min(1),
+      kind: Kind,
+      version: z.string().optional(),
+      labels: z.array(z.string()),
+      capabilities: z.array(z.string()),
+      effects: z.array(z.string()),
+      risk: z.number().optional(),
+      source: Source.optional(),
+      schemaRef: z.string().optional(),
+      digest: z.string().optional(),
+      owner: z.string().optional(),
+    })
+    .superRefine((value, ctx) => {
+      const segments = value.id.split(":");
+      const hasValidSegments = segments.length === 2 || segments.length === 3;
+
+      if (!hasValidSegments) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "id must use kind:name or kind:source:name format",
+        });
+        return;
+      }
+
+      if (segments.some((segment) => segment.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "id segments must not be empty",
+        });
+      }
+
+      if (segments[0] !== value.kind) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "id kind segment must match kind",
+        });
+      }
+
+      if (value.source === undefined && segments.length !== 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "descriptor source metadata requires a three-segment id",
+        });
+      }
+
+      if (value.source !== undefined && segments.length !== 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "descriptor source metadata must match the id source segment",
+        });
+      }
+
+      if (value.source !== undefined && segments[1] !== value.source.type) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["id"],
+          message: "id source segment must match source.type",
+        });
+      }
+    });
   export type Descriptor = z.infer<typeof Descriptor>;
 }

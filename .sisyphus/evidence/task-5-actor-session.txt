@@ -1,0 +1,9 @@
+Task 5 evidence: actor/session descriptors
+
+- RuntimeResource.ActorDescriptor includes actorId, actorType, agentProfileRef, permissions, labels, and digest.
+- RuntimeResource.SessionDescriptor includes sessionId, parentSessionId, sessionType, ownerActorId, and digest.
+- Both descriptors are serializable Zod objects and were covered by focused tests.
+
+Verification:
+- bun test packages/protocol
+- Result: 399 pass, 0 fail

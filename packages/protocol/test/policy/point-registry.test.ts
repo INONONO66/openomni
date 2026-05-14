@@ -1,0 +1,111 @@
+import { describe, expect, test } from "bun:test";
+import { Policy } from "../../src/policy/index.js";
+
+const expectedPointIds = [
+  "session.inbound.pre",
+  "run.lifecycle.pre",
+  "run.turn.pre",
+  "prompt.context.pre",
+  "tool.catalog.pre",
+  "connection.llm.pre",
+  "connection.llm.post",
+  "tool.native.pre",
+  "tool.mcp.pre",
+  "delegation.subagent.pre",
+  "delegation.background.pre",
+  "tool.native.post",
+  "tool.mcp.post",
+  "delegation.subagent.post",
+  "delegation.background.post",
+  "run.turn.post",
+  "run.completion.pre",
+  "session.writeback.pre",
+  "run.lifecycle.post",
+  "run.error.error",
+] as const;
+
+describe("PolicyPoint registry", () => {
+  test("accepts only canonical 3-tier point IDs", () => {
+    expect(Policy.PolicyPoint.Id.parse("tool.native.pre")).toBe("tool.native.pre");
+    expect(Policy.PolicyPoint.Id.safeParse("tool.native.prepare").success).toBe(false);
+    expect(Policy.PolicyPoint.Id.safeParse("tool.pre").success).toBe(false);
+    expect(Policy.PolicyPoint.Id.safeParse("unknown.native.pre").success).toBe(false);
+  });
+
+  test("validates the versioned point contract shape", () => {
+    const contract = Policy.PolicyPoint.Contract.parse({
+      id: "tool.native.pre",
+      version: 1,
+      phase: "pre",
+      resourceKinds: ["tool"],
+      inputSchema: "policy.point.tool.native.pre.input.v1",
+      requiredContext: ["sessionId", "runId", "toolId", "toolInput"],
+      allowedEffects: ["tool.filter", "tool.rewrite_input", "run.abort", "audit.annotate"],
+      defaultFailPolicy: "fail-closed",
+      sideEffectBoundary: true,
+    });
+
+    expect(contract.id).toBe("tool.native.pre");
+    expect(contract.allowedEffects).toContain("tool.rewrite_input");
+  });
+
+  test("rejects effects that are not PolicyEffect types", () => {
+    const parsed = Policy.PolicyPoint.Contract.safeParse({
+      id: "tool.native.pre",
+      version: 1,
+      phase: "pre",
+      resourceKinds: ["tool"],
+      inputSchema: "policy.point.tool.native.pre.input.v1",
+      requiredContext: [],
+      allowedEffects: ["tool.delete_everything"],
+      defaultFailPolicy: "fail-closed",
+      sideEffectBoundary: true,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("exports an initial contract for every required 3-tier point", () => {
+    expect(Object.keys(Policy.PolicyPoint.Registry).sort()).toEqual([...expectedPointIds].sort());
+
+    for (const pointId of expectedPointIds) {
+      const contract = Policy.PolicyPoint.Registry[pointId];
+      expect(contract.id).toBe(pointId);
+      expect(contract.version).toBe(1);
+      expect(Policy.PolicyPoint.Contract.safeParse(contract).success).toBe(true);
+    }
+  });
+
+  test("maps all 14 legacy timings to registered 3-tier point IDs", () => {
+    const aliases = Policy.PolicyPoint.TimingAliases;
+
+    expect(Object.keys(aliases).sort()).toEqual(Object.values(Policy.Timing).sort());
+    expect(aliases[Policy.Timing.INBOUND_RECEIVE]).toEqual(["session.inbound.pre"]);
+    expect(aliases[Policy.Timing.INVOKE_PREPARE]).toEqual([
+      "tool.native.pre",
+      "tool.mcp.pre",
+      "delegation.subagent.pre",
+      "delegation.background.pre",
+    ]);
+    expect(aliases[Policy.Timing.INVOKE_RESULT]).toEqual([
+      "tool.native.post",
+      "tool.mcp.post",
+      "delegation.subagent.post",
+      "delegation.background.post",
+    ]);
+
+    for (const pointIds of Object.values(aliases)) {
+      for (const pointId of pointIds) {
+        expect(Policy.PolicyPoint.Registry[pointId]).toBeDefined();
+      }
+    }
+  });
+
+  test("pre-boundary contracts fail closed and post-boundary contracts fail open", () => {
+    expect(Policy.PolicyPoint.Registry["tool.native.pre"].defaultFailPolicy).toBe("fail-closed");
+    expect(Policy.PolicyPoint.Registry["tool.native.pre"].sideEffectBoundary).toBe(true);
+    expect(Policy.PolicyPoint.Registry["tool.native.post"].defaultFailPolicy).toBe("fail-open");
+    expect(Policy.PolicyPoint.Registry["tool.native.post"].sideEffectBoundary).toBe(false);
+    expect(Policy.PolicyPoint.Registry["run.error.error"].phase).toBe("error");
+  });
+});
