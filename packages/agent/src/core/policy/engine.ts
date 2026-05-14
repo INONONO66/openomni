@@ -108,7 +108,7 @@ function buildActor(traceContext: TraceContext.Type | undefined): Record<string,
 }
 
 function resolveAction(timing: Policy.Timing): string {
-  if (timing === "pre_tool_use" || timing === "post_tool_use") return "tool.call";
+  if (timing === "invoke.prepare" || timing === "invoke.result") return "tool.call";
   return `middleware.${timing}`;
 }
 
@@ -224,8 +224,8 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
   async function dispatchSystemPrompt(
     ctx: Omit<PolicyContext, "timing">,
   ): Promise<Policy.SystemPromptResult> {
-    const selected = selectRegistrations(registrations, "on_system_prompt", ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing: "on_system_prompt" };
+    const selected = selectRegistrations(registrations, "context.prepare", ctx.agentType);
+    const fullCtx: PolicyContext = { ...ctx, timing: "context.prepare" };
 
     let systemPrompt: string | undefined;
     const prependParts: string[] = [];
@@ -245,7 +245,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
           component: "agent.policy",
           msg: "middleware error",
           context: {
-            timing: "on_system_prompt",
+            timing: "context.prepare",
             name: reg.name,
             error: String(err),
             failPolicy,
@@ -266,7 +266,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         component: "agent.policy",
         msg: "middleware dispatch",
         context: {
-          timing: "on_system_prompt",
+          timing: "context.prepare",
           name: reg.name,
           verdict: verdict.action,
           durationMs,

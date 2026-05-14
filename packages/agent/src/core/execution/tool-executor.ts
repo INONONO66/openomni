@@ -47,7 +47,7 @@ export function createToolExecutor(
     const ctx = getContext?.();
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-    const preVerdict = await engine.dispatch("pre_tool_use", {
+    const preVerdict = await engine.dispatch("invoke.prepare", {
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
@@ -130,7 +130,7 @@ export function createToolExecutor(
       time: Date.now(),
     });
 
-    const postVerdict = await engine.dispatch("post_tool_use", {
+    const postVerdict = await engine.dispatch("invoke.result", {
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,

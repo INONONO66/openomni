@@ -7,7 +7,7 @@ type CompactionConfig = NonNullable<ChatAgentConfig["compaction"]>;
 export function createCompactionPolicy(config: CompactionConfig): PolicyRegistration {
   return {
     name: "builtin:compaction",
-    timing: "post_compaction",
+    timing: "completion.prepare",
     priority: 900,
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {

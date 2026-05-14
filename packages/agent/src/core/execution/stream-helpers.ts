@@ -1,5 +1,4 @@
 import type { RunInput } from "@openomni/llm";
-import { Retry } from "@openomni/llm";
 import { AgentExecution, Operational } from "@openomni/protocol";
 import type { Message, Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -23,6 +22,7 @@ import {
   createToolPermissionPolicy,
 } from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
+import * as Retry from "../retry";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
 import { toMessagesWithParts } from "./shared";
 import { createToolExecutor } from "./tool-executor";
@@ -176,7 +176,7 @@ export async function dispatchPreRun(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const preRunVerdict = await engine.dispatch("pre_run", {
+  const preRunVerdict = await engine.dispatch("run.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: 0,
@@ -215,7 +215,7 @@ export async function dispatchBudgetCheck(
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
 
-  const postRunVerdict = await engine.dispatch("post_run", {
+  const postRunVerdict = await engine.dispatch("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -250,6 +250,79 @@ export async function dispatchBudgetCheck(
       steps: state.steps,
       usage: state.totalUsage,
       finishReason: "max-steps",
+      compactionCount: getCompactionCount(state),
+    },
+  };
+}
+
+export async function dispatchModelRequest(
+  state: StreamRunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+): Promise<AgentEvent | null> {
+  const verdict = await engine.dispatch("model.request", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: false,
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+  });
+
+  if (verdict.action !== "abort") return null;
+
+  return {
+    type: "complete",
+    result: {
+      text: state.lastAssistantText,
+      steps: state.steps,
+      usage: state.totalUsage,
+      finishReason: "stop",
+      guardAborted: true,
+      compactionCount: getCompactionCount(state),
+    },
+  };
+}
+
+export async function dispatchModelResponse(
+  state: StreamRunState,
+  engine: PolicyEngineInstance,
+  config: ChatAgentConfig,
+  outcomeType: string,
+): Promise<AgentEvent | null> {
+  const verdict = await engine.dispatch("model.response", {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: outcomeType === "stop",
+    continuationCount: state.continuationCount,
+    elapsedMs: Date.now() - state.startTime,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+    toolInput: { outcomeType },
+  });
+
+  if (verdict.action === "transform") {
+    const payload = verdict.input as { text?: unknown };
+    if (typeof payload.text === "string") state.lastAssistantText = payload.text;
+  }
+
+  if (verdict.action !== "abort") return null;
+
+  return {
+    type: "complete",
+    result: {
+      text: state.lastAssistantText,
+      steps: state.steps,
+      usage: state.totalUsage,
+      finishReason: "stop",
+      guardAborted: true,
       compactionCount: getCompactionCount(state),
     },
   };
@@ -310,7 +383,7 @@ export async function buildTurn(
   agentBase: StreamAgentBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnVerdict = await engine.dispatch("pre_turn", {
+  const preTurnVerdict = await engine.dispatch("turn.start", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -390,7 +463,7 @@ export async function buildTurn(
 
   const system = await buildTurnSystemPrompt(state, config, engine);
 
-  // pre_tool_selection — policies can filter/modify tools exposed to LLM
+  // resources.prepare — policies can filter/modify tools exposed to LLM
   const allTools = config.tools ?? [];
   const catalogLabels: Policy.LabelEntry[] = [];
   for (const [name, labels] of toolLabels) {
@@ -398,7 +471,7 @@ export async function buildTurn(
       catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
     }
   }
-  const toolSelectionVerdict = await engine.dispatch("pre_tool_selection", {
+  const toolSelectionVerdict = await engine.dispatch("resources.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -537,7 +610,7 @@ export async function* handleStop(
   for (const verdict of turn.preToolUseVerdicts) {
     yield {
       type: "hook_verdict",
-      timing: "pre_tool_use",
+      timing: "invoke.prepare",
       action: verdict.action,
       reason: "reason" in verdict ? verdict.reason : undefined,
     };
@@ -549,7 +622,7 @@ export async function* handleStop(
   state.steps.push(step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
-  const postTurnVerdict = await engine.dispatch("post_turn", {
+  const postTurnVerdict = await engine.dispatch("turn.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -564,7 +637,7 @@ export async function* handleStop(
 
   yield {
     type: "hook_verdict",
-    timing: "post_turn",
+    timing: "turn.finish",
     action: postTurnVerdict.action,
     reason: "reason" in postTurnVerdict ? postTurnVerdict.reason : undefined,
   };
@@ -657,7 +730,7 @@ export async function* handleError(
   retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const onErrorVerdict = await engine.dispatch("on_error", {
+  const onErrorVerdict = await engine.dispatch("error", {
     toolInput: { error: normalizedError },
     steps: state.steps,
     usage: state.totalUsage,
@@ -782,7 +855,7 @@ async function dispatchPostRunTransform(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
-  const postRunVerdict = await engine.dispatch("post_run", {
+  const postRunVerdict = await engine.dispatch("run.finish", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
@@ -807,7 +880,7 @@ async function applyPostCompaction(
   agentBase: StreamAgentBase,
   isCompletion: boolean,
 ): Promise<void> {
-  const compactionVerdict = await engine.dispatch("post_compaction", {
+  const compactionVerdict = await engine.dispatch("completion.prepare", {
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,

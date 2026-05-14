@@ -1,7 +1,8 @@
-import { run as llmRun, Retry } from "@openomni/llm";
+import { run as llmRun } from "@openomni/llm";
 import { Operational, type Sink } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
+import * as Retry from "../retry";
 import { resolveProviderModel } from "./shared";
 import {
   assertToolExecutor,
@@ -9,6 +10,8 @@ import {
   buildTurn,
   createStreamRunState,
   dispatchBudgetCheck,
+  dispatchModelRequest,
+  dispatchModelResponse,
   dispatchPreRun,
   emitTurnStart,
   handleCompact,
@@ -84,7 +87,17 @@ export async function* streamAgent(
         if (turnResult.budgetWarningEvent) yield turnResult.budgetWarningEvent;
 
         const runLlm = config.llm?.run ?? llmRun;
+        const modelRequestEvent = await dispatchModelRequest(state, engine, config);
+        if (modelRequestEvent) {
+          yield modelRequestEvent;
+          return;
+        }
         const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
+        const modelResponseEvent = await dispatchModelResponse(state, engine, config, outcome.type);
+        if (modelResponseEvent) {
+          yield modelResponseEvent;
+          return;
+        }
 
         if (outcome.type === "stop") {
           const decision = yield* handleStop(state, config, engine, agentBase, turnResult.turn);

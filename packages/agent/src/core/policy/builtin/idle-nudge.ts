@@ -15,10 +15,10 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): PolicyRegis
 
   return {
     name: "builtin:idle-nudge",
-    timing: ["pre_turn", "post_tool_use"],
+    timing: ["turn.start", "invoke.result"],
     priority: 300,
     fn: (ctx) => {
-      if (ctx.timing === "post_tool_use") {
+      if (ctx.timing === "invoke.result") {
         lastProgressAt = Date.now();
         return { action: "continue" };
       }
