@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const policyKernelVersion = 1;
+
 export namespace Policy {
   const MAX_REGEX_PATTERN_LENGTH = 200;
   const MAX_INPUT_LENGTH = 10_000;
@@ -676,6 +678,7 @@ export namespace Policy {
   } satisfies Record<Timing, RegisteredPolicyPointId[]>;
 
   export const PolicyPoint = Object.assign(policyPoint, {
+    version: policyKernelVersion,
     Id: PolicyPointId,
     Contract: PolicyPointContract,
     RegistrySchema: z.record(PolicyPointId, PolicyPointContract),
@@ -712,6 +715,8 @@ export namespace Policy {
 }
 
 export namespace RuntimeResource {
+  export const schemaVersion = policyKernelVersion;
+
   export const Kind = z.enum([
     "tool",
     "skill",
