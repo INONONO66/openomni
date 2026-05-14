@@ -185,3 +185,8 @@
 - The v2 dispatch path composes adapted decisions with `composeEffects()` and returns a composed decision under `agent.policy.composed`, leaving legacy `dispatch()` unchanged.
 - Effect validation is enforced against `PolicyPoint.Registry` allow-lists after composition; descriptor-aware tool dispatch narrows `invoke.prepare` / `invoke.result` to native or MCP policy points when resource metadata is available.
 - Verification passed with changed-file LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.
+
+### Task 23 Findings (2026-05-14)
+- Determinism conformance coverage now freezes golden request/decision fixtures and checks same-input replay, priority-sorted registration permutations, concurrent dispatch isolation, and mutation rejection.
+- `dispatchV2()` snapshots are recursively cloned and frozen before policy execution so policy functions cannot mutate nested request state shared by callers or parallel evaluations.
+- Evidence file: `.sisyphus/evidence/task-23-determinism.txt`; verification passed with LSP diagnostics, `bun test packages/agent`, and `bun run check-types`.

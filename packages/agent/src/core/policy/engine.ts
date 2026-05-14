@@ -104,6 +104,28 @@ function isPreBoundaryTiming(timing: Policy.Timing): boolean {
   );
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function immutableSnapshot<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((entry) => immutableSnapshot(entry))) as T;
+  }
+
+  if (isPlainRecord(value)) {
+    const snapshot: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      snapshot[key] = immutableSnapshot(entry);
+    }
+    return Object.freeze(snapshot) as T;
+  }
+
+  return value;
+}
+
 function systemPromptTerminalError(verdict: Policy.Verdict, name: string): Error {
   const reason = verdict.reason ?? verdict.action;
   const policyId = verdict.policyId ?? "unknown";
@@ -357,7 +379,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     ctx: DispatchV2Context,
   ): Promise<Policy.PolicyDecision> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx: PolicyContext = { ...ctx, timing };
+    const fullCtx: PolicyContext = immutableSnapshot({ ...ctx, timing });
     const decisions: Policy.PolicyDecision[] = [];
 
     for (const reg of selected) {
