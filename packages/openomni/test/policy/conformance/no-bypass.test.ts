@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import type { PolicyRegistration } from "@openomni/agent";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import type { Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import { IngressEngine } from "../../../src/ingress/engine";
@@ -119,20 +119,26 @@ describe("policy no-bypass conformance — openomni governed paths", () => {
       sessionId: "should-not-spawn",
       runId: "should-not-run",
     });
-    const manager = BackgroundManager.create({ maxDepth: 0 });
+    const createPolicyEngine = PolicyEngine.create;
+    const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
+      const engine = createPolicyEngine(options);
+      engine.register(denyAll("background launch denied by conformance policy"));
+      return engine;
+    });
+    const manager = BackgroundManager.create();
 
     const task = await manager.launch({
       agentName: "worker",
       prompt: "should not run",
       model,
       parentSessionId: createParentSession(),
-      depth: 1,
     });
 
     expect(task.status).toBe("failed");
-    expect(task.error).toContain("max depth (0) exceeded");
+    expect(task.error).toBe("background launch denied by conformance policy");
     expect(spawnSpy).toHaveBeenCalledTimes(0);
     manager.dispose();
+    policyEngineSpy.mockRestore();
     spawnSpy.mockRestore();
   });
 

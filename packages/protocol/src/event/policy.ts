@@ -47,7 +47,7 @@ export namespace PolicyEvent {
       actor: z.record(z.string(), z.unknown()),
       action: z.string(),
       resource: z.string(),
-      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]),
+      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject", "deny"]),
       reason: z.string(),
       beforeSideEffect: z.record(z.string(), z.unknown()).optional(),
     }).merge(PolicyAuditContext),
@@ -71,7 +71,7 @@ export namespace PolicyEvent {
       actor: z.record(z.string(), z.unknown()),
       action: z.string(),
       resource: z.string(),
-      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]),
+      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject", "deny"]),
       reason: z.string(),
     }),
   );
@@ -83,7 +83,7 @@ export namespace PolicyEvent {
       actor: z.record(z.string(), z.unknown()),
       action: z.string(),
       resource: z.string(),
-      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject"]),
+      verdict: z.enum(["continue", "skip", "abort", "retry", "transform", "inject", "deny"]),
       reason: z.string(),
     }),
   );

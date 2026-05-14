@@ -515,7 +515,7 @@ export namespace Policy {
       "pre",
       ["prompt"],
       ["sessionId", "runId", "turnIndex"],
-      ["prompt.append_context", "prompt.inject_message", "audit.annotate"],
+      ["prompt.append_context", "prompt.inject_message", "prompt.replace", "audit.annotate"],
       "fail-open",
       true,
     ),
