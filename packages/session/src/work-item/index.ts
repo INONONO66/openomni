@@ -81,6 +81,10 @@ export namespace WorkItemStore {
     return Storage.get().workItem?.list(filter) ?? [];
   }
 
+  export function remove(hash: string): boolean {
+    return Storage.get().workItem?.remove(hash) ?? false;
+  }
+
   export async function update(
     hash: string,
     fields: Partial<Omit<WorkItem.Info, "hash">>,

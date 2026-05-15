@@ -201,6 +201,15 @@ describe("WorkItemStore", () => {
     expect(WorkItemStore.get(item.hash)).toBeUndefined();
   });
 
+  test("removes a work item", async () => {
+    configureSqlite();
+    const item = await createItem("to-remove");
+    expect(WorkItemStore.get(item.hash)).toBeDefined();
+    expect(WorkItemStore.remove(item.hash)).toBe(true);
+    expect(WorkItemStore.get(item.hash)).toBeUndefined();
+    expect(WorkItemStore.remove(item.hash)).toBe(false);
+  });
+
   test("publishes bus events after adapter writes", async () => {
     const adapter = configureSqlite();
     const order: string[] = [];
