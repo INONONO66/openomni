@@ -1,4 +1,5 @@
 import type { PolicyRegistration } from "@openomni/agent";
+import { PolicyDecision } from "@openomni/protocol";
 import { ContextAssembler } from "./assembler";
 
 export interface ContextMiddlewareConfig {
@@ -20,15 +21,15 @@ export function createContextMiddleware(config: ContextMiddlewareConfig): Policy
           globalConfigDir: config.globalConfigDir,
         });
       } catch {
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "server.context" });
       }
 
-      if (!assembled) return { action: "continue" };
+      if (!assembled) return PolicyDecision.allow({ policyId: "server.context" });
 
-      return {
-        action: "transform",
-        input: { appendContext: assembled },
-      };
+      return PolicyDecision.allow({
+        policyId: "server.context",
+        effects: [{ type: "prompt.append_context", context: assembled }],
+      });
     },
   };
 }

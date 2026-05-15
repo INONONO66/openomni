@@ -1,6 +1,6 @@
 import { McpClient } from "@openomni/agent";
-import type { McpServerConfig, Tool } from "@openomni/protocol";
-import { Mcp, PolicyEvent, ToolExecution } from "@openomni/protocol";
+import type { McpServerConfig, RuntimeResource, Tool } from "@openomni/protocol";
+import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import type { NativeTool, ToolCategory, ToolProvider } from "@openomni/openomni";
@@ -13,6 +13,34 @@ interface McpClientLike {
   disconnect(): Promise<void>;
   listTools(): Promise<Tool.Spec[]>;
   callTool(toolName: string, input: Record<string, unknown>, callId?: string): Promise<Tool.Result>;
+}
+
+function uniqueLabels(labels: readonly string[]): string[] {
+  return [...new Set(labels)];
+}
+
+function mcpToolMetadata(
+  serverName: string,
+  spec: Tool.Spec,
+): { readonly labels: string[]; readonly descriptor: RuntimeResource.Descriptor } {
+  const labels = uniqueLabels([
+    ...(spec.labels ?? []),
+    `tool:${spec.name}`,
+    "source.mcp",
+    `mcp.${serverName}`,
+  ]);
+
+  return {
+    labels,
+    descriptor: {
+      id: `tool:mcp:${serverName}:${spec.name}`,
+      kind: "tool",
+      source: { type: "mcp", serverId: serverName, remoteName: spec.name },
+      labels,
+      capabilities: [],
+      effects: [],
+    },
+  };
 }
 
 export interface McpToolProviderOptions {
@@ -65,7 +93,7 @@ export class McpToolProvider implements ToolProvider {
           actor: buildActor(audit.sessionId, audit.actor),
           action: "mcp.server.connect",
           resource: config.name,
-          verdict: "continue" as const,
+          verdict: "allow" as const,
           reason: "MCP server connected",
         });
       }
@@ -77,7 +105,7 @@ export class McpToolProvider implements ToolProvider {
           actor: buildActor(audit.sessionId, audit.actor),
           action: "mcp.server.connect",
           resource: config.name,
-          verdict: "abort" as const,
+          verdict: "deny" as const,
           reason: err instanceof Error ? err.message : String(err),
         });
       }
@@ -123,7 +151,7 @@ export class McpToolProvider implements ToolProvider {
         actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect",
         resource: name,
-        verdict: "continue" as const,
+        verdict: "allow" as const,
         reason: "MCP server disconnected",
       });
     }
@@ -160,7 +188,7 @@ export class McpToolProvider implements ToolProvider {
         actor: buildActor(audit.sessionId, audit.actor),
         action: "mcp.server.disconnect_all",
         resource: "mcp.servers",
-        verdict: "continue" as const,
+        verdict: "allow" as const,
         reason: "MCP servers disconnected",
       });
     }
@@ -176,8 +204,11 @@ export class McpToolProvider implements ToolProvider {
       try {
         const specs = await client.listTools();
         for (const spec of specs) {
+          const metadata = mcpToolMetadata(serverName, spec);
           tools.push({
-            spec,
+            spec: { ...spec, labels: metadata.labels },
+            labels: metadata.labels,
+            descriptor: metadata.descriptor,
             riskTier: 1,
             isReadOnly: false,
             isDestructive: false,
@@ -210,11 +241,11 @@ export class McpToolProvider implements ToolProvider {
         this.clients.has(serverName) && this.connected.has(serverName),
     });
     const tool = guard.tool;
-    if (guard.verdict.action !== "continue" || !tool) {
+    if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
       const result = {
         id: crypto.randomUUID(),
         toolCallId: call.id,
-        output: guard.verdict.reason ?? `Unknown tool: ${call.tool}`,
+        output: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
         isError: true,
       };
       const sessionId = readSessionId(call);
@@ -227,8 +258,8 @@ export class McpToolProvider implements ToolProvider {
           actor: buildActor(sessionId),
           action: MCP_TOOL_ACTION,
           resource: tool?.spec.name ?? call.tool,
-          verdict: "abort" as const,
-          reason: guard.verdict.reason ?? `Unknown tool: ${call.tool}`,
+          verdict: "deny" as const,
+          reason: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
         });
       }
       return result;

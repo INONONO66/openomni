@@ -49,7 +49,7 @@ describe("WebSocketHandler authentication", () => {
       expect.objectContaining({
         name: "channel-authn:websocket-token",
         policyId: "guardrail.permission",
-        verdict: "continue",
+        verdict: "allow",
         reason: "websocket subprotocol token accepted",
       }),
     ]);
@@ -89,7 +89,7 @@ describe("WebSocketHandler authentication", () => {
       expect.objectContaining({
         name: "channel-authn:websocket-token",
         policyId: "guardrail.permission",
-        verdict: "abort",
+        verdict: "deny",
         reason: "websocket token missing or invalid",
       }),
     ]);

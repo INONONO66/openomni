@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
+import { PolicyEngine, type PolicyContext } from "@openomni/agent";
 import type { NativeTool } from "@openomni/openomni";
-import type { Tool } from "@openomni/protocol";
-import { Mcp } from "@openomni/protocol";
+import type { RuntimeResource, Tool } from "@openomni/protocol";
+import { Mcp, PolicyDecision } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import { McpPrefixGuardMiddleware, McpToolProvider } from "../../../src/tool/mcp";
 
@@ -122,6 +123,30 @@ describe("McpToolProvider", () => {
       id: "call-1",
       tool: "search.query",
       input: { query: "hello" },
+    });
+  });
+
+  it("exposes MCP labels and descriptors on refreshed tools for agent policy dispatch", async () => {
+    const client = makeClient();
+    client.listTools.mockResolvedValueOnce([
+      { name: "search.query", description: "query", inputSchema: {}, labels: ["custom.label"] },
+    ]);
+    const provider = new McpToolProvider({ createClient: () => client.client });
+
+    await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
+    await provider.refreshTools();
+
+    const [tool] = provider.listTools();
+    expect(tool.spec.labels).toEqual([
+      "custom.label",
+      "tool:search.query",
+      "source.mcp",
+      "mcp.search",
+    ]);
+    expect(tool.descriptor).toMatchObject({
+      id: "tool:mcp:search:search.query",
+      kind: "tool",
+      source: { type: "mcp", serverId: "search", remoteName: "search.query" },
     });
   });
 
@@ -441,7 +466,7 @@ describe("McpToolProvider", () => {
       expect(lifecycleEvents[1].payload).toMatchObject({
         action: "mcp.server.connect",
         resource: "search",
-        verdict: "continue",
+        verdict: "allow",
         reason: "MCP server connected",
       });
       expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
@@ -478,7 +503,7 @@ describe("McpToolProvider", () => {
       expect(lifecycleEvents[1].payload).toMatchObject({
         action: "mcp.server.disconnect",
         resource: "search",
-        verdict: "continue",
+        verdict: "allow",
       });
       expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
     } finally {
@@ -527,7 +552,7 @@ describe("McpToolProvider", () => {
       expect(lifecycleEvents[1].payload).toMatchObject({
         action: "mcp.server.disconnect_all",
         resource: "mcp.servers",
-        verdict: "continue",
+        verdict: "allow",
       });
       expect(lifecycleEvents[0].payload.actionId).toBe(lifecycleEvents[1].payload.actionId);
     } finally {
@@ -601,8 +626,69 @@ describe("McpPrefixGuardMiddleware", () => {
         isServerConnected: () => testCase.connected,
       });
 
-      expect(result.verdict.policyId).toBe("guardrail.permission");
-      expect(result.verdict.reason).toBeTruthy();
+      expect(result.verdict.policyId).toBe("agent.policy.composed");
+      expect(PolicyDecision.reason(result.verdict)).toBeTruthy();
     }
+  });
+  it("dispatches MCP prefix checks with an MCP resource descriptor for known tools", async () => {
+    const { tool } = makeTool("search.query");
+    const captured: Array<PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor }> = [];
+    const createPolicyEngine = PolicyEngine.create;
+    const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
+      const engine = createPolicyEngine(options);
+      const dispatch = engine.dispatch;
+      engine.dispatch = async (timing, ctx) => {
+        captured.push(ctx as PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor });
+        return dispatch(timing, ctx);
+      };
+      return engine;
+    });
+
+    try {
+      await McpPrefixGuardMiddleware.evaluatePreToolUse({
+        call: { id: "call-mcp-descriptor", tool: "search_query", input: {} },
+        tools: [tool],
+        isServerConnected: () => true,
+      });
+    } finally {
+      policyEngineSpy.mockRestore();
+    }
+
+    expect(captured[0]?.resourceDescriptor).toMatchObject({
+      id: "tool:mcp:search.query",
+      kind: "tool",
+      source: { type: "mcp", serverId: "search" },
+    });
+  });
+
+  it("dispatches MCP prefix checks with an MCP resource descriptor for unknown tools", async () => {
+    const captured: Array<PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor }> = [];
+    const createPolicyEngine = PolicyEngine.create;
+    const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
+      const engine = createPolicyEngine(options);
+      const dispatch = engine.dispatch;
+      engine.dispatch = async (timing, ctx) => {
+        captured.push(ctx as PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor });
+        return dispatch(timing, ctx);
+      };
+      return engine;
+    });
+
+    try {
+      await McpPrefixGuardMiddleware.evaluatePreToolUse({
+        call: { id: "call-mcp-unknown-descriptor", tool: "ghost_query", input: {} },
+        tools: [],
+        isServerConnected: () => true,
+      });
+    } finally {
+      policyEngineSpy.mockRestore();
+    }
+
+    expect(captured[0]?.resourceDescriptor).toMatchObject({
+      id: "tool:mcp:ghost_query",
+      kind: "tool",
+      source: { type: "mcp" },
+      labels: ["source.mcp"],
+    });
   });
 });
