@@ -35,7 +35,7 @@ interface AuditPolicyEvaluated extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Policy.EvaluationResult["action"];
+  readonly verdict: Policy.PolicyDecision["verdict"];
   readonly reason: string;
 }
 
@@ -45,7 +45,7 @@ interface AuditActionApproved extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: "continue";
+  readonly verdict: "allow";
   readonly reason: string;
 }
 
@@ -55,7 +55,7 @@ interface AuditActionBlocked extends AuditBase {
   readonly actor: Record<string, unknown>;
   readonly action: string;
   readonly resource: string;
-  readonly verdict: Policy.EvaluationResult["action"];
+  readonly verdict: Policy.PolicyDecision["verdict"];
   readonly reason: string;
 }
 
@@ -328,13 +328,18 @@ async function beginOperation(
 
   await appendPolicyEvent(state, result);
   if (result.action === "abort") {
-    await blockOperation(state, result.policyId, result.reason, result.action);
+    await blockOperation(state, result.policyId, result.reason, canonicalVerdict(result));
     throw new Error(
       `Skill operation "${request.action}" on "${request.resource}" denied: ${result.reason}`,
     );
   }
 
   return state;
+}
+
+function canonicalVerdict(result: Policy.EvaluationResult): Policy.PolicyDecision["verdict"] {
+  if (result.decision === "require_approval") return "pending";
+  return result.action === "continue" ? "allow" : "deny";
 }
 
 async function appendPolicyEvent(
@@ -350,7 +355,7 @@ async function appendPolicyEvent(
       actor: state.actor,
       action: state.action,
       resource: state.resource,
-      verdict: result.action,
+      verdict: canonicalVerdict(result),
       reason: result.reason,
       ...base,
     }),
@@ -369,7 +374,7 @@ async function approveOperation(state: AuditState, reason: string): Promise<void
       actor: state.actor,
       action: state.action,
       resource: state.resource,
-      verdict: "continue",
+      verdict: "allow",
       reason,
       ...base,
     }),
@@ -382,7 +387,7 @@ async function blockOperation(
   state: AuditState,
   policyId: string,
   reason: string,
-  verdict: AuditActionBlocked["verdict"] = "abort",
+  verdict: AuditActionBlocked["verdict"] = "deny",
 ): Promise<void> {
   await appendAuditEvent(
     state.sessionId,

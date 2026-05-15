@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine, defaultRegistry, type PolicyContext } from "@openomni/agent";
-import type { Policy } from "@openomni/protocol";
+import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { PolicyResolver } from "../../src/policy";
 
@@ -55,13 +55,15 @@ describe("policy pipeline integration", () => {
         const hasGitHubLabel =
           ctx.labels?.some((label) => label.value === "surface.github") ?? false;
         if (hasGitHubLabel) {
-          return {
-            action: "abort",
-            reason: "github_surface_requires_explicit_review_mode",
+          return PolicyDecision.deny({
             policyId: "test:github-surface-guard",
-          };
+            reasonCodes: ["github_surface_requires_explicit_review_mode"],
+            effects: [
+              { type: "run.abort", reason: "github_surface_requires_explicit_review_mode" },
+            ],
+          });
         }
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "test:github-surface-guard" });
       },
     }));
 
@@ -73,16 +75,16 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatchLegacy(
+    const verdict = await engine.dispatch(
       "turn.start",
       baseCtx({ agentType: "reviewer", labels: labelEntries(plan.labels) }),
     );
 
-    expect(verdict).toEqual({
-      action: "abort",
-      reason: "github_surface_requires_explicit_review_mode",
-      policyId: "test:github-surface-guard",
+    expect(verdict).toMatchObject({
+      verdict: "deny",
+      policyId: "agent.policy.composed",
     });
+    expect(PolicyDecision.reason(verdict)).toBe("github_surface_requires_explicit_review_mode");
   });
 
   it("denies write tools for a reviewer agent on GitHub", async () => {
@@ -109,13 +111,13 @@ describe("policy pipeline integration", () => {
       fn: (ctx) => {
         const isWriteTool = ctx.toolLabels?.includes("capability.write") ?? false;
         if (isWriteTool) {
-          return {
-            action: "abort",
-            reason: "reviewer_read_only",
+          return PolicyDecision.deny({
             policyId: "policy:github-review-readonly",
-          };
+            reasonCodes: ["reviewer_read_only"],
+            effects: [{ type: "run.abort", reason: "reviewer_read_only" }],
+          });
         }
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "policy:github-review-readonly" });
       },
     }));
 
@@ -124,7 +126,7 @@ describe("policy pipeline integration", () => {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatchLegacy(
+    const verdict = await engine.dispatch(
       "invoke.prepare",
       baseCtx({
         agentType: "reviewer",
@@ -136,11 +138,11 @@ describe("policy pipeline integration", () => {
       }),
     );
 
-    expect(verdict).toEqual({
-      action: "abort",
-      reason: "reviewer_read_only",
-      policyId: "policy:github-review-readonly",
+    expect(verdict).toMatchObject({
+      verdict: "deny",
+      policyId: "agent.policy.composed",
     });
+    expect(PolicyDecision.reason(verdict)).toBe("reviewer_read_only");
   });
 
   it("keeps permissions-only worker middleware working end-to-end", async () => {
@@ -150,7 +152,7 @@ describe("policy pipeline integration", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const registration of registrations) engine.register(registration);
 
-    const verdict = await engine.dispatchLegacy(
+    const verdict = await engine.dispatch(
       "invoke.prepare",
       baseCtx({
         toolName: "github.create_issue_comment",
@@ -160,10 +162,9 @@ describe("policy pipeline integration", () => {
       }),
     );
 
-    expect(verdict.action).toBe("abort");
-    expect("decision" in verdict ? verdict.decision : undefined).toBe("deny");
-    expect(verdict.reason).toBe("allowlist_miss");
-    expect(verdict.policyId).toBe("guardrail.permission");
+    expect(verdict.verdict).toBe("deny");
+    expect(PolicyDecision.reason(verdict)).toBe("allowlist_miss");
+    expect(verdict.policyId).toBe("agent.policy.composed");
   });
 
   it("fails closed when a required policy is not registered", () => {

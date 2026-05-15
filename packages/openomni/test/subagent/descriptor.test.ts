@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { PolicyContext, PolicyRegistration } from "@openomni/agent";
-import type { RuntimeResource } from "@openomni/protocol";
+import { PolicyDecision, type RuntimeResource } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { BackgroundManager } from "../../src/subagent/background-manager";
 import { BackgroundLimitsMiddleware } from "../../src/subagent/middleware/background-limits";
@@ -27,7 +27,11 @@ function captureDescriptorPolicy(
     priority: 0,
     fn: (ctx) => {
       onCapture(ctx);
-      return { action: "abort", reason: "descriptor captured", policyId: "test" };
+      return PolicyDecision.deny({
+        policyId: "test",
+        reasonCodes: ["descriptor captured"],
+        effects: [{ type: "run.abort", reason: "descriptor captured" }],
+      });
     },
   };
 }
@@ -61,8 +65,8 @@ describe("subagent resource descriptors", () => {
     }
 
     expect(captured?.resourceDescriptor).toEqual({
-      id: "tool:agent:subagent_spawn",
-      kind: "tool",
+      id: "worker:agent:subagent_spawn",
+      kind: "worker",
       source: { type: "agent", agentId: "worker" },
       labels: ["source.agent", "delegation.subagent"],
       capabilities: ["delegation.spawn"],
@@ -71,12 +75,38 @@ describe("subagent resource descriptors", () => {
     expect(captured?.toolLabels).toEqual(["source.agent", "delegation.subagent"]);
   });
 
+  test("SubagentRuntime.spawnBackground attaches a background worker descriptor", async () => {
+    let captured: DescriptorPolicyContext | undefined;
+
+    try {
+      await SubagentRuntime.spawnBackground({
+        agentName: "worker",
+        title: "background work",
+        prompt: "do background work",
+        model,
+        middleware: [captureDescriptorPolicy((ctx) => (captured = ctx))],
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("descriptor captured");
+    }
+
+    expect(captured?.resourceDescriptor).toEqual({
+      id: "worker:agent:background_launch",
+      kind: "worker",
+      source: { type: "agent", agentId: "worker" },
+      labels: ["source.agent", "delegation.background"],
+      capabilities: ["delegation.background"],
+      effects: ["session.create"],
+    });
+  });
+
   test("BackgroundManager.launch passes a background descriptor into the launch policy gate", async () => {
     let captured: PreLaunchContextWithDescriptor | undefined;
     const policySpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockImplementation(
       async (ctx) => {
         captured = ctx;
-        return { verdict: { action: "continue" }, shouldQueue: false };
+        return { verdict: PolicyDecision.allow({ policyId: "test" }), shouldQueue: false };
       },
     );
     const spawnSpy = spyOn(SubagentRuntime, "spawnBackground").mockResolvedValue({
@@ -94,8 +124,8 @@ describe("subagent resource descriptors", () => {
     });
 
     expect(captured?.resourceDescriptor).toEqual({
-      id: "tool:agent:background_launch",
-      kind: "tool",
+      id: "worker:agent:background_launch",
+      kind: "worker",
       source: { type: "agent", agentId: "worker" },
       labels: ["source.agent", "delegation.background"],
       capabilities: ["delegation.background"],

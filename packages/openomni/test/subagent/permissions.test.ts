@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { Policy } from "@openomni/protocol";
+import { Policy, PolicyDecision } from "@openomni/protocol";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
 import { intersectPermissions } from "../../src/execution-runtime/tool/agent/tools/subagent-runtime";
 
@@ -33,8 +33,8 @@ describe("SubagentRuntime permissions", () => {
       toolInput: {},
     });
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.reason).toBe("denylist");
+    expect(verdict.verdict).toBe("deny");
+    expect(PolicyDecision.reason(verdict)).toBe("denylist");
     expect(verdict.policyId).toBe("guardrail.permission");
   });
 

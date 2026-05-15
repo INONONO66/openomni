@@ -1,4 +1,10 @@
-import { PolicyEvent, ToolExecution, type Policy, type Tool } from "@openomni/protocol";
+import {
+  PolicyDecision,
+  PolicyEvent,
+  ToolExecution,
+  type Policy,
+  type Tool,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 import type {
@@ -9,11 +15,6 @@ import type {
 } from "./types.js";
 
 const TOOL_CALL_ACTION = "tool.call";
-
-type EventVerdict = "continue" | "skip" | "abort" | "retry" | "transform" | "inject";
-function toEventVerdict(action: Policy.Verdict["action"]): EventVerdict {
-  return action === "deny" ? "abort" : action;
-}
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -87,16 +88,16 @@ function publishPolicyEvaluated(
   base: { traceId: string; sessionId: string; runId?: string; time: number },
   actor: Record<string, unknown>,
   resource: string,
-  verdict: Policy.Verdict,
+  decision: Policy.PolicyDecision,
 ): void {
   Bus.publish(PolicyEvent.Evaluated, {
     ...base,
-    policyId: verdict.policyId ?? "tool.runtime-policy",
+    policyId: decision.policyId,
     actor,
     action: TOOL_CALL_ACTION,
     resource,
-    verdict: toEventVerdict(verdict.action),
-    reason: verdict.reason ?? "runtime policy evaluated",
+    verdict: decision.verdict,
+    reason: PolicyDecision.reason(decision, "runtime policy evaluated"),
   });
 }
 
@@ -154,12 +155,12 @@ export function createToolExecutor(
         lockOwnerId,
       });
 
-      publishPolicyEvaluated(eventBase(), actor, originalName, policy.verdict);
+      publishPolicyEvaluated(eventBase(), actor, originalName, policy.decision);
 
-      if (policy.verdict.action !== "continue") {
+      if (PolicyDecision.isBlocking(policy.decision)) {
         const result = createErrorResult(
           call,
-          policy.verdict.reason ?? "tool runtime policy aborted",
+          PolicyDecision.reason(policy.decision, "tool runtime policy aborted"),
         );
         Bus.publish(PolicyEvent.ActionBlocked, {
           ...eventBase(),
@@ -167,8 +168,8 @@ export function createToolExecutor(
           actor,
           action: TOOL_CALL_ACTION,
           resource: originalName,
-          verdict: toEventVerdict(policy.verdict.action),
-          reason: policy.verdict.reason ?? "tool runtime policy aborted",
+          verdict: policy.decision.verdict,
+          reason: PolicyDecision.reason(policy.decision, "tool runtime policy aborted"),
         });
         Bus.publish(ToolExecution.Completed, {
           ...eventBase(),
@@ -195,14 +196,14 @@ export function createToolExecutor(
       );
       const durationMs = Date.now() - startTime;
 
-      const postVerdict = await ToolRuntimePolicyMiddleware.evaluatePostTool({
+      const postDecision = await ToolRuntimePolicyMiddleware.evaluatePostTool({
         toolName: originalName,
         toolCallId: call.id,
         input: dispatchedCall.input,
         output: result.output,
         handle: policy.handle,
       });
-      publishPolicyEvaluated(eventBase(), actor, originalName, postVerdict);
+      publishPolicyEvaluated(eventBase(), actor, originalName, postDecision);
 
       Bus.publish(ToolExecution.Completed, {
         ...eventBase(),
@@ -228,15 +229,15 @@ export function createToolExecutor(
         });
       }
 
-      if (policy?.verdict.action === "continue") {
-        const postVerdict = await ToolRuntimePolicyMiddleware.evaluatePostTool({
+      if (policy && !PolicyDecision.isBlocking(policy.decision)) {
+        const postDecision = await ToolRuntimePolicyMiddleware.evaluatePostTool({
           toolName: originalName,
           toolCallId: call.id,
           input: dispatchedCall.input,
           output: message,
           handle: policy.handle,
         });
-        publishPolicyEvaluated(eventBase(), actor, originalName, postVerdict);
+        publishPolicyEvaluated(eventBase(), actor, originalName, postDecision);
       }
 
       const result = createErrorResult(call, message);
@@ -247,7 +248,7 @@ export function createToolExecutor(
           actor,
           action: TOOL_CALL_ACTION,
           resource: originalName,
-          verdict: "abort" as const,
+          verdict: "deny" as const,
           reason: message,
         });
       }

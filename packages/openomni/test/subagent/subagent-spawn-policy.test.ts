@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { PolicyContext } from "@openomni/agent";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { PolicyEngine, type PolicyContext } from "@openomni/agent";
+import { PolicyDecision, type RuntimeResource } from "@openomni/protocol";
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent";
 
@@ -43,10 +44,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     const verdict = await registration.fn(middlewareContext("subagent"));
 
     expect(verdict).toMatchObject({
-      action: "abort",
-      reason: "denylist",
+      verdict: "deny",
       policyId: "guardrail.permission",
     });
+    expect(PolicyDecision.reason(verdict)).toBe("denylist");
   });
 
   test("default denylist ignores non-subagent tool calls", async () => {
@@ -54,7 +55,7 @@ describe("SubagentSpawnPolicyMiddleware", () => {
 
     const verdict = await registration.fn(middlewareContext("read_file"));
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
     expect(verdict.policyId).toBe("guardrail.permission");
   });
 
@@ -65,10 +66,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     });
 
     expect(result.verdict).toMatchObject({
-      action: "abort",
-      reason: "Session not found: missing-session",
-      policyId: "guardrail.permission",
+      verdict: "deny",
+      policyId: "agent.policy.composed",
     });
+    expect(PolicyDecision.reason(result.verdict)).toBe("Session not found: missing-session");
   });
 
   test("session existence policy returns session for valid calls", async () => {
@@ -79,7 +80,7 @@ describe("SubagentSpawnPolicyMiddleware", () => {
       sessionId: session.id,
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.verdict).toBe("allow");
     expect(result.session?.id).toBe(session.id);
   });
 
@@ -96,10 +97,10 @@ describe("SubagentSpawnPolicyMiddleware", () => {
     });
 
     expect(result.verdict).toMatchObject({
-      action: "abort",
-      reason: "Session already has an active run",
-      policyId: "guardrail.permission",
+      verdict: "deny",
+      policyId: "agent.policy.composed",
     });
+    expect(result.verdict.reasonCodes).toContain("Session already has an active run");
   });
 
   test("cancel timeout policy resolves default and explicit hard timeout", async () => {
@@ -126,8 +127,72 @@ describe("SubagentSpawnPolicyMiddleware", () => {
       timeoutMs: 80,
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.verdict).toBe("allow");
     expect(result.waitTimeoutMs).toBe(80);
     expect(SubagentSpawnPolicyMiddleware.enforceWaitTimeout(undefined, noop)).toBeUndefined();
+  });
+  test("evaluatePreSpawn dispatches send with a subagent worker descriptor", async () => {
+    const session = createSession();
+    const captured: Array<PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor }> = [];
+    const createPolicyEngine = PolicyEngine.create;
+    const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
+      const engine = createPolicyEngine(options);
+      const dispatch = engine.dispatch;
+      engine.dispatch = async (timing, ctx) => {
+        captured.push(ctx as PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor });
+        return dispatch(timing, ctx);
+      };
+      return engine;
+    });
+
+    try {
+      await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
+        operation: "send",
+        sessionId: session.id,
+      });
+    } finally {
+      policyEngineSpy.mockRestore();
+    }
+
+    expect(captured[0]?.resourceDescriptor).toEqual({
+      id: "worker:subagent:send",
+      kind: "worker",
+      source: { type: "agent" },
+      labels: ["source.agent", "delegation.subagent", "operation.send"],
+      capabilities: ["delegation.send"],
+      effects: ["session.message"],
+    });
+  });
+
+  test("evaluatePreSpawn dispatches wait with a subagent worker descriptor", async () => {
+    const captured: Array<PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor }> = [];
+    const createPolicyEngine = PolicyEngine.create;
+    const policyEngineSpy = spyOn(PolicyEngine, "create").mockImplementation((options) => {
+      const engine = createPolicyEngine(options);
+      const dispatch = engine.dispatch;
+      engine.dispatch = async (timing, ctx) => {
+        captured.push(ctx as PolicyContext & { resourceDescriptor?: RuntimeResource.Descriptor });
+        return dispatch(timing, ctx);
+      };
+      return engine;
+    });
+
+    try {
+      await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
+        operation: "wait",
+        sessionId: "worker-session",
+      });
+    } finally {
+      policyEngineSpy.mockRestore();
+    }
+
+    expect(captured[0]?.resourceDescriptor).toEqual({
+      id: "worker:subagent:wait",
+      kind: "worker",
+      source: { type: "agent" },
+      labels: ["source.agent", "delegation.subagent", "operation.wait"],
+      capabilities: ["delegation.wait"],
+      effects: [],
+    });
   });
 });

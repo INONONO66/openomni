@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine, type PolicyContext, type PolicyRegistration } from "@openomni/agent";
-import type { Ingress, Policy, Subagent } from "@openomni/protocol";
+import { PolicyDecision, type Ingress, type Policy, type Subagent } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 import { BackgroundLimitsPolicy } from "../../src/policy/background-limits";
@@ -191,8 +191,8 @@ describe("IngressAuthorityMiddleware integration", () => {
 
     expect(decisions.length).toBeGreaterThan(0);
     for (const d of decisions) {
-      expect(d).toHaveProperty("timing");
       expect(d).toHaveProperty("policyId");
+      expect(d).toHaveProperty("verdict");
     }
   });
 
@@ -232,7 +232,7 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.verdict).toBe("allow");
     expect(result.shouldQueue).toBe(false);
   });
 
@@ -251,8 +251,8 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.reason).toContain("per agent");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.reasonCodes.some((reason) => reason.includes("per agent"))).toBe(true);
   });
 
   test("denies when depth limit is exceeded", async () => {
@@ -268,8 +268,8 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.reason).toContain("depth");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.reasonCodes.some((reason) => reason.includes("depth"))).toBe(true);
   });
 
   test("denies when descendant limit from same parent is exceeded", async () => {
@@ -289,8 +289,8 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.reason).toContain("descendants");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.reasonCodes.some((reason) => reason.includes("descendants"))).toBe(true);
   });
 
   test("queues when total concurrency is saturated but queue has capacity", async () => {
@@ -306,7 +306,7 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.verdict).toBe("allow");
     expect(result.shouldQueue).toBe(true);
   });
 
@@ -323,8 +323,8 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.reason).toContain("queue full");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.reasonCodes.some((reason) => reason.includes("queue full"))).toBe(true);
   });
 
   test("registrations produce all five limit checks", () => {
@@ -365,6 +365,67 @@ describe("BackgroundLimitsPolicy integration", () => {
       expect(def.failPolicy).toBe("fail-closed");
     }
   });
+
+  test("evaluates background launch through a background worker descriptor", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+      input: makeLaunchRequest({ agentName: "worker" }),
+      activeTasks: [],
+      activeCount: 0,
+      pendingQueueSize: 0,
+      maxConcurrentPerAgent: 3,
+      maxConcurrentTotal: 10,
+      maxDepth: 5,
+      maxDescendants: 5,
+      maxQueueSize: 20,
+      onDecision: (decision) => decisions.push(decision),
+    });
+
+    expect(result.verdict.verdict).toBe("allow");
+    expect(decisions).toHaveLength(5);
+  });
+
+  test("background launch rejects effects outside delegation.background.pre", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "invalid-background-effect",
+      timing: "invoke.prepare",
+      priority: 0,
+      fn: () =>
+        PolicyDecision.allow({
+          policyId: "invalid-background-effect",
+          reasonCodes: ["invalid-effect"],
+          effects: [{ type: "tool.rewrite_input", input: { command: "echo unsafe" } }],
+        }),
+    });
+
+    const decision = await engine.dispatch("invoke.prepare", {
+      ...baseCtx({
+        toolName: "subagent",
+        toolInput: { operation: "background.launch", agentName: "worker" },
+        resourceDescriptor: {
+          id: "worker:background:worker",
+          kind: "worker",
+          labels: ["source.agent", "delegation.background", "agent:worker"],
+          capabilities: ["background.launch"],
+          effects: ["session.create_child", "worker.spawn"],
+          source: { type: "agent" },
+        },
+      }),
+    });
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.effect_not_allowed");
+    expect(decision.effects).toContainEqual(
+      expect.objectContaining({
+        type: "audit.annotate",
+        annotation: expect.stringContaining(
+          "tool.rewrite_input is not allowed at delegation.background.pre",
+        ),
+        severity: "error",
+      }),
+    );
+  });
 });
 
 describe("ToolRuntimePolicyMiddleware integration", () => {
@@ -377,7 +438,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
       lockOwnerId: "run-1",
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.decision.verdict).toBe("allow");
     expect(result.handle.lockAcquired).toBe(false);
     expect(result.handle.timeoutMs).toBe(30_000);
   });
@@ -391,7 +452,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
       lockOwnerId: "run-2",
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.decision.verdict).toBe("allow");
     expect(result.handle.timeoutMs).toBe(60_000);
   });
 
@@ -408,7 +469,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
       handle,
     });
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   test("enforceTimeout rejects after specified ms", async () => {
@@ -460,7 +521,7 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
 
     expect(decisions.length).toBeGreaterThan(0);
     for (const d of decisions) {
-      expect(d).toHaveProperty("timing", "invoke.prepare");
+      expect(d).toHaveProperty("verdict");
     }
   });
 });
@@ -512,15 +573,15 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
         timing: "invoke.prepare",
         priority: 0,
         failPolicy: "fail-open",
-        fn: () => ({ action: "continue" }),
+        fn: () => PolicyDecision.allow({ policyId: "custom-policy" }),
       },
     ];
 
     const result = SubagentSpawnPolicyMiddleware.childMiddleware(existing, false);
 
     expect(result).toHaveLength(2);
-    expect(result![0].name).toBe("subagent:default-denylist");
-    expect(result![1].name).toBe("custom-policy");
+    expect(result?.[0].name).toBe("subagent:default-denylist");
+    expect(result?.[1].name).toBe("custom-policy");
   });
 
   test("childMiddleware passes through when explicit permissions exist", () => {
@@ -530,7 +591,7 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
         timing: "invoke.prepare",
         priority: 0,
         failPolicy: "fail-open",
-        fn: () => ({ action: "continue" }),
+        fn: () => PolicyDecision.allow({ policyId: "custom-policy" }),
       },
     ];
 
@@ -550,7 +611,7 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
       sessionId: session.id,
     });
 
-    expect(result.verdict.action).toBe("continue");
+    expect(result.verdict.verdict).toBe("allow");
     expect(result.session?.id).toBe(session.id);
   });
 
@@ -589,14 +650,14 @@ describe("cross-middleware deny-wins", () => {
     const engine = PolicyEngine.create({ audit: false });
     engine.register(denylistReg);
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       ...baseCtx(),
       toolName: "subagent",
       toolInput: { operation: "spawn" },
     });
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.reason).toBe("denylist");
+    expect(verdict.verdict).toBe("deny");
+    expect(PolicyDecision.reason(verdict)).toBe("denylist");
   });
 
   test("ingress allows user but background depth limit denies launch", async () => {
@@ -622,8 +683,8 @@ describe("cross-middleware deny-wins", () => {
       maxQueueSize: 20,
     });
 
-    expect(bgResult.verdict.action).toBe("abort");
-    expect(bgResult.verdict.reason).toContain("depth");
+    expect(bgResult.verdict.verdict).toBe("deny");
+    expect(bgResult.verdict.reasonCodes.some((reason) => reason.includes("depth"))).toBe(true);
   });
 
   test("deny-wins across policy engine boundaries with mixed verdicts", async () => {
@@ -634,7 +695,7 @@ describe("cross-middleware deny-wins", () => {
       timing: "invoke.prepare",
       priority: 0,
       failPolicy: "fail-closed",
-      fn: () => ({ action: "continue", policyId: "allow-policy", reason: "allowed" }),
+      fn: () => PolicyDecision.allow({ policyId: "allow-policy", reasonCodes: ["allowed"] }),
     };
 
     const denyPolicy: PolicyRegistration = {
@@ -642,21 +703,26 @@ describe("cross-middleware deny-wins", () => {
       timing: "invoke.prepare",
       priority: 10,
       failPolicy: "fail-closed",
-      fn: () => ({ action: "abort", policyId: "deny-policy", reason: "denied by policy" }),
+      fn: () =>
+        PolicyDecision.deny({
+          policyId: "deny-policy",
+          reasonCodes: ["denied by policy"],
+          effects: [{ type: "run.abort", reason: "denied by policy" }],
+        }),
     };
 
     engine.register(allowPolicy);
     engine.register(denyPolicy);
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       ...baseCtx(),
       toolName: "some_tool",
       toolInput: {},
     });
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.policyId).toBe("deny-policy");
-    expect(verdict.reason).toBe("denied by policy");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.policyId).toBe("agent.policy.composed");
+    expect(verdict.reasonCodes).toContain("denied by policy");
   });
 
   test("worker middleware deny + tool runtime continue → overall deny", async () => {
@@ -666,15 +732,15 @@ describe("cross-middleware deny-wins", () => {
     const engine = PolicyEngine.create({ audit: false });
     for (const reg of workerRegs) engine.register(reg);
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       ...baseCtx(),
       toolName: "bash",
       toolCallId: "call-bash",
       toolInput: { command: "rm -rf /" },
     });
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.reason).toBe("allowlist_miss");
+    expect(verdict.verdict).toBe("deny");
+    expect(PolicyDecision.reason(verdict)).toBe("allowlist_miss");
   });
 
   test("ingress deny blocks entire pipeline regardless of downstream allowances", async () => {
@@ -702,7 +768,7 @@ describe("cross-middleware deny-wins", () => {
       operation: "send",
       sessionId: session.id,
     });
-    expect(spawnResult.verdict.action).toBe("continue");
+    expect(spawnResult.verdict.verdict).toBe("allow");
   });
 
   test("multiple background limits compound: first deny wins", async () => {
@@ -725,7 +791,7 @@ describe("cross-middleware deny-wins", () => {
       maxQueueSize: 20,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.reason).toContain("per agent");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.reasonCodes.some((reason) => reason.includes("per agent"))).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Tool } from "@openomni/protocol";
+import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "./executor.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
@@ -231,13 +231,13 @@ describe("createToolExecutor", () => {
       timeoutConfig: { tier2: 15 },
       lockOwnerId: "owner-1",
       onDecision: (decision) => {
-        decisions.push(`${decision.policyId}:${decision.reason ?? ""}`);
+        decisions.push(`${decision.policyId}:${PolicyDecision.reason(decision, "")}`);
       },
     });
 
-    expect(result.verdict.action).toBe("continue");
-    expect(result.verdict.policyId).toBe("tool.runtime-policy");
-    expect(result.verdict.reason).toBe("runtime policy evaluated");
+    expect(result.decision.verdict).toBe("allow");
+    expect(result.decision.policyId).toBe("tool.runtime-policy");
+    expect(PolicyDecision.reason(result.decision)).toBe("runtime policy evaluated");
     expect(result.handle.timeoutMs).toBe(15);
     expect(decisions).toContain("tool.runtime-policy:high-risk tool execution recorded");
     expect(decisions).toContain("tool.runtime-policy:timeout resolved");

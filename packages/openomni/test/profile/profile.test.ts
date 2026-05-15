@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { Profile } from "../../src/profile";
 import { MEMORY_GUIDANCE } from "../../src/profile/guidance";
 
@@ -22,6 +23,23 @@ async function withTempDir(fn: (dir: string) => Promise<void>) {
   }
 }
 
+function expectAllow(decision: Policy.PolicyDecision, policyId = "profile"): void {
+  expect(decision).toEqual(PolicyDecision.allow({ policyId }));
+}
+
+function expectEffect(
+  decision: Policy.PolicyDecision,
+  effect: Policy.PolicyEffect,
+  policyId = "profile",
+): void {
+  expect(decision).toEqual(
+    PolicyDecision.allow({
+      policyId,
+      effects: [effect],
+    }),
+  );
+}
+
 describe("Profile", () => {
   describe("loader", () => {
     it("loads all three files when present", async () => {
@@ -36,26 +54,34 @@ describe("Profile", () => {
         const [soul, user, memory] = registrations;
 
         const soulVerdict = await soul.fn({} as any);
-        expect(soulVerdict).toEqual({
-          action: "transform",
-          input: { prependContext: "═══ PERSONA IDENTITY ═══\nYou are a helpful assistant." },
-        });
+        expectEffect(
+          soulVerdict,
+          {
+            type: "prompt.inject_message",
+            message: "═══ PERSONA IDENTITY ═══\nYou are a helpful assistant.",
+          },
+          "profile.soul",
+        );
 
         const userVerdict = await user.fn({} as any);
-        expect(userVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: `\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nName: Alice`,
+        expectEffect(
+          userVerdict,
+          {
+            type: "prompt.append_context",
+            context: `\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nName: Alice`,
           },
-        });
+          "profile.user",
+        );
 
         const memoryVerdict = await memory.fn({} as any);
-        expect(memoryVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nUser prefers dark mode`,
+        expectEffect(
+          memoryVerdict,
+          {
+            type: "prompt.append_context",
+            context: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nUser prefers dark mode`,
           },
-        });
+          "profile.memory",
+        );
       });
     });
 
@@ -71,13 +97,15 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const userVerdict = await registrations[1].fn({} as any);
 
-        expect(userVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext:
+        expectEffect(
+          userVerdict,
+          {
+            type: "prompt.append_context",
+            context:
               "\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nGlobal preferences\n\nAgent-specific prefs",
           },
-        });
+          "profile.user",
+        );
       });
     });
 
@@ -91,12 +119,14 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const userVerdict = await registrations[1].fn({} as any);
 
-        expect(userVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: "\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nGlobal only",
+        expectEffect(
+          userVerdict,
+          {
+            type: "prompt.append_context",
+            context: "\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nGlobal only",
           },
-        });
+          "profile.user",
+        );
       });
     });
 
@@ -109,12 +139,14 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const userVerdict = await registrations[1].fn({} as any);
 
-        expect(userVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: "\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nAgent only",
+        expectEffect(
+          userVerdict,
+          {
+            type: "prompt.append_context",
+            context: "\u2550\u2550\u2550 USER PROFILE \u2550\u2550\u2550\nAgent only",
           },
-        });
+          "profile.user",
+        );
       });
     });
 
@@ -123,7 +155,7 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         for (const reg of registrations) {
           const verdict = await reg.fn({} as any);
-          expect(verdict).toEqual({ action: "continue" });
+          expectAllow(verdict);
         }
       });
     });
@@ -136,16 +168,17 @@ describe("Profile", () => {
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const soulVerdict = await registrations[0].fn({} as any);
-        expect(soulVerdict).toEqual({
-          action: "transform",
-          input: { prependContext: "═══ PERSONA IDENTITY ═══\nSoul content only" },
-        });
+        expectEffect(
+          soulVerdict,
+          { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nSoul content only" },
+          "profile.soul",
+        );
 
         const userVerdict = await registrations[1].fn({} as any);
-        expect(userVerdict).toEqual({ action: "continue" });
+        expectAllow(userVerdict);
 
         const memoryVerdict = await registrations[2].fn({} as any);
-        expect(memoryVerdict).toEqual({ action: "continue" });
+        expectAllow(memoryVerdict);
       });
     });
 
@@ -157,7 +190,7 @@ describe("Profile", () => {
         });
         for (const reg of registrations) {
           const verdict = await reg.fn({} as any);
-          expect(verdict).toEqual({ action: "continue" });
+          expectAllow(verdict);
         }
       });
     });
@@ -167,7 +200,7 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "..", homeRoot: dir });
         for (const reg of registrations) {
           const verdict = await reg.fn({} as any);
-          expect(verdict).toEqual({ action: "continue" });
+          expectAllow(verdict);
         }
       });
     });
@@ -183,7 +216,7 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         for (const reg of registrations) {
           const verdict = await reg.fn({} as any);
-          expect(verdict).toEqual({ action: "continue" });
+          expectAllow(verdict);
         }
       });
     });
@@ -241,13 +274,13 @@ describe("Profile", () => {
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const soulVerdict = await registrations[0].fn({} as any);
-        expect(soulVerdict).toHaveProperty("input.prependContext");
+        expect(soulVerdict.effects[0]).toMatchObject({ type: "prompt.inject_message" });
 
         const userVerdict = await registrations[1].fn({} as any);
-        expect(userVerdict).toHaveProperty("input.appendContext");
+        expect(userVerdict.effects[0]).toMatchObject({ type: "prompt.append_context" });
 
         const memoryVerdict = await registrations[2].fn({} as any);
-        expect(memoryVerdict).toHaveProperty("input.appendContext");
+        expect(memoryVerdict.effects[0]).toMatchObject({ type: "prompt.append_context" });
       });
     });
 
@@ -260,12 +293,14 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const verdict = await registrations[2].fn({} as any);
 
-        expect(verdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nUser likes TypeScript`,
+        expectEffect(
+          verdict,
+          {
+            type: "prompt.append_context",
+            context: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nUser likes TypeScript`,
           },
-        });
+          "profile.memory",
+        );
       });
     });
 
@@ -277,7 +312,7 @@ describe("Profile", () => {
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const verdict = await registrations[2].fn({} as any);
-        expect(verdict).toEqual({ action: "continue" });
+        expectAllow(verdict);
       });
     });
   });
@@ -297,10 +332,11 @@ describe("Profile", () => {
 
         const second = await registrations[0].fn({} as any);
         expect(second).toEqual(first);
-        expect(second).toEqual({
-          action: "transform",
-          input: { prependContext: "═══ PERSONA IDENTITY ═══\noriginal soul" },
-        });
+        expectEffect(
+          second,
+          { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\noriginal soul" },
+          "profile.soul",
+        );
       });
     });
 
@@ -312,20 +348,22 @@ describe("Profile", () => {
 
         const first = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const firstVerdict = await first[0].fn({} as any);
-        expect(firstVerdict).toEqual({
-          action: "transform",
-          input: { prependContext: "═══ PERSONA IDENTITY ═══\nversion one" },
-        });
+        expectEffect(
+          firstVerdict,
+          { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nversion one" },
+          "profile.soul",
+        );
 
         const soulPath = join(dir, ".openomni", "profiles", "test-agent", "SOUL.md");
         await Bun.write(soulPath, "version two");
 
         const second = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const secondVerdict = await second[0].fn({} as any);
-        expect(secondVerdict).toEqual({
-          action: "transform",
-          input: { prependContext: "═══ PERSONA IDENTITY ═══\nversion two" },
-        });
+        expectEffect(
+          secondVerdict,
+          { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nversion two" },
+          "profile.soul",
+        );
       });
     });
 
@@ -344,12 +382,14 @@ describe("Profile", () => {
         await Bun.write(memoryPath, "updated memory");
 
         const memoryVerdict = await registrations[2].fn({} as any);
-        expect(memoryVerdict).toEqual({
-          action: "transform",
-          input: {
-            appendContext: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nupdated memory`,
+        expectEffect(
+          memoryVerdict,
+          {
+            type: "prompt.append_context",
+            context: `\u2550\u2550\u2550 DECLARATIVE MEMORY \u2550\u2550\u2550\n${MEMORY_GUIDANCE}\n\nupdated memory`,
           },
-        });
+          "profile.memory",
+        );
       });
     });
   });

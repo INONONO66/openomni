@@ -107,7 +107,7 @@ describe("SkillManager", () => {
       actor,
       action: "skill.install",
       resource: "global-alpha",
-      verdict: "continue",
+      verdict: "allow",
       reason: "default_allow",
       visibility: "internal",
     });
@@ -116,7 +116,7 @@ describe("SkillManager", () => {
       actor,
       action: "skill.install",
       resource: "global-alpha",
-      verdict: "continue",
+      verdict: "allow",
     });
     expect(Object.keys(events[0].input ?? {})).not.toContain("promptFragment");
   });
@@ -185,7 +185,7 @@ describe("SkillManager", () => {
       type: "action_blocked",
       action: "skill.enable",
       resource: "missing",
-      verdict: "abort",
+      verdict: "deny",
       reason: "skill_not_installed",
     });
   });
@@ -218,7 +218,7 @@ describe("SkillManager", () => {
       type: "action_blocked",
       action: "skill.install",
       resource: "denied",
-      verdict: "abort",
+      verdict: "deny",
       reason: "denylist",
     });
   });

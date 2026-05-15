@@ -1,5 +1,5 @@
 import type { PolicyRegistration } from "@openomni/agent";
-import { type Policy, Skill } from "@openomni/protocol";
+import { type Policy, PolicyDecision, Skill } from "@openomni/protocol";
 
 const layerOrder: Record<Skill.Layer, number> = {
   execution: 0,
@@ -26,26 +26,24 @@ export function createSkillActivationMiddleware(
     priority: options.priority ?? 90,
     ...(options.scope !== undefined && { scope: options.scope }),
     ...(options.propagate !== undefined && { propagate: options.propagate }),
-    fn: () => activationVerdict(activeSkills),
+    fn: () => activationDecision(activeSkills),
   };
 }
 
-function activationVerdict(skills: readonly Skill.Definition[]): Policy.Verdict {
+function activationDecision(skills: readonly Skill.Definition[]): Policy.PolicyDecision {
   if (skills.length === 0) {
-    return {
-      action: "continue",
+    return PolicyDecision.allow({
       policyId: "skill.activation",
-      reason: "no active skills",
-    };
+      reasonCodes: ["no active skills"],
+    });
   }
 
   const conflicts = findConflicts(skills);
-  return {
-    action: "inject",
-    message: composePrompt(skills),
+  return PolicyDecision.allow({
     policyId: conflicts.length > 0 ? "skill.activation.conflict" : "skill.activation",
-    reason: composeReason(skills, conflicts),
-  };
+    reasonCodes: [composeReason(skills, conflicts)],
+    effects: [{ type: "prompt.inject_message", message: composePrompt(skills) }],
+  });
 }
 
 function sortSkills(skills: readonly Skill.Definition[]): Skill.Definition[] {

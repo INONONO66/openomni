@@ -4,7 +4,13 @@ import {
   type PolicyContext,
   type PolicyRegistration,
 } from "@openomni/agent";
-import { type Policy, type Message, Subagent, type RuntimeResource } from "@openomni/protocol";
+import {
+  PolicyDecision,
+  type Policy,
+  type Message,
+  Subagent,
+  type RuntimeResource,
+} from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
@@ -45,8 +51,8 @@ function createSubagentDescriptor(
 ): RuntimeResource.Descriptor {
   if (operation === "send") {
     return {
-      id: "tool:agent:subagent_send",
-      kind: "tool",
+      id: "worker:agent:subagent_send",
+      kind: "worker",
       source: { type: "agent", agentId: childAgent },
       labels: ["source.agent", "delegation.subagent"],
       capabilities: ["delegation.send"],
@@ -54,9 +60,20 @@ function createSubagentDescriptor(
     };
   }
 
+  if (operation === "spawn_background") {
+    return {
+      id: "worker:agent:background_launch",
+      kind: "worker",
+      source: { type: "agent", agentId: childAgent },
+      labels: ["source.agent", "delegation.background"],
+      capabilities: ["delegation.background"],
+      effects: ["session.create"],
+    };
+  }
+
   return {
-    id: "tool:agent:subagent_spawn",
-    kind: "tool",
+    id: "worker:agent:subagent_spawn",
+    kind: "worker",
     source: { type: "agent", agentId: childAgent },
     labels: ["source.agent", "delegation.subagent"],
     capabilities: ["delegation.spawn"],
@@ -70,8 +87,13 @@ async function dispatchPreDelegation(input: {
   parentSessionId?: string;
   operation: PreDelegationOperation;
   prompt: string;
-}): Promise<Policy.Verdict> {
-  if (!input.middleware?.length) return { action: "continue" };
+}): Promise<Policy.PolicyDecision> {
+  if (!input.middleware?.length) {
+    return PolicyDecision.allow({
+      policyId: "subagent.delegation",
+      reasonCodes: ["no middleware registered"],
+    });
+  }
 
   const engine = PolicyEngine.create({ audit: false });
   for (const reg of input.middleware) {
@@ -103,36 +125,40 @@ async function dispatchPreDelegation(input: {
     resourceDescriptor,
   };
 
-  return engine.dispatchLegacy("invoke.prepare", policyContext);
+  return engine.dispatch("invoke.prepare", policyContext);
 }
 
-function applyDelegationTransform(
+function applyDelegationConstraints(
   config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
-  input: Record<string, unknown>,
+  decision: Policy.PolicyDecision,
 ): void {
-  if (input.permissions !== undefined) config.permissions = input.permissions as Policy.Permission;
-  if (typeof input.softTimeoutMs === "number") config.softTimeoutMs = input.softTimeoutMs;
-  if (typeof input.hardTimeoutMs === "number") config.hardTimeoutMs = input.hardTimeoutMs;
+  const constraints = decision.effects
+    .filter(
+      (effect): effect is Extract<Policy.PolicyEffect, { type: "delegation.set_constraints" }> =>
+        effect.type === "delegation.set_constraints",
+    )
+    .at(-1)?.constraints;
+
+  if (!constraints) return;
+  const permissions = constraints.permissions;
+  if (permissions && typeof permissions === "object" && "action" in permissions) {
+    config.permissions = permissions as Policy.Permission;
+  }
+  if (typeof constraints.softTimeoutMs === "number")
+    config.softTimeoutMs = constraints.softTimeoutMs;
+  if (typeof constraints.hardTimeoutMs === "number")
+    config.hardTimeoutMs = constraints.hardTimeoutMs;
 }
 
-function applyPreDelegationVerdict(
+function applyPreDelegationDecision(
   config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
-  verdict: Policy.Verdict,
+  decision: Policy.PolicyDecision,
   fallbackReason: string,
 ): void {
-  switch (verdict.action) {
-    case "continue":
-      return;
-    case "transform":
-      applyDelegationTransform(config, verdict.input);
-      return;
-    case "skip":
-    case "abort":
-    case "retry":
-    case "inject":
-    case "deny":
-      throw new Error(verdict.reason ?? fallbackReason);
+  if (PolicyDecision.isBlocking(decision)) {
+    throw new Error(PolicyDecision.reason(decision, fallbackReason));
   }
+  applyDelegationConstraints(config, decision);
 }
 
 export namespace SubagentRuntime {
@@ -204,14 +230,14 @@ export namespace SubagentRuntime {
   }
 
   export async function spawn(config: SpawnConfig): Promise<RunResult> {
-    const verdict = await dispatchPreDelegation({
+    const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
       operation: "spawn",
       prompt: config.prompt,
     });
-    applyPreDelegationVerdict(config, verdict, "invoke.prepare policy aborted spawn");
+    applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted spawn");
 
     const session = createSpawnSession(config);
 
@@ -245,14 +271,14 @@ export namespace SubagentRuntime {
   }
 
   export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
-    const verdict = await dispatchPreDelegation({
+    const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
       operation: "spawn_background",
       prompt: config.prompt,
     });
-    applyPreDelegationVerdict(config, verdict, "invoke.prepare policy aborted spawn");
+    applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted background spawn");
 
     const session = createSpawnSession(config);
 
@@ -291,14 +317,14 @@ export namespace SubagentRuntime {
     const childAgent =
       typeof childMeta?.agentName === "string" ? childMeta.agentName : config.sessionId;
     const childSession = Session.get(config.sessionId);
-    const sendVerdict = await dispatchPreDelegation({
+    const sendDecision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent,
       parentSessionId: childSession?.parentSessionId,
       operation: "send",
       prompt: config.prompt,
     });
-    applyPreDelegationVerdict(config, sendVerdict, "invoke.prepare policy aborted send");
+    applyPreDelegationDecision(config, sendDecision, "invoke.prepare policy aborted send");
 
     const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
       operation: "send",
@@ -347,11 +373,11 @@ export namespace SubagentRuntime {
         operation: "resume",
         sessionId: config.sessionId,
       });
-      if (policy.verdict.action !== "continue") {
-        if (policy.verdict.reason === `Session not found: ${config.sessionId}`) {
+      if (PolicyDecision.isBlocking(policy.verdict)) {
+        if (PolicyDecision.reason(policy.verdict) === `Session not found: ${config.sessionId}`) {
           return { resumed: false, sessionId: config.sessionId, runId: undefined };
         }
-        throw new Error(policy.verdict.reason ?? "subagent resume policy aborted");
+        throw new Error(PolicyDecision.reason(policy.verdict, "subagent resume policy aborted"));
       }
 
       const latestRun = policy.latestRun;
@@ -388,7 +414,7 @@ export namespace SubagentRuntime {
       sessionId: config.sessionId,
       hardTimeoutMs: config.hardTimeoutMs,
     });
-    if (policy.verdict.action !== "continue") return;
+    if (PolicyDecision.isBlocking(policy.verdict)) return;
     const session = policy.session;
     if (!session) return;
 

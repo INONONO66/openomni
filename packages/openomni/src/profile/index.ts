@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Operational } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { PolicyRegistration } from "@openomni/agent";
 import { homedir } from "node:os";
@@ -102,8 +102,11 @@ function createSoulRegistration(homeRoot: string, agentName: string): PolicyRegi
     fn: async () => {
       try {
         if (snapshot === null) snapshot = await loadSoul(homeRoot, agentName);
-        if (!snapshot) return { action: "continue" };
-        return { action: "transform", input: { prependContext: renderSoul(snapshot) } };
+        if (!snapshot) return PolicyDecision.allow({ policyId: "profile" });
+        return PolicyDecision.allow({
+          policyId: "profile.soul",
+          effects: [{ type: "prompt.inject_message", message: renderSoul(snapshot) }],
+        });
       } catch (error) {
         Bus.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
@@ -112,7 +115,7 @@ function createSoulRegistration(homeRoot: string, agentName: string): PolicyRegi
           msg: "profile:soul middleware failed",
           context: { error },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "profile" });
       }
     },
   };
@@ -129,8 +132,11 @@ function createUserRegistration(homeRoot: string, agentName: string): PolicyRegi
     fn: async () => {
       try {
         if (snapshot === null) snapshot = await loadUser(homeRoot, agentName);
-        if (!snapshot) return { action: "continue" };
-        return { action: "transform", input: { appendContext: renderUser(snapshot) } };
+        if (!snapshot) return PolicyDecision.allow({ policyId: "profile" });
+        return PolicyDecision.allow({
+          policyId: "profile.user",
+          effects: [{ type: "prompt.append_context", context: renderUser(snapshot) }],
+        });
       } catch (error) {
         Bus.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
@@ -139,7 +145,7 @@ function createUserRegistration(homeRoot: string, agentName: string): PolicyRegi
           msg: "profile:user middleware failed",
           context: { error },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "profile" });
       }
     },
   };
@@ -156,8 +162,11 @@ function createMemoryRegistration(homeRoot: string, agentName: string): PolicyRe
     fn: async () => {
       try {
         if (snapshot === null) snapshot = await loadMemory(homeRoot, agentName);
-        if (!snapshot) return { action: "continue" };
-        return { action: "transform", input: { appendContext: renderMemory(snapshot) } };
+        if (!snapshot) return PolicyDecision.allow({ policyId: "profile" });
+        return PolicyDecision.allow({
+          policyId: "profile.memory",
+          effects: [{ type: "prompt.append_context", context: renderMemory(snapshot) }],
+        });
       } catch (error) {
         Bus.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
@@ -166,7 +175,7 @@ function createMemoryRegistration(homeRoot: string, agentName: string): PolicyRe
           msg: "profile:memory middleware failed",
           context: { error },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "profile" });
       }
     },
   };

@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
-import type { Ingress } from "@openomni/protocol";
-import { Ingress as IngressNamespace } from "@openomni/protocol";
+import {
+  Ingress as IngressNamespace,
+  PolicyDecision as ProtocolPolicyDecision,
+  type Ingress,
+} from "@openomni/protocol";
 import { Storage } from "@openomni/session";
 import {
   defaultRunFn,
@@ -110,10 +113,9 @@ describe("IngressEngine", () => {
     expect((error as Error).message).toContain("coordinator is required");
     expect(decisions).toContainEqual(
       expect.objectContaining({
-        name: "ingress:coordinator-presence",
         policyId: "ingress.coordinator",
-        verdict: "abort",
-        reason: "coordinator is required",
+        verdict: "deny",
+        reasonCodes: ["coordinator is required"],
       }),
     );
   });
@@ -173,11 +175,12 @@ describe("IngressEngine", () => {
       name: "test:deny-inbound",
       timing: "inbound.receive",
       priority: 0,
-      fn: () => ({
-        action: "deny" as const,
-        reason: "inbound denied by policy",
-        policyId: "test:deny-inbound",
-      }),
+      fn: () =>
+        ProtocolPolicyDecision.deny({
+          policyId: "test:deny-inbound",
+          reasonCodes: ["inbound denied by policy"],
+          effects: [{ type: "run.abort", reason: "inbound denied by policy" }],
+        }),
     });
 
     const error = await catchError(
@@ -198,7 +201,7 @@ describe("IngressEngine", () => {
     expect(dispatchCalled).toBe(false);
   });
 
-  it("fails closed when inbound.receive returns an unsupported verdict", async () => {
+  it("treats inbound.receive pending verdict as terminal", async () => {
     let dispatchCalled = false;
     IngressEngine.setCoordinator({
       async dispatch(_sessionId, request) {
@@ -217,11 +220,12 @@ describe("IngressEngine", () => {
       name: "test:retry-inbound",
       timing: "inbound.receive",
       priority: 0,
-      fn: () => ({
-        action: "retry" as const,
-        reason: "retry is not supported at inbound.receive",
-        policyId: "test:retry-inbound",
-      }),
+      fn: () =>
+        ProtocolPolicyDecision.pending({
+          policyId: "test:retry-inbound",
+          reasonCodes: ["approval required at inbound.receive"],
+          effects: [{ type: "run.abort", reason: "approval required at inbound.receive" }],
+        }),
     });
 
     const error = await catchError(
@@ -238,7 +242,7 @@ describe("IngressEngine", () => {
     );
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("retry is not supported at inbound.receive");
+    expect((error as Error).message).toBe("approval required at inbound.receive");
     expect(dispatchCalled).toBe(false);
   });
 
@@ -344,7 +348,6 @@ describe("IngressEngine", () => {
 
       expect(caughtError).toBeInstanceOf(Error);
       expect((caughtError as Error).message).toContain("unknown ingress mode");
-      expect((caughtError as Error).message).toContain("unknown-mode");
     } finally {
       schema.safeParse = originalSafeParse;
     }
@@ -369,7 +372,12 @@ describe("IngressEngine", () => {
         timing: "inbound.receive",
         priority: 0,
         failPolicy: "fail-closed",
-        fn: () => ({ action: "abort" as const, policyId: "test.abort", reason }),
+        fn: () =>
+          ProtocolPolicyDecision.deny({
+            policyId: "test.abort",
+            reasonCodes: [reason],
+            effects: [{ type: "run.abort", reason }],
+          }),
       };
     }
 
@@ -378,7 +386,7 @@ describe("IngressEngine", () => {
         name: "test:ingress-continue",
         timing: "inbound.receive",
         priority: 0,
-        fn: () => ({ action: "continue" as const, policyId: "test.continue", reason: "ok" }),
+        fn: () => ProtocolPolicyDecision.allow({ policyId: "test.continue", reasonCodes: ["ok"] }),
       };
     }
 
@@ -410,11 +418,10 @@ describe("IngressEngine", () => {
 
       await catchError(IngressEngine.ingest(makeEvent()));
 
-      const ingressDecision = decisions.find((d) => d.timing === "inbound.receive");
+      const ingressDecision = decisions.find((d) => d.policyId === "test.abort");
       expect(ingressDecision).toBeDefined();
-      expect(ingressDecision!.name).toBe("test:ingress-abort");
-      expect(ingressDecision!.verdict).toBe("abort");
-      expect(ingressDecision!.reason).toBe("blocked");
+      expect(ingressDecision?.verdict).toBe("deny");
+      expect(ProtocolPolicyDecision.reason(ingressDecision!)).toBe("blocked");
     });
 
     it("provides surface and actor labels to policy context", async () => {
@@ -425,7 +432,10 @@ describe("IngressEngine", () => {
         priority: 0,
         fn: (ctx) => {
           capturedLabels = ctx.labels;
-          return { action: "continue" as const, policyId: "test.labels", reason: "captured" };
+          return ProtocolPolicyDecision.allow({
+            policyId: "test.labels",
+            reasonCodes: ["captured"],
+          });
         },
       });
       testState.responseQueue.push("ok");

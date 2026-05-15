@@ -2,7 +2,7 @@ import {
   IngressEvent,
   type Execution,
   type Ingress,
-  type Policy,
+  PolicyDecision as Decision,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
@@ -46,7 +46,7 @@ export namespace IngressHandlers {
       engine.register(reg);
     }
 
-    const verdict = await engine.dispatchLegacy("writeback.commit", {
+    const decision = await engine.dispatch("writeback.commit", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -63,24 +63,19 @@ export namespace IngressHandlers {
       traceContext: ctx.traceContext,
     });
 
-    return resolveWritebackVerdict(verdict, output);
+    return resolveWritebackDecision(decision, output);
   }
 
-  function resolveWritebackVerdict(verdict: Policy.Verdict, output: string): string {
-    switch (verdict.action) {
-      case "continue":
-        return output;
-      case "transform": {
-        const input = verdict.input as { output?: unknown };
-        return typeof input.output === "string" ? input.output : output;
-      }
-      case "skip":
-      case "abort":
-      case "retry":
-      case "inject":
-      case "deny":
-        throw new Error(verdict.reason ?? `writeback.commit policy returned ${verdict.action}`);
+  function resolveWritebackDecision(decision: Decision, output: string): string {
+    if (Decision.isBlocking(decision)) {
+      throw new Error(Decision.reason(decision, "writeback.commit policy denied"));
     }
+    const suppress = decision.effects.find((effect) => effect.type === "writeback.suppress");
+    if (suppress?.type === "writeback.suppress") {
+      throw new Error(suppress.reason ?? "writeback.commit policy suppressed output");
+    }
+    const rewrite = decision.effects.find((effect) => effect.type === "writeback.rewrite");
+    return rewrite?.type === "writeback.rewrite" ? rewrite.output : output;
   }
 
   export function buildExecutionRequest(ctx: HandlerContext): Execution.Request {
