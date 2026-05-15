@@ -348,8 +348,8 @@ describe("createToolExecutor effect application", () => {
 
     const result = await executor(makeCall("call-plain-post-deny"));
 
-    expect(result.output).toBe("[Denied: post-deny]");
-    expect(result.isError).toBe(true);
+    expect(result.output).toBe("original");
+    expect(result.isError).toBeUndefined();
   });
 
   it("blocks and redacts output when invoke.result returns deny with explicit run.abort", async () => {
@@ -494,8 +494,8 @@ describe("createToolExecutor effect application", () => {
       const result = await executor(makeCall("call-post-audit"));
 
       expect(calls).toBeGreaterThan(0);
-      expect(result.isError).toBe(true);
-      expect(result.output).toBe("[Denied: post-deny]");
+      expect(result.isError).toBeUndefined();
+      expect(result.output).toBe("original");
     });
 
     it("onDecision callback receives invoke.result decisions", async () => {

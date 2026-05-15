@@ -692,6 +692,13 @@ export async function* handleStop(
   const toolAbort = turn.toolPolicyDecisions.find(
     (entry) => PolicyDecision.isBlocking(entry.decision) && effectOf(entry.decision, "run.abort"),
   );
+
+  yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turn.turnUsage };
+
+  const step: AgentStep = { type: "text", content: state.lastAssistantText };
+  state.steps.push(step);
+  if (config.onStepFinish) await config.onStepFinish(step);
+
   if (toolAbort) {
     const event: AgentEvent = {
       type: "complete",
@@ -707,12 +714,6 @@ export async function* handleStop(
     yield event;
     return "complete";
   }
-
-  yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turn.turnUsage };
-
-  const step: AgentStep = { type: "text", content: state.lastAssistantText };
-  state.steps.push(step);
-  if (config.onStepFinish) await config.onStepFinish(step);
 
   const postTurnDecision = await engine.dispatch("turn.finish", {
     steps: state.steps,

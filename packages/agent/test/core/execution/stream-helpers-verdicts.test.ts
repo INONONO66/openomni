@@ -160,8 +160,12 @@ describe("stream helper deny verdicts", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("aborts on model.response deny because run.abort is enforced at post-boundary", async () => {
+  it("records a diagnostic and keeps model.response deny fail-open", async () => {
     Bus.reset();
+    const diagnostics: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === Operational.Info.name) diagnostics.push(payload);
+    });
     const engine = PolicyEngine.create();
     engine.register({
       name: "deny-model-response",
@@ -170,13 +174,18 @@ describe("stream helper deny verdicts", () => {
       fn: () => deny("test.deny", "after-provider"),
     });
 
-    const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop");
+    try {
+      const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop");
+      await Promise.resolve();
 
-    const complete = expectComplete(result);
-    expect(complete.result.guardAborted).toBe(true);
+      expect(result).toBeNull();
+      expect(hasDenyDiagnostic(diagnostics, "model.response")).toBe(true);
+    } finally {
+      unsubscribe();
+    }
   });
 
-  it("aborts on turn.finish deny because run.abort is enforced at post-boundary", async () => {
+  it("emits a hook verdict and completes normally for turn.finish deny", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
@@ -198,7 +207,7 @@ describe("stream helper deny verdicts", () => {
 
     expect(hook).toMatchObject({ timing: "turn.finish", action: "deny", reason: "post-turn" });
     expect(complete).toBeDefined();
-    expect(complete?.result.guardAborted).toBe(true);
+    expect(complete?.result.guardAborted).toBeUndefined();
   });
 
   it("records a diagnostic and fail-closes completion.prepare deny", async () => {
