@@ -51,7 +51,7 @@ describe("PolicyEvent BusEvents", () => {
         actor,
         action: "tool.execute",
         resource: "tool:shell",
-        verdict: "continue",
+        verdict: "allow",
         reason: "user has admin role",
       }),
     );
@@ -65,7 +65,7 @@ describe("PolicyEvent BusEvents", () => {
         actor,
         action: "tool.execute",
         resource: "tool:shell",
-        verdict: "transform",
+        verdict: "pending",
         reason: "sanitizing input",
         beforeSideEffect: { originalInput: "dangerous" },
       }),
@@ -80,7 +80,7 @@ describe("PolicyEvent BusEvents", () => {
         actor,
         action: "tool.execute",
         resource: "tool:shell",
-        verdict: "continue",
+        verdict: "allow",
         reason: "composed allow",
         effects: [{ type: "audit.annotate", annotation: "allowed" } satisfies Policy.PolicyEffect],
         obligations: [{ type: "human_approval", reason: "needs review" }],
@@ -125,7 +125,7 @@ describe("PolicyEvent BusEvents", () => {
         actor,
         action: "tool.execute",
         resource: "tool:shell",
-        verdict: "abort",
+        verdict: "deny",
         reason: "user lacks required permission",
       }),
     );
@@ -139,14 +139,14 @@ describe("PolicyEvent BusEvents", () => {
         actor,
         action: "tool.execute",
         resource: "tool:shell",
-        verdict: "continue",
+        verdict: "allow",
         reason: "approved by policy",
       }),
     );
   });
 
   test("all verdict types are accepted", () => {
-    const verdicts = ["continue", "skip", "abort", "retry", "transform", "inject", "deny"] as const;
+    const verdicts = ["allow", "deny", "pending"] as const;
 
     for (const verdict of verdicts) {
       expectParseOk(() =>

@@ -193,47 +193,6 @@ export namespace Policy {
     return verdict("allow", "default_allow");
   }
 
-  export const Verdict = z.discriminatedUnion("action", [
-    z.object({
-      action: z.literal("continue"),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("skip"),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("abort"),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("retry"),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("transform"),
-      input: z.record(z.string(), z.unknown()),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("inject"),
-      message: z.string(),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("deny"),
-      reason: z.string().optional(),
-      policyId: z.string().optional(),
-    }),
-  ]);
-  export type Verdict = z.infer<typeof Verdict>;
-
   export const Timing = {
     INBOUND_RECEIVE: "inbound.receive",
     RUN_START: "run.start",
@@ -273,27 +232,19 @@ export namespace Policy {
   });
   export type Definition = z.infer<typeof Definition>;
 
-  export const Decision = z.object({
-    timing: z.string(),
-    label: z.string(),
-    policyId: z.string(),
-    verdict: Verdict,
-    reason: z.string().optional(),
-    durationMs: z.number().optional(),
-  });
-  export type Decision = z.infer<typeof Decision>;
-
   export const PolicyEffectType = z.enum([
     "prompt.append_context",
     "prompt.inject_message",
     "prompt.replace",
     "tool.filter",
     "tool.rewrite_input",
+    "tool.rewrite_output",
     "tool.skip_invocation",
     "tool.require_approval",
     "run.abort",
     "run.continue_with_prompt",
     "run.retry_after",
+    "run.replace_messages",
     "delegation.set_constraints",
     "delegation.require_approval",
     "audit.annotate",
@@ -327,6 +278,10 @@ export namespace Policy {
       input: z.record(z.string(), z.unknown()),
     }),
     z.object({
+      type: z.literal("tool.rewrite_output"),
+      output: z.string(),
+    }),
+    z.object({
       type: z.literal("tool.skip_invocation"),
       reason: z.string().optional(),
     }),
@@ -346,6 +301,10 @@ export namespace Policy {
       type: z.literal("run.retry_after"),
       delayMs: z.number().int().min(0),
       maxRetries: z.number().int().min(1).optional(),
+    }),
+    z.object({
+      type: z.literal("run.replace_messages"),
+      messages: z.array(z.unknown()),
     }),
     z.object({
       type: z.literal("delegation.set_constraints"),
@@ -388,16 +347,19 @@ export namespace Policy {
   });
   export type PolicyObligation = z.infer<typeof PolicyObligation>;
 
-  export const PolicyDecision = z.object({
-    policyId: z.string(),
-    policyVersion: z.string().optional(),
-    verdict: z.enum(["allow", "deny", "pending"]),
-    effects: z.array(PolicyEffect),
-    obligations: z.array(PolicyObligation).optional(),
-    reasonCodes: z.array(z.string()),
-    factsUsed: z.array(z.string()).optional(),
-    durationMs: z.number().min(0).optional(),
-  });
+  export const PolicyDecision = z
+    .object({
+      policyId: z.string(),
+      policyVersion: z.string().optional(),
+      verdict: z.enum(["allow", "deny", "pending"]),
+      effects: z.array(PolicyEffect),
+      obligations: z.array(PolicyObligation).optional(),
+      reasonCodes: z.array(z.string()),
+      factsUsed: z.array(z.string()).optional(),
+      durationMs: z.number().min(0).optional(),
+      priority: z.number().optional(),
+    })
+    .strict();
   export type PolicyDecision = z.infer<typeof PolicyDecision>;
 
   export const EffectiveDecision = z.object({
@@ -499,7 +461,13 @@ export namespace Policy {
       "pre",
       ["run"],
       ["actorId", "sessionId", "runId"],
-      ["audit.annotate", "run.abort", "delegation.set_constraints", "prompt.append_context"],
+      [
+        "audit.annotate",
+        "run.abort",
+        "delegation.set_constraints",
+        "prompt.append_context",
+        "prompt.inject_message",
+      ],
       ...preBoundary,
     ),
     "run.turn.pre": contract(
@@ -507,7 +475,13 @@ export namespace Policy {
       "pre",
       ["run"],
       ["sessionId", "runId", "turnIndex"],
-      ["audit.annotate", "run.abort", "run.retry_after", "prompt.append_context"],
+      [
+        "audit.annotate",
+        "run.abort",
+        "run.retry_after",
+        "prompt.append_context",
+        "prompt.inject_message",
+      ],
       ...preBoundary,
     ),
     "prompt.context.pre": contract(
@@ -540,7 +514,7 @@ export namespace Policy {
       "post",
       ["connection"],
       ["sessionId", "runId", "modelId", "responseTokens"],
-      ["audit.annotate", "run.abort", "run.continue_with_prompt"],
+      ["audit.annotate", "run.abort", "prompt.inject_message", "run.replace_messages"],
       ...postBoundary,
     ),
     "tool.native.pre": contract(
@@ -548,7 +522,14 @@ export namespace Policy {
       "pre",
       ["tool"],
       ["sessionId", "runId", "toolId", "toolInput"],
-      ["tool.filter", "tool.rewrite_input", "tool.require_approval", "run.abort", "audit.annotate"],
+      [
+        "tool.filter",
+        "tool.rewrite_input",
+        "tool.skip_invocation",
+        "tool.require_approval",
+        "run.abort",
+        "audit.annotate",
+      ],
       ...preBoundary,
     ),
     "tool.mcp.pre": contract(
@@ -556,7 +537,14 @@ export namespace Policy {
       "pre",
       ["tool"],
       ["sessionId", "runId", "toolId", "mcpServerId", "toolInput"],
-      ["tool.filter", "tool.rewrite_input", "tool.require_approval", "run.abort", "audit.annotate"],
+      [
+        "tool.filter",
+        "tool.rewrite_input",
+        "tool.skip_invocation",
+        "tool.require_approval",
+        "run.abort",
+        "audit.annotate",
+      ],
       ...preBoundary,
     ),
     "delegation.subagent.pre": contract(
@@ -580,7 +568,7 @@ export namespace Policy {
       "post",
       ["tool"],
       ["sessionId", "runId", "toolId", "toolResult"],
-      ["audit.annotate", "run.abort"],
+      ["audit.annotate", "run.abort", "tool.rewrite_output"],
       ...postBoundary,
     ),
     "tool.mcp.post": contract(
@@ -588,7 +576,7 @@ export namespace Policy {
       "post",
       ["tool"],
       ["sessionId", "runId", "toolId", "mcpServerId", "toolResult"],
-      ["audit.annotate", "run.abort"],
+      ["audit.annotate", "run.abort", "tool.rewrite_output"],
       ...postBoundary,
     ),
     "delegation.subagent.post": contract(
@@ -612,7 +600,13 @@ export namespace Policy {
       "post",
       ["run"],
       ["sessionId", "runId", "turnIndex", "turnResult"],
-      ["audit.annotate", "run.abort", "run.continue_with_prompt"],
+      [
+        "audit.annotate",
+        "run.abort",
+        "run.continue_with_prompt",
+        "prompt.inject_message",
+        "run.replace_messages",
+      ],
       ...postBoundary,
     ),
     "run.completion.pre": contract(
@@ -620,7 +614,7 @@ export namespace Policy {
       "pre",
       ["run"],
       ["sessionId", "runId", "completionCandidate"],
-      ["audit.annotate", "run.abort", "prompt.append_context"],
+      ["audit.annotate", "run.abort", "prompt.append_context", "run.replace_messages"],
       ...preBoundary,
     ),
     "session.writeback.pre": contract(
@@ -628,7 +622,7 @@ export namespace Policy {
       "pre",
       ["session"],
       ["sessionId", "runId", "writebackPayload"],
-      ["audit.annotate", "run.abort"],
+      ["audit.annotate", "run.abort", "writeback.rewrite", "writeback.suppress"],
       ...preBoundary,
     ),
     "run.lifecycle.post": contract(
@@ -703,13 +697,92 @@ export namespace Policy {
     registryVersion: z.string().optional(),
   });
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
+}
 
-  export const SystemPromptResult = z.object({
-    systemPrompt: z.string().optional(),
-    prependContext: z.string().optional(),
-    appendContext: z.string().optional(),
-  });
-  export type SystemPromptResult = z.infer<typeof SystemPromptResult>;
+export type PolicyDecision = Policy.PolicyDecision;
+
+export namespace PolicyDecision {
+  export interface Options {
+    readonly policyId: string;
+    readonly effects?: Policy.PolicyEffect[];
+    readonly reasonCodes?: string[];
+    readonly obligations?: Policy.PolicyObligation[];
+    readonly factsUsed?: string[];
+    readonly durationMs?: number;
+    readonly priority?: number;
+  }
+
+  function create(
+    verdict: Policy.PolicyDecision["verdict"],
+    options: Options,
+  ): Policy.PolicyDecision {
+    return {
+      policyId: options.policyId,
+      verdict,
+      effects: options.effects ?? [],
+      reasonCodes: options.reasonCodes ?? [],
+      ...(options.obligations !== undefined && { obligations: options.obligations }),
+      ...(options.factsUsed !== undefined && { factsUsed: options.factsUsed }),
+      ...(options.durationMs !== undefined && { durationMs: options.durationMs }),
+      ...(options.priority !== undefined && { priority: options.priority }),
+    };
+  }
+
+  export function allow(options: Options): Policy.PolicyDecision {
+    return create("allow", options);
+  }
+
+  export function deny(options: Options): Policy.PolicyDecision {
+    return create("deny", options);
+  }
+
+  export function pending(options: Options): Policy.PolicyDecision {
+    return create("pending", options);
+  }
+
+  export function isBlocking(decision: Policy.PolicyDecision): boolean {
+    return decision.verdict !== "allow";
+  }
+
+  export function reason(
+    decision: Policy.PolicyDecision,
+    fallback: string = decision.verdict,
+  ): string {
+    return decision.reasonCodes[0] ?? fallback;
+  }
+
+  export function fromEvaluation(
+    result: Policy.EvaluationResult,
+    options: { readonly policyId?: string; readonly denyEffect?: Policy.PolicyEffect } = {},
+  ): Policy.PolicyDecision {
+    const policyId = options.policyId ?? result.policyId;
+    const reasonCodes = [result.reason];
+    if (result.decision === "require_approval") {
+      return pending({
+        policyId,
+        reasonCodes,
+        effects: [{ type: "tool.require_approval", reason: result.reason }],
+        obligations: [
+          {
+            obligationId: `${policyId}.approval`,
+            type: "humanApproval",
+            description: result.reason,
+          },
+        ],
+      });
+    }
+
+    if (result.action === "continue") return allow({ policyId, reasonCodes });
+
+    return deny({
+      policyId,
+      reasonCodes,
+      effects: [
+        options.denyEffect ?? { type: "run.abort", reason: result.reason },
+        { type: "audit.annotate", annotation: result.reason, severity: "error" },
+      ],
+    });
+  }
 }
 
 export namespace RuntimeResource {
