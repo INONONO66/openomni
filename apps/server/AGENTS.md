@@ -65,12 +65,12 @@ Two execution modes are selected by `OPENOMNI_MODE` env var:
 **Coordinator mode** (default):
 1. `loadConfig()` — read env + config files.
 2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
-3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`, `TaskToolProvider`, `TodoToolProvider`.
+3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` — pick a default model from stored credentials (if any).
-6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP, task, and todo tools.
+6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP tools.
 7. `IngressEngine.setCoordinator(coordinator)`.
-8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, taskProvider, todoProvider, defaultModel, workspaceRoot })`.
+8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, defaultModel, workspaceRoot })`.
 9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
 10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
 11. Start each channel (`channel.start()` in parallel).
@@ -114,9 +114,6 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | `AgentToolProvider` | `@openomni/openomni` | subagent delegation tools |
 | `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
 | `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
-| `TaskToolProvider` | `@openomni/openomni` | task management tools |
-| `TodoToolProvider` | `@openomni/openomni` | todo list tools |
-
 `createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Policy.Permission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
 
 ## CHANNELS

@@ -18,8 +18,6 @@ export * from "./execution/index.js";
 export * from "./ipc/index.js";
 export * from "./worker-bootstrap/index.js";
 export * from "./tool-selection/index.js";
-export * from "./task/index.js";
-export * from "./todo/index.js";
 export * from "./work-item/index.js";
 export * from "./storage/index.js";
 export * from "./trace/index.js";

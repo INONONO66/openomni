@@ -60,8 +60,6 @@ export namespace Storage {
       ): Array<{ id: string; data: string; status: string; output?: string }>;
       delete(id: string): void;
     };
-    task?: ProtocolStorage.TaskSubAdapter;
-    todo?: ProtocolStorage.TodoSubAdapter;
     workItem?: ProtocolStorage.WorkItemSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
   }

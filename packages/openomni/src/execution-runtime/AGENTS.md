@@ -15,7 +15,6 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
 - Agent delegation tools live under `tool/agent/`.
-- Task and todo tools live under their own provider directories and read persistence through `@openomni/session` storage sub-adapters.
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 ## Safety rules

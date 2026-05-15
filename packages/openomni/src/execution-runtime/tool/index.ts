@@ -5,8 +5,6 @@ export { createToolExecutor } from "./executor.js";
 export { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
 export { ToolProxyProvider } from "./tool-proxy-provider.js";
 export { SystemToolProvider } from "./system/index.js";
-export { TaskToolProvider } from "./task/provider.js";
-export { TodoToolProvider } from "./todo/provider.js";
 export type { CatalogEntry } from "./catalog.js";
 export type { ToolExecutorContext } from "./executor.js";
 export type {

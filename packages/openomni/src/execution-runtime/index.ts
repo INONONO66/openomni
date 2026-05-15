@@ -5,8 +5,6 @@ export {
   AgentToolProvider,
   ToolProxyProvider,
   SystemToolProvider,
-  TaskToolProvider,
-  TodoToolProvider,
   Tool,
   buildToolCatalog,
   createToolExecutor,

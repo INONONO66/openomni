@@ -4,8 +4,6 @@ import {
   type AgentToolProvider,
   SessionBridge,
   SystemToolProvider,
-  TaskToolProvider,
-  TodoToolProvider,
   buildWorkerMiddleware,
   type CoordinatorLike,
 } from "@openomni/openomni";
@@ -39,16 +37,12 @@ async function run(config: Config, request: Execution.Request): Promise<Executio
   const workspaceRoot =
     request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspaceRoot;
   const systemProvider = new SystemToolProvider(workspaceRoot);
-  const taskProvider = new TaskToolProvider();
-  const todoProvider = new TodoToolProvider();
 
   const availableTools = [
     ...systemProvider.listTools(),
     ...config.agentProvider.listTools(),
     ...config.mcpProvider.listTools(),
     ...(config.customProvider?.listTools() ?? []),
-    ...taskProvider.listTools(),
-    ...todoProvider.listTools(),
   ];
 
   const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);

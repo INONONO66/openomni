@@ -2,8 +2,7 @@ import { Subagent } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { WorkerRunStateStore } from "./state-store.js";
 
-// Subagent execution lifecycle per session. Separate from Task.Run in @openomni/openomni,
-// which handles scheduled-task runs (triggers, idempotency, checkpoints).
+// Subagent execution lifecycle per session, kept separate from user-facing work items.
 
 export type WorkerRunStatus =
   | "queued"
