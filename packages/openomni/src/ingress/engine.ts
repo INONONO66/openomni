@@ -1,5 +1,10 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { type Ingress, type Policy, IngressEvent } from "@openomni/protocol";
+import {
+  type Ingress,
+  type Policy,
+  IngressEvent,
+  PolicyDecision as Decision,
+} from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import { IngressEventProjector } from "./event-projector";
@@ -15,18 +20,9 @@ let _coordinator: CoordinatorLike | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 
-function assertInboundReceiveAllowed(verdict: Policy.Verdict): void {
-  switch (verdict.action) {
-    case "continue":
-      return;
-    case "skip":
-    case "abort":
-    case "retry":
-    case "transform":
-    case "inject":
-    case "deny":
-      throw new Error(verdict.reason ?? `inbound.receive policy returned ${verdict.action}`);
-  }
+function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
+  if (!Decision.isBlocking(decision)) return;
+  throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
 }
 
 export namespace IngressEngine {
@@ -99,7 +95,7 @@ export namespace IngressEngine {
         if (role) labels.push({ value: `actor.${role}`, source: "system" });
       }
 
-      const verdict = await engine.dispatchLegacy("inbound.receive", {
+      const decision = await engine.dispatch("inbound.receive", {
         steps: [],
         usage: emptyUsage,
         turnCount: 0,
@@ -111,7 +107,7 @@ export namespace IngressEngine {
         traceContext: trace,
       });
 
-      assertInboundReceiveAllowed(verdict);
+      assertInboundReceiveAllowed(decision);
     }
 
     const agentModel = inboundEvent.agent.model;

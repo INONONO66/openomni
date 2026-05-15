@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { Messenger, Tool } from "@openomni/protocol";
+import { PolicyDecision, type Messenger, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "../../../../src/core/execution/tool-executor";
 import {
@@ -24,7 +24,15 @@ function denyAll(timing: PolicyRegistration["timing"], reason: string): PolicyRe
     timing,
     priority: 0,
     failPolicy: "fail-closed",
-    fn: () => ({ action: "deny", reason, policyId: `conformance.${timing}.deny-all` }),
+    fn: () =>
+      PolicyDecision.deny({
+        policyId: `conformance.${timing}.deny-all`,
+        reasonCodes: [reason],
+        effects:
+          timing === "context.prepare"
+            ? [{ type: "audit.annotate", annotation: reason, severity: "error" }]
+            : [{ type: "run.abort", reason }],
+      }),
   };
 }
 
@@ -100,11 +108,11 @@ describe("policy no-bypass conformance — agent governed paths", () => {
       ...denyAll("invoke.prepare", "mcp tool denied by conformance policy"),
       fn: (ctx) => {
         capturedLabels.push(ctx.toolLabels ?? []);
-        return {
-          action: "deny" as const,
-          reason: "mcp tool denied by conformance policy",
+        return PolicyDecision.deny({
           policyId: "conformance.mcp.deny-all",
-        };
+          reasonCodes: ["mcp tool denied by conformance policy"],
+          effects: [{ type: "run.abort", reason: "mcp tool denied by conformance policy" }],
+        });
       },
     });
 
@@ -130,7 +138,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     const error = await messenger.send(envelope("blocked", "worker")).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("Authorization denied");
+    expect((error as Error).message).toContain("authorization denied");
     expect(transport.sendMock).toHaveBeenCalledTimes(0);
     Bus.reset();
   });
@@ -139,12 +147,9 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     const engine = PolicyEngine.create();
     engine.register(denyAll("context.prepare", "system prompt denied by conformance policy"));
 
-    const error = await engine
-      .dispatchSystemPrompt(basePolicyContext())
-      .catch((err: unknown) => err);
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("system prompt denied by conformance policy");
+    const decision = await engine.dispatch("context.prepare", basePolicyContext());
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("system prompt denied by conformance policy");
   });
 
   it("blocks writeback commit before final output is committed", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Policy } from "@openomni/protocol";
 import { PolicyEngine } from "../../../../src/core/policy";
 import type { PolicyContext, PolicyRegistration } from "../../../../src/core/policy";
+import { allow, inject } from "../../../helpers/policy-decision";
 
 type PolicyDecision = Policy.PolicyDecision;
 
@@ -21,12 +22,25 @@ const goldenDecision = Object.freeze({
   policyId: "agent.policy.composed",
   verdict: "allow",
   effects: Object.freeze([
-    Object.freeze({ type: "prompt.inject_message", message: "Require approval for writes." }),
-    Object.freeze({ type: "prompt.inject_message", message: "Use read-only tools first." }),
     Object.freeze({ type: "prompt.inject_message", message: "Keep an audit trail." }),
+    Object.freeze({ type: "prompt.inject_message", message: "Use read-only tools first." }),
+    Object.freeze({ type: "prompt.inject_message", message: "Require approval for writes." }),
   ]),
   reasonCodes: Object.freeze(["policy.audit", "policy.readonly", "policy.approval"]),
 });
+
+function stableDecision(decision: PolicyDecision): Omit<PolicyDecision, "durationMs"> {
+  const { durationMs: _durationMs, ...stable } = decision;
+  return stable;
+}
+
+function expectCanonicalDecision(
+  decision: PolicyDecision,
+  expected: Omit<PolicyDecision, "durationMs">,
+): void {
+  expect(stableDecision(decision)).toEqual(expected);
+  expect(typeof decision.durationMs).toBe("number");
+}
 
 function cloneGoldenRequest(): Omit<PolicyContext, "timing"> {
   return {
@@ -48,34 +62,19 @@ function policySet(): PolicyRegistration[] {
       name: "workspace-lock",
       timing: "model.request",
       priority: 30,
-      fn: () => ({
-        action: "inject",
-        message: "Require approval for writes.",
-        reason: "policy.approval",
-        policyId: "policy.approval",
-      }),
+      fn: () => inject("Require approval for writes.", "policy.approval", "policy.approval"),
     },
     {
       name: "rewrite-cwd",
       timing: "model.request",
       priority: 10,
-      fn: () => ({
-        action: "inject",
-        message: "Keep an audit trail.",
-        reason: "policy.audit",
-        policyId: "policy.audit",
-      }),
+      fn: () => inject("Keep an audit trail.", "policy.audit", "policy.audit"),
     },
     {
       name: "runtime-timeout",
       timing: "model.request",
       priority: 20,
-      fn: () => ({
-        action: "inject",
-        message: "Use read-only tools first.",
-        reason: "policy.readonly",
-        policyId: "policy.readonly",
-      }),
+      fn: () => inject("Use read-only tools first.", "policy.readonly", "policy.readonly"),
     },
   ];
 }
@@ -102,8 +101,8 @@ describe("policy determinism conformance", () => {
     const first = await evaluate();
     const second = await evaluate();
 
-    expect(first).toEqual(goldenDecision);
-    expect(second).toEqual(goldenDecision);
+    expectCanonicalDecision(first, goldenDecision);
+    expectCanonicalDecision(second, goldenDecision);
   });
 
   it("is stable across randomized policy registration order", async () => {
@@ -112,7 +111,7 @@ describe("policy determinism conformance", () => {
     );
 
     for (const decision of decisions) {
-      expect(decision).toEqual(goldenDecision);
+      expectCanonicalDecision(decision, goldenDecision);
     }
   });
 
@@ -123,7 +122,7 @@ describe("policy determinism conformance", () => {
     );
 
     for (const decision of decisions) {
-      expect(decision).toEqual(goldenDecision);
+      expectCanonicalDecision(decision, goldenDecision);
     }
   });
 
@@ -142,7 +141,7 @@ describe("policy determinism conformance", () => {
             mutationRejected = true;
           }
 
-          return { action: "continue", policyId: "policy.mutating" };
+          return allow("policy.mutating");
         },
       },
     ]);
@@ -151,7 +150,7 @@ describe("policy determinism conformance", () => {
 
     expect(mutationRejected).toBe(true);
     expect(request).toEqual(cloneGoldenRequest());
-    expect(decision).toEqual({
+    expectCanonicalDecision(decision, {
       policyId: "agent.policy.composed",
       verdict: "allow",
       effects: [],

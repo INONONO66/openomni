@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PolicyContext } from "@openomni/agent";
+import { PolicyDecision } from "@openomni/protocol";
 import { createContextMiddleware } from "../../src/context/middleware";
 
 let tempRoot: string;
@@ -46,7 +47,7 @@ describe("createContextMiddleware", () => {
     expect(middleware.failPolicy).toBe("fail-open");
   });
 
-  it("returns { action: 'continue' } when workspace is empty", async () => {
+  it("returns allow when workspace is empty", async () => {
     const ws = makeWorkspace("empty-workspace");
     const middleware = createContextMiddleware({ workspaceRoot: ws });
 
@@ -58,10 +59,10 @@ describe("createContextMiddleware", () => {
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
-    expect(result).toEqual({ action: "continue" });
+    expect(result).toEqual(PolicyDecision.allow({ policyId: "server.context" }));
   });
 
-  it("returns { action: 'transform', input: { appendContext: '...' } } when AGENTS.md exists", async () => {
+  it("returns allow with append-context effect when AGENTS.md exists", async () => {
     const ws = makeWorkspace("with-agents");
     writeFileSync(join(ws, "AGENTS.md"), "# Project Knowledge\nSome rules here");
 
@@ -75,16 +76,16 @@ describe("createContextMiddleware", () => {
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
-    expect(result.action).toBe("transform");
-    if (result.action === "transform") {
-      expect(result.input).toBeDefined();
-      const appendContext = result.input.appendContext as string | undefined;
-      expect(appendContext).toBeDefined();
-      expect(appendContext).toContain("# Project Knowledge");
-    }
+    expect(result.verdict).toBe("allow");
+    expect(result.effects).toEqual([
+      expect.objectContaining({
+        type: "prompt.append_context",
+        context: expect.stringContaining("# Project Knowledge"),
+      }),
+    ]);
   });
 
-  it("returns { action: 'continue' } when ContextAssembler throws", async () => {
+  it("returns allow when ContextAssembler throws", async () => {
     // Create a workspace that will cause assembler to fail (e.g., permission issue)
     // For this test, we'll just use a non-existent path
     const middleware = createContextMiddleware({ workspaceRoot: "/nonexistent/path/xyz" });
@@ -97,7 +98,7 @@ describe("createContextMiddleware", () => {
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
-    expect(result).toEqual({ action: "continue" });
+    expect(result).toEqual(PolicyDecision.allow({ policyId: "server.context" }));
   });
 
   it("appendContext contains AGENTS.md content when present", async () => {
@@ -115,15 +116,13 @@ describe("createContextMiddleware", () => {
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
-    expect(result.action).toBe("transform");
-    if (result.action === "transform") {
-      const appendContext = result.input.appendContext as string | undefined;
-      expect(appendContext).toContain("Agent Configuration");
-      expect(appendContext).toContain("MaxTurns: 10");
-    }
+    expect(result.verdict).toBe("allow");
+    expect(result.effects[0]).toMatchObject({ type: "prompt.append_context" });
+    expect((result.effects[0] as { context?: string }).context).toContain("Agent Configuration");
+    expect((result.effects[0] as { context?: string }).context).toContain("MaxTurns: 10");
   });
 
-  it("returns { action: 'continue' } when assembled context is empty string", async () => {
+  it("returns allow when assembled context is empty string", async () => {
     const ws = makeWorkspace("empty-context");
     // Create workspace with no AGENTS.md and no skills
     const middleware = createContextMiddleware({ workspaceRoot: ws });
@@ -136,6 +135,6 @@ describe("createContextMiddleware", () => {
     } as unknown as PolicyContext;
 
     const result = await middleware.fn(mockCtx);
-    expect(result).toEqual({ action: "continue" });
+    expect(result).toEqual(PolicyDecision.allow({ policyId: "server.context" }));
   });
 });

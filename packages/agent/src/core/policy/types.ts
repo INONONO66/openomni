@@ -25,7 +25,9 @@ export interface PolicyContext {
   labels?: Policy.LabelEntry[];
 }
 
-export type PolicyFn = (ctx: PolicyContext) => Promise<Policy.Verdict> | Policy.Verdict;
+export type PolicyFn = (
+  ctx: PolicyContext,
+) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
 
 export interface PolicyRegistration {
   name: string;

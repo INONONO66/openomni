@@ -1,4 +1,4 @@
-import { Policy, type Adapter } from "@openomni/protocol";
+import { Policy, PolicyDecision, type Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { evaluateTriggers } from "../shared/trigger";
@@ -10,7 +10,7 @@ export interface ChannelAuthnDecision {
   readonly timing: Policy.Timing;
   readonly name: string;
   readonly policyId: ChannelAuthnPolicyId;
-  readonly verdict: Policy.Verdict["action"];
+  readonly verdict: Policy.PolicyDecision["verdict"];
   readonly reason: string;
   readonly durationMs: number;
   readonly metadata?: Record<string, unknown>;
@@ -19,19 +19,19 @@ export interface ChannelAuthnDecision {
 export type ChannelAuthnDecisionObserver = (decision: ChannelAuthnDecision) => void | Promise<void>;
 
 export interface WebSocketAuthResult {
-  readonly verdict: Policy.Verdict;
+  readonly verdict: Policy.PolicyDecision;
   readonly headers?: Record<string, string>;
   readonly response?: Response;
 }
 
 export interface GitHubAuthResult {
-  readonly verdict: Policy.Verdict;
+  readonly verdict: Policy.PolicyDecision;
   readonly body?: string;
   readonly response?: Response;
 }
 
 export interface ChannelTriggerAuthResult {
-  readonly verdict: Policy.Verdict;
+  readonly verdict: Policy.PolicyDecision;
 }
 
 interface WebSocketAuthState {
@@ -58,7 +58,7 @@ function evaluateChannelPermission(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Policy.Verdict {
+}): Policy.PolicyDecision {
   const request: Policy.EvaluationRequest = {
     action: input.action,
     resource: input.resource,
@@ -66,29 +66,32 @@ function evaluateChannelPermission(input: {
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
   };
 
-  return Policy.evaluate(
-    {
-      action: input.action,
-      inputRules: [
-        {
-          toolPattern: input.resource,
-          field: input.field,
-          pattern: "^true$",
-          action: "allow",
-          reason: input.allowReason,
-          priority: 2,
-        },
-        {
-          toolPattern: input.resource,
-          field: input.field,
-          pattern: "^false$",
-          action: "deny",
-          reason: input.denyReason,
-          priority: 1,
-        },
-      ],
-    },
-    request,
+  return PolicyDecision.fromEvaluation(
+    Policy.evaluate(
+      {
+        action: input.action,
+        inputRules: [
+          {
+            toolPattern: input.resource,
+            field: input.field,
+            pattern: "^true$",
+            action: "allow",
+            reason: input.allowReason,
+            priority: 2,
+          },
+          {
+            toolPattern: input.resource,
+            field: input.field,
+            pattern: "^false$",
+            action: "deny",
+            reason: input.denyReason,
+            priority: 1,
+          },
+        ],
+      },
+      request,
+    ),
+    { denyEffect: { type: "run.abort", reason: input.denyReason } },
   );
 }
 
@@ -157,7 +160,7 @@ function readSubprotocolAuth(
 
 function recordDecision(
   definition: Policy.Definition,
-  verdict: Policy.Verdict,
+  verdict: Policy.PolicyDecision,
   durationMs: number,
   onDecision: ChannelAuthnDecisionObserver | undefined,
   metadata?: Record<string, unknown>,
@@ -166,14 +169,14 @@ function recordDecision(
     timing: authTiming,
     name: definition.name,
     policyId: verdict.policyId ?? "guardrail.permission",
-    verdict: verdict.action,
-    reason: verdict.reason ?? "unspecified",
+    verdict: verdict.verdict,
+    reason: PolicyDecision.reason(verdict, "unspecified"),
     durationMs,
     ...(metadata !== undefined ? { metadata } : {}),
   });
 }
 
-function evaluateWebSocketToken(state: WebSocketAuthState): Policy.Verdict {
+function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecision {
   const policyId = "channel.authn.websocket-token";
   if (!state.token) {
     return evaluateChannelPermission({
@@ -235,7 +238,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.Verdict {
   });
 }
 
-async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Policy.Verdict> {
+async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Policy.PolicyDecision> {
   const policyId = "channel.authn.github-hmac";
   const signature = state.request.headers.get("x-hub-signature-256");
   if (!signature) {

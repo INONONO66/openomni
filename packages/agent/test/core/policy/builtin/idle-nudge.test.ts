@@ -22,6 +22,10 @@ function baseCtx(timing: Policy.Timing, overrides?: Partial<PolicyContext>): Pol
   };
 }
 
+function injectedMessage(verdict: Policy.PolicyDecision): string | undefined {
+  return verdict.effects.find((effect) => effect.type === "prompt.inject_message")?.message;
+}
+
 afterEach(() => {
   Date.now = originalNow;
 });
@@ -32,7 +36,7 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
     const verdict = await mw.fn(baseCtx("turn.start"));
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("injects nudge message when idle threshold exceeded", async () => {
@@ -40,12 +44,11 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
     const verdict = await mw.fn(baseCtx("turn.start"));
-    expect(verdict.action).toBe("inject");
-    if (verdict.action === "inject") {
-      expect(verdict.message).toContain("[System]");
-      expect(verdict.message).toContain("idle for 69s");
-      expect(verdict.message).toContain("Report your current status");
-    }
+    const message = injectedMessage(verdict);
+    expect(verdict.verdict).toBe("allow");
+    expect(message).toContain("[System]");
+    expect(message).toContain("idle for 69s");
+    expect(message).toContain("Report your current status");
   });
 
   it("aborts with 'stalled' after maxNudges exceeded", async () => {
@@ -53,17 +56,15 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 1000, maxNudges: 2 });
 
     mockNow(2000);
-    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
 
     mockNow(4000);
-    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
 
     mockNow(6000);
     const third = await mw.fn(baseCtx("turn.start"));
-    expect(third.action).toBe("abort");
-    if (third.action === "abort") {
-      expect(third.reason).toBe("stalled");
-    }
+    expect(third.verdict).toBe("deny");
+    expect(third.reasonCodes).toContain("stalled");
   });
 
   it("invoke.result resets idle timer", async () => {
@@ -75,7 +76,7 @@ describe("createIdleNudgePolicy", () => {
 
     mockNow(70000);
     const verdict = await mw.fn(baseCtx("turn.start"));
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("is disabled when idleThresholdMs is -1", async () => {
@@ -83,7 +84,7 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
     const verdict = await mw.fn(baseCtx("turn.start"));
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("respects custom idleThresholdMs and maxNudges", async () => {
@@ -91,15 +92,15 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 5000, maxNudges: 1 });
 
     mockNow(3000);
-    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("continue");
+    expect((await mw.fn(baseCtx("turn.start"))).verdict).toBe("allow");
 
     mockNow(10000);
-    expect((await mw.fn(baseCtx("turn.start"))).action).toBe("inject");
+    expect(injectedMessage(await mw.fn(baseCtx("turn.start")))).toBeDefined();
 
     mockNow(20000);
     const next = await mw.fn(baseCtx("turn.start"));
-    expect(next.action).toBe("abort");
-    if (next.action === "abort") expect(next.reason).toBe("stalled");
+    expect(next.verdict).toBe("deny");
+    expect(next.reasonCodes).toContain("stalled");
   });
 
   it("nudge message reports idle duration in seconds", async () => {
@@ -107,10 +108,9 @@ describe("createIdleNudgePolicy", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 10000 });
     mockNow(125500);
     const verdict = await mw.fn(baseCtx("turn.start"));
-    expect(verdict.action).toBe("inject");
-    if (verdict.action === "inject") {
-      expect(verdict.message).toContain("126s");
-    }
+    const message = injectedMessage(verdict);
+    expect(verdict.verdict).toBe("allow");
+    expect(message).toContain("126s");
   });
 
   it("registers for both turn.start and invoke.result timings with priority 300", () => {

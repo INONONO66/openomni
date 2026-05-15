@@ -1,4 +1,10 @@
-import { type Message, type Policy, Subagent, type RuntimeResource } from "@openomni/protocol";
+import {
+  type Message,
+  PolicyDecision,
+  type Policy,
+  Subagent,
+  type RuntimeResource,
+} from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
 import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
@@ -36,8 +42,8 @@ type BackgroundManagerInstance = {
 
 function createBackgroundLaunchDescriptor(agentName: string): RuntimeResource.Descriptor {
   return {
-    id: "tool:agent:background_launch",
-    kind: "tool",
+    id: "worker:agent:background_launch",
+    kind: "worker",
     source: { type: "agent", agentId: agentName },
     labels: ["source.agent", "delegation.background"],
     capabilities: ["delegation.background"],
@@ -45,18 +51,9 @@ function createBackgroundLaunchDescriptor(agentName: string): RuntimeResource.De
   };
 }
 
-function backgroundLaunchFailureReason(verdict: Policy.Verdict): string | undefined {
-  switch (verdict.action) {
-    case "continue":
-      return undefined;
-    case "skip":
-    case "abort":
-    case "retry":
-    case "transform":
-    case "inject":
-    case "deny":
-      return verdict.reason ?? `background launch policy returned ${verdict.action}`;
-  }
+function backgroundLaunchFailureReason(decision: Policy.PolicyDecision): string | undefined {
+  if (!PolicyDecision.isBlocking(decision)) return undefined;
+  return PolicyDecision.reason(decision, `background launch policy returned ${decision.verdict}`);
 }
 
 export const BackgroundManager = {

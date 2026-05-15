@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Execution, Message, Ingress } from "@openomni/protocol";
+import { PolicyDecision, type Execution, type Message, type Ingress } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
 import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
@@ -185,12 +185,13 @@ describe("IngressHandlers", () => {
   it("handleDirect dispatches writeback.commit before storing output", async () => {
     const sessionId = createSession();
     const storeDirectResultMock = mock(() => undefined);
-    const policyFn = mock(() => ({
-      action: "transform" as const,
-      input: { output: "policy output" },
-      reason: "rewrite-writeback",
-      policyId: "test.writeback",
-    }));
+    const policyFn = mock(() =>
+      PolicyDecision.allow({
+        policyId: "test.writeback",
+        reasonCodes: ["rewrite-writeback"],
+        effects: [{ type: "writeback.rewrite", output: "policy output" }],
+      }),
+    );
     SessionBridge.storeDirectResult = storeDirectResultMock;
 
     const event: Ingress.InboundEvent = {
@@ -241,11 +242,12 @@ describe("IngressHandlers", () => {
         name: "test-deny-writeback",
         timing: "writeback.commit",
         priority: 0,
-        fn: () => ({
-          action: "deny" as const,
-          reason: "writeback denied by policy",
-          policyId: "test:deny-writeback",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:deny-writeback",
+            reasonCodes: ["writeback denied by policy"],
+            effects: [{ type: "run.abort", reason: "writeback denied by policy" }],
+          }),
       },
     ];
 
@@ -261,7 +263,47 @@ describe("IngressHandlers", () => {
     expect(storeDirectResultMock).not.toHaveBeenCalled();
   });
 
-  it("fails closed when writeback.commit returns an unsupported verdict", async () => {
+  it("treats writeback.commit suppress effect as terminal before storing output", async () => {
+    const sessionId = createSession();
+    const storeDirectResultMock = mock(() => undefined);
+    SessionBridge.storeDirectResult = storeDirectResultMock;
+
+    const event: Ingress.InboundEvent = {
+      id: "event-direct-suppress-writeback",
+      surface: "tui",
+      mode: "direct",
+      payload: "payload",
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+    const policies: PolicyRegistration[] = [
+      {
+        name: "test-suppress-writeback",
+        timing: "writeback.commit",
+        priority: 0,
+        fn: () =>
+          PolicyDecision.allow({
+            policyId: "test:suppress-writeback",
+            reasonCodes: ["writeback suppressed by policy"],
+            effects: [{ type: "writeback.suppress", reason: "writeback suppressed by policy" }],
+          }),
+      },
+    ];
+
+    const error = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: makeDirectCoordinator("direct output"),
+      policies,
+    }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("writeback suppressed by policy");
+    expect(storeDirectResultMock).not.toHaveBeenCalled();
+  });
+
+  it("treats writeback.commit pending verdict as terminal", async () => {
     const sessionId = createSession();
     const storeDirectResultMock = mock(() => undefined);
     SessionBridge.storeDirectResult = storeDirectResultMock;
@@ -280,11 +322,12 @@ describe("IngressHandlers", () => {
         name: "test-retry-writeback",
         timing: "writeback.commit",
         priority: 0,
-        fn: () => ({
-          action: "retry" as const,
-          reason: "retry is not supported at writeback.commit",
-          policyId: "test:retry-writeback",
-        }),
+        fn: () =>
+          PolicyDecision.pending({
+            policyId: "test:retry-writeback",
+            reasonCodes: ["approval required at writeback.commit"],
+            effects: [{ type: "run.abort", reason: "approval required at writeback.commit" }],
+          }),
       },
     ];
 
@@ -296,7 +339,7 @@ describe("IngressHandlers", () => {
     }).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("retry is not supported at writeback.commit");
+    expect((error as Error).message).toBe("approval required at writeback.commit");
     expect(storeDirectResultMock).not.toHaveBeenCalled();
   });
 });

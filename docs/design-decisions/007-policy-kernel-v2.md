@@ -23,7 +23,7 @@ The kernel is specified in [Policy Kernel v2 Specification](../policy-kernel-spe
 - `PolicyEffect` is data interpreted by trusted point adapters, not executable policy code.
 - Side-effecting runtime APIs must converge on policy-aware facades.
 
-Legacy `Policy.Verdict` remains a migration input only. It must be adapted into `PolicyDecision` semantics and cannot be allowed to silently fall through at side-effect boundaries.
+Old action-shaped verdict objects are no longer part of the policy engine contract. Runtime policies return `PolicyDecision` directly, and side-effect boundaries apply only declared `effects[]`.
 
 ### Audit Decision
 
@@ -49,7 +49,7 @@ The `audit.annotate` effect is the primary mechanism for policies to attach stru
 - Tools, MCP tools, skills, subagents, workers, credentials, and session writes need `RuntimeResource.Descriptor` coverage.
 - Existing ad-hoc runtime guards must either become policies or sit behind policy-aware facades.
 - The conformance test suite becomes part of the kernel contract, not just implementation regression coverage.
-- Documentation and package maps must distinguish the legacy verdict adapter from the long-term effect-based kernel.
+- Documentation and package maps must describe the effect-based kernel directly; old action-shaped adapters must not be reintroduced.
 - Bus event integration for policy audit requires `BusPersistence` to handle policy decision events without performance regression on the hot path.
 
 ## Non-goals
@@ -62,10 +62,10 @@ The `audit.annotate` effect is the primary mechanism for policies to attach stru
 ## Migration Strategy
 
 1. Freeze the kernel specification and conformance expectations.
-2. Make legacy verdict dispatch total: deny is terminal, unsupported verdicts are explicit errors, and pre-boundary failures fail closed.
+2. Make canonical PolicyDecision dispatch total: deny is terminal, unsupported decision shapes are explicit errors, and pre-boundary failures fail closed.
 3. Add a runtime `PolicyPoint` registry for the current 14 lifecycle timings. Register each timing under its 3-tier ID. The legacy flat timing names remain valid as routing aliases during this step; the kernel resolves them to the appropriate 3-tier point based on the resource kind in the `PolicyRequest`.
 4. Attach `RuntimeResource.Descriptor` to tool catalog entries, then expand to MCP, skills, subagents, workers, credentials, and session writes. Set `source.type` on all tool descriptors at this step.
 5. Introduce `PolicyDecision` and effect composition behind a compatibility adapter.
 6. Convert high-risk policies first: tool permission, ingress authority, subagent/background limits, MCP prefix guard, worker bootstrap validation, and credential injection.
 7. Convert prompt-shaping and persistence policies after side-effect boundaries are safe.
-8. Remove legacy verdict support only when conformance tests cover every governed operation.
+8. Keep legacy verdict support removed; conformance tests must cover every governed operation before policy injection points are expanded.

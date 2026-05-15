@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
 import type { PolicyContext } from "../../../../src/core/policy";
-import type { Policy } from "@openomni/protocol";
-
-type Abort = Extract<Policy.Verdict, { action: "abort" }>;
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -30,7 +27,7 @@ describe("createToolPermissionPolicy", () => {
         toolInput: { path: "/tmp/test" },
       }),
     );
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
     expect(verdict.policyId).toBe("guardrail.permission");
   });
 
@@ -45,9 +42,9 @@ describe("createToolPermissionPolicy", () => {
         toolInput: { cmd: "rm -rf /" },
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("allowlist_miss");
-    expect((verdict as Abort).policyId).toBe("guardrail.permission");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("allowlist_miss");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   it("abort — tool on denylist", async () => {
@@ -61,9 +58,9 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("denylist");
-    expect((verdict as Abort).policyId).toBe("guardrail.permission");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("denylist");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   it("abort — empty allowlist denies everything (allowlist_empty)", async () => {
@@ -77,8 +74,8 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("allowlist_empty");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("allowlist_empty");
   });
 
   it("continue — no toolName in context", async () => {
@@ -86,7 +83,7 @@ describe("createToolPermissionPolicy", () => {
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(baseCtx());
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — wildcard allowlist allows everything", async () => {
@@ -100,7 +97,7 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("abort — inputRule deny overrides allowlist", async () => {
@@ -127,8 +124,8 @@ describe("createToolPermissionPolicy", () => {
         toolInput: { cmd: "rm -rf /tmp" },
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("destructive_command");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("destructive_command");
   });
 
   it("continue — permission without explicit action gets normalized to tool.call", async () => {
@@ -142,7 +139,7 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("emits tool.execution.permission_denied event on deny", async () => {
@@ -166,7 +163,7 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("abort");
+    expect(verdict.verdict).toBe("deny");
     expect(events.some((e) => e.name === "tool.execution.permission_denied")).toBe(true);
   });
 
@@ -186,8 +183,8 @@ describe("createToolPermissionPolicy", () => {
       }),
     );
     expect(blocked).toBeDefined();
-    expect(blocked!.toolName).toBe("blocked_tool");
-    expect(blocked!.reason).toBe("denylist");
+    expect(blocked?.toolName).toBe("blocked_tool");
+    expect(blocked?.reason).toBe("denylist");
   });
 
   it("has name builtin:tool-permission", () => {
@@ -222,8 +219,8 @@ describe("createToolPermissionPolicy", () => {
         toolLabels: ["risk.tier-3", "capability.write"],
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("deny_label");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("deny_label");
   });
 
   it("continue — no permission rules means default allow", async () => {
@@ -237,7 +234,7 @@ describe("createToolPermissionPolicy", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("default_allow");
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.reasonCodes).toContain("default_allow");
   });
 });

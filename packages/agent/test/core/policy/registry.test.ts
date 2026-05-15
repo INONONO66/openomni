@@ -3,6 +3,7 @@ import { Operational, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
+import { allow } from "../../helpers/policy-decision";
 
 const builtinPolicyIds = [
   "builtin:budget-reassurance",
@@ -35,7 +36,7 @@ describe("PolicyRegistry", () => {
       name: `test:${runtime.agentName}:${(config as { mode: string }).mode}`,
       timing: "turn.start",
       priority: 10,
-      fn: () => ({ action: "continue" }),
+      fn: () => allow(),
     });
     registry.register("test.policy", factory);
 
@@ -69,7 +70,7 @@ describe("PolicyRegistry", () => {
         name: "present.policy",
         timing: "turn.start",
         priority: 10,
-        fn: () => ({ action: "continue" }),
+        fn: () => allow(),
       }));
 
       const registrations = registry.resolve(

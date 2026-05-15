@@ -1,6 +1,12 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type RuntimeResource, type Subagent, type TraceContext } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import {
+  Operational,
+  Policy,
+  PolicyDecision,
+  type RuntimeResource,
+  type Subagent,
+  type TraceContext,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -31,8 +37,8 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
-function continueVerdict(policyId: string, reason: string): Policy.Verdict {
-  return { action: "continue", policyId, reason };
+function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
 
 function evaluateLimit(input: {
@@ -43,35 +49,38 @@ function evaluateLimit(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly metadata?: Record<string, unknown>;
-}): Policy.Verdict {
-  return Policy.evaluate(
-    {
-      action: input.action,
-      inputRules: [
-        {
-          toolPattern: input.resource,
-          field: input.field,
-          pattern: "^true$",
-          action: "allow",
-          reason: input.allowReason,
-          priority: 2,
-        },
-        {
-          toolPattern: input.resource,
-          field: input.field,
-          pattern: "^false$",
-          action: "deny",
-          reason: input.denyReason,
-          priority: 1,
-        },
-      ],
-    },
-    {
-      action: input.action,
-      resource: input.resource,
-      input: { [input.field]: String(input.allowed) },
-      metadata: input.metadata,
-    },
+}): Policy.PolicyDecision {
+  return PolicyDecision.fromEvaluation(
+    Policy.evaluate(
+      {
+        action: input.action,
+        inputRules: [
+          {
+            toolPattern: input.resource,
+            field: input.field,
+            pattern: "^true$",
+            action: "allow",
+            reason: input.allowReason,
+            priority: 2,
+          },
+          {
+            toolPattern: input.resource,
+            field: input.field,
+            pattern: "^false$",
+            action: "deny",
+            reason: input.denyReason,
+            priority: 1,
+          },
+        ],
+      },
+      {
+        action: input.action,
+        resource: input.resource,
+        input: { [input.field]: String(input.allowed) },
+        metadata: input.metadata,
+      },
+    ),
+    { denyEffect: { type: "run.abort", reason: input.denyReason } },
   );
 }
 
@@ -235,7 +244,7 @@ function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       if (!state.shouldQueue) {
-        return continueVerdict("background.limit.queue", "queue capacity not required");
+        return allowDecision("background.limit.queue", "queue capacity not required");
       }
 
       if (state.pendingQueueSize >= state.maxQueueSize) {
@@ -321,11 +330,11 @@ export namespace BackgroundLimitsMiddleware {
     readonly maxQueueSize: number;
     readonly traceContext?: TraceContext.Type;
     readonly resourceDescriptor?: RuntimeResource.Descriptor;
-    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreLaunchResult {
-    readonly verdict: Policy.Verdict;
+    readonly verdict: Policy.PolicyDecision;
     readonly shouldQueue: boolean;
   }
 
@@ -383,7 +392,7 @@ export namespace BackgroundLimitsMiddleware {
       ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
     };
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", policyContext);
+    const verdict = await engine.dispatch("invoke.prepare", policyContext);
 
     return { verdict, shouldQueue: state.shouldQueue ?? false };
   }

@@ -1,5 +1,5 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, Ingress, type TraceContext } from "@openomni/protocol";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import { Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 
@@ -15,12 +15,16 @@ interface PreRunState {
   mode?: Ingress.InboundEvent["mode"];
 }
 
-function continueVerdict(policyId: string, reason: string): Policy.Verdict {
-  return { action: "continue", policyId, reason };
+function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
 
-function abortVerdict(policyId: string, reason: string): Policy.Verdict {
-  return { action: "abort", policyId, reason };
+function abortDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.deny({
+    policyId,
+    reasonCodes: [reason],
+    effects: [{ type: "run.abort", reason }],
+  });
 }
 
 function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
@@ -46,38 +50,40 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   return false;
 }
 
-function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.Verdict {
+function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDecision {
   const action = "ingress.top_level.create";
   const resource = `ingress.${event.surface}`;
-  return Policy.evaluate(
-    {
-      action,
-      inputRules: [
-        {
-          toolPattern: resource,
-          field: "authorized",
-          pattern: "^true$",
-          action: "allow",
-          reason: "actor authorized for top-level inbound work",
-          priority: 2,
-        },
-        {
-          toolPattern: resource,
-          field: "authorized",
-          pattern: "^false$",
-          action: "deny",
-          reason: "actor is not authorized to create top-level inbound work",
-          priority: 1,
-        },
-      ],
-    },
-    {
-      action,
-      resource,
-      actor: getActor(event),
-      input: { authorized: String(isAuthorizedTopLevelActor(event)) },
-      metadata: { mode: event.mode, surface: event.surface },
-    },
+  return PolicyDecision.fromEvaluation(
+    Policy.evaluate(
+      {
+        action,
+        inputRules: [
+          {
+            toolPattern: resource,
+            field: "authorized",
+            pattern: "^true$",
+            action: "allow",
+            reason: "actor authorized for top-level inbound work",
+            priority: 2,
+          },
+          {
+            toolPattern: resource,
+            field: "authorized",
+            pattern: "^false$",
+            action: "deny",
+            reason: "actor is not authorized to create top-level inbound work",
+            priority: 1,
+          },
+        ],
+      },
+      {
+        action,
+        resource,
+        actor: getActor(event),
+        input: { authorized: String(isAuthorizedTopLevelActor(event)) },
+        metadata: { mode: event.mode, surface: event.surface },
+      },
+    ),
   );
 }
 
@@ -94,9 +100,9 @@ function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       if (state.coordinator === undefined) {
-        return abortVerdict("ingress.coordinator", "coordinator is required");
+        return abortDecision("ingress.coordinator", "coordinator is required");
       }
-      return continueVerdict("ingress.coordinator", "coordinator available");
+      return allowDecision("ingress.coordinator", "coordinator available");
     },
   };
 }
@@ -109,11 +115,11 @@ function createSchemaValidation(state: PreRunState): PolicyRegistration {
       const parsed = Ingress.InboundEventSchema.safeParse(state.input);
       if (!parsed.success) {
         state.schemaError = parsed.error;
-        return abortVerdict("ingress.schema", "invalid ingress event");
+        return abortDecision("ingress.schema", "invalid ingress event");
       }
 
       state.parsedEvent = parsed.data;
-      return continueVerdict("ingress.schema", "ingress event schema valid");
+      return allowDecision("ingress.schema", "ingress event schema valid");
     },
   };
 }
@@ -138,18 +144,18 @@ function createModeDispatch(state: PreRunState): PolicyRegistration {
       const event = requireParsedEvent(state);
       if (event.mode !== "direct") {
         const unknownMode = (event as { mode: unknown }).mode;
-        return abortVerdict("ingress.mode", `unknown ingress mode: ${unknownMode}`);
+        return abortDecision("ingress.mode", `unknown ingress mode: ${unknownMode}`);
       }
 
       state.mode = event.mode;
-      return continueVerdict("ingress.mode", `dispatch mode ${event.mode}`);
+      return allowDecision("ingress.mode", `dispatch mode ${event.mode}`);
     },
   };
 }
 
-function throwAbort(verdict: Policy.Verdict, state: PreRunState): never {
+function throwAbort(decision: Policy.PolicyDecision, state: PreRunState): never {
   if (state.schemaError) throw state.schemaError;
-  throw new Error(verdict.reason ?? "ingress run.start middleware aborted");
+  throw new Error(PolicyDecision.reason(decision, "ingress run.start middleware aborted"));
 }
 
 export namespace IngressAuthorityMiddleware {
@@ -185,7 +191,7 @@ export namespace IngressAuthorityMiddleware {
     readonly event: Ingress.InboundEvent;
     readonly coordinator?: CoordinatorLike;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreRunResult {
@@ -214,7 +220,7 @@ export namespace IngressAuthorityMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatchLegacy("run.start", {
+    const decision = await engine.dispatch("run.start", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -225,7 +231,7 @@ export namespace IngressAuthorityMiddleware {
       traceContext: ctx.traceContext,
     });
 
-    if (verdict.action !== "continue") throwAbort(verdict, state);
+    if (PolicyDecision.isBlocking(decision)) throwAbort(decision, state);
     if (!state.parsedEvent || !state.coordinator || !state.mode) {
       throw new Error("ingress run.start middleware did not produce dispatch context");
     }

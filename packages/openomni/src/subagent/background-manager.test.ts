@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { PolicyDecision } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "@openomni/session/src/storage/sqlite-storage";
 import { Storage } from "@openomni/session";
 import { BackgroundStore } from "./background-store";
@@ -252,18 +253,19 @@ describe("BackgroundManager — launch limit policy", () => {
       maxQueueSize: 100,
     });
 
-    expect(result.verdict.action).toBe("abort");
-    expect(result.verdict.policyId).toBe("guardrail.permission");
-    expect(result.verdict.reason).toBe("max concurrent tasks per agent (0) exceeded");
+    expect(result.verdict.verdict).toBe("deny");
+    expect(result.verdict.policyId).toBe("agent.policy.composed");
+    expect(PolicyDecision.reason(result.verdict)).toBe(
+      "max concurrent tasks per agent (0) exceeded",
+    );
   });
 
   it("treats background launch deny verdict as terminal", async () => {
     const evaluateSpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockResolvedValue({
-      verdict: {
-        action: "deny",
-        reason: "background launch denied by policy",
+      verdict: PolicyDecision.deny({
         policyId: "test:deny-background-launch",
-      },
+        reasonCodes: ["background launch denied by policy"],
+      }),
       shouldQueue: false,
     });
     const manager = BackgroundManager.create();
@@ -282,11 +284,10 @@ describe("BackgroundManager — launch limit policy", () => {
 
   it("fails closed when background launch returns an unsupported verdict", async () => {
     const evaluateSpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockResolvedValue({
-      verdict: {
-        action: "retry",
-        reason: "retry is not supported for background launch",
+      verdict: PolicyDecision.pending({
         policyId: "test:retry-background-launch",
-      },
+        reasonCodes: ["retry is not supported for background launch"],
+      }),
       shouldQueue: false,
     });
     const manager = BackgroundManager.create();

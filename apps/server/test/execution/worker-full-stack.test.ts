@@ -169,7 +169,7 @@ describe("builtin middleware — tool permission", () => {
     if (!toolPermission) throw new Error("tool permission middleware not found");
 
     const verdict = await toolPermission.fn(makeToolCtx("bash"));
-    expect(verdict.action).toBe("abort");
+    expect(verdict.verdict).toBe("deny");
   });
 
   test("allows tool not in denylist", async () => {
@@ -181,7 +181,7 @@ describe("builtin middleware — tool permission", () => {
     if (!toolPermission) throw new Error("tool permission middleware not found");
 
     const verdict = await toolPermission.fn(makeToolCtx("read"));
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 });
 

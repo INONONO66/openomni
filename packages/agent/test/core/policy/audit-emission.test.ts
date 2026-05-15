@@ -4,6 +4,7 @@ import { Bus } from "@openomni/session";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
+import { allow, rewriteToolInput } from "../../helpers/policy-decision";
 
 type PolicyEvaluatedEvent = z.infer<typeof PolicyEvent.Evaluated.schema>;
 type PolicyDecisionComposedEvent = z.infer<typeof PolicyEvent.DecisionComposed.schema>;
@@ -55,12 +56,8 @@ describe("PolicyEngine audit emission", () => {
         name: "rewrite-shell",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "transform",
-          input: { command: "pwd" },
-          reason: "rewrite-shell-input",
-          policyId: "policy.rewrite-shell",
-        }),
+        fn: () =>
+          rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell", "rewrite-shell-input"),
       });
 
       const ctx = {
@@ -75,7 +72,7 @@ describe("PolicyEngine audit emission", () => {
         },
       };
 
-      await engine.dispatchLegacy("invoke.prepare", ctx);
+      await engine.dispatch("invoke.prepare", ctx);
       await flushBus();
 
       expect(evaluated).toHaveLength(1);
@@ -87,7 +84,7 @@ describe("PolicyEngine audit emission", () => {
         actor: { kind: "agent", name: "request-agent", runId: "run-request" },
         action: "tool.call",
         resource: "shell",
-        verdict: "transform",
+        verdict: "allow",
         reason: "rewrite-shell-input",
         effects: [{ type: "tool.rewrite_input", input: { command: "pwd" } }],
         reasonCodes: ["rewrite-shell-input"],
@@ -119,22 +116,14 @@ describe("PolicyEngine audit emission", () => {
         name: "annotate-shell",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "continue",
-          reason: "shell-reviewed",
-          policyId: "policy.annotate-shell",
-        }),
+        fn: () => allow("policy.annotate-shell", "shell-reviewed"),
       });
       engine.register({
         name: "rewrite-shell",
         timing: "invoke.prepare",
         priority: 10,
-        fn: () => ({
-          action: "transform",
-          input: { command: "pwd" },
-          reason: "rewrite-shell-input",
-          policyId: "policy.rewrite-shell",
-        }),
+        fn: () =>
+          rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell", "rewrite-shell-input"),
       });
 
       const decision = await engine.dispatch("invoke.prepare", {

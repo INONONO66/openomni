@@ -3,6 +3,13 @@ import type { Tool } from "@openomni/protocol";
 import type { PolicyRegistration, PolicyContext } from "../../../src/core/policy";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
+import {
+  abortRun,
+  allow,
+  pending,
+  rewriteToolInput,
+  rewriteToolOutput,
+} from "../../helpers/policy-decision";
 
 function newID(prefix: string): string {
   return `${prefix}-${Math.random().toString(16).slice(2)}`;
@@ -11,7 +18,7 @@ function newID(prefix: string): string {
 describe("invoke.result middleware dispatch", () => {
   it("fires the middleware fn after tool execution with correct context", async () => {
     const toolOutput = "tool-output-value";
-    const postToolFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postToolFn = mock((_ctx: PolicyContext) => allow());
 
     const engine = PolicyEngine.create();
     engine.register({
@@ -42,7 +49,7 @@ describe("invoke.result middleware dispatch", () => {
   });
 
   it("forwards usage from getContext to tool middleware", async () => {
-    const postToolFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postToolFn = mock((_ctx: PolicyContext) => allow());
 
     const engine = PolicyEngine.create();
     engine.register({
@@ -80,12 +87,7 @@ describe("invoke.result middleware dispatch", () => {
       name: "test:transform",
       timing: "invoke.result",
       priority: 100,
-      fn: () => ({
-        action: "transform",
-        input: { output: "modified-output" },
-        reason: "modify-output",
-        policyId: "test.transform",
-      }),
+      fn: () => rewriteToolOutput("modified-output", "test.transform", "modify-output"),
     });
 
     const executor = createToolExecutor({
@@ -106,7 +108,7 @@ describe("invoke.result middleware dispatch", () => {
 });
 
 describe("invoke.prepare middleware dispatch", () => {
-  it("skip verdict prevents tool execution", async () => {
+  it("pending approval decision prevents tool execution", async () => {
     const baseExecutor = mock(
       async (call: Tool.Call): Promise<Tool.Result> => ({
         id: newID("result"),
@@ -118,20 +120,23 @@ describe("invoke.prepare middleware dispatch", () => {
 
     const engine = PolicyEngine.create();
     engine.register({
-      name: "test:skip",
+      name: "test:approval",
       timing: "invoke.prepare",
       priority: 100,
-      fn: () => ({ action: "skip", reason: "test-skip" }),
+      fn: () =>
+        pending("test.approval", "approval-required", [
+          { type: "tool.require_approval", reason: "approval-required" },
+        ]),
     });
 
     const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
 
-    const call: Tool.Call = { id: "call-skip", tool: "bash", input: { command: "ls" } };
+    const call: Tool.Call = { id: "call-approval", tool: "bash", input: { command: "ls" } };
     const result = await executor(call);
 
     expect(baseExecutor).toHaveBeenCalledTimes(0);
-    expect(result.output).toContain("Skipped");
-    expect(result.isError).toBe(false);
+    expect(result.output).toBe("[Denied: approval-required]");
+    expect(result.isError).toBe(true);
   });
 
   it("abort verdict prevents tool execution with isError", async () => {
@@ -149,7 +154,7 @@ describe("invoke.prepare middleware dispatch", () => {
       name: "test:abort",
       timing: "invoke.prepare",
       priority: 100,
-      fn: () => ({ action: "abort", reason: "Blocked: test-deny" }),
+      fn: () => abortRun("test.abort", "Blocked: test-deny"),
     });
 
     const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
@@ -174,12 +179,7 @@ describe("invoke.prepare middleware dispatch", () => {
       name: "test:transform-input",
       timing: "invoke.prepare",
       priority: 100,
-      fn: () => ({
-        action: "transform",
-        input: { command: "echo safe" },
-        reason: "rewrite-input",
-        policyId: "test.transform-input",
-      }),
+      fn: () => rewriteToolInput({ command: "echo safe" }, "test.transform-input", "rewrite-input"),
     });
 
     const executor = createToolExecutor({ toolExecutor: baseExecutor, engine });
@@ -193,11 +193,7 @@ describe("invoke.prepare middleware dispatch", () => {
 
 describe("error middleware dispatch (stream-engine level)", () => {
   it("error middleware is registered and dispatchable", async () => {
-    const onErrorFn = mock((_ctx: PolicyContext) => ({
-      action: "abort" as const,
-      reason: "test-error-abort",
-      policyId: "test.on-error",
-    }));
+    const onErrorFn = mock((_ctx: PolicyContext) => abortRun("test.on-error", "test-error-abort"));
 
     const engine = PolicyEngine.create();
     engine.register({
@@ -208,7 +204,7 @@ describe("error middleware dispatch (stream-engine level)", () => {
     });
 
     const error = new Error("test-error");
-    const verdict = await engine.dispatchLegacy("error", {
+    const verdict = await engine.dispatch("error", {
       steps: [],
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       turnCount: 0,
@@ -219,7 +215,7 @@ describe("error middleware dispatch (stream-engine level)", () => {
     });
 
     expect(onErrorFn).toHaveBeenCalledTimes(1);
-    expect(verdict.action).toBe("abort");
+    expect(verdict.verdict).toBe("deny");
     const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext;
     expect(calledCtx.timing).toBe("error");
     expect(calledCtx.toolInput?.error).toBe(error);

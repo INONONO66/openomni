@@ -1,5 +1,11 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Policy, type Tool, type TraceContext } from "@openomni/protocol";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import {
+  Policy,
+  PolicyDecision,
+  type RuntimeResource,
+  type Tool,
+  type TraceContext,
+} from "@openomni/protocol";
 import type { NativeTool } from "@openomni/openomni";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -19,42 +25,64 @@ function evaluatePrefixGuard(input: {
   readonly allowReason: string;
   readonly denyReason: string;
   readonly serverName?: string;
-}): Policy.Verdict {
+}): Policy.PolicyDecision {
   const action = "mcp.tool.call";
-  return Policy.evaluate(
-    {
-      action,
-      inputRules: [
-        {
-          toolPattern: input.resource,
-          field: "allowed",
-          pattern: "^true$",
-          action: "allow",
-          reason: input.allowReason,
-          priority: 2,
-        },
-        {
-          toolPattern: input.resource,
-          field: "allowed",
-          pattern: "^false$",
-          action: "deny",
-          reason: input.denyReason,
-          priority: 1,
-        },
-      ],
-    },
-    {
-      action,
-      resource: input.resource,
-      input: { ...input.call.input, allowed: String(input.allowed) },
-      metadata: { callTool: input.call.tool, serverName: input.serverName },
-    },
+  return PolicyDecision.fromEvaluation(
+    Policy.evaluate(
+      {
+        action,
+        inputRules: [
+          {
+            toolPattern: input.resource,
+            field: "allowed",
+            pattern: "^true$",
+            action: "allow",
+            reason: input.allowReason,
+            priority: 2,
+          },
+          {
+            toolPattern: input.resource,
+            field: "allowed",
+            pattern: "^false$",
+            action: "deny",
+            reason: input.denyReason,
+            priority: 1,
+          },
+        ],
+      },
+      {
+        action,
+        resource: input.resource,
+        input: { ...input.call.input, allowed: String(input.allowed) },
+        metadata: { callTool: input.call.tool, serverName: input.serverName },
+      },
+    ),
+    { denyEffect: { type: "tool.skip_invocation", reason: input.denyReason } },
   );
 }
 
 function resolveTool(tools: readonly NativeTool[], name: string): NativeTool | undefined {
   const dottedName = name.replace(/_/g, ".");
   return tools.find((entry) => entry.spec.name === name || entry.spec.name === dottedName);
+}
+
+function createMcpDescriptor(
+  call: Tool.Call,
+  tool: NativeTool | undefined,
+): RuntimeResource.Descriptor {
+  if (tool?.descriptor) return tool.descriptor;
+
+  const toolName = tool?.spec.name ?? call.tool;
+  const serverName = toolName.includes(".") ? toolName.slice(0, toolName.indexOf(".")) : undefined;
+  const labels = tool?.spec.labels ?? tool?.labels ?? ["source.mcp"];
+  return {
+    id: `tool:mcp:${toolName}`,
+    kind: "tool",
+    source: { type: "mcp", ...(serverName !== undefined && { serverId: serverName }) },
+    labels: [...labels],
+    capabilities: [],
+    effects: [],
+  };
 }
 
 function createMcpPrefixGuard(state: PrefixGuardState): PolicyRegistration {
@@ -123,11 +151,11 @@ export namespace McpPrefixGuardMiddleware {
     readonly tools: readonly NativeTool[];
     readonly isServerConnected: (serverName: string) => boolean;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreToolUseResult {
-    readonly verdict: Policy.Verdict;
+    readonly verdict: Policy.PolicyDecision;
     readonly tool?: NativeTool;
     readonly serverName?: string;
   }
@@ -142,13 +170,9 @@ export namespace McpPrefixGuardMiddleware {
       tools: ctx.tools,
       isServerConnected: ctx.isServerConnected,
     };
-    let lastDecision: PolicyDecision | undefined;
     const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
-      onDecision: async (decision) => {
-        lastDecision = decision;
-        await ctx.onDecision?.(decision);
-      },
+      onDecision: ctx.onDecision,
       audit: false,
     });
 
@@ -156,7 +180,8 @@ export namespace McpPrefixGuardMiddleware {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", {
+    const tool = resolveTool(ctx.tools, ctx.call.tool);
+    const verdict = await engine.dispatch("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -167,19 +192,11 @@ export namespace McpPrefixGuardMiddleware {
       toolCallId: ctx.call.id,
       toolInput: ctx.call.input,
       traceContext: ctx.traceContext,
+      resourceDescriptor: createMcpDescriptor(ctx.call, tool),
     });
 
-    const finalVerdict =
-      verdict.action === "continue" && lastDecision?.verdict === "continue"
-        ? {
-            action: "continue" as const,
-            policyId: lastDecision.policyId,
-            reason: lastDecision.reason ?? "continue",
-          }
-        : verdict;
-
     return {
-      verdict: finalVerdict,
+      verdict,
       ...(state.tool !== undefined && { tool: state.tool }),
       ...(state.serverName !== undefined && { serverName: state.serverName }),
     };

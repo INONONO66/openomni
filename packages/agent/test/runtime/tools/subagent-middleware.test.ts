@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { AgentRegistry } from "../../../src/runtime/registry/registry";
 import type { AgentProfile } from "@openomni/protocol";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
+import { allow } from "../../helpers/policy-decision";
 
 let SubagentTool: typeof import("../../../src/runtime/tools/subagent").SubagentTool;
 
@@ -31,7 +32,7 @@ function makeMiddleware(name: string, propagate?: boolean): PolicyRegistration {
     timing: "run.start",
     priority: 100,
     propagate,
-    fn: async () => ({ action: "continue" as const }),
+    fn: async () => allow(),
   };
 }
 

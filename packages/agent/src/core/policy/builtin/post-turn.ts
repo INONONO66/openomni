@@ -1,8 +1,10 @@
-import { Operational, type Policy } from "@openomni/protocol";
+import { Operational, PolicyDecision, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { PolicyContext, PolicyFactory, PolicyRegistration } from "../types";
 
-export type PostTurnHandler = (ctx: PolicyContext) => Promise<Policy.Verdict> | Policy.Verdict;
+export type PostTurnHandler = (
+  ctx: PolicyContext,
+) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
 
 export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistration {
   return {
@@ -20,7 +22,7 @@ export function createPostTurnPolicy(handler: PostTurnHandler): PolicyRegistrati
           msg: "post-turn handler failed",
           context: { error: String(error) },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.post_turn" });
       }
     },
   };

@@ -8,6 +8,7 @@ import {
   mockProviderModel,
   type MockLlmFn,
 } from "../helpers/mock-llm";
+import { allow, abortRun, continueWithPrompt, replaceMessages } from "../helpers/policy-decision";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -99,7 +100,7 @@ describe("run() delegation contract", () => {
           name: "test:post-turn-stalled",
           timing: "turn.finish",
           priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "stalled" }),
+          fn: () => abortRun("test.stalled", "stalled"),
         },
       ],
     });
@@ -164,7 +165,7 @@ describe("run() delegation contract", () => {
           name: "test:post-turn-deny",
           timing: "turn.finish",
           priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "policy-violation" }),
+          fn: () => abortRun("test.policy", "policy-violation"),
         },
       ],
     });
@@ -205,7 +206,7 @@ describe("run() delegation contract", () => {
           priority: 100,
           fn: (ctx) => {
             seenUsage = ctx.usage;
-            return { action: "abort" as const, reason: "stop" };
+            return abortRun("test.error", "stop");
           },
         },
       ],
@@ -236,24 +237,14 @@ describe("run() delegation contract", () => {
           priority: 100,
           fn: () =>
             turnCount < 2
-              ? {
-                  action: "inject" as const,
-                  message: "continue",
-                  reason: "continue-for-compaction",
-                  policyId: "test.post-turn",
-                }
-              : { action: "continue" as const },
+              ? continueWithPrompt("continue", "test.post-turn", "continue-for-compaction")
+              : allow("test.continue"),
         },
         {
           name: "test:force-compaction",
           timing: "completion.prepare",
           priority: 1,
-          fn: async () => ({
-            action: "transform" as const,
-            input: { messages: [] as unknown[] },
-            reason: "force-compaction",
-            policyId: "test.force-compaction",
-          }),
+          fn: async () => replaceMessages([], "test.force-compaction", "force-compaction"),
         },
       ],
     });

@@ -5,13 +5,24 @@ import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig, ChatAgentInput, AgentEvent } from "../../../src/core/types";
 import type { TraceContext } from "@openomni/protocol";
 import {
+  abortRun,
+  allow,
+  appendContext,
+  inject,
+  replaceMessages,
+  replacePrompt,
+  rewriteWriteback,
+} from "../../helpers/policy-decision";
+import {
   buildPolicyEngine,
   buildTurn,
   createStreamRunState,
   dispatchBudgetCheck,
+  dispatchWritebackCommit,
   dispatchModelRequest,
   dispatchModelResponse,
   dispatchPreRun,
+  handleCompact,
   handleError,
   handleStop,
   type StreamAgentBase,
@@ -60,7 +71,7 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     turnToolCalls: [],
     turnToolResults: [],
-    preToolUseVerdicts: [],
+    toolPolicyDecisions: [],
     ...overrides,
   };
 }
@@ -76,9 +87,7 @@ async function collectEvents(gen: AsyncGenerator<AgentEvent>): Promise<AgentEven
 describe("dispatchPreRun (run.start)", () => {
   it("dispatches run.start and allows continuation on continue verdict", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({
-      action: "continue" as const,
-    }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({ name: "test-pre-run", timing: "run.start", priority: 100, fn });
 
@@ -98,14 +107,14 @@ describe("dispatchPreRun (run.start)", () => {
       name: "test-pre-run-abort",
       timing: "run.start",
       priority: 100,
-      fn: () => ({ action: "abort", reason: "pre-run-block", policyId: "test.abort" }),
+      fn: () => abortRun("test.abort", "pre-run-block"),
     });
 
     const state = makeState();
     const result = await dispatchPreRun(state, engine, makeConfig());
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("complete");
+    expect(result?.type).toBe("complete");
     const complete = result as Extract<AgentEvent, { type: "complete" }>;
     expect(complete.result.guardAborted).toBe(true);
     expect(complete.result.finishReason).toBe("stop");
@@ -118,12 +127,7 @@ describe("dispatchPreRun (run.start)", () => {
       name: "test-pre-run-inject",
       timing: "run.start",
       priority: 100,
-      fn: () => ({
-        action: "inject",
-        message: "injected-context",
-        reason: "add-context",
-        policyId: "test.inject",
-      }),
+      fn: () => inject("injected-context", "test.inject", "add-context"),
     });
 
     const state = makeState();
@@ -144,10 +148,29 @@ describe("dispatchPreRun (run.start)", () => {
   });
 });
 
+it("appends run.start context as a user message", async () => {
+  Bus.reset();
+  const engine = PolicyEngine.create();
+  engine.register({
+    name: "test-pre-run-context",
+    timing: "run.start",
+    priority: 100,
+    fn: () => appendContext("run context", "test.context", "append"),
+  });
+
+  const state = makeState();
+  const result = await dispatchPreRun(state, engine, makeConfig());
+
+  expect(result).toBeNull();
+  expect(state.messages.at(-1)?.parts).toContainEqual(
+    expect.objectContaining({ type: "text", text: "run context" }),
+  );
+});
+
 describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("dispatches turn.start and returns ready on continue", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({ name: "test-pre-turn", timing: "turn.start", priority: 100, fn });
 
@@ -169,6 +192,99 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     expect(ctx.timing).toBe("turn.start");
   });
 
+  it("buildTurn emits budget_reassurance event when reasonCodes includes budget_reassurance", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-budget-reassurance",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-budget-reassurance", "budget_reassurance", [
+          { type: "prompt.inject_message", message: "you are on track" },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetReassuranceEvent?.type).toBe("budget_reassurance");
+      expect(result.budgetWarningEvent).toBeUndefined();
+    }
+  });
+
+  it("buildTurn emits budget_warning event when reasonCodes includes budget_warning", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-budget-warning",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-budget-warning", "budget_warning", [
+          { type: "prompt.inject_message", message: "finish this section soon" },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetWarningEvent?.type).toBe("budget_warning");
+      expect(result.budgetReassuranceEvent).toBeUndefined();
+    }
+  });
+
+  it("buildTurn does not emit budget events for unrelated inject messages", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-unrelated-inject",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-unrelated-inject", "idle_nudge", [
+          {
+            type: "prompt.inject_message",
+            message: "[Budget Status] keep going without triggering budget events",
+          },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetReassuranceEvent).toBeUndefined();
+      expect(result.budgetWarningEvent).toBeUndefined();
+    }
+  });
+
   it("returns complete when turn.start policy returns abort", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
@@ -176,7 +292,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       name: "test-pre-turn-abort",
       timing: "turn.start",
       priority: 100,
-      fn: () => ({ action: "abort", reason: "pre-turn-block", policyId: "test.abort" }),
+      fn: () => abortRun("test.abort", "pre-turn-block"),
     });
 
     const state = makeState();
@@ -198,12 +314,9 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
 
   it("dispatches context.prepare during buildTurn", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({
-      action: "transform" as const,
-      input: { appendContext: "extra-context" },
-      reason: "system-prompt-extend",
-      policyId: "test.sp",
-    }));
+    const fn = mock((_ctx: PolicyContext) =>
+      appendContext("extra-context", "test.sp", "system-prompt-extend"),
+    );
     const engine = PolicyEngine.create();
     engine.register({ name: "test-sp", timing: "context.prepare", priority: 100, fn });
 
@@ -225,12 +338,91 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
       expect(result.turn.runInput.system).toContain("extra-context");
     }
   });
+
+  it("context.prepare replace effect replaces an existing system prompt", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-replace-system",
+      timing: "context.prepare",
+      priority: 100,
+      fn: () => replacePrompt("replacement prompt", "test.replace", "replace-system"),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig({ systemPrompt: "base prompt" }),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.turn.runInput.system).toBe("replacement prompt");
+    }
+  });
+
+  it("context.prepare replace effect creates a system prompt when none exists", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-replace-empty-system",
+      timing: "context.prepare",
+      priority: 100,
+      fn: () => replacePrompt("new prompt", "test.replace", "replace-empty"),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig({ systemPrompt: undefined }),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.turn.runInput.system).toBe("new prompt");
+    }
+  });
+});
+
+it("appends turn.start context as a user message", async () => {
+  Bus.reset();
+  const engine = PolicyEngine.create();
+  engine.register({
+    name: "test-turn-context",
+    timing: "turn.start",
+    priority: 100,
+    fn: () => appendContext("turn context", "test.context", "append"),
+  });
+
+  const state = makeState();
+  const result = await buildTurn(
+    state,
+    makeConfig(),
+    engine,
+    { provider: "test", id: "test-model" },
+    undefined,
+    makeTrace(),
+    makeAgentBase(),
+  );
+
+  expect(result.type).toBe("ready");
+  expect(state.messages.at(-1)?.parts).toContainEqual(
+    expect.objectContaining({ type: "text", text: "turn context" }),
+  );
 });
 
 describe("dispatchBudgetCheck (run.finish on budget exceeded)", () => {
   it("dispatches run.finish when budget is exceeded", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({ name: "test-post-run", timing: "run.finish", priority: 100, fn });
 
@@ -248,7 +440,7 @@ describe("dispatchBudgetCheck (run.finish on budget exceeded)", () => {
     const result = await dispatchBudgetCheck(state, engine, config, makeAgentBase());
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("complete");
+    expect(result?.type).toBe("complete");
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0][0] as PolicyContext;
     expect(ctx.timing).toBe("run.finish");
@@ -269,7 +461,7 @@ describe("dispatchBudgetCheck (run.finish on budget exceeded)", () => {
 describe("model dispatch points", () => {
   it("dispatches model.request before provider execution", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({ name: "test-model-request", timing: "model.request", priority: 100, fn });
 
@@ -284,12 +476,7 @@ describe("model dispatch points", () => {
 
   it("dispatches model.response after provider execution and exposes outcome type", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({
-      action: "transform" as const,
-      input: { text: "rewritten" },
-      reason: "rewrite-response",
-      policyId: "test.model-response",
-    }));
+    const fn = mock((_ctx: PolicyContext) => allow("test.model-response", "observe-response"));
     const engine = PolicyEngine.create();
     engine.register({ name: "test-model-response", timing: "model.response", priority: 100, fn });
 
@@ -298,18 +485,75 @@ describe("model dispatch points", () => {
     const result = await dispatchModelResponse(state, engine, makeConfig(), "stop");
 
     expect(result).toBeNull();
-    expect(state.lastAssistantText).toBe("rewritten");
+    expect(state.lastAssistantText).toBe("original");
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0][0] as PolicyContext;
     expect(ctx.timing).toBe("model.response");
     expect(ctx.toolInput?.outcomeType).toBe("stop");
+  });
+
+  it("applies model.request prompt injection before provider execution", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-model-request-inject",
+      timing: "model.request",
+      priority: 100,
+      fn: () => inject("pre-llm context", "test.model-request", "inject"),
+    });
+
+    const state = makeState();
+    const result = await dispatchModelRequest(state, engine, makeConfig());
+
+    expect(result).toBeNull();
+    expect(state.messages.at(-1)?.parts).toContainEqual(
+      expect.objectContaining({ type: "text", text: "pre-llm context" }),
+    );
+  });
+
+  it("applies model.response replacement messages with schema validation", async () => {
+    Bus.reset();
+    const { createUserMessage } = await import("../../../src/core/message-factory");
+    const replacement = [createUserMessage("replacement", "test")];
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-model-response-replace",
+      timing: "model.response",
+      priority: 100,
+      fn: () => replaceMessages(replacement, "test.model-response", "replace"),
+    });
+
+    const state = makeState();
+    const result = await dispatchModelResponse(state, engine, makeConfig(), "stop");
+
+    expect(result).toBeNull();
+    expect(state.messages).toEqual(replacement);
+  });
+
+  it("blocks model.response malformed replacement messages", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-model-response-bad-replace",
+      timing: "model.response",
+      priority: 100,
+      fn: () =>
+        allow("test.model-response", "bad-replace", [
+          { type: "run.replace_messages", messages: [{ invalid: true }] },
+        ]),
+    });
+
+    const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop");
+
+    expect(result?.type).toBe("complete");
+    if (result?.type === "complete") expect(result.result.guardAborted).toBe(true);
   });
 });
 
 describe("handleStop (turn.finish + run.finish)", () => {
   it("dispatches turn.finish on stop and completes normally", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({ name: "test-post-turn", timing: "turn.finish", priority: 100, fn });
 
@@ -329,6 +573,29 @@ describe("handleStop (turn.finish + run.finish)", () => {
     expect(completeEvent).toBeDefined();
   });
 
+  it("emits actual tool policy decision timings", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    const state = makeState();
+    state.lastAssistantText = "response text";
+    const turn = makeTurnArtifacts({
+      toolPolicyDecisions: [
+        { timing: "invoke.prepare", decision: allow("test.pre", "pre") },
+        { timing: "invoke.result", decision: allow("test.post", "post") },
+      ],
+    });
+
+    const events = await collectEvents(
+      handleStop(state, makeConfig(), engine, makeAgentBase(), turn),
+    );
+
+    expect(
+      events
+        .filter((event) => event.type === "hook_verdict")
+        .map((event) => (event as Extract<AgentEvent, { type: "hook_verdict" }>).timing),
+    ).toEqual(["invoke.prepare", "invoke.result", "turn.finish"]);
+  });
+
   it("turn.finish inject verdict causes continuation", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
@@ -336,12 +603,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
       name: "test-post-turn-inject",
       timing: "turn.finish",
       priority: 100,
-      fn: () => ({
-        action: "inject",
-        message: "continue working",
-        reason: "continuation",
-        policyId: "test.inject",
-      }),
+      fn: () => inject("continue working", "test.inject", "continuation"),
     });
 
     const state = makeState();
@@ -362,6 +624,28 @@ describe("handleStop (turn.finish + run.finish)", () => {
     expect(state.continuationCount).toBe(1);
   });
 
+  it("turn.finish replace_messages effect mutates state before completion", async () => {
+    Bus.reset();
+    const { createUserMessage } = await import("../../../src/core/message-factory");
+    const replacement = [createUserMessage("turn replacement", "test")];
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-post-turn-replace",
+      timing: "turn.finish",
+      priority: 100,
+      fn: () => replaceMessages(replacement, "test.turn", "replace"),
+    });
+
+    const state = makeState();
+    state.lastAssistantText = "text";
+    const events = await collectEvents(
+      handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts()),
+    );
+
+    expect(events.some((event) => event.type === "complete")).toBe(true);
+    expect(state.messages).toEqual(replacement);
+  });
+
   it("turn.finish abort verdict yields complete event with guardAborted", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
@@ -369,11 +653,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
       name: "test-post-turn-abort",
       timing: "turn.finish",
       priority: 100,
-      fn: () => ({
-        action: "abort",
-        reason: "force-stop",
-        policyId: "test.abort",
-      }),
+      fn: () => abortRun("test.abort", "force-stop"),
     });
 
     const state = makeState();
@@ -387,7 +667,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
       | undefined;
 
     expect(completeEvent).toBeDefined();
-    expect(completeEvent!.result.guardAborted).toBe(true);
+    expect(completeEvent?.result.guardAborted).toBe(true);
   });
 
   it("turn.finish abort with reason 'stalled' sets finishReason to stalled", async () => {
@@ -397,11 +677,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
       name: "test-stalled",
       timing: "turn.finish",
       priority: 100,
-      fn: () => ({
-        action: "abort",
-        reason: "stalled",
-        policyId: "test.stalled",
-      }),
+      fn: () => abortRun("test.stalled", "stalled"),
     });
 
     const state = makeState();
@@ -415,23 +691,18 @@ describe("handleStop (turn.finish + run.finish)", () => {
       | undefined;
 
     expect(completeEvent).toBeDefined();
-    expect(completeEvent!.result.finishReason).toBe("stalled");
-    expect(completeEvent!.result.guardAborted).toBeFalsy();
+    expect(completeEvent?.result.finishReason).toBe("stalled");
+    expect(completeEvent?.result.guardAborted).toBeFalsy();
   });
 
-  it("dispatches run.finish transform to modify final text", async () => {
+  it("dispatches run.finish without modifying final text", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
       name: "test-post-run-transform",
       timing: "run.finish",
       priority: 100,
-      fn: () => ({
-        action: "transform",
-        input: { text: "transformed-text" },
-        reason: "transform-final",
-        policyId: "test.transform",
-      }),
+      fn: () => allow("test.post-run", "observe-final"),
     });
 
     const state = makeState();
@@ -445,18 +716,47 @@ describe("handleStop (turn.finish + run.finish)", () => {
       | undefined;
 
     expect(completeEvent).toBeDefined();
-    expect(completeEvent!.result.text).toBe("transformed-text");
+    expect(completeEvent?.result.text).toBe("original");
+  });
+});
+
+describe("dispatchWritebackCommit effects", () => {
+  it("applies writeback.rewrite to final output", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-writeback-rewrite",
+      timing: "writeback.commit",
+      priority: 100,
+      fn: () => rewriteWriteback("rewritten output", "test.writeback", "rewrite"),
+    });
+
+    await expect(
+      dispatchWritebackCommit(makeState(), engine, makeConfig(), "original"),
+    ).resolves.toBe("rewritten output");
+  });
+
+  it("applies writeback.suppress by throwing before output is returned", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-writeback-suppress",
+      timing: "writeback.commit",
+      priority: 100,
+      fn: () =>
+        allow("test.writeback", "suppress", [{ type: "writeback.suppress", reason: "redacted" }]),
+    });
+
+    await expect(
+      dispatchWritebackCommit(makeState(), engine, makeConfig(), "secret"),
+    ).rejects.toThrow("redacted");
   });
 });
 
 describe("handleError (error)", () => {
   it("dispatches error and respects abort verdict", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({
-      action: "abort" as const,
-      reason: "error-abort",
-      policyId: "test.error-abort",
-    }));
+    const fn = mock((_ctx: PolicyContext) => abortRun("test.error-abort", "error-abort"));
     const engine = PolicyEngine.create();
     engine.register({ name: "test-on-error", timing: "error", priority: 100, fn });
 
@@ -487,7 +787,7 @@ describe("handleError (error)", () => {
       | Extract<AgentEvent, { type: "complete" }>
       | undefined;
     expect(completeEvent).toBeDefined();
-    expect(completeEvent!.result.guardAborted).toBe(true);
+    expect(completeEvent?.result.guardAborted).toBe(true);
   });
 
   it("error continue verdict allows retry when retry policy permits", async () => {
@@ -497,7 +797,7 @@ describe("handleError (error)", () => {
       name: "test-on-error-continue",
       timing: "error",
       priority: 100,
-      fn: () => ({ action: "continue" as const }),
+      fn: () => allow(),
     });
 
     const state = makeState();
@@ -517,10 +817,83 @@ describe("handleError (error)", () => {
     const decision = result.value as { action: string };
     expect(decision.action).toBe("retry");
   });
+
+  it("applies run.retry_after delayMs before retrying", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-retry-delay",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.retry-delay", "retry-after", [{ type: "run.retry_after", delayMs: 20 }]),
+    });
+
+    const state = makeState();
+    const config = makeConfig();
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const started = Date.now();
+    const gen = handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      1,
+      retryPolicy,
+    );
+    let result: IteratorResult<AgentEvent, unknown>;
+    do {
+      result = await gen.next();
+    } while (!result.done);
+
+    expect((result.value as { action: string }).action).toBe("retry");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(15);
+  });
+
+  it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-retry-limit",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.retry-limit", "retry-after", [
+          { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
+        ]),
+    });
+
+    const state = makeState();
+    const config = makeConfig();
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const events = await collectEvents(
+      handleError(
+        state,
+        engine,
+        config,
+        makeAgentBase(),
+        new Error("timeout while waiting"),
+        2,
+        retryPolicy,
+      ),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "error", willRetry: false });
+  });
 });
 
 describe("completion.prepare dispatch", () => {
-  it("completion.prepare transform replaces messages in state", async () => {
+  it("completion.prepare replace_messages effect replaces messages in state", async () => {
     Bus.reset();
     const { createUserMessage } = await import("../../../src/core/message-factory");
     const compactedMessages = [createUserMessage("compacted summary", "test")];
@@ -530,33 +903,60 @@ describe("completion.prepare dispatch", () => {
       name: "test-post-compaction",
       timing: "completion.prepare",
       priority: 100,
-      fn: () => ({
-        action: "transform",
-        input: { messages: compactedMessages },
-        reason: "compact",
-        policyId: "test.compact",
-      }),
+      fn: () => replaceMessages(compactedMessages, "test.compact", "compact"),
     });
 
-    const verdict = await engine.dispatchLegacy("completion.prepare", {
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      turnCount: 1,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 100,
+    const state = makeState();
+    await handleCompact(state, engine, makeConfig(), makeAgentBase());
+
+    expect(state.messages).toEqual(compactedMessages);
+    expect(state.compactionCount).toBe(1);
+  });
+
+  it("completion.prepare append_context effect appends a user message", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-post-compaction-context",
+      timing: "completion.prepare",
+      priority: 100,
+      fn: () => appendContext("compaction context", "test.compact", "append"),
     });
 
-    expect(verdict.action).toBe("transform");
-    if (verdict.action === "transform") {
-      const payload = verdict.input as { messages?: unknown };
-      expect(Array.isArray(payload.messages)).toBe(true);
+    const state = makeState();
+    const result = await handleCompact(state, engine, makeConfig(), makeAgentBase());
+
+    expect(result).toBe("continue");
+    expect(state.messages.at(-1)?.parts).toContainEqual(
+      expect.objectContaining({ type: "text", text: "compaction context" }),
+    );
+  });
+
+  it("completion.prepare malformed replacement messages fail closed", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-post-compaction-bad-replacement",
+      timing: "completion.prepare",
+      priority: 100,
+      fn: () =>
+        allow("test.compact", "bad-replace", [
+          { type: "run.replace_messages", messages: [{ invalid: true }] },
+        ]),
+    });
+
+    const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());
+
+    expect(result).not.toBe("continue");
+    if (result !== "continue") {
+      expect(result.type).toBe("complete");
+      if (result.type === "complete") expect(result.result.guardAborted).toBe(true);
     }
   });
 
-  it("completion.prepare continue verdict leaves state unchanged", async () => {
+  it("completion.prepare continue verdict leaves state messages unchanged", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
     engine.register({
       name: "test-post-compaction-noop",
@@ -565,16 +965,12 @@ describe("completion.prepare dispatch", () => {
       fn,
     });
 
-    const verdict = await engine.dispatchLegacy("completion.prepare", {
-      steps: [],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      turnCount: 1,
-      isCompletion: true,
-      continuationCount: 0,
-      elapsedMs: 100,
-    });
+    const state = makeState();
+    const originalMessages = state.messages;
+    await handleCompact(state, engine, makeConfig(), makeAgentBase());
 
-    expect(verdict.action).toBe("continue");
+    expect(state.messages).toBe(originalMessages);
+    expect(state.compactionCount).toBe(0);
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0][0] as PolicyContext;
     expect(ctx.timing).toBe("completion.prepare");

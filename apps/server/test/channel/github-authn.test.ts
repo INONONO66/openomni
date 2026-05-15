@@ -31,7 +31,7 @@ describe("GitHubAdapter channel-authn", () => {
       expect.objectContaining({
         name: "channel-authn:github-hmac",
         policyId: "guardrail.permission",
-        verdict: "continue",
+        verdict: "allow",
         reason: "github signature verified",
       }),
     ]);
@@ -54,7 +54,7 @@ describe("GitHubAdapter channel-authn", () => {
       expect.objectContaining({
         name: "channel-authn:github-hmac",
         policyId: "guardrail.permission",
-        verdict: "abort",
+        verdict: "deny",
         reason: "github signature invalid",
       }),
     ]);
@@ -76,7 +76,7 @@ describe("GitHubAdapter channel-authn", () => {
       expect.objectContaining({
         name: "channel-authn:github-hmac",
         policyId: "guardrail.permission",
-        verdict: "abort",
+        verdict: "deny",
         reason: "github signature missing",
       }),
     ]);
@@ -124,11 +124,11 @@ describe("GitHubAdapter channel-authn", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("Filtered");
     expect(decisions).toEqual([
-      expect.objectContaining({ name: "channel-authn:github-hmac", verdict: "continue" }),
+      expect.objectContaining({ name: "channel-authn:github-hmac", verdict: "allow" }),
       expect.objectContaining({
         name: "channel-authn:github-triggers",
         policyId: "guardrail.permission",
-        verdict: "abort",
+        verdict: "deny",
         reason: "github trigger denied",
         metadata: expect.objectContaining({
           surface: "github",

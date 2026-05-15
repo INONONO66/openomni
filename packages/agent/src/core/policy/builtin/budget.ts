@@ -1,3 +1,4 @@
+import { PolicyDecision } from "@openomni/protocol";
 import { checkBudget, describeBudgetRemaining } from "../../budget";
 import type { PolicyFactory, PolicyRegistration } from "../types";
 
@@ -8,7 +9,8 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
     timing: "turn.start",
     priority: 10,
     fn: (ctx) => {
-      if (issued || !ctx.budgetState) return { action: "continue" };
+      if (issued || !ctx.budgetState)
+        return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
       const status = checkBudget(ctx.budgetState, ctx.budget);
       if (status === "reassurance") {
         issued = true;
@@ -19,14 +21,18 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
           remaining,
           threshold: ctx.budget?.reassuranceThreshold ?? 0.6,
         });
-        return {
-          action: "inject",
-          message: `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
-          reason: "budget_reassurance",
+        return PolicyDecision.allow({
           policyId: "builtin.budget.reassurance",
-        };
+          reasonCodes: ["budget_reassurance"],
+          effects: [
+            {
+              type: "prompt.inject_message",
+              message: `[Budget Status] ${remaining}. You have plenty of budget remaining. Do NOT rush or skip tasks. Complete your work thoroughly.`,
+            },
+          ],
+        });
       }
-      return { action: "continue" };
+      return PolicyDecision.allow({ policyId: "builtin.budget.reassurance" });
     },
   };
 }
@@ -43,7 +49,8 @@ export function createBudgetWarningPolicy(): PolicyRegistration {
     timing: "turn.start",
     priority: 20,
     fn: (ctx) => {
-      if (issued || !ctx.budgetState) return { action: "continue" };
+      if (issued || !ctx.budgetState)
+        return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
       const status = checkBudget(ctx.budgetState, ctx.budget);
       if (status === "warning") {
         issued = true;
@@ -54,14 +61,18 @@ export function createBudgetWarningPolicy(): PolicyRegistration {
           remaining,
           threshold: ctx.budget?.warningThreshold ?? 0.8,
         });
-        return {
-          action: "inject",
-          message: `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
-          reason: "budget_warning",
+        return PolicyDecision.allow({
           policyId: "builtin.budget.warning",
-        };
+          reasonCodes: ["budget_warning"],
+          effects: [
+            {
+              type: "prompt.inject_message",
+              message: `[Budget Warning] ${remaining}. Wrap up your current task and provide a summary.`,
+            },
+          ],
+        });
       }
-      return { action: "continue" };
+      return PolicyDecision.allow({ policyId: "builtin.budget.warning" });
     },
   };
 }

@@ -1,5 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus, SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { DiscordClient } from "./client";
@@ -113,7 +113,7 @@ export class DiscordAdapter implements Adapter.Surface {
         ? { onDecision: this.authOptions.onDecision }
         : {}),
     });
-    if (auth.verdict.action === "abort") return;
+    if (PolicyDecision.isBlocking(auth.verdict)) return;
 
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;

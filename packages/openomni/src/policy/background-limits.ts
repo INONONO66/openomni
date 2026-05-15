@@ -1,8 +1,26 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import { Operational, type Policy, type Subagent, type TraceContext } from "@openomni/protocol";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import {
+  Operational,
+  PolicyDecision,
+  type Policy,
+  type RuntimeResource,
+  type Subagent,
+  type TraceContext,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+function backgroundDescriptor(input: LaunchRequest): RuntimeResource.Descriptor {
+  return {
+    id: `worker:background:${input.agentName}`,
+    kind: "worker",
+    labels: ["source.agent", "delegation.background", `agent:${input.agentName}`],
+    capabilities: ["background.launch"],
+    effects: ["session.create_child", "worker.spawn"],
+    source: { type: "agent" },
+  };
+}
 
 interface LaunchRequest {
   readonly agentName: string;
@@ -26,12 +44,16 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
-function continueVerdict(policyId: string, reason: string): Policy.Verdict {
-  return { action: "continue", policyId, reason };
+function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
+  return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
 
-function denyVerdict(reason: string): Policy.Verdict {
-  return { action: "abort", reason };
+function denyDecision(reason: string): Policy.PolicyDecision {
+  return PolicyDecision.deny({
+    policyId: "background.limit",
+    reasonCodes: [reason],
+    effects: [{ type: "run.abort", reason }],
+  });
 }
 
 function createPerAgentLimit(state: BackgroundLimitState): PolicyRegistration {
@@ -52,12 +74,12 @@ function createPerAgentLimit(state: BackgroundLimitState): PolicyRegistration {
             limit: state.maxConcurrentPerAgent,
           },
         });
-        return denyVerdict(
+        return denyDecision(
           `max concurrent tasks per agent (${state.maxConcurrentPerAgent}) exceeded`,
         );
       }
 
-      return continueVerdict("background.per-agent-limit", "per-agent capacity available");
+      return allowDecision("background.per-agent-limit", "per-agent capacity available");
     },
   };
 }
@@ -79,10 +101,10 @@ function createDepthLimit(state: BackgroundLimitState): PolicyRegistration {
             limit: state.maxDepth,
           },
         });
-        return denyVerdict(`max depth (${state.maxDepth}) exceeded`);
+        return denyDecision(`max depth (${state.maxDepth}) exceeded`);
       }
 
-      return continueVerdict("background.depth-limit", "depth within limit");
+      return allowDecision("background.depth-limit", "depth within limit");
     },
   };
 }
@@ -107,10 +129,10 @@ function createDescendantLimit(state: BackgroundLimitState): PolicyRegistration 
             limit: state.maxDescendants,
           },
         });
-        return denyVerdict(`max descendants (${state.maxDescendants}) from same parent exceeded`);
+        return denyDecision(`max descendants (${state.maxDescendants}) from same parent exceeded`);
       }
 
-      return continueVerdict("background.descendant-limit", "descendant capacity available");
+      return allowDecision("background.descendant-limit", "descendant capacity available");
     },
   };
 }
@@ -122,13 +144,13 @@ function createTotalLimit(state: BackgroundLimitState): PolicyRegistration {
     fn: () => {
       state.shouldQueue = state.activeCount >= state.maxConcurrentTotal;
       if (state.shouldQueue) {
-        return continueVerdict(
+        return allowDecision(
           "background.total-limit",
           "total concurrency saturated; queue required",
         );
       }
 
-      return continueVerdict("background.total-limit", "total concurrency capacity available");
+      return allowDecision("background.total-limit", "total concurrency capacity available");
     },
   };
 }
@@ -139,7 +161,7 @@ function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       if (!state.shouldQueue) {
-        return continueVerdict("background.limit.queue", "queue capacity not required");
+        return allowDecision("background.limit.queue", "queue capacity not required");
       }
 
       if (state.pendingQueueSize >= state.maxQueueSize) {
@@ -154,10 +176,10 @@ function createQueueLimit(state: BackgroundLimitState): PolicyRegistration {
             limit: state.maxQueueSize,
           },
         });
-        return denyVerdict(`queue full (max ${state.maxQueueSize})`);
+        return denyDecision(`queue full (max ${state.maxQueueSize})`);
       }
 
-      return continueVerdict("background.queue-limit", "queue capacity available");
+      return allowDecision("background.queue-limit", "queue capacity available");
     },
   };
 }
@@ -209,11 +231,11 @@ export namespace BackgroundLimitsPolicy {
     readonly maxDescendants: number;
     readonly maxQueueSize: number;
     readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: PolicyDecision) => void | Promise<void>;
+    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   export interface PreLaunchResult {
-    readonly verdict: Policy.Verdict;
+    readonly verdict: Policy.PolicyDecision;
     readonly shouldQueue: boolean;
   }
 
@@ -250,7 +272,7 @@ export namespace BackgroundLimitsPolicy {
       engine.register(registration);
     }
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", {
+    const verdict = await engine.dispatch("invoke.prepare", {
       steps: [],
       usage: emptyUsage,
       turnCount: 0,
@@ -266,6 +288,7 @@ export namespace BackgroundLimitsPolicy {
         activeCount: ctx.activeCount,
         pendingQueueSize: ctx.pendingQueueSize,
       },
+      resourceDescriptor: backgroundDescriptor(ctx.input),
       traceContext: ctx.traceContext,
     });
 

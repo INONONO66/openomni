@@ -14,12 +14,12 @@ describe("channel-authn trigger policy", () => {
       },
     });
 
-    expect(auth.verdict.action).toBe("continue");
+    expect(auth.verdict.verdict).toBe("allow");
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:discord-triggers",
         policyId: "guardrail.permission",
-        verdict: "continue",
+        verdict: "allow",
         reason: "discord trigger accepted",
         metadata: expect.objectContaining({
           surface: "discord",
@@ -42,12 +42,12 @@ describe("channel-authn trigger policy", () => {
       },
     });
 
-    expect(auth.verdict.action).toBe("abort");
+    expect(auth.verdict.verdict).toBe("deny");
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:telegram-triggers",
         policyId: "guardrail.permission",
-        verdict: "abort",
+        verdict: "deny",
         reason: "telegram trigger denied",
         metadata: expect.objectContaining({
           surface: "telegram",
@@ -75,9 +75,9 @@ describe("channel-authn trigger policy", () => {
       ctx: githubContext({}),
     });
 
-    expect(accepted.verdict.action).toBe("continue");
-    expect(denied.verdict.action).toBe("abort");
-    expect(emptyRules.verdict.action).toBe("continue");
+    expect(accepted.verdict.verdict).toBe("allow");
+    expect(denied.verdict.verdict).toBe("deny");
+    expect(emptyRules.verdict.verdict).toBe("allow");
   });
 });
 

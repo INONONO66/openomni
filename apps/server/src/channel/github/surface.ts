@@ -1,5 +1,5 @@
 import type { Adapter } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus, SurfaceKey } from "@openomni/session";
 import { Dedupe } from "../../shared/dedupe";
 import { GitHubClient } from "./client";
@@ -128,7 +128,8 @@ export class GitHubAdapter implements Adapter.Surface {
         ? { onDecision: this.authOptions.onDecision }
         : {}),
     });
-    if (triggerAuth.verdict.action === "abort") return new Response("Filtered", { status: 200 });
+    if (PolicyDecision.isBlocking(triggerAuth.verdict))
+      return new Response("Filtered", { status: 200 });
 
     const inbound = this.normalizer.normalize(content, eventKey, deliveryId ?? undefined);
     if (!inbound) return new Response("Filtered", { status: 200 });

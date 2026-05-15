@@ -8,6 +8,7 @@ import {
   mockProviderModel,
   type MockLlmFn,
 } from "./helpers/mock-llm";
+import { allow, continueWithPrompt } from "./helpers/policy-decision";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -120,12 +121,7 @@ describe("ChatAgent", () => {
           name: "test:inject-continue",
           timing: "turn.finish",
           priority: 250,
-          fn: async () => ({
-            action: "inject",
-            input: { message: "continue" },
-            reason: "continue-after-step",
-            policyId: "test.step-guard",
-          }),
+          fn: async () => continueWithPrompt("continue", "test.step-guard", "continue-after-step"),
         },
       ],
     });
@@ -212,14 +208,9 @@ describe("ChatAgent", () => {
           fn: async () => {
             guardInvocations += 1;
             if (guardInvocations === 1) {
-              return {
-                action: "inject",
-                input: { message: "continue" },
-                reason: "continue-after-step",
-                policyId: "test.step-guard",
-              };
+              return continueWithPrompt("continue", "test.step-guard", "continue-after-step");
             }
-            return { action: "continue" };
+            return allow("test.step-guard");
           },
         },
       ],

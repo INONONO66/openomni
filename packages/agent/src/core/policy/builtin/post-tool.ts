@@ -1,4 +1,4 @@
-import { Operational } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { PolicyContext, PolicyFactory, PolicyRegistration } from "../types";
 
@@ -21,16 +21,17 @@ export function createPostToolPolicy(enricher: PostToolEnricher): PolicyRegistra
           msg: "post-tool enricher failed",
           context: { error: String(error) },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.post_tool" });
       }
-      if (!addition) return { action: "continue" };
+      if (!addition) return PolicyDecision.allow({ policyId: "builtin.post_tool" });
       const base = ctx.toolOutput ?? "";
-      return {
-        action: "transform",
-        input: { output: base ? `${base}\n${addition}` : addition },
-        reason: "post_tool_enrichment",
+      return PolicyDecision.allow({
         policyId: "builtin.post_tool",
-      };
+        reasonCodes: ["post_tool_enrichment"],
+        effects: [
+          { type: "tool.rewrite_output", output: base ? `${base}\n${addition}` : addition },
+        ],
+      });
     },
   };
 }

@@ -15,6 +15,12 @@ function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   };
 }
 
+function rewrittenOutput(
+  verdict: Awaited<ReturnType<ReturnType<typeof createPostToolPolicy>["fn"]>>,
+): string | undefined {
+  return verdict.effects.find((effect) => effect.type === "tool.rewrite_output")?.output;
+}
+
 describe("createPostToolPolicy", () => {
   it("enricher returns string → transform verdict with appended output", async () => {
     const enricher = () => "enrichment text";
@@ -28,10 +34,8 @@ describe("createPostToolPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
-    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
-      "original output\nenrichment text",
-    );
+    expect(verdict.verdict).toBe("allow");
+    expect(rewrittenOutput(verdict)).toBe("original output\nenrichment text");
   });
 
   it("enricher returns null → continue verdict", async () => {
@@ -46,7 +50,7 @@ describe("createPostToolPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("enricher receives correct tool context", async () => {
@@ -84,7 +88,7 @@ describe("createPostToolPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("enricher returns string with empty toolOutput → transform with enrichment only", async () => {
@@ -98,10 +102,8 @@ describe("createPostToolPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
-    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
-      "enrichment text",
-    );
+    expect(verdict.verdict).toBe("allow");
+    expect(rewrittenOutput(verdict)).toBe("enrichment text");
   });
 
   it("has priority 200", () => {
@@ -133,9 +135,7 @@ describe("createPostToolPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
-    expect(((verdict as Record<string, unknown>).input as Record<string, unknown>).output).toBe(
-      "original output\nasync enrichment",
-    );
+    expect(verdict.verdict).toBe("allow");
+    expect(rewrittenOutput(verdict)).toBe("original output\nasync enrichment");
   });
 });

@@ -1,4 +1,4 @@
-import { Policy, type Messenger } from "@openomni/protocol";
+import { Policy, PolicyDecision, type Messenger } from "@openomni/protocol";
 import type { PolicyRegistration } from "../types";
 
 export interface MessengerAllowPatternConfig {
@@ -64,43 +64,51 @@ export function createMessengerAllowPatternPolicy(
       const toAgentId = ctx.envelope?.toAgentId;
 
       if (!fromAgentId || !toAgentId) {
-        return Policy.evaluate(undefined, {
-          action: "messenger.envelope.send",
-          resource: "messenger.envelope",
-        });
+        return PolicyDecision.fromEvaluation(
+          Policy.evaluate(undefined, {
+            action: "messenger.envelope.send",
+            resource: "messenger.envelope",
+          }),
+        );
       }
 
       const { allowPatterns } = config;
 
       if (!allowPatterns || allowPatterns.length === 0) {
-        return evaluateMessengerPermission({
-          fromAgentId,
-          toAgentId,
-          allowed: true,
-          allowReason: "no_allow_patterns_configured",
-          denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
-        });
+        return PolicyDecision.fromEvaluation(
+          evaluateMessengerPermission({
+            fromAgentId,
+            toAgentId,
+            allowed: true,
+            allowReason: "no_allow_patterns_configured",
+            denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+          }),
+        );
       }
 
       const isAuthorized = allowPatterns.some((p) => matchesPattern(p, fromAgentId, toAgentId));
 
       if (isAuthorized) {
-        return evaluateMessengerPermission({
-          fromAgentId,
-          toAgentId,
-          allowed: true,
-          allowReason: "allow_pattern_matched",
-          denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
-        });
+        return PolicyDecision.fromEvaluation(
+          evaluateMessengerPermission({
+            fromAgentId,
+            toAgentId,
+            allowed: true,
+            allowReason: "allow_pattern_matched",
+            denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+          }),
+        );
       }
 
-      return evaluateMessengerPermission({
-        fromAgentId,
-        toAgentId,
-        allowed: false,
-        allowReason: "allow_pattern_matched",
-        denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
-      });
+      return PolicyDecision.fromEvaluation(
+        evaluateMessengerPermission({
+          fromAgentId,
+          toAgentId,
+          allowed: false,
+          allowReason: "allow_pattern_matched",
+          denyReason: `authorization denied: ${fromAgentId} → ${toAgentId}`,
+        }),
+      );
     },
   };
 }

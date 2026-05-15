@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
-import type { Ingress } from "@openomni/protocol";
+import { PolicyDecision, type Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import { IngressEngine } from "../../../src/ingress/engine";
 import { BackgroundManager } from "../../../src/subagent/background-manager";
@@ -14,7 +14,12 @@ function denyAll(reason: string): PolicyRegistration {
     timing: "invoke.prepare",
     priority: 0,
     failPolicy: "fail-closed",
-    fn: () => ({ action: "deny", reason, policyId: "conformance.invoke.prepare.deny-all" }),
+    fn: () =>
+      PolicyDecision.deny({
+        policyId: "conformance.invoke.prepare.deny-all",
+        reasonCodes: [reason],
+        effects: [{ type: "run.abort", reason }],
+      }),
   };
 }
 
@@ -24,7 +29,12 @@ function inboundDenyAll(reason: string): PolicyRegistration {
     timing: "inbound.receive",
     priority: 0,
     failPolicy: "fail-closed",
-    fn: () => ({ action: "deny", reason, policyId: "conformance.inbound.receive.deny-all" }),
+    fn: () =>
+      PolicyDecision.deny({
+        policyId: "conformance.inbound.receive.deny-all",
+        reasonCodes: [reason],
+        effects: [{ type: "run.abort", reason }],
+      }),
   };
 }
 

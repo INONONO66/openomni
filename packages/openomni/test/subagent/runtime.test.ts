@@ -5,7 +5,7 @@ import {
   type ChatAgentInput,
   type PolicyRegistration,
 } from "@openomni/agent";
-import { Subagent } from "@openomni/protocol";
+import { PolicyDecision, Subagent } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
@@ -306,11 +306,12 @@ describe("SubagentRuntime", () => {
         name: "test:block-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "abort" as const,
-          reason: "delegation denied by test policy",
-          policyId: "test:block",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:block",
+            reasonCodes: ["delegation denied by test policy"],
+            effects: [{ type: "run.abort", reason: "delegation denied by test policy" }],
+          }),
       };
 
       const error = await SubagentRuntime.spawn({
@@ -330,11 +331,12 @@ describe("SubagentRuntime", () => {
         name: "test:deny-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "deny" as const,
-          reason: "delegation denied by policy",
-          policyId: "test:deny-delegation",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:deny-delegation",
+            reasonCodes: ["delegation denied by policy"],
+            effects: [{ type: "run.abort", reason: "delegation denied by policy" }],
+          }),
       };
 
       const error = await SubagentRuntime.spawn({
@@ -350,16 +352,17 @@ describe("SubagentRuntime", () => {
       expect(runCalls).toHaveLength(0);
     });
 
-    it("spawn fails closed when invoke.prepare returns an unsupported verdict", async () => {
+    it("spawn treats invoke.prepare pending verdict as terminal", async () => {
       const retryPolicy: PolicyRegistration = {
         name: "test:retry-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "retry" as const,
-          reason: "retry is not supported for delegation prepare",
-          policyId: "test:retry-delegation",
-        }),
+        fn: () =>
+          PolicyDecision.pending({
+            policyId: "test:retry-delegation",
+            reasonCodes: ["approval required for delegation prepare"],
+            effects: [{ type: "run.abort", reason: "approval required for delegation prepare" }],
+          }),
       };
 
       const error = await SubagentRuntime.spawn({
@@ -371,7 +374,7 @@ describe("SubagentRuntime", () => {
       }).catch((err: unknown) => err);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe("retry is not supported for delegation prepare");
+      expect((error as Error).message).toBe("approval required for delegation prepare");
       expect(runCalls).toHaveLength(0);
     });
 
@@ -382,10 +385,7 @@ describe("SubagentRuntime", () => {
         name: "test:allow-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "continue" as const,
-          policyId: "test:allow",
-        }),
+        fn: () => PolicyDecision.allow({ policyId: "test:allow" }),
       };
 
       const result = await SubagentRuntime.spawn({
@@ -406,12 +406,17 @@ describe("SubagentRuntime", () => {
         name: "test:transform-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "transform" as const,
-          input: { softTimeoutMs: 5000, hardTimeoutMs: 10000 },
-          reason: "enforce timeout limits",
-          policyId: "test:transform",
-        }),
+        fn: () =>
+          PolicyDecision.allow({
+            policyId: "test:transform",
+            reasonCodes: ["enforce timeout limits"],
+            effects: [
+              {
+                type: "delegation.set_constraints",
+                constraints: { softTimeoutMs: 5000, hardTimeoutMs: 10000 },
+              },
+            ],
+          }),
       };
 
       const config: Parameters<typeof SubagentRuntime.spawn>[0] = {
@@ -423,6 +428,7 @@ describe("SubagentRuntime", () => {
       };
 
       const result = await SubagentRuntime.spawn(config);
+
       expect(result.output).toBe("transformed output");
       expect(config.softTimeoutMs).toBe(5000);
       expect(config.hardTimeoutMs).toBe(10000);
@@ -441,7 +447,7 @@ describe("SubagentRuntime", () => {
         fn: (ctx) => {
           capturedLabels = ctx.labels;
           capturedToolInput = ctx.toolInput;
-          return { action: "continue" as const, policyId: "test:capture" };
+          return PolicyDecision.allow({ policyId: "test:capture" });
         },
       };
 
@@ -479,11 +485,12 @@ describe("SubagentRuntime", () => {
         name: "test:block-send",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "abort" as const,
-          reason: "send delegation denied",
-          policyId: "test:block-send",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:block-send",
+            reasonCodes: ["send delegation denied"],
+            effects: [{ type: "run.abort", reason: "send delegation denied" }],
+          }),
       };
 
       const error = await SubagentRuntime.send({
@@ -511,11 +518,12 @@ describe("SubagentRuntime", () => {
         name: "test:deny-send",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "deny" as const,
-          reason: "send denied by policy",
-          policyId: "test:deny-send",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:deny-send",
+            reasonCodes: ["send denied by policy"],
+            effects: [{ type: "run.abort", reason: "send denied by policy" }],
+          }),
       };
 
       const error = await SubagentRuntime.send({
@@ -535,11 +543,12 @@ describe("SubagentRuntime", () => {
         name: "test:deny-background-delegation",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({
-          action: "deny" as const,
-          reason: "background delegation denied by policy",
-          policyId: "test:deny-background-delegation",
-        }),
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "test:deny-background-delegation",
+            reasonCodes: ["background delegation denied by policy"],
+            effects: [{ type: "run.abort", reason: "background delegation denied by policy" }],
+          }),
       };
 
       const error = await SubagentRuntime.spawnBackground({

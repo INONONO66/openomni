@@ -170,11 +170,11 @@ describe("policy composition conformance", () => {
       ]);
 
       expect(result.mergedEffects).toEqual([
+        { type: "prompt.append_context", context: "third" },
         { type: "prompt.append_context", context: "first" },
         { type: "prompt.append_context", context: "second" },
-        { type: "prompt.append_context", context: "third" },
       ]);
-      expect(result.contributingPolicies).toEqual(["policy.alpha", "policy.beta", "policy.gamma"]);
+      expect(result.contributingPolicies).toEqual(["policy.gamma", "policy.alpha", "policy.beta"]);
     });
 
     it("deduplicates exact duplicate effects by stable hash", () => {
@@ -277,7 +277,7 @@ describe("policy composition conformance", () => {
       });
     }
 
-    it("keeps post-boundary rewrite conflicts diagnostic-only", () => {
+    it("fails closed for incompatible writeback rewrite conflicts", () => {
       const result = composeEffects([
         decision({
           policyId: "policy.rewrite-a",
@@ -289,14 +289,13 @@ describe("policy composition conformance", () => {
         }),
       ]);
 
-      expect(result.verdict).toBe("allow");
+      expect(result.verdict).toBe("deny");
       expect(result.mergedEffects).toEqual([
-        { type: "writeback.rewrite", output: "Output A" },
         {
           type: "audit.annotate",
           annotation:
-            "policy.effect_conflict.post_boundary: writeback.rewrite.output rewritten by policy.rewrite-a and policy.rewrite-b",
-          severity: "warning",
+            "policy.effect_conflict.fail_closed: writeback.rewrite.output rewritten by policy.rewrite-a and policy.rewrite-b",
+          severity: "error",
         },
       ]);
     });

@@ -14,6 +14,7 @@ import {
   mockProviderModel,
   type MockLlmFn,
 } from "../../helpers/mock-llm";
+import { abortRun, allow, inject } from "../../helpers/policy-decision";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
@@ -71,7 +72,7 @@ describe("run.start middleware dispatch", () => {
   it("fires before the first LLM turn", async () => {
     const preRunFn = mock((_ctx: PolicyContext) => {
       callOrder.push("run.start");
-      return { action: "continue" as const };
+      return allow();
     });
 
     await collectEvents({
@@ -95,7 +96,7 @@ describe("run.start middleware dispatch", () => {
           name: "test:run.start_abort",
           timing: "run.start",
           priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "blocked" }),
+          fn: () => abortRun("test.run-start-abort", "blocked"),
         },
       ],
     });
@@ -117,12 +118,7 @@ describe("run.start middleware dispatch", () => {
           name: "test:run.start_inject",
           timing: "run.start",
           priority: 100,
-          fn: () => ({
-            action: "inject" as const,
-            message: injectedContent,
-            reason: "inject-pre-run-context",
-            policyId: "test.pre-run-inject",
-          }),
+          fn: () => inject(injectedContent, "test.pre-run-inject", "inject-pre-run-context"),
         },
       ],
     });
@@ -140,7 +136,7 @@ describe("run.start middleware dispatch", () => {
 
 describe("run.finish middleware dispatch", () => {
   it("fires after normal completion with result context", async () => {
-    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => allow());
 
     await collectEvents({
       ...defaultConfig,
@@ -155,7 +151,7 @@ describe("run.finish middleware dispatch", () => {
   });
 
   it("fires after budget exceeded (max-steps completion)", async () => {
-    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => allow());
 
     const events = await collectEvents({
       ...defaultConfig,
@@ -171,7 +167,7 @@ describe("run.finish middleware dispatch", () => {
   });
 
   it("does NOT fire after turn.start abort", async () => {
-    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => allow());
 
     await collectEvents({
       ...defaultConfig,
@@ -180,7 +176,7 @@ describe("run.finish middleware dispatch", () => {
           name: "test:turn.start_abort",
           timing: "turn.start",
           priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "blocked" }),
+          fn: () => abortRun("test.turn-start-abort", "blocked"),
         },
         { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
       ],
@@ -190,7 +186,7 @@ describe("run.finish middleware dispatch", () => {
   });
 
   it("does NOT fire after turn.finish abort", async () => {
-    const postRunFn = mock((_ctx: PolicyContext) => ({ action: "continue" as const }));
+    const postRunFn = mock((_ctx: PolicyContext) => allow());
 
     await collectEvents({
       ...defaultConfig,
@@ -199,7 +195,7 @@ describe("run.finish middleware dispatch", () => {
           name: "test:turn.finish_abort",
           timing: "turn.finish",
           priority: 100,
-          fn: () => ({ action: "abort" as const, reason: "blocked" }),
+          fn: () => abortRun("test.turn-finish-abort", "blocked"),
         },
         { name: "test:run.finish_watcher", timing: "run.finish", priority: 100, fn: postRunFn },
       ],
@@ -208,27 +204,20 @@ describe("run.finish middleware dispatch", () => {
     expect(postRunFn).toHaveBeenCalledTimes(0);
   });
 
-  it("transform verdict → AgentResult.text is replaced", async () => {
-    const transformedText = "post-run-transformed-result";
-
+  it("run.finish allow leaves AgentResult.text unchanged", async () => {
     const events = await collectEvents({
       ...defaultConfig,
       middleware: [
         {
-          name: "test:run.finish_transform",
+          name: "test:run.finish_observe",
           timing: "run.finish",
           priority: 100,
-          fn: () => ({
-            action: "transform" as const,
-            input: { text: transformedText },
-            reason: "replace-result-text",
-            policyId: "test.post-run-transform",
-          }),
+          fn: () => allow("test.post-run-observe", "observe-result"),
         },
       ],
     });
 
     const result = getResult(events);
-    expect(result?.text).toBe(transformedText);
+    expect(result?.text).toBe("");
   });
 });

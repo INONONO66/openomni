@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine, type PolicyDecision } from "@openomni/agent";
-import type { Skill } from "@openomni/protocol";
+import { PolicyDecision as ProtocolPolicyDecision, type Skill } from "@openomni/protocol";
 import { createSkillActivationMiddleware } from "../../src/skill";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -17,8 +17,8 @@ describe("createSkillActivationMiddleware", () => {
       ]),
     );
 
-    const result = await engine.dispatchSystemPrompt(baseCtx());
-    const context = result.appendContext ?? "";
+    const result = await engine.dispatch("context.prepare", baseCtx());
+    const context = (result.effects[0] as { message?: string } | undefined)?.message ?? "";
 
     expect(context.indexOf("[execution:exec]")).toBeLessThan(
       context.indexOf("[enhancement:alpha]"),
@@ -44,16 +44,20 @@ describe("createSkillActivationMiddleware", () => {
     });
     engine.register(createSkillActivationMiddleware([]));
 
-    const result = await engine.dispatchSystemPrompt(baseCtx());
+    const result = await engine.dispatch("context.prepare", baseCtx());
 
-    expect(result).toEqual({});
+    expect(result).toMatchObject({
+      policyId: "agent.policy.composed",
+      verdict: "allow",
+      effects: [],
+      reasonCodes: ["no active skills"],
+    });
     expect(decisions).toHaveLength(1);
     expect(decisions[0]).toMatchObject({
-      name: "skill:activation",
       policyId: "skill.activation",
-      verdict: "continue",
-      reason: "no active skills",
+      verdict: "allow",
     });
+    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toBe("no active skills");
   });
 
   it("makes same-layer execution conflicts observable while composing deterministically", async () => {
@@ -72,16 +76,18 @@ describe("createSkillActivationMiddleware", () => {
       ]),
     );
 
-    const result = await engine.dispatchSystemPrompt(baseCtx());
-    const context = result.appendContext ?? "";
+    const result = await engine.dispatch("context.prepare", baseCtx());
+    const context = (result.effects[0] as { message?: string } | undefined)?.message ?? "";
 
     expect(context.indexOf("[execution:exec-a]")).toBeLessThan(
       context.indexOf("[execution:exec-b]"),
     );
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.policyId).toBe("skill.activation.conflict");
-    expect(decisions[0]?.reason).toContain("conflict");
-    expect(decisions[0]?.reason).toContain("multiple execution skills (exec-a, exec-b)");
+    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toContain("conflict");
+    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toContain(
+      "multiple execution skills (exec-a, exec-b)",
+    );
   });
 });
 

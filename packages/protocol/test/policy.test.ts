@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
-import { Policy } from "../src/policy/index";
+import { Policy, PolicyDecision } from "../src/policy/index";
 
 const it = test;
 
@@ -439,67 +439,61 @@ describe("Policy schemas", () => {
     });
   });
 
-  describe("Policy.Verdict", () => {
-    it("parses continue verdict", () => {
-      const result = Policy.Verdict.parse({ action: "continue" });
-      expect(result.action).toBe("continue");
+  describe("Policy.PolicyDecision", () => {
+    const baseDecision = {
+      policyId: "test.policy",
+      effects: [],
+      reasonCodes: ["matched"],
+    };
+
+    it("accepts canonical allow, deny, and pending verdicts", () => {
+      for (const verdict of ["allow", "deny", "pending"] as const) {
+        const result = Policy.PolicyDecision.parse({ ...baseDecision, verdict });
+        expect(result.verdict).toBe(verdict);
+      }
     });
 
-    it("parses skip verdict", () => {
-      const result = Policy.Verdict.parse({ action: "skip", reason: "skipped" });
-      expect(result.action).toBe("skip");
-      expect(result.reason).toBe("skipped");
+    it("rejects legacy evaluator and effect verdict strings", () => {
+      for (const verdict of ["continue", "abort", "transform", "inject"] as const) {
+        expect(Policy.PolicyDecision.safeParse({ ...baseDecision, verdict }).success).toBe(false);
+      }
     });
 
-    it("parses abort verdict", () => {
-      const result = Policy.Verdict.parse({ action: "abort", reason: "stopped" });
-      expect(result.action).toBe("abort");
-      expect(result.reason).toBe("stopped");
+    it("rejects hybrid canonical decisions carrying legacy verdict keys", () => {
+      expect(
+        Policy.PolicyDecision.safeParse({
+          ...baseDecision,
+          verdict: "allow",
+          action: "abort",
+          reason: "legacy abort",
+        }).success,
+      ).toBe(false);
     });
 
-    it("parses retry verdict", () => {
-      const result = Policy.Verdict.parse({ action: "retry" });
-      expect(result.action).toBe("retry");
-    });
-
-    it("parses transform verdict with input", () => {
-      const result = Policy.Verdict.parse({
-        action: "transform",
-        input: { key: "value" },
-      });
-      expect(result).toMatchObject({
-        action: "transform",
-        input: { key: "value" },
-      });
-    });
-
-    it("parses inject verdict with message", () => {
-      const result = Policy.Verdict.parse({
-        action: "inject",
-        message: "injected message",
-      });
-      expect(result).toMatchObject({
-        action: "inject",
-        message: "injected message",
-      });
-    });
-
-    it("parses deny verdict", () => {
-      const result = Policy.Verdict.parse({ action: "deny", reason: "denied" });
-      expect(result.action).toBe("deny");
-      expect(result.reason).toBe("denied");
-    });
-
-    it("rejects invalid verdict action", () => {
-      expect(Policy.Verdict.safeParse({ action: "invalid" }).success).toBe(false);
-    });
-
-    it("includes optional policyId in all verdicts", () => {
-      const result = Policy.Verdict.parse({
-        action: "continue",
+    it("creates allow decisions with helper defaults", () => {
+      const result = PolicyDecision.allow({ policyId: "test.policy" });
+      expect(result).toEqual({
         policyId: "test.policy",
+        verdict: "allow",
+        effects: [],
+        reasonCodes: [],
       });
-      expect(result.policyId).toBe("test.policy");
+      expect(PolicyDecision.isBlocking(result)).toBe(false);
+    });
+
+    it("creates deny and pending decisions as blocking", () => {
+      const deny = PolicyDecision.deny({ policyId: "deny.policy", reasonCodes: ["denied"] });
+      const pending = PolicyDecision.pending({
+        policyId: "pending.policy",
+        reasonCodes: ["needs_approval"],
+      });
+
+      expect(deny.verdict).toBe("deny");
+      expect(pending.verdict).toBe("pending");
+      expect(PolicyDecision.isBlocking(deny)).toBe(true);
+      expect(PolicyDecision.isBlocking(pending)).toBe(true);
+      expect(PolicyDecision.reason(deny)).toBe("denied");
+      expect(PolicyDecision.reason(pending)).toBe("needs_approval");
     });
   });
 

@@ -17,6 +17,7 @@ import {
   type StreamRunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/stream-helpers";
+import { deny } from "../../helpers/policy-decision";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
 
@@ -61,7 +62,7 @@ function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
     turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     turnToolCalls: [],
     turnToolResults: [],
-    preToolUseVerdicts: [],
+    toolPolicyDecisions: [],
     ...overrides,
   };
 }
@@ -74,7 +75,7 @@ async function collectEvents(gen: AsyncGenerator<AgentEvent>): Promise<AgentEven
 
 function expectComplete(event: AgentEvent | null): Extract<AgentEvent, { type: "complete" }> {
   expect(event).not.toBeNull();
-  expect(event!.type).toBe("complete");
+  expect(event?.type).toBe("complete");
   return event as Extract<AgentEvent, { type: "complete" }>;
 }
 
@@ -86,7 +87,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-run-start",
       timing: "run.start",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "blocked", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "blocked"),
     });
 
     const complete = expectComplete(await dispatchPreRun(makeState(), engine, makeConfig()));
@@ -102,7 +103,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-turn-start",
       timing: "turn.start",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "blocked", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "blocked"),
     });
 
     const result = await buildTurn(
@@ -128,7 +129,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-resources",
       timing: "resources.prepare",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "no-tools", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "no-tools"),
     });
 
     const result = await buildTurn(
@@ -149,11 +150,7 @@ describe("stream helper deny verdicts", () => {
 
   it("fail-closes model.request deny before provider execution", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => ({
-      action: "deny" as const,
-      reason: "provider-blocked",
-      policyId: "test.deny",
-    }));
+    const fn = mock((_ctx: PolicyContext) => deny("test.deny", "provider-blocked"));
     const engine = PolicyEngine.create();
     engine.register({ name: "deny-model-request", timing: "model.request", priority: 100, fn });
 
@@ -174,7 +171,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-model-response",
       timing: "model.response",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "after-provider", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "after-provider"),
     });
 
     try {
@@ -195,7 +192,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-turn-finish",
       timing: "turn.finish",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "post-turn", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "post-turn"),
     });
     const state = makeState();
     state.lastAssistantText = "done";
@@ -210,10 +207,10 @@ describe("stream helper deny verdicts", () => {
 
     expect(hook).toMatchObject({ timing: "turn.finish", action: "deny", reason: "post-turn" });
     expect(complete).toBeDefined();
-    expect(complete!.result.guardAborted).toBeUndefined();
+    expect(complete?.result.guardAborted).toBeUndefined();
   });
 
-  it("records a diagnostic and keeps completion.prepare deny fail-open", async () => {
+  it("records a diagnostic and fail-closes completion.prepare deny", async () => {
     Bus.reset();
     const diagnostics: unknown[] = [];
     const unsubscribe = Bus.observe((event, payload) => {
@@ -224,14 +221,18 @@ describe("stream helper deny verdicts", () => {
       name: "deny-compaction",
       timing: "completion.prepare",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "post-compaction", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "post-compaction"),
     });
 
     try {
       const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());
       await Promise.resolve();
 
-      expect(result).toBe("continue");
+      expect(result).not.toBe("continue");
+      if (result !== "continue") {
+        expect(result.type).toBe("complete");
+        if (result.type === "complete") expect(result.result.guardAborted).toBe(true);
+      }
       expect(hasDenyDiagnostic(diagnostics, "completion.prepare")).toBe(true);
     } finally {
       unsubscribe();
@@ -245,7 +246,7 @@ describe("stream helper deny verdicts", () => {
       name: "deny-writeback",
       timing: "writeback.commit",
       priority: 100,
-      fn: () => ({ action: "deny", reason: "no-writeback", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "no-writeback"),
     });
 
     try {
