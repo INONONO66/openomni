@@ -18,7 +18,7 @@ The goal is interpreter-grade stability: stable semantics, replayable decisions,
 - Policy Kernel v2 does not make policies execute arbitrary code in privileged contexts.
 - Policy Kernel v2 does not replace domain runtimes such as the worker pool, MCP client, or session storage.
 - Policy Kernel v2 does not allow policies to directly mutate sessions, invoke tools, access credentials, or call external services.
-- Policy Kernel v2 does not require all legacy `Policy.Verdict` policies to disappear immediately; legacy verdicts may be adapted during migration.
+- Policy Kernel v2 does not expose legacy verdict objects at policy boundaries; policies return canonical `PolicyDecision` values directly.
 
 ## Core Model
 
@@ -236,13 +236,17 @@ Each effect category has an explicit merge rule. If no rule is defined for a con
 | `prompt.inject_message` | Append all in priority order. Two injections with identical content and role deduplicate by hash. |
 | `tool.filter` | Union of all filter patterns. A tool is filtered if any policy filters it. |
 | `tool.rewrite_input` | Deep merge of input records in priority order. Later priority wins on key conflict. If two policies rewrite the same key with different values at equal priority, fail closed. |
+| `tool.rewrite_output` | Only one output rewrite is active. Higher priority wins. Equal-priority incompatible rewrites fail closed at composition; post adapters treat plain post-boundary deny as diagnostic-only unless an explicit `run.abort` effect is allowed and present. |
 | `tool.require_approval` | Absorbing: if any policy requires approval, the composed result requires approval. Reasons concatenate. |
 | `run.abort` | Absorbing: if any policy aborts, the run aborts. First abort reason wins. |
 | `run.continue_with_prompt` | Only one `run.continue_with_prompt` may be active. If two policies emit it, fail closed unless one has strictly higher priority. |
 | `run.retry_after` | Use the maximum `delayMs` across all retry effects. Use the minimum `maxRetries` across all retry effects (safer bound). |
+| `run.replace_messages` | Only one message replacement is active. Higher priority wins. Equal-priority incompatible replacements fail closed. |
 | `delegation.set_constraints` | Deep merge of constraint records in priority order. Same key conflict at equal priority fails closed. |
 | `delegation.require_approval` | Absorbing: if any policy requires approval, delegation requires approval. Reasons concatenate. |
-| `audit.annotate` | Append all annotations. No deduplication. Order: priority descending, then policy id ascending. |
+| `writeback.rewrite` | Only one writeback rewrite is active. Higher priority wins. Equal-priority incompatible rewrites fail closed. |
+| `writeback.suppress` | Suppression wins over lower- or equal-priority rewrites; equal-priority suppress/rewrite from different policies fails closed before session-visible output is stored. A higher-priority rewrite may override a lower-priority suppression. |
+| `audit.annotate` | Append all annotations in priority order, then policy id order. Exact duplicate annotations deduplicate by stable effect hash. |
 
 ## Obligation Lifecycle
 
@@ -344,23 +348,23 @@ Each policy point is a versioned ABI contract. The table below defines the full 
 | Point ID | Allowed Effects | Required Context | Default Fail Policy | Side-Effect Boundary | Phase |
 | --- | --- | --- | --- | --- | --- |
 | `session.inbound.pre` | `audit.annotate`, `run.abort`, `delegation.set_constraints` | `actorId`, `sessionId`, `inboundEvent` | `fail-closed` | yes | pre |
-| `run.lifecycle.pre` | `audit.annotate`, `run.abort`, `delegation.set_constraints`, `prompt.append_context` | `actorId`, `sessionId`, `runId` | `fail-closed` | yes | pre |
-| `run.turn.pre` | `audit.annotate`, `run.abort`, `run.retry_after`, `prompt.append_context` | `sessionId`, `runId`, `turnIndex` | `fail-closed` | yes | pre |
-| `prompt.context.pre` | `prompt.append_context`, `prompt.inject_message`, `audit.annotate` | `sessionId`, `runId`, `turnIndex` | `fail-open` | yes | pre |
+| `run.lifecycle.pre` | `audit.annotate`, `run.abort`, `delegation.set_constraints`, `prompt.append_context`, `prompt.inject_message` | `actorId`, `sessionId`, `runId` | `fail-closed` | yes | pre |
+| `run.turn.pre` | `audit.annotate`, `run.abort`, `run.retry_after`, `prompt.append_context`, `prompt.inject_message` | `sessionId`, `runId`, `turnIndex` | `fail-closed` | yes | pre |
+| `prompt.context.pre` | `prompt.append_context`, `prompt.inject_message`, `prompt.replace`, `audit.annotate` | `sessionId`, `runId`, `turnIndex` | `fail-open` | yes | pre |
 | `tool.catalog.pre` | `tool.filter`, `audit.annotate`, `run.abort` | `sessionId`, `runId`, `availableTools` | `fail-closed` | yes | pre |
 | `connection.llm.pre` | `prompt.append_context`, `prompt.inject_message`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `modelId` | `fail-closed` | yes | pre |
-| `connection.llm.post` | `audit.annotate`, `run.abort`, `run.continue_with_prompt` | `sessionId`, `runId`, `modelId`, `responseTokens` | `fail-open` | no | post |
-| `tool.native.pre` | `tool.filter`, `tool.rewrite_input`, `tool.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `toolId`, `toolInput` | `fail-closed` | yes | pre |
-| `tool.mcp.pre` | `tool.filter`, `tool.rewrite_input`, `tool.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `toolId`, `mcpServerId`, `toolInput` | `fail-closed` | yes | pre |
+| `connection.llm.post` | `audit.annotate`, `run.abort`, `prompt.inject_message`, `run.replace_messages` | `sessionId`, `runId`, `modelId`, `responseTokens` | `fail-open` | no | post |
+| `tool.native.pre` | `tool.filter`, `tool.rewrite_input`, `tool.skip_invocation`, `tool.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `toolId`, `toolInput` | `fail-closed` | yes | pre |
+| `tool.mcp.pre` | `tool.filter`, `tool.rewrite_input`, `tool.skip_invocation`, `tool.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `toolId`, `mcpServerId`, `toolInput` | `fail-closed` | yes | pre |
 | `delegation.subagent.pre` | `delegation.set_constraints`, `delegation.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `subagentId`, `subagentProfile` | `fail-closed` | yes | pre |
 | `delegation.background.pre` | `delegation.set_constraints`, `delegation.require_approval`, `run.abort`, `audit.annotate` | `sessionId`, `runId`, `backgroundTaskId` | `fail-closed` | yes | pre |
-| `tool.native.post` | `audit.annotate`, `run.abort` | `sessionId`, `runId`, `toolId`, `toolResult` | `fail-open` | no | post |
-| `tool.mcp.post` | `audit.annotate`, `run.abort` | `sessionId`, `runId`, `toolId`, `mcpServerId`, `toolResult` | `fail-open` | no | post |
+| `tool.native.post` | `audit.annotate`, `run.abort`, `tool.rewrite_output` | `sessionId`, `runId`, `toolId`, `toolResult` | `fail-open` | no | post |
+| `tool.mcp.post` | `audit.annotate`, `run.abort`, `tool.rewrite_output` | `sessionId`, `runId`, `toolId`, `mcpServerId`, `toolResult` | `fail-open` | no | post |
 | `delegation.subagent.post` | `audit.annotate` | `sessionId`, `runId`, `subagentId`, `subagentResult` | `fail-open` | no | post |
 | `delegation.background.post` | `audit.annotate` | `sessionId`, `runId`, `backgroundTaskId`, `taskResult` | `fail-open` | no | post |
-| `run.turn.post` | `audit.annotate`, `run.abort`, `run.continue_with_prompt` | `sessionId`, `runId`, `turnIndex`, `turnResult` | `fail-open` | no | post |
-| `run.completion.pre` | `audit.annotate`, `run.abort`, `prompt.append_context` | `sessionId`, `runId`, `completionCandidate` | `fail-closed` | yes | pre |
-| `session.writeback.pre` | `audit.annotate`, `run.abort` | `sessionId`, `runId`, `writebackPayload` | `fail-closed` | yes | pre |
+| `run.turn.post` | `audit.annotate`, `run.abort`, `run.continue_with_prompt`, `prompt.inject_message`, `run.replace_messages` | `sessionId`, `runId`, `turnIndex`, `turnResult` | `fail-open` | no | post |
+| `run.completion.pre` | `audit.annotate`, `run.abort`, `prompt.append_context`, `run.replace_messages` | `sessionId`, `runId`, `completionCandidate` | `fail-closed` | yes | pre |
+| `session.writeback.pre` | `audit.annotate`, `run.abort`, `writeback.rewrite`, `writeback.suppress` | `sessionId`, `runId`, `writebackPayload` | `fail-closed` | yes | pre |
 | `run.lifecycle.post` | `audit.annotate` | `sessionId`, `runId`, `runOutcome` | `fail-open` | no | post |
 | `run.error.error` | `audit.annotate`, `run.abort`, `run.retry_after` | `sessionId`, `runId`, `errorCode`, `errorPhase` | `fail-closed` | no | error |
 
@@ -398,26 +402,20 @@ Additional resource-specific point IDs may be introduced when the lifecycle poin
 ## Runtime Ownership
 
 - `protocol` owns schemas: `PolicyPoint`, `PolicyRequest`, `PolicyDecision`, `PolicyEffect`, `RuntimeResource.Descriptor`.
-- `agent` owns the pure evaluator, decision composition, legacy verdict adapter, and stateless point adapters for ChatAgent execution.
+- `agent` owns the pure evaluator, decision composition, and stateless point adapters for ChatAgent execution.
 - `openomni` owns session-backed resource descriptors and policy-aware facades for ingress, subagents, background work, tools, skills, and writeback.
 - `coordinator` owns worker process policy points, worker bootstrap validation, IPC dispatch gating, recovery, and credential injection mediation.
 - `server` owns host-specific MCP lifecycle gates, channel actor descriptors, and context source descriptors.
 
-## Legacy Verdict Compatibility
+## Canonical Decision Contract
 
-Legacy `Policy.Verdict` remains supported only through an adapter during migration.
+Policy functions return `PolicyDecision` directly:
 
-Mapping rules:
+- `allow` permits the boundary and may contribute compatible effects;
+- `deny` blocks fail-closed pre-boundaries and remains diagnostic-only at configured post-boundaries;
+- `pending` blocks until an obligation such as approval is satisfied.
 
-- `continue` -> `allow` with no effects;
-- `abort` -> `deny` with `run.abort` or point-specific abort effect;
-- `deny` -> `deny` with authorization reason;
-- `skip` -> `allow` with `tool.skip_invocation` where allowed;
-- `retry` -> `pending` or `allow` with `run.retry_after`, depending on point contract;
-- `inject` -> `allow` with `prompt.inject_message` where allowed;
-- `transform` -> point-specific rewrite effect only when a typed mapping exists.
-
-Unsupported mappings fail closed at pre-boundary points and emit diagnostics at post-boundary points.
+Runtime behavior changes are expressed as typed effects such as `prompt.inject_message`, `prompt.append_context`, `tool.filter`, `tool.rewrite_input`, `tool.rewrite_output`, `tool.skip_invocation`, `run.abort`, `run.continue_with_prompt`, `run.replace_messages`, `writeback.rewrite`, `writeback.suppress`, and `delegation.set_constraints`. Effects not allowed by the resolved policy point fail closed at pre-boundaries.
 
 ## No-bypass Rule
 
@@ -511,13 +509,13 @@ If a `PolicyRequest` arrives with a point ID that is not registered in the kerne
 ## Implementation Sequence
 
 1. Freeze this specification and ADR.
-2. Make legacy verdict dispatch total: no silent allow, deny is terminal, unsupported verdicts fail closed at pre-boundary points.
+2. Make canonical PolicyDecision dispatch total: no silent allow, deny is terminal, unsupported decision shapes fail closed at pre-boundary points.
 3. Introduce a runtime `PolicyPoint` registry for the existing 14 timing points.
 4. Attach `RuntimeResource.Descriptor` to tool catalog entries first, then MCP, subagents, skills, workers, credentials, and session writes.
 5. Introduce `PolicyDecision` with `effects[]` behind a compatibility adapter.
 6. Convert high-risk policies first: tool permission, ingress authority, subagent/background limits, MCP prefix guard, worker bootstrap, credential injection.
 7. Convert prompt-shaping policies after the safety boundary is stable: memory, skills, compaction, post-turn, persistence enforcement.
-8. Remove legacy verdict support only after conformance tests cover every governed operation.
+8. Keep legacy verdict support removed. Current conformance tests must cover every governed operation that is wired in this implementation; paths listed in the appendix remain explicitly skipped until their policy-aware facades are introduced.
 
 ## Appendix: Known Ungoverned Paths
 
@@ -645,7 +643,7 @@ These paths bypass the policy kernel today. Each is documented as a skipped test
 
 ### Integration Priority
 
-The no-bypass rule (see No-bypass Rule section) requires all ten paths to be covered before legacy verdict support is removed. The recommended order follows the Implementation Sequence:
+The no-bypass rule (see No-bypass Rule section) requires these ten paths to become enforced before they are exposed through policy-aware facades. They remain documented skipped conformance gaps in the current implementation. The recommended order follows the Implementation Sequence:
 
 1. Worker spawn and IPC dispatch (coordinator owns these; high blast radius if ungoverned)
 2. Credential injection (security-critical; no policy audit today)
