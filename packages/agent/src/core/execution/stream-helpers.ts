@@ -2,6 +2,7 @@ import type { RunInput } from "@openomni/llm";
 import { AgentExecution, Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { Policy, Sink, Tool, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
 import {
   checkBudget,
   createBudgetState,
@@ -154,28 +155,6 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
   }
 }
 
-function _assertNever(value: never): never {
-  throw new Error(`Unhandled policy decision: ${JSON.stringify(value)}`);
-}
-
-function effectOf<T extends Policy.PolicyEffect["type"]>(
-  decision: Policy.PolicyDecision,
-  type: T,
-): Extract<Policy.PolicyEffect, { type: T }> | undefined {
-  return decision.effects.find(
-    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
-  );
-}
-
-function effectsOf<T extends Policy.PolicyEffect["type"]>(
-  decision: Policy.PolicyDecision,
-  type: T,
-): Array<Extract<Policy.PolicyEffect, { type: T }>> {
-  return decision.effects.filter(
-    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
-  );
-}
-
 function injectedPrompts(decision: Policy.PolicyDecision): string[] {
   const prompts: string[] = [];
   for (const effect of decision.effects) {
@@ -212,12 +191,6 @@ function applyMessageReplacementEffect(
 ): void {
   const messages = replacementMessages(decision);
   if (messages !== undefined) state.messages = messages;
-}
-
-function matchesToolPattern(toolName: string, pattern: string): boolean {
-  if (pattern === "*") return true;
-  if (pattern.endsWith(".*")) return toolName.startsWith(`${pattern.slice(0, -2)}.`);
-  return toolName === pattern;
 }
 
 function applyToolFilterEffects(
@@ -417,7 +390,6 @@ export async function dispatchModelResponse(
   });
 
   if (!PolicyDecision.isBlocking(decision)) {
-    applyPromptMessageEffects(state, decision);
     try {
       applyMessageReplacementEffect(state, decision);
     } catch (error) {
@@ -433,6 +405,7 @@ export async function dispatchModelResponse(
       );
       return createGuardCompleteEvent(state);
     }
+    applyPromptMessageEffects(state, decision);
     return null;
   }
   if (effectOf(decision, "run.abort")) return createGuardCompleteEvent(state);
@@ -528,30 +501,27 @@ export async function buildTurn(
     };
   }
 
-  for (const effect of preTurnDecision.effects) {
-    if (effect.type !== "prompt.inject_message" && effect.type !== "prompt.append_context")
-      continue;
-    const prompt = effect.type === "prompt.inject_message" ? effect.message : effect.context;
-    state.messages.push(createUserMessage(prompt, "stream-engine"));
-    if (prompt.startsWith("[Budget Status]")) {
-      const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-      Bus.publish(AgentExecution.BudgetReassurance, {
-        ...agentBase,
-        time: Date.now(),
-        remaining,
-        threshold: config.budget?.reassuranceThreshold ?? 0.6,
-      });
-      budgetReassuranceEvent = { type: "budget_reassurance", remaining };
-    } else if (prompt.startsWith("[Budget Warning]")) {
-      const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-      Bus.publish(AgentExecution.BudgetWarning, {
-        ...agentBase,
-        time: Date.now(),
-        remaining,
-        threshold: config.budget?.warningThreshold ?? 0.8,
-      });
-      budgetWarningEvent = { type: "budget_warning", remaining };
-    }
+  applyPromptMessageEffects(state, preTurnDecision);
+
+  if (preTurnDecision.reasonCodes.includes("budget_reassurance")) {
+    const remaining = describeBudgetRemaining(state.budgetState, config.budget);
+    Bus.publish(AgentExecution.BudgetReassurance, {
+      ...agentBase,
+      time: Date.now(),
+      remaining,
+      threshold: config.budget?.reassuranceThreshold ?? 0.6,
+    });
+    budgetReassuranceEvent = { type: "budget_reassurance", remaining };
+  }
+  if (preTurnDecision.reasonCodes.includes("budget_warning")) {
+    const remaining = describeBudgetRemaining(state.budgetState, config.budget);
+    Bus.publish(AgentExecution.BudgetWarning, {
+      ...agentBase,
+      time: Date.now(),
+      remaining,
+      threshold: config.budget?.warningThreshold ?? 0.8,
+    });
+    budgetWarningEvent = { type: "budget_warning", remaining };
   }
 
   state.budgetState = recordTurn(state.budgetState);
@@ -717,6 +687,25 @@ export async function* handleStop(
       action: entry.decision.verdict,
       reason: PolicyDecision.reason(entry.decision, undefined),
     };
+  }
+
+  const toolAbort = turn.toolPolicyDecisions.find(
+    (entry) => PolicyDecision.isBlocking(entry.decision) && effectOf(entry.decision, "run.abort"),
+  );
+  if (toolAbort) {
+    const event: AgentEvent = {
+      type: "complete",
+      result: {
+        text: state.lastAssistantText,
+        steps: state.steps,
+        usage: state.totalUsage,
+        finishReason: "stop",
+        guardAborted: true,
+        compactionCount: getCompactionCount(state),
+      },
+    };
+    yield event;
+    return "complete";
   }
 
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turn.turnUsage };

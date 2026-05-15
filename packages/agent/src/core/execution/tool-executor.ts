@@ -3,6 +3,7 @@ import { PolicyDecision, ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
+import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
 import { summarizeInput } from "./shared";
 
 type BlockedResultMetadata = {
@@ -59,30 +60,6 @@ function toolDescriptor(
   };
   if (source !== undefined) descriptor.source = source;
   return descriptor;
-}
-
-function effectOf<T extends Policy.PolicyEffect["type"]>(
-  decision: Policy.PolicyDecision,
-  type: T,
-): Extract<Policy.PolicyEffect, { type: T }> | undefined {
-  return decision.effects.find(
-    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
-  );
-}
-
-function effectsOf<T extends Policy.PolicyEffect["type"]>(
-  decision: Policy.PolicyDecision,
-  type: T,
-): Array<Extract<Policy.PolicyEffect, { type: T }>> {
-  return decision.effects.filter(
-    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
-  );
-}
-
-function matchesToolPattern(toolName: string, pattern: string): boolean {
-  if (pattern === "*") return true;
-  if (pattern.endsWith(".*")) return toolName.startsWith(`${pattern.slice(0, -2)}.`);
-  return toolName === pattern;
 }
 
 export function createToolExecutor(

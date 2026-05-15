@@ -192,6 +192,99 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     expect(ctx.timing).toBe("turn.start");
   });
 
+  it("buildTurn emits budget_reassurance event when reasonCodes includes budget_reassurance", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-budget-reassurance",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-budget-reassurance", "budget_reassurance", [
+          { type: "prompt.inject_message", message: "you are on track" },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetReassuranceEvent?.type).toBe("budget_reassurance");
+      expect(result.budgetWarningEvent).toBeUndefined();
+    }
+  });
+
+  it("buildTurn emits budget_warning event when reasonCodes includes budget_warning", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-budget-warning",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-budget-warning", "budget_warning", [
+          { type: "prompt.inject_message", message: "finish this section soon" },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetWarningEvent?.type).toBe("budget_warning");
+      expect(result.budgetReassuranceEvent).toBeUndefined();
+    }
+  });
+
+  it("buildTurn does not emit budget events for unrelated inject messages", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-unrelated-inject",
+      timing: "turn.start",
+      priority: 100,
+      fn: () =>
+        allow("test-unrelated-inject", "idle_nudge", [
+          {
+            type: "prompt.inject_message",
+            message: "[Budget Status] keep going without triggering budget events",
+          },
+        ]),
+    });
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig(),
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.budgetReassuranceEvent).toBeUndefined();
+      expect(result.budgetWarningEvent).toBeUndefined();
+    }
+  });
+
   it("returns complete when turn.start policy returns abort", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();

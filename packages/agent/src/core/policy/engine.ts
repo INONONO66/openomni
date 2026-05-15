@@ -213,6 +213,24 @@ function validationFailure(
   });
 }
 
+// deny decisions at pre-boundary timings must include run.abort so downstream
+// callers can distinguish "composition conflict deny" from "diagnostic-only deny".
+function enforceDenyAbort(
+  decision: Policy.PolicyDecision,
+  timing: Policy.Timing,
+  descriptor: RuntimeResource.Descriptor | undefined,
+): Policy.PolicyDecision {
+  if (decision.verdict !== "deny") return decision;
+  if (decision.effects.some((effect) => effect.type === "run.abort")) return decision;
+  if (!allowedEffectTypes(timing, descriptor).has("run.abort")) return decision;
+
+  const reason = decision.reasonCodes[0] ?? "policy.deny";
+  return {
+    ...decision,
+    effects: [{ type: "run.abort", reason }, ...decision.effects],
+  };
+}
+
 function composedDecision(
   effective: Policy.EffectiveDecision,
   decisions: readonly Policy.PolicyDecision[],
@@ -398,8 +416,9 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
       const decision =
         validationFailure(timing, ctx.resourceDescriptor, effective.mergedEffects) ??
         composedDecision(effective, decisions);
-      publishComposedDecision(timing, fullCtx, decision);
-      return decision;
+      const enforced = enforceDenyAbort(decision, timing, ctx.resourceDescriptor);
+      publishComposedDecision(timing, fullCtx, enforced);
+      return enforced;
     }
 
     if (selected.length === 0) {

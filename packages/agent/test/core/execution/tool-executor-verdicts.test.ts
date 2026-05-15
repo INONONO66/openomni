@@ -348,11 +348,11 @@ describe("createToolExecutor effect application", () => {
 
     const result = await executor(makeCall("call-plain-post-deny"));
 
-    expect(result.output).toBe("original");
-    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe("[Denied: post-deny]");
+    expect(result.isError).toBe(true);
   });
 
-  it("blocks and redacts output when invoke.result returns deny", async () => {
+  it("blocks and redacts output when invoke.result returns deny with explicit run.abort", async () => {
     const engine = engineWithRegistrations([
       {
         name: "pre",
@@ -398,7 +398,10 @@ describe("createToolExecutor effect application", () => {
         timing: "invoke.prepare",
         priority: 0,
         fn: (ctx) => {
-          capturedSources.push(ctx.resourceDescriptor?.source?.type);
+          const resourceDescriptor = ctx as {
+            resourceDescriptor?: { source?: { type?: string } };
+          };
+          capturedSources.push(resourceDescriptor.resourceDescriptor?.source?.type);
           return PolicyDecision.allow({ policyId: "capture-mcp" });
         },
       },
@@ -412,5 +415,128 @@ describe("createToolExecutor effect application", () => {
     await executor({ id: "mcp-call", tool: "fixture_read", input: {} });
 
     expect(capturedSources).toEqual(["mcp"]);
+  });
+
+  describe("invoke.result run.abort propagation", () => {
+    it("invoke.result deny with run.abort returns blocked result", async () => {
+      let calls = 0;
+      const decision = PolicyDecision.deny({
+        policyId: "post",
+        reasonCodes: ["post-deny"],
+        effects: [{ type: "run.abort", reason: "post-deny" }],
+      });
+      const engine = engineWithRegistrations([
+        {
+          name: "pre",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => PolicyDecision.allow({ policyId: "pre" }),
+        },
+        {
+          name: "post",
+          timing: "invoke.result",
+          priority: 0,
+          fn: () => decision,
+        },
+      ]);
+      const executor = createToolExecutor({
+        engine,
+        toolExecutor: async (call) => {
+          calls += 1;
+          return {
+            id: "result-post-abort",
+            toolCallId: call.id,
+            output: "original",
+          };
+        },
+      });
+
+      const result = await executor(makeCall("call-post-abort"));
+
+      expect(calls).toBeGreaterThan(0);
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("[Denied: post-deny]");
+    });
+
+    it("invoke.result deny without run.abort still returns tool result", async () => {
+      let calls = 0;
+      const engine = engineWithRegistrations([
+        {
+          name: "pre",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => PolicyDecision.allow({ policyId: "pre" }),
+        },
+        {
+          name: "post",
+          timing: "invoke.result",
+          priority: 0,
+          fn: () =>
+            PolicyDecision.deny({
+              policyId: "post",
+              reasonCodes: ["post-deny"],
+              effects: [{ type: "audit.annotate", annotation: "post-deny" }],
+            }),
+        },
+      ]);
+      const executor = createToolExecutor({
+        engine,
+        toolExecutor: async (call) => {
+          calls += 1;
+          return {
+            id: "result-post-audit",
+            toolCallId: call.id,
+            output: "original",
+          };
+        },
+      });
+
+      const result = await executor(makeCall("call-post-audit"));
+
+      expect(calls).toBeGreaterThan(0);
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("[Denied: post-deny]");
+    });
+
+    it("onDecision callback receives invoke.result decisions", async () => {
+      const decisions: Array<[string, Policy.PolicyDecision]> = [];
+      const decision = PolicyDecision.deny({
+        policyId: "post",
+        reasonCodes: ["post-deny"],
+        effects: [{ type: "run.abort", reason: "post-deny" }],
+      });
+      const engine = engineWithRegistrations([
+        {
+          name: "pre",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => PolicyDecision.allow({ policyId: "pre" }),
+        },
+        {
+          name: "post",
+          timing: "invoke.result",
+          priority: 0,
+          fn: () => decision,
+        },
+      ]);
+      const executor = createToolExecutor({
+        engine,
+        onDecision: (timing, decision) => {
+          decisions.push([timing, decision]);
+        },
+        toolExecutor: async (call) => ({
+          id: "result-on-decision",
+          toolCallId: call.id,
+          output: "original",
+        }),
+      });
+
+      await executor(makeCall("call-on-decision"));
+
+      const invokeResultDecision = decisions.find(([timing]) => timing === "invoke.result");
+      expect(invokeResultDecision).toBeDefined();
+      expect(invokeResultDecision?.[1].verdict).toBe("deny");
+      expect(invokeResultDecision?.[1].reasonCodes).toContain("post-deny");
+    });
   });
 });
