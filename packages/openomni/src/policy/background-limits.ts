@@ -13,7 +13,7 @@ const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 function backgroundDescriptor(input: LaunchRequest): RuntimeResource.Descriptor {
   return {
-    id: `worker:background:${input.agentName}`,
+    id: `worker:agent:background:${input.agentName}`,
     kind: "worker",
     labels: ["source.agent", "delegation.background", `agent:${input.agentName}`],
     capabilities: ["background.launch"],

@@ -138,7 +138,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     const error = await messenger.send(envelope("blocked", "worker")).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("Authorization denied");
+    expect((error as Error).message).toContain("authorization denied");
     expect(transport.sendMock).toHaveBeenCalledTimes(0);
     Bus.reset();
   });

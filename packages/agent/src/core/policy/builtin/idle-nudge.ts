@@ -34,8 +34,7 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): PolicyRegis
       if (idleThresholdMs === -1) return PolicyDecision.allow({ policyId: "builtin.idle_nudge" });
 
       const idleMs = Date.now() - lastProgressAt;
-      if (idleMs <= idleThresholdMs)
-        return PolicyDecision.allow({ policyId: "builtin.idle_nudge" });
+      if (idleMs < idleThresholdMs) return PolicyDecision.allow({ policyId: "builtin.idle_nudge" });
 
       if (nudgeCount >= maxNudges) {
         return PolicyDecision.deny({

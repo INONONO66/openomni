@@ -111,7 +111,7 @@ run.start → turn.start → context.prepare → resources.prepare
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatch("context.prepare", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Builtins** (priority in parentheses):
-  - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns `skip` / `abort` / `require_approval`
+  - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns deny with `tool.skip_invocation` / `run.abort` / `tool.require_approval`
   - `budget-reassurance` (10) — injects a reassurance system message around 60% budget
   - `budget-warning` (20) — injects a warning around 80% budget
   - `memory` (100) — appends similar memory entries to the system prompt
@@ -126,7 +126,7 @@ run.start → turn.start → context.prepare → resources.prepare
 streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   ├─ retry loop (maxAttempts)
   │   ├─ build PolicyEngine (builtins + config.policies)
-  │   ├─ dispatch(run.start)                    → inject / abort / continue
+  │   ├─ dispatch(run.start)                    → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
   │       ├─ checkBudget → if exceeded, dispatch(run.finish) + yield complete
   │       ├─ dispatch(turn.start)               → budget warnings, idle-nudge
@@ -140,8 +140,8 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   │       │         ├─ execute tool
   │       │         └─ dispatch(invoke.result) → idle-nudge reset, enrichment
   │       ├─ outcome === "stop"?
-  │       │    ├─ dispatch(turn.finish)         → inject (continue) / abort / complete
-  │       │    ├─ if inject: dispatch(completion.prepare) → loop
+  │       │    ├─ dispatch(turn.finish)         → allow (with continuation effects) / deny
+  │       │    ├─ if continuation: dispatch(completion.prepare) → loop
   │       │    └─ else: dispatch(run.finish) + yield complete
   │       └─ outcome === "error"/"aborted"?
   │            └─ dispatch(error) → retry (shouldRetry) or throw

@@ -53,10 +53,10 @@ function assertSendAllowed(
   Bus.publish(MessengerEvent.DeliveryFailed, {
     traceId,
     envelopeId: envelope.id,
-    reason: `authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`,
+    reason,
     time: Date.now(),
   });
-  throw new Error(`Authorization denied: ${envelope.fromAgentId} → ${envelope.toAgentId}`);
+  throw new Error(reason);
 }
 
 export namespace AgentMessenger {

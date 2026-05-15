@@ -42,7 +42,7 @@ describe("AgentMessenger verdict handling", () => {
     const error = await messenger.send(envelope("agent-x", "agent-y")).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("Authorization denied");
+    expect((error as Error).message).toContain("authorization denied");
     expect(transport.sendMock).not.toHaveBeenCalled();
   });
 });

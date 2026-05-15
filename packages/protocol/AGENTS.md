@@ -18,12 +18,11 @@ src/
 ├── adapter/              # Adapter.Surface / Capabilities / TriggerRule / Inbound-OutboundMessage
 ├── ingress/              # InboundEvent (direct), AgentDef, IngressResult
 ├── messenger/            # MessageEnvelope, PersistencePolicy, AllowPattern, AuditEntry
-├── policy/               # Policy.Permission, Policy.InputRule, Policy.DelegationPolicy
+├── policy/               # Policy.Permission, Policy.InputRule, Policy.DelegationPolicy, Policy.Timing (14), Policy.PolicyDecision, Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── event-log/            # ExecutionEvent discriminated union (LLM / tool / step / session)
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
-├── policy/               # Policy.Timing (14), Policy.PolicyDecision, Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
 ├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
