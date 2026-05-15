@@ -62,6 +62,7 @@ export namespace Storage {
     };
     task?: ProtocolStorage.TaskSubAdapter;
     todo?: ProtocolStorage.TodoSubAdapter;
+    workItem?: ProtocolStorage.WorkItemSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
   }
 }

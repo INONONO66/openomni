@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Message, Task, Todo, Storage as ProtocolStorage } from "@openomni/protocol";
+import type { Message, Task, Todo, WorkItem, Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
@@ -18,17 +18,18 @@ const ORDERED_MIGRATIONS = [
   "0006_task_plan_todo/migration.sql",
   "0007_todo_fk_idempotency_idx/migration.sql",
   "0008_unified_observability/migration.sql",
+  "0009_work_item/migration.sql",
 ];
 
 function applyPragmas(db: Database): void {
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA synchronous = NORMAL");
-  db.exec("PRAGMA busy_timeout = 5000");
-  db.exec("PRAGMA cache_size = -64000");
-  db.exec("PRAGMA mmap_size = 268435456");
-  db.exec("PRAGMA temp_store = MEMORY");
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+  db.query("PRAGMA journal_mode = WAL").get();
+  db.query("PRAGMA synchronous = NORMAL").get();
+  db.query("PRAGMA busy_timeout = 5000").get();
+  db.query("PRAGMA cache_size = -64000").get();
+  db.query("PRAGMA mmap_size = 268435456").get();
+  db.query("PRAGMA temp_store = MEMORY").get();
+  db.query("PRAGMA foreign_keys = ON").get();
+  db.query("PRAGMA wal_checkpoint(PASSIVE)").get();
 }
 
 function applyMigrations(db: Database): void {
@@ -662,18 +663,102 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
+  workItem: ProtocolStorage.WorkItemSubAdapter = {
+    get: (hash: string): WorkItem.Info | undefined => {
+      const row = this.db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
+        data: string;
+      } | null;
+      return row ? (JSON.parse(row.data) as WorkItem.Info) : undefined;
+    },
+
+    set: (hash: string, item: WorkItem.Info): void => {
+      const now = Date.now();
+      const status =
+        item.timestamps.cancelled !== undefined
+          ? "cancelled"
+          : item.timestamps.failed !== undefined
+            ? "failed"
+            : item.timestamps.completed !== undefined
+              ? "completed"
+              : item.blockers.some((blocker) => blocker.resolvedAt === undefined)
+                ? "blocked"
+                : item.timestamps.started !== undefined
+                  ? "running"
+                  : "pending";
+      this.db
+        .query(
+          `INSERT INTO work_item (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(hash) DO UPDATE SET
+             data = excluded.data,
+             status = excluded.status,
+             assignee_id = excluded.assignee_id,
+             session_id = excluded.session_id,
+             parent_hash = excluded.parent_hash,
+             source_channel = excluded.source_channel,
+             time_updated = excluded.time_updated`,
+        )
+        .run(
+          hash,
+          JSON.stringify(item),
+          status,
+          item.assigneeId ?? null,
+          item.sessionId ?? null,
+          item.relations.parentHash ?? null,
+          item.sourceChannel,
+          item.timestamps.created,
+          now,
+        );
+    },
+
+    list: (filter?: ProtocolStorage.WorkItemListFilter): WorkItem.Info[] => {
+      const conditions: string[] = [];
+      const params: (string | null)[] = [];
+
+      if (filter?.status && filter.status.length > 0) {
+        const placeholders = filter.status.map(() => "?").join(", ");
+        conditions.push(`status IN (${placeholders})`);
+        params.push(...filter.status);
+      }
+      if (filter?.assigneeId !== undefined) {
+        conditions.push("assignee_id = ?");
+        params.push(filter.assigneeId);
+      }
+      if (filter?.sessionId !== undefined) {
+        conditions.push("session_id = ?");
+        params.push(filter.sessionId);
+      }
+      if (filter?.parentHash !== undefined) {
+        conditions.push("parent_hash = ?");
+        params.push(filter.parentHash);
+      }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const rows = this.db
+        .query(`SELECT data FROM work_item ${where} ORDER BY time_created ASC`)
+        .all(...params) as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as WorkItem.Info);
+    },
+
+    remove: (hash: string): boolean => {
+      const result = this.db.query("DELETE FROM work_item WHERE hash = ?").run(hash);
+      return result.changes > 0;
+    },
+  };
+
   clear(): void {
-    this.db.exec("DELETE FROM worker_run_state");
-    this.db.exec("DELETE FROM bus_event");
-    this.db.exec("DELETE FROM background_task");
-    this.db.exec("DELETE FROM todo");
-    this.db.exec("DELETE FROM plan");
-    this.db.exec("DELETE FROM task");
-    this.db.exec("DELETE FROM artifact");
-    this.db.exec("DELETE FROM surface_key");
-    this.db.exec("DELETE FROM part");
-    this.db.exec("DELETE FROM message");
-    this.db.exec("DELETE FROM session");
+    this.db.query("DELETE FROM worker_run_state").run();
+    this.db.query("DELETE FROM bus_event").run();
+    this.db.query("DELETE FROM background_task").run();
+    this.db.query("DELETE FROM work_item").run();
+    this.db.query("DELETE FROM todo").run();
+    this.db.query("DELETE FROM plan").run();
+    this.db.query("DELETE FROM task").run();
+    this.db.query("DELETE FROM artifact").run();
+    this.db.query("DELETE FROM surface_key").run();
+    this.db.query("DELETE FROM part").run();
+    this.db.query("DELETE FROM message").run();
+    this.db.query("DELETE FROM session").run();
   }
 
   transaction<T>(fn: () => T): T {
