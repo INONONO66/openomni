@@ -1,0 +1,185 @@
+import { z } from "zod";
+import { BusEvent } from "../bus/index.js";
+
+const BaseEvent = z.object({
+  traceId: z.string(),
+  runId: z.string().optional(),
+  taskId: z.string().optional(),
+  sessionId: z.string().optional(),
+  time: z.number(),
+});
+
+export namespace WorkItem {
+  export const Status = z.enum([
+    "pending",
+    "running",
+    "blocked",
+    "completed",
+    "failed",
+    "cancelled",
+  ]);
+  export type Status = z.infer<typeof Status>;
+
+  export const Blocker = z.object({
+    id: z.string(),
+    description: z.string(),
+    kind: z.enum(["dependency", "error", "waiting_input", "external", "unknown"]),
+    createdAt: z.number(),
+    resolvedAt: z.number().optional(),
+  });
+  export type Blocker = z.infer<typeof Blocker>;
+
+  export const Evidence = z.object({
+    id: z.string(),
+    kind: z.enum(["test_result", "build_result", "review", "verification", "manual", "custom"]),
+    description: z.string(),
+    passed: z.boolean(),
+    detail: z.string().optional(),
+    createdAt: z.number(),
+  });
+  export type Evidence = z.infer<typeof Evidence>;
+
+  export const VerificationGate = z.object({
+    automated: z
+      .object({
+        passed: z.boolean(),
+        checks: z.array(
+          z.object({
+            name: z.string(),
+            passed: z.boolean(),
+            output: z.string().optional(),
+          }),
+        ),
+      })
+      .optional(),
+    acceptance: z
+      .object({
+        passed: z.boolean(),
+        criteria: z.array(
+          z.object({
+            criterion: z.string(),
+            met: z.boolean(),
+            evidence: z.string().optional(),
+          }),
+        ),
+      })
+      .optional(),
+    review: z
+      .object({
+        passed: z.boolean(),
+        reviewer: z.string(),
+        recommendation: z.enum(["approve", "request_changes", "reject"]),
+        comments: z.string().optional(),
+      })
+      .optional(),
+  });
+  export type VerificationGate = z.infer<typeof VerificationGate>;
+
+  export const Info = z.object({
+    hash: z.string(),
+    name: z.string(),
+    sourceMessageId: z.string(),
+    sourceChannel: z.string(),
+    assigneeId: z.string().optional(),
+    sessionId: z.string().optional(),
+    attempt: z.number().int().min(1).default(1),
+    timestamps: z.object({
+      created: z.number(),
+      updated: z.number(),
+      started: z.number().optional(),
+      completed: z.number().optional(),
+      failed: z.number().optional(),
+      cancelled: z.number().optional(),
+      deadline: z.number().optional(),
+    }),
+    relations: z.object({
+      parentHash: z.string().optional(),
+      childHashes: z.array(z.string()).default([]),
+      dependsOn: z.array(z.string()).default([]),
+    }),
+    intent: z.string(),
+    goal: z.string(),
+    context: z.string().optional(),
+    constraints: z.array(z.string()).default([]),
+    acceptanceCriteria: z.array(z.string()).default([]),
+    changedFiles: z.array(z.string()).default([]),
+    failureReason: z.string().optional(),
+    blockers: z.array(Blocker).default([]),
+    evidence: z.array(Evidence).default([]),
+    verificationGate: VerificationGate.optional(),
+  });
+  export type Info = z.infer<typeof Info>;
+
+  export function deriveStatus(item: Info): Status {
+    if (item.timestamps.cancelled !== undefined) return "cancelled";
+    if (item.timestamps.failed !== undefined) return "failed";
+    if (item.timestamps.completed !== undefined) return "completed";
+    if (item.blockers.some((blocker) => blocker.resolvedAt === undefined)) return "blocked";
+    if (item.timestamps.started !== undefined) return "running";
+    return "pending";
+  }
+
+  export function generateHash(): string {
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    return `wi_${Array.from(bytes)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")}`;
+  }
+
+  export namespace Events {
+    export const Created = BusEvent.define(
+      "work_item.created",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          name: z.string(),
+          sessionId: z.string().optional(),
+          assigneeId: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const Updated = BusEvent.define(
+      "work_item.updated",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          fields: z.array(z.string()),
+        }),
+      }),
+    );
+
+    export const StatusChanged = BusEvent.define(
+      "work_item.status_changed",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          from: Status,
+          to: Status,
+        }),
+      }),
+    );
+
+    export const Completed = BusEvent.define(
+      "work_item.completed",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          sessionId: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const Failed = BusEvent.define(
+      "work_item.failed",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          reason: z.string().optional(),
+          sessionId: z.string().optional(),
+        }),
+      }),
+    );
+  }
+}

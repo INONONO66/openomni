@@ -1,5 +1,6 @@
 import type { Task } from "../task/index.js";
 import type { Todo } from "../todo/index.js";
+import type { WorkItem } from "../work-item/index.js";
 
 export namespace Storage {
   export interface TaskSubAdapter {
@@ -37,5 +38,19 @@ export namespace Storage {
     upsertAll(sessionId: string, todos: Todo.Info[]): Promise<void>;
     list(sessionId: string): Promise<Todo.Info[]>;
     deleteAll(sessionId: string): Promise<void>;
+  }
+
+  export interface WorkItemListFilter {
+    status?: WorkItem.Status[];
+    assigneeId?: string;
+    sessionId?: string;
+    parentHash?: string;
+  }
+
+  export interface WorkItemSubAdapter {
+    get(hash: string): WorkItem.Info | undefined;
+    set(hash: string, item: WorkItem.Info): void;
+    list(filter?: WorkItemListFilter): WorkItem.Info[];
+    remove(hash: string): boolean;
   }
 }
