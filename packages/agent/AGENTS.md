@@ -24,7 +24,7 @@ src/
 │   │   ├── tool-executor.ts    # Wraps user toolExecutor with invoke.prepare / invoke.result dispatch
 │   │   └── compaction.ts       # InMemoryCompactor for message compression
 │   └── policy/
-│       ├── engine.ts           # PolicyEngine.create() — register, dispatch, dispatchSystemPrompt
+│       ├── engine.ts           # PolicyEngine.create() — register, dispatch canonical PolicyDecision
 │       ├── types.ts            # PolicyContext, PolicyFn, PolicyRegistration
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
@@ -108,8 +108,8 @@ run.start → turn.start → context.prepare → resources.prepare
 ```
 
 - **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`.
-- **Verdict** (`Policy.Verdict`): `continue | skip | abort | retry | transform | inject`. The first non-`continue` verdict terminates the chain for that timing.
-- **System prompt transforms**: `dispatchSystemPrompt()` runs only the `context.prepare` chain and supports transform chaining so multiple policies can contribute.
+- **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
+- **System prompt effects**: `dispatch("context.prepare", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Builtins** (priority in parentheses):
   - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns `skip` / `abort` / `require_approval`
   - `budget-reassurance` (10) — injects a reassurance system message around 60% budget

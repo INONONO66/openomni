@@ -1,3 +1,4 @@
+import { PolicyDecision } from "@openomni/protocol";
 import { InMemoryCompactor } from "../../execution/compaction";
 import type { PolicyFactory, PolicyRegistration } from "../types";
 import type { ChatAgentConfig } from "../../types";
@@ -11,20 +12,20 @@ export function createCompactionPolicy(config: CompactionConfig): PolicyRegistra
     priority: 900,
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
       if (!ctx.budgetState) {
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
       const totalTokens = ctx.budgetState.totalInputTokens + ctx.budgetState.totalOutputTokens;
       if (!InMemoryCompactor.shouldCompact(totalTokens, config)) {
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
       const result = await InMemoryCompactor.compact(ctx.messages, config);
       if (!result.compacted) {
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.compaction" });
       }
 
       ctx.eventEmitter?.emit("agent.compaction", {
@@ -34,12 +35,11 @@ export function createCompactionPolicy(config: CompactionConfig): PolicyRegistra
         messagesAfter: result.messages.length,
       });
 
-      return {
-        action: "transform",
-        input: { messages: result.messages },
-        reason: "compaction_threshold_exceeded",
+      return PolicyDecision.allow({
         policyId: "builtin.compaction",
-      };
+        reasonCodes: ["compaction_threshold_exceeded"],
+        effects: [{ type: "run.replace_messages", messages: result.messages }],
+      });
     },
   };
 }

@@ -40,10 +40,11 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
-    expect(
-      verdict.action === "transform" && (verdict.input as Record<string, unknown>).appendContext,
-    ).toBe("[Memory Context]\n- first memory\n- second memory");
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.effects).toContainEqual({
+      type: "prompt.append_context",
+      context: "[Memory Context]\n- first memory\n- second memory",
+    });
   });
 
   it("should continue when no memory results found", async () => {
@@ -55,7 +56,7 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("should continue when no user message in context", async () => {
@@ -66,7 +67,7 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("should continue when messages is undefined", async () => {
@@ -77,7 +78,7 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("should continue when memory.retrieve throws", async () => {
@@ -91,7 +92,7 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("should have correct middleware registration properties", () => {
@@ -120,6 +121,6 @@ describe("createMemoryPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
+    expect(verdict.verdict).toBe("allow");
   });
 });

@@ -1,12 +1,12 @@
-import type { Policy, Tool, TraceContext } from "@openomni/protocol";
-import { ToolExecution } from "@openomni/protocol";
+import type { Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
+import { PolicyDecision, ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import { summarizeInput } from "./shared";
 
 type BlockedResultMetadata = {
-  verdict: Policy.Verdict["action"];
+  verdict: Policy.PolicyDecision["verdict"];
   reason: string;
   retryAfterMs?: number;
   policyId?: string;
@@ -26,8 +26,63 @@ export interface ToolExecutorOptions {
   getPolicyToolName?: (toolName: string) => string | undefined;
   getToolLabels?: (toolName: string) => string[] | undefined;
   onToolComplete?: (durationMs: number) => void;
-  onVerdict?: (verdict: Policy.Verdict) => void;
+  onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void;
   traceContext?: TraceContext.Type;
+}
+
+function sourceFromLabels(
+  labels: readonly string[] | undefined,
+): RuntimeResource.Source | undefined {
+  const sourceLabel = labels?.find(
+    (label) => label.startsWith("source.") || label.startsWith("source:"),
+  );
+  const sourceType = sourceLabel?.replace(/^source[.:]/, "");
+  if (sourceType === "mcp") return { type: "mcp" };
+  if (sourceType === "skill-mcp") return { type: "skill-mcp" };
+  if (sourceType === "agent") return { type: "agent" };
+  if (sourceType === "server") return { type: "server" };
+  if (sourceType === "system") return { type: "system" };
+  return undefined;
+}
+
+function toolDescriptor(
+  toolName: string,
+  labels: readonly string[] | undefined,
+): RuntimeResource.Descriptor {
+  const source = sourceFromLabels(labels);
+  const descriptor: RuntimeResource.Descriptor = {
+    id: source ? `tool:${source.type}:${toolName}` : `tool:${toolName}`,
+    kind: "tool",
+    labels: labels ? [...labels] : [],
+    capabilities: [],
+    effects: [],
+  };
+  if (source !== undefined) descriptor.source = source;
+  return descriptor;
+}
+
+function effectOf<T extends Policy.PolicyEffect["type"]>(
+  decision: Policy.PolicyDecision,
+  type: T,
+): Extract<Policy.PolicyEffect, { type: T }> | undefined {
+  return decision.effects.find(
+    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
+  );
+}
+
+function effectsOf<T extends Policy.PolicyEffect["type"]>(
+  decision: Policy.PolicyDecision,
+  type: T,
+): Array<Extract<Policy.PolicyEffect, { type: T }>> {
+  return decision.effects.filter(
+    (effect): effect is Extract<Policy.PolicyEffect, { type: T }> => effect.type === type,
+  );
+}
+
+function matchesToolPattern(toolName: string, pattern: string): boolean {
+  if (pattern === "*") return true;
+  if (pattern.endsWith(".*")) return toolName.startsWith(`${pattern.slice(0, -2)}.`);
+  return toolName === pattern;
 }
 
 export function createToolExecutor(
@@ -40,7 +95,7 @@ export function createToolExecutor(
     getPolicyToolName,
     getToolLabels,
     onToolComplete,
-    onVerdict,
+    onDecision,
     traceContext,
   } = options;
   const traceId = traceContext?.traceId ?? crypto.randomUUID();
@@ -81,7 +136,8 @@ export function createToolExecutor(
     const ctx = getContext?.();
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-    const preVerdict = await engine.dispatchLegacy("invoke.prepare", {
+    const toolLabels = getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName);
+    const preDecision = await engine.dispatch("invoke.prepare", {
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
@@ -90,59 +146,50 @@ export function createToolExecutor(
       continuationCount: 0,
       toolName: policyToolName,
       toolCallId: call.id,
-      toolLabels: getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName),
+      toolLabels,
       toolInput: call.input,
+      resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
     });
 
-    onVerdict?.(preVerdict);
+    onDecision?.("invoke.prepare", preDecision);
 
-    let effectiveCall = call;
-    switch (preVerdict.action) {
-      case "continue":
-        break;
-      case "transform":
-        effectiveCall = { ...call, input: preVerdict.input };
-        break;
-      case "skip":
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: `[Skipped: ${preVerdict.reason ?? "middleware"}]`,
-          isError: false,
-        };
-      case "abort": {
-        const reason = preVerdict.reason ?? "middleware";
-        publishBlocked(call, policyToolName, reason);
-        return blockedResult(
-          call,
-          reason.startsWith("Blocked:") ? `[${reason}]` : `[Aborted: ${reason}]`,
-        );
-      }
-      case "deny": {
-        const reason = preVerdict.reason ?? "middleware";
-        publishBlocked(call, policyToolName, reason);
-        return blockedResult(call, `[Denied: ${reason}]`);
-      }
-      case "inject": {
-        const reason = "inject verdict is not valid for invoke.prepare";
-        publishBlocked(call, policyToolName, reason);
-        return blockedResult(call, `[Denied: ${reason}]`);
-      }
-      case "retry": {
-        const reason = preVerdict.reason ?? "middleware";
-        publishBlocked(call, policyToolName, reason);
-        return blockedResult(call, `[Retry requested: ${reason}]`, {
-          verdict: "retry",
-          reason,
-          retryAfterMs: 0,
-          ...(preVerdict.policyId !== undefined && { policyId: preVerdict.policyId }),
-        });
-      }
-      default: {
-        const exhaustive: never = preVerdict;
-        return exhaustive;
-      }
+    if (PolicyDecision.isBlocking(preDecision)) {
+      const reason = PolicyDecision.reason(preDecision, "middleware");
+      publishBlocked(call, policyToolName, reason);
+      const retry = effectOf(preDecision, "run.retry_after");
+      return blockedResult(call, `[Denied: ${reason}]`, {
+        verdict: preDecision.verdict,
+        reason,
+        ...(retry !== undefined && { retryAfterMs: retry.delayMs }),
+        policyId: preDecision.policyId,
+      });
     }
+
+    const matchingFilter = effectsOf(preDecision, "tool.filter").find((effect) =>
+      matchesToolPattern(policyToolName, effect.toolPattern),
+    );
+    if (matchingFilter) {
+      const reason = PolicyDecision.reason(preDecision, `filtered: ${matchingFilter.toolPattern}`);
+      publishBlocked(call, policyToolName, reason);
+      return blockedResult(call, `[Denied: ${reason}]`, {
+        verdict: preDecision.verdict,
+        reason,
+        policyId: preDecision.policyId,
+      });
+    }
+
+    const skip = effectOf(preDecision, "tool.skip_invocation");
+    if (skip) {
+      return {
+        id: crypto.randomUUID(),
+        toolCallId: call.id,
+        output: `[Skipped: ${skip.reason ?? PolicyDecision.reason(preDecision, "middleware")}]`,
+        isError: false,
+      };
+    }
+
+    const rewriteInput = effectOf(preDecision, "tool.rewrite_input");
+    const effectiveCall = rewriteInput ? { ...call, input: rewriteInput.input } : call;
 
     Bus.publish(ToolExecution.Started, {
       ...eventBase,
@@ -181,7 +228,7 @@ export function createToolExecutor(
       time: Date.now(),
     });
 
-    const postVerdict = await engine.dispatchLegacy("invoke.result", {
+    const postDecision = await engine.dispatch("invoke.result", {
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
@@ -190,27 +237,26 @@ export function createToolExecutor(
       continuationCount: 0,
       toolName: policyToolName,
       toolCallId: call.id,
-      toolLabels: getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName),
+      toolLabels,
       toolOutput: result.output,
+      resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
     });
 
-    switch (postVerdict.action) {
-      case "transform":
-        if (typeof postVerdict.input.output === "string") {
-          return { ...result, output: postVerdict.input.output };
-        }
-        return result;
-      case "continue":
-      case "skip":
-      case "abort":
-      case "retry":
-      case "inject":
-      case "deny":
-        return result;
-      default: {
-        const exhaustive: never = postVerdict;
-        return exhaustive;
-      }
+    onDecision?.("invoke.result", postDecision);
+    const postAbort = effectOf(postDecision, "run.abort");
+    if (PolicyDecision.isBlocking(postDecision) && postAbort) {
+      const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");
+      publishBlocked(call, policyToolName, reason);
+      const retry = effectOf(postDecision, "run.retry_after");
+      return blockedResult(call, `[Denied: ${reason}]`, {
+        verdict: postDecision.verdict,
+        reason,
+        ...(retry !== undefined && { retryAfterMs: retry.delayMs }),
+        policyId: postDecision.policyId,
+      });
     }
+
+    const rewriteOutput = effectOf(postDecision, "tool.rewrite_output");
+    return rewriteOutput ? { ...result, output: rewriteOutput.output } : result;
   };
 }

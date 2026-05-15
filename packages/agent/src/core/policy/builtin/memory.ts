@@ -1,7 +1,7 @@
 import type { Memory } from "../../memory";
 import type { PolicyFactory, PolicyRegistration } from "../types";
 import type { Message } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 function getLastUserText(messages: Message.WithParts[] | undefined): string | null {
@@ -25,7 +25,7 @@ export function createMemoryPolicy(memory: Memory): PolicyRegistration {
     priority: 100,
     fn: async (ctx) => {
       const text = getLastUserText(ctx.messages);
-      if (!text) return { action: "continue" };
+      if (!text) return PolicyDecision.allow({ policyId: "builtin.memory" });
       let results: Awaited<ReturnType<Memory["retrieve"]>>;
       try {
         results = await memory.retrieve(text);
@@ -37,16 +37,16 @@ export function createMemoryPolicy(memory: Memory): PolicyRegistration {
           msg: "memory retrieval failed",
           context: { error },
         });
-        return { action: "continue" };
+        return PolicyDecision.allow({ policyId: "builtin.memory" });
       }
-      if (!results || results.length === 0) return { action: "continue" };
+      if (!results || results.length === 0)
+        return PolicyDecision.allow({ policyId: "builtin.memory" });
       const entries = results.map((r) => `- ${r.content}`).join("\n");
-      return {
-        action: "transform",
-        input: { appendContext: `[Memory Context]\n${entries}` },
-        reason: "memory_context_available",
+      return PolicyDecision.allow({
         policyId: "builtin.memory",
-      };
+        reasonCodes: ["memory_context_available"],
+        effects: [{ type: "prompt.append_context", context: `[Memory Context]\n${entries}` }],
+      });
     },
   };
 }

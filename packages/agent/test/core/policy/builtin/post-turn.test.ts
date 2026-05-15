@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createPostTurnPolicy } from "../../../../src/core/policy/builtin/post-turn";
 import type { PolicyContext } from "../../../../src/core/policy";
+import { abortRun, allow, inject } from "../../../helpers/policy-decision";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -17,44 +18,38 @@ function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
 
 describe("createPostTurnPolicy", () => {
   it("handler returning inject → middleware returns inject verdict", async () => {
-    const handler = () => ({
-      action: "inject" as const,
-      message: "injected message",
-      reason: "injected-message",
-      policyId: "test.post-turn",
-    });
+    const handler = () => inject("injected message", "test.post-turn", "injected-message");
     const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("inject");
-    if (verdict.action === "inject") {
-      expect(verdict.message).toBe("injected message");
-    }
+    expect(verdict.verdict).toBe("allow");
+    expect(verdict.effects).toContainEqual({
+      type: "prompt.inject_message",
+      message: "injected message",
+    });
   });
 
   it("handler returning abort → middleware returns abort verdict", async () => {
-    const handler = () => ({ action: "abort" as const, reason: "custom abort reason" });
+    const handler = () => abortRun("test.post-turn", "custom abort reason");
     const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("abort");
-    if (verdict.action === "abort") {
-      expect(verdict.reason).toBe("custom abort reason");
-    }
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("custom abort reason");
   });
 
   it("handler returning continue → middleware returns continue verdict", async () => {
-    const handler = () => ({ action: "continue" as const });
+    const handler = () => allow("test.post-turn");
     const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("handler throwing → middleware returns continue verdict (error isolation)", async () => {
@@ -66,21 +61,21 @@ describe("createPostTurnPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("has priority 250", () => {
-    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => allow("test.post-turn"));
     expect(middleware.priority).toBe(250);
   });
 
   it("has timing turn.finish", () => {
-    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => allow("test.post-turn"));
     expect(middleware.timing).toBe("turn.finish");
   });
 
   it("has name builtin:post-turn", () => {
-    const middleware = createPostTurnPolicy(() => ({ action: "continue" }));
+    const middleware = createPostTurnPolicy(() => allow("test.post-turn"));
     expect(middleware.name).toBe("builtin:post-turn");
   });
 
@@ -88,7 +83,7 @@ describe("createPostTurnPolicy", () => {
     let receivedCtx: PolicyContext | undefined;
     const handler = (ctx: PolicyContext) => {
       receivedCtx = ctx;
-      return { action: "continue" as const };
+      return allow("test.post-turn");
     };
     const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({
@@ -109,13 +104,13 @@ describe("createPostTurnPolicy", () => {
   it("handler can be async", async () => {
     const handler = async () => {
       await Promise.resolve();
-      return { action: "continue" as const };
+      return allow("test.post-turn");
     };
     const middleware = createPostTurnPolicy(handler);
     const ctx = baseCtx({ turnCount: 1 });
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 });

@@ -5,6 +5,7 @@ import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import type { Tool } from "@openomni/protocol";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
+import { abortRun } from "../../helpers/policy-decision";
 
 function makeEngine() {
   return PolicyEngine.create();
@@ -19,7 +20,7 @@ function abortMiddleware(reason: string): PolicyRegistration {
     name: "test-abort",
     timing: "invoke.prepare",
     priority: 0,
-    fn: async () => ({ action: "abort", reason }),
+    fn: async () => abortRun("test.abort", reason),
   };
 }
 
@@ -129,7 +130,7 @@ describe("createToolExecutor bus events", () => {
     stopObserve();
 
     expect(result.isError).toBe(true);
-    expect(String(result.output)).toContain("[Blocked:");
+    expect(result.output).toBe("[Denied: Blocked: test rule]");
     expect(started).toHaveLength(0);
     expect(denied).toHaveLength(1);
     expect(publishedNames).toEqual(["tool.execution.permission_denied"]);

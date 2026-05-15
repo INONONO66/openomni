@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Policy } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext, PolicyRegistration } from "../../../src/core/policy/types";
+import { abortRun, allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
 
 function baseCtx(): Omit<PolicyContext, "timing"> {
   return {
@@ -21,25 +22,25 @@ describe("deny-wins composition", () => {
       name: "allow-policy-a",
       timing: "turn.start",
       priority: 10,
-      fn: () => ({ action: "continue" }),
+      fn: () => allow(),
     });
     engine.register({
       name: "allow-policy-b",
       timing: "turn.start",
       priority: 20,
-      fn: () => ({ action: "continue" }),
+      fn: () => allow(),
     });
     engine.register({
       name: "deny-policy",
       timing: "turn.start",
       priority: 30,
-      fn: () => ({ action: "deny", reason: "blocked-by-deny", policyId: "test.deny" }),
+      fn: () => deny("test.deny", "blocked-by-deny"),
     });
 
-    const verdict = await engine.dispatchLegacy("turn.start", baseCtx());
+    const verdict = await engine.dispatch("turn.start", baseCtx());
 
-    expect(verdict.action).toBe("deny");
-    expect(verdict.reason).toBe("blocked-by-deny");
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("blocked-by-deny");
   });
 
   it("deny at lower priority short-circuits higher priority policies", async () => {
@@ -52,7 +53,7 @@ describe("deny-wins composition", () => {
       priority: 0,
       fn: () => {
         executed.push("deny-first");
-        return { action: "deny", reason: "early-deny", policyId: "test.deny-first" };
+        return deny("test.deny-first", "early-deny");
       },
     });
     engine.register({
@@ -61,7 +62,7 @@ describe("deny-wins composition", () => {
       priority: 100,
       fn: () => {
         executed.push("allow-later");
-        return { action: "continue" };
+        return allow();
       },
     });
     engine.register({
@@ -70,13 +71,13 @@ describe("deny-wins composition", () => {
       priority: 200,
       fn: () => {
         executed.push("transform-later");
-        return { action: "transform", input: {}, reason: "transform", policyId: "test.transform" };
+        return rewriteToolInput({}, "test.transform", "transform");
       },
     });
 
-    const verdict = await engine.dispatchLegacy("invoke.prepare", baseCtx());
+    const verdict = await engine.dispatch("invoke.prepare", baseCtx());
 
-    expect(verdict.action).toBe("deny");
+    expect(verdict.verdict).toBe("deny");
     expect(executed).toEqual(["deny-first"]);
   });
 
@@ -90,7 +91,7 @@ describe("deny-wins composition", () => {
       priority: 10,
       fn: () => {
         executed.push("allow-first");
-        return { action: "continue" };
+        return allow();
       },
     });
     engine.register({
@@ -99,7 +100,7 @@ describe("deny-wins composition", () => {
       priority: 20,
       fn: () => {
         executed.push("abort-second");
-        return { action: "abort", reason: "abort-wins", policyId: "test.abort" };
+        return abortRun("test.abort", "abort-wins");
       },
     });
     engine.register({
@@ -108,13 +109,13 @@ describe("deny-wins composition", () => {
       priority: 30,
       fn: () => {
         executed.push("inject-third");
-        return { action: "inject", message: "msg", reason: "inject", policyId: "test.inject" };
+        return inject("msg", "test.inject", "inject");
       },
     });
 
-    const verdict = await engine.dispatchLegacy("turn.finish", baseCtx());
+    const verdict = await engine.dispatch("turn.finish", baseCtx());
 
-    expect(verdict.action).toBe("abort");
+    expect(verdict.verdict).toBe("deny");
     expect(executed).toEqual(["allow-first", "abort-second"]);
   });
 
@@ -125,12 +126,12 @@ describe("deny-wins composition", () => {
         name: `continue-${i}`,
         timing: "run.start",
         priority: i * 10,
-        fn: () => ({ action: "continue" }),
+        fn: () => allow(),
       });
     }
 
-    const verdict = await engine.dispatchLegacy("run.start", baseCtx());
-    expect(verdict.action).toBe("continue");
+    const verdict = await engine.dispatch("run.start", baseCtx());
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("deny-wins across all Policy.Timing values", async () => {
@@ -157,18 +158,18 @@ describe("deny-wins composition", () => {
         name: "allow",
         timing,
         priority: 0,
-        fn: () => ({ action: "continue" }),
+        fn: () => allow(),
       });
       engine.register({
         name: "deny",
         timing,
         priority: 10,
-        fn: () => ({ action: "deny", reason: `denied-at-${timing}`, policyId: "test.deny" }),
+        fn: () => deny("test.deny", `denied-at-${timing}`),
       });
 
-      const verdict = await engine.dispatchLegacy(timing, baseCtx());
-      expect(verdict.action).toBe("deny");
-      expect(verdict.reason).toBe(`denied-at-${timing}`);
+      const verdict = await engine.dispatch(timing, baseCtx());
+      expect(verdict.verdict).toBe("deny");
+      expect(verdict.reasonCodes).toContain(`denied-at-${timing}`);
     }
   });
 });
@@ -200,13 +201,13 @@ describe("scope filtering with 100 policies", () => {
         scope: { agentType: [agentType] },
         fn: () => {
           executed.push(`policy-${i}-${agentType}`);
-          return { action: "continue" };
+          return allow();
         },
       };
       engine.register(reg);
     }
 
-    await engine.dispatchLegacy("turn.start", { ...baseCtx(), agentType: "coder" });
+    await engine.dispatch("turn.start", { ...baseCtx(), agentType: "coder" });
 
     expect(executed.length).toBe(10);
     expect(executed.every((name) => name.includes("coder"))).toBe(true);
@@ -229,7 +230,7 @@ describe("scope filtering with 100 policies", () => {
         scope: { agentType: ["reviewer"] },
         fn: () => {
           executed.push(`scoped-reviewer-${i}`);
-          return { action: "continue" };
+          return allow();
         },
       });
     }
@@ -241,17 +242,17 @@ describe("scope filtering with 100 policies", () => {
         priority: i * 2 + 1,
         fn: () => {
           executed.push(`unscoped-${i}`);
-          return { action: "continue" };
+          return allow();
         },
       });
     }
 
-    await engine.dispatchLegacy("invoke.prepare", { ...baseCtx(), agentType: "reviewer" });
+    await engine.dispatch("invoke.prepare", { ...baseCtx(), agentType: "reviewer" });
 
     expect(executed.length).toBe(100);
 
     executed.length = 0;
-    await engine.dispatchLegacy("invoke.prepare", { ...baseCtx(), agentType: "coder" });
+    await engine.dispatch("invoke.prepare", { ...baseCtx(), agentType: "coder" });
 
     expect(executed.length).toBe(50);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -269,7 +270,7 @@ describe("scope filtering with 100 policies", () => {
         scope: { agentType: ["planner", "architect"] },
         fn: () => {
           executed.push(`scoped-${i}`);
-          return { action: "continue" };
+          return allow();
         },
       });
     }
@@ -281,12 +282,12 @@ describe("scope filtering with 100 policies", () => {
         priority: 100 + i,
         fn: () => {
           executed.push(`unscoped-${i}`);
-          return { action: "continue" };
+          return allow();
         },
       });
     }
 
-    await engine.dispatchLegacy("turn.finish", baseCtx());
+    await engine.dispatch("turn.finish", baseCtx());
 
     expect(executed.length).toBe(20);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -305,12 +306,12 @@ describe("scope filtering with 100 policies", () => {
         scope: { agentType: scopeTypes },
         fn: () => {
           executed.push(`policy-${i}`);
-          return { action: "continue" };
+          return allow();
         },
       });
     }
 
-    await engine.dispatchLegacy("error", { ...baseCtx(), agentType: "reviewer" });
+    await engine.dispatch("error", { ...baseCtx(), agentType: "reviewer" });
 
     const expectedCount = Math.ceil(100 / 3);
     expect(executed.length).toBe(expectedCount);

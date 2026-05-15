@@ -3,6 +3,7 @@ import { PolicyEvent, type RuntimeResource } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
+import { allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
 
 function baseCtx(): Omit<PolicyContext, "timing"> {
   return {
@@ -27,46 +28,42 @@ function systemToolDescriptor(name: string): RuntimeResource.Descriptor {
 }
 
 describe("PolicyEngine.dispatch", () => {
-  it("adapts legacy verdicts and returns the composed policy decision", async () => {
+  it("composes canonical policy decisions", async () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "context-note",
       timing: "model.request",
       priority: 20,
-      fn: () => ({ action: "inject", message: "Prefer read-only tools.", reason: "safe-default" }),
+      fn: () => inject("Prefer read-only tools.", "policy.context-note", "safe-default"),
     });
     engine.register({
       name: "request-budget",
       timing: "model.request",
       priority: 10,
-      fn: () => ({ action: "continue", policyId: "policy.request-budget" }),
+      fn: () => allow("policy.request-budget"),
     });
 
     const decision = await engine.dispatch("model.request", baseCtx());
 
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       policyId: "agent.policy.composed",
       verdict: "allow",
       effects: [{ type: "prompt.inject_message", message: "Prefer read-only tools." }],
       reasonCodes: ["safe-default"],
     });
+    expect(typeof decision.durationMs).toBe("number");
   });
 
-  it("fails closed when an adapted effect is not allowed at the policy point", async () => {
+  it("fails closed when an effect is not allowed at the policy point", async () => {
     const engine = PolicyEngine.create();
     engine.register({
       name: "bad-run-injection",
-      timing: "run.start",
+      timing: "run.finish",
       priority: 0,
-      fn: () => ({
-        action: "inject",
-        message: "not valid here",
-        reason: "bad-run-effect",
-        policyId: "policy.bad-run",
-      }),
+      fn: () => inject("not valid here", "policy.bad-run", "bad-run-effect"),
     });
 
-    const decision = await engine.dispatch("run.start", baseCtx());
+    const decision = await engine.dispatch("run.finish", baseCtx());
 
     expect(decision.verdict).toBe("deny");
     expect(decision.policyId).toBe("agent.policy.composed");
@@ -74,7 +71,7 @@ describe("PolicyEngine.dispatch", () => {
       {
         type: "audit.annotate",
         annotation:
-          "policy.effect_not_allowed: prompt.inject_message is not allowed at run.lifecycle.pre",
+          "policy.effect_not_allowed: prompt.inject_message is not allowed at run.lifecycle.post",
         severity: "error",
       },
     ]);
@@ -86,12 +83,7 @@ describe("PolicyEngine.dispatch", () => {
     const received = mock((ctx: PolicyContext) => {
       const entry = Object.entries(ctx).find(([key]) => key === "resourceDescriptor");
       expect(entry?.[1]).toEqual(descriptor);
-      return {
-        action: "transform",
-        input: { command: "pwd" },
-        reason: "rewrite-shell",
-        policyId: "policy.tool-rewrite",
-      };
+      return rewriteToolInput({ command: "pwd" }, "policy.tool-rewrite", "rewrite-shell");
     });
     const engine = PolicyEngine.create();
     engine.register({
@@ -108,12 +100,13 @@ describe("PolicyEngine.dispatch", () => {
     });
 
     expect(received).toHaveBeenCalledTimes(1);
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       policyId: "agent.policy.composed",
       verdict: "allow",
       effects: [{ type: "tool.rewrite_input", input: { command: "pwd" } }],
       reasonCodes: ["rewrite-shell"],
     });
+    expect(typeof decision.durationMs).toBe("number");
   });
 
   it("stops evaluation after deny while still emitting audit events", async () => {
@@ -128,13 +121,13 @@ describe("PolicyEngine.dispatch", () => {
     });
 
     try {
-      const afterDeny = mock(() => ({ action: "continue" as const }));
+      const afterDeny = mock(() => allow());
       const engine = PolicyEngine.create();
       engine.register({
         name: "deny-shell",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => ({ action: "deny", reason: "blocked-shell", policyId: "policy.deny-shell" }),
+        fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
       engine.register({
         name: "after-deny",
@@ -155,12 +148,13 @@ describe("PolicyEngine.dispatch", () => {
       await Promise.resolve();
 
       expect(afterDeny).toHaveBeenCalledTimes(0);
-      expect(decision).toEqual({
+      expect(decision).toMatchObject({
         policyId: "agent.policy.composed",
         verdict: "deny",
         effects: [{ type: "audit.annotate", annotation: "blocked-shell", severity: "error" }],
         reasonCodes: ["blocked-shell"],
       });
+      expect(typeof decision.durationMs).toBe("number");
       expect(evaluated).toHaveLength(1);
       expect(composed).toHaveLength(1);
     } finally {

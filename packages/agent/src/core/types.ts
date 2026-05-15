@@ -92,7 +92,7 @@ export type AgentEvent =
   | {
       type: "hook_verdict";
       timing: Policy.Timing;
-      action: Policy.Verdict["action"];
+      action: Policy.PolicyDecision["verdict"];
       reason?: string;
     };
 

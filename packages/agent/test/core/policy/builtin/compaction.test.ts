@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
 import type { PolicyContext } from "../../../../src/core/policy";
+import { effectOf } from "../../../helpers/policy-decision";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -54,7 +55,7 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("transforms when above threshold", async () => {
@@ -72,13 +73,10 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
-    const v = verdict as Record<string, unknown>;
-    expect(v.input).toBeDefined();
-    expect((v.input as Record<string, unknown>).messages).toBeDefined();
-    expect(((v.input as Record<string, unknown>).messages as unknown[]).length).toBeLessThan(
-      messages.length,
-    );
+    expect(verdict.verdict).toBe("allow");
+    const replacement = effectOf(verdict, "run.replace_messages");
+    expect(replacement).toBeDefined();
+    expect(replacement?.messages.length).toBeLessThan(messages.length);
   });
 
   it("emits compaction event when compacting", async () => {
@@ -104,7 +102,7 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("transform");
+    expect(verdict.verdict).toBe("allow");
     expect(events.length).toBe(1);
     expect(events[0].name).toBe("agent.compaction");
     expect(events[0].data.messagesBefore).toBe(10);
@@ -124,7 +122,7 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continues when empty messages array", async () => {
@@ -140,7 +138,7 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continues when no budget state", async () => {
@@ -157,7 +155,7 @@ describe("createCompactionPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("has priority 900", () => {

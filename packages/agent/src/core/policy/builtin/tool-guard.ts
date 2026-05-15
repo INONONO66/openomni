@@ -1,4 +1,4 @@
-import { Operational, Policy } from "@openomni/protocol";
+import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentEventEmitter } from "../../types";
 import type { PolicyFactory, PolicyRegistration } from "../types";
@@ -22,7 +22,7 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
     fn: async (ctx) => {
       const toolName = ctx.toolName;
       const toolInput = ctx.toolInput;
-      if (!toolName) return { action: "continue" };
+      if (!toolName) return PolicyDecision.allow({ policyId: "guardrail.permission" });
 
       const normalizedPermission: Policy.Permission = config.permission.action
         ? config.permission
@@ -44,11 +44,11 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
           msg: "tool permission evaluation failed",
           context: { toolName, error: String(error) },
         });
-        return {
-          action: "abort",
-          reason: "tool_permission_evaluation_failed",
+        return PolicyDecision.deny({
           policyId: "guardrail.permission",
-        };
+          reasonCodes: ["tool_permission_evaluation_failed"],
+          effects: [{ type: "run.abort", reason: "tool_permission_evaluation_failed" }],
+        });
       }
 
       if (verdict.action === "continue") {
@@ -59,7 +59,7 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
           toolName,
           inputSummary: summarizeInput(toolInput ?? {}),
         });
-        return verdict;
+        return PolicyDecision.fromEvaluation(verdict);
       }
 
       config.eventEmitter?.emit("tool.execution.permission_denied", {
@@ -70,7 +70,7 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
         reason: verdict.reason,
       });
       config.onToolBlocked?.(ctx.toolCallId ?? "", toolName, verdict.reason);
-      return verdict;
+      return PolicyDecision.fromEvaluation(verdict);
     },
   };
 }

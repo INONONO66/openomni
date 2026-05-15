@@ -98,7 +98,186 @@ describe("composeEffects", () => {
     ]);
   });
 
-  it("keeps post-boundary conflicts diagnostic-only", () => {
+  it("lets higher-priority tool input rewrites win instead of failing closed", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.low",
+        priority: 10,
+        effects: [{ type: "tool.rewrite_input", input: { command: "pwd", cwd: "/tmp" } }],
+      }),
+      decision({
+        policyId: "policy.high",
+        priority: 20,
+        effects: [{ type: "tool.rewrite_input", input: { command: "ls" } }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({
+      type: "tool.rewrite_input",
+      input: { command: "ls", cwd: "/tmp" },
+    });
+  });
+
+  it("fails closed on equal-priority delegation constraint conflicts", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.strict-a",
+        effects: [{ type: "delegation.set_constraints", constraints: { maxTurns: 1 } }],
+      }),
+      decision({
+        policyId: "policy.strict-b",
+        effects: [{ type: "delegation.set_constraints", constraints: { maxTurns: 2 } }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("deny");
+    expect(result.mergedEffects).toEqual([
+      {
+        type: "audit.annotate",
+        annotation:
+          "policy.effect_conflict.fail_closed: delegation.set_constraints.maxTurns rewritten by policy.strict-a and policy.strict-b",
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("lets higher-priority delegation constraints win on key conflict", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.low",
+        priority: 10,
+        effects: [
+          {
+            type: "delegation.set_constraints",
+            constraints: { maxTurns: 1, timeout: { softMs: 100 } },
+          },
+        ],
+      }),
+      decision({
+        policyId: "policy.high",
+        priority: 20,
+        effects: [
+          {
+            type: "delegation.set_constraints",
+            constraints: { maxTurns: 2, timeout: { hardMs: 200 } },
+          },
+        ],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({
+      type: "delegation.set_constraints",
+      constraints: { maxTurns: 2, timeout: { softMs: 100, hardMs: 200 } },
+    });
+  });
+
+  it("fails closed on equal-priority continuation prompt conflicts", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.continue-a",
+        effects: [{ type: "run.continue_with_prompt", prompt: "ask A" }],
+      }),
+      decision({
+        policyId: "policy.continue-b",
+        effects: [{ type: "run.continue_with_prompt", prompt: "ask B" }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("deny");
+    expect(result.mergedEffects).toEqual([
+      {
+        type: "audit.annotate",
+        annotation:
+          "policy.effect_conflict.fail_closed: run.continue_with_prompt.prompt rewritten by policy.continue-a and policy.continue-b",
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("lets higher-priority continuation prompts win", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.low",
+        priority: 10,
+        effects: [{ type: "run.continue_with_prompt", prompt: "ask low" }],
+      }),
+      decision({
+        policyId: "policy.high",
+        priority: 20,
+        effects: [{ type: "run.continue_with_prompt", prompt: "ask high" }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({
+      type: "run.continue_with_prompt",
+      prompt: "ask high",
+    });
+  });
+
+  it("fails closed on equal-priority replacement message conflicts", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.compact-a",
+        effects: [{ type: "run.replace_messages", messages: [{ id: "a" }] }],
+      }),
+      decision({
+        policyId: "policy.compact-b",
+        effects: [{ type: "run.replace_messages", messages: [{ id: "b" }] }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("deny");
+    expect(result.mergedEffects).toEqual([
+      {
+        type: "audit.annotate",
+        annotation:
+          "policy.effect_conflict.fail_closed: run.replace_messages.messages rewritten by policy.compact-a and policy.compact-b",
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("lets higher-priority replacement messages win", () => {
+    const messages = [{ id: "high" }];
+    const result = composeEffects([
+      decision({
+        policyId: "policy.low",
+        priority: 10,
+        effects: [{ type: "run.replace_messages", messages: [{ id: "low" }] }],
+      }),
+      decision({
+        policyId: "policy.high",
+        priority: 20,
+        effects: [{ type: "run.replace_messages", messages }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({ type: "run.replace_messages", messages });
+  });
+
+  it("lets higher-priority tool output rewrites win", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.low",
+        priority: 10,
+        effects: [{ type: "tool.rewrite_output", output: "low" }],
+      }),
+      decision({
+        policyId: "policy.high",
+        priority: 20,
+        effects: [{ type: "tool.rewrite_output", output: "high" }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({ type: "tool.rewrite_output", output: "high" });
+  });
+
+  it("fails closed on equal-priority writeback rewrite and suppress conflicts", () => {
     const result = composeEffects([
       decision({
         policyId: "policy.redact",
@@ -110,16 +289,36 @@ describe("composeEffects", () => {
       }),
     ]);
 
-    expect(result.verdict).toBe("allow");
+    expect(result.verdict).toBe("deny");
     expect(result.mergedEffects).toEqual([
-      { type: "writeback.suppress", reason: "contains sensitive content" },
       {
         type: "audit.annotate",
         annotation:
-          "policy.effect_conflict.post_boundary: writeback.suppress conflicts with writeback.rewrite from policy.redact and policy.suppress",
-        severity: "warning",
+          "policy.effect_conflict.fail_closed: writeback.suppress conflicts with writeback.rewrite from policy.redact and policy.suppress",
+        severity: "error",
       },
     ]);
+  });
+
+  it("lets higher-priority writeback rewrites win over lower suppressions", () => {
+    const result = composeEffects([
+      decision({
+        policyId: "policy.suppress",
+        priority: 10,
+        effects: [{ type: "writeback.suppress", reason: "contains sensitive content" }],
+      }),
+      decision({
+        policyId: "policy.rewrite",
+        priority: 20,
+        effects: [{ type: "writeback.rewrite", output: "safe output" }],
+      }),
+    ]);
+
+    expect(result.verdict).toBe("allow");
+    expect(result.mergedEffects).toContainEqual({
+      type: "writeback.rewrite",
+      output: "safe output",
+    });
   });
 
   it("merges scalar constraints to safer bounds", () => {
@@ -185,9 +384,9 @@ describe("composeEffects", () => {
 
     expect(result.verdict).toBe("allow");
     expect(result.mergedEffects).toEqual([
+      { type: "prompt.append_context", context: "third" },
       { type: "prompt.append_context", context: "first" },
       { type: "prompt.append_context", context: "second" },
-      { type: "prompt.append_context", context: "third" },
     ]);
   });
 });

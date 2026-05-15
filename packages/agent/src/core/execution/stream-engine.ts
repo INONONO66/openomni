@@ -111,7 +111,11 @@ export async function* streamAgent(
         }
 
         if (outcome.type === "compact") {
-          await handleCompact(state, engine, config, agentBase);
+          const compactDecision = await handleCompact(state, engine, config, agentBase);
+          if (compactDecision !== "continue") {
+            yield compactDecision;
+            return;
+          }
           continue;
         }
 

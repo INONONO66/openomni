@@ -26,16 +26,22 @@ interface FieldOwner {
   readonly path: string;
   readonly policyId: string;
   readonly valueHash: string;
+  readonly priority: number;
 }
 
 interface MergedEffect {
   readonly effect: Policy.PolicyEffect;
   readonly order: number;
+  readonly priority: number;
 }
 
 interface ApprovalAccumulator {
   readonly order: number;
   readonly reasons: string[];
+}
+
+interface PriorityApprovalAccumulator extends ApprovalAccumulator {
+  readonly priority: number;
 }
 
 interface RetryAccumulator {
@@ -95,7 +101,7 @@ function orderDecisions(decisions: Policy.PolicyDecision[]): OrderedDecision[] {
   return decisions
     .map((decision, index) => ({ decision, priority: decisionPriority(decision), index }))
     .sort((left, right) => {
-      if (left.priority !== right.priority) return right.priority - left.priority;
+      if (left.priority !== right.priority) return left.priority - right.priority;
       const policyOrder = left.decision.policyId.localeCompare(right.decision.policyId);
       return policyOrder === 0 ? left.index - right.index : policyOrder;
     });
@@ -142,7 +148,7 @@ function collectEffectEntries(orderedDecisions: OrderedDecision[]): EffectEntry[
 
   return entries
     .sort((left, right) => {
-      if (left.priority !== right.priority) return right.priority - left.priority;
+      if (left.priority !== right.priority) return left.priority - right.priority;
       const policyOrder = left.policyId.localeCompare(right.policyId);
       if (policyOrder !== 0) return policyOrder;
       if (left.decisionIndex !== right.decisionIndex)
@@ -154,7 +160,7 @@ function collectEffectEntries(orderedDecisions: OrderedDecision[]): EffectEntry[
 
 function collectSafeDenyEffects(orderedDecisions: OrderedDecision[]): Policy.PolicyEffect[] {
   return collectEffectEntries(orderedDecisions)
-    .filter((entry) => entry.effect.type === "audit.annotate")
+    .filter((entry) => entry.effect.type === "audit.annotate" || entry.effect.type === "run.abort")
     .map((entry) => entry.effect);
 }
 
@@ -167,12 +173,21 @@ function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
     ...collectRecordRewriteConflicts(entries, "tool.rewrite_input"),
     ...collectRecordRewriteConflicts(entries, "delegation.set_constraints"),
     ...collectSingleValueConflicts(entries, "prompt.replace", "prompt", "prompt.replace"),
+    ...collectSingleValueConflicts(entries, "tool.rewrite_output", "output", "tool.rewrite_output"),
     ...collectSingleValueConflicts(
       entries,
       "run.continue_with_prompt",
       "prompt",
       "run.continue_with_prompt",
     ),
+    ...collectSingleValueConflicts(
+      entries,
+      "run.replace_messages",
+      "messages",
+      "run.replace_messages",
+    ),
+    ...collectSingleValueConflicts(entries, "writeback.rewrite", "output", "writeback.rewrite"),
+    ...collectWritebackSuppressConflicts(entries),
     ...collectFilterApprovalConflicts(entries),
   ];
 }
@@ -190,23 +205,35 @@ function collectRecordRewriteConflicts(
 
     for (const [path, value] of flattenRecord(record)) {
       const valueHash = stableHash(value);
-      const owner = owners.find(
-        (candidate) => pathsOverlap(candidate.path, path) && candidate.policyId !== entry.policyId,
-      );
+      const owner = highestPriorityOwner(owners, path, entry.policyId);
 
       if (owner && owner.valueHash !== valueHash) {
-        conflicts.push({
-          boundary: "pre",
-          message: `${effectType}.${path} rewritten by ${owner.policyId} and ${entry.policyId}`,
-        });
-        continue;
+        if (owner.priority === entry.priority) {
+          conflicts.push({
+            boundary: "pre",
+            message: `${effectType}.${path} rewritten by ${owner.policyId} and ${entry.policyId}`,
+          });
+        }
+        if (owner.priority > entry.priority) continue;
       }
 
-      owners.push({ path, policyId: entry.policyId, valueHash });
+      if (!owner || entry.priority >= owner.priority) {
+        owners.push({ path, policyId: entry.policyId, valueHash, priority: entry.priority });
+      }
     }
   }
 
   return conflicts;
+}
+
+function highestPriorityOwner(
+  owners: readonly FieldOwner[],
+  path: string,
+  policyId: string,
+): FieldOwner | undefined {
+  return owners
+    .filter((candidate) => pathsOverlap(candidate.path, path) && candidate.policyId !== policyId)
+    .sort((left, right) => right.priority - left.priority)[0];
 }
 
 function recordForEffect(
@@ -224,8 +251,13 @@ function recordForEffect(
 
 function collectSingleValueConflicts(
   entries: EffectEntry[],
-  effectType: "prompt.replace" | "run.continue_with_prompt",
-  field: "prompt",
+  effectType:
+    | "prompt.replace"
+    | "tool.rewrite_output"
+    | "run.continue_with_prompt"
+    | "run.replace_messages"
+    | "writeback.rewrite",
+  field: "prompt" | "output" | "messages",
   label: string,
 ): Conflict[] {
   const conflicts: Conflict[] = [];
@@ -237,14 +269,18 @@ function collectSingleValueConflicts(
 
     const valueHash = stableHash(value);
     if (owner && owner.policyId !== entry.policyId && owner.valueHash !== valueHash) {
-      conflicts.push({
-        boundary: "pre",
-        message: `${label}.${field} rewritten by ${owner.policyId} and ${entry.policyId}`,
-      });
-      continue;
+      if (owner.priority === entry.priority) {
+        conflicts.push({
+          boundary: "pre",
+          message: `${label}.${field} rewritten by ${owner.policyId} and ${entry.policyId}`,
+        });
+      }
+      if (owner.priority > entry.priority) continue;
     }
 
-    owner = { path: field, policyId: entry.policyId, valueHash };
+    if (!owner || entry.priority >= owner.priority) {
+      owner = { path: field, policyId: entry.policyId, valueHash, priority: entry.priority };
+    }
   }
 
   return conflicts;
@@ -252,13 +288,47 @@ function collectSingleValueConflicts(
 
 function singleValueForEffect(
   effect: Policy.PolicyEffect,
-  effectType: "prompt.replace" | "run.continue_with_prompt",
-): string | undefined {
+  effectType:
+    | "prompt.replace"
+    | "tool.rewrite_output"
+    | "run.continue_with_prompt"
+    | "run.replace_messages"
+    | "writeback.rewrite",
+): unknown {
   if (effectType === "prompt.replace" && effect.type === "prompt.replace") return effect.prompt;
+  if (effectType === "tool.rewrite_output" && effect.type === "tool.rewrite_output") {
+    return effect.output;
+  }
   if (effectType === "run.continue_with_prompt" && effect.type === "run.continue_with_prompt") {
     return effect.prompt;
   }
+  if (effectType === "run.replace_messages" && effect.type === "run.replace_messages") {
+    return effect.messages;
+  }
+  if (effectType === "writeback.rewrite" && effect.type === "writeback.rewrite") {
+    return effect.output;
+  }
   return undefined;
+}
+
+function collectWritebackSuppressConflicts(entries: EffectEntry[]): Conflict[] {
+  const conflicts: Conflict[] = [];
+  const rewrites = entries.filter((entry) => entry.effect.type === "writeback.rewrite");
+  const suppressions = entries.filter((entry) => entry.effect.type === "writeback.suppress");
+
+  for (const rewrite of rewrites) {
+    for (const suppress of suppressions) {
+      if (rewrite.policyId === suppress.policyId || rewrite.priority !== suppress.priority) {
+        continue;
+      }
+      conflicts.push({
+        boundary: "pre",
+        message: `writeback.suppress conflicts with writeback.rewrite from ${rewrite.policyId} and ${suppress.policyId}`,
+      });
+    }
+  }
+
+  return conflicts;
 }
 
 function collectFilterApprovalConflicts(entries: EffectEntry[]): Conflict[] {
@@ -280,16 +350,18 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
   const postConflicts = collectPostConflicts(entries);
   const toolFilters = new Map<string, number>();
   let toolRewrite: { input: Record<string, unknown>; order: number } | undefined;
+  let toolOutputRewrite: MergedEffect | undefined;
   let toolSkip: MergedEffect | undefined;
   let toolApproval: ApprovalAccumulator | undefined;
   let runAbort: MergedEffect | undefined;
   let continueWithPrompt: MergedEffect | undefined;
   let retryAfter: RetryAccumulator | undefined;
+  let runReplaceMessages: MergedEffect | undefined;
   let delegationConstraints: { constraints: Record<string, unknown>; order: number } | undefined;
   let delegationApproval: ApprovalAccumulator | undefined;
   let promptReplace: MergedEffect | undefined;
   let writebackRewrite: MergedEffect | undefined;
-  let writebackSuppress: ApprovalAccumulator | undefined;
+  let writebackSuppress: PriorityApprovalAccumulator | undefined;
   let timeout: { timeoutMs: number; order: number } | undefined;
   let workspaceLock: { required: boolean; order: number } | undefined;
 
@@ -300,10 +372,10 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
       case "prompt.append_context":
       case "prompt.inject_message":
       case "audit.annotate":
-        merged.push({ effect, order: entry.order });
+        merged.push({ effect, order: entry.order, priority: entry.priority });
         break;
       case "prompt.replace":
-        promptReplace ??= { effect, order: entry.order };
+        promptReplace = selectPriorityEffect(promptReplace, entry);
         break;
       case "tool.filter":
         if (!toolFilters.has(effect.toolPattern)) toolFilters.set(effect.toolPattern, entry.order);
@@ -314,20 +386,26 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
           order: Math.min(toolRewrite?.order ?? entry.order, entry.order),
         };
         break;
+      case "tool.rewrite_output":
+        toolOutputRewrite = selectPriorityEffect(toolOutputRewrite, entry);
+        break;
       case "tool.skip_invocation":
-        toolSkip ??= { effect, order: entry.order };
+        toolSkip ??= { effect, order: entry.order, priority: entry.priority };
         break;
       case "tool.require_approval":
         toolApproval = appendReason(toolApproval, effect.reason, entry.order);
         break;
       case "run.abort":
-        runAbort ??= { effect, order: entry.order };
+        runAbort ??= { effect, order: entry.order, priority: entry.priority };
         break;
       case "run.continue_with_prompt":
-        continueWithPrompt ??= { effect, order: entry.order };
+        continueWithPrompt = selectPriorityEffect(continueWithPrompt, entry);
         break;
       case "run.retry_after":
         retryAfter = mergeRetry(retryAfter, effect, entry.order);
+        break;
+      case "run.replace_messages":
+        runReplaceMessages = selectPriorityEffect(runReplaceMessages, entry);
         break;
       case "delegation.set_constraints":
         delegationConstraints = {
@@ -342,10 +420,15 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
         delegationApproval = appendReason(delegationApproval, effect.reason, entry.order);
         break;
       case "writeback.rewrite":
-        writebackRewrite ??= { effect, order: entry.order };
+        writebackRewrite = selectPriorityEffect(writebackRewrite, entry);
         break;
       case "writeback.suppress":
-        writebackSuppress = appendReason(writebackSuppress, effect.reason, entry.order);
+        writebackSuppress = appendPriorityReason(
+          writebackSuppress,
+          effect.reason,
+          entry.order,
+          entry.priority,
+        );
         break;
       case "runtime.set_timeout":
         timeout = {
@@ -366,22 +449,27 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
 
   if (promptReplace) merged.push(promptReplace);
   for (const [toolPattern, order] of toolFilters) {
-    merged.push({ effect: { type: "tool.filter", toolPattern }, order });
+    merged.push({ effect: { type: "tool.filter", toolPattern }, order, priority: 0 });
   }
   if (toolRewrite)
     merged.push({
       effect: { type: "tool.rewrite_input", input: toolRewrite.input },
       order: toolRewrite.order,
+      priority: 0,
     });
+  if (toolOutputRewrite) merged.push(toolOutputRewrite);
   if (toolSkip) merged.push(toolSkip);
   if (toolApproval)
     merged.push({
       effect: approvalEffect("tool.require_approval", toolApproval),
       order: toolApproval.order,
+      priority: 0,
     });
   if (runAbort) merged.push(runAbort);
   if (continueWithPrompt) merged.push(continueWithPrompt);
-  if (retryAfter) merged.push({ effect: retryEffect(retryAfter), order: retryAfter.order });
+  if (retryAfter)
+    merged.push({ effect: retryEffect(retryAfter), order: retryAfter.order, priority: 0 });
+  if (runReplaceMessages) merged.push(runReplaceMessages);
   if (delegationConstraints) {
     merged.push({
       effect: {
@@ -389,18 +477,24 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
         constraints: delegationConstraints.constraints,
       },
       order: delegationConstraints.order,
+      priority: 0,
     });
   }
   if (delegationApproval) {
     merged.push({
       effect: approvalEffect("delegation.require_approval", delegationApproval),
       order: delegationApproval.order,
+      priority: 0,
     });
   }
-  if (writebackSuppress) {
+  if (
+    writebackSuppress &&
+    (!writebackRewrite || writebackSuppress.priority >= writebackRewrite.priority)
+  ) {
     merged.push({
       effect: approvalEffect("writeback.suppress", writebackSuppress),
       order: writebackSuppress.order,
+      priority: writebackSuppress.priority,
     });
   } else if (writebackRewrite) {
     merged.push(writebackRewrite);
@@ -409,11 +503,13 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
     merged.push({
       effect: { type: "runtime.set_timeout", timeoutMs: timeout.timeoutMs },
       order: timeout.order,
+      priority: 0,
     });
   if (workspaceLock) {
     merged.push({
       effect: { type: "runtime.workspace_lock", required: workspaceLock.required },
       order: workspaceLock.order,
+      priority: 0,
     });
   }
 
@@ -423,39 +519,14 @@ function mergeEntries(entries: EffectEntry[]): MergeResult {
   };
 }
 
-function collectPostConflicts(entries: EffectEntry[]): Conflict[] {
-  const rewriteEntries = entries.filter((entry) => entry.effect.type === "writeback.rewrite");
-  const suppressEntry = entries.find((entry) => entry.effect.type === "writeback.suppress");
-  const conflicts: Conflict[] = [];
-  let firstRewrite: EffectEntry | undefined;
+function collectPostConflicts(_entries: EffectEntry[]): Conflict[] {
+  return [];
+}
 
-  for (const entry of rewriteEntries) {
-    if (!firstRewrite) {
-      firstRewrite = entry;
-      continue;
-    }
-
-    if (
-      firstRewrite.policyId !== entry.policyId &&
-      firstRewrite.effect.type === "writeback.rewrite" &&
-      entry.effect.type === "writeback.rewrite" &&
-      firstRewrite.effect.output !== entry.effect.output
-    ) {
-      conflicts.push({
-        boundary: "post",
-        message: `writeback.rewrite.output rewritten by ${firstRewrite.policyId} and ${entry.policyId}`,
-      });
-    }
-  }
-
-  if (firstRewrite && suppressEntry) {
-    conflicts.push({
-      boundary: "post",
-      message: `writeback.suppress conflicts with writeback.rewrite from ${firstRewrite.policyId} and ${suppressEntry.policyId}`,
-    });
-  }
-
-  return conflicts;
+function selectPriorityEffect(current: MergedEffect | undefined, entry: EffectEntry): MergedEffect {
+  const order = Math.min(current?.order ?? entry.order, entry.order);
+  if (current && current.priority > entry.priority) return { ...current, order };
+  return { effect: entry.effect, order, priority: entry.priority };
 }
 
 function appendReason(
@@ -485,6 +556,31 @@ function approvalEffect(
     return reason === undefined ? { type } : { type, reason };
   }
   return reason === undefined ? { type } : { type, reason };
+}
+
+function appendPriorityReason(
+  accumulator: PriorityApprovalAccumulator | undefined,
+  reason: string | undefined,
+  order: number,
+  priority: number,
+): PriorityApprovalAccumulator {
+  if (accumulator && accumulator.priority > priority) {
+    return { ...accumulator, order: Math.min(accumulator.order, order) };
+  }
+
+  if (accumulator && accumulator.priority === priority) {
+    return {
+      order: Math.min(accumulator.order, order),
+      priority,
+      reasons: reason === undefined ? accumulator.reasons : [...accumulator.reasons, reason],
+    };
+  }
+
+  return {
+    order: Math.min(accumulator?.order ?? order, order),
+    priority,
+    reasons: reason === undefined ? [] : [reason],
+  };
 }
 
 function mergeRetry(

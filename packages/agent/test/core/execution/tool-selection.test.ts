@@ -5,6 +5,7 @@ import { buildTurn, createStreamRunState } from "../../../src/core/execution/str
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool, TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import { abortRun, allow, filterTools } from "../../helpers/policy-decision";
 
 function makeTools(...names: string[]): Tool.Spec[] {
   return names.map((name) => ({
@@ -46,17 +47,12 @@ function makeState() {
   return createStreamRunState(input);
 }
 
-function filterPolicy(allowedTools: string[]): PolicyRegistration {
+function filterPolicy(filteredTools: string[]): PolicyRegistration {
   return {
     name: "test-filter",
     timing: "resources.prepare",
     priority: 0,
-    fn: async () => ({
-      action: "transform" as const,
-      input: { tools: allowedTools },
-      reason: "test-filter",
-      policyId: "test-filter",
-    }),
+    fn: async () => filterTools(filteredTools, "test-filter", "test-filter"),
   };
 }
 
@@ -65,11 +61,7 @@ function abortSelectionPolicy(reason: string): PolicyRegistration {
     name: "test-abort-selection",
     timing: "resources.prepare",
     priority: 0,
-    fn: async () => ({
-      action: "abort" as const,
-      reason,
-      policyId: "test-abort-selection",
-    }),
+    fn: async () => abortRun("test-abort-selection", reason),
   };
 }
 
@@ -97,10 +89,10 @@ describe("resources.prepare dispatch", () => {
     expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "read", "write"]);
   });
 
-  it("filters tools when transform verdict specifies allowed tools", async () => {
+  it("filters out tools when policy returns tool.filter patterns", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register(filterPolicy(["bash", "write"]));
+    engine.register(filterPolicy(["read"]));
 
     const tools = makeTools("bash", "read", "write");
     const state = makeState();
@@ -120,6 +112,30 @@ describe("resources.prepare dispatch", () => {
     if (result.type !== "ready") return;
     expect(result.turn.runInput.tools).toHaveLength(2);
     expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "write"]);
+  });
+
+  it("filters out wildcard-prefixed tool patterns", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register(filterPolicy(["dangerous.*"]));
+
+    const tools = makeTools("dangerous.exec", "safe.read", "dangerous.write");
+    const state = makeState();
+    const config = makeConfig(tools);
+
+    const result = await buildTurn(
+      state,
+      config,
+      engine,
+      { provider: "test", id: "test-model" },
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type !== "ready") return;
+    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["safe.read"]);
   });
 
   it("returns complete result when abort verdict is returned", async () => {
@@ -159,7 +175,7 @@ describe("resources.prepare dispatch", () => {
       priority: 0,
       fn: async (ctx) => {
         capturedCtx = ctx as unknown as Record<string, unknown>;
-        return { action: "continue" as const };
+        return allow();
       },
     });
 
@@ -181,8 +197,8 @@ describe("resources.prepare dispatch", () => {
     );
 
     expect(capturedCtx).toBeDefined();
-    expect(capturedCtx!.timing).toBe("resources.prepare");
-    const labels = capturedCtx!.labels as Array<{ value: string; source: string }>;
+    expect(capturedCtx?.timing).toBe("resources.prepare");
+    const labels = capturedCtx?.labels as Array<{ value: string; source: string }>;
     expect(labels.length).toBeGreaterThan(0);
     expect(labels.some((l) => l.value.includes("bash"))).toBe(true);
     expect(labels.every((l) => l.source === "tool_metadata")).toBe(true);
@@ -195,12 +211,7 @@ describe("resources.prepare dispatch", () => {
       name: "transform-no-tools",
       timing: "resources.prepare",
       priority: 0,
-      fn: async () => ({
-        action: "transform" as const,
-        input: { someOtherKey: "value" },
-        reason: "test",
-        policyId: "test",
-      }),
+      fn: async () => allow("test", "test"),
     });
 
     const tools = makeTools("bash", "read", "write");

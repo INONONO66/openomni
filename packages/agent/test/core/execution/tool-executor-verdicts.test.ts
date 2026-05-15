@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ToolExecution, type Policy, type Tool } from "@openomni/protocol";
+import { PolicyDecision, ToolExecution, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
@@ -16,18 +16,24 @@ function makeCall(id = "call-1"): Tool.Call {
   return { id, tool: "bash", input: { command: "bun test" } };
 }
 
-function verdictPolicy(verdict: Policy.Verdict): PolicyRegistration {
+function verdictPolicy(decision: Policy.PolicyDecision): PolicyRegistration {
   return {
-    name: `test-${verdict.action}`,
+    name: `test-${decision.verdict}`,
     timing: "invoke.prepare",
     priority: 0,
-    fn: async () => verdict,
+    fn: async () => decision,
   };
 }
 
-function engineWith(verdict: Policy.Verdict) {
+function engineWith(decision: Policy.PolicyDecision) {
   const engine = PolicyEngine.create();
-  engine.register(verdictPolicy(verdict));
+  engine.register(verdictPolicy(decision));
+  return engine;
+}
+
+function engineWithRegistrations(registrations: PolicyRegistration[]) {
+  const engine = PolicyEngine.create();
+  for (const registration of registrations) engine.register(registration);
   return engine;
 }
 
@@ -44,7 +50,13 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     Bus.subscribe(ToolExecution.PermissionDenied, (event) => denied.push(event));
     Bus.subscribe(ToolExecution.Started, (event) => started.push(event));
 
-    const engine = engineWith({ action: "deny", reason: "sandbox_violation" });
+    const engine = engineWith(
+      PolicyDecision.deny({
+        policyId: "test.deny",
+        reasonCodes: ["sandbox_violation"],
+        effects: [{ type: "run.abort", reason: "sandbox_violation" }],
+      }),
+    );
     const executor = createToolExecutor({
       engine,
       traceContext: { traceId: "trace-deny", sessionId: "sess-deny" },
@@ -65,13 +77,15 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     expect((denied[0] as { reason: string; toolCallId: string }).reason).toBe("sandbox_violation");
   });
 
-  it("fails closed when invoke.prepare returns inject", async () => {
+  it("fails closed when invoke.prepare returns pending approval", async () => {
     let calls = 0;
-    const engine = engineWith({
-      action: "inject",
-      message: "not valid here",
-      reason: "wrong_boundary",
-    });
+    const engine = engineWith(
+      PolicyDecision.pending({
+        policyId: "test.approval",
+        reasonCodes: ["wrong_boundary"],
+        effects: [{ type: "tool.require_approval", reason: "wrong_boundary" }],
+      }),
+    );
     const executor = createToolExecutor({
       engine,
       toolExecutor: async (call) => {
@@ -84,12 +98,18 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("[Denied: inject verdict is not valid for invoke.prepare]");
+    expect(result.output).toBe("[Denied: wrong_boundary]");
   });
 
   it("blocks execution with retry-after metadata when policy returns retry", async () => {
     let calls = 0;
-    const engine = engineWith({ action: "retry", reason: "rate_limited" });
+    const engine = engineWith(
+      PolicyDecision.pending({
+        policyId: "test.retry",
+        reasonCodes: ["rate_limited"],
+        effects: [{ type: "tool.require_approval", reason: "rate_limited" }],
+      }),
+    );
     const executor = createToolExecutor({
       engine,
       toolExecutor: async (call) => {
@@ -102,17 +122,23 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("[Retry requested: rate_limited]");
+    expect(result.output).toBe("[Denied: rate_limited]");
     expect(result.metadata).toEqual({
-      verdict: "retry",
+      verdict: "pending",
       reason: "rate_limited",
-      retryAfterMs: 0,
+      policyId: "agent.policy.composed",
     });
   });
 
-  it("preserves skip and abort blocking behavior", async () => {
+  it("preserves deny blocking behavior", async () => {
     let calls = 0;
-    const skipEngine = engineWith({ action: "skip", reason: "optional" });
+    const skipEngine = engineWith(
+      PolicyDecision.deny({
+        policyId: "test.skip",
+        reasonCodes: ["optional"],
+        effects: [{ type: "run.abort", reason: "optional" }],
+      }),
+    );
     const skipExecutor = createToolExecutor({
       engine: skipEngine,
       toolExecutor: async (call) => {
@@ -124,11 +150,17 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     const skipResult = await skipExecutor(makeCall("call-skip"));
     expect(skipResult).toMatchObject({
       toolCallId: "call-skip",
-      output: "[Skipped: optional]",
-      isError: false,
+      output: "[Denied: optional]",
+      isError: true,
     });
 
-    const abortEngine = engineWith({ action: "abort", reason: "Blocked: hard stop" });
+    const abortEngine = engineWith(
+      PolicyDecision.deny({
+        policyId: "test.abort",
+        reasonCodes: ["Blocked: hard stop"],
+        effects: [{ type: "run.abort", reason: "Blocked: hard stop" }],
+      }),
+    );
     const abortExecutor = createToolExecutor({
       engine: abortEngine,
       toolExecutor: async (call) => {
@@ -140,9 +172,245 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     const abortResult = await abortExecutor(makeCall("call-abort"));
     expect(abortResult).toMatchObject({
       toolCallId: "call-abort",
-      output: "[Blocked: hard stop]",
+      output: "[Denied: Blocked: hard stop]",
       isError: true,
     });
     expect(calls).toBe(0);
+  });
+});
+
+describe("createToolExecutor effect application", () => {
+  it("blocks matching tool.filter effects at invoke.prepare", async () => {
+    let calls = 0;
+    const engine = engineWith(
+      PolicyDecision.allow({
+        policyId: "test.filter",
+        reasonCodes: ["filtered_tool"],
+        effects: [{ type: "tool.filter", toolPattern: "bash" }],
+      }),
+    );
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => {
+        calls += 1;
+        return { id: "result-filter", toolCallId: call.id, output: "should not run" };
+      },
+    });
+
+    const result = await executor(makeCall("call-filtered"));
+
+    expect(calls).toBe(0);
+    expect(result).toMatchObject({
+      toolCallId: "call-filtered",
+      output: "[Denied: filtered_tool]",
+      isError: true,
+    });
+  });
+
+  it("allows non-matching tool.filter effects at invoke.prepare", async () => {
+    let calls = 0;
+    const engine = engineWith(
+      PolicyDecision.allow({
+        policyId: "test.filter",
+        reasonCodes: ["filter-other"],
+        effects: [{ type: "tool.filter", toolPattern: "dangerous.*" }],
+      }),
+    );
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => {
+        calls += 1;
+        return { id: "result-filter-miss", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const result = await executor(makeCall("call-filter-miss"));
+
+    expect(calls).toBe(1);
+    expect(result).toMatchObject({
+      toolCallId: "call-filter-miss",
+      output: "ok",
+    });
+  });
+
+  it("skips native tool invocation when invoke.prepare returns tool.skip_invocation", async () => {
+    let calls = 0;
+    const engine = engineWith(
+      PolicyDecision.allow({
+        policyId: "test.skip",
+        reasonCodes: ["optional"],
+        effects: [{ type: "tool.skip_invocation", reason: "cached" }],
+      }),
+    );
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => {
+        calls += 1;
+        return { id: "result-skip", toolCallId: call.id, output: "should not run" };
+      },
+    });
+
+    const result = await executor(makeCall("call-real-skip"));
+
+    expect(calls).toBe(0);
+    expect(result).toMatchObject({
+      toolCallId: "call-real-skip",
+      output: "[Skipped: cached]",
+      isError: false,
+    });
+  });
+
+  it("rewrites native tool input before invocation", async () => {
+    let seenInput: Record<string, unknown> | undefined;
+    const engine = engineWith(
+      PolicyDecision.allow({
+        policyId: "test.rewrite-input",
+        reasonCodes: ["rewrite"],
+        effects: [{ type: "tool.rewrite_input", input: { command: "echo safe" } }],
+      }),
+    );
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => {
+        seenInput = call.input;
+        return { id: "result-rewrite", toolCallId: call.id, output: "ok" };
+      },
+    });
+
+    const result = await executor(makeCall("call-rewrite-input"));
+
+    expect(result.output).toBe("ok");
+    expect(seenInput).toEqual({ command: "echo safe" });
+  });
+
+  it("rewrites native tool output after successful invocation", async () => {
+    const engine = engineWithRegistrations([
+      {
+        name: "pre",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "pre" }),
+      },
+      {
+        name: "post",
+        timing: "invoke.result",
+        priority: 0,
+        fn: () =>
+          PolicyDecision.allow({
+            policyId: "post",
+            reasonCodes: ["redact"],
+            effects: [{ type: "tool.rewrite_output", output: "redacted" }],
+          }),
+      },
+    ]);
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => ({
+        id: "result-output",
+        toolCallId: call.id,
+        output: "secret",
+      }),
+    });
+
+    const result = await executor(makeCall("call-rewrite-output"));
+
+    expect(result.output).toBe("redacted");
+  });
+
+  it("keeps post-boundary plain deny diagnostic-only without leaking rewrite effects", async () => {
+    const engine = engineWithRegistrations([
+      {
+        name: "pre",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "pre" }),
+      },
+      {
+        name: "post",
+        timing: "invoke.result",
+        priority: 0,
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "post",
+            reasonCodes: ["post-deny"],
+            effects: [{ type: "audit.annotate", annotation: "post-deny" }],
+          }),
+      },
+    ]);
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => ({
+        id: "result-plain-post",
+        toolCallId: call.id,
+        output: "original",
+      }),
+    });
+
+    const result = await executor(makeCall("call-plain-post-deny"));
+
+    expect(result.output).toBe("original");
+    expect(result.isError).toBeUndefined();
+  });
+
+  it("blocks and redacts output when invoke.result returns deny", async () => {
+    const engine = engineWithRegistrations([
+      {
+        name: "pre",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "pre" }),
+      },
+      {
+        name: "post",
+        timing: "invoke.result",
+        priority: 0,
+        fn: () =>
+          PolicyDecision.deny({
+            policyId: "post",
+            reasonCodes: ["post-deny"],
+            effects: [
+              { type: "run.abort", reason: "post-deny" },
+              { type: "tool.rewrite_output", output: "should-not-apply" },
+            ],
+          }),
+      },
+    ]);
+    const executor = createToolExecutor({
+      engine,
+      toolExecutor: async (call) => ({
+        id: "result-denied-post",
+        toolCallId: call.id,
+        output: "original",
+      }),
+    });
+
+    const result = await executor(makeCall("call-post-deny"));
+
+    expect(result.output).toBe("[Denied: post-deny]");
+    expect(result.isError).toBe(true);
+  });
+
+  it("classifies source.mcp labelled tools as MCP resources", async () => {
+    const capturedSources: Array<string | undefined> = [];
+    const engine = engineWithRegistrations([
+      {
+        name: "capture-mcp",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: (ctx) => {
+          capturedSources.push(ctx.resourceDescriptor?.source?.type);
+          return PolicyDecision.allow({ policyId: "capture-mcp" });
+        },
+      },
+    ]);
+    const executor = createToolExecutor({
+      engine,
+      getToolLabels: () => ["source.mcp", "mcp.fixture"],
+      toolExecutor: async (call) => ({ id: "result-mcp", toolCallId: call.id, output: "mcp ok" }),
+    });
+
+    await executor({ id: "mcp-call", tool: "fixture_read", input: {} });
+
+    expect(capturedSources).toEqual(["mcp"]);
   });
 });

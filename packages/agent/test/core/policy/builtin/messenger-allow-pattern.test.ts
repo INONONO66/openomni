@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createMessengerAllowPatternPolicy } from "../../../../src/core/policy/builtin/messenger-allow-pattern";
 import type { PolicyContext } from "../../../../src/core/policy";
 import type { Messenger } from "@openomni/protocol";
+import { firstReason } from "../../../helpers/policy-decision";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -39,8 +40,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx());
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("default_allow");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("default_allow");
     expect(verdict.policyId).toBe("guardrail.permission");
   });
 
@@ -48,8 +49,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     const mw = createMessengerAllowPatternPolicy({});
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "agent-b") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("no_allow_patterns_configured");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("no_allow_patterns_configured");
     expect(verdict.policyId).toBe("guardrail.permission");
   });
 
@@ -57,8 +58,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     const mw = createMessengerAllowPatternPolicy({ allowPatterns: [] });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "agent-b") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("no_allow_patterns_configured");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("no_allow_patterns_configured");
   });
 
   it("continue — exact pattern match allows", async () => {
@@ -67,8 +68,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "agent-b") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("allow_pattern_matched");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("allow_pattern_matched");
   });
 
   it("abort — no pattern matches denies", async () => {
@@ -77,10 +78,10 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-x", "agent-y") }));
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.reason).toContain("authorization denied");
-    expect(verdict.reason).toContain("agent-x");
-    expect(verdict.reason).toContain("agent-y");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toContain("authorization denied");
+    expect(firstReason(verdict)).toContain("agent-x");
+    expect(firstReason(verdict)).toContain("agent-y");
   });
 
   it("continue — wildcard from allows any sender", async () => {
@@ -89,8 +90,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("any-sender", "agent-b") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("allow_pattern_matched");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("allow_pattern_matched");
   });
 
   it("continue — wildcard to allows any receiver", async () => {
@@ -99,8 +100,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "any-receiver") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("allow_pattern_matched");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("allow_pattern_matched");
   });
 
   it("continue — double wildcard allows everything", async () => {
@@ -109,8 +110,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("x", "y") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("allow_pattern_matched");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("allow_pattern_matched");
   });
 
   it("abort — partial match (from matches, to does not) denies", async () => {
@@ -119,8 +120,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "agent-c") }));
 
-    expect(verdict.action).toBe("abort");
-    expect(verdict.reason).toContain("authorization denied");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toContain("authorization denied");
   });
 
   it("continue — multiple patterns, second matches", async () => {
@@ -132,8 +133,8 @@ describe("createMessengerAllowPatternPolicy", () => {
     });
     const verdict = await mw.fn(baseCtx({ envelope: envelope("agent-a", "agent-b") }));
 
-    expect(verdict.action).toBe("continue");
-    expect(verdict.reason).toBe("allow_pattern_matched");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("allow_pattern_matched");
   });
 
   it("has name builtin:messenger-allow-pattern", () => {

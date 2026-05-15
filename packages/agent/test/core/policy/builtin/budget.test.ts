@@ -5,6 +5,7 @@ import {
 } from "../../../../src/core/policy/builtin/budget";
 import type { PolicyContext } from "../../../../src/core/policy";
 import type { BudgetState } from "../../../../src/core/budget";
+import type { Policy } from "@openomni/protocol";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -17,6 +18,10 @@ function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
     elapsedMs: 0,
     ...overrides,
   };
+}
+
+function injectedMessage(verdict: Policy.PolicyDecision): string | undefined {
+  return verdict.effects.find((effect) => effect.type === "prompt.inject_message")?.message;
 }
 
 function createBudgetState(overrides?: Partial<BudgetState>): BudgetState {
@@ -41,14 +46,13 @@ describe("createBudgetReassurancePolicy", () => {
     });
 
     const verdict = await middleware.fn(ctx);
+    const message = injectedMessage(verdict);
 
-    expect(verdict.action).toBe("inject");
-    if (verdict.action === "inject") {
-      expect(verdict.message).toContain("[Budget Status]");
-      expect(verdict.message).toContain("You have plenty of budget remaining");
-      expect(verdict.message).toContain("Do NOT rush or skip tasks");
-      expect(verdict.message).toContain("Complete your work thoroughly");
-    }
+    expect(verdict.verdict).toBe("allow");
+    expect(message).toContain("[Budget Status]");
+    expect(message).toContain("You have plenty of budget remaining");
+    expect(message).toContain("Do NOT rush or skip tasks");
+    expect(message).toContain("Complete your work thoroughly");
   });
 
   it("fires exactly once (closure state)", async () => {
@@ -61,8 +65,8 @@ describe("createBudgetReassurancePolicy", () => {
     const verdict1 = await middleware.fn(ctx);
     const verdict2 = await middleware.fn(ctx);
 
-    expect(verdict1.action).toBe("inject");
-    expect(verdict2.action).toBe("continue");
+    expect(injectedMessage(verdict1)).toBeDefined();
+    expect(injectedMessage(verdict2)).toBeUndefined();
   });
 
   it("continues below threshold", async () => {
@@ -74,11 +78,11 @@ describe("createBudgetReassurancePolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("respects custom reassuranceThreshold", async () => {
-    const middleware = createBudgetReassurancePolicy({ reassuranceThreshold: 0.5 });
+    const middleware = createBudgetReassurancePolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 13 }),
       budget: { maxTurns: 24, reassuranceThreshold: 0.5 },
@@ -86,7 +90,7 @@ describe("createBudgetReassurancePolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("inject");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("has priority 10", () => {
@@ -109,13 +113,12 @@ describe("createBudgetWarningPolicy", () => {
     });
 
     const verdict = await middleware.fn(ctx);
+    const message = injectedMessage(verdict);
 
-    expect(verdict.action).toBe("inject");
-    if (verdict.action === "inject") {
-      expect(verdict.message).toContain("[Budget Warning]");
-      expect(verdict.message).toContain("Wrap up your current task");
-      expect(verdict.message).toContain("provide a summary");
-    }
+    expect(verdict.verdict).toBe("allow");
+    expect(message).toContain("[Budget Warning]");
+    expect(message).toContain("Wrap up your current task");
+    expect(message).toContain("provide a summary");
   });
 
   it("fires exactly once (closure state)", async () => {
@@ -128,8 +131,8 @@ describe("createBudgetWarningPolicy", () => {
     const verdict1 = await middleware.fn(ctx);
     const verdict2 = await middleware.fn(ctx);
 
-    expect(verdict1.action).toBe("inject");
-    expect(verdict2.action).toBe("continue");
+    expect(injectedMessage(verdict1)).toBeDefined();
+    expect(injectedMessage(verdict2)).toBeUndefined();
   });
 
   it("continues below threshold", async () => {
@@ -141,11 +144,11 @@ describe("createBudgetWarningPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("respects custom warningThreshold", async () => {
-    const middleware = createBudgetWarningPolicy({ warningThreshold: 0.7 });
+    const middleware = createBudgetWarningPolicy();
     const ctx = baseCtx({
       budgetState: createBudgetState({ turns: 17 }),
       budget: { maxTurns: 24, warningThreshold: 0.7 },
@@ -153,7 +156,7 @@ describe("createBudgetWarningPolicy", () => {
 
     const verdict = await middleware.fn(ctx);
 
-    expect(verdict.action).toBe("inject");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("has priority 20", () => {

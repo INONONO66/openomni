@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { Message, Policy } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { BudgetState } from "../../../src/core/budget";
 import type { Memory, MemoryResult } from "../../../src/core/memory";
@@ -14,10 +14,7 @@ import { createPostToolPolicy } from "../../../src/core/policy/builtin/post-tool
 import { createPostTurnPolicy } from "../../../src/core/policy/builtin/post-turn";
 import { createIdleNudgePolicy } from "../../../src/core/policy/builtin/idle-nudge";
 import { createUserMessage } from "../../../src/core/message-factory";
-
-type Inject = Extract<Policy.Verdict, { action: "inject" }>;
-type Abort = Extract<Policy.Verdict, { action: "abort" }>;
-type Transform = Extract<Policy.Verdict, { action: "transform" }>;
+import { abortRun, allow, effectOf, firstReason, inject } from "../../helpers/policy-decision";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -93,7 +90,7 @@ describe("snapshot: budget-reassurance", () => {
         budget: { maxTurns: 24 },
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("inject — at 0.6 threshold", async () => {
@@ -104,12 +101,12 @@ describe("snapshot: budget-reassurance", () => {
         budget: { maxTurns: 24 },
       }),
     );
-    expect(verdict.action).toBe("inject");
-    const v = verdict as Inject;
-    expect(v.reason).toBe("budget_reassurance");
-    expect(v.policyId).toBe("builtin.budget.reassurance");
-    expect(v.message).toContain("[Budget Status]");
-    expect(v.message).toContain("Do NOT rush or skip tasks");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("budget_reassurance");
+    expect(verdict.policyId).toBe("builtin.budget.reassurance");
+    const effect = effectOf(verdict, "prompt.inject_message");
+    expect(effect?.message).toContain("[Budget Status]");
+    expect(effect?.message).toContain("Do NOT rush or skip tasks");
   });
 
   it("continue — fires only once (closure state)", async () => {
@@ -117,13 +114,13 @@ describe("snapshot: budget-reassurance", () => {
     const ctx = baseCtx({ budgetState: budgetState({ turns: 15 }), budget: { maxTurns: 24 } });
     await mw.fn(ctx);
     const second = await mw.fn(ctx);
-    expect(second).toEqual({ action: "continue" });
+    expect(second.verdict).toBe("allow");
   });
 
   it("continue — no budgetState", async () => {
     const mw = createBudgetReassurancePolicy();
     const verdict = await mw.fn(baseCtx());
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -136,7 +133,7 @@ describe("snapshot: budget-warning", () => {
         budget: { maxTurns: 24 },
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("inject — at 0.8 threshold", async () => {
@@ -147,12 +144,12 @@ describe("snapshot: budget-warning", () => {
         budget: { maxTurns: 24 },
       }),
     );
-    expect(verdict.action).toBe("inject");
-    const v = verdict as Inject;
-    expect(v.reason).toBe("budget_warning");
-    expect(v.policyId).toBe("builtin.budget.warning");
-    expect(v.message).toContain("[Budget Warning]");
-    expect(v.message).toContain("Wrap up your current task");
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("budget_warning");
+    expect(verdict.policyId).toBe("builtin.budget.warning");
+    const effect = effectOf(verdict, "prompt.inject_message");
+    expect(effect?.message).toContain("[Budget Warning]");
+    expect(effect?.message).toContain("Wrap up your current task");
   });
 
   it("continue — fires only once", async () => {
@@ -160,13 +157,13 @@ describe("snapshot: budget-warning", () => {
     const ctx = baseCtx({ budgetState: budgetState({ turns: 20 }), budget: { maxTurns: 24 } });
     await mw.fn(ctx);
     const second = await mw.fn(ctx);
-    expect(second).toEqual({ action: "continue" });
+    expect(second.verdict).toBe("allow");
   });
 
   it("continue — no budgetState", async () => {
     const mw = createBudgetWarningPolicy();
     const verdict = await mw.fn(baseCtx());
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -183,7 +180,7 @@ describe("snapshot: tool-permission", () => {
         toolInput: { path: "/tmp/test" },
       }),
     );
-    expect(verdict.action).toBe("continue");
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("abort — tool not on allowlist", async () => {
@@ -198,10 +195,9 @@ describe("snapshot: tool-permission", () => {
         toolInput: { cmd: "rm -rf /" },
       }),
     );
-    expect(verdict.action).toBe("abort");
-    const v = verdict as Abort;
-    expect(v.reason).toBe("allowlist_miss");
-    expect(v.policyId).toBe("guardrail.permission");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toBe("allowlist_miss");
+    expect(verdict.policyId).toBe("guardrail.permission");
   });
 
   it("abort — tool on denylist", async () => {
@@ -216,8 +212,8 @@ describe("snapshot: tool-permission", () => {
         toolInput: {},
       }),
     );
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("denylist");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toBe("denylist");
   });
 
   it("continue — no toolName in context", async () => {
@@ -225,7 +221,7 @@ describe("snapshot: tool-permission", () => {
       permission: { action: "tool.call", allowlist: ["read_file"] },
     });
     const verdict = await mw.fn(baseCtx({ timing: "invoke.prepare" }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -239,26 +235,26 @@ describe("snapshot: memory", () => {
     const userMsg = createUserMessage("what are my preferences?", "test");
     const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
 
-    expect(verdict.action).toBe("transform");
-    const v = verdict as Transform;
-    expect((v.input as Record<string, unknown>).appendContext).toBe(
+    expect(verdict.verdict).toBe("allow");
+    const effect = effectOf(verdict, "prompt.append_context");
+    expect(effect?.context).toBe(
       "[Memory Context]\n- user prefers dark mode\n- user timezone is KST",
     );
-    expect(v.reason).toBe("memory_context_available");
-    expect(v.policyId).toBe("builtin.memory");
+    expect(firstReason(verdict)).toBe("memory_context_available");
+    expect(verdict.policyId).toBe("builtin.memory");
   });
 
   it("continue — no memory results", async () => {
     const mw = createMemoryPolicy(mockMemory([]));
     const userMsg = createUserMessage("hello", "test");
     const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — no messages in context", async () => {
     const mw = createMemoryPolicy(mockMemory([{ key: "k1", content: "data", score: 1.0 }]));
     const verdict = await mw.fn(baseCtx({ timing: "context.prepare" }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — memory.retrieve throws", async () => {
@@ -269,7 +265,7 @@ describe("snapshot: memory", () => {
     const mw = createMemoryPolicy(mem);
     const userMsg = createUserMessage("test", "test");
     const verdict = await mw.fn(baseCtx({ timing: "context.prepare", messages: [userMsg] }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -283,7 +279,7 @@ describe("snapshot: compaction", () => {
         budgetState: budgetState({ totalInputTokens: 1000, totalOutputTokens: 500 }),
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("transform — above token threshold", async () => {
@@ -299,19 +295,18 @@ describe("snapshot: compaction", () => {
         budgetState: budgetState({ totalInputTokens: 7000, totalOutputTokens: 1000 }),
       }),
     );
-    expect(verdict.action).toBe("transform");
-    const v = verdict as Transform;
-    expect(v.reason).toBe("compaction_threshold_exceeded");
-    expect(v.policyId).toBe("builtin.compaction");
-    const compactedMsgs = (v.input as Record<string, unknown>).messages as unknown[];
-    expect(compactedMsgs.length).toBeLessThan(messages.length);
+    expect(verdict.verdict).toBe("allow");
+    expect(firstReason(verdict)).toBe("compaction_threshold_exceeded");
+    expect(verdict.policyId).toBe("builtin.compaction");
+    const effect = effectOf(verdict, "run.replace_messages");
+    expect(effect?.messages.length).toBeLessThan(messages.length);
   });
 
   it("continue — no budgetState", async () => {
     const mw = createCompactionPolicy({ contextWindowTokens: 1000, thresholdRatio: 0.8 });
     const messages = Array.from({ length: 10 }, (_, i) => testMessage(`m${i}`));
     const verdict = await mw.fn(baseCtx({ messages }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — empty messages", async () => {
@@ -322,7 +317,7 @@ describe("snapshot: compaction", () => {
         budgetState: budgetState({ totalInputTokens: 9000, totalOutputTokens: 1000 }),
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -337,11 +332,11 @@ describe("snapshot: post-tool", () => {
         toolOutput: "file contents here",
       }),
     );
-    expect(verdict.action).toBe("transform");
-    const v = verdict as Transform;
-    expect((v.input as Record<string, unknown>).output).toBe("file contents here\nenrichment");
-    expect(v.reason).toBe("post_tool_enrichment");
-    expect(v.policyId).toBe("builtin.post_tool");
+    expect(verdict.verdict).toBe("allow");
+    const effect = effectOf(verdict, "tool.rewrite_output");
+    expect(effect?.output).toBe("file contents here\nenrichment");
+    expect(firstReason(verdict)).toBe("post_tool_enrichment");
+    expect(verdict.policyId).toBe("builtin.post_tool");
   });
 
   it("continue — enricher returns null", async () => {
@@ -353,7 +348,7 @@ describe("snapshot: post-tool", () => {
         toolOutput: "content",
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — enricher throws (error isolation)", async () => {
@@ -367,7 +362,7 @@ describe("snapshot: post-tool", () => {
         toolOutput: "content",
       }),
     );
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("transform — empty toolOutput uses enrichment only", async () => {
@@ -379,41 +374,34 @@ describe("snapshot: post-tool", () => {
         toolOutput: "",
       }),
     );
-    expect(verdict.action).toBe("transform");
-    const v = verdict as Transform;
-    expect((v.input as Record<string, unknown>).output).toBe("standalone enrichment");
+    expect(verdict.verdict).toBe("allow");
+    const effect = effectOf(verdict, "tool.rewrite_output");
+    expect(effect?.output).toBe("standalone enrichment");
   });
 });
 
 describe("snapshot: post-turn", () => {
   it("inject — handler returns inject verdict", async () => {
-    const mw = createPostTurnPolicy(() => ({
-      action: "inject" as const,
-      message: "reminder to user",
-      reason: "turn_reminder",
-      policyId: "test.turn.finish",
-    }));
+    const mw = createPostTurnPolicy(() =>
+      inject("reminder to user", "test.turn.finish", "turn_reminder"),
+    );
     const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 3 }));
-    expect(verdict.action).toBe("inject");
-    const v = verdict as Inject;
-    expect(v.message).toBe("reminder to user");
-    expect(v.reason).toBe("turn_reminder");
+    expect(verdict.verdict).toBe("allow");
+    expect(effectOf(verdict, "prompt.inject_message")?.message).toBe("reminder to user");
+    expect(firstReason(verdict)).toBe("turn_reminder");
   });
 
   it("continue — handler returns continue", async () => {
-    const mw = createPostTurnPolicy(() => ({ action: "continue" as const }));
+    const mw = createPostTurnPolicy(() => allow("test.turn.finish"));
     const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 1 }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("abort — handler returns abort", async () => {
-    const mw = createPostTurnPolicy(() => ({
-      action: "abort" as const,
-      reason: "max_turns_reached",
-    }));
+    const mw = createPostTurnPolicy(() => abortRun("test.turn.finish", "max_turns_reached"));
     const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 10 }));
-    expect(verdict.action).toBe("abort");
-    expect((verdict as Abort).reason).toBe("max_turns_reached");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toBe("max_turns_reached");
   });
 
   it("continue — handler throws (error isolation)", async () => {
@@ -421,7 +409,7 @@ describe("snapshot: post-turn", () => {
       throw new Error("handler exploded");
     });
     const verdict = await mw.fn(baseCtx({ timing: "turn.finish", turnCount: 1 }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -431,7 +419,7 @@ describe("snapshot: idle-nudge", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(30000);
     const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("inject — idle threshold exceeded", async () => {
@@ -439,12 +427,12 @@ describe("snapshot: idle-nudge", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: 60000 });
     mockNow(70000);
     const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict.action).toBe("inject");
-    const v = verdict as Inject;
-    expect(v.message).toContain("[System]");
-    expect(v.message).toContain("idle for 69s");
-    expect(v.reason).toBe("idle_nudge");
-    expect(v.policyId).toBe("builtin.idle_nudge");
+    expect(verdict.verdict).toBe("allow");
+    const effect = effectOf(verdict, "prompt.inject_message");
+    expect(effect?.message).toContain("[System]");
+    expect(effect?.message).toContain("idle for 69s");
+    expect(firstReason(verdict)).toBe("idle_nudge");
+    expect(verdict.policyId).toBe("builtin.idle_nudge");
   });
 
   it("abort — maxNudges exceeded", async () => {
@@ -456,10 +444,9 @@ describe("snapshot: idle-nudge", () => {
     await mw.fn(baseCtx({ timing: "turn.start" }));
     mockNow(6000);
     const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict.action).toBe("abort");
-    const v = verdict as Abort;
-    expect(v.reason).toBe("stalled");
-    expect(v.policyId).toBe("builtin.idle_nudge");
+    expect(verdict.verdict).toBe("deny");
+    expect(firstReason(verdict)).toBe("stalled");
+    expect(verdict.policyId).toBe("builtin.idle_nudge");
   });
 
   it("continue — invoke.result resets idle timer", async () => {
@@ -469,7 +456,7 @@ describe("snapshot: idle-nudge", () => {
     await mw.fn(baseCtx({ timing: "invoke.result" }));
     mockNow(70000);
     const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 
   it("continue — disabled when idleThresholdMs is -1", async () => {
@@ -477,7 +464,7 @@ describe("snapshot: idle-nudge", () => {
     const mw = createIdleNudgePolicy({ idleThresholdMs: -1 });
     mockNow(999999);
     const verdict = await mw.fn(baseCtx({ timing: "turn.start" }));
-    expect(verdict).toEqual({ action: "continue" });
+    expect(verdict.verdict).toBe("allow");
   });
 });
 
@@ -526,7 +513,7 @@ describe("snapshot: registration metadata", () => {
   });
 
   it("post-turn: name, timing, priority", () => {
-    const mw = createPostTurnPolicy(() => ({ action: "continue" }));
+    const mw = createPostTurnPolicy(() => allow("test.turn.finish"));
     expect(mw.name).toBe("builtin:post-turn");
     expect(mw.timing).toBe("turn.finish");
     expect(mw.priority).toBe(250);
