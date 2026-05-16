@@ -269,6 +269,24 @@ describe("BackgroundManager — launch limit policy", () => {
     }
   });
 
+  it("cleans up active state when auth resolution fails", async () => {
+    const manager = BackgroundManager.create({
+      resolveAuth: () => {
+        throw new Error("auth unavailable");
+      },
+    });
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("auth unavailable");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
   it("returns policy metadata on non-continue verdicts", async () => {
     const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchInput(),
