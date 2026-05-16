@@ -219,6 +219,7 @@ describe("BusPersistence", () => {
         prompt: "summarize private user request",
         systemPrompt: "internal instruction text",
         messages: [{ role: "user", content: "secret prompt" }],
+        generatedAt: new Date("2026-05-16T00:00:00.000Z"),
       },
     });
     await BusPersistence.flush();
@@ -233,6 +234,7 @@ describe("BusPersistence", () => {
         prompt: unknown;
         systemPrompt: unknown;
         messages: unknown;
+        generatedAt: string;
       };
     };
     expect(data.context.apiKey).toBe("[redacted]");
@@ -243,5 +245,6 @@ describe("BusPersistence", () => {
     expect(data.context.prompt).toEqual({ type: "string", length: 30 });
     expect(data.context.systemPrompt).toEqual({ type: "string", length: 25 });
     expect(data.context.messages).toEqual({ type: "array", length: 1 });
+    expect(data.context.generatedAt).toBe("2026-05-16T00:00:00.000Z");
   });
 });

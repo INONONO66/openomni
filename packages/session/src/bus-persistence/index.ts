@@ -247,7 +247,10 @@ function numberFromRecord(
 }
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
     ? (value as Record<string, unknown>)
     : undefined;
 }
