@@ -44,17 +44,40 @@ describe("context barrel export", () => {
   });
 });
 
-describe("local-runner wiring", () => {
+describe("local-runner disabled", () => {
   const localRunnerSrc = readFileSync(join(serverSrc, "bootstrap/local-runner.ts"), "utf-8");
 
-  it("imports createContextMiddleware from context/index", () => {
-    expect(localRunnerSrc).toContain("createContextMiddleware");
-    expect(localRunnerSrc).toContain("../context/index");
+  it("fails instead of running in process", () => {
+    expect(localRunnerSrc).toContain("LocalRunner is disabled");
+    expect(localRunnerSrc).not.toContain("ChatAgent.create");
   });
 
-  it("uses createContextMiddleware in middleware array", () => {
-    expect(localRunnerSrc).toContain("createContextMiddleware(");
-    expect(localRunnerSrc).toContain("...buildWorkerMiddleware(");
+  it("rejects dispatch calls", async () => {
+    const { LocalRunner } = await import("../../src/bootstrap/local-runner");
+    const { SystemToolProvider, AgentToolProvider } = await import("@openomni/openomni");
+    const { McpToolProvider } = await import("../../src/tool/mcp");
+    const { CustomToolProvider } = await import("../../src/tool/custom");
+
+    const runner = LocalRunner.create({
+      systemProvider: new SystemToolProvider(),
+      agentProvider: new AgentToolProvider(),
+      mcpProvider: new McpToolProvider(),
+      customProvider: new CustomToolProvider(),
+    });
+
+    try {
+      await runner.dispatch("session", {
+        runId: "run",
+        sessionId: "session",
+        mode: "direct",
+        prompt: "hello",
+        model: { provider: "test", id: "test" },
+      });
+      expect.unreachable("LocalRunner dispatch should fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("LocalRunner is disabled; use coordinator execution");
+    }
   });
 });
 

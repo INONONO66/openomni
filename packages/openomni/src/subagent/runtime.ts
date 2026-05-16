@@ -45,6 +45,11 @@ type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
 
 type PreDelegationOperation = "spawn" | "spawn_background" | "send";
 
+function createDelegationTrace(parentSessionId: string | undefined) {
+  if (parentSessionId === undefined) return undefined;
+  return { traceId: crypto.randomUUID(), sessionId: parentSessionId };
+}
+
 function createSubagentDescriptor(
   childAgent: string,
   operation: PreDelegationOperation,
@@ -95,7 +100,18 @@ async function dispatchPreDelegation(input: {
     });
   }
 
-  const engine = PolicyEngine.create({ audit: false });
+  const traceContext = createDelegationTrace(input.parentSessionId);
+  const engine = PolicyEngine.create({
+    traceContext,
+    audit:
+      traceContext === undefined
+        ? false
+        : {
+            sessionId: traceContext.sessionId,
+            action: `delegation.${input.operation}`,
+            resource: `agent.${input.childAgent}`,
+          },
+  });
   for (const reg of input.middleware) {
     engine.register(reg);
   }
@@ -123,6 +139,7 @@ async function dispatchPreDelegation(input: {
         : []),
     ],
     resourceDescriptor,
+    traceContext,
   };
 
   return engine.dispatch("invoke.prepare", policyContext);

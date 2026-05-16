@@ -21,11 +21,12 @@ export interface RunInput {
   signal?: AbortSignal;
   model?: Provider.Model;
   auth?: Auth.Info;
+  allowAuthFallback?: boolean;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   providerOptions?: Record<string, unknown>;
-  trace?: { traceId?: string };
+  trace?: { traceId?: string; runId?: string };
 }
 
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
@@ -65,7 +66,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   if (model) {
     createStream = async (streamInput) => {
       const ai = await import("ai");
-      const auth = input.auth ?? (await Auth.get(model.providerID));
+      const auth =
+        input.auth ??
+        (input.allowAuthFallback === false ? undefined : await Auth.get(model.providerID));
       if (!auth) {
         throw new Error(
           `No authentication found for provider: ${model.providerID}. Configure provider credentials or use a proxy auth provider first.`,
@@ -178,6 +181,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   }
 
   const resolvedModel = model ?? ({} as Provider.Model);
+  const traceId = input.trace?.traceId ?? crypto.randomUUID();
+  const provider = model?.providerID ?? "default";
+  const modelId = model?.id ?? "default";
 
   const processor = Processor.create({
     assistantMessage,
@@ -186,15 +192,18 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     abort: abortSignal,
     sink,
     createStream,
+    trace: {
+      traceId,
+      sessionId: sessionID,
+      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
+      provider,
+    },
   });
-
-  const traceId = input.trace?.traceId ?? crypto.randomUUID();
-  const provider = model?.providerID ?? "default";
-  const modelId = model?.id ?? "default";
 
   Bus.publish(LlmCall.Started, {
     traceId,
     sessionId: sessionID,
+    ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
     provider,
     model: modelId,
     messageCount: messages.length,
@@ -218,6 +227,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     Bus.publish(LlmCall.Completed, {
       traceId,
       sessionId: sessionID,
+      ...(input.trace?.runId !== undefined && { runId: input.trace.runId }),
       provider,
       model: modelId,
       durationMs,

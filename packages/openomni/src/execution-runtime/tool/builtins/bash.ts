@@ -11,6 +11,8 @@ export { isReadOnlyCommand, isDestructiveCommand };
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
 
+const bashEnvKeys = ["PATH", "TMPDIR", "TEMP", "TMP", "BUN_INSTALL"];
+
 interface BashInput {
   command: string;
   workdir?: string;
@@ -39,6 +41,16 @@ function resolveTimeout(input: Record<string, unknown>): number {
   const value = optionalPositiveNumber(input, "timeoutMs");
   if (value === undefined) return DEFAULT_TIMEOUT_MS;
   return Math.min(value, MAX_TIMEOUT_MS);
+}
+
+function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of bashEnvKeys) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  env.HOME = workspaceRoot ? resolve(workspaceRoot) : process.cwd();
+  return env;
 }
 
 export function bashTool(workspaceRoot?: string): NativeTool {
@@ -76,6 +88,7 @@ export function bashTool(workspaceRoot?: string): NativeTool {
 
         const proc = Bun.spawn(["bash", "-lc", command], {
           cwd,
+          env: buildBashEnv(workspaceRoot),
           stdout: "pipe",
           stderr: "pipe",
         });

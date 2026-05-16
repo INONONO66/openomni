@@ -18,10 +18,12 @@ Defines the locked-in wire contract between the coordinator process and worker p
 
 | Method | Direction | Description |
 |--------|-----------|-------------|
+| `coordinator.bootstrap` | Coordinator → Worker | Authenticate the supervisor connection and deliver worker bootstrap config. |
 | `coordinator.spawn_run` | Coordinator → Worker | Spawn a new agent run on the worker. Injects credentials and permissions. |
 | `coordinator.cancel_run` | Coordinator → Worker | Cancel an in-progress run by runId. |
 | `coordinator.check_permission` | Coordinator → Worker (reply) | Response to worker's tool permission query. |
-| `worker.ready` | Worker → Coordinator | Worker process has started and is ready to accept runs. |
+| `worker.ready` | Worker → Coordinator | Legacy worker startup signal; current runtime uses `coordinator.bootstrap`. |
+| `worker.bootstrap_ready` | Worker → Coordinator | Worker authenticated bootstrap is applied and runs may be accepted. |
 | `worker.heartbeat` | Worker → Coordinator | Periodic liveness + resource report. |
 | `worker.run_started` | Worker → Coordinator | Notify that a run has begun execution. |
 | `worker.run_completed` | Worker → Coordinator | Notify run terminal state (succeeded/failed/cancelled/interrupted). |
