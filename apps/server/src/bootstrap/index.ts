@@ -7,8 +7,8 @@ import { initialize, Bus, BusPersistence, WorkerRun } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
-  MainActivationManager,
-  createMainWorkerTools,
+  ResidentRuntime,
+  createResidentWorkerTools,
   SystemToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
@@ -16,7 +16,7 @@ import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/index";
 import { createMessageHandler } from "../handler/conversation";
-import { buildAgentDef, buildMainAgentDef } from "../ingress/bridge";
+import { buildAgentDef, buildResidentAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
@@ -26,7 +26,8 @@ import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { installShutdownHandlers } from "./shutdown";
-import { createAllAgents } from "../agents";
+import { createAllAgents, registerAgent } from "../agents";
+import { createResidentProfile } from "../profile/resident";
 
 function djb2Hash(s: string): string {
   let h = 5381;
@@ -122,11 +123,11 @@ export async function main(): Promise<void> {
   };
   await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider);
 
-  const mainActivationManager = MainActivationManager.create({
+  const residentRuntime = ResidentRuntime.create({
     maxActive: 10,
-    idleTimeoutMs: Number(process.env.OPENOMNI_MAIN_IDLE_TIMEOUT_MS ?? 30_000),
+    idleTimeoutMs: Number(process.env.OPENOMNI_RESIDENT_IDLE_TIMEOUT_MS ?? 30_000),
   });
-  IngressEngine.setMainActivationManager(mainActivationManager);
+  IngressEngine.setResidentRuntime(residentRuntime);
 
   Bus.publish(Operational.Info, {
     traceId: crypto.randomUUID(),
@@ -140,11 +141,16 @@ export async function main(): Promise<void> {
     config.telegram.token || config.github.secret || config.discord.token,
   );
   const model = await resolveModel();
-  const mainWorkerTools = model
-    ? createMainWorkerTools({
+  const residentProfile = model
+    ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
+    : undefined;
+  if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
+  const residentWorkerTools = model
+    ? createResidentWorkerTools({
         ingest: IngressEngine.ingest,
-        defaultModel: { provider: model.providerID, id: model.id },
-        createWorkerAgent: ({ agentName, workspaceRoot }) =>
+        surface: "resident-worker-tool",
+        residentAgentNames: ["resident"],
+        resolveWorkerAgent: ({ agentName, workspaceRoot }) =>
           buildAgentDef(agentName, {
             systemProvider,
             agentProvider,
@@ -152,16 +158,15 @@ export async function main(): Promise<void> {
             defaultModel: { provider: model.providerID, id: model.id },
             workspaceRoot: workspaceRoot ?? config.workspace?.root ?? process.cwd(),
           }),
-        mainAgentNames: ["dev"],
       })
     : [];
-  const customProvider = new CustomToolProvider(mainWorkerTools);
+  const customProvider = new CustomToolProvider(residentWorkerTools);
   const toolDispatcher = buildToolDispatcher([mcpProvider]);
   const coordinator = createExecutionCoordinator({
     workerScript,
     bootstrap,
     toolDispatcher,
-    askMain: async ({ workerId, sessionId, runId, question }) => {
+    askResident: async ({ workerId, sessionId, runId, question }) => {
       const requestId = crypto.randomUUID();
       if (!model) {
         return { requestId, accepted: false, error: "worker.ask_main requires a configured model" };
@@ -172,7 +177,7 @@ export async function main(): Promise<void> {
         return {
           requestId,
           accepted: false,
-          error: `worker.ask_main requires a worker run with parent Main session: ${runId ?? "unknown"}`,
+          error: `worker.ask_main requires a worker run with parent Resident session: ${runId ?? "unknown"}`,
         };
       }
 
@@ -188,15 +193,15 @@ export async function main(): Promise<void> {
       try {
         const result = await IngressEngine.ingest({
           id: crypto.randomUUID(),
-          surface: "worker-ask-main",
+          surface: "worker-ask-resident",
           workspace: config.workspace?.root ?? process.cwd(),
           mode: "direct",
-          payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Main:\n\n${question}`,
+          payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${question}`,
           runtime: {
             durableSessionId: mainSessionId,
             lifecycle: "active",
           },
-          target: { kind: "main" },
+          target: { kind: "resident" },
           meta: {
             actor: {
               role: "worker",
@@ -205,10 +210,10 @@ export async function main(): Promise<void> {
               sessionId,
               runId,
             },
-            target: { kind: "main" },
-            agentName: "dev",
+            target: { kind: "resident" },
+            agentName: "resident",
           },
-          agent: buildMainAgentDef("dev", {
+          agent: buildResidentAgentDef("resident", {
             systemProvider,
             agentProvider,
             mcpProvider,

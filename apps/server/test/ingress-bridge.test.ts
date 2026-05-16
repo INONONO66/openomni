@@ -56,10 +56,10 @@ const deps = {
 };
 
 describe("ingress bridge tool surfaces", () => {
-  it("keeps in-process Main lightweight with only server custom worker-control tools", () => {
+  it("keeps resident lightweight with only server custom worker-control tools", () => {
     const event = buildInboundEvent(makeMessage(), "dev", deps);
 
-    expect(event.target).toEqual({ kind: "main" });
+    expect(event.target).toEqual({ kind: "resident" });
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "cancel_worker",
       "resume_worker",

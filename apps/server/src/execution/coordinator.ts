@@ -17,7 +17,7 @@ export type CoordinatorConfig = {
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
   toolDispatcher?: Map<string, (call: Tool.Call) => Promise<Tool.Result>>;
-  askMain?: (params: AskMainParams) => Promise<AskMainResult>;
+  askResident?: (params: AskMainParams) => Promise<AskMainResult>;
 };
 
 export function buildToolDispatcher(
@@ -66,7 +66,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     idleShutdownMs: config.workerIdleTimeoutMs,
     socketDir: config.socketDir,
     bootstrap: config.bootstrap,
-    onAskMain: config.askMain,
+    onAskMain: config.askResident,
     onToolCall: toolDispatcher
       ? async (params) => {
           const call: Tool.Call = {

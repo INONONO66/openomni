@@ -60,7 +60,7 @@ export class WorkerSupervisor {
       workerId: number,
       snapshot: WorkerBootstrap.WorkerSnapshot,
     ) => void,
-    private readonly askMainHandler?: (params: AskMainParams) => Promise<AskMainResult>,
+    private readonly askResidentHandler?: (params: AskMainParams) => Promise<AskMainResult>,
   ) {
     this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
     this.doStart();
@@ -138,18 +138,18 @@ export class WorkerSupervisor {
               }
               const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "";
               const question = typeof params?.question === "string" ? params.question : "";
-              if (!this.askMainHandler || !sessionId || !question) {
+              if (!this.askResidentHandler || !sessionId || !question) {
                 respond({
                   requestId,
                   accepted: false,
-                  error: this.askMainHandler
+                  error: this.askResidentHandler
                     ? "worker.ask_main requires sessionId and question"
                     : "worker.ask_main is not configured",
                 });
                 return;
               }
 
-              this.askMainHandler({
+              this.askResidentHandler({
                 workerId: String(workerId),
                 sessionId,
                 ...(typeof params?.runId === "string" ? { runId: params.runId } : {}),

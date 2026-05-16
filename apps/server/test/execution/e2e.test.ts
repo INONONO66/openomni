@@ -12,8 +12,8 @@ function makeDirectEvent(): Ingress.DirectEvent {
     surface: "test",
     mode: "direct",
     payload: "hello",
-    target: { kind: "new-worker" },
-    meta: { actor: { role: "user" }, target: { kind: "new-worker" } },
+    target: { kind: "worker" },
+    meta: { actor: { role: "user" }, target: { kind: "worker" } },
     agent: {
       model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
       tools: [],
@@ -23,11 +23,11 @@ function makeDirectEvent(): Ingress.DirectEvent {
 
 beforeEach(() => {
   IngressEngine.reset();
-  IngressEngine.setCoordinator(undefined);
+  IngressEngine.clearCoordinator();
 });
 
 afterEach(() => {
-  IngressEngine.setCoordinator(undefined);
+  IngressEngine.clearCoordinator();
 });
 
 describe("coordinator dispatch path — direct mode", () => {
