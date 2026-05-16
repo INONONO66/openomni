@@ -45,4 +45,5 @@ yarn-error.log*
 .cursor
 .claude
 .opencode
+.omo
 *.local.ts

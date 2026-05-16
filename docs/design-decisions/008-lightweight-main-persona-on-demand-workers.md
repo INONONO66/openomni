@@ -1,4 +1,4 @@
-# ADR-008: Lightweight Main Persona with On-Demand Worker Processes
+# ADR-008: Lightweight Resident with On-Demand Worker Processes
 
 **Status**: Proposed
 
@@ -6,27 +6,27 @@
 
 The current coordinator spawns a fixed pool of 8 worker processes at server startup. Each worker loads Bun + SQLite + LLM SDK, resulting in ~9 processes always running regardless of workload. This is excessive for a personal server.
 
-Meanwhile, the product direction (ADR-005, persona-workforce.md) calls for a Main Persona that handles conversation directly and delegates heavy work to specialized workers. The current architecture routes ALL execution through the coordinator, even simple conversation.
+Meanwhile, the product direction (ADR-005, persona-workforce.md) calls for a Resident that handles conversation directly and delegates heavy work to specialized workers. The current architecture routes ALL execution through the coordinator, even simple conversation.
 
 Comparable systems:
 - **Hermes**: single gateway process, in-process session management, lightweight
 - **opencode**: independent per-task processes, each handling one session
 - **Claude Code team mode**: tmux-spawned independent CLI instances
 
-OpenOmni should combine the best of both: Main Persona runs Hermes-style (in-process, lightweight, always-on), while heavy work spawns opencode-style independent worker processes on demand.
+OpenOmni should combine the best of both: Resident runs Hermes-style (in-process, lightweight, always-on), while heavy work spawns opencode-style independent worker processes on demand.
 
 ## Decision
 
 OpenOmni will adopt a two-tier execution model:
 
-1. **Main Persona Runtime** — runs in the server process, handles conversation directly without coordinator dispatch.
+1. **Resident Runtime** — runs in the server process, handles conversation directly without coordinator dispatch.
 2. **On-Demand Worker Manager** — replaces the fixed worker pool. Spawns worker processes only when needed, kills them when done or idle.
 
 ### Execution Model
 
 ```
 Server Process (always on, lightweight)
-├── MainPersonaRuntime
+├── ResidentRuntime
 │   ├── conversation handling (in-process)
 │   ├── intent classification (direct vs delegate)
 │   ├── worker lifecycle management
@@ -39,9 +39,9 @@ Server Process (always on, lightweight)
 │   └── crash recovery → mark interrupted
 │
 └── IngressEngine
-    ├── target: main → MainPersonaRuntime (in-process)
+    ├── target: resident → ResidentRuntime (in-process)
     ├── target: worker:{id} → direct to worker (IPC)
-    └── authority check (user/Main only create workers)
+    └── authority check (user/Resident only create workers)
 ```
 
 ### Worker Process Lifecycle
@@ -62,10 +62,10 @@ Resume:  new process + existing sessionId + transcript reload
 ### Communication
 
 ```
-User ←→ Main Persona (in-process, zero IPC)
-Main → Worker: spawn, cancel, deliver message (IPC)
-Worker → Main: ask_main, heartbeat, run_completed (IPC)
-User → Worker: direct inbound (ingress routes directly, Main observes via events)
+User ←→ Resident (in-process, zero IPC)
+Resident → Worker: spawn, cancel, deliver message (IPC)
+Worker → Resident: ask_main, heartbeat, run_completed (IPC)
+User → Worker: direct inbound (ingress routes directly, Resident observes via events)
 User: "show me Worker A" → tail persisted bus events (not live subscription)
 ```
 
@@ -77,11 +77,11 @@ User: "show me Worker A" → tail persisted bus events (not live subscription)
 - Most time is spent in conversation, which needs zero workers
 - Workers should exist only when work exists
 
-### Why Main in-process?
+### Why Resident in-process?
 
 - Conversation is lightweight (single LLM call, no file ops)
 - Eliminates IPC round-trip for 90% of interactions
-- Main needs instant access to memory, session state, worker registry
+- Resident needs instant access to memory, session state, worker registry
 - Hermes proves this model works at scale
 
 ### Why on-demand workers?
@@ -106,10 +106,10 @@ User: "show me Worker A" → tail persisted bus events (not live subscription)
 | Module | Responsibility |
 | --- | --- |
 | `packages/protocol` | SessionKind, worker IPC method schemas, ask events |
-| `packages/openomni/src/persona/` | MainPersonaRuntime, intent routing, writeback policy |
-| `packages/openomni/src/ingress/` | Target resolution: main vs worker:{id}, authority validation |
+| `packages/openomni/src/resident/` | ResidentRuntime, intent routing, writeback policy |
+| `packages/openomni/src/ingress/` | Target resolution: resident vs worker:{id}, authority validation |
 | `packages/coordinator/src/worker-manager/` | Process spawn/kill, socket auth, idle timeout, heartbeat, active worker registry |
-| `apps/server/src/bootstrap/` | Wire MainPersonaRuntime + WorkerManager + channels |
+| `apps/server/src/bootstrap/` | Wire ResidentRuntime + WorkerManager + channels |
 | `apps/server/src/execution/worker-entry.ts` | Worker process entrypoint (mostly unchanged, add ask-main) |
 
 ### State Machines
@@ -138,7 +138,7 @@ queued → starting → running → succeeded
                            → cancelled
                            → interrupted (crash/timeout)
 
-waiting_input → running    (user/Main answered, new process resumes)
+waiting_input → running    (user/Resident answered, new process resumes)
 interrupted → running      (explicit resume with new process)
 ```
 
@@ -152,19 +152,19 @@ New methods:
 
 ```
 server → worker:
-  worker.deliver_message     Direct user/Main message to active worker
+  worker.deliver_message     Direct user/Resident message to active worker
   worker.shutdown_idle       Graceful idle shutdown request
 
 worker → server:
-  worker.ask_main            Worker needs Main/user decision
+  worker.ask_main            Worker needs Resident/user decision
     { askId, sessionId, runId, question, urgency, timeoutMs }
 ```
 
-### Ask-Main Flow
+### Ask-Resident Flow
 
 1. Worker sends `worker.ask_main` via IPC
 2. Server persists ask event in worker session
-3. MainPersonaRuntime evaluates:
+3. ResidentRuntime evaluates:
    - Can answer autonomously → respond immediately via IPC
    - Cannot answer → escalate to user, mark run `waiting_input`
 4. If escalated: worker receives `pending` response, stops gracefully
@@ -175,7 +175,7 @@ worker → server:
 1. User targets worker explicitly (e.g., "Worker A: change approach to X")
 2. IngressEngine validates authority (only user may direct-target)
 3. Routes directly to worker via `worker.deliver_message` IPC
-4. Main Persona observes via session lineage and bus events (not in forwarding path)
+4. Resident observes via session lineage and bus events (not in forwarding path)
 
 ### Passthrough (Observability)
 
@@ -196,7 +196,7 @@ Workers are not limited to coding. Any heavy or isolated task qualifies:
 | Writing | Blog posts, documentation, translations |
 | Data | Crawling, analysis, visualization |
 | Operations | Deployment, monitoring setup, CI/CD |
-| Any isolated task | Main decides "this needs focused independent work" |
+| Any isolated task | Resident decides "this needs focused independent work" |
 
 Each worker can have different tool sets, system prompts, and workspace contexts appropriate to its domain.
 
@@ -217,9 +217,9 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 - `packages/coordinator/src/worker-pool/session-routing.ts` → remove (1:1 session:worker, no routing needed)
 
 ### Add
-- `packages/openomni/src/persona/runtime.ts` — MainPersonaRuntime
-- `packages/openomni/src/persona/intent.ts` — classify direct vs delegate
-- `packages/openomni/src/ingress/target-resolver.ts` — main vs worker routing
+- `packages/openomni/src/resident/runtime.ts` — ResidentRuntime
+- `packages/openomni/src/resident/intent.ts` — classify direct vs delegate
+- `packages/openomni/src/ingress/target-resolver.ts` — resident vs worker routing
 - IPC method: `worker.ask_main`, `worker.deliver_message`
 - Protocol: `SessionKind` enum (conversation, work, self-loop)
 
@@ -231,17 +231,17 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 ## Constraints
 
 - SQLite WAL mode must handle multi-process writes (server + workers)
-- Main conversation history must NOT absorb raw worker transcripts (per ADR-005)
+- Resident conversation history must NOT absorb raw worker transcripts (per ADR-005)
 - Worker count is bounded by available system resources, not a fixed config
-- Only user and Main Persona may create workers (controlled inbound authority)
+- Only user and Resident may create workers (controlled inbound authority)
 
 ## Consequences
 
 ### Positive
-- Idle server = 1 process (Main only). Minimal resource usage.
+- Idle server = 1 process (Resident only). Minimal resource usage.
 - Workers scale with actual workload (0 when idle, N when busy)
-- Main Persona conversation is instant (no IPC overhead)
-- Clean separation: conversation (Main) vs work (Workers)
+- Resident conversation is instant (no IPC overhead)
+- Clean separation: conversation (Resident) vs work (Workers)
 - Resume is cheap: new process + existing session
 - Matches ADR-005 persona workforce model directly
 
@@ -262,6 +262,6 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 ## Open Questions
 
 1. Should idle timeout be configurable per-worker or global?
-2. Should Main in-process agent share the same ChatAgent code path or have a simplified loop?
+2. Should Resident in-process agent share the same ChatAgent code path or have a simplified loop?
 3. Maximum concurrent worker count — hard limit or soft pressure?
-4. Should worker spawn be lazy (first message triggers) or eager (Main decides immediately)?
+4. Should worker spawn be lazy (first message triggers) or eager (Resident decides immediately)?
