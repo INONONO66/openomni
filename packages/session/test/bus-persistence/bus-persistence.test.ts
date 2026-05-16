@@ -192,4 +192,56 @@ describe("BusPersistence", () => {
 
     expect(rows()).toHaveLength(1);
   });
+
+  test("redacts sensitive and raw payload fields before persistence", async () => {
+    const session = createSession();
+    const event = BusEvent.define(
+      "policy.action.requested",
+      z.object({
+        sessionId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+        context: z.record(z.string(), z.unknown()),
+      }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(event, {
+      sessionId: session.id,
+      traceId: "trace-redact",
+      time: Date.now(),
+      context: {
+        apiKey: "secret",
+        credentials: { anthropic: "sk-secret" },
+        error: "provider failed with prompt text and token secret",
+        err: "raw stack includes api key",
+        input: { command: "printenv DISCORD_BOT_TOKEN" },
+        prompt: "summarize private user request",
+        systemPrompt: "internal instruction text",
+        messages: [{ role: "user", content: "secret prompt" }],
+      },
+    });
+    await BusPersistence.flush();
+
+    const data = JSON.parse((await waitForRows(1))[0].data) as {
+      context: {
+        apiKey: string;
+        credentials: string;
+        error: unknown;
+        err: unknown;
+        input: unknown;
+        prompt: unknown;
+        systemPrompt: unknown;
+        messages: unknown;
+      };
+    };
+    expect(data.context.apiKey).toBe("[redacted]");
+    expect(data.context.credentials).toBe("[redacted]");
+    expect(data.context.error).toEqual({ type: "string", length: 49 });
+    expect(data.context.err).toEqual({ type: "string", length: 26 });
+    expect(data.context.input).toEqual({ type: "object", keys: ["command"] });
+    expect(data.context.prompt).toEqual({ type: "string", length: 30 });
+    expect(data.context.systemPrompt).toEqual({ type: "string", length: 25 });
+    expect(data.context.messages).toEqual({ type: "array", length: 1 });
+  });
 });
