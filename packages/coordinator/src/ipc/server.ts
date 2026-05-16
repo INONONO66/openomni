@@ -14,12 +14,14 @@ export type RequestHandler = (
   params: Record<string, unknown> | undefined,
   respond: (result: unknown) => void,
   notify: (method: string, params?: Record<string, unknown>) => void,
+  connectionId: string,
 ) => void;
 
 export interface IpcServer {
   readonly socketPath: string;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
+  useConnection(id: string): void;
   close(): void;
 }
 
@@ -51,8 +53,14 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
   const connections = new Map<string, { socket: BunSocket; decoder: LineDecoder }>();
   const pending = new Map<string, PendingRequest>();
   let connCounter = 0;
+  let activeConnectionId: string | undefined;
 
   function getActiveSocket(): BunSocket | undefined {
+    if (activeConnectionId) {
+      const active = connections.get(activeConnectionId)?.socket;
+      if (active) return active;
+      activeConnectionId = undefined;
+    }
     const first = connections.values().next();
     return first.done ? undefined : first.value.socket;
   }
@@ -126,7 +134,13 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
               socket.write(encode(Ipc.createNotification(method, params)));
             };
             try {
-              handler(parsed.method, parsed.params, respond, notify);
+              handler(
+                parsed.method,
+                parsed.params,
+                respond,
+                notify,
+                (socket.data as unknown as SocketData).id,
+              );
             } catch (err) {
               socket.write(
                 encode(
@@ -146,6 +160,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
                 parsed.params,
                 () => undefined,
                 () => undefined,
+                (socket.data as unknown as SocketData).id,
               );
             } catch (error) {
               console.warn(
@@ -160,6 +175,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         const id = (socket.data as unknown as SocketData).id;
         connections.delete(id);
         if (connections.size === 0) {
+          activeConnectionId = undefined;
           failAllPending(new IpcConnectionError("socket closed"));
         }
       },
@@ -168,6 +184,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         connections.delete(id);
         void socket;
         if (connections.size === 0) {
+          activeConnectionId = undefined;
           failAllPending(new IpcConnectionError("socket error"));
         }
       },
@@ -196,6 +213,9 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       if (sock) {
         sock.write(encode(Ipc.createNotification(method, params)));
       }
+    },
+    useConnection(id) {
+      if (connections.has(id)) activeConnectionId = id;
     },
     close() {
       failAllPending(new IpcConnectionError("server closed"));
