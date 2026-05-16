@@ -56,8 +56,8 @@ BusPersistence.start();
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
 const activeRunIds = new Set<string>();
-let resolveBootstrapReady = () => undefined;
-let rejectBootstrapReady = (_error: Error) => undefined;
+let resolveBootstrapReady: () => void = () => undefined;
+let rejectBootstrapReady: (_error: Error) => void = () => undefined;
 const bootstrapReady = new Promise<void>((resolve, reject) => {
   resolveBootstrapReady = resolve;
   rejectBootstrapReady = reject;
