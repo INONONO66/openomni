@@ -84,6 +84,12 @@ export namespace BusPersistence {
     state?.unsubscribe();
     state = undefined;
   }
+
+  export async function flush(): Promise<void> {
+    await new Promise((resolve) => queueMicrotask(resolve));
+    const pending = state ? [...state.chains.values()] : [];
+    await Promise.allSettled(pending);
+  }
 }
 
 interface PersistInput {
@@ -95,7 +101,9 @@ interface PersistInput {
 
 async function persist(input: PersistInput): Promise<void> {
   const db = getDatabase();
-  const data = JSON.stringify(input.payload === undefined ? null : input.payload);
+  const data = JSON.stringify(
+    redactForPersistence(input.payload === undefined ? null : input.payload),
+  );
   const traceId = getTraceField(input.payload, "traceId") ?? crypto.randomUUID();
   const runId = getTraceField(input.payload, "runId");
   const durationMs = getNumberTraceField(input.payload, "durationMs");
@@ -115,6 +123,39 @@ async function persist(input: PersistInput): Promise<void> {
     durationMs ?? null,
     timeCreated,
   );
+}
+
+const sensitiveKeyPattern =
+  /authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?key/i;
+const rawBodyKeyPattern =
+  /^(args|command|content|err|error|input|messages|newString|oldString|output|payload|prompt|systemPrompt|text)$/i;
+
+function redactForPersistence(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactForPersistence(item));
+  }
+  const record = toRecord(value);
+  if (!record) return value;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(record)) {
+    if (sensitiveKeyPattern.test(key)) {
+      redacted[key] = "[redacted]";
+    } else if (rawBodyKeyPattern.test(key)) {
+      redacted[key] = summarizeValue(item);
+    } else {
+      redacted[key] = redactForPersistence(item);
+    }
+  }
+  return redacted;
+}
+
+function summarizeValue(value: unknown): unknown {
+  if (typeof value === "string") return { type: "string", length: value.length };
+  if (Array.isArray(value)) return { type: "array", length: value.length };
+  const record = toRecord(value);
+  if (record) return { type: "object", keys: Object.keys(record).sort() };
+  return value;
 }
 
 function getDatabase(): Database {
@@ -206,7 +247,10 @@ function numberFromRecord(
 }
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
     ? (value as Record<string, unknown>)
     : undefined;
 }
@@ -231,13 +275,14 @@ function writeOperationalToStdout(eventName: string, payload: unknown): void {
 
   const rec = toRecord(payload);
   const ctx = rec ? toRecord(rec.context) : undefined;
+  const redactedCtx = redactForPersistence(ctx) as Record<string, unknown> | undefined;
   const line = JSON.stringify({
     ts: rec?.time ?? Date.now(),
     level,
     pid: process.pid,
     component: rec?.component ?? "unknown",
     msg: rec?.msg ?? "",
-    ...ctx,
+    ...redactedCtx,
   });
   process.stdout.write(`${line}\n`);
 }

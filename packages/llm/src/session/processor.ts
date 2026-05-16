@@ -1,4 +1,11 @@
-import { Operational, type Message, type Run, type Sink, type Tool } from "@openomni/protocol";
+import {
+  LlmCall,
+  Operational,
+  type Message,
+  type Run,
+  type Sink,
+  type Tool,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { TokenTracker } from "../token";
 import { Retry } from "./retry";
@@ -37,6 +44,7 @@ export namespace Processor {
     sink?: Sink;
     onToolCall?: (part: Message.ToolPart) => Promise<ToolResult>;
     createStream?: (input: StreamInput) => Promise<Stream>;
+    trace?: { traceId: string; sessionId: string; runId?: string; provider?: string };
   }
 
   export interface ProcessorInfo {
@@ -65,6 +73,7 @@ export namespace Processor {
       sink: configuredSink = createNoopSink(),
       onToolCall,
       createStream = defaultStream,
+      trace,
     } = options;
 
     const sink = createProjectedSink(configuredSink, sessionID);
@@ -416,6 +425,29 @@ export namespace Processor {
               if (retryReason !== undefined) {
                 attempt++;
                 const delayMs = Retry.delay(attempt, APIError.isInstance(e) ? e : undefined);
+                if (trace) {
+                  Bus.publish(LlmCall.RetryDecided, {
+                    traceId: trace.traceId,
+                    sessionId: trace.sessionId,
+                    ...(trace.runId !== undefined && { runId: trace.runId }),
+                    attempt,
+                    maxAttempts: Number.MAX_SAFE_INTEGER,
+                    reason: retryReason,
+                    backoffMs: delayMs,
+                    time: Date.now(),
+                  });
+
+                  if (retryReason === "Too Many Requests" || retryReason === "Rate Limited") {
+                    Bus.publish(LlmCall.RateLimited, {
+                      traceId: trace.traceId,
+                      sessionId: trace.sessionId,
+                      ...(trace.runId !== undefined && { runId: trace.runId }),
+                      provider: trace.provider ?? model.providerID,
+                      retryAfterMs: delayMs,
+                      time: Date.now(),
+                    });
+                  }
+                }
 
                 publishStatus({
                   type: "retry",
@@ -481,7 +513,11 @@ export namespace Processor {
     return {
       onMessage(message) {
         sink.onMessage(message);
-        publish("sink.message", { payload: message });
+        publish("sink.message", {
+          role: message.info.role,
+          messageId: message.info.id,
+          partCount: message.parts.length,
+        });
       },
 
       onToolCall(call: Tool.Call) {
@@ -489,7 +525,7 @@ export namespace Processor {
         publish("sink.tool.started", {
           toolCallId: call.id,
           toolName: call.tool,
-          args: call.input,
+          inputSummary: summarizeRecord(call.input),
         });
       },
 
@@ -497,20 +533,25 @@ export namespace Processor {
         sink.onToolResult(result);
         publish("sink.tool.completed", {
           toolCallId: result.toolCallId,
-          output: result.output,
+          outputLength: result.output.length,
           isError: result.isError,
         });
       },
 
       onSnapshot(snapshot: Run.Snapshot) {
         sink.onSnapshot(snapshot);
-        publish("sink.snapshot", { payload: snapshot });
+        publish("sink.snapshot", { stateType: String(snapshot.state.type ?? "unknown") });
       },
 
       flush() {
         return Promise.resolve();
       },
     };
+  }
+
+  function summarizeRecord(input: Record<string, unknown>): string {
+    const keys = Object.keys(input).sort();
+    return keys.length === 0 ? "empty" : keys.join(",");
   }
 
   function createNoopSink(): Sink {

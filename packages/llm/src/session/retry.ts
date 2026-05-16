@@ -112,7 +112,7 @@ export namespace Retry {
     maxAttempts?: number;
     signal?: AbortSignal;
     initialDelay?: number;
-    trace?: { traceId: string; sessionId: string; provider?: string };
+    trace?: { traceId: string; sessionId: string; runId?: string; provider?: string };
   }
 
   export async function withRetry<T>(fn: () => Promise<T>, options?: WithRetryOptions): Promise<T> {
@@ -153,11 +153,12 @@ export namespace Retry {
           const delayMs = delay(attempt, e, initialDelay);
 
           if (options?.trace) {
-            const { traceId, sessionId, provider = "unknown" } = options.trace;
+            const { traceId, sessionId, runId, provider = "unknown" } = options.trace;
 
             Bus.publish(LlmCall.RetryDecided, {
               traceId,
               sessionId,
+              ...(runId !== undefined && { runId }),
               attempt,
               maxAttempts,
               reason: retryReason,
@@ -171,6 +172,7 @@ export namespace Retry {
               Bus.publish(LlmCall.RateLimited, {
                 traceId,
                 sessionId,
+                ...(runId !== undefined && { runId }),
                 provider,
                 retryAfterMs: delayMs,
                 time: Date.now(),

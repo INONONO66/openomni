@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { PolicyDecision } from "@openomni/protocol";
+import { PolicyDecision, PolicyEvent } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "@openomni/session/src/storage/sqlite-storage";
-import { Storage } from "@openomni/session";
+import { Bus, Storage } from "@openomni/session";
 import { BackgroundStore } from "./background-store";
 import { BackgroundManager } from "./background-manager";
 import { BackgroundLimitsMiddleware } from "./middleware/background-limits";
@@ -49,6 +49,7 @@ function mockSpawnBackground(): void {
 afterEach(() => {
   spawnBackgroundSpy?.mockRestore();
   spawnBackgroundSpy = undefined;
+  Bus.reset();
 });
 
 describe("BackgroundStore — SQLite persistence", () => {
@@ -240,6 +241,52 @@ describe("BackgroundManager — launch limit policy", () => {
     }
   });
 
+  it("passes resolved provider auth to background subagent runs", async () => {
+    const manager = BackgroundManager.create({
+      allowAuthFallback: false,
+      resolveAuth: (provider) =>
+        provider === "anthropic"
+          ? { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "proxy" }
+          : undefined,
+    });
+    try {
+      const task = await manager.launch({
+        ...makeLaunchInput(),
+        model: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
+      });
+
+      expect(task.status).toBe("running");
+      expect(spawnBackgroundSpy).toHaveBeenCalledTimes(1);
+      expect(spawnBackgroundSpy.mock.calls[0]?.[0].auth).toEqual({
+        type: "proxy",
+        baseURL: "http://localhost:8317/v1",
+        apiKey: "proxy",
+      });
+      expect(spawnBackgroundSpy.mock.calls[0]?.[0].allowAuthFallback).toBe(false);
+      await manager.cancel(task.id);
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("cleans up active state when auth resolution fails", async () => {
+    const manager = BackgroundManager.create({
+      resolveAuth: () => {
+        throw new Error("auth unavailable");
+      },
+    });
+    try {
+      const task = await manager.launch(makeLaunchInput());
+
+      expect(task.status).toBe("failed");
+      expect(task.error).toBe("auth unavailable");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+      expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
   it("returns policy metadata on non-continue verdicts", async () => {
     const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchInput(),
@@ -258,6 +305,41 @@ describe("BackgroundManager — launch limit policy", () => {
     expect(PolicyDecision.reason(result.verdict)).toBe(
       "max concurrent tasks per agent (0) exceeded",
     );
+  });
+
+  it("emits durable audit events for background launch limits", async () => {
+    const composed: Array<{
+      action: string;
+      resource: string;
+      sessionId: string;
+      pointId?: string;
+      verdict: string;
+    }> = [];
+    const unsubscribe = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+      composed.push(event);
+    });
+
+    await BackgroundLimitsMiddleware.evaluatePreLaunch({
+      input: makeLaunchInput(),
+      activeTasks: [],
+      activeCount: 0,
+      pendingQueueSize: 0,
+      maxConcurrentPerAgent: 3,
+      maxConcurrentTotal: 10,
+      maxDepth: 5,
+      maxDescendants: 10,
+      maxQueueSize: 100,
+    });
+    unsubscribe();
+
+    expect(composed).toHaveLength(1);
+    expect(composed[0]).toMatchObject({
+      action: "delegation.background.launch",
+      resource: "agent.test-agent",
+      sessionId: "parent-session-1",
+      pointId: "delegation.background.pre",
+      verdict: "allow",
+    });
   });
 
   it("treats background launch deny verdict as terminal", async () => {

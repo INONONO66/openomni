@@ -13,6 +13,8 @@ import {
 
 type ConsultationConfig = {
   model: RuntimeModel;
+  auth?: ChatAgentConfig["auth"];
+  allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
   systemPrompt?: string;
   tools?: ChatAgentConfig["tools"];
   toolExecutor?: ChatAgentConfig["toolExecutor"];
@@ -22,6 +24,8 @@ type ConsultationConfig = {
 function createRuntimeAgent(config: ConsultationConfig) {
   return ChatAgent.create({
     model: config.model,
+    auth: config.auth,
+    allowAuthFallback: config.allowAuthFallback,
     systemPrompt: config.systemPrompt,
     tools: config.tools,
     budget: config.budget,

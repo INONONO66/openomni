@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import type { Message } from "@openomni/protocol";
+import { Bus } from "../../src/bus";
 import { Session } from "../../src/session";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
@@ -42,6 +43,16 @@ function makeAssistantMessage(
       cache: { read: 0, write: 0 },
     },
     ...overrides,
+  };
+}
+
+function makeTextPart(sessionID: string, messageID: string): Message.TextPart {
+  return {
+    id: crypto.randomUUID(),
+    sessionID,
+    messageID,
+    type: "text",
+    text: "hello",
   };
 }
 
@@ -177,6 +188,30 @@ describe("Session.addMessage metadata hooks", () => {
       expect(updated?.time.updated).toBeGreaterThanOrEqual(originalUpdated);
       expect(updated?.time.updated).toBeGreaterThanOrEqual(before);
       expect(updated?.time.updated).toBeLessThanOrEqual(after);
+    });
+  });
+
+  describe("part updates", () => {
+    test("publishes the owning session when adding a part", async () => {
+      const session = Session.create({
+        title: "Test",
+        model: { providerID: "test", modelID: "test-model" },
+      });
+      const message = makeUserMessage(session.id);
+      Session.addMessage(session.id, message);
+
+      const updated = new Promise<{ id: string }>((resolve) => {
+        const unsubscribe = Bus.subscribe(Session.Event.Updated, (payload) => {
+          if (payload.info.id !== session.id) return;
+          unsubscribe();
+          resolve({ id: payload.info.id });
+        });
+      });
+
+      Session.addPart(message.id, makeTextPart(session.id, message.id));
+
+      const info = await updated;
+      expect(info.id).toBe(session.id);
     });
   });
 

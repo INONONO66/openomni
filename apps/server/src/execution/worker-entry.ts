@@ -1,8 +1,9 @@
 import { ChatAgent, AgentRegistry } from "@openomni/agent";
+import type { Auth } from "@openomni/llm";
 import { createIpcServer } from "@openomni/coordinator";
-import { Execution, Tool, WorkerBootstrap } from "@openomni/protocol";
+import { Execution, Subagent, Tool, WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus } from "@openomni/session";
+import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
   BackgroundManager,
@@ -17,9 +18,15 @@ import { loadConfig } from "../config";
 import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
 import { createContextMiddleware } from "../context/index";
 
-const args = process.argv.slice(2);
-const workerId = args[args.indexOf("--worker-id") + 1] ?? "unknown";
-const socketPath = args[args.indexOf("--socket") + 1];
+function readCliArg(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+const workerId = readCliArg("--worker-id") ?? "unknown";
+const socketPath = readCliArg("--socket");
+const ipcAuthToken = process.env.OPENOMNI_WORKER_IPC_TOKEN;
+delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
 
 if (!socketPath) {
   Bus.publish(Operational.Error, {
@@ -31,22 +38,117 @@ if (!socketPath) {
   process.exit(1);
 }
 
+if (!ipcAuthToken) {
+  Bus.publish(Operational.Error, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "worker-entry: missing IPC auth token",
+  });
+  process.exit(1);
+}
+
 const config = loadConfig();
 initialize({
   dbPath: resolveWorkerDbPath(config),
 });
+BusPersistence.start();
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
 const activeRunIds = new Set<string>();
+let resolveBootstrapReady: () => void = () => undefined;
+let rejectBootstrapReady: (_error: Error) => void = () => undefined;
+const bootstrapReady = new Promise<void>((resolve, reject) => {
+  resolveBootstrapReady = resolve;
+  rejectBootstrapReady = reject;
+});
 
 const backgroundManager = BackgroundManager.create({
   maxConcurrentPerAgent: 3,
   maxConcurrentTotal: 10,
   maxDepth: 3,
+  resolveAuth: resolveBootstrapAuth,
+  allowAuthFallback: false,
 });
 
-const server = createIpcServer(socketPath, (method, params, respond) => {
-  if (method === "coordinator.spawn_run") {
+function resolveBootstrapAuth(provider: string): Auth.Info | undefined {
+  const credentials = workerBootstrap?.credentials;
+  if (!credentials) return undefined;
+
+  const prefix = provider.toUpperCase();
+  const apiKey = credentials[`${prefix}_API_KEY`];
+  const baseURL = credentials[`${prefix}_BASE_URL`];
+
+  if (baseURL) {
+    return { type: "proxy", baseURL, ...(apiKey ? { apiKey } : {}) };
+  }
+  if (apiKey) {
+    return { type: "api", key: apiKey };
+  }
+  return undefined;
+}
+
+const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
+  if (method === "coordinator.bootstrap") {
+    if (params?.authToken !== ipcAuthToken) {
+      respond({ ok: false, error: "unauthorized" });
+      return;
+    }
+
+    try {
+      const bootstrap = WorkerBootstrap.Bootstrap.parse(params.bootstrap);
+      workerBootstrap = bootstrap;
+      const agentDefs = bootstrap.agents.map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        model: agent.model,
+        systemPrompt: agent.systemPrompt,
+        tools: agent.tools.allow ?? [],
+        permissions: agent.permissions,
+        budget: agent.budget,
+      }));
+      AgentRegistry.replaceAll(agentDefs);
+      server.useConnection(connectionId);
+      resolveBootstrapReady();
+      server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
+      Bus.publish(Operational.Info, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "worker bootstrap received",
+        context: {
+          workerId,
+          agents: bootstrap.agents.length,
+          mcpTools: bootstrap.toolCatalog.length,
+        },
+      });
+      respond({ ok: true });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      rejectBootstrapReady(error);
+      respond({ ok: false, error: error.message });
+      Bus.publish(Operational.Error, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "server",
+        msg: "worker bootstrap failed",
+        context: {
+          workerId,
+          err: error.message,
+        },
+      });
+    }
+  } else if (method === "coordinator.spawn_run") {
+    if (params?.authToken !== ipcAuthToken) {
+      respond({
+        runId: typeof params?.runId === "string" ? params.runId : "unknown",
+        sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
+        status: "failed",
+        error: "unauthorized coordinator request",
+      });
+      return;
+    }
+
     let request: Execution.Request;
     try {
       request = Execution.Request.parse(params);
@@ -63,10 +165,19 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
     const { runId, sessionId } = request;
 
     (async () => {
+      const traceId = request.traceId ?? crypto.randomUUID();
       activeRunIds.add(runId);
       server.notify("worker.run_started", { runId, sessionId });
+      Bus.publish(Subagent.Events.WorkerRunStarted, {
+        traceId,
+        sessionId,
+        runId,
+        time: Date.now(),
+        payload: { sessionId, runId, title: request.prompt.slice(0, 80) },
+      });
 
       try {
+        await bootstrapReady;
         const messages = SessionBridge.buildDirectMessages(sessionId).filter(
           (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
             m.role === "user" || m.role === "assistant",
@@ -102,6 +213,8 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
             toolsRef,
             catalogRef,
             agentDefinitionsRef,
+            resolveAuth: resolveBootstrapAuth,
+            allowAuthFallback: false,
             parentSessionId: sessionId,
             parentPermissions: request.permissions,
           }),
@@ -130,6 +243,8 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
 
         const agent = ChatAgent.create({
           model: request.model,
+          auth: resolveBootstrapAuth(request.model.provider),
+          allowAuthFallback: false,
           systemPrompt: request.systemPrompt,
           budget: request.budget,
           tools,
@@ -144,9 +259,7 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
         });
         const runResult = await agent.run({
           messages,
-          ...(request.traceId
-            ? { traceContext: { traceId: request.traceId, sessionId, runId } }
-            : {}),
+          traceContext: { traceId, sessionId, runId },
         });
 
         server.notify("worker.run_completed", {
@@ -154,6 +267,13 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           sessionId,
           status: "succeeded",
           output: runResult.text,
+        });
+        Bus.publish(Subagent.Events.WorkerRunCompleted, {
+          traceId,
+          sessionId,
+          runId,
+          time: Date.now(),
+          payload: { sessionId, runId, status: "succeeded" },
         });
 
         respond({
@@ -164,24 +284,36 @@ const server = createIpcServer(socketPath, (method, params, respond) => {
           finishReason: runResult.finishReason,
         });
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
         server.notify("worker.run_completed", {
           runId,
           sessionId,
           status: "failed",
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage,
+        });
+        Bus.publish(Subagent.Events.WorkerRunFailed, {
+          traceId,
+          sessionId,
+          runId,
+          time: Date.now(),
+          payload: { sessionId, runId, error: errorMessage },
         });
 
         respond({
           runId,
           sessionId,
           status: "failed",
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage,
         });
       } finally {
         activeRunIds.delete(runId);
       }
     })();
   } else if (method === "coordinator.cancel_run") {
+    if (params?.authToken !== ipcAuthToken) {
+      respond({ cancelled: false, error: "unauthorized coordinator request" });
+      return;
+    }
     respond({ cancelled: true });
   } else {
     respond({ ok: true });
@@ -202,6 +334,7 @@ setInterval(() => {
   server
     .call("worker.heartbeat", {
       workerId,
+      authToken: ipcAuthToken,
       activeRunIds: [...activeRunIds],
       memoryRssMb: process.memoryUsage().rss / 1024 / 1024,
       snapshot,
@@ -211,48 +344,9 @@ setInterval(() => {
     });
 }, HEARTBEAT_INTERVAL_MS);
 
-(async () => {
-  try {
-    const raw = await server.call("worker.ready", { workerId, pid: process.pid });
-    const bootstrap = WorkerBootstrap.Bootstrap.parse(raw);
-    workerBootstrap = bootstrap;
-    // Convert RuntimeAgentDefinition back to AgentProfile.Definition for registry
-    const agentDefs = bootstrap.agents.map((agent) => ({
-      name: agent.name,
-      description: agent.description,
-      model: agent.model,
-      systemPrompt: agent.systemPrompt,
-      tools: agent.tools.allow ?? [],
-      permissions: agent.permissions,
-      budget: agent.budget,
-    }));
-    AgentRegistry.replaceAll(agentDefs);
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "worker bootstrap received",
-      context: {
-        workerId,
-        agents: bootstrap.agents.length,
-        mcpTools: bootstrap.toolCatalog.length,
-      },
-    });
-  } catch (err) {
-    Bus.publish(Operational.Error, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "worker bootstrap failed",
-      context: {
-        workerId,
-        err: err instanceof Error ? err.message : String(err),
-      },
-    });
-  }
-})();
-
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
+  await BusPersistence.flush();
+  BusPersistence.stop();
   server.close();
   process.exit(0);
 });

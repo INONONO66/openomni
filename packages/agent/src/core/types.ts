@@ -38,12 +38,16 @@ export interface ChatAgentConfig {
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;
+    reserveTokens?: number;
+    reserveRatio?: number;
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
   memory?: Memory;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
+  auth?: RunInput["auth"];
+  allowAuthFallback?: RunInput["allowAuthFallback"];
   middleware?: PolicyRegistration[];
   context?: AgentRuntimeContext;
   llm?: {
