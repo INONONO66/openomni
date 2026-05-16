@@ -474,6 +474,9 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
 
     set: (hash: string, item: WorkItem.Info): void => {
+      if (hash !== item.hash) {
+        throw new Error(`WorkItem hash mismatch: key=${hash} payload=${item.hash}`);
+      }
       const now = Date.now();
       const status = WorkItem.deriveStatus(item);
       this.db

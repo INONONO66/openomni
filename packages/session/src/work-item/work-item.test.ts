@@ -128,7 +128,7 @@ describe("WorkItemStore", () => {
 
     await expect(
       WorkItemStore.update(first.hash, {
-        relations: { ...first.relations, dependsOn: [second.hash] },
+        relations: { childHashes: first.relations.childHashes, dependsOn: [second.hash] },
       }),
     ).rejects.toThrow("Circular dependency detected");
   });
@@ -224,6 +224,29 @@ describe("WorkItemStore", () => {
     expect(WorkItemStore.get(item.hash)).toBeUndefined();
     expect(WorkItemStore.remove(item.hash)).toBe(false);
     expect(events).toEqual([item.hash]);
+  });
+
+  test("rejects starting a failed item without retry", async () => {
+    configureSqlite();
+    const item = await createItem("start-failed");
+    await WorkItemStore.fail(item.hash, "broken");
+    await expect(WorkItemStore.start(item.hash)).rejects.toThrow("Cannot start a failed work item");
+  });
+
+  test("rejects retrying a non-failed item", async () => {
+    configureSqlite();
+    const item = await createItem("retry-pending");
+    await expect(WorkItemStore.retry(item.hash)).rejects.toThrow(
+      "retry() can only be called on failed work items",
+    );
+  });
+
+  test("returns unmet for missing work item in areDependenciesMet", () => {
+    configureSqlite();
+    expect(WorkItemStore.areDependenciesMet("wi_nonexistent0")).toEqual({
+      met: false,
+      reason: "pending",
+    });
   });
 
   test("publishes bus events after adapter writes", async () => {

@@ -114,10 +114,7 @@ export namespace WorkItemStore {
     const existing = adapter.workItem.get(hash);
     if (!existing) return undefined;
 
-    if (
-      fields.relations?.parentHash !== undefined &&
-      fields.relations.parentHash !== existing.relations.parentHash
-    ) {
+    if (fields.relations && "parentHash" in fields.relations) {
       throw new Error("Cannot change parentHash after creation — create a new work item instead");
     }
 
@@ -262,7 +259,8 @@ export namespace WorkItemStore {
     if (!workItem) return { met: false, reason: "pending" };
 
     const item = workItem.get(hash);
-    if (!item || item.relations.dependsOn.length === 0) {
+    if (!item) return { met: false, reason: "pending" };
+    if (item.relations.dependsOn.length === 0) {
       return { met: true, reason: "all_complete" };
     }
 
@@ -280,20 +278,25 @@ export namespace WorkItemStore {
   }
 
   export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
-    return mutate(hash, (existing, now) => ({
-      changedFields: ["attempt", "timestamps", "failureReason"],
-      updated: {
-        ...existing,
-        attempt: existing.attempt + 1,
-        failureReason: undefined,
-        timestamps: {
-          ...existing.timestamps,
-          failed: undefined,
-          started: now,
-          updated: now,
+    return mutate(hash, (existing, now) => {
+      if (WorkItem.deriveStatus(existing) !== "failed") {
+        throw new Error("retry() can only be called on failed work items");
+      }
+      return {
+        changedFields: ["attempt", "timestamps", "failureReason"],
+        updated: {
+          ...existing,
+          attempt: existing.attempt + 1,
+          failureReason: undefined,
+          timestamps: {
+            ...existing.timestamps,
+            failed: undefined,
+            started: now,
+            updated: now,
+          },
         },
-      },
-    }));
+      };
+    });
   }
 
   function buildWorkItem(input: Parameters<typeof create>[0], now: number): WorkItem.Info {
@@ -396,7 +399,10 @@ export namespace WorkItemStore {
     target: "started" | "completed" | "failed" | "cancelled",
   ): void {
     const status = WorkItem.deriveStatus(existing);
-    if (target === "started" && (status === "completed" || status === "cancelled")) {
+    if (
+      target === "started" &&
+      (status === "completed" || status === "cancelled" || status === "failed")
+    ) {
       throw new Error(`Cannot start a ${status} work item — use retry() for failed items`);
     }
     if (target === "completed" && status === "failed") {
