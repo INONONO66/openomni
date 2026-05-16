@@ -515,16 +515,28 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         params.push(...filter.status);
       }
       if (filter?.assigneeId !== undefined) {
-        conditions.push("assignee_id = ?");
-        params.push(filter.assigneeId);
+        if (filter.assigneeId === null) {
+          conditions.push("assignee_id IS NULL");
+        } else {
+          conditions.push("assignee_id = ?");
+          params.push(filter.assigneeId);
+        }
       }
       if (filter?.sessionId !== undefined) {
-        conditions.push("session_id = ?");
-        params.push(filter.sessionId);
+        if (filter.sessionId === null) {
+          conditions.push("session_id IS NULL");
+        } else {
+          conditions.push("session_id = ?");
+          params.push(filter.sessionId);
+        }
       }
       if (filter?.parentHash !== undefined) {
-        conditions.push("parent_hash = ?");
-        params.push(filter.parentHash);
+        if (filter.parentHash === null) {
+          conditions.push("parent_hash IS NULL");
+        } else {
+          conditions.push("parent_hash = ?");
+          params.push(filter.parentHash);
+        }
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

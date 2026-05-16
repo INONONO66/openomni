@@ -128,7 +128,7 @@ describe("WorkItemStore", () => {
 
     await expect(
       WorkItemStore.update(first.hash, {
-        relations: { childHashes: first.relations.childHashes, dependsOn: [second.hash] },
+        relations: { ...first.relations, dependsOn: [second.hash] },
       }),
     ).rejects.toThrow("Circular dependency detected");
   });
@@ -157,7 +157,8 @@ describe("WorkItemStore", () => {
 
   test("rejects changing parentHash after creation", async () => {
     configureSqlite();
-    const item = await createItem("parent-immutable", { parentHash: "wi_000000000001" });
+    const parent = await createItem("actual-parent");
+    const item = await createItem("parent-immutable", { parentHash: parent.hash });
 
     await expect(
       WorkItemStore.update(item.hash, {

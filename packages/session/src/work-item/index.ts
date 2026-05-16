@@ -41,27 +41,29 @@ export namespace WorkItemStore {
     }
 
     const now = Date.now();
+    const parent = input.parentHash ? adapter.workItem.get(input.parentHash) : undefined;
+    if (input.parentHash && !parent) {
+      throw new Error(`Parent work item not found: ${input.parentHash}`);
+    }
+
     const item = buildWorkItem(input, now);
     adapter.workItem.set(item.hash, item);
 
-    if (input.parentHash) {
-      const parent = adapter.workItem.get(input.parentHash);
-      if (parent && !parent.relations.childHashes.includes(item.hash)) {
-        adapter.workItem.set(input.parentHash, {
-          ...parent,
-          relations: {
-            ...parent.relations,
-            childHashes: [...parent.relations.childHashes, item.hash],
-          },
-          timestamps: { ...parent.timestamps, updated: now },
-        });
-        Bus.publish(WorkItem.Events.Updated, {
-          traceId: crypto.randomUUID(),
-          time: now,
-          sessionId: parent.sessionId,
-          payload: { hash: parent.hash, fields: ["relations"] },
-        });
-      }
+    if (parent && !parent.relations.childHashes.includes(item.hash)) {
+      adapter.workItem.set(parent.hash, {
+        ...parent,
+        relations: {
+          ...parent.relations,
+          childHashes: [...parent.relations.childHashes, item.hash],
+        },
+        timestamps: { ...parent.timestamps, updated: now },
+      });
+      Bus.publish(WorkItem.Events.Updated, {
+        traceId: crypto.randomUUID(),
+        time: now,
+        sessionId: parent.sessionId,
+        payload: { hash: parent.hash, fields: ["relations"] },
+      });
     }
 
     Bus.publish(WorkItem.Events.Created, {
@@ -92,8 +94,37 @@ export namespace WorkItemStore {
     if (!adapter.workItem) return false;
 
     const existing = adapter.workItem.get(hash);
+    if (!existing) return false;
+
+    if (existing.relations.parentHash) {
+      const parent = adapter.workItem.get(existing.relations.parentHash);
+      if (parent) {
+        const filtered = parent.relations.childHashes.filter((h) => h !== hash);
+        if (filtered.length !== parent.relations.childHashes.length) {
+          adapter.workItem.set(parent.hash, {
+            ...parent,
+            relations: { ...parent.relations, childHashes: filtered },
+            timestamps: { ...parent.timestamps, updated: Date.now() },
+          });
+        }
+      }
+    }
+
+    for (const item of adapter.workItem.list()) {
+      if (item.relations.dependsOn.includes(hash)) {
+        adapter.workItem.set(item.hash, {
+          ...item,
+          relations: {
+            ...item.relations,
+            dependsOn: item.relations.dependsOn.filter((h) => h !== hash),
+          },
+          timestamps: { ...item.timestamps, updated: Date.now() },
+        });
+      }
+    }
+
     const removed = adapter.workItem.remove(hash);
-    if (removed && existing) {
+    if (removed) {
       Bus.publish(WorkItem.Events.Removed, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
@@ -114,12 +145,27 @@ export namespace WorkItemStore {
     const existing = adapter.workItem.get(hash);
     if (!existing) return undefined;
 
-    if (fields.relations && "parentHash" in fields.relations) {
-      throw new Error("Cannot change parentHash after creation — create a new work item instead");
+    const managedFields = [
+      "timestamps",
+      "failureReason",
+      "attempt",
+      "blockers",
+      "evidence",
+      "verificationGate",
+    ] as const;
+    for (const key of managedFields) {
+      if (key in fields) {
+        throw new Error(`Use lifecycle helpers instead of update() for "${key}"`);
+      }
     }
-
-    if (fields.relations?.dependsOn) {
-      detectCycles(adapter.workItem, fields.relations.dependsOn, new Set([hash]));
+    if (fields.relations) {
+      const r = fields.relations as Record<string, unknown>;
+      if (r.parentHash !== undefined) {
+        throw new Error("Cannot change parentHash after creation — create a new work item instead");
+      }
+      if (fields.relations.dependsOn) {
+        detectCycles(adapter.workItem, fields.relations.dependsOn, new Set([hash]));
+      }
     }
 
     const now = Date.now();
@@ -135,6 +181,8 @@ export namespace WorkItemStore {
       relations: {
         ...existing.relations,
         ...(fields.relations ?? {}),
+        parentHash: existing.relations.parentHash,
+        childHashes: existing.relations.childHashes,
       },
     };
 
