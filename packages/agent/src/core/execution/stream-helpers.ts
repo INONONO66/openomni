@@ -35,6 +35,7 @@ export interface StreamAgentBase {
 }
 
 export interface StreamRunState {
+  readonly sessionId: string;
   budgetState: BudgetState;
   messages: Message.WithParts[];
   lastAssistantText: string;
@@ -94,6 +95,7 @@ export type ErrorDecision =
 export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   const sessionId = input.traceContext?.sessionId ?? "stream-engine";
   return {
+    sessionId,
     budgetState: createBudgetState(),
     messages: toMessagesWithParts(input.messages, sessionId),
     lastAssistantText: "",
@@ -179,9 +181,9 @@ function replacementMessages(decision: Policy.PolicyDecision): Message.WithParts
 function applyPromptMessageEffects(state: StreamRunState, decision: Policy.PolicyDecision): void {
   for (const effect of decision.effects) {
     if (effect.type === "prompt.inject_message") {
-      state.messages.push(createUserMessage(effect.message, "stream-engine"));
+      state.messages.push(createUserMessage(effect.message, state.sessionId));
     } else if (effect.type === "prompt.append_context") {
-      state.messages.push(createUserMessage(effect.context, "stream-engine"));
+      state.messages.push(createUserMessage(effect.context, state.sessionId));
     }
   }
 }
@@ -228,7 +230,7 @@ function publishDenyDiagnostic(
     },
   });
   config.eventEmitter?.emit("agent.policy.deny", {
-    sessionId: "stream-engine",
+    sessionId: state.sessionId,
     time: Date.now(),
     timing,
     reason,
@@ -420,7 +422,7 @@ export function emitTurnStart(
   agentBase: StreamAgentBase,
 ): void {
   config.eventEmitter?.emit("agent.turn.start", {
-    sessionId: "stream-engine",
+    sessionId: state.sessionId,
     time: Date.now(),
     turnIndex: state.budgetState.turns,
   });
@@ -438,7 +440,7 @@ export function emitTurnComplete(
   turnUsage: TokenUsage,
 ): void {
   config.eventEmitter?.emit("agent.turn.complete", {
-    sessionId: "stream-engine",
+    sessionId: state.sessionId,
     time: Date.now(),
     turnIndex: state.turnIndex,
     usage: {
@@ -765,8 +767,8 @@ export async function* handleStop(
   if (!PolicyDecision.isBlocking(postTurnDecision) && continuationPrompts.length > 0) {
     const parentID = state.messages.at(-1)?.info.id ?? "";
     state.messages.push(
-      createAssistantMessage(state.lastAssistantText, parentID, "stream-engine"),
-      ...continuationPrompts.map((prompt) => createUserMessage(prompt, "stream-engine")),
+      createAssistantMessage(state.lastAssistantText, parentID, state.sessionId),
+      ...continuationPrompts.map((prompt) => createUserMessage(prompt, state.sessionId)),
     );
     const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
     if (blocked) {
@@ -925,7 +927,7 @@ export async function* handleError(
   if (Retry.shouldAgentRetry(effectiveRetryPolicy, retryReason, attempt)) {
     const backoffMs = retryEffect?.delayMs ?? Retry.calculateAgentBackoffMs(retryPolicy, attempt);
     config.eventEmitter?.emit("agent.error.retry", {
-      sessionId: "stream-engine",
+      sessionId: state.sessionId,
       time: Date.now(),
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
