@@ -19,7 +19,6 @@ import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
 import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
-import { LocalRunner } from "./local-runner";
 import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
@@ -101,6 +100,9 @@ function createRoutingHandler(
 
 export async function main(): Promise<void> {
   const config = loadConfig();
+  if (process.env.OPENOMNI_MODE === "local") {
+    throw new Error("OPENOMNI_MODE=local is disabled; OpenOmni requires coordinator mode");
+  }
 
   mkdirSync(dirname(config.storage.dbPath), { recursive: true });
   initialize({ dbPath: config.storage.dbPath });
@@ -118,39 +120,20 @@ export async function main(): Promise<void> {
   };
   await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider);
 
-  const isLocalMode = process.env.OPENOMNI_MODE === "local";
-
   let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
 
-  if (isLocalMode) {
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "server running in local mode (no worker pool)",
-    });
-    const localRunner = LocalRunner.create({
-      systemProvider,
-      agentProvider,
-      mcpProvider,
-      customProvider,
-      workspaceRoot: config.workspace?.root,
-    });
-    IngressEngine.setCoordinator(localRunner);
-  } else {
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "server running in coordinator mode",
-    });
-    const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
-    const bootstrap = await assembleBootstrap(mcpProvider);
-    const toolDispatcher = buildToolDispatcher([mcpProvider]);
-    coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
-    await coordinator.waitUntilReady();
-    IngressEngine.setCoordinator(coordinator);
-  }
+  Bus.publish(Operational.Info, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "server",
+    msg: "server running in coordinator mode",
+  });
+  const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
+  const bootstrap = await assembleBootstrap(mcpProvider);
+  const toolDispatcher = buildToolDispatcher([mcpProvider]);
+  coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
+  await coordinator.waitUntilReady();
+  IngressEngine.setCoordinator(coordinator);
 
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
@@ -241,7 +224,7 @@ export async function main(): Promise<void> {
   });
 
   const traceId = crypto.randomUUID();
-  const mode = isLocalMode ? "local" : "coordinator";
+  const mode = "coordinator";
   await runRecovery(routingHandler, coordinator, traceId);
 
   Bus.publish(Operational.BootstrapCompleted, {
