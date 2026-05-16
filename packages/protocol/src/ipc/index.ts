@@ -35,6 +35,7 @@ const notificationSchema = baseMessage.extend({
 const methods = {
   "coordinator.spawn_run": {
     params: z.object({
+      authToken: z.string(),
       runId: z.string(),
       sessionId: z.string(),
       prompt: z.string(),
@@ -54,8 +55,12 @@ const methods = {
     result: z.object({ accepted: z.boolean() }),
   },
   "coordinator.cancel_run": {
-    params: z.object({ runId: z.string(), sessionId: z.string() }),
-    result: z.object({ cancelled: z.boolean() }),
+    params: z.object({ authToken: z.string(), runId: z.string(), sessionId: z.string() }),
+    result: z.object({ cancelled: z.boolean(), error: z.string().optional() }),
+  },
+  "coordinator.bootstrap": {
+    params: z.object({ authToken: z.string(), bootstrap: WorkerBootstrap.Bootstrap }),
+    result: z.object({ ok: z.boolean(), error: z.string().optional() }),
   },
   // Central tool permission enforcement — workers ask coordinator before executing any tool
   "coordinator.check_permission": {
@@ -74,8 +79,13 @@ const methods = {
       bootstrap: WorkerBootstrap.Bootstrap.optional(),
     }),
   },
+  "worker.bootstrap_ready": {
+    params: z.object({ workerId: z.string(), authToken: z.string() }),
+    result: z.null(),
+  },
   "worker.heartbeat": {
     params: z.object({
+      authToken: z.string(),
       workerId: z.string(),
       activeRunIds: z.array(z.string()),
       memoryRssMb: z.number(),
