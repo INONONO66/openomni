@@ -89,6 +89,8 @@ type WorkerRuntimeConfig = {
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
   agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };
+  resolveAuth?: (provider: string) => ChatAgentConfig["auth"];
+  allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
 };
 
 function resolveChildDefinition(
@@ -142,6 +144,8 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         title: config.title,
         prompt: config.prompt,
         model: config.model,
+        auth: cfg.resolveAuth?.(config.model.provider),
+        allowAuthFallback: cfg.allowAuthFallback,
         systemPrompt: config.systemPrompt,
         tools: childTools,
         toolExecutor: cfg.toolsRef.toolExecutor,
@@ -162,6 +166,8 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         sessionId: config.sessionId,
         prompt: config.prompt,
         model: config.model,
+        auth: cfg.resolveAuth?.(config.model.provider),
+        allowAuthFallback: cfg.allowAuthFallback,
         systemPrompt: config.systemPrompt,
         tools: resolveChildTools(cfg, childDefinition, depth),
         toolExecutor: cfg.toolsRef.toolExecutor,
