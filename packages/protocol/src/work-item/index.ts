@@ -120,11 +120,11 @@ export namespace WorkItem {
   }
 
   export function generateHash(): string {
-    const bytes = new Uint8Array(4);
+    const bytes = new Uint8Array(8);
     crypto.getRandomValues(bytes);
-    return `wi_${Array.from(bytes)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")}`;
+    let n = 0n;
+    for (const b of bytes) n = (n << 8n) | BigInt(b);
+    return `wi_${n.toString(36).padStart(12, "0").slice(0, 12)}`;
   }
 
   export namespace Events {
@@ -177,6 +177,16 @@ export namespace WorkItem {
         payload: z.object({
           hash: z.string(),
           reason: z.string().optional(),
+          sessionId: z.string().optional(),
+        }),
+      }),
+    );
+
+    export const Removed = BusEvent.define(
+      "work_item.removed",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
           sessionId: z.string().optional(),
         }),
       }),

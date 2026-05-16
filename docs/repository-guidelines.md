@@ -42,7 +42,6 @@ Known watchpoints:
 | Item | Current status | Rule |
 | --- | --- | --- |
 | `apps/server/src/agents/types.ts` | Server-local agent definition with trigger metadata. | Keep app-local unless reused outside `apps/server`; promote persistent persona contracts to `protocol`. |
-| `packages/openomni/src/storage/task-types.ts` | Backward-compat task re-export shim. | Remove only after migration scripts import `Task` from `@openomni/protocol` directly. |
 
 ## Test matrix expectations
 
@@ -102,5 +101,4 @@ Required updates by change type:
 | High | Keep root/package docs aligned with the single server app topology. | Single `apps/server` host. |
 | High | Keep app-level test scripts and CI direct app tests aligned. | Avoid local `turbo run test` ambiguity. |
 | Medium | Delete empty `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts`. | Strong orphan candidate. |
-| Medium | Replace `packages/openomni/src/storage/task-types.ts` consumers with `@openomni/protocol`. | Removes compatibility shim. |
 | Medium | Reduce lint warnings, especially non-null assertions and `any`. | Keeps type-safety rules credible. |

@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Message, WorkItem, Storage as ProtocolStorage } from "@openomni/protocol";
+import { type Message, WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
@@ -475,18 +475,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
     set: (hash: string, item: WorkItem.Info): void => {
       const now = Date.now();
-      const status =
-        item.timestamps.cancelled !== undefined
-          ? "cancelled"
-          : item.timestamps.failed !== undefined
-            ? "failed"
-            : item.timestamps.completed !== undefined
-              ? "completed"
-              : item.blockers.some((blocker) => blocker.resolvedAt === undefined)
-                ? "blocked"
-                : item.timestamps.started !== undefined
-                  ? "running"
-                  : "pending";
+      const status = WorkItem.deriveStatus(item);
       this.db
         .query(
           `INSERT INTO work_item (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)

@@ -1,12 +1,9 @@
-import { mkdir, appendFile } from "node:fs/promises";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Operational, WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { SqliteStorageAdapter } from "../storage/sqlite-storage.js";
 import { Storage } from "../storage/storage.js";
 import { WorkItemStore } from "./index.js";
-
-const evidenceDir = ".sisyphus/evidence";
 
 const baseInput = {
   sourceMessageId: "msg_1",
@@ -27,11 +24,6 @@ function configureSqlite(): SqliteStorageAdapter {
 
 async function flushBus(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-async function saveEvidence(fileName: string, content: string): Promise<void> {
-  await mkdir(evidenceDir, { recursive: true });
-  await appendFile(`${evidenceDir}/${fileName}`, `${new Date().toISOString()} ${content}\n`);
 }
 
 async function createItem(
@@ -80,7 +72,6 @@ describe("WorkItemStore", () => {
       "status:running->completed",
       "completed",
     ]);
-    await saveEvidence("task-3-lifecycle.txt", `hash=${item.hash} events=${events.join(",")}`);
   });
 
   test("blocks and resumes when blockers are resolved", async () => {
@@ -103,10 +94,6 @@ describe("WorkItemStore", () => {
     expect(WorkItem.deriveStatus(blocked!)).toBe("blocked");
     expect(WorkItem.deriveStatus(resumed!)).toBe("running");
     expect(statuses).toEqual(["pending->running", "running->blocked", "blocked->running"]);
-    await saveEvidence(
-      "task-3-blocker-flow.txt",
-      `hash=${item.hash} statuses=${statuses.join(",")}`,
-    );
   });
 
   test("derives dependency readiness across failure, retry, and completion", async () => {
@@ -132,10 +119,6 @@ describe("WorkItemStore", () => {
       met: true,
       reason: "all_complete",
     });
-    await saveEvidence(
-      "task-3-dependency-chain.txt",
-      `dependency=${dependency.hash} dependent=${dependent.hash} ready=all_complete`,
-    );
   });
 
   test("rejects circular dependency updates", async () => {
@@ -143,15 +126,44 @@ describe("WorkItemStore", () => {
     const first = await createItem("cycle-a");
     const second = await createItem("cycle-b", { dependsOn: [first.hash] });
 
-    expect(() =>
+    await expect(
       WorkItemStore.update(first.hash, {
         relations: { ...first.relations, dependsOn: [second.hash] },
       }),
-    ).toThrow("Circular dependency detected");
-    await saveEvidence(
-      "task-3-cycle-detection.txt",
-      `first=${first.hash} second=${second.hash} rejected=true`,
+    ).rejects.toThrow("Circular dependency detected");
+  });
+
+  test("rejects completing a failed item", async () => {
+    configureSqlite();
+    const item = await createItem("fail-then-complete");
+
+    await WorkItemStore.fail(item.hash, "broken");
+
+    await expect(WorkItemStore.complete(item.hash)).rejects.toThrow(
+      "Cannot complete a failed work item",
     );
+  });
+
+  test("rejects failing a completed item", async () => {
+    configureSqlite();
+    const item = await createItem("complete-then-fail");
+
+    await WorkItemStore.complete(item.hash);
+
+    await expect(WorkItemStore.fail(item.hash)).rejects.toThrow(
+      "Cannot fail a completed work item",
+    );
+  });
+
+  test("rejects changing parentHash after creation", async () => {
+    configureSqlite();
+    const item = await createItem("parent-immutable", { parentHash: "wi_000000000001" });
+
+    await expect(
+      WorkItemStore.update(item.hash, {
+        relations: { ...item.relations, parentHash: "wi_000000000002" },
+      }),
+    ).rejects.toThrow("Cannot change parentHash after creation");
   });
 
   test("retries failed work items with a new attempt and running status", async () => {
@@ -203,11 +215,15 @@ describe("WorkItemStore", () => {
 
   test("removes a work item", async () => {
     configureSqlite();
+    const events: string[] = [];
+    Bus.subscribe(WorkItem.Events.Removed, (event) => events.push(event.payload.hash));
     const item = await createItem("to-remove");
     expect(WorkItemStore.get(item.hash)).toBeDefined();
     expect(WorkItemStore.remove(item.hash)).toBe(true);
+    await flushBus();
     expect(WorkItemStore.get(item.hash)).toBeUndefined();
     expect(WorkItemStore.remove(item.hash)).toBe(false);
+    expect(events).toEqual([item.hash]);
   });
 
   test("publishes bus events after adapter writes", async () => {

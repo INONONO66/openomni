@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { WorkItem } from "./index.js";
 
 const baseItem = {
-  hash: "wi_1234abcd",
+  hash: "wi_000000000001",
   name: "Implement WorkItem namespace",
   sourceMessageId: "msg_1",
   sourceChannel: "discord",
@@ -127,13 +127,13 @@ describe("WorkItem.deriveStatus", () => {
 });
 
 describe("WorkItem.generateHash", () => {
-  test("produces wi_ hashes with 8 hex characters", () => {
+  test("produces wi_ hashes with 12 base36 characters", () => {
     const hashes = new Set<string>();
 
     for (let index = 0; index < 100; index += 1) {
       const hash = WorkItem.generateHash();
 
-      expect(hash).toMatch(/^wi_[0-9a-f]{8}$/);
+      expect(hash).toMatch(/^wi_[0-9a-z]{12}$/);
       hashes.add(hash);
     }
 
@@ -149,6 +149,7 @@ describe("WorkItem.Events", () => {
       WorkItem.Events.StatusChanged,
       WorkItem.Events.Completed,
       WorkItem.Events.Failed,
+      WorkItem.Events.Removed,
     ];
 
     for (const event of events) {

@@ -54,7 +54,7 @@ describe("SqliteStorageAdapter workItem", () => {
 
   test("round-trips through get, list, and remove", () => {
     const item = makeWorkItem({
-      hash: "wi_roundtrip",
+      hash: "wi_000roundtrip",
       sessionId: "session-1",
       assigneeId: "agent-1",
       relations: { parentHash: "parent-1", childHashes: [], dependsOn: [] },
@@ -71,12 +71,12 @@ describe("SqliteStorageAdapter workItem", () => {
 
   test("list filters by status and sessionId", () => {
     const pending = makeWorkItem({
-      hash: "wi_pending",
+      hash: "wi_00000pending",
       sessionId: "s1",
       timestamps: { created: 1, updated: 1 },
     });
     const completed = makeWorkItem({
-      hash: "wi_completed",
+      hash: "wi_000completed",
       sessionId: "s2",
       timestamps: { created: 2, updated: 2, completed: 3 },
     });
@@ -85,18 +85,24 @@ describe("SqliteStorageAdapter workItem", () => {
     adapter.workItem?.set(completed.hash, completed);
 
     expect(adapter.workItem?.list({ status: ["completed"] }).map((item) => item.hash)).toEqual([
-      "wi_completed",
+      "wi_000completed",
     ]);
     expect(adapter.workItem?.list({ sessionId: "s1" }).map((item) => item.hash)).toEqual([
-      "wi_pending",
+      "wi_00000pending",
     ]);
   });
 
   test("clear removes work items", () => {
     const items = [
-      makeWorkItem({ hash: "wi_a", timestamps: { created: 1, updated: 1 } }),
-      makeWorkItem({ hash: "wi_b", timestamps: { created: 2, updated: 2, completed: 3 } }),
-      makeWorkItem({ hash: "wi_c", timestamps: { created: 3, updated: 3, cancelled: 4 } }),
+      makeWorkItem({ hash: "wi_00000000000a", timestamps: { created: 1, updated: 1 } }),
+      makeWorkItem({
+        hash: "wi_00000000000b",
+        timestamps: { created: 2, updated: 2, completed: 3 },
+      }),
+      makeWorkItem({
+        hash: "wi_00000000000c",
+        timestamps: { created: 3, updated: 3, cancelled: 4 },
+      }),
     ];
 
     for (const item of items) {

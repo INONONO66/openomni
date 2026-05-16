@@ -30,6 +30,5 @@ Last updated: 2026-05-01
 - `apps/server` tests are run directly in CI; keep local test commands aligned with CI when adding app workspaces.
 - Some tests still use tautological assertions for no-throw or compile-time checks; convert them to behavioral assertions where possible.
 - `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts` is an empty orphan candidate.
-- `packages/openomni/src/storage/task-types.ts` is a backward-compat shim still used by a migration script.
 - persona workforce runtime contracts are documented but not implemented yet: self-loop kind, inbound authority policy, distilled writeback, persona lifecycle, and memory candidates
 - Biome configured (replaces ESLint + Prettier)

@@ -55,6 +55,12 @@ export namespace WorkItemStore {
           },
           timestamps: { ...parent.timestamps, updated: now },
         });
+        Bus.publish(WorkItem.Events.Updated, {
+          traceId: crypto.randomUUID(),
+          time: now,
+          sessionId: parent.sessionId,
+          payload: { hash: parent.hash, fields: ["relations"] },
+        });
       }
     }
 
@@ -82,7 +88,20 @@ export namespace WorkItemStore {
   }
 
   export function remove(hash: string): boolean {
-    return Storage.get().workItem?.remove(hash) ?? false;
+    const adapter = Storage.get();
+    if (!adapter.workItem) return false;
+
+    const existing = adapter.workItem.get(hash);
+    const removed = adapter.workItem.remove(hash);
+    if (removed && existing) {
+      Bus.publish(WorkItem.Events.Removed, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        sessionId: existing.sessionId,
+        payload: { hash, sessionId: existing.sessionId },
+      });
+    }
+    return removed;
   }
 
   export async function update(
@@ -94,6 +113,13 @@ export namespace WorkItemStore {
 
     const existing = adapter.workItem.get(hash);
     if (!existing) return undefined;
+
+    if (
+      fields.relations?.parentHash !== undefined &&
+      fields.relations.parentHash !== existing.relations.parentHash
+    ) {
+      throw new Error("Cannot change parentHash after creation — create a new work item instead");
+    }
 
     if (fields.relations?.dependsOn) {
       detectCycles(adapter.workItem, fields.relations.dependsOn, new Set([hash]));
@@ -115,18 +141,11 @@ export namespace WorkItemStore {
       },
     };
 
-    return persistMutation(adapter.workItem, existing, updated, now, () => {
-      Bus.publish(WorkItem.Events.Updated, {
-        traceId: crypto.randomUUID(),
-        time: now,
-        sessionId: updated.sessionId,
-        payload: { hash, fields: Object.keys(fields) },
-      });
-    });
+    return persistMutation(adapter.workItem, existing, updated, now, Object.keys(fields));
   }
 
   export async function start(hash: string): Promise<WorkItem.Info | undefined> {
-    return mutateTimestamps(hash, (timestamps, now) => ({
+    return mutateTimestamps(hash, "started", (timestamps, now) => ({
       ...timestamps,
       started: now,
       updated: now,
@@ -135,6 +154,8 @@ export namespace WorkItemStore {
 
   export async function complete(hash: string): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["timestamps"],
+      target: "completed",
       updated: {
         ...existing,
         timestamps: { ...existing.timestamps, completed: now, updated: now },
@@ -152,6 +173,8 @@ export namespace WorkItemStore {
 
   export async function fail(hash: string, reason?: string): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["timestamps", "failureReason"],
+      target: "failed",
       updated: {
         ...existing,
         timestamps: { ...existing.timestamps, failed: now, updated: now },
@@ -169,7 +192,7 @@ export namespace WorkItemStore {
   }
 
   export async function cancel(hash: string): Promise<WorkItem.Info | undefined> {
-    return mutateTimestamps(hash, (timestamps, now) => ({
+    return mutateTimestamps(hash, "cancelled", (timestamps, now) => ({
       ...timestamps,
       cancelled: now,
       updated: now,
@@ -181,6 +204,7 @@ export namespace WorkItemStore {
     blocker: Omit<WorkItem.Blocker, "id" | "createdAt">,
   ): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["blockers"],
       updated: {
         ...existing,
         blockers: [...existing.blockers, { id: crypto.randomUUID(), ...blocker, createdAt: now }],
@@ -194,6 +218,7 @@ export namespace WorkItemStore {
     blockerId: string,
   ): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["blockers"],
       updated: {
         ...existing,
         blockers: existing.blockers.map((blocker) =>
@@ -208,10 +233,13 @@ export namespace WorkItemStore {
     hash: string,
     evidence: Omit<WorkItem.Evidence, "id" | "createdAt">,
   ): Promise<WorkItem.Info | undefined> {
-    return mutateWithoutStatusEvent(hash, (existing, now) => ({
-      ...existing,
-      evidence: [...existing.evidence, { id: crypto.randomUUID(), ...evidence, createdAt: now }],
-      timestamps: { ...existing.timestamps, updated: now },
+    return mutate(hash, (existing, now) => ({
+      changedFields: ["evidence"],
+      updated: {
+        ...existing,
+        evidence: [...existing.evidence, { id: crypto.randomUUID(), ...evidence, createdAt: now }],
+        timestamps: { ...existing.timestamps, updated: now },
+      },
     }));
   }
 
@@ -219,10 +247,13 @@ export namespace WorkItemStore {
     hash: string,
     gate: WorkItem.VerificationGate,
   ): Promise<WorkItem.Info | undefined> {
-    return mutateWithoutStatusEvent(hash, (existing, now) => ({
-      ...existing,
-      verificationGate: gate,
-      timestamps: { ...existing.timestamps, updated: now },
+    return mutate(hash, (existing, now) => ({
+      changedFields: ["verificationGate"],
+      updated: {
+        ...existing,
+        verificationGate: gate,
+        timestamps: { ...existing.timestamps, updated: now },
+      },
     }));
   }
 
@@ -250,6 +281,7 @@ export namespace WorkItemStore {
 
   export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["attempt", "timestamps", "failureReason"],
       updated: {
         ...existing,
         attempt: existing.attempt + 1,
@@ -292,13 +324,16 @@ export namespace WorkItemStore {
 
   function mutateTimestamps(
     hash: string,
+    target: "started" | "cancelled",
     updateTimestamps: (
       timestamps: WorkItem.Info["timestamps"],
       now: number,
     ) => WorkItem.Info["timestamps"],
   ): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
+      changedFields: ["timestamps"],
       updated: { ...existing, timestamps: updateTimestamps(existing.timestamps, now) },
+      target,
     }));
   }
 
@@ -307,7 +342,12 @@ export namespace WorkItemStore {
     build: (
       existing: WorkItem.Info,
       now: number,
-    ) => { updated: WorkItem.Info; afterPublish?: (updated: WorkItem.Info) => void },
+    ) => {
+      updated: WorkItem.Info;
+      changedFields: string[];
+      target?: "started" | "completed" | "failed" | "cancelled";
+      afterPublish?: (updated: WorkItem.Info) => void;
+    },
   ): Promise<WorkItem.Info | undefined> {
     const adapter = Storage.get().workItem;
     if (!adapter) return undefined;
@@ -316,23 +356,9 @@ export namespace WorkItemStore {
     if (!existing) return undefined;
 
     const now = Date.now();
-    const { updated, afterPublish } = build(existing, now);
-    return persistMutation(adapter, existing, updated, now, afterPublish);
-  }
-
-  async function mutateWithoutStatusEvent(
-    hash: string,
-    build: (existing: WorkItem.Info, now: number) => WorkItem.Info,
-  ): Promise<WorkItem.Info | undefined> {
-    const adapter = Storage.get().workItem;
-    if (!adapter) return undefined;
-
-    const existing = adapter.get(hash);
-    if (!existing) return undefined;
-
-    const updated = build(existing, Date.now());
-    adapter.set(hash, updated);
-    return updated;
+    const { updated, changedFields, target, afterPublish } = build(existing, now);
+    if (target) assertTransition(existing, target);
+    return persistMutation(adapter, existing, updated, now, changedFields, afterPublish);
   }
 
   function persistMutation(
@@ -340,6 +366,7 @@ export namespace WorkItemStore {
     existing: WorkItem.Info,
     updated: WorkItem.Info,
     time: number,
+    changedFields: string[],
     afterPublish?: (updated: WorkItem.Info) => void,
   ): WorkItem.Info {
     adapter.set(updated.hash, updated);
@@ -355,7 +382,38 @@ export namespace WorkItemStore {
       });
     }
     afterPublish?.(updated);
+    Bus.publish(WorkItem.Events.Updated, {
+      traceId: crypto.randomUUID(),
+      time,
+      sessionId: updated.sessionId,
+      payload: { hash: updated.hash, fields: changedFields },
+    });
     return updated;
+  }
+
+  function assertTransition(
+    existing: WorkItem.Info,
+    target: "started" | "completed" | "failed" | "cancelled",
+  ): void {
+    const status = WorkItem.deriveStatus(existing);
+    if (target === "started" && (status === "completed" || status === "cancelled")) {
+      throw new Error(`Cannot start a ${status} work item — use retry() for failed items`);
+    }
+    if (target === "completed" && status === "failed") {
+      throw new Error("Cannot complete a failed work item — retry() first");
+    }
+    if (target === "completed" && status === "cancelled") {
+      throw new Error("Cannot complete a cancelled work item");
+    }
+    if (target === "failed" && status === "completed") {
+      throw new Error("Cannot fail a completed work item");
+    }
+    if (target === "failed" && status === "cancelled") {
+      throw new Error("Cannot fail a cancelled work item");
+    }
+    if (target === "cancelled" && status === "completed") {
+      throw new Error("Cannot cancel a completed work item");
+    }
   }
 
   function detectCycles(
