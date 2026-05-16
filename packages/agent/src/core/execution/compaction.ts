@@ -73,13 +73,17 @@ function resolveThresholdTokens(options: CompactionOptions): number {
     options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
   const reserveTokens = resolveReserveTokens(options);
   if (reserveTokens === undefined) return ratioThreshold;
-  return Math.min(ratioThreshold, Math.max(0, options.contextWindowTokens - reserveTokens));
+  return Math.min(ratioThreshold, options.contextWindowTokens - reserveTokens);
 }
 
 function resolveReserveTokens(options: CompactionOptions): number | undefined {
-  if (options.reserveTokens !== undefined) return options.reserveTokens;
-  if (options.reserveRatio !== undefined) return options.contextWindowTokens * options.reserveRatio;
-  return undefined;
+  const reserveTokens =
+    options.reserveTokens ??
+    (options.reserveRatio === undefined
+      ? undefined
+      : options.contextWindowTokens * options.reserveRatio);
+  if (reserveTokens === undefined || !Number.isFinite(reserveTokens)) return undefined;
+  return Math.min(options.contextWindowTokens, Math.max(0, reserveTokens));
 }
 
 function buildSummaryMessage(summaryText: string): Message.WithParts {

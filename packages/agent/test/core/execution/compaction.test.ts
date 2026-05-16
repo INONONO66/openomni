@@ -114,6 +114,39 @@ describe("InMemoryCompactor", () => {
         }),
       ).toBe(false);
     });
+
+    it("prefers reserveTokens over reserveRatio", () => {
+      expect(
+        InMemoryCompactor.shouldCompact(751, {
+          contextWindowTokens: 1000,
+          reserveTokens: 250,
+          reserveRatio: 0.5,
+        }),
+      ).toBe(true);
+      expect(
+        InMemoryCompactor.shouldCompact(749, {
+          contextWindowTokens: 1000,
+          reserveTokens: 250,
+          reserveRatio: 0.5,
+        }),
+      ).toBe(false);
+    });
+
+    it("normalizes out-of-range reserve values", () => {
+      expect(
+        InMemoryCompactor.shouldCompact(999, {
+          contextWindowTokens: 1000,
+          thresholdRatio: 1,
+          reserveTokens: -100,
+        }),
+      ).toBe(false);
+      expect(
+        InMemoryCompactor.shouldCompact(0, {
+          contextWindowTokens: 1000,
+          reserveTokens: 1200,
+        }),
+      ).toBe(true);
+    });
   });
 
   describe("compact", () => {
