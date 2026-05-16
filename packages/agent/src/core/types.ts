@@ -38,6 +38,8 @@ export interface ChatAgentConfig {
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;
+    reserveTokens?: number;
+    reserveRatio?: number;
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };

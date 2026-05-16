@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { createCompactionPolicy } from "../../../../src/core/policy/builtin/compaction";
 import type { PolicyContext } from "../../../../src/core/policy";
+import type { BudgetState } from "../../../../src/core/budget";
 import { effectOf } from "../../../helpers/policy-decision";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
@@ -40,6 +41,17 @@ function createTestMessage(id: string): Message.WithParts {
   };
 }
 
+function budgetState(inputTokens: number, outputTokens: number): BudgetState {
+  return {
+    startTime: Date.now(),
+    turns: 1,
+    toolCalls: 0,
+    toolRuntimeMs: 0,
+    totalInputTokens: inputTokens,
+    totalOutputTokens: outputTokens,
+  };
+}
+
 describe("createCompactionPolicy", () => {
   it("continues when below threshold", async () => {
     const middleware = createCompactionPolicy({
@@ -50,7 +62,7 @@ describe("createCompactionPolicy", () => {
     const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
     const ctx = baseCtx({
       messages,
-      budgetState: { turns: 1, totalInputTokens: 1000, totalOutputTokens: 500 },
+      budgetState: budgetState(1000, 500),
     });
 
     const verdict = await middleware.fn(ctx);
@@ -68,7 +80,29 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: { turns: 1, totalInputTokens: 7000, totalOutputTokens: 1000 },
+      budgetState: budgetState(7000, 1000),
+    });
+
+    const verdict = await middleware.fn(ctx);
+
+    expect(verdict.verdict).toBe("allow");
+    const replacement = effectOf(verdict, "run.replace_messages");
+    expect(replacement).toBeDefined();
+    expect(replacement?.messages.length).toBeLessThan(messages.length);
+  });
+
+  it("transforms when reserve budget is reached before ratio threshold", async () => {
+    const middleware = createCompactionPolicy({
+      contextWindowTokens: 1000,
+      thresholdRatio: 0.95,
+      reserveTokens: 250,
+      protectRecentMessages: 2,
+    });
+
+    const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
+    const ctx = baseCtx({
+      messages,
+      budgetState: budgetState(700, 60),
     });
 
     const verdict = await middleware.fn(ctx);
@@ -80,9 +114,9 @@ describe("createCompactionPolicy", () => {
   });
 
   it("emits compaction event when compacting", async () => {
-    const events: Array<{ name: string; data: unknown }> = [];
+    const events: Array<{ name: string; data: Record<string, unknown> }> = [];
     const mockEmitter = {
-      emit: (name: string, data: unknown) => {
+      emit: (name: string, data: Record<string, unknown>) => {
         events.push({ name, data });
       },
     };
@@ -96,17 +130,19 @@ describe("createCompactionPolicy", () => {
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
     const ctx = baseCtx({
       messages,
-      budgetState: { turns: 1, totalInputTokens: 7000, totalOutputTokens: 1000 },
-      eventEmitter: mockEmitter as unknown as Parameters<typeof baseCtx>[0]["eventEmitter"],
+      budgetState: budgetState(7000, 1000),
+      eventEmitter: mockEmitter,
     });
 
     const verdict = await middleware.fn(ctx);
 
     expect(verdict.verdict).toBe("allow");
     expect(events.length).toBe(1);
-    expect(events[0].name).toBe("agent.compaction");
-    expect(events[0].data.messagesBefore).toBe(10);
-    expect(events[0].data.messagesAfter).toBeLessThan(10);
+    const event = events[0];
+    if (!event) throw new Error("expected compaction event");
+    expect(event.name).toBe("agent.compaction");
+    expect(event.data.messagesBefore).toBe(10);
+    expect(event.data.messagesAfter).toBeLessThan(10);
   });
 
   it("continues when no messages in context", async () => {
@@ -117,7 +153,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: undefined,
-      budgetState: { turns: 1, totalInputTokens: 7000, totalOutputTokens: 1000 },
+      budgetState: budgetState(7000, 1000),
     });
 
     const verdict = await middleware.fn(ctx);
@@ -133,7 +169,7 @@ describe("createCompactionPolicy", () => {
 
     const ctx = baseCtx({
       messages: [],
-      budgetState: { turns: 1, totalInputTokens: 7000, totalOutputTokens: 1000 },
+      budgetState: budgetState(7000, 1000),
     });
 
     const verdict = await middleware.fn(ctx);

@@ -2,8 +2,15 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { InMemoryCompactor } from "../../../src/core/execution/compaction";
 
+let idCounter = 0;
+
+function nextId(prefix: string): string {
+  idCounter += 1;
+  return `${prefix}-${idCounter}`;
+}
+
 function makeUserMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
+  const id = nextId("user-message");
   const sessionID = "test";
   const info: Message.UserMessage = {
     id,
@@ -14,7 +21,7 @@ function makeUserMessage(text: string): Message.WithParts {
     model: { providerID: "", modelID: "" },
   };
   const part: Message.TextPart = {
-    id: crypto.randomUUID(),
+    id: nextId("user-part"),
     sessionID,
     messageID: id,
     type: "text",
@@ -24,7 +31,7 @@ function makeUserMessage(text: string): Message.WithParts {
 }
 
 function makeAssistantMessage(text: string): Message.WithParts {
-  const id = crypto.randomUUID();
+  const id = nextId("assistant-message");
   const sessionID = "test";
   const info: Message.AssistantMessage = {
     id,
@@ -40,7 +47,7 @@ function makeAssistantMessage(text: string): Message.WithParts {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   };
   const part: Message.TextPart = {
-    id: crypto.randomUUID(),
+    id: nextId("assistant-part"),
     sessionID,
     messageID: id,
     type: "text",
@@ -74,6 +81,36 @@ describe("InMemoryCompactor", () => {
         InMemoryCompactor.shouldCompact(400, {
           contextWindowTokens: 1000,
           thresholdRatio: 0.5,
+        }),
+      ).toBe(false);
+    });
+
+    it("compacts early when reserveTokens would be consumed", () => {
+      expect(
+        InMemoryCompactor.shouldCompact(751, {
+          contextWindowTokens: 1000,
+          reserveTokens: 250,
+        }),
+      ).toBe(true);
+      expect(
+        InMemoryCompactor.shouldCompact(749, {
+          contextWindowTokens: 1000,
+          reserveTokens: 250,
+        }),
+      ).toBe(false);
+    });
+
+    it("compacts early when reserveRatio would be consumed", () => {
+      expect(
+        InMemoryCompactor.shouldCompact(701, {
+          contextWindowTokens: 1000,
+          reserveRatio: 0.3,
+        }),
+      ).toBe(true);
+      expect(
+        InMemoryCompactor.shouldCompact(699, {
+          contextWindowTokens: 1000,
+          reserveRatio: 0.3,
         }),
       ).toBe(false);
     });

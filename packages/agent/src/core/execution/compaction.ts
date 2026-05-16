@@ -4,6 +4,8 @@ import { Bus } from "@openomni/session";
 export interface CompactionOptions {
   contextWindowTokens: number;
   thresholdRatio?: number;
+  reserveTokens?: number;
+  reserveRatio?: number;
   protectRecentMessages?: number;
   onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
 }
@@ -19,8 +21,7 @@ const DEFAULT_PROTECT_RECENT = 6;
 
 export namespace InMemoryCompactor {
   export function shouldCompact(totalTokens: number, options: CompactionOptions): boolean {
-    const threshold =
-      options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
+    const threshold = resolveThresholdTokens(options);
     return totalTokens >= threshold;
   }
 
@@ -65,6 +66,20 @@ export namespace InMemoryCompactor {
       removedCount: toRemove.length,
     };
   }
+}
+
+function resolveThresholdTokens(options: CompactionOptions): number {
+  const ratioThreshold =
+    options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
+  const reserveTokens = resolveReserveTokens(options);
+  if (reserveTokens === undefined) return ratioThreshold;
+  return Math.min(ratioThreshold, Math.max(0, options.contextWindowTokens - reserveTokens));
+}
+
+function resolveReserveTokens(options: CompactionOptions): number | undefined {
+  if (options.reserveTokens !== undefined) return options.reserveTokens;
+  if (options.reserveRatio !== undefined) return options.contextWindowTokens * options.reserveRatio;
+  return undefined;
 }
 
 function buildSummaryMessage(summaryText: string): Message.WithParts {
