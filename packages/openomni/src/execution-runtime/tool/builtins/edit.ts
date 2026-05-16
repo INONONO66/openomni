@@ -1,5 +1,5 @@
 import { defineTool } from "../define.js";
-import { optionalBoolean, requireString } from "../shared/input.js";
+import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 import { EDIT_PROMPT } from "./edit-prompt.js";
@@ -27,7 +27,13 @@ function replaceMany(
 }
 
 export function createEditTool(workspaceRoot: string) {
-  return defineTool<{ path: string; oldString: string; newString: string; replaceAll?: boolean }>({
+  return defineTool<{
+    path: string;
+    oldString: string;
+    newString: string;
+    replaceAll?: boolean;
+    expectedFileHash?: string;
+  }>({
     name: "edit",
     description: "Replace exact text in a file",
     prompt: EDIT_PROMPT,
@@ -38,6 +44,10 @@ export function createEditTool(workspaceRoot: string) {
         oldString: { type: "string", description: "Text to replace" },
         newString: { type: "string", description: "Replacement text" },
         replaceAll: { type: "boolean", description: "Replace all occurrences" },
+        expectedFileHash: {
+          type: "string",
+          description: "Expected SHA-256 hash of the current file",
+        },
       },
       required: ["path", "oldString", "newString"],
     },
@@ -51,6 +61,7 @@ export function createEditTool(workspaceRoot: string) {
         const oldString = requireString(call.input, "oldString");
         const newString = requireString(call.input, "newString");
         const replaceAll = optionalBoolean(call.input, "replaceAll") ?? false;
+        const expectedFileHash = optionalString(call.input, "expectedFileHash");
 
         if (oldString === newString) {
           return errorResult(call, "Invalid input: oldString and newString must be different");
@@ -63,7 +74,24 @@ export function createEditTool(workspaceRoot: string) {
           return errorResult(call, `Path does not exist: ${filePath}`);
         }
 
+        if (expectedFileHash !== undefined && !isSha256Hex(expectedFileHash)) {
+          return errorResult(
+            call,
+            "Invalid input: expectedFileHash must be a lowercase SHA-256 hex digest",
+          );
+        }
+
         const original = await file.text();
+        if (expectedFileHash !== undefined) {
+          const actualFileHash = await sha256Hex(original);
+          if (actualFileHash !== expectedFileHash) {
+            return errorResult(
+              call,
+              `File hash mismatch for ${filePath}: expected ${expectedFileHash}, got ${actualFileHash}`,
+            );
+          }
+        }
+
         if (!original.includes(oldString)) {
           return errorResult(call, `oldString not found in file: ${filePath}`);
         }
@@ -83,4 +111,13 @@ export function createEditTool(workspaceRoot: string) {
       }
     },
   });
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isSha256Hex(value: string): boolean {
+  return /^[0-9a-f]{64}$/.test(value);
 }
