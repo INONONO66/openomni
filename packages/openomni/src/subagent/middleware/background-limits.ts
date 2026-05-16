@@ -15,6 +15,17 @@ type BackgroundPolicyContext = Parameters<ReturnType<typeof PolicyEngine.create>
   readonly resourceDescriptor?: RuntimeResource.Descriptor;
 };
 
+function createBackgroundLaunchDescriptor(agentName: string): RuntimeResource.Descriptor {
+  return {
+    id: "worker:agent:background_launch",
+    kind: "worker",
+    source: { type: "agent", agentId: agentName },
+    labels: ["source.agent", "delegation.background"],
+    capabilities: ["delegation.background"],
+    effects: ["session.create"],
+  };
+}
+
 interface LaunchRequest {
   readonly agentName: string;
   readonly prompt: string;
@@ -361,10 +372,20 @@ export namespace BackgroundLimitsMiddleware {
       maxDescendants: ctx.maxDescendants,
       maxQueueSize: ctx.maxQueueSize,
     };
+    const traceContext = ctx.traceContext ?? {
+      traceId: crypto.randomUUID(),
+      sessionId: ctx.input.parentSessionId,
+    };
+    const resourceDescriptor =
+      ctx.resourceDescriptor ?? createBackgroundLaunchDescriptor(ctx.input.agentName);
     const engine = PolicyEngine.create({
-      traceContext: ctx.traceContext,
+      traceContext,
       onDecision: ctx.onDecision,
-      audit: false,
+      audit: {
+        sessionId: traceContext.sessionId,
+        action: "delegation.background.launch",
+        resource: `agent.${ctx.input.agentName}`,
+      },
     });
 
     for (const registration of registrations(state)) {
@@ -379,7 +400,7 @@ export namespace BackgroundLimitsMiddleware {
       continuationCount: 0,
       elapsedMs: 0,
       toolName: "subagent",
-      toolLabels: ctx.resourceDescriptor?.labels,
+      toolLabels: resourceDescriptor.labels,
       toolInput: {
         operation: "background.launch",
         agentName: ctx.input.agentName,
@@ -388,8 +409,8 @@ export namespace BackgroundLimitsMiddleware {
         activeCount: ctx.activeCount,
         pendingQueueSize: ctx.pendingQueueSize,
       },
-      traceContext: ctx.traceContext,
-      ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
+      traceContext,
+      resourceDescriptor,
     };
 
     const verdict = await engine.dispatch("invoke.prepare", policyContext);

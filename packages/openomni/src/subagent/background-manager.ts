@@ -10,6 +10,7 @@ import { startSweep, stopSweep } from "./abort-registry";
 import { BackgroundStore } from "./background-store.js";
 import { BackgroundLimitsMiddleware } from "./middleware/background-limits.js";
 import { SubagentRuntime } from "./runtime.js";
+import type { RuntimeConfig } from "./transcript.js";
 
 type LaunchInput = {
   agentName: string;
@@ -26,6 +27,8 @@ type Config = {
   maxDescendants?: number;
   taskTtlMs?: number;
   maxQueueSize?: number;
+  resolveAuth?: (provider: string) => RuntimeConfig["auth"];
+  allowAuthFallback?: RuntimeConfig["allowAuthFallback"];
   onTaskComplete?: (result: Subagent.BackgroundTaskResult) => void;
 };
 
@@ -64,6 +67,8 @@ export const BackgroundManager = {
     const maxDescendants = config?.maxDescendants ?? 10;
     const taskTtlMs = config?.taskTtlMs ?? 1_800_000;
     const maxQueueSize = config?.maxQueueSize ?? 100;
+    const resolveAuth = config?.resolveAuth;
+    const allowAuthFallback = config?.allowAuthFallback;
     const onTaskComplete = config?.onTaskComplete;
 
     const tasks = new Map<string, Subagent.BackgroundTask>();
@@ -157,6 +162,8 @@ export const BackgroundManager = {
         prompt: input.prompt,
         title: input.prompt.slice(0, 50),
         model: input.model,
+        auth: resolveAuth?.(input.model.provider),
+        allowAuthFallback,
         signal: controller.signal,
       }).then(
         ({ sessionId, runId }) => {
