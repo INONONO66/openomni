@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { SessionRouting } from "./session-routing";
 import { WorkerSupervisor, type ToolCallParams, type ToolCallResult } from "./supervisor";
@@ -23,7 +25,7 @@ export type WorkerPool = {
 
 export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
   const size = config.size ?? 8;
-  const socketDir = config.socketDir ?? "/tmp";
+  const socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp");
 
   const workers: WorkerSupervisor[] = Array.from(
     { length: size },
@@ -67,6 +69,14 @@ export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
     },
     async shutdown() {
       await Promise.all(workers.map((w) => w.stop()));
+      fs.rmSync(socketDir, { recursive: true, force: true });
     },
   };
+}
+
+function createPrivateSocketDir(baseDir: string): string {
+  fs.mkdirSync(baseDir, { recursive: true, mode: 0o700 });
+  const dir = fs.mkdtempSync(path.join(baseDir, "openomni-workers-"));
+  fs.chmodSync(dir, 0o700);
+  return dir;
 }

@@ -27,6 +27,8 @@ export type ToolCallResult = {
 export class WorkerSupervisor {
   private proc: Subprocess | null = null;
   private client: IpcClient | null = null;
+  private bootstrapped = false;
+  private readonly authToken = crypto.randomUUID();
   private restartCount = 0;
   private restartWindowStart = 0;
   private running = false;
@@ -50,15 +52,18 @@ export class WorkerSupervisor {
 
   private doStart(): void {
     this.running = true;
+    this.bootstrapped = false;
     this.proc = Bun.spawn(
-      ["bun", this.script, "--worker-id", String(this.id), "--socket", this.socketPath],
+      ["bun", this.script, "--", "--worker-id", String(this.id), "--socket", this.socketPath],
       {
+        env: { ...buildWorkerEnv(process.env), OPENOMNI_WORKER_IPC_TOKEN: this.authToken },
         stdout: "pipe",
         stderr: "pipe",
       },
     );
     this.proc.exited.then(() => {
       this.running = false;
+      this.bootstrapped = false;
       const prev = this.client;
       this.client = null;
       prev?.close();
@@ -74,6 +79,7 @@ export class WorkerSupervisor {
     const toolCallHandler = this.toolCallHandler;
     const snapshotHandler = this.snapshotHandler;
     const workerId = this.id;
+    const authToken = this.authToken;
 
     while (Date.now() < deadline && !this.stopping && this.running) {
       if (!fs.existsSync(this.socketPath)) {
@@ -83,14 +89,7 @@ export class WorkerSupervisor {
       try {
         const c = await connectIpcClient(this.socketPath, {
           connectTimeoutMs: 500,
-          onRequest(method, params, respond) {
-            if (method === "worker.ready") {
-              respond(
-                bootstrap ?? { configEpoch: "", agents: [], toolCatalog: [], credentials: {} },
-              );
-              return;
-            }
-
+          onRequest: (method, params, respond) => {
             if (method === "worker.tool_call" && toolCallHandler) {
               const p = params as ToolCallParams;
               toolCallHandler(p)
@@ -116,7 +115,29 @@ export class WorkerSupervisor {
 
             respond(null);
           },
+          onNotification: (method, params) => {
+            if (method === "worker.bootstrap_ready" && params?.authToken === authToken) {
+              this.bootstrapped = true;
+            }
+          },
         });
+        const bootstrapResult = await c.call(
+          "coordinator.bootstrap",
+          {
+            authToken,
+            bootstrap: bootstrap ?? {
+              configEpoch: "",
+              agents: [],
+              toolCatalog: [],
+              credentials: {},
+            },
+          },
+          5000,
+        );
+        if (!isBootstrapAccepted(bootstrapResult)) {
+          throw new Error("worker bootstrap rejected");
+        }
+        this.bootstrapped = true;
         if (!this.stopping && this.running) {
           this.client = c;
         } else {
@@ -157,7 +178,7 @@ export class WorkerSupervisor {
   }
 
   isReady(): boolean {
-    return this.client?.connected === true;
+    return this.client?.connected === true && this.bootstrapped;
   }
 
   async waitReady(timeoutMs = 10_000): Promise<void> {
@@ -179,7 +200,11 @@ export class WorkerSupervisor {
       Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000,
       MAX_DISPATCH_TIMEOUT_MS,
     );
-    return c.call("coordinator.spawn_run", { runId, ...params }, timeoutMs);
+    return c.call(
+      "coordinator.spawn_run",
+      { authToken: this.authToken, runId, ...params },
+      timeoutMs,
+    );
   }
 
   forceKill(): void {
@@ -200,4 +225,32 @@ export class WorkerSupervisor {
     this.proc = null;
     this.running = false;
   }
+}
+
+const workerEnvKeys = new Set([
+  "PATH",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "BUN_INSTALL",
+  "NODE_ENV",
+  "CI",
+  "OPENOMNI_DB_PATH",
+  "OPENOMNI_MODELS_URL",
+  "OPENOMNI_MODELS_PATH",
+  "OPENOMNI_DISABLE_MODELS_FETCH",
+  "OPENOMNI_WORKER_ENV_FIXTURE",
+]);
+
+function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of workerEnvKeys) {
+    const value = source[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
+function isBootstrapAccepted(value: unknown): boolean {
+  return value !== null && typeof value === "object" && (value as { ok?: unknown }).ok === true;
 }
