@@ -15,6 +15,7 @@ type SdkOptions = {
 
 type ProviderSDK = {
   languageModel(modelID: string): unknown;
+  chat?: (modelID: string) => unknown;
   responses?: (modelID: string) => unknown;
 };
 
@@ -107,6 +108,11 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageMod
 
   const sdk = getSDK(model, auth);
   const providerID = model.providerID;
+  if (providerID === "openai" && auth.type === "proxy" && sdk.chat) {
+    const languageModel = sdk.chat(modelID) as LanguageModel;
+    LANGUAGE_CACHE.set(cacheKey, languageModel);
+    return languageModel;
+  }
   const customLoader = CUSTOM_LOADERS[providerID];
   const custom = customLoader ? customLoader() : undefined;
 
