@@ -1,5 +1,9 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
+import { Auth } from "../src/auth";
 
 const TEST_PROVIDER_ID = "__test_run__";
 let run: typeof import("../src/run").run;
@@ -61,6 +65,10 @@ describe("run", () => {
         capturedSnapshots.push(snapshot);
       },
     };
+  });
+
+  afterEach(() => {
+    aiCapture.__openomniAiStreamArgs = undefined;
   });
 
   test("accepts RunInput with required fields", () => {
@@ -145,6 +153,36 @@ describe("run", () => {
       expect(outcome.error.message).toContain("no-auth-provider-xyz");
     }
     expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("does not read stored auth when fallback is disabled", async () => {
+    const authFile = join(tmpdir(), `openomni-run-auth-${crypto.randomUUID()}.json`);
+
+    try {
+      await Auth.withFile(authFile, async () => {
+        await Auth.set("stored-auth-provider", testAuth);
+
+        const outcome = await run(
+          {
+            messages: [],
+            tools: [],
+            allowAuthFallback: false,
+            model: {
+              id: "claude-3-haiku",
+              providerID: "stored-auth-provider",
+              name: "Test Model",
+              api: { npm: "@ai-sdk/anthropic" },
+            },
+          },
+          mockSink,
+        );
+
+        expect(outcome.type).toBe("error");
+        expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
+      });
+    } finally {
+      rmSync(authFile, { force: true });
+    }
   });
 
   test("returns aborted outcome when signal is aborted before run", async () => {

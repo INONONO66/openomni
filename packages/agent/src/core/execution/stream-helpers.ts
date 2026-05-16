@@ -92,9 +92,10 @@ export type ErrorDecision =
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
 export function createStreamRunState(input: ChatAgentInput): StreamRunState {
+  const sessionId = input.traceContext?.sessionId ?? "stream-engine";
   return {
     budgetState: createBudgetState(),
-    messages: toMessagesWithParts(input.messages, "stream-engine"),
+    messages: toMessagesWithParts(input.messages, sessionId),
     lastAssistantText: "",
     steps: [],
     totalUsage: {
@@ -599,10 +600,16 @@ export async function buildTurn(
         system,
         signal: config.signal,
         model: providerModel,
+        auth: config.auth,
+        allowAuthFallback: config.allowAuthFallback,
         toolExecutor: hookedExecutor,
         toolChoice: configuredToolChoice,
         maxSteps: config.budget?.maxToolCalls ?? 24,
         providerOptions: config.providerOptions,
+        trace: {
+          traceId: trace.traceId,
+          ...(trace.runId !== undefined && { runId: trace.runId }),
+        },
       },
       trackingSink,
       turnUsage,
