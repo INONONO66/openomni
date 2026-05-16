@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Tool } from "@openomni/protocol";
 import { createEditTool } from "./edit.js";
@@ -10,8 +11,7 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 async function withWorkspace(fn: (workspace: string) => Promise<void>): Promise<void> {
-  const workspace = join(import.meta.dir, ".edit-test-fixture");
-  await mkdir(workspace, { recursive: true });
+  const workspace = await mkdtemp(join(tmpdir(), "openomni-edit-test-"));
   try {
     await fn(workspace);
   } finally {
@@ -63,6 +63,28 @@ describe("createEditTool", () => {
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("File hash mismatch");
+      expect(await Bun.file(target).text()).toBe(original);
+    });
+  });
+
+  it("rejects malformed expectedFileHash values", async () => {
+    await withWorkspace(async (workspace) => {
+      const target = join(workspace, "file.txt");
+      const original = "hello world\n";
+      await Bun.write(target, original);
+
+      const tool = createEditTool(workspace);
+      const result = await tool.execute(
+        call({
+          path: "file.txt",
+          oldString: "world",
+          newString: "openomni",
+          expectedFileHash: "not-a-sha256",
+        }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("expectedFileHash must be a lowercase SHA-256 hex digest");
       expect(await Bun.file(target).text()).toBe(original);
     });
   });

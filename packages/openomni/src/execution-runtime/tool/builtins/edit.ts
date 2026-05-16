@@ -74,6 +74,13 @@ export function createEditTool(workspaceRoot: string) {
           return errorResult(call, `Path does not exist: ${filePath}`);
         }
 
+        if (expectedFileHash !== undefined && !isSha256Hex(expectedFileHash)) {
+          return errorResult(
+            call,
+            "Invalid input: expectedFileHash must be a lowercase SHA-256 hex digest",
+          );
+        }
+
         const original = await file.text();
         if (expectedFileHash !== undefined) {
           const actualFileHash = await sha256Hex(original);
@@ -109,4 +116,8 @@ export function createEditTool(workspaceRoot: string) {
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isSha256Hex(value: string): boolean {
+  return /^[0-9a-f]{64}$/.test(value);
 }
