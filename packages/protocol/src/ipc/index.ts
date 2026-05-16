@@ -2,7 +2,7 @@ import { z } from "zod";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
 const baseMessage = z.object({
-  v: z.literal(1),
+  v: z.literal(2),
   id: z.string().optional(),
 });
 
@@ -150,22 +150,24 @@ export namespace Ipc {
   export type Response = z.infer<typeof responseSchema>;
   export type Notification = z.infer<typeof notificationSchema>;
 
+  const version = 2;
+
   export function createRequest(method: string, params?: Record<string, unknown>): Request {
-    return { v: 1, type: "request", id: crypto.randomUUID(), method, params };
+    return { v: version, type: "request", id: crypto.randomUUID(), method, params };
   }
 
   export function createResponse(id: string, result: unknown): Response {
-    return { v: 1, type: "response", id, result };
+    return { v: version, type: "response", id, result };
   }
 
   export function createErrorResponse(id: string, code: number, message: string): Response {
-    return { v: 1, type: "response", id, error: { code, message } };
+    return { v: version, type: "response", id, error: { code, message } };
   }
 
   export function createNotification(
     method: string,
     params?: Record<string, unknown>,
   ): Notification {
-    return { v: 1, type: "notification", method, params };
+    return { v: version, type: "notification", method, params };
   }
 }

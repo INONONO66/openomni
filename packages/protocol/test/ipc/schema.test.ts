@@ -4,7 +4,7 @@ import { Ipc } from "../../src/index.js";
 describe("Ipc.Request", () => {
   test("parse round-trip", () => {
     const raw = {
-      v: 1,
+      v: 2,
       type: "request",
       id: "req-1",
       method: "worker.ready",
@@ -16,7 +16,7 @@ describe("Ipc.Request", () => {
   });
 
   test("rejects missing id", () => {
-    expect(Ipc.Request.safeParse({ v: 1, type: "request", method: "worker.ready" }).success).toBe(
+    expect(Ipc.Request.safeParse({ v: 2, type: "request", method: "worker.ready" }).success).toBe(
       false,
     );
   });
@@ -24,7 +24,7 @@ describe("Ipc.Request", () => {
   test("rejects wrong version", () => {
     expect(
       Ipc.Request.safeParse({
-        v: 2,
+        v: 1,
         type: "request",
         id: "req-1",
         method: "worker.ready",
@@ -35,7 +35,7 @@ describe("Ipc.Request", () => {
   test("rejects wrong type", () => {
     expect(
       Ipc.Request.safeParse({
-        v: 1,
+        v: 2,
         type: "notification",
         id: "req-1",
         method: "worker.ready",
@@ -46,7 +46,7 @@ describe("Ipc.Request", () => {
 
 describe("Ipc.Response", () => {
   test("parse round-trip with result", () => {
-    const raw = { v: 1, type: "response", id: "req-1", result: { accepted: true } };
+    const raw = { v: 2, type: "response", id: "req-1", result: { accepted: true } };
     const parsed = Ipc.Response.parse(raw);
     const reparsed = Ipc.Response.parse(JSON.parse(JSON.stringify(parsed)));
     expect(reparsed).toEqual(parsed);
@@ -54,7 +54,7 @@ describe("Ipc.Response", () => {
 
   test("parse round-trip with error", () => {
     const raw = {
-      v: 1,
+      v: 2,
       type: "response",
       id: "req-1",
       error: { code: 2000, message: "method not found" },
@@ -65,14 +65,14 @@ describe("Ipc.Response", () => {
   });
 
   test("rejects missing id", () => {
-    expect(Ipc.Response.safeParse({ v: 1, type: "response", result: null }).success).toBe(false);
+    expect(Ipc.Response.safeParse({ v: 2, type: "response", result: null }).success).toBe(false);
   });
 });
 
 describe("Ipc.Notification", () => {
   test("parse round-trip", () => {
     const raw = {
-      v: 1,
+      v: 2,
       type: "notification",
       method: "worker.state_update",
       params: { runId: "run-1", sessionId: "sess-1", event: "turn_start" },
@@ -83,7 +83,7 @@ describe("Ipc.Notification", () => {
   });
 
   test("rejects missing method", () => {
-    expect(Ipc.Notification.safeParse({ v: 1, type: "notification" }).success).toBe(false);
+    expect(Ipc.Notification.safeParse({ v: 2, type: "notification" }).success).toBe(false);
   });
 });
 
@@ -92,7 +92,7 @@ describe("Ipc helpers", () => {
     const req = Ipc.createRequest("worker.ready", { workerId: "w1", pid: 42 });
     expect(Ipc.Request.safeParse(req).success).toBe(true);
     expect(req.type).toBe("request");
-    expect(req.v).toBe(1);
+    expect(req.v).toBe(2);
     expect(typeof req.id).toBe("string");
     expect(req.method).toBe("worker.ready");
   });
@@ -100,7 +100,7 @@ describe("Ipc helpers", () => {
   test("createRequest without params", () => {
     const req = Ipc.createRequest("coordinator.cancel_run");
     expect(Ipc.Request.safeParse(req).success).toBe(true);
-    expect(req.params).toBeUndefined();
+    expect(req.params).toBe(undefined);
   });
 
   test("createResponse produces valid response", () => {
@@ -116,7 +116,7 @@ describe("Ipc helpers", () => {
     expect(Ipc.Response.safeParse(res).success).toBe(true);
     expect(res.error?.code).toBe(2000);
     expect(res.error?.message).toBe("method not found");
-    expect(res.result).toBeUndefined();
+    expect(res.result).toBe(undefined);
   });
 
   test("createNotification produces valid notification", () => {
@@ -133,7 +133,7 @@ describe("Ipc helpers", () => {
   test("createNotification without params", () => {
     const notif = Ipc.createNotification("ping");
     expect(Ipc.Notification.safeParse(notif).success).toBe(true);
-    expect(notif.params).toBeUndefined();
+    expect(notif.params).toBe(undefined);
   });
 });
 
@@ -141,6 +141,7 @@ describe("Ipc.Methods param schemas", () => {
   test("coordinator.spawn_run params valid", () => {
     expect(
       Ipc.Methods["coordinator.spawn_run"].params.safeParse({
+        authToken: "token",
         runId: "run-1",
         sessionId: "sess-1",
         prompt: "do work",
@@ -183,6 +184,7 @@ describe("Ipc.Methods param schemas", () => {
   test("worker.heartbeat params valid", () => {
     expect(
       Ipc.Methods["worker.heartbeat"].params.safeParse({
+        authToken: "token",
         workerId: "w1",
         activeRunIds: ["run-1", "run-2"],
         memoryRssMb: 256,
