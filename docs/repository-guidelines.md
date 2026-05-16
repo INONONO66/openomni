@@ -20,7 +20,7 @@ Use this order when deciding where a concept belongs:
 | Concept | Source of truth | Notes |
 | --- | --- | --- |
 | Cross-package schema or event | `packages/protocol/src/{domain}/` | Zod-first; no runtime logic. |
-| Durable session state | `packages/session/src/` | Session, storage adapters, event log, worker runs, artifacts, todos. |
+| Durable session state | `packages/session/src/` | Session, storage adapters, event log, worker runs, artifacts, work items. |
 | LLM provider behavior | `packages/llm/src/` | Auth, provider SDK wiring, transforms, token/cost tracking. |
 | Stateless agent execution | `packages/agent/src/core/` | No durable session lifecycle or storage ownership. |
 | Agent runtime helpers | `packages/agent/src/runtime/` | Messenger, registry, subagent/background tools, MCP client. |
@@ -33,7 +33,7 @@ Use this order when deciding where a concept belongs:
 
 - Put cross-package contracts in `@openomni/protocol` first.
 - Do not redefine protocol contracts in upper layers with new Zod schemas.
-- Upper layers may expose runtime wrappers around protocol contracts when they add behavior, such as `Session.Todo.update()` publishing bus events.
+- Upper layers may expose runtime wrappers around protocol contracts when they add behavior, such as `WorkItemStore.create()` publishing bus events.
 - App-local interfaces are allowed for external API payloads and host wiring, but they must not become hidden shared contracts.
 - If an app-local type starts being imported across package boundaries, promote it to `protocol` or keep it behind a package barrel in the owning package.
 

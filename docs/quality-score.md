@@ -2,7 +2,7 @@
 
 > Per-package quality assessment. Updated periodically to track progress.
 
-Last updated: 2026-05-01
+Last updated: 2026-05-16
 
 | Package  | Tests                  | Lint         | Types                      | API Stability           | Docs                           | Overall |
 | -------- | ---------------------- | ------------ | -------------------------- | ----------------------- | ------------------------------ | ------- |

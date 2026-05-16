@@ -26,6 +26,7 @@ src/
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
+├── work-item/            # WorkItemStore — universal work state engine (CRUD + lifecycle + Bus events + dependency tracking)
 └── worker-run/           # WorkerRun — event-sourced subagent execution records
 ```
 
@@ -41,6 +42,7 @@ src/
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) flow through the shared `Bus` too.
 - **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.
 - **Snapshot.Provider**: Interface for capturing and restoring session message state. `Snapshot.Diff` reports added / removed / modified message IDs.
+- **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.complete()`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.setVerificationGate()`, `.areDependenciesMet()`, `.retry()`. Publishes `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed) on every mutation. Gracefully degrades when `Storage.Adapter.workItem` is absent. Terminal state transitions are validated (e.g. cannot complete a failed item without retry). `parentHash` is create-only immutable.
 - **WorkerRun**: Event-sourced via `Storage.Adapter.eventLog`. `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.listBySession()`. State transitions (e.g. `waiting_input → running`) increment `resumeCount`. Used by `SubagentRuntime` / `BackgroundManager` to persist subagent runs.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
 - **Persona session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child persona trees. Future work should add explicit metadata conventions before adding new storage shapes.
