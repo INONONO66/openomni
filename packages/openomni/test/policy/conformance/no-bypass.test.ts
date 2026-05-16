@@ -62,6 +62,7 @@ function inboundEvent(): Ingress.InboundEvent {
     workspace: "/repo",
     mode: "direct",
     payload: "hello",
+    meta: { actor: { role: "user" } },
     agent: { model },
   };
 }

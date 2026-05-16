@@ -56,9 +56,48 @@ describe("IngressSessionResolver", () => {
       const key = IngressSessionResolver.extractSurfaceKey(event);
       expect(key).toBe("telegram::");
     });
+
+    it("appends explicit ADR-008 target to avoid session collisions", () => {
+      const key = IngressSessionResolver.extractSurfaceKey({
+        surface: "internal",
+        workspace: "repo",
+        channel: "main",
+        target: { type: "worker", workerId: "worker-1" },
+      });
+
+      expect(key).toBe("internal:repo:main:target:worker:worker-1");
+    });
+
+    it("does not append explicit main target to preserve existing surface mappings", () => {
+      const key = IngressSessionResolver.extractSurfaceKey({
+        surface: "telegram",
+        channel: "123",
+        target: { type: "main" },
+      });
+
+      expect(key).toBe("telegram::123");
+    });
   });
 
   describe("resolve", () => {
+    it("creates new-worker sessions as children when parent session is supplied", () => {
+      const parent = Session.create({
+        title: "parent",
+        model: { providerID: "test", modelID: "fixture" },
+      });
+
+      const result = IngressSessionResolver.resolve({
+        surface: "main-worker-tool",
+        target: { kind: "new-worker", parentSessionId: parent.id },
+      });
+
+      expect(result.session.parentSessionId).toBe(parent.id);
+      expect(result.session.spawnDepth).toBe(parent.spawnDepth + 1);
+      expect(Session.listChildren(parent.id).map((session) => session.id)).toContain(
+        result.session.id,
+      );
+    });
+
     it("creates new session for new surface key", () => {
       const event = {
         surface: "slack",
@@ -128,6 +167,15 @@ describe("IngressSessionResolver", () => {
 
       expect(result2.isNew).toBe(true);
       expect(sessionId1).not.toBe(sessionId2);
+    });
+
+    it("fails closed when worker target session is missing", () => {
+      expect(() =>
+        IngressSessionResolver.resolve({
+          surface: "internal",
+          target: { type: "worker", sessionId: "missing-session" },
+        }),
+      ).toThrow("worker target session not found");
     });
 
     it("uses custom model config when provided", () => {

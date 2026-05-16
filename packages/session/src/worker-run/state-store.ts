@@ -3,9 +3,9 @@ import { Storage } from "../storage/storage";
 
 const transitions: Record<Subagent.WorkerRunStatus, readonly Subagent.WorkerRunStatus[]> = {
   queued: ["starting"],
-  starting: ["running"],
+  starting: ["running", "failed", "cancelled", "interrupted"],
   running: ["waiting_input", "succeeded", "failed", "cancelled", "interrupted"],
-  waiting_input: ["running"],
+  waiting_input: ["running", "failed", "cancelled", "interrupted"],
   succeeded: [],
   failed: [],
   cancelled: [],

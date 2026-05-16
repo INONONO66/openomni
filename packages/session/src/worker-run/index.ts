@@ -17,6 +17,7 @@ export type WorkerRunStatus =
 export interface WorkerRunRecord {
   runId: string;
   sessionId: string;
+  parentSessionId?: string;
   title: string;
   prompt: string;
   assignedStepId?: string;
@@ -24,6 +25,7 @@ export interface WorkerRunRecord {
   startedAt: number;
   endedAt?: number;
   lastMessageId?: string;
+  error?: string;
   resumeCount: number;
 }
 
@@ -90,6 +92,7 @@ function toWorkerRunRecord(record: WorkerRunStateStore.Record): WorkerRunRecord 
   return {
     runId: record.runId,
     sessionId: record.sessionId,
+    parentSessionId: record.parentSessionId,
     title: record.title,
     prompt: record.prompt,
     assignedStepId: record.assignedStepId,
@@ -98,6 +101,7 @@ function toWorkerRunRecord(record: WorkerRunStateStore.Record): WorkerRunRecord 
     endedAt:
       extras?.endedAt ?? (terminalStatuses.has(record.status) ? record.timeUpdated : undefined),
     lastMessageId: extras?.lastMessageId,
+    error: record.error,
     resumeCount: record.resumeCount,
   };
 }

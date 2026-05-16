@@ -13,6 +13,16 @@ export {
 } from "./ingress";
 export type { CoordinatorLike } from "./ingress";
 
+// Main persona activation/runtime
+export { MainActivationManager, createMainWorkerTools } from "./persona";
+export type {
+  MainActivationLifecycle,
+  MainActivationManagerOptions,
+  MainRunContext,
+  MainRunResult,
+  MainWorkerToolsOptions,
+} from "./persona";
+
 // Runtime
 export { BusTransport } from "./runtime/bus-transport";
 export type { Transport } from "./runtime/bus-transport";

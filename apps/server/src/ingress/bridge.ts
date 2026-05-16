@@ -1,11 +1,17 @@
-import type { Tool, Adapter, Ingress } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
 import type { AgentToolProvider, NativeTool, SystemToolProvider } from "@openomni/openomni";
-import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
+import { buildToolCatalog, createToolExecutor, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
 const fallbackModel = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+const mainWorkerControlTools = new Set([
+  "spawn_worker",
+  "send_worker_message",
+  "cancel_worker",
+  "resume_worker",
+]);
 
 export interface BridgeDeps {
   systemProvider: SystemToolProvider;
@@ -31,7 +37,7 @@ function createFallbackDefinition(agentName: string, deps: BridgeDeps): AgentDef
   };
 }
 
-function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[] {
+function selectToolEntries(definition: AgentDefinition, deps: BridgeDeps) {
   const catalog = buildToolCatalog([
     { tools: deps.systemProvider.listTools(), source: "system" },
     { tools: deps.agentProvider.listTools(), source: "agent" },
@@ -41,16 +47,19 @@ function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[]
       : []),
   ]);
 
-  const selected = resolveToolSelection(catalog, definition.tools);
-  return selected.map((entry) => ({
+  return resolveToolSelection(catalog, definition.tools);
+}
+
+function buildAgentDefFromEntries(
+  definition: AgentDefinition,
+  deps: BridgeDeps,
+  selectedEntries: ReturnType<typeof selectToolEntries>,
+): Ingress.AgentDef {
+  const specs = selectedEntries.map((entry) => ({
     ...entry.tool.spec,
     name: sanitizeToolName(entry.tool.spec.name),
   }));
-}
-
-function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
-  const specs = selectTools(definition, deps);
+  const nativeTools = selectedEntries.map((entry) => entry.tool);
 
   return {
     model: definition.model,
@@ -61,7 +70,31 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },
+    toolExecutorFactory: ({ sessionId, runId, agentName, workspaceRoot }) =>
+      createToolExecutor({
+        tools: nativeTools,
+        config: {
+          workspaceRoot,
+          runtime: { sessionId, runId, agentName, workspaceRoot },
+        },
+      }),
   };
+}
+
+export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
+  const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
+  return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
+}
+
+export function buildMainAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
+  const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
+  const mainEntries = selectToolEntries(
+    { ...definition, tools: { categories: ["custom"] } },
+    deps,
+  ).filter(
+    (entry) => entry.source === "server" && mainWorkerControlTools.has(entry.tool.spec.name),
+  );
+  return buildAgentDefFromEntries(definition, deps, mainEntries);
 }
 
 function createBaseEvent(
@@ -77,7 +110,15 @@ function createBaseEvent(
     channel: descriptor.id ?? undefined,
     userId: message.sender.id,
     payload,
+    target: { kind: "main" },
     meta: {
+      actor: {
+        role: "user",
+        id: message.sender.id,
+      },
+      target: {
+        kind: "main",
+      },
       surfaceKey: message.surfaceKey,
       kind: descriptor.kind,
       sender: message.sender,
@@ -95,10 +136,14 @@ export function buildInboundEvent(
   deps: BridgeDeps,
 ): Ingress.InboundEvent {
   const base = createBaseEvent(message, message.text);
-  const agent = buildAgentDef(agentName, deps);
+  const agent = buildMainAgentDef(agentName, deps);
 
   return {
     ...base,
+    meta: {
+      ...base.meta,
+      agentName,
+    },
     mode: "direct",
     agent,
   };

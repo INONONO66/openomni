@@ -144,11 +144,23 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.event.id).toBe("evt-1");
   });
 
-  test("aborts when coordinator is missing", async () => {
-    const event = makeInboundEvent();
+  test("allows explicit main target when coordinator is missing", async () => {
+    const event = makeInboundEvent({
+      target: { type: "main" },
+      meta: { actor: { role: "user" } },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({ event });
+
+    expect(result.target.kind).toBe("main");
+    expect(result.coordinator).toBeUndefined();
+  });
+
+  test("aborts when coordinator is missing for worker creation target", async () => {
+    const event = makeInboundEvent({ target: { type: "new-worker" } });
 
     await expect(IngressAuthorityMiddleware.runPreRun({ event })).rejects.toThrow(
-      "coordinator is required",
+      "coordinator is required for new-worker target",
     );
   });
 

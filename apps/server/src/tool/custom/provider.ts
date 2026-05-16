@@ -7,7 +7,7 @@ export class CustomToolProvider implements ToolProvider {
 
   private tools: NativeTool[] = [];
 
-  constructor() {
+  constructor(extraTools: NativeTool[] = []) {
     this.tools = [
       {
         spec: {
@@ -50,6 +50,7 @@ export class CustomToolProvider implements ToolProvider {
           };
         },
       },
+      ...extraTools,
     ];
   }
 

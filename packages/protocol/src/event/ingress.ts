@@ -12,6 +12,7 @@ export namespace IngressEvent {
     Base.extend({
       surface: z.string(),
       mode: z.enum(["plan", "direct"]),
+      target: z.string().optional(),
       payloadLength: z.number(),
     }),
   );
@@ -21,6 +22,7 @@ export namespace IngressEvent {
     Base.extend({
       sessionId: z.string(),
       mode: z.enum(["plan", "direct"]),
+      target: z.string().optional(),
     }),
   );
 
@@ -29,6 +31,7 @@ export namespace IngressEvent {
     Base.extend({
       sessionId: z.string(),
       isNew: z.boolean(),
+      target: z.enum(["main", "new-worker", "worker"]).optional(),
     }),
   );
 
@@ -37,7 +40,19 @@ export namespace IngressEvent {
     Base.extend({
       sessionId: z.string(),
       mode: z.enum(["plan", "direct"]),
+      target: z.string().optional(),
       durationMs: z.number(),
+    }),
+  );
+
+  export const Failed = BusEvent.define(
+    "ingress.failed",
+    Base.extend({
+      sessionId: z.string(),
+      mode: z.enum(["plan", "direct"]),
+      target: z.string().optional(),
+      durationMs: z.number(),
+      error: z.string(),
     }),
   );
 }

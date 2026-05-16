@@ -3,10 +3,12 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, BusPersistence } from "@openomni/session";
+import { initialize, Bus, BusPersistence, WorkerRun } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
+  MainActivationManager,
+  createMainWorkerTools,
   SystemToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
@@ -14,6 +16,7 @@ import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/index";
 import { createMessageHandler } from "../handler/conversation";
+import { buildAgentDef, buildMainAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
@@ -111,7 +114,6 @@ export async function main(): Promise<void> {
   const systemProvider = new SystemToolProvider(config.workspace?.root);
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
-  const customProvider = new CustomToolProvider();
 
   const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
   const mergedMcpConfig = {
@@ -120,7 +122,11 @@ export async function main(): Promise<void> {
   };
   await connectMcpServers({ ...config, mcp: mergedMcpConfig }, mcpProvider);
 
-  let coordinator: ReturnType<typeof createExecutionCoordinator> | undefined;
+  const mainActivationManager = MainActivationManager.create({
+    maxActive: 10,
+    idleTimeoutMs: Number(process.env.OPENOMNI_MAIN_IDLE_TIMEOUT_MS ?? 30_000),
+  });
+  IngressEngine.setMainActivationManager(mainActivationManager);
 
   Bus.publish(Operational.Info, {
     traceId: crypto.randomUUID(),
@@ -130,20 +136,100 @@ export async function main(): Promise<void> {
   });
   const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
   const bootstrap = await assembleBootstrap(mcpProvider);
-  const toolDispatcher = buildToolDispatcher([
-    systemProvider,
-    agentProvider,
-    mcpProvider,
-    customProvider,
-  ]);
-  coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
-  await coordinator.waitUntilReady();
-  IngressEngine.setCoordinator(coordinator);
-
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
   );
   const model = await resolveModel();
+  const mainWorkerTools = model
+    ? createMainWorkerTools({
+        ingest: IngressEngine.ingest,
+        defaultModel: { provider: model.providerID, id: model.id },
+        createWorkerAgent: ({ agentName, workspaceRoot }) =>
+          buildAgentDef(agentName, {
+            systemProvider,
+            agentProvider,
+            mcpProvider,
+            defaultModel: { provider: model.providerID, id: model.id },
+            workspaceRoot: workspaceRoot ?? config.workspace?.root ?? process.cwd(),
+          }),
+        mainAgentNames: ["dev"],
+      })
+    : [];
+  const customProvider = new CustomToolProvider(mainWorkerTools);
+  const toolDispatcher = buildToolDispatcher([mcpProvider]);
+  const coordinator = createExecutionCoordinator({
+    workerScript,
+    bootstrap,
+    toolDispatcher,
+    askMain: async ({ workerId, sessionId, runId, question }) => {
+      const requestId = crypto.randomUUID();
+      if (!model) {
+        return { requestId, accepted: false, error: "worker.ask_main requires a configured model" };
+      }
+      const run = runId ? await WorkerRun.get(sessionId, runId) : undefined;
+      const mainSessionId = run?.parentSessionId;
+      if (!mainSessionId) {
+        return {
+          requestId,
+          accepted: false,
+          error: `worker.ask_main requires a worker run with parent Main session: ${runId ?? "unknown"}`,
+        };
+      }
+
+      const current = runId ? await WorkerRun.get(sessionId, runId) : undefined;
+      if (runId && current && current.status === "starting") {
+        await WorkerRun.updateStatus(sessionId, runId, "running");
+      }
+      const running = runId ? await WorkerRun.get(sessionId, runId) : undefined;
+      if (runId && running?.status === "running") {
+        await WorkerRun.updateStatus(sessionId, runId, "waiting_input");
+      }
+
+      try {
+        const result = await IngressEngine.ingest({
+          id: crypto.randomUUID(),
+          surface: "worker-ask-main",
+          workspace: config.workspace?.root ?? process.cwd(),
+          mode: "direct",
+          payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Main:\n\n${question}`,
+          runtime: {
+            durableSessionId: mainSessionId,
+            lifecycle: "active",
+          },
+          target: { kind: "main" },
+          meta: {
+            actor: {
+              role: "worker",
+              trusted: true,
+              workerId,
+              sessionId,
+              runId,
+            },
+            target: { kind: "main" },
+            agentName: "dev",
+          },
+          agent: buildMainAgentDef("dev", {
+            systemProvider,
+            agentProvider,
+            mcpProvider,
+            customProvider,
+            defaultModel: { provider: model.providerID, id: model.id },
+            workspaceRoot: config.workspace?.root ?? process.cwd(),
+          }),
+        });
+        return { requestId, accepted: true, output: result.result.output };
+      } finally {
+        const after = runId ? await WorkerRun.get(sessionId, runId) : undefined;
+        if (runId && after?.status === "waiting_input") {
+          await WorkerRun.updateStatus(sessionId, runId, "running");
+        }
+      }
+    },
+    maxWorkers: 10,
+    workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
+  });
+  IngressEngine.setCoordinator(coordinator);
+
   const routingHandler = model
     ? createRoutingHandler(
         systemProvider,

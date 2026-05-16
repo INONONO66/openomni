@@ -15,9 +15,11 @@ import {
 } from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+let MainActivationManager: typeof import("../../src/persona/main-activation-manager").MainActivationManager;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
+  ({ MainActivationManager } = await import("../../src/persona/main-activation-manager"));
 });
 
 afterAll(() => {
@@ -31,6 +33,22 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  installMainActivationManager();
+  installCoordinator();
+});
+
+function installMainActivationManager() {
+  IngressEngine.setMainActivationManager(
+    MainActivationManager.create({
+      runAgent: async (_config, input) => {
+        testState.llmInputs.push(input);
+        return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
+      },
+    }),
+  );
+}
+
+function installCoordinator() {
   IngressEngine.setCoordinator({
     async dispatch(_sessionId, request) {
       const output = testState.responseQueue.shift() ?? "{}";
@@ -43,7 +61,7 @@ beforeEach(() => {
       };
     },
   });
-});
+}
 
 async function catchError(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -65,6 +83,7 @@ describe("IngressEngine", () => {
       channel: "C1",
       mode: "direct",
       payload: "hello",
+      meta: { actor: { role: "user" } },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -102,7 +121,9 @@ describe("IngressEngine", () => {
         surface: "tui",
         workspace: "/repo",
         mode: "direct",
+        target: { type: "new-worker" },
         payload: "hello",
+        meta: { actor: { role: "user" }, target: { kind: "worker", sessionId: "worker-sess-1" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -110,12 +131,12 @@ describe("IngressEngine", () => {
     );
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("coordinator is required");
+    expect((error as Error).message).toContain("coordinator is required for new-worker target");
     expect(decisions).toContainEqual(
       expect.objectContaining({
         policyId: "ingress.coordinator",
         verdict: "deny",
-        reasonCodes: ["coordinator is required"],
+        reasonCodes: ["coordinator is required for new-worker target"],
       }),
     );
   });
@@ -190,6 +211,7 @@ describe("IngressEngine", () => {
         workspace: "/repo",
         mode: "direct",
         payload: "hello",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -235,6 +257,7 @@ describe("IngressEngine", () => {
         workspace: "/repo",
         mode: "direct",
         payload: "hello",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -257,6 +280,7 @@ describe("IngressEngine", () => {
       channel: "main",
       mode: "direct",
       payload: "First message",
+      meta: { actor: { role: "user" } },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -269,6 +293,7 @@ describe("IngressEngine", () => {
       channel: "main",
       mode: "direct",
       payload: "Second message",
+      meta: { actor: { role: "user" } },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -290,6 +315,7 @@ describe("IngressEngine", () => {
       workspace: "/repo",
       mode: "direct",
       payload: "Before reset",
+      meta: { actor: { role: "user" } },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -298,18 +324,8 @@ describe("IngressEngine", () => {
     const first = await IngressEngine.ingest(event);
     IngressEngine.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    IngressEngine.setCoordinator({
-      async dispatch(_sessionId, request) {
-        const output = testState.responseQueue.shift() ?? "{}";
-        return {
-          runId: request.runId,
-          sessionId: request.sessionId,
-          status: "succeeded" as const,
-          output,
-          finishReason: "stop" as const,
-        };
-      },
-    });
+    installMainActivationManager();
+    installCoordinator();
 
     const second = await IngressEngine.ingest({
       ...event,
@@ -327,6 +343,7 @@ describe("IngressEngine", () => {
       workspace: "/repo",
       mode: "unknown-mode",
       payload: "test",
+      meta: { actor: { role: "user" } },
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
@@ -361,6 +378,7 @@ describe("IngressEngine", () => {
         workspace: "/repo",
         mode: "direct",
         payload: "hello",
+        meta: { actor: { role: "user" } },
         agent: { model: { provider: "anthropic", id: "claude-3-haiku-20240307" } },
         ...overrides,
       };
@@ -421,7 +439,8 @@ describe("IngressEngine", () => {
       const ingressDecision = decisions.find((d) => d.policyId === "test.abort");
       expect(ingressDecision).toBeDefined();
       expect(ingressDecision?.verdict).toBe("deny");
-      expect(ProtocolPolicyDecision.reason(ingressDecision!)).toBe("blocked");
+      if (!ingressDecision) throw new Error("expected ingress decision");
+      expect(ProtocolPolicyDecision.reason(ingressDecision)).toBe("blocked");
     });
 
     it("provides surface and actor labels to policy context", async () => {
@@ -446,6 +465,7 @@ describe("IngressEngine", () => {
 
       expect(capturedLabels).toEqual([
         { value: "surface.slack", source: "system" },
+        { value: "target.main", source: "system" },
         { value: "actor.user", source: "system" },
       ]);
     });

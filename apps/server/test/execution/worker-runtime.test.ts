@@ -51,6 +51,7 @@ describe("worker-runtime", () => {
     );
 
     expect(context.tools).toHaveLength(1);
+    expect(context.tools?.[0]?.name).toBe("bash");
     expect(context.toolExecutor).toBeDefined();
 
     if (!context.toolExecutor) throw new Error("expected toolExecutor to be defined");
@@ -61,5 +62,22 @@ describe("worker-runtime", () => {
     });
 
     expect(result.output).not.toContain("denied by policy");
+  });
+
+  it("only advertises tools that the worker executor can run", () => {
+    const availableTools = new SystemToolProvider("/workspace/openomni").listTools();
+    const context = createExecutionToolContext(
+      {
+        tools: [
+          { name: "bash", inputSchema: { type: "object" } },
+          { name: "spawn_worker", inputSchema: { type: "object" } },
+        ],
+        toolConfig: { workspaceRoot: "/workspace/openomni" },
+      },
+      availableTools,
+    );
+
+    expect(context.tools?.map((tool) => tool.name)).toEqual(["bash"]);
+    expect(context.toolExecutor).toBeDefined();
   });
 });

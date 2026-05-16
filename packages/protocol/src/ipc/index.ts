@@ -58,6 +58,38 @@ const methods = {
     params: z.object({ authToken: z.string(), runId: z.string(), sessionId: z.string() }),
     result: z.object({ cancelled: z.boolean(), error: z.string().optional() }),
   },
+  "worker.deliver_message": {
+    params: z.object({
+      authToken: z.string(),
+      sessionId: z.string(),
+      runId: z.string().optional(),
+      message: z.string(),
+    }),
+    result: z.object({ accepted: z.boolean(), error: z.string().optional() }),
+  },
+  "worker.shutdown_idle": {
+    params: z.object({
+      authToken: z.string(),
+      workerId: z.string(),
+      reason: z.string().optional(),
+    }),
+    result: z.object({ acknowledged: z.boolean(), error: z.string().optional() }),
+  },
+  "worker.ask_main": {
+    params: z.object({
+      authToken: z.string(),
+      workerId: z.string(),
+      sessionId: z.string(),
+      runId: z.string().optional(),
+      question: z.string(),
+    }),
+    result: z.object({
+      requestId: z.string(),
+      accepted: z.boolean(),
+      output: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  },
   "coordinator.bootstrap": {
     params: z.object({ authToken: z.string(), bootstrap: WorkerBootstrap.Bootstrap }),
     result: z.object({ ok: z.boolean(), error: z.string().optional() }),

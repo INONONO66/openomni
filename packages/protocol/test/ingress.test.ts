@@ -53,6 +53,37 @@ describe("AgentDef", () => {
   });
 });
 
+describe("Ingress meta contracts", () => {
+  test("parses actor and target metadata", () => {
+    const meta = Ingress.MetaSchema.parse({
+      actor: {
+        role: "main",
+        trusted: true,
+      },
+      target: {
+        kind: "worker",
+        sessionId: "sess-1",
+      },
+      traceId: "trace-1",
+    });
+
+    expect(meta.actor?.role).toBe("main");
+    expect(meta.actor?.trusted).toBe(true);
+    expect(meta.target?.kind).toBe("worker");
+    expect(meta.target?.sessionId).toBe("sess-1");
+  });
+
+  test("rejects worker target without worker identity", () => {
+    expect(() =>
+      Ingress.MetaSchema.parse({
+        target: {
+          kind: "worker",
+        },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("DirectEvent", () => {
   test("should parse valid direct event with agent", () => {
     const event = Ingress.DirectEventSchema.parse({
@@ -102,6 +133,44 @@ describe("InboundEvent", () => {
             id: "claude-3-5-sonnet",
           },
         },
+      }),
+    ).toThrow();
+  });
+
+  test("parses ADR-008 target aliases and actor metadata", () => {
+    const main = Ingress.InboundEventSchema.parse({
+      id: "event-main-1",
+      surface: "cli",
+      mode: "direct",
+      target: "main",
+      payload: "hello",
+      meta: { actor: { role: "user", id: "u1" } },
+      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
+    });
+    expect(Ingress.resolveTarget(main)).toEqual({ kind: "main" });
+    expect(main.meta?.actor?.role).toBe("user");
+
+    const worker = Ingress.InboundEventSchema.parse({
+      id: "event-worker-1",
+      surface: "cli",
+      mode: "direct",
+      target: "worker:worker-7",
+      payload: "continue",
+      meta: { actor: { role: "main" } },
+      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
+    });
+    expect(Ingress.resolveTarget(worker)).toEqual({ kind: "worker", workerId: "worker-7" });
+  });
+
+  test("rejects worker target without workerId or sessionId", () => {
+    expect(() =>
+      Ingress.InboundEventSchema.parse({
+        id: "event-worker-invalid",
+        surface: "cli",
+        mode: "direct",
+        target: { type: "worker" },
+        payload: "continue",
+        agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
       }),
     ).toThrow();
   });

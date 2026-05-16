@@ -7,6 +7,7 @@ import {
 } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
+import type { MainActivationManager } from "../persona/main-activation-manager";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
@@ -17,6 +18,7 @@ export type { CoordinatorLike };
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 let _coordinator: CoordinatorLike | undefined;
+let _mainActivationManager: MainActivationManager | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 
@@ -31,6 +33,7 @@ export namespace IngressEngine {
     Storage.reset();
     Bus.reset();
     _coordinator = undefined;
+    _mainActivationManager = undefined;
     _middlewareDecisionObserver = undefined;
     _ingressPolicies = [];
   }
@@ -41,6 +44,14 @@ export namespace IngressEngine {
 
   export function clearCoordinator(): void {
     _coordinator = undefined;
+  }
+
+  export function setMainActivationManager(manager: MainActivationManager): void {
+    _mainActivationManager = manager;
+  }
+
+  export function clearMainActivationManager(): void {
+    _mainActivationManager = undefined;
   }
 
   export function setPolicyDecisionObserver(
@@ -63,6 +74,11 @@ export namespace IngressEngine {
     });
 
     const inboundEvent = preRun.event;
+    const target = preRun.target;
+    const targetLabel =
+      target.kind === "worker"
+        ? `worker:${target.workerId ?? target.sessionId ?? ""}`
+        : target.kind;
 
     const payloadLength =
       typeof inboundEvent.payload === "string"
@@ -73,6 +89,7 @@ export namespace IngressEngine {
       traceId: trace.traceId,
       surface: inboundEvent.surface,
       mode: inboundEvent.mode,
+      ...(targetLabel ? { target: targetLabel } : {}),
       payloadLength,
       time: Date.now(),
     });
@@ -88,6 +105,7 @@ export namespace IngressEngine {
 
       const labels: Policy.LabelEntry[] = [
         { value: `surface.${inboundEvent.surface}`, source: "system" },
+        { value: `target.${target.kind}`, source: "system" },
       ];
       const actor = inboundEvent.meta?.actor;
       if (actor && typeof actor === "object" && !Array.isArray(actor)) {
@@ -103,7 +121,11 @@ export namespace IngressEngine {
         continuationCount: 0,
         elapsedMs: 0,
         labels,
-        toolInput: { surface: inboundEvent.surface, mode: inboundEvent.mode },
+        toolInput: {
+          surface: inboundEvent.surface,
+          mode: inboundEvent.mode,
+          target: target.kind,
+        },
         traceContext: trace,
       });
 
@@ -126,13 +148,20 @@ export namespace IngressEngine {
       activeTrace,
     );
 
-    return IngressHandlers.handleDirect({
+    const handlerContext = {
       sessionId: session.id,
       event: inboundEvent,
       coordinator: preRun.coordinator,
+      mainActivationManager: _mainActivationManager,
       traceContext: activeTrace,
       policies: _ingressPolicies,
       onPolicyDecision: _middlewareDecisionObserver,
-    });
+    };
+
+    if (target.kind === "main") {
+      return IngressHandlers.handleMain(handlerContext);
+    }
+
+    return IngressHandlers.handleDirect(handlerContext);
   }
 }

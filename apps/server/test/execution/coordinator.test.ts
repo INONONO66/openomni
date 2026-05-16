@@ -2,14 +2,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 
 import type { Execution } from "@openomni/protocol";
 
-type MockWorkerPool = {
+type MockWorkerManager = {
   dispatch(sessionId: string, runId: string, params: Record<string, unknown>): Promise<unknown>;
-  getStats(): { workers: number; active: number; idle: number; ready: number };
+  getStats(): {
+    workers: number;
+    active: number;
+    idle: number;
+    ready: number;
+    busy: number;
+    maxWorkers: number;
+  };
   waitUntilReady(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
 };
 
-let mockWorkerPool: MockWorkerPool;
+let mockWorkerManager: MockWorkerManager;
 
 function createDeferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let resolve!: (value: T) => void;
@@ -20,7 +27,7 @@ function createDeferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
 }
 
 mock.module("@openomni/coordinator", () => ({
-  createWorkerPool: () => mockWorkerPool,
+  createWorkerManager: () => mockWorkerManager,
   recoverInterruptedRuns: async () => ({ recovered: 0, sessions: [] }),
 }));
 
@@ -35,7 +42,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  mockWorkerPool = {
+  mockWorkerManager = {
     dispatch(_sessionId, _runId, params) {
       const deferred = createDeferred<unknown>();
       if (typeof params.delayMs === "number") {
@@ -52,7 +59,7 @@ beforeEach(() => {
       return deferred.promise;
     },
     getStats() {
-      return { workers: 1, active: 1, idle: 0, ready: 1 };
+      return { workers: 1, active: 1, idle: 0, ready: 1, busy: 0, maxWorkers: 1 };
     },
     async waitUntilReady() {
       /* no-op */
@@ -77,7 +84,7 @@ function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Requ
 describe("ExecutionCoordinator", () => {
   test("waitUntilReady delegates to the worker pool", async () => {
     const waitUntilReady = mock(async () => undefined);
-    mockWorkerPool.waitUntilReady = waitUntilReady;
+    mockWorkerManager.waitUntilReady = waitUntilReady;
 
     const coordinator = createExecutionCoordinator({
       workerScript: "unused-in-test",

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Execution, type Message, type Ingress } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
-import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Bus, Session, Storage, SurfaceKey, WorkerRun } from "@openomni/session";
 import { mockModelsGet, mockProviderFromModelsDevModel, resetTestState } from "./_llm-mock";
 import type { CoordinatorLike } from "../../src/ingress/coordinator-like";
 
@@ -174,12 +174,169 @@ describe("IngressHandlers", () => {
     );
     expect(result).toEqual({
       mode: "direct",
+      target: { kind: "main" },
       sessionId,
       result: {
         output: "direct output",
         finishReason: "stop",
       },
     });
+  });
+
+  it("delivers messages to an active worker target without spawning a new run", async () => {
+    const sessionId = createSession();
+    const storeDirectResultMock = mock(() => undefined);
+    const dispatch = mock(async () => {
+      throw new Error("dispatch should not be called");
+    });
+    const deliverMessage = mock(async () => ({ accepted: true }));
+    SessionBridge.storeDirectResult = storeDirectResultMock;
+
+    const event: Ingress.InboundEvent = {
+      id: "event-worker-deliver",
+      surface: "tui",
+      mode: "direct",
+      payload: "adjust your plan",
+      target: { kind: "worker", sessionId },
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+
+    const result = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: { dispatch, deliverMessage },
+    });
+
+    expect(deliverMessage).toHaveBeenCalledWith(sessionId, "adjust your plan", undefined);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(await WorkerRun.listBySession(sessionId)).toHaveLength(0);
+    expect(result.result.finishReason).toBe("delivered");
+    expect(storeDirectResultMock).toHaveBeenCalled();
+  });
+
+  it("falls back to a resume run when live worker delivery is unsupported", async () => {
+    const sessionId = createSession();
+    const dispatch = mock(async (_sessionId: string, request: Execution.Request) => ({
+      runId: request.runId,
+      sessionId,
+      status: "succeeded" as const,
+      output: "resumed",
+      finishReason: "stop",
+    }));
+    const deliverMessage = mock(async () => ({
+      accepted: false,
+      error: "live worker message delivery is not supported",
+    }));
+
+    const event: Ingress.InboundEvent = {
+      id: "event-worker-deliver-fallback",
+      surface: "tui",
+      mode: "direct",
+      payload: "adjust later",
+      target: { kind: "worker", sessionId },
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+
+    const result = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: { dispatch, deliverMessage },
+    });
+
+    expect(deliverMessage).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect((await WorkerRun.listBySession(sessionId))[0]?.status).toBe("succeeded");
+    expect(result.result.output).toBe("resumed");
+  });
+
+  it("background worker ingress returns after admission and completes durable run later", async () => {
+    const sessionId = createSession();
+    let releaseDispatch: (() => void) | undefined;
+    const dispatchStarted = Promise.withResolvers<void>();
+    const dispatch = mock(async (_sessionId: string, request: Execution.Request) => {
+      dispatchStarted.resolve();
+      await new Promise<void>((resolve) => {
+        releaseDispatch = resolve;
+      });
+      return {
+        runId: request.runId,
+        sessionId,
+        status: "succeeded" as const,
+        output: "background done",
+        finishReason: "stop",
+      };
+    });
+
+    const event: Ingress.InboundEvent = {
+      id: "event-worker-background",
+      surface: "tui",
+      mode: "direct",
+      payload: "start in background",
+      target: { kind: "worker", sessionId },
+      runtime: { lifecycle: "starting", background: true },
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+
+    const result = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator: { dispatch },
+    });
+
+    expect(result.result.finishReason).toBe("background");
+    expect(JSON.parse(result.result.output)).toMatchObject({
+      accepted: true,
+      status: "started",
+      sessionId,
+    });
+    expect((await WorkerRun.listBySession(sessionId))[0]?.status).toBe("starting");
+
+    await dispatchStarted.promise;
+    releaseDispatch?.();
+
+    const deadline = Date.now() + 1_000;
+    while ((await WorkerRun.listBySession(sessionId))[0]?.status !== "succeeded") {
+      if (Date.now() > deadline) throw new Error("background run did not complete");
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks starting worker runs interrupted when dispatch throws on IPC failure", async () => {
+    const sessionId = createSession();
+    const event: Ingress.InboundEvent = {
+      id: "event-worker-start-failure",
+      surface: "tui",
+      mode: "direct",
+      payload: "start work",
+      target: { kind: "worker", sessionId },
+      agent: {
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      },
+    };
+    const coordinator: CoordinatorLike = {
+      async dispatch() {
+        throw new Error("socket closed before delivery");
+      },
+    };
+
+    const error = await IngressHandlers.handleDirect({
+      sessionId,
+      event,
+      coordinator,
+    }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    const runs = await WorkerRun.listBySession(sessionId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("interrupted");
+    expect(runs[0]?.error).toBe("socket closed before delivery");
   });
 
   it("handleDirect dispatches writeback.commit before storing output", async () => {

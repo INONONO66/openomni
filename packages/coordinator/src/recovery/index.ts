@@ -10,7 +10,9 @@ export async function recoverInterruptedRuns(): Promise<RecoveryResult> {
 
   for (const session of Session.list()) {
     const runs = await WorkerRun.listBySession(session.id);
-    const incompleteRuns = runs.filter((r) => r.status === "running" || r.status === "starting");
+    const incompleteRuns = runs.filter(
+      (r) => r.status === "running" || r.status === "starting" || r.status === "waiting_input",
+    );
 
     for (const run of incompleteRuns) {
       // starting → running is the only valid transition before → interrupted

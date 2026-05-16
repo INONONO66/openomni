@@ -44,8 +44,14 @@ export function createExecutionToolContext(
   }
 
   const selectedTools = selectRequestedTools(availableTools, request.tools);
+  if (selectedTools.length === 0) {
+    return {};
+  }
   return {
-    tools: request.tools,
+    tools: selectedTools.map((tool) => ({
+      ...tool.spec,
+      name: tool.spec.name.replace(/\./g, "_"),
+    })),
     toolExecutor: createToolExecutor({
       tools: selectedTools,
       config: {

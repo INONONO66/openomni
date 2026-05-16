@@ -73,6 +73,17 @@ describe("recoverInterruptedRuns", () => {
     expect(result.recovered).toBe(1);
   });
 
+  test("marks waiting_input runs as interrupted", async () => {
+    seedSession("s-waiting");
+    await seedRunAtStatus("s-waiting", "r-waiting", "waiting_input");
+
+    const result = await recoverInterruptedRuns();
+
+    const run = await WorkerRun.get("s-waiting", "r-waiting");
+    expect(run?.status).toBe("interrupted");
+    expect(result.recovered).toBe(1);
+  });
+
   test("publishes WorkerRunFailed event for each interrupted run", async () => {
     seedSession("s3");
     await seedRunAtStatus("s3", "r3a", "running");

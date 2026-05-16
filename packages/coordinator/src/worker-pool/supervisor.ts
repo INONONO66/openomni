@@ -24,6 +24,20 @@ export type ToolCallResult = {
   isError?: boolean;
 };
 
+export type AskMainParams = {
+  workerId: string;
+  sessionId: string;
+  runId?: string;
+  question: string;
+};
+
+export type AskMainResult = {
+  requestId: string;
+  accepted: boolean;
+  output?: string;
+  error?: string;
+};
+
 export class WorkerSupervisor {
   private proc: Subprocess | null = null;
   private client: IpcClient | null = null;
@@ -31,6 +45,7 @@ export class WorkerSupervisor {
   private readonly authToken = crypto.randomUUID();
   private restartCount = 0;
   private restartWindowStart = 0;
+  private generation = 0;
   private running = false;
   private stopping = false;
   readonly socketPath: string;
@@ -45,12 +60,14 @@ export class WorkerSupervisor {
       workerId: number,
       snapshot: WorkerBootstrap.WorkerSnapshot,
     ) => void,
+    private readonly askMainHandler?: (params: AskMainParams) => Promise<AskMainResult>,
   ) {
     this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
     this.doStart();
   }
 
   private doStart(): void {
+    this.generation += 1;
     this.running = true;
     this.bootstrapped = false;
     this.proc = Bun.spawn(
@@ -110,6 +127,42 @@ export class WorkerSupervisor {
                 snapshotHandler(workerId, params.snapshot as WorkerBootstrap.WorkerSnapshot);
               }
               respond(null);
+              return;
+            }
+
+            if (method === "worker.ask_main") {
+              const requestId = crypto.randomUUID();
+              if (params?.authToken !== authToken) {
+                respond({ requestId, accepted: false, error: "unauthorized worker request" });
+                return;
+              }
+              const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "";
+              const question = typeof params?.question === "string" ? params.question : "";
+              if (!this.askMainHandler || !sessionId || !question) {
+                respond({
+                  requestId,
+                  accepted: false,
+                  error: this.askMainHandler
+                    ? "worker.ask_main requires sessionId and question"
+                    : "worker.ask_main is not configured",
+                });
+                return;
+              }
+
+              this.askMainHandler({
+                workerId: String(workerId),
+                sessionId,
+                ...(typeof params?.runId === "string" ? { runId: params.runId } : {}),
+                question,
+              })
+                .then((result: AskMainResult) => respond(result))
+                .catch((err: unknown) =>
+                  respond({
+                    requestId,
+                    accepted: false,
+                    error: err instanceof Error ? err.message : String(err),
+                  }),
+                );
               return;
             }
 
@@ -180,6 +233,10 @@ export class WorkerSupervisor {
     return this.client?.connected === true && this.bootstrapped;
   }
 
+  getGeneration(): number {
+    return this.generation;
+  }
+
   async waitReady(timeoutMs = 10_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -204,6 +261,54 @@ export class WorkerSupervisor {
       { authToken: this.authToken, runId, ...params },
       timeoutMs,
     );
+  }
+
+  async cancel(runId: string, sessionId: string): Promise<unknown> {
+    const c = this.client;
+    if (!c?.connected) {
+      return { cancelled: false, error: `worker ${this.id} not available` };
+    }
+    return c.call("coordinator.cancel_run", { authToken: this.authToken, runId, sessionId }, 5_000);
+  }
+
+  async deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown> {
+    const c = this.client;
+    if (!c?.connected) {
+      return { accepted: false, error: `worker ${this.id} not available` };
+    }
+    return c.call(
+      "worker.deliver_message",
+      { authToken: this.authToken, sessionId, ...(runId ? { runId } : {}), message },
+      5_000,
+    );
+  }
+
+  async shutdownIdle(): Promise<boolean> {
+    const c = this.client;
+    if (!c?.connected) {
+      await this.stop();
+      return true;
+    }
+
+    const wasStopping = this.stopping;
+    this.stopping = true;
+    try {
+      const result = await c.call(
+        "worker.shutdown_idle",
+        { authToken: this.authToken, workerId: String(this.id) },
+        5_000,
+      );
+      if (!isShutdownAcknowledged(result)) {
+        this.stopping = wasStopping;
+        return false;
+      }
+    } catch {
+      await this.stop();
+      return true;
+    }
+
+    await this.stop();
+    return true;
   }
 
   forceKill(): void {
@@ -239,6 +344,7 @@ const workerEnvKeys = new Set([
   "OPENOMNI_MODELS_PATH",
   "OPENOMNI_DISABLE_MODELS_FETCH",
   "OPENOMNI_WORKER_ENV_FIXTURE",
+  "OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS",
 ]);
 
 function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
@@ -252,4 +358,12 @@ function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
 
 function isBootstrapAccepted(value: unknown): boolean {
   return value !== null && typeof value === "object" && (value as { ok?: unknown }).ok === true;
+}
+
+function isShutdownAcknowledged(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { acknowledged?: unknown }).acknowledged === true
+  );
 }

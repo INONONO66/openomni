@@ -61,12 +61,12 @@ describe("worker pool dispatch", () => {
     expect(parMs).toBeLessThan(seqMs);
   });
 
-  test("getStats reflects pool configuration", () => {
+  test("getStats reflects on-demand worker limit", () => {
     const stats = pool.getStats();
-    expect(stats.workers).toBe(4);
-    expect(stats.ready).toBe(4);
-    expect(stats.active).toBe(4);
-    expect(stats.idle).toBe(0);
+    expect(stats.maxActiveWorkers).toBe(4);
+    expect(stats.workers).toBeLessThanOrEqual(4);
+    expect(stats.ready).toBeLessThanOrEqual(stats.workers);
+    expect(stats.active + stats.idle).toBe(stats.workers);
   });
 
   test("creates a private per-pool socket directory", () => {

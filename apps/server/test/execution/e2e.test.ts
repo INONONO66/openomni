@@ -12,6 +12,8 @@ function makeDirectEvent(): Ingress.DirectEvent {
     surface: "test",
     mode: "direct",
     payload: "hello",
+    target: { kind: "new-worker" },
+    meta: { actor: { role: "user" }, target: { kind: "new-worker" } },
     agent: {
       model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
       tools: [],
