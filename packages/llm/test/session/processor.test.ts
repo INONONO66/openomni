@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
-import { Operational, type Run, type Sink, type Tool } from "@openomni/protocol";
+import { LlmCall, Operational, type Run, type Sink, type Tool } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { Processor } from "../../src/session/processor";
 import type { Message } from "../../src/session";
@@ -15,14 +15,7 @@ type OperationalInfoPayload = {
   context?: Record<string, unknown>;
 };
 
-interface EventLogRow {
-  id: number;
-  type: string;
-  status: string;
-  data: string;
-}
-
-function configureEventLogSession(sessionId: string, rows: EventLogRow[]): void {
+function configureSession(sessionId: string): void {
   const messages = new Map<string, Message.Info>();
   const parts = new Map<string, Message.Part>();
   const now = Date.now();
@@ -77,27 +70,6 @@ function configureEventLogSession(sessionId: string, rows: EventLogRow[]): void 
         return parts.delete(partID);
       },
     },
-    eventLog: {
-      append(rowSessionId, type, data) {
-        if (rowSessionId !== sessionId) return rows.length;
-        const id = rows.length + 1;
-        rows.push({ id, type, status: "pending", data });
-        return id;
-      },
-      replay(rowSessionId) {
-        return rowSessionId === sessionId ? rows : [];
-      },
-      listIncomplete(rowSessionId) {
-        return rowSessionId === sessionId ? rows : [];
-      },
-      markComplete(_rowSessionId, eventId) {
-        const row = rows.find((item) => item.id === eventId);
-        if (row) row.status = "completed";
-      },
-      listIncompleteSessions() {
-        return rows.some((row) => row.status !== "completed") ? [sessionId] : [];
-      },
-    },
   });
 }
 
@@ -146,6 +118,7 @@ describe("Processor", () => {
   });
 
   afterEach(() => {
+    Bus.reset();
     Storage.reset();
   });
 
@@ -460,7 +433,7 @@ describe("Processor", () => {
       const snapshots: Run.Snapshot[] = [];
       const messages: Message.WithParts[] = [];
 
-      configureEventLogSession("session-456", []);
+      configureSession("session-456");
 
       const sink: Sink = {
         onMessage(message) {
@@ -528,11 +501,11 @@ describe("Processor", () => {
       expect(toolStarted?.context).toMatchObject({
         toolCallId: "call-1",
         toolName: "lookup",
-        args: { q: "x" },
+        inputSummary: "q",
       });
       expect(toolCompleted?.context).toMatchObject({
         toolCallId: "call-1",
-        output: "ok",
+        outputLength: 2,
       });
 
       unsub();
@@ -601,6 +574,63 @@ describe("Processor", () => {
 
       expect(result).toBeDefined();
       expect(attemptCount).toBe(2);
+    });
+
+    test("publishes structured retry and rate-limit events", async () => {
+      let attemptCount = 0;
+      const retries: Array<{ runId?: string; reason: string; backoffMs: number }> = [];
+      const rateLimits: Array<{ runId?: string; provider: string; retryAfterMs: number }> = [];
+      const unsubRetry = Bus.subscribe(LlmCall.RetryDecided, (event) => {
+        retries.push(event);
+      });
+      const unsubRateLimit = Bus.subscribe(LlmCall.RateLimited, (event) => {
+        rateLimits.push(event);
+      });
+
+      const processor = Processor.create({
+        assistantMessage: mockAssistantMessage,
+        sessionID: "session-456",
+        model: mockModel,
+        abort: abortController.signal,
+        trace: {
+          traceId: "trace-processor-retry",
+          sessionId: "session-456",
+          runId: "run-processor-retry",
+          provider: "anthropic",
+        },
+        createStream: async () => ({
+          fullStream: (async function* () {
+            attemptCount++;
+            if (attemptCount === 1) {
+              throw new APIError({
+                message: JSON.stringify({
+                  type: "error",
+                  error: { type: "too_many_requests" },
+                }),
+                isRetryable: true,
+              });
+            }
+            yield { type: "finish" };
+          })(),
+        }),
+      });
+
+      await processor.process({ messages: [], model: mockModel, system: "" });
+      unsubRetry();
+      unsubRateLimit();
+
+      expect(retries).toHaveLength(1);
+      expect(retries[0]).toMatchObject({
+        runId: "run-processor-retry",
+        reason: "Too Many Requests",
+      });
+      expect(retries[0]?.backoffMs).toBeGreaterThan(0);
+      expect(rateLimits).toHaveLength(1);
+      expect(rateLimits[0]).toMatchObject({
+        runId: "run-processor-retry",
+        provider: "anthropic",
+        retryAfterMs: retries[0]?.backoffMs,
+      });
     });
 
     test("handles non-retryable errors", async () => {
