@@ -59,10 +59,22 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
     if (activeConnectionId) {
       const active = connections.get(activeConnectionId)?.socket;
       if (active) return active;
-      activeConnectionId = undefined;
+      return undefined;
     }
     const first = connections.values().next();
     return first.done ? undefined : first.value.socket;
+  }
+
+  function removeConnection(id: string, reason: string): void {
+    connections.delete(id);
+    if (id === activeConnectionId) {
+      failAllPending(new IpcConnectionError(reason));
+      return;
+    }
+    if (connections.size === 0) {
+      activeConnectionId = undefined;
+      failAllPending(new IpcConnectionError(reason));
+    }
   }
 
   function failAllPending(err: Error): void {
@@ -173,20 +185,12 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       },
       close(socket: BunSocket) {
         const id = (socket.data as unknown as SocketData).id;
-        connections.delete(id);
-        if (connections.size === 0) {
-          activeConnectionId = undefined;
-          failAllPending(new IpcConnectionError("socket closed"));
-        }
+        removeConnection(id, "socket closed");
       },
       error(socket: BunSocket, _err: Error) {
         const id = (socket.data as unknown as SocketData).id;
-        connections.delete(id);
         void socket;
-        if (connections.size === 0) {
-          activeConnectionId = undefined;
-          failAllPending(new IpcConnectionError("socket error"));
-        }
+        removeConnection(id, "socket error");
       },
     },
   });

@@ -130,7 +130,12 @@ export async function main(): Promise<void> {
   });
   const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
   const bootstrap = await assembleBootstrap(mcpProvider);
-  const toolDispatcher = buildToolDispatcher([mcpProvider]);
+  const toolDispatcher = buildToolDispatcher([
+    systemProvider,
+    agentProvider,
+    mcpProvider,
+    customProvider,
+  ]);
   coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
   await coordinator.waitUntilReady();
   IngressEngine.setCoordinator(coordinator);

@@ -137,7 +137,6 @@ export class WorkerSupervisor {
         if (!isBootstrapAccepted(bootstrapResult)) {
           throw new Error("worker bootstrap rejected");
         }
-        this.bootstrapped = true;
         if (!this.stopping && this.running) {
           this.client = c;
         } else {
