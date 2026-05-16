@@ -53,6 +53,14 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+function summarizeInput(input: unknown): string {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return typeof input;
+  }
+  const keys = Object.keys(input).sort();
+  return keys.length === 0 ? "empty" : keys.join(",");
+}
+
 function resolveImplicitValue(
   source: ImplicitInputSource,
   runtime: ToolRuntimeContext,
@@ -135,7 +143,7 @@ export function createToolExecutor(
       actor,
       action: TOOL_CALL_ACTION,
       resource: originalName,
-      context: { input: call.input },
+      context: { inputSummary: summarizeInput(call.input) },
     });
 
     const enrichedCall = injectImplicitInputs(call, tool, runtime);
@@ -196,7 +204,7 @@ export function createToolExecutor(
       );
       const durationMs = Date.now() - startTime;
 
-      const postDecision = await ToolRuntimePolicyMiddleware.evaluatePostTool({
+      const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
         toolName: originalName,
         toolCallId: call.id,
         input: dispatchedCall.input,
@@ -230,7 +238,7 @@ export function createToolExecutor(
       }
 
       if (policy && !PolicyDecision.isBlocking(policy.decision)) {
-        const postDecision = await ToolRuntimePolicyMiddleware.evaluatePostTool({
+        const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
           toolName: originalName,
           toolCallId: call.id,
           input: dispatchedCall.input,

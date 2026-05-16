@@ -15,7 +15,7 @@ src/
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, model, channels, server, recovery, shutdown
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
-│   ├── local-runner.ts   # LocalRunner.create() — in-process CoordinatorLike for OPENOMNI_MODE=local
+│   ├── local-runner.ts   # Disabled stub; OpenOmni requires coordinator execution
 │   ├── providers.ts      # resolveModel() — picks a default LLM model from stored credentials
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
@@ -60,9 +60,9 @@ src/
 
 ## BOOT SEQUENCE (`bootstrap/index.ts`)
 
-Two execution modes are selected by `OPENOMNI_MODE` env var:
+OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=local` is disabled and fails during bootstrap.
 
-**Coordinator mode** (default):
+**Coordinator mode**:
 1. `loadConfig()` — read env + config files.
 2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
 3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
@@ -77,9 +77,7 @@ Two execution modes are selected by `OPENOMNI_MODE` env var:
 12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
 13. `installShutdownHandlers({ channels, server, mcpProvider, coordinator })` — graceful stop on SIGINT / SIGTERM.
 
-**Local mode** (`OPENOMNI_MODE=local`):
-- Skips worker pool; uses `LocalRunner.create(...)` as the `CoordinatorLike`.
-- `LocalRunner` runs `ChatAgent` in-process via `bootstrap/local-runner.ts`.
+**Local mode** (`OPENOMNI_MODE=local`): disabled. Do not add in-process `ChatAgent` execution paths.
 
 ## MESSAGE FLOW
 

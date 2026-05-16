@@ -49,6 +49,11 @@ function makeRuntime(selection: ToolSelection.Selection) {
     parentSessionId: "parent-session",
     catalogRef: { catalog },
     agentDefinitionsRef: { definitions },
+    resolveAuth: (provider) =>
+      provider === "anthropic"
+        ? { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "proxy" }
+        : undefined,
+    allowAuthFallback: false,
   });
 }
 
@@ -83,6 +88,31 @@ describe("createWorkerSubagentRuntime", () => {
     expect(spawnSpy.mock.calls[0]?.[0].tools?.map((tool: { name: string }) => tool.name)).toEqual([
       "read",
     ]);
+  });
+
+  test("spawn passes provider auth from the worker bootstrap", async () => {
+    const runtime = makeRuntime({ all: true });
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
+    });
+
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+    expect(spawnSpy.mock.calls[0]?.[0].auth).toEqual({
+      type: "proxy",
+      baseURL: "http://localhost:8317/v1",
+      apiKey: "proxy",
+    });
+    expect(spawnSpy.mock.calls[0]?.[0].allowAuthFallback).toBe(false);
   });
 
   test("send resolves tools from the child session metadata and depth", async () => {
@@ -121,12 +151,18 @@ describe("createWorkerSubagentRuntime", () => {
     await runtime.send({
       sessionId: grandchild.id,
       prompt: "continue",
-      model: { provider: "test", id: "model" },
+      model: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
     });
 
     expect(sendSpy).toHaveBeenCalledTimes(1);
     expect(sendSpy.mock.calls[0]?.[0].tools?.map((tool: { name: string }) => tool.name)).toEqual([
       "read",
     ]);
+    expect(sendSpy.mock.calls[0]?.[0].auth).toEqual({
+      type: "proxy",
+      baseURL: "http://localhost:8317/v1",
+      apiKey: "proxy",
+    });
+    expect(sendSpy.mock.calls[0]?.[0].allowAuthFallback).toBe(false);
   });
 });

@@ -335,7 +335,10 @@ export namespace Session {
   export function addPart(messageID: string, part: Message.Part): void {
     const adapter = Storage.getAdapter();
     adapter.part.set(messageID, part);
-    Bus.publish(Event.Updated, { info: adapter.session.get(messageID)! });
+    const session = adapter.session.get(part.sessionID);
+    if (session) {
+      Bus.publish(Event.Updated, { info: session });
+    }
   }
 
   export function getParts(messageID: string): Message.Part[] {

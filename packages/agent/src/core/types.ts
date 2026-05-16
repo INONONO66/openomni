@@ -46,6 +46,8 @@ export interface ChatAgentConfig {
   memory?: Memory;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
+  auth?: RunInput["auth"];
+  allowAuthFallback?: RunInput["allowAuthFallback"];
   middleware?: PolicyRegistration[];
   context?: AgentRuntimeContext;
   llm?: {

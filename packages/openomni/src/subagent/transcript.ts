@@ -14,6 +14,8 @@ import {
 
 export type RuntimeConfig = {
   model: RuntimeModel;
+  auth?: ChatAgentConfig["auth"];
+  allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
   systemPrompt?: string;
   tools?: ChatAgentConfig["tools"];
   toolExecutor?: ChatAgentConfig["toolExecutor"];
@@ -81,6 +83,8 @@ export async function runWithTranscript(
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const agent = ChatAgent.create({
     model: config.model,
+    auth: config.auth,
+    allowAuthFallback: config.allowAuthFallback,
     systemPrompt: config.systemPrompt,
     tools: config.tools,
     budget: config.budget,

@@ -5,7 +5,7 @@ import {
   type ChatAgentInput,
   type PolicyRegistration,
 } from "@openomni/agent";
-import { PolicyDecision, Subagent } from "@openomni/protocol";
+import { PolicyDecision, PolicyEvent, Subagent } from "@openomni/protocol";
 import { Bus, Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
@@ -470,6 +470,45 @@ describe("SubagentRuntime", () => {
         { value: "actor.child:child-agent", source: "system" },
         { value: `actor.parent:${parentSessionId}`, source: "system" },
       ]);
+    });
+
+    it("emits durable audit events for parent-scoped delegation policy", async () => {
+      queueResult("audited output");
+      const parentSessionId = createParentSession();
+      const composed: Array<{
+        action: string;
+        resource: string;
+        sessionId: string;
+        pointId?: string;
+      }> = [];
+      const unsubscribe = Bus.subscribe(PolicyEvent.DecisionComposed, (event) => {
+        composed.push(event);
+      });
+
+      const allowPolicy: PolicyRegistration = {
+        name: "test:audit-delegation",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "test:audit-delegation" }),
+      };
+
+      await SubagentRuntime.spawn({
+        parentSessionId,
+        agentName: "child-agent",
+        title: "audited task",
+        prompt: "audit this",
+        model,
+        middleware: [allowPolicy],
+      });
+      unsubscribe();
+
+      expect(composed).toHaveLength(1);
+      expect(composed[0]).toMatchObject({
+        action: "delegation.spawn",
+        resource: "agent.child-agent",
+        sessionId: parentSessionId,
+        pointId: "delegation.subagent.pre",
+      });
     });
 
     it("send aborts when invoke.prepare policy returns abort", async () => {
