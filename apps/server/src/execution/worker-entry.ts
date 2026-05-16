@@ -8,7 +8,6 @@ import {
   AgentToolProvider,
   BackgroundManager,
   ToolProxyProvider,
-  SessionBridge,
   SystemToolProvider,
   buildToolCatalog,
   buildWorkerMiddleware,
@@ -17,7 +16,11 @@ import {
   type NativeTool,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
-import { createExecutionToolContext, resolveWorkerDbPath } from "./worker-runtime";
+import {
+  buildWorkerInputMessages,
+  createExecutionToolContext,
+  resolveWorkerDbPath,
+} from "./worker-runtime";
 import { createContextMiddleware } from "../context/index";
 
 function readCliArg(name: string): string | undefined {
@@ -98,11 +101,11 @@ function createWorkerInternalTools(runId: string, sessionId: string): NativeTool
     spec: {
       name: "ask_main",
       description:
-        "Ask the Main Persona for guidance, approval, or missing context. Blocks until Main answers.",
+        "Ask the Resident for guidance, approval, or missing context. Blocks until Resident answers.",
       inputSchema: {
         type: "object",
         properties: {
-          question: { type: "string", description: "Question or decision request for Main" },
+          question: { type: "string", description: "Question or decision request for Resident" },
         },
         required: ["question"],
       },
@@ -154,7 +157,8 @@ function createWorkerInternalTools(runId: string, sessionId: string): NativeTool
   const checkInbox: NativeTool = {
     spec: {
       name: "check_inbox",
-      description: "Fetch live messages delivered by Main/User while this worker run is active.",
+      description:
+        "Fetch live messages delivered by Resident/User while this worker run is active.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -271,10 +275,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
 
       try {
         await bootstrapReady;
-        const messages = SessionBridge.buildDirectMessages(sessionId).filter(
-          (m): m is { role: "user"; content: string } | { role: "assistant"; content: string } =>
-            m.role === "user" || m.role === "assistant",
-        );
+        const messages = buildWorkerInputMessages(sessionId, request.prompt);
         const workspaceRoot =
           request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
         const systemProvider = new SystemToolProvider(workspaceRoot);
@@ -375,7 +376,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use ask_main when you need Main Persona guidance or approval; use check_inbox to read live messages delivered while this run is active.",
+            "Worker runtime tools: use ask_main when you need Resident guidance or approval; use check_inbox to read live messages delivered while this run is active.",
           ]
             .filter(Boolean)
             .join("\n\n"),
