@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Session, Storage } from "@openomni/session";
-import { MainActivationManager } from "../../src/persona/main-activation-manager";
+import { ResidentRuntime } from "../../src/resident/runtime";
 
 function makeEvent() {
   return {
@@ -8,12 +8,12 @@ function makeEvent() {
     surface: "slack",
     payload: "hello",
     mode: "direct" as const,
-    meta: { target: { kind: "main" as const } },
+    meta: { target: { kind: "resident" as const } },
     agent: { model: { provider: "test", id: "fixture" } },
   };
 }
 
-describe("MainActivationManager", () => {
+describe("ResidentRuntime", () => {
   beforeEach(() => {
     Storage.initialize({ dbPath: ":memory:" });
   });
@@ -23,7 +23,7 @@ describe("MainActivationManager", () => {
   });
 
   test("hydrates, runs, and releases idle activations", async () => {
-    const manager = MainActivationManager.create({
+    const manager = ResidentRuntime.create({
       idleTimeoutMs: 10,
       runAgent: async (_config, input) => ({
         text: `ran:${input.messages.length}`,
@@ -32,18 +32,18 @@ describe("MainActivationManager", () => {
     });
 
     const session = Session.create({
-      title: "main-activation-test",
+      title: "resident-runtime-test",
       model: { providerID: "test", modelID: "fixture" },
     });
 
     const result = await manager.run({
       sessionId: session.id,
       event: {
-        id: "evt-main-1",
+        id: "evt-resident-1",
         surface: "slack",
         payload: "hello",
         mode: "direct",
-        meta: { target: { kind: "main" } },
+        meta: { target: { kind: "resident" } },
         agent: {
           model: { provider: "test", id: "fixture" },
         },
@@ -61,7 +61,7 @@ describe("MainActivationManager", () => {
   });
 });
 
-test("MainActivationManager enforces maximum resident activations", async () => {
+test("ResidentRuntime enforces maximum resident activations", async () => {
   let markFirstRunStarted!: () => void;
   let releaseFirstRun!: () => void;
   const firstRunStarted = new Promise<void>((resolve) => {
@@ -70,7 +70,7 @@ test("MainActivationManager enforces maximum resident activations", async () => 
   const firstRunCanFinish = new Promise<void>((resolve) => {
     releaseFirstRun = resolve;
   });
-  const manager = MainActivationManager.create({
+  const manager = ResidentRuntime.create({
     maxActive: 1,
     idleTimeoutMs: 1_000,
     runAgent: async () => {
@@ -80,11 +80,11 @@ test("MainActivationManager enforces maximum resident activations", async () => 
     },
   });
 
-  const firstRun = manager.run({ sessionId: "main-a", event: makeEvent() });
+  const firstRun = manager.run({ sessionId: "resident-a", event: makeEvent() });
   await firstRunStarted;
 
-  await expect(manager.run({ sessionId: "main-b", event: makeEvent() })).rejects.toThrow(
-    "maximum main activations reached",
+  await expect(manager.run({ sessionId: "resident-b", event: makeEvent() })).rejects.toThrow(
+    "maximum resident activations reached",
   );
 
   releaseFirstRun();

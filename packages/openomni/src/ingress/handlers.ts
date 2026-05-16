@@ -8,7 +8,7 @@ import {
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import { Bus, WorkerRun } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
-import type { MainActivationManager } from "../persona/main-activation-manager";
+import type { ResidentRuntime } from "../resident/runtime";
 import { SessionBridge } from "./session-bridge";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -18,7 +18,7 @@ export namespace IngressHandlers {
     sessionId: string;
     event: Ingress.InboundEvent;
     coordinator?: CoordinatorLike;
-    mainActivationManager?: MainActivationManager;
+    residentRuntime?: ResidentRuntime;
     traceContext?: TraceContextProtocol.Type;
     policies?: PolicyRegistration[];
     onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
@@ -325,9 +325,9 @@ export namespace IngressHandlers {
     })();
   }
 
-  export async function handleMain(ctx: HandlerContext): Promise<Ingress.IngressResult> {
-    if (!ctx.mainActivationManager) {
-      throw new Error("main activation manager is required");
+  export async function handleResident(ctx: HandlerContext): Promise<Ingress.IngressResult> {
+    if (!ctx.residentRuntime) {
+      throw new Error("resident runtime is required");
     }
 
     if (ctx.traceContext) {
@@ -335,17 +335,17 @@ export namespace IngressHandlers {
         traceId: ctx.traceContext.traceId,
         sessionId: ctx.sessionId,
         mode: "direct",
-        target: "main",
+        target: "resident",
         time: Date.now(),
       });
     }
 
-    const mainResult = await ctx.mainActivationManager.run({
+    const residentResult = await ctx.residentRuntime.run({
       sessionId: ctx.sessionId,
       event: ctx.event,
       traceContext: ctx.traceContext,
     });
-    const output = await dispatchWritebackCommit(ctx, mainResult.output);
+    const output = await dispatchWritebackCommit(ctx, residentResult.output);
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     return {
@@ -354,7 +354,7 @@ export namespace IngressHandlers {
       sessionId: ctx.sessionId,
       result: {
         output,
-        finishReason: mainResult.finishReason,
+        finishReason: residentResult.finishReason,
       },
     };
   }

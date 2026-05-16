@@ -15,11 +15,11 @@ import {
 } from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
-let MainActivationManager: typeof import("../../src/persona/main-activation-manager").MainActivationManager;
+let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
-  ({ MainActivationManager } = await import("../../src/persona/main-activation-manager"));
+  ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
 afterAll(() => {
@@ -33,13 +33,13 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  installMainActivationManager();
+  installResidentRuntime();
   installCoordinator();
 });
 
-function installMainActivationManager() {
-  IngressEngine.setMainActivationManager(
-    MainActivationManager.create({
+function installResidentRuntime() {
+  IngressEngine.setResidentRuntime(
+    ResidentRuntime.create({
       runAgent: async (_config, input) => {
         testState.llmInputs.push(input);
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
@@ -121,7 +121,7 @@ describe("IngressEngine", () => {
         surface: "tui",
         workspace: "/repo",
         mode: "direct",
-        target: { type: "new-worker" },
+        target: { kind: "worker" },
         payload: "hello",
         meta: { actor: { role: "user" }, target: { kind: "worker", sessionId: "worker-sess-1" } },
         agent: {
@@ -131,12 +131,12 @@ describe("IngressEngine", () => {
     );
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("coordinator is required for new-worker target");
+    expect((error as Error).message).toContain("coordinator is required for worker target");
     expect(decisions).toContainEqual(
       expect.objectContaining({
         policyId: "ingress.coordinator",
         verdict: "deny",
-        reasonCodes: ["coordinator is required for new-worker target"],
+        reasonCodes: ["coordinator is required for worker target"],
       }),
     );
   });
@@ -277,7 +277,7 @@ describe("IngressEngine", () => {
       id: "event-reuse-1",
       surface: "tui",
       workspace: "/repo",
-      channel: "main",
+      channel: "resident",
       mode: "direct",
       payload: "First message",
       meta: { actor: { role: "user" } },
@@ -290,7 +290,7 @@ describe("IngressEngine", () => {
       id: "event-reuse-2",
       surface: "tui",
       workspace: "/repo",
-      channel: "main",
+      channel: "resident",
       mode: "direct",
       payload: "Second message",
       meta: { actor: { role: "user" } },
@@ -324,7 +324,7 @@ describe("IngressEngine", () => {
     const first = await IngressEngine.ingest(event);
     IngressEngine.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    installMainActivationManager();
+    installResidentRuntime();
     installCoordinator();
 
     const second = await IngressEngine.ingest({
@@ -465,7 +465,7 @@ describe("IngressEngine", () => {
 
       expect(capturedLabels).toEqual([
         { value: "surface.slack", source: "system" },
-        { value: "target.main", source: "system" },
+        { value: "target.resident", source: "system" },
         { value: "actor.user", source: "system" },
       ]);
     });

@@ -61,18 +61,18 @@ describe("IngressSessionResolver", () => {
       const key = IngressSessionResolver.extractSurfaceKey({
         surface: "internal",
         workspace: "repo",
-        channel: "main",
-        target: { type: "worker", workerId: "worker-1" },
+        channel: "resident",
+        target: { kind: "worker", workerId: "worker-1" },
       });
 
-      expect(key).toBe("internal:repo:main:target:worker:worker-1");
+      expect(key).toBe("internal:repo:resident:target:worker:worker-1");
     });
 
-    it("does not append explicit main target to preserve existing surface mappings", () => {
+    it("does not append explicit resident target to preserve existing surface mappings", () => {
       const key = IngressSessionResolver.extractSurfaceKey({
         surface: "telegram",
         channel: "123",
-        target: { type: "main" },
+        target: { kind: "resident" },
       });
 
       expect(key).toBe("telegram::123");
@@ -80,15 +80,15 @@ describe("IngressSessionResolver", () => {
   });
 
   describe("resolve", () => {
-    it("creates new-worker sessions as children when parent session is supplied", () => {
+    it("creates worker sessions as children when parent session is supplied", () => {
       const parent = Session.create({
         title: "parent",
         model: { providerID: "test", modelID: "fixture" },
       });
 
       const result = IngressSessionResolver.resolve({
-        surface: "main-worker-tool",
-        target: { kind: "new-worker", parentSessionId: parent.id },
+        surface: "resident-worker-tool",
+        target: { kind: "worker", parentSessionId: parent.id },
       });
 
       expect(result.session.parentSessionId).toBe(parent.id);
@@ -173,7 +173,7 @@ describe("IngressSessionResolver", () => {
       expect(() =>
         IngressSessionResolver.resolve({
           surface: "internal",
-          target: { type: "worker", sessionId: "missing-session" },
+          target: { kind: "worker", sessionId: "missing-session" },
         }),
       ).toThrow("worker target session not found");
     });

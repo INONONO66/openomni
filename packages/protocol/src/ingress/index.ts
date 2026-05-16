@@ -19,25 +19,22 @@ const ActorSchemaImpl = z
     workerId: z.string().optional(),
     trusted: z.boolean().optional(),
     isTrustedManager: z.boolean().optional(),
+    isResident: z.boolean().optional(),
     isMain: z.boolean().optional(),
   })
   .catchall(z.unknown());
 
 const RawTargetSchema = z
   .object({
-    kind: z.enum(["main", "new-worker", "worker"]),
+    kind: z.enum(["resident", "worker"]),
     workerId: z.string().optional(),
     sessionId: z.string().optional(),
     parentSessionId: z.string().optional(),
   })
-  .catchall(z.unknown())
-  .refine((target) => target.kind !== "worker" || Boolean(target.workerId || target.sessionId), {
-    message: "worker target requires workerId or sessionId",
-  });
+  .catchall(z.unknown());
 
 const TargetSchemaImpl = z.preprocess((input) => {
-  if (input === "main") return { kind: "main" };
-  if (input === "new-worker") return { kind: "new-worker" };
+  if (input === "resident") return { kind: "resident" };
   if (typeof input === "string" && input.startsWith("worker:")) {
     const id = input.slice("worker:".length);
     return { kind: "worker", workerId: id };
@@ -143,15 +140,15 @@ export namespace Ingress {
   export function resolveTarget(event: { target?: Target; meta?: { target?: Target } }): Target {
     if (event.target) return TargetSchema.parse(event.target);
     if (event.meta?.target) return TargetSchema.parse(event.meta.target);
-    return { kind: "main" };
+    return { kind: "resident" };
   }
 
   export function targetKey(target: Target): string {
-    if (target.kind === "main") return target.sessionId ? `main:${target.sessionId}` : "main";
-    if (target.kind === "new-worker") {
-      return target.workerId ? `new-worker:${target.workerId}` : "new-worker";
+    if (target.kind === "resident") {
+      return target.sessionId ? `resident:${target.sessionId}` : "resident";
     }
-    return target.sessionId ? `worker-session:${target.sessionId}` : `worker:${target.workerId}`;
+    if (target.sessionId) return `worker-session:${target.sessionId}`;
+    return target.workerId ? `worker:${target.workerId}` : "worker";
   }
 
   export type DirectResult = {

@@ -174,7 +174,7 @@ describe("IngressHandlers", () => {
     );
     expect(result).toEqual({
       mode: "direct",
-      target: { kind: "main" },
+      target: { kind: "resident" },
       sessionId,
       result: {
         output: "direct output",

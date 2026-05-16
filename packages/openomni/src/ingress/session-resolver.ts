@@ -27,11 +27,11 @@ export namespace IngressSessionResolver {
   }
 
   // Format: "surface:workspace:channel" for legacy events. Explicit ADR-008 targets append
-  // `target:<target-key>` so main, new-worker, and worker sessions do not collide.
+  // `target:<target-key>` so resident and worker sessions do not collide.
   export function extractSurfaceKey(event: ResolvableEvent): string {
     const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
     const target = event.target || event.meta?.target ? Ingress.resolveTarget(event) : undefined;
-    if (target && target.kind !== "main") {
+    if (target && target.kind !== "resident") {
       parts.push("target", Ingress.targetKey(target));
     }
     return SurfaceKey.create(parts);
@@ -49,39 +49,41 @@ export namespace IngressSessionResolver {
     let session: Session.Info;
     let isNew: boolean;
 
-    if (target.kind === "new-worker") {
-      const parentSessionId =
-        target.parentSessionId ??
-        (typeof event.meta?.actor?.sessionId === "string" ? event.meta.actor.sessionId : undefined);
-      session =
-        parentSessionId && Session.get(parentSessionId)
-          ? Session.createChild({
-              parentSessionId,
-              title: `Worker session from ${event.surface}`,
-              model: defaultModel,
-              workerMeta: { target: "new-worker", surface: event.surface },
-            })
-          : Session.create({
-              title: `Worker session from ${event.surface}`,
-              model: defaultModel,
-            });
-      isNew = true;
-    } else if (target.kind === "worker") {
-      if (!target.sessionId) {
-        throw new Error("worker target requires existing sessionId");
+    if (target.kind === "worker") {
+      const durableSessionId = event.runtime?.durableSessionId ?? target.sessionId;
+      if (durableSessionId) {
+        const existing = Session.get(durableSessionId);
+        if (!existing) {
+          throw new Error(`worker target session not found: ${durableSessionId}`);
+        }
+        session = existing;
+        isNew = false;
+      } else {
+        const parentSessionId =
+          target.parentSessionId ??
+          (typeof event.meta?.actor?.sessionId === "string"
+            ? event.meta.actor.sessionId
+            : undefined);
+        session =
+          parentSessionId && Session.get(parentSessionId)
+            ? Session.createChild({
+                parentSessionId,
+                title: `Worker session from ${event.surface}`,
+                model: defaultModel,
+                workerMeta: { target: "worker", surface: event.surface },
+              })
+            : Session.create({
+                title: `Worker session from ${event.surface}`,
+                model: defaultModel,
+              });
+        isNew = true;
       }
-      const existing = Session.get(target.sessionId);
-      if (!existing) {
-        throw new Error(`worker target session not found: ${target.sessionId}`);
-      }
-      session = existing;
-      isNew = false;
     } else {
       const durableSessionId = event.runtime?.durableSessionId;
       if (durableSessionId) {
         const existing = Session.get(durableSessionId);
         if (!existing) {
-          throw new Error(`main target session not found: ${durableSessionId}`);
+          throw new Error(`resident target session not found: ${durableSessionId}`);
         }
         session = existing;
         isNew = false;

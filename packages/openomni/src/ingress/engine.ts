@@ -7,7 +7,7 @@ import {
 } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
-import type { MainActivationManager } from "../persona/main-activation-manager";
+import type { ResidentRuntime } from "../resident/runtime";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
@@ -18,7 +18,7 @@ export type { CoordinatorLike };
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 let _coordinator: CoordinatorLike | undefined;
-let _mainActivationManager: MainActivationManager | undefined;
+let _residentRuntime: ResidentRuntime | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 
@@ -33,7 +33,7 @@ export namespace IngressEngine {
     Storage.reset();
     Bus.reset();
     _coordinator = undefined;
-    _mainActivationManager = undefined;
+    _residentRuntime = undefined;
     _middlewareDecisionObserver = undefined;
     _ingressPolicies = [];
   }
@@ -46,12 +46,12 @@ export namespace IngressEngine {
     _coordinator = undefined;
   }
 
-  export function setMainActivationManager(manager: MainActivationManager): void {
-    _mainActivationManager = manager;
+  export function setResidentRuntime(manager: ResidentRuntime): void {
+    _residentRuntime = manager;
   }
 
-  export function clearMainActivationManager(): void {
-    _mainActivationManager = undefined;
+  export function clearResidentRuntime(): void {
+    _residentRuntime = undefined;
   }
 
   export function setPolicyDecisionObserver(
@@ -152,14 +152,14 @@ export namespace IngressEngine {
       sessionId: session.id,
       event: inboundEvent,
       coordinator: preRun.coordinator,
-      mainActivationManager: _mainActivationManager,
+      residentRuntime: _residentRuntime,
       traceContext: activeTrace,
       policies: _ingressPolicies,
       onPolicyDecision: _middlewareDecisionObserver,
     };
 
-    if (target.kind === "main") {
-      return IngressHandlers.handleMain(handlerContext);
+    if (target.kind === "resident") {
+      return IngressHandlers.handleResident(handlerContext);
     }
 
     return IngressHandlers.handleDirect(handlerContext);

@@ -36,7 +36,7 @@ function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
 }
 
 function targetRequiresCoordinator(target: Ingress.Target): boolean {
-  return target.kind !== "main";
+  return target.kind !== "resident";
 }
 
 function isTrustedManager(actor: ActorRecord): boolean {
@@ -50,9 +50,9 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   const target = Ingress.resolveTarget(event);
   const role = String(actor.role ?? actor.kind ?? actor.type ?? "").toLowerCase();
   if (role === "user") return true;
-  if (role === "main" || role === "main_persona" || actor.isMain === true) return true;
+  if (role === "resident") return true;
   if (role === "manager") return isTrustedManager(actor);
-  if (role === "worker" && target.kind === "main") return isTrustedManager(actor);
+  if (role === "worker" && target.kind === "resident") return isTrustedManager(actor);
 
   return false;
 }
@@ -112,7 +112,7 @@ function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
       state.target = target;
 
       if (!targetRequiresCoordinator(target)) {
-        return allowDecision("ingress.coordinator", "coordinator not required for main target");
+        return allowDecision("ingress.coordinator", "coordinator not required for resident target");
       }
       if (state.coordinator === undefined) {
         return abortDecision(

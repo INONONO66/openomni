@@ -11,11 +11,11 @@ import {
 } from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
-let MainActivationManager: typeof import("../../src/persona/main-activation-manager").MainActivationManager;
+let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
-  ({ MainActivationManager } = await import("../../src/persona/main-activation-manager"));
+  ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
 afterAll(() => {
@@ -29,8 +29,8 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  IngressEngine.setMainActivationManager(
-    MainActivationManager.create({
+  IngressEngine.setResidentRuntime(
+    ResidentRuntime.create({
       runAgent: async (_config, input) => {
         testState.llmInputs.push(input);
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };

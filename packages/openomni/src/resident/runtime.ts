@@ -9,22 +9,22 @@ import { Bus } from "@openomni/session";
 import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
 
-export type MainActivationLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
+export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
 
-export interface MainRunContext {
+export interface ResidentRunContext {
   readonly sessionId: string;
   readonly event: Ingress.InboundEvent;
   readonly traceContext?: TraceContextProtocol.Type;
 }
 
-export interface MainRunResult {
+export interface ResidentRunResult {
   readonly output: string;
   readonly finishReason: string;
   readonly runId: string;
   readonly activationId: string;
 }
 
-export interface MainActivationManagerOptions {
+export interface ResidentRuntimeOptions {
   readonly maxActive?: number;
   readonly idleTimeoutMs?: number;
   readonly slotWaitTimeoutMs?: number;
@@ -39,7 +39,7 @@ export interface MainActivationManagerOptions {
 
 interface ActivationRecord {
   activationId: string;
-  lifecycle: MainActivationLifecycle;
+  lifecycle: ResidentLifecycle;
   idleTimer?: ReturnType<typeof setTimeout>;
   queue: Promise<unknown>;
   lastUsedAt: number;
@@ -56,16 +56,16 @@ function extractAgentName(event: Ingress.InboundEvent): string | undefined {
   return typeof raw === "string" ? raw : undefined;
 }
 
-export class MainActivationManager {
+export class ResidentRuntime {
   private readonly activations = new Map<string, ActivationRecord>();
   private readonly waiters: SlotWaiter[] = [];
   private readonly maxActive: number;
   private readonly idleTimeoutMs: number;
   private readonly slotWaitTimeoutMs: number;
   private activeRuns = 0;
-  private readonly runAgent: NonNullable<MainActivationManagerOptions["runAgent"]>;
+  private readonly runAgent: NonNullable<ResidentRuntimeOptions["runAgent"]>;
 
-  constructor(options: MainActivationManagerOptions = {}) {
+  constructor(options: ResidentRuntimeOptions = {}) {
     this.maxActive = options.maxActive ?? 10;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
     this.slotWaitTimeoutMs = options.slotWaitTimeoutMs ?? 30_000;
@@ -85,7 +85,7 @@ export class MainActivationManager {
     };
   }
 
-  getLifecycle(sessionId: string): MainActivationLifecycle {
+  getLifecycle(sessionId: string): ResidentLifecycle {
     return this.activations.get(sessionId)?.lifecycle ?? "sleeping";
   }
 
@@ -97,7 +97,7 @@ export class MainActivationManager {
     this.activations.delete(sessionId);
   }
 
-  async run(ctx: MainRunContext): Promise<MainRunResult> {
+  async run(ctx: ResidentRunContext): Promise<ResidentRunResult> {
     const activation = this.ensureActivation(ctx.sessionId);
     const previous = activation.queue;
     const chained = previous.catch(() => undefined).then(() => this.runExclusive(ctx));
@@ -110,7 +110,7 @@ export class MainActivationManager {
     if (!activation) {
       this.evictIdleActivations();
       if (this.activations.size >= this.maxActive) {
-        throw new Error(`maximum main activations reached (${this.maxActive})`);
+        throw new Error(`maximum resident activations reached (${this.maxActive})`);
       }
       activation = {
         activationId: crypto.randomUUID(),
@@ -144,7 +144,9 @@ export class MainActivationManager {
       timer = setTimeout(() => {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
-        reject(new Error(`main activation slot wait timed out after ${this.slotWaitTimeoutMs}ms`));
+        reject(
+          new Error(`resident activation slot wait timed out after ${this.slotWaitTimeoutMs}ms`),
+        );
       }, this.slotWaitTimeoutMs);
     });
     if (timer) clearTimeout(timer);
@@ -168,7 +170,7 @@ export class MainActivationManager {
     }, this.idleTimeoutMs);
   }
 
-  private buildAgentConfig(ctx: MainRunContext, runId: string): ChatAgentConfig {
+  private buildAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
     const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot ?? ctx.event.workspace;
     const toolExecutor = ctx.event.agent.toolExecutorFactory
       ? ctx.event.agent.toolExecutorFactory({
@@ -193,7 +195,7 @@ export class MainActivationManager {
     };
   }
 
-  private async runExclusive(ctx: MainRunContext): Promise<MainRunResult> {
+  private async runExclusive(ctx: ResidentRunContext): Promise<ResidentRunResult> {
     await this.acquireSlot();
     const activation = this.ensureActivation(ctx.sessionId);
     const runId = crypto.randomUUID();
@@ -224,7 +226,7 @@ export class MainActivationManager {
         traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
         sessionId: ctx.sessionId,
         mode: "direct",
-        target: "main",
+        target: "resident",
         durationMs: Date.now() - start,
         time: Date.now(),
       });
@@ -241,7 +243,7 @@ export class MainActivationManager {
         traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
         sessionId: ctx.sessionId,
         mode: "direct",
-        target: "main",
+        target: "resident",
         durationMs: Date.now() - start,
         error: error instanceof Error ? error.message : String(error),
         time: Date.now(),
@@ -253,8 +255,8 @@ export class MainActivationManager {
   }
 }
 
-export namespace MainActivationManager {
-  export function create(options: MainActivationManagerOptions = {}): MainActivationManager {
-    return new MainActivationManager(options);
+export namespace ResidentRuntime {
+  export function create(options: ResidentRuntimeOptions = {}): ResidentRuntime {
+    return new ResidentRuntime(options);
   }
 }

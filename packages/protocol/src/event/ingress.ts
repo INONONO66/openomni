@@ -31,7 +31,7 @@ export namespace IngressEvent {
     Base.extend({
       sessionId: z.string(),
       isNew: z.boolean(),
-      target: z.enum(["main", "new-worker", "worker"]).optional(),
+      target: z.enum(["resident", "worker"]).optional(),
     }),
   );
 
