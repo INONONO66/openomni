@@ -1,6 +1,6 @@
 # packages/openomni
 
-Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add DAG utilities, inbound event handling, task persistence, and a session-backed subagent runtime. This package is the future home for the Main Persona orchestration seams: controlled inbound authority, self-loop session creation, persona delegation, and distilled writeback.
+Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add DAG utilities, inbound event handling, and a session-backed subagent runtime. This package is the future home for the Main Persona orchestration seams: controlled inbound authority, self-loop session creation, persona delegation, and distilled writeback.
 
 ## Module Map
 
@@ -9,15 +9,13 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge` |
 | `src/runtime/` | Session bus transport bridge | `BusTransport`, `Transport` |
-| `src/storage/` | Shared task type re-exports | `Task` (re-exported from `@openomni/protocol`) |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
-| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `TaskToolProvider`, `TodoToolProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
+| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
 
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
 - `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `direct` handler.
-- `src/storage/` is now a thin re-export shim. Task types (`Task.Info`, `Task.Run`, `Task.Status`) moved to `@openomni/protocol/task` and are re-exported here for backward compatibility. Task and todo persistence is handled by the optional sub-adapters on `Storage.Adapter` in `@openomni/session`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
 - Persona workforce direction: `src/ingress/` remains the external/internal inbound seam, `src/subagent/` remains the child persona execution seam, and a future self-loop/writeback layer should live in this package rather than in `agent`.
 
@@ -27,7 +25,6 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 
 ```
 dag/                → no internal deps
-storage/            → no orchestration deps (re-exports from @openomni/protocol)
 runtime/            → @openomni/session + @openomni/agent transport contracts
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → no sibling deps
@@ -43,7 +40,6 @@ Consumers should only use `@openomni/openomni` exports:
 - DAG helpers from `src/dag/`
 - Ingress orchestration from `src/ingress/`
 - Bus transport bridge from `src/runtime/`
-- Task type re-exports from `src/storage/` (persistence is in `@openomni/session`)
 - Subagent runtime + background manager from `src/subagent/`
 - Tool system, workspace lock, and worker middleware from `src/execution-runtime/`
 
@@ -51,7 +47,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 ## Extension Points
 
-- Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface. `TaskToolProvider` and `TodoToolProvider` live in their own subdirectories (`task/`, `todo/`) and read from `Storage.get()` in `@openomni/session`.
+- Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 - Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.
 - Add persona workforce orchestration here when implementing persona runtime contracts: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
@@ -66,7 +62,6 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 - `src/dag/AGENTS.md` — dependency-graph helpers
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
-- `src/storage/AGENTS.md` — task type re-exports (persistence moved to `@openomni/session`)
 - `src/subagent/AGENTS.md` — session-backed subagent runtime and background manager
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware
 

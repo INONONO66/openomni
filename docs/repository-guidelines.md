@@ -20,7 +20,7 @@ Use this order when deciding where a concept belongs:
 | Concept | Source of truth | Notes |
 | --- | --- | --- |
 | Cross-package schema or event | `packages/protocol/src/{domain}/` | Zod-first; no runtime logic. |
-| Durable session state | `packages/session/src/` | Session, storage adapters, event log, worker runs, artifacts, todos. |
+| Durable session state | `packages/session/src/` | Session, storage adapters, event log, worker runs, artifacts, work items. |
 | LLM provider behavior | `packages/llm/src/` | Auth, provider SDK wiring, transforms, token/cost tracking. |
 | Stateless agent execution | `packages/agent/src/core/` | No durable session lifecycle or storage ownership. |
 | Agent runtime helpers | `packages/agent/src/runtime/` | Messenger, registry, subagent/background tools, MCP client. |
@@ -33,7 +33,7 @@ Use this order when deciding where a concept belongs:
 
 - Put cross-package contracts in `@openomni/protocol` first.
 - Do not redefine protocol contracts in upper layers with new Zod schemas.
-- Upper layers may expose runtime wrappers around protocol contracts when they add behavior, such as `Session.Todo.update()` publishing bus events.
+- Upper layers may expose runtime wrappers around protocol contracts when they add behavior, such as `WorkItemStore.create()` publishing bus events.
 - App-local interfaces are allowed for external API payloads and host wiring, but they must not become hidden shared contracts.
 - If an app-local type starts being imported across package boundaries, promote it to `protocol` or keep it behind a package barrel in the owning package.
 
@@ -42,7 +42,6 @@ Known watchpoints:
 | Item | Current status | Rule |
 | --- | --- | --- |
 | `apps/server/src/agents/types.ts` | Server-local agent definition with trigger metadata. | Keep app-local unless reused outside `apps/server`; promote persistent persona contracts to `protocol`. |
-| `packages/openomni/src/storage/task-types.ts` | Backward-compat task re-export shim. | Remove only after migration scripts import `Task` from `@openomni/protocol` directly. |
 
 ## Test matrix expectations
 
@@ -102,5 +101,4 @@ Required updates by change type:
 | High | Keep root/package docs aligned with the single server app topology. | Single `apps/server` host. |
 | High | Keep app-level test scripts and CI direct app tests aligned. | Avoid local `turbo run test` ambiguity. |
 | Medium | Delete empty `packages/openomni/src/execution-runtime/tool/mcp-proxy-provider.ts`. | Strong orphan candidate. |
-| Medium | Replace `packages/openomni/src/storage/task-types.ts` consumers with `@openomni/protocol`. | Removes compatibility shim. |
 | Medium | Reduce lint warnings, especially non-null assertions and `any`. | Keeps type-safety rules credible. |

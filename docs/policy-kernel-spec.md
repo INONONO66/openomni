@@ -617,13 +617,13 @@ These paths bypass the policy kernel today. Each is documented as a skipped test
 
 ---
 
-### 9. Todo writes
+### 9. WorkItem writes
 
-**Location**: `packages/session/src/todo/index.ts` — `Todo.update()`
+**Location**: `packages/session/src/work-item/index.ts` — `WorkItemStore`
 
-**Gap**: `Todo.update()` mutates todo state without a policy check. Todo mutations are session-visible side effects with no governance gate.
+**Gap**: `WorkItemStore` mutations (create, update, complete, fail, etc.) lack a policy check. Work item mutations are session-visible side effects with no governance gate.
 
-**Spec requirement**: Todo writes are session-visible mutations and fall under the `session.write` governance requirement.
+**Spec requirement**: WorkItem writes are session-visible mutations and fall under the `session.write` governance requirement.
 
 **v2 integration**: Same pattern as session and artifact writes. Governed callers should route through a policy-aware facade. The `session` package stays as raw storage.
 

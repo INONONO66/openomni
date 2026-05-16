@@ -11,4 +11,4 @@ export * from "./worker-run/index.js";
 export { WorkerRunStateStore } from "./worker-run/state-store.js";
 export { TraceContext } from "./trace/index.js";
 export * from "./storage/wal-maintenance.js";
-export { Todo } from "./todo/index.js";
+export { WorkItemStore } from "./work-item/index.js";

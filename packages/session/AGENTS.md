@@ -26,7 +26,7 @@ src/
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
-├── todo/                 # Todo.update(sessionId, todos) / Todo.get(sessionId) — publishes Todo.Updated bus event
+├── work-item/            # WorkItemStore — universal work state engine (CRUD + lifecycle + Bus events + dependency tracking)
 └── worker-run/           # WorkerRun — event-sourced subagent execution records
 ```
 
@@ -37,20 +37,19 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
-- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `task`, `todo`. Unimplemented optional sub-objects gracefully degrade. The `task` and `todo` sub-adapters satisfy the interfaces defined in `@openomni/protocol`'s `Storage` namespace.
-- **Migration 0006**: Adds `task`, `task_run`, `task_idempotency`, and `todo` tables to the SQLite schema, backing the `task` and `todo` optional sub-adapters in `SqliteStorageAdapter`.
-- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) and `Todo.Updated` flow through the shared `Bus` too.
-- **Todo namespace**: `Todo.update(sessionId, todos)` replaces the full todo list for a session and publishes `Todo.Updated`. `Todo.get(sessionId)` returns the current list. Both degrade gracefully when `Storage.Adapter.todo` is absent.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `workItem`, and `workerRunState`. Unimplemented optional sub-objects gracefully degrade.
+- **Migration 0006**: Legacy task/todo tables remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
+- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) flow through the shared `Bus` too.
 - **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.
 - **Snapshot.Provider**: Interface for capturing and restoring session message state. `Snapshot.Diff` reports added / removed / modified message IDs.
+- **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.complete()`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.setVerificationGate()`, `.areDependenciesMet()`, `.retry()`. Publishes `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed) on every mutation. Gracefully degrades when `Storage.Adapter.workItem` is absent. Terminal state transitions are validated (e.g. cannot complete a failed item without retry). `parentHash` is create-only immutable.
 - **WorkerRun**: Event-sourced via `Storage.Adapter.eventLog`. `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.listBySession()`. State transitions (e.g. `waiting_input → running`) increment `resumeCount`. Used by `SubagentRuntime` / `BackgroundManager` to persist subagent runs.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
 - **Persona session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child persona trees. Future work should add explicit metadata conventions before adding new storage shapes.
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters (`task`, `todo`, `backgroundTask`) from outside this package. Use it directly when you need raw sub-adapter access. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific (for example, `Session.*` mutations and `Todo.update()`). `Storage.getAdapter()` is an internal alias — both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `backgroundTask`, `workItem`, and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc subagent state alongside `Session`; use `WorkerRun` so it is event-sourced and replayable.
-- Do NOT call `Storage.get().todo` directly for writes that require bus event publication — go through `Todo.update()` instead. For read-only queries that don't require event notification, direct access is OK (or use `Todo.get()`).
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Message, Task, Todo, Storage as ProtocolStorage } from "@openomni/protocol";
+import { type Message, WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
@@ -18,17 +18,18 @@ const ORDERED_MIGRATIONS = [
   "0006_task_plan_todo/migration.sql",
   "0007_todo_fk_idempotency_idx/migration.sql",
   "0008_unified_observability/migration.sql",
+  "0009_work_item/migration.sql",
 ];
 
 function applyPragmas(db: Database): void {
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA synchronous = NORMAL");
-  db.exec("PRAGMA busy_timeout = 5000");
-  db.exec("PRAGMA cache_size = -64000");
-  db.exec("PRAGMA mmap_size = 268435456");
-  db.exec("PRAGMA temp_store = MEMORY");
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+  db.query("PRAGMA journal_mode = WAL").get();
+  db.query("PRAGMA synchronous = NORMAL").get();
+  db.query("PRAGMA busy_timeout = 5000").get();
+  db.query("PRAGMA cache_size = -64000").get();
+  db.query("PRAGMA mmap_size = 268435456").get();
+  db.query("PRAGMA temp_store = MEMORY").get();
+  db.query("PRAGMA foreign_keys = ON").get();
+  db.query("PRAGMA wal_checkpoint(PASSIVE)").get();
 }
 
 function applyMigrations(db: Database): void {
@@ -464,216 +465,106 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     },
   };
 
-  task: ProtocolStorage.TaskSubAdapter = {
-    task: {
-      get: (id: string): Task.Info | undefined => {
-        const row = this.db.query("SELECT data FROM task WHERE id = ?").get(id) as {
-          data: string;
-        } | null;
-        return row ? (JSON.parse(row.data) as Task.Info) : undefined;
-      },
-
-      set: (id: string, info: Task.Info): void => {
-        const now = Date.now();
-        this.db
-          .query(
-            `INSERT INTO task (id, owner_type, owner_id, status, data, time_created, time_updated)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-               owner_type = excluded.owner_type,
-               owner_id = excluded.owner_id,
-               status = excluded.status,
-               data = excluded.data,
-               time_updated = excluded.time_updated`,
-          )
-          .run(id, info.owner.type, info.owner.id, info.status, JSON.stringify(info), now, now);
-      },
-
-      list: (filter?: ProtocolStorage.TaskListFilter): Task.Info[] => {
-        let tasks = (this.db.query("SELECT data FROM task").all() as Array<{ data: string }>).map(
-          (r) => JSON.parse(r.data) as Task.Info,
-        );
-
-        if (!filter) return tasks;
-
-        if (filter.status) {
-          const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
-          tasks = tasks.filter((t) => statuses.includes(t.status));
-        }
-        if (filter.ownerId) {
-          tasks = tasks.filter((t) => t.owner.id === filter.ownerId);
-        }
-        if (filter.assignedAgentId) {
-          tasks = tasks.filter((t) => t.assignedAgentId === filter.assignedAgentId);
-        }
-        if (filter.tags && filter.tags.length > 0) {
-          tasks = tasks.filter((t) => filter.tags?.every((tag) => t.tags?.includes(tag)));
-        }
-
-        return tasks;
-      },
-
-      remove: (id: string): boolean => {
-        const existing = this.db.query("SELECT 1 FROM task WHERE id = ?").get(id);
-        if (!existing) return false;
-        // CASCADE in migration auto-removes task_run rows and their task_idempotency entries
-        this.db.query("DELETE FROM task WHERE id = ?").run(id);
-        return true;
-      },
+  workItem: ProtocolStorage.WorkItemSubAdapter = {
+    get: (hash: string): WorkItem.Info | undefined => {
+      const row = this.db.query("SELECT data FROM work_item WHERE hash = ?").get(hash) as {
+        data: string;
+      } | null;
+      return row ? (JSON.parse(row.data) as WorkItem.Info) : undefined;
     },
 
-    run: {
-      get: (runId: string): Task.Run | undefined => {
-        const row = this.db.query("SELECT data FROM task_run WHERE id = ?").get(runId) as {
-          data: string;
-        } | null;
-        return row ? (JSON.parse(row.data) as Task.Run) : undefined;
-      },
-
-      set: (taskId: string, run: Task.Run): void => {
-        const now = Date.now();
-        this.db.transaction(() => {
-          this.db
-            .query(
-              `INSERT INTO task_run (id, task_id, status, trigger_data, data, time_created, time_updated)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 status = excluded.status,
-                 trigger_data = excluded.trigger_data,
-                 data = excluded.data,
-                 time_updated = excluded.time_updated`,
-            )
-            .run(
-              run.runId,
-              taskId,
-              run.status,
-              JSON.stringify(run.trigger),
-              JSON.stringify(run),
-              now,
-              now,
-            );
-          this.db
-            .query(
-              `INSERT INTO task_idempotency (key, run_id, time_created)
-               VALUES (?, ?, ?)
-               ON CONFLICT(key) DO UPDATE SET run_id = excluded.run_id`,
-            )
-            .run(run.idempotencyKey, run.runId, now);
-        })();
-      },
-
-      list: (taskId: string, opts?: ProtocolStorage.RunListOptions): Task.Run[] => {
-        let runs = (
-          this.db.query("SELECT data FROM task_run WHERE task_id = ?").all(taskId) as Array<{
-            data: string;
-          }>
-        ).map((r) => JSON.parse(r.data) as Task.Run);
-
-        if (opts?.sortBy) {
-          const { sortBy } = opts;
-          const dir = opts.sortOrder === "asc" ? 1 : -1;
-          runs.sort((a, b) => dir * ((a[sortBy] ?? 0) - (b[sortBy] ?? 0)));
-        }
-        if (opts?.offset !== undefined || opts?.limit !== undefined) {
-          const start = opts.offset ?? 0;
-          runs = runs.slice(start, start + (opts.limit ?? runs.length));
-        }
-
-        return runs;
-      },
-
-      listByStatus: (statuses: Task.RunStatus[]): Task.Run[] => {
-        if (statuses.length === 0) return [];
-        const placeholders = statuses.map(() => "?").join(", ");
-        const rows = this.db
-          .prepare(`SELECT data FROM task_run WHERE status IN (${placeholders})`)
-          .all(...statuses) as Array<{ data: string }>;
-        return rows.map((r) => JSON.parse(r.data) as Task.Run);
-      },
-
-      remove: (runId: string): boolean => {
-        const existing = this.db.query("SELECT 1 FROM task_run WHERE id = ?").get(runId);
-        if (!existing) return false;
-        // CASCADE auto-removes task_idempotency entry
-        this.db.query("DELETE FROM task_run WHERE id = ?").run(runId);
-        return true;
-      },
-
-      getByIdempotencyKey: (key: string): Task.Run | undefined => {
-        const row = this.db.query("SELECT run_id FROM task_idempotency WHERE key = ?").get(key) as {
-          run_id: string;
-        } | null;
-        if (!row) return undefined;
-        return this.task.run.get(row.run_id);
-      },
-    },
-  };
-
-  todo: ProtocolStorage.TodoSubAdapter = {
-    upsertAll: async (sessionId: string, todos: Todo.Info[]): Promise<void> => {
-      this.db.transaction(() => {
-        this.db.query("DELETE FROM todo WHERE session_id = ?").run(sessionId);
-        for (const todo of todos) {
-          const now = Date.now();
-          this.db
-            .query(
-              `INSERT INTO todo (id, session_id, content, status, priority, position, time_created, time_updated)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            )
-            .run(
-              todo.id,
-              sessionId,
-              todo.content,
-              todo.status,
-              todo.priority,
-              todo.position,
-              now,
-              now,
-            );
-        }
-      })();
-    },
-
-    list: async (sessionId: string): Promise<Todo.Info[]> => {
-      const rows = this.db
+    set: (hash: string, item: WorkItem.Info): void => {
+      if (hash !== item.hash) {
+        throw new Error(`WorkItem hash mismatch: key=${hash} payload=${item.hash}`);
+      }
+      const now = Date.now();
+      const status = WorkItem.deriveStatus(item);
+      this.db
         .query(
-          "SELECT id, session_id, content, status, priority, position FROM todo WHERE session_id = ? ORDER BY position ASC",
+          `INSERT INTO work_item (hash, data, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(hash) DO UPDATE SET
+             data = excluded.data,
+             status = excluded.status,
+             assignee_id = excluded.assignee_id,
+             session_id = excluded.session_id,
+             parent_hash = excluded.parent_hash,
+             source_channel = excluded.source_channel,
+             time_updated = excluded.time_updated`,
         )
-        .all(sessionId) as Array<{
-        id: string;
-        session_id: string;
-        content: string;
-        status: string;
-        priority: string;
-        position: number;
-      }>;
-      return rows.map((r) => ({
-        id: r.id,
-        sessionId: r.session_id,
-        content: r.content,
-        status: r.status as Todo.Status,
-        priority: r.priority as Todo.Priority,
-        position: r.position,
-      }));
+        .run(
+          hash,
+          JSON.stringify(item),
+          status,
+          item.assigneeId ?? null,
+          item.sessionId ?? null,
+          item.relations.parentHash ?? null,
+          item.sourceChannel,
+          item.timestamps.created,
+          now,
+        );
     },
 
-    deleteAll: async (sessionId: string): Promise<void> => {
-      this.db.query("DELETE FROM todo WHERE session_id = ?").run(sessionId);
+    list: (filter?: ProtocolStorage.WorkItemListFilter): WorkItem.Info[] => {
+      const conditions: string[] = [];
+      const params: (string | null)[] = [];
+
+      if (filter?.status && filter.status.length > 0) {
+        const placeholders = filter.status.map(() => "?").join(", ");
+        conditions.push(`status IN (${placeholders})`);
+        params.push(...filter.status);
+      }
+      if (filter?.assigneeId !== undefined) {
+        if (filter.assigneeId === null) {
+          conditions.push("assignee_id IS NULL");
+        } else {
+          conditions.push("assignee_id = ?");
+          params.push(filter.assigneeId);
+        }
+      }
+      if (filter?.sessionId !== undefined) {
+        if (filter.sessionId === null) {
+          conditions.push("session_id IS NULL");
+        } else {
+          conditions.push("session_id = ?");
+          params.push(filter.sessionId);
+        }
+      }
+      if (filter?.parentHash !== undefined) {
+        if (filter.parentHash === null) {
+          conditions.push("parent_hash IS NULL");
+        } else {
+          conditions.push("parent_hash = ?");
+          params.push(filter.parentHash);
+        }
+      }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const rows = this.db
+        .query(`SELECT data FROM work_item ${where} ORDER BY time_created ASC`)
+        .all(...params) as Array<{ data: string }>;
+      return rows.map((r) => JSON.parse(r.data) as WorkItem.Info);
+    },
+
+    remove: (hash: string): boolean => {
+      const result = this.db.query("DELETE FROM work_item WHERE hash = ?").run(hash);
+      return result.changes > 0;
     },
   };
 
   clear(): void {
-    this.db.exec("DELETE FROM worker_run_state");
-    this.db.exec("DELETE FROM bus_event");
-    this.db.exec("DELETE FROM background_task");
-    this.db.exec("DELETE FROM todo");
-    this.db.exec("DELETE FROM plan");
-    this.db.exec("DELETE FROM task");
-    this.db.exec("DELETE FROM artifact");
-    this.db.exec("DELETE FROM surface_key");
-    this.db.exec("DELETE FROM part");
-    this.db.exec("DELETE FROM message");
-    this.db.exec("DELETE FROM session");
+    this.db.query("DELETE FROM worker_run_state").run();
+    this.db.query("DELETE FROM bus_event").run();
+    this.db.query("DELETE FROM background_task").run();
+    this.db.query("DELETE FROM work_item").run();
+    this.db.query("DELETE FROM todo").run();
+    this.db.query("DELETE FROM plan").run();
+    this.db.query("DELETE FROM task").run();
+    this.db.query("DELETE FROM artifact").run();
+    this.db.query("DELETE FROM surface_key").run();
+    this.db.query("DELETE FROM part").run();
+    this.db.query("DELETE FROM message").run();
+    this.db.query("DELETE FROM session").run();
   }
 
   transaction<T>(fn: () => T): T {

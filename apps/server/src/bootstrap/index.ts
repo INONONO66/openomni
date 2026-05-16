@@ -8,8 +8,6 @@ import {
   AgentToolProvider,
   IngressEngine,
   SystemToolProvider,
-  TaskToolProvider,
-  TodoToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
 import { Auth } from "@openomni/llm";
@@ -90,16 +88,12 @@ function createRoutingHandler(
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
-  taskProvider?: TaskToolProvider,
-  todoProvider?: TodoToolProvider,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
     agentProvider,
     mcpProvider,
     customProvider,
-    taskProvider,
-    todoProvider,
     defaultModel,
     workspaceRoot,
   });
@@ -116,8 +110,6 @@ export async function main(): Promise<void> {
   const agentProvider = new AgentToolProvider();
   const mcpProvider = new McpToolProvider();
   const customProvider = new CustomToolProvider();
-  const taskProvider = new TaskToolProvider();
-  const todoProvider = new TodoToolProvider();
 
   const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
   const mergedMcpConfig = {
@@ -154,7 +146,7 @@ export async function main(): Promise<void> {
     });
     const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
     const bootstrap = await assembleBootstrap(mcpProvider);
-    const toolDispatcher = buildToolDispatcher([mcpProvider, taskProvider, todoProvider]);
+    const toolDispatcher = buildToolDispatcher([mcpProvider]);
     coordinator = createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher });
     await coordinator.waitUntilReady();
     IngressEngine.setCoordinator(coordinator);
@@ -172,8 +164,6 @@ export async function main(): Promise<void> {
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
-        taskProvider,
-        todoProvider,
       )
     : undefined;
 

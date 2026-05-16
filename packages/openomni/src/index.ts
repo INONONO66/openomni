@@ -85,8 +85,6 @@ export {
   AgentToolProvider,
   ToolProxyProvider,
   SystemToolProvider,
-  TaskToolProvider,
-  TodoToolProvider,
   Tool,
   WorkspaceLock,
   buildToolCatalog,

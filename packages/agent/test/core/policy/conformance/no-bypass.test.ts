@@ -200,7 +200,7 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
     documentedSkip,
   );
   itSkip(
-    "UNGOVERNED: Todo writes packages/session/src/todo/index.ts — no policy gate",
+    "UNGOVERNED: WorkItem writes packages/session/src/work-item/index.ts — no policy gate",
     documentedSkip,
   );
   itSkip(

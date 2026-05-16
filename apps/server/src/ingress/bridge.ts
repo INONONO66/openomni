@@ -1,12 +1,6 @@
 import type { Tool, Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
-import type {
-  AgentToolProvider,
-  NativeTool,
-  SystemToolProvider,
-  TaskToolProvider,
-  TodoToolProvider,
-} from "@openomni/openomni";
+import type { AgentToolProvider, NativeTool, SystemToolProvider } from "@openomni/openomni";
 import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
@@ -18,8 +12,6 @@ export interface BridgeDeps {
   agentProvider: AgentToolProvider;
   mcpProvider: McpToolProvider;
   customProvider?: { listTools(): NativeTool[] };
-  taskProvider?: TaskToolProvider;
-  todoProvider?: TodoToolProvider;
   defaultModel?: { provider: string; id: string };
   workspaceRoot: string;
 }
@@ -46,12 +38,6 @@ function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[]
     { tools: deps.mcpProvider.listTools(), source: "mcp" },
     ...(deps.customProvider
       ? [{ tools: deps.customProvider.listTools(), source: "server" as const }]
-      : []),
-    ...(deps.taskProvider
-      ? [{ tools: deps.taskProvider.listTools(), source: "system" as const }]
-      : []),
-    ...(deps.todoProvider
-      ? [{ tools: deps.todoProvider.listTools(), source: "system" as const }]
       : []),
   ]);
 

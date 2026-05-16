@@ -13,7 +13,7 @@ src/
 ├── run/                  # Run.Snapshot / Outcome / RetryPolicy / Budget
 ├── sink/                 # Sink — streaming callback contract (TS interface, not Zod)
 ├── bus/                  # BusEvent.define() factory for typed event descriptors
-├── event/                # Task.*, Agent.* events + event/agent-execution.ts (AgentExecution.*)
+├── event/                # Event contracts + event/agent-execution.ts (AgentExecution.*)
 ├── notification/         # NotificationRequest / Result / Severity / DeliveryMode
 ├── adapter/              # Adapter.Surface / Capabilities / TriggerRule / Inbound-OutboundMessage
 ├── ingress/              # InboundEvent (direct), AgentDef, IngressResult
@@ -24,9 +24,8 @@ src/
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
 ├── artifact/             # Artifact.Meta, Artifact.Part
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
-├── storage/              # Storage.TaskSubAdapter and Storage.TodoSubAdapter interfaces
-├── task/                 # Task.Info, Task.Run, Task.Status, Task.RunStatus, Task.Owner, Task.Trigger, Task.Context, Task.Checkpoint, Task.SpawnedBy
-├── todo/                 # Todo.Info, Todo.Status, Todo.Priority, Todo.Updated BusEvent
+├── storage/              # Storage.WorkItemSubAdapter interface
+├── work-item/            # WorkItem.Info, Blocker, Evidence, VerificationGate, Status, deriveStatus(), generateHash(), WorkItem.Events.*
 ├── tool-selection/       # ToolSelection schema for choosing tool categories and overrides
 ├── trace/                # TraceContext schema shared by observability helpers
 ├── worker-bootstrap/     # Worker bootstrap payload contracts
@@ -42,9 +41,8 @@ src/
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
 - **Policy timings**: 14 policy timing points — `inbound.receive`, `run.start`, `turn.start`, `context.prepare`, `resources.prepare`, `model.request`, `model.response`, `invoke.prepare`, `invoke.result`, `turn.finish`, `completion.prepare`, `writeback.commit`, `run.finish`, `error`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`; legacy permission evaluators still use `EvaluationResult.action` (`continue | abort`).
 - **Subagent lifecycle**: `Subagent.Events.*` covers worker sessions (`WorkerSessionSpawned/Resumed/Cancelled`), worker runs (`WorkerRunStarted/Completed/Failed`), consultations (`WorkerConsultationRequested/Completed`), and background tasks (`BackgroundTaskLaunched/Completed/Failed/Cancelled`).
-- **Storage sub-adapters**: `Storage.TaskSubAdapter` and `Storage.TodoSubAdapter` are pure interface contracts in `storage/index.ts`. They carry no runtime logic — implementations live in `@openomni/session`.
-- **Task types**: `Task.Info` / `Task.Run` / `Task.Status` / `Task.RunStatus` live in `task/index.ts`. These moved from `packages/openomni/src/storage/` so session and openomni can share them without a circular dep.
-- **Todo types**: `Todo.Info` / `Todo.Status` / `Todo.Priority` live in `todo/index.ts`. `Todo.Updated` is a `BusEvent.define()` descriptor published when a session's todo list changes.
+- **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/session`.
+- **WorkItem namespace**: `work-item/index.ts` defines `WorkItem.Info` (universal work state schema with derived status, blockers, evidence, verification gates), `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed via `BusEvent.define()`), `deriveStatus()` (pure status derivation from timestamps/blockers), and `generateHash()` (base36 12-char collision-safe IDs).
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
 - **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/session`.
 
@@ -75,8 +73,8 @@ Keep these as protocol contracts only. Runtime policy and storage implementation
 - Adding a new policy timing? Update `Policy.Timing` in `policy/index.ts` and coordinate with `packages/agent/src/core/policy/engine.ts`.
 - Adding a new subagent event? Extend `Subagent.Events` in `subagent/index.ts` with a `BusEvent.define()` call.
 - Adding a new storage sub-adapter interface? Add it to `storage/index.ts` as a named interface under the `Storage` namespace.
+- Adding a work-item field? Update `WorkItem.Info` in `work-item/index.ts`. If it affects status derivation, update `deriveStatus()`.
+- Adding a work-item event? Extend `WorkItem.Events` in `work-item/index.ts` with a `BusEvent.define()` call.
 - Adding a new worker request or IPC field? Update `execution/`, `ipc/`, or `worker-bootstrap/` here first, then adapt coordinator/openomni/server callers.
 - Adding trace metadata? Update `trace/index.ts`; helper functions stay in `@openomni/session`.
-- Adding a new task field? Update `Task.Info` or `Task.Run` in `task/index.ts`.
-- Adding a new todo field? Update `Todo.Info` in `todo/index.ts` and keep `Todo.Updated` in sync.
 - This package builds to `dist/` — run `bun run build` after changes.
