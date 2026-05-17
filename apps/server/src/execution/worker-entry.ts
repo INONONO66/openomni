@@ -23,6 +23,8 @@ import {
 } from "./worker-runtime";
 import { createContextMiddleware } from "../context/index";
 
+const MAX_INBOX_MESSAGES = 100;
+
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -78,6 +80,13 @@ const backgroundManager = BackgroundManager.create({
   resolveAuth: resolveBootstrapAuth,
   allowAuthFallback: false,
 });
+
+async function shutdownWorker(exitCode: number): Promise<never> {
+  await BusPersistence.flush();
+  BusPersistence.stop();
+  server.close();
+  process.exit(exitCode);
+}
 
 function resolveBootstrapAuth(provider: string): Auth.Info | undefined {
   const credentials = workerBootstrap?.credentials;
@@ -522,6 +531,9 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       return;
     }
     const [, run] = active;
+    if (run.inbox.length >= MAX_INBOX_MESSAGES) {
+      run.inbox.shift();
+    }
     run.inbox.push(message);
     Bus.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
@@ -550,8 +562,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
     }
     respond({ acknowledged: true });
     setTimeout(() => {
-      server.close();
-      process.exit(0);
+      void shutdownWorker(0);
     }, 0);
   } else {
     respond({ ok: true });
@@ -583,10 +594,7 @@ setInterval(() => {
 }, HEARTBEAT_INTERVAL_MS);
 
 process.on("SIGTERM", async () => {
-  await BusPersistence.flush();
-  BusPersistence.stop();
-  server.close();
-  process.exit(0);
+  await shutdownWorker(0);
 });
 
 Bus.publish(Operational.Info, {

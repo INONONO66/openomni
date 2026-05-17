@@ -63,6 +63,22 @@ describe("resident profile", () => {
     await waitFor(() => profile.factory().systemPrompt.includes("Updated soul."));
     profile.close();
   });
+
+  it("keeps the last valid snapshot when watched profile reload fails", async () => {
+    const profileDir = await createProfileDir();
+    await Bun.write(path.join(profileDir, "SOUL.md"), "Initial soul.");
+    await Bun.write(path.join(profileDir, "config.yaml"), "name: Initial\n");
+
+    const profile = await createResidentProfile({ profileDir, model });
+    await Bun.write(path.join(profileDir, "config.yaml"), "invalid config line\n");
+    await Bun.sleep(75);
+
+    expect(profile.factory().systemPrompt).toContain("Name: Initial");
+
+    await Bun.write(path.join(profileDir, "config.yaml"), "name: Updated\n");
+    await waitFor(() => profile.factory().systemPrompt.includes("Name: Updated"));
+    profile.close();
+  });
 });
 
 async function waitFor(predicate: () => boolean): Promise<void> {

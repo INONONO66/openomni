@@ -45,6 +45,7 @@ export async function createResidentProfile(
       .then((next) => {
         snapshot = next;
       })
+      .catch(() => undefined)
       .finally(() => {
         reload = undefined;
       });
