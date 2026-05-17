@@ -34,14 +34,16 @@ export class McpClient {
 
   async connect(): Promise<void> {
     const traceId = randomUUID();
-    const transport = this.createTransport(this.config);
-    const closeTracker = trackTransportCloseRequests(transport);
+    let transport: Transport | undefined;
+    let closeTracker: TransportCloseTracker | undefined;
     const transportType =
       this.config.transport === "streamable-http"
         ? ("streamable-http" as const)
         : (this.config.transport as "stdio" | "sse" | "http");
 
     try {
+      transport = this.createTransport(this.config);
+      closeTracker = trackTransportCloseRequests(transport);
       await this.client.connect(transport);
       const tools = await this.client.listTools();
       this.connected = true;
@@ -57,7 +59,9 @@ export class McpClient {
       });
     } catch (err) {
       this.connected = false;
-      const cleanupError = await cleanupFailedConnection(this.client, transport, closeTracker);
+      const cleanupError = transport
+        ? await cleanupFailedConnection(this.client, transport, closeTracker)
+        : undefined;
       const context: Record<string, unknown> = { serverName: this.config.name };
       if (cleanupError) {
         context.cleanupError = String(cleanupError);
@@ -187,7 +191,7 @@ function trackTransportCloseRequests(transport: Transport): TransportCloseTracke
 async function cleanupFailedConnection(
   client: McpClientHandle,
   transport: Transport,
-  closeTracker: TransportCloseTracker,
+  closeTracker?: TransportCloseTracker,
 ): Promise<unknown | undefined> {
   let cleanupError: unknown;
   try {
@@ -199,7 +203,7 @@ async function cleanupFailedConnection(
   // The SDK client normally owns and closes the transport after connect() starts.
   // If close() failed before it reached the transport, close it directly while
   // still preserving the original connection error for callers.
-  if (!closeTracker.isClosed()) {
+  if (!closeTracker?.isClosed()) {
     try {
       await transport.close();
     } catch (err) {

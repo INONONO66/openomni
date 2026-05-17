@@ -217,20 +217,29 @@ describe("McpClient connection cleanup", () => {
     const closeError = new Error("cleanup failed");
     const sdkClient = createConnectableStubClient({ connectError, closeError });
     const transport = createTransportStub();
+    const serverName = "filesystem-cleanup-error";
     const observedErrors: Array<{
+      readonly component?: string;
       readonly error?: string;
       readonly context?: Record<string, unknown>;
     }> = [];
     const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Error.name) {
-        observedErrors.push(
-          payload as { readonly error?: string; readonly context?: Record<string, unknown> },
-        );
+      const errorPayload = payload as {
+        readonly component?: string;
+        readonly error?: string;
+        readonly context?: Record<string, unknown>;
+      };
+      if (
+        event.name === Operational.Error.name &&
+        errorPayload.component === "agent.mcp" &&
+        errorPayload.context?.serverName === serverName
+      ) {
+        observedErrors.push(errorPayload);
       }
     });
     const client = new McpClient(
       {
-        name: "filesystem",
+        name: serverName,
         transport: "stdio",
         command: "mcp-server-filesystem",
       },
@@ -250,8 +259,59 @@ describe("McpClient connection cleanup", () => {
     expect(sdkClient.closeCalls()).toBe(1);
     expect(transport.closeCalls()).toBe(1);
     expect(observedErrors).toHaveLength(1);
+    expect(observedErrors[0]?.component).toBe("agent.mcp");
     expect(observedErrors[0]?.error).toBe("Error: connect failed");
     expect(observedErrors[0]?.context?.cleanupError).toBe("Error: cleanup failed");
+  });
+
+  test("reports transport factory failures through operational errors", async () => {
+    const createError = new Error("transport factory failed");
+    const serverName = "factory-failure";
+    const observedErrors: Array<{
+      readonly component?: string;
+      readonly error?: string;
+      readonly context?: Record<string, unknown>;
+    }> = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      const errorPayload = payload as {
+        readonly component?: string;
+        readonly error?: string;
+        readonly context?: Record<string, unknown>;
+      };
+      if (
+        event.name === Operational.Error.name &&
+        errorPayload.component === "agent.mcp" &&
+        errorPayload.context?.serverName === serverName
+      ) {
+        observedErrors.push(errorPayload);
+      }
+    });
+    const client = new McpClient(
+      {
+        name: serverName,
+        transport: "stdio",
+        command: "mcp-server-filesystem",
+      },
+      {
+        client: createStubClient([]),
+        createTransport: () => {
+          throw createError;
+        },
+      },
+    );
+
+    try {
+      await expect(client.connect()).rejects.toBe(createError);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      unsubscribe();
+    }
+
+    expect(observedErrors).toHaveLength(1);
+    expect(observedErrors[0]?.component).toBe("agent.mcp");
+    expect(observedErrors[0]?.error).toBe("Error: transport factory failed");
+    expect(observedErrors[0]?.context?.serverName).toBe(serverName);
+    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
   });
 
   test("does not double-close when the client closes a transport that omits onclose", async () => {
