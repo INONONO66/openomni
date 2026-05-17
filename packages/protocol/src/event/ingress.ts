@@ -14,7 +14,7 @@ export namespace IngressEvent {
     "ingress.received",
     Base.extend({
       surface: z.string(),
-      mode: z.enum(["plan", "direct"]),
+      mode: z.enum(["plan", "direct", "internal"]),
       target: IngressTargetLabel,
       payloadLength: z.number(),
     }),
@@ -24,7 +24,7 @@ export namespace IngressEvent {
     "ingress.mode.detected",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct"]),
+      mode: z.enum(["plan", "direct", "internal"]),
       target: IngressTargetLabel,
     }),
   );
@@ -42,7 +42,7 @@ export namespace IngressEvent {
     "ingress.completed",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct"]),
+      mode: z.enum(["plan", "direct", "internal"]),
       target: IngressTargetLabel,
       durationMs: z.number(),
     }),
@@ -52,7 +52,7 @@ export namespace IngressEvent {
     "ingress.failed",
     Base.extend({
       sessionId: z.string(),
-      mode: z.enum(["plan", "direct"]),
+      mode: z.enum(["plan", "direct", "internal"]),
       target: IngressTargetLabel,
       durationMs: z.number(),
       error: z.string(),

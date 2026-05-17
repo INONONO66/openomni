@@ -4,6 +4,7 @@ export type { DAGStep, DAGStructure } from "./dag";
 
 // Ingress
 export {
+  CronAdapter,
   IngressEngine,
   IngressEventProjector,
   IngressAuthorityMiddleware,

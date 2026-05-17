@@ -9,7 +9,7 @@ import { createIngressAudit, summarizeText } from "./audit-envelope";
 import { resolveTarget } from "./target";
 
 export namespace IngressEventProjector {
-  function extractTextPayload(event: Ingress.InboundEvent): string {
+  function extractTextPayload(event: Ingress.ResolvedInboundEvent): string {
     if (typeof event.payload === "string") {
       return event.payload;
     }
@@ -27,7 +27,7 @@ export namespace IngressEventProjector {
   }
 
   export function project(
-    event: Ingress.InboundEvent,
+    event: Ingress.ResolvedInboundEvent,
     sessionId: string,
     model: { providerID: string; modelID: string },
     traceContext?: TraceContextProtocol.Type,

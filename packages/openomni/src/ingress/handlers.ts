@@ -17,7 +17,7 @@ const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 export namespace IngressHandlers {
   export interface HandlerContext {
     sessionId: string;
-    event: Ingress.InboundEvent;
+    event: Ingress.ResolvedInboundEvent;
     coordinator?: CoordinatorLike;
     residentRuntime?: ResidentRuntime;
     traceContext?: TraceContextProtocol.Type;
@@ -76,7 +76,7 @@ export namespace IngressHandlers {
     return resolveWritebackDecision(decision, output);
   }
 
-  function summarizeTarget(event: Ingress.InboundEvent): string | undefined {
+  function summarizeTarget(event: Ingress.ResolvedInboundEvent): string | undefined {
     return resolveTarget(event).kind;
   }
 
@@ -335,7 +335,7 @@ export namespace IngressHandlers {
       Bus.publish(IngressEvent.ModeDetected, {
         traceId: ctx.traceContext.traceId,
         sessionId: ctx.sessionId,
-        mode: "direct",
+        mode: ctx.event.mode,
         target: "resident",
         time: Date.now(),
       });
@@ -350,7 +350,7 @@ export namespace IngressHandlers {
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
 
     return {
-      mode: "direct",
+      mode: ctx.event.mode,
       target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: {
@@ -366,7 +366,7 @@ export namespace IngressHandlers {
       Bus.publish(IngressEvent.ModeDetected, {
         traceId: ctx.traceContext.traceId,
         sessionId: ctx.sessionId,
-        mode: "direct",
+        mode: ctx.event.mode,
         ...(target ? { target } : {}),
         time: Date.now(),
       });
@@ -426,8 +426,8 @@ export namespace IngressHandlers {
           SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
           publishCompleted(ctx, target, start);
           return {
-            mode: "direct",
-            target: resolveTarget(ctx.event),
+      mode: ctx.event.mode,
+      target: resolveTarget(ctx.event),
             sessionId: ctx.sessionId,
             result: {
               output,
@@ -450,7 +450,7 @@ export namespace IngressHandlers {
     publishCompleted(ctx, target, start);
 
     return {
-      mode: "direct",
+      mode: ctx.event.mode,
       target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: {

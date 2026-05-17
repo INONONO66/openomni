@@ -13,7 +13,7 @@ export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "
 
 export interface ResidentRunContext {
   readonly sessionId: string;
-  readonly event: Ingress.InboundEvent;
+  readonly event: Ingress.ResolvedInboundEvent;
   readonly traceContext?: TraceContextProtocol.Type;
 }
 
@@ -51,7 +51,7 @@ function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
   return ChatAgent.create(config).run(input);
 }
 
-function extractAgentName(event: Ingress.InboundEvent): string | undefined {
+function extractAgentName(event: Ingress.ResolvedInboundEvent): string | undefined {
   const raw = event.meta?.agentName ?? event.meta?.agent;
   return typeof raw === "string" ? raw : undefined;
 }
