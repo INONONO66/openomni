@@ -23,6 +23,23 @@ async function withTempDir(fn: (dir: string) => Promise<void>) {
   }
 }
 
+type ProfilePolicyContext = Parameters<
+  ReturnType<typeof Profile.createMiddleware>[number]["fn"]
+>[0];
+
+function policyContext(overrides: Partial<ProfilePolicyContext> = {}): ProfilePolicyContext {
+  return {
+    timing: "context.prepare",
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    ...overrides,
+  };
+}
+
 function expectAllow(decision: Policy.PolicyDecision, policyId = "profile"): void {
   expect(decision).toEqual(PolicyDecision.allow({ policyId }));
 }
@@ -53,7 +70,7 @@ describe("Profile", () => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         const [soul, user, memory] = registrations;
 
-        const soulVerdict = await soul.fn({} as any);
+        const soulVerdict = await soul.fn(policyContext());
         expectEffect(
           soulVerdict,
           {
@@ -63,7 +80,7 @@ describe("Profile", () => {
           "profile.soul",
         );
 
-        const userVerdict = await user.fn({} as any);
+        const userVerdict = await user.fn(policyContext());
         expectEffect(
           userVerdict,
           {
@@ -73,7 +90,7 @@ describe("Profile", () => {
           "profile.user",
         );
 
-        const memoryVerdict = await memory.fn({} as any);
+        const memoryVerdict = await memory.fn(policyContext());
         expectEffect(
           memoryVerdict,
           {
@@ -95,7 +112,7 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const userVerdict = await registrations[1].fn({} as any);
+        const userVerdict = await registrations[1].fn(policyContext());
 
         expectEffect(
           userVerdict,
@@ -117,7 +134,7 @@ describe("Profile", () => {
         await createFixture(dir, "test-agent", {});
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const userVerdict = await registrations[1].fn({} as any);
+        const userVerdict = await registrations[1].fn(policyContext());
 
         expectEffect(
           userVerdict,
@@ -137,7 +154,7 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const userVerdict = await registrations[1].fn({} as any);
+        const userVerdict = await registrations[1].fn(policyContext());
 
         expectEffect(
           userVerdict,
@@ -154,7 +171,7 @@ describe("Profile", () => {
       await withTempDir(async (dir) => {
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         for (const reg of registrations) {
-          const verdict = await reg.fn({} as any);
+          const verdict = await reg.fn(policyContext());
           expectAllow(verdict);
         }
       });
@@ -167,17 +184,17 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const soulVerdict = await registrations[0].fn({} as any);
+        const soulVerdict = await registrations[0].fn(policyContext());
         expectEffect(
           soulVerdict,
           { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nSoul content only" },
           "profile.soul",
         );
 
-        const userVerdict = await registrations[1].fn({} as any);
+        const userVerdict = await registrations[1].fn(policyContext());
         expectAllow(userVerdict);
 
-        const memoryVerdict = await registrations[2].fn({} as any);
+        const memoryVerdict = await registrations[2].fn(policyContext());
         expectAllow(memoryVerdict);
       });
     });
@@ -189,7 +206,7 @@ describe("Profile", () => {
           homeRoot: dir,
         });
         for (const reg of registrations) {
-          const verdict = await reg.fn({} as any);
+          const verdict = await reg.fn(policyContext());
           expectAllow(verdict);
         }
       });
@@ -199,7 +216,7 @@ describe("Profile", () => {
       await withTempDir(async (dir) => {
         const registrations = Profile.createMiddleware({ agentName: "..", homeRoot: dir });
         for (const reg of registrations) {
-          const verdict = await reg.fn({} as any);
+          const verdict = await reg.fn(policyContext());
           expectAllow(verdict);
         }
       });
@@ -215,7 +232,7 @@ describe("Profile", () => {
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
         for (const reg of registrations) {
-          const verdict = await reg.fn({} as any);
+          const verdict = await reg.fn(policyContext());
           expectAllow(verdict);
         }
       });
@@ -273,13 +290,13 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const soulVerdict = await registrations[0].fn({} as any);
+        const soulVerdict = await registrations[0].fn(policyContext());
         expect(soulVerdict.effects[0]).toMatchObject({ type: "prompt.inject_message" });
 
-        const userVerdict = await registrations[1].fn({} as any);
+        const userVerdict = await registrations[1].fn(policyContext());
         expect(userVerdict.effects[0]).toMatchObject({ type: "prompt.append_context" });
 
-        const memoryVerdict = await registrations[2].fn({} as any);
+        const memoryVerdict = await registrations[2].fn(policyContext());
         expect(memoryVerdict.effects[0]).toMatchObject({ type: "prompt.append_context" });
       });
     });
@@ -291,7 +308,7 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const verdict = await registrations[2].fn({} as any);
+        const verdict = await registrations[2].fn(policyContext());
 
         expectEffect(
           verdict,
@@ -311,7 +328,7 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const verdict = await registrations[2].fn({} as any);
+        const verdict = await registrations[2].fn(policyContext());
         expectAllow(verdict);
       });
     });
@@ -325,12 +342,12 @@ describe("Profile", () => {
         });
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const first = await registrations[0].fn({} as any);
+        const first = await registrations[0].fn(policyContext());
 
         const soulPath = join(dir, ".openomni", "profiles", "test-agent", "SOUL.md");
         await Bun.write(soulPath, "modified soul");
 
-        const second = await registrations[0].fn({} as any);
+        const second = await registrations[0].fn(policyContext());
         expect(second).toEqual(first);
         expectEffect(
           second,
@@ -347,7 +364,7 @@ describe("Profile", () => {
         });
 
         const first = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const firstVerdict = await first[0].fn({} as any);
+        const firstVerdict = await first[0].fn(policyContext());
         expectEffect(
           firstVerdict,
           { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nversion one" },
@@ -358,7 +375,7 @@ describe("Profile", () => {
         await Bun.write(soulPath, "version two");
 
         const second = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
-        const secondVerdict = await second[0].fn({} as any);
+        const secondVerdict = await second[0].fn(policyContext());
         expectEffect(
           secondVerdict,
           { type: "prompt.inject_message", message: "═══ PERSONA IDENTITY ═══\nversion two" },
@@ -376,12 +393,12 @@ describe("Profile", () => {
 
         const registrations = Profile.createMiddleware({ agentName: "test-agent", homeRoot: dir });
 
-        await registrations[0].fn({} as any);
+        await registrations[0].fn(policyContext());
 
         const memoryPath = join(dir, ".openomni", "profiles", "test-agent", "MEMORY.md");
         await Bun.write(memoryPath, "updated memory");
 
-        const memoryVerdict = await registrations[2].fn({} as any);
+        const memoryVerdict = await registrations[2].fn(policyContext());
         expectEffect(
           memoryVerdict,
           {

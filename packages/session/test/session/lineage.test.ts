@@ -101,4 +101,23 @@ describe("Session lineage APIs", () => {
       state: "busy",
     });
   });
+
+  test("createChild rejects missing parents without creating a child", () => {
+    expect(() =>
+      Session.createChild({
+        parentSessionId: "missing-parent",
+        title: "Orphan",
+        model: { providerID: "test", modelID: "orphan-model" },
+      }),
+    ).toThrow("Parent session not found: missing-parent");
+
+    expect(Session.list()).toEqual([]);
+    expect(Session.listChildren("missing-parent")).toEqual([]);
+  });
+
+  test("updateWorkerMeta on a missing session is a no-op", () => {
+    expect(() => Session.updateWorkerMeta("missing-session", { lane: "worker-1" })).not.toThrow();
+    expect(Session.getWorkerMeta("missing-session")).toBeUndefined();
+    expect(Session.list()).toEqual([]);
+  });
 });
