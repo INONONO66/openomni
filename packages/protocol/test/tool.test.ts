@@ -1,6 +1,37 @@
 import { describe, test, expect } from "bun:test";
 import { Tool } from "../src/tool/index.js";
 
+describe("Tool shared contracts", () => {
+  test("parses tool config shared by execution and ingress", () => {
+    const config = Tool.Config.parse({
+      systemTools: ["read"],
+      agentTools: ["subagent"],
+      mcpTools: ["search.query"],
+      workspaceRoot: "/workspace",
+    });
+
+    expect(config.systemTools).toEqual(["read"]);
+    expect(config.agentTools).toEqual(["subagent"]);
+    expect(config.mcpTools).toEqual(["search.query"]);
+    expect(config.workspaceRoot).toBe("/workspace");
+  });
+
+  test("rejects invalid tool config shapes", () => {
+    expect(Tool.Config.safeParse({ systemTools: "read" }).success).toBe(false);
+    expect(Tool.Config.safeParse({ workspaceRoot: 42 }).success).toBe(false);
+  });
+
+  test("parses canonical tool source and risk tier contracts", () => {
+    expect(Tool.Source.parse("system")).toBe("system");
+    expect(Tool.Source.parse("server")).toBe("server");
+    expect(Tool.RiskTier.parse(0)).toBe(0);
+    expect(Tool.RiskTier.parse(3)).toBe(3);
+
+    expect(Tool.Source.safeParse("custom").success).toBe(false);
+    expect(Tool.RiskTier.safeParse(4).success).toBe(false);
+  });
+});
+
 describe("Tool.StatePending", () => {
   test("parses valid pending state with empty input", () => {
     const state = Tool.StatePending.parse({

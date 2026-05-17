@@ -32,6 +32,9 @@ describe("AgentDef", () => {
       ],
       budget: {
         maxTurns: 10,
+        maxToolCalls: 20,
+        maxWallTimeMs: 30_000,
+        maxToolRuntimeMs: 5_000,
       },
       permissions: {
         action: "tool.call",
@@ -47,9 +50,40 @@ describe("AgentDef", () => {
     if (!tool) throw new Error("expected parsed tool");
     expect(tool.name).toBe("bash");
     expect(agent.budget?.maxTurns).toBe(10);
+    expect(agent.budget?.maxToolCalls).toBe(20);
+    expect(agent.budget?.maxWallTimeMs).toBe(30_000);
+    expect(agent.budget?.maxToolRuntimeMs).toBe(5_000);
     expect(agent.permissions?.action).toBe("tool.call");
     expect(agent.permissions?.allowlist).toEqual(["bash"]);
     expect(agent.toolConfig?.workspaceRoot).toBe("/workspace/openomni");
+  });
+
+  test("should parse full canonical budget fields through direct events", () => {
+    const event = Ingress.DirectEventSchema.parse({
+      id: "event-budget",
+      surface: "cli",
+      mode: "direct",
+      payload: "budgeted work",
+      agent: {
+        model: {
+          provider: "anthropic",
+          id: "claude-3-5-sonnet",
+        },
+        budget: {
+          maxTurns: 8,
+          maxToolCalls: 13,
+          maxWallTimeMs: 60_000,
+          maxToolRuntimeMs: 10_000,
+        },
+      },
+    });
+
+    expect(event.agent.budget).toEqual({
+      maxTurns: 8,
+      maxToolCalls: 13,
+      maxWallTimeMs: 60_000,
+      maxToolRuntimeMs: 10_000,
+    });
   });
 });
 

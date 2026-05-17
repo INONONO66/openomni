@@ -2,9 +2,8 @@ import type { Policy, RuntimeResource, Tool, ToolSelection } from "@openomni/pro
 
 export type ToolCategory = "system" | "agent" | "mcp";
 export type ToolMetaValue = boolean | ((input: unknown) => boolean);
-export type ToolSource = "system" | "mcp" | "agent" | "server";
-
-export type ToolRiskTier = 0 | 1 | 2 | 3;
+export type ToolSource = Tool.Source;
+export type ToolRiskTier = Tool.RiskTier;
 // Tier 0: read-only (read, glob, grep.search)
 // Tier 1: local write (write, edit)
 // Tier 2: bash — logged, future approval gate

@@ -14,14 +14,7 @@ const requestSchema = z.object({
   }),
   systemPrompt: z.string().optional(),
   tools: z.array(Tool.Spec).optional(),
-  toolConfig: z
-    .object({
-      systemTools: z.array(z.string()).optional(),
-      agentTools: z.array(z.string()).optional(),
-      mcpTools: z.array(z.string()).optional(),
-      workspaceRoot: z.string().optional(),
-    })
-    .optional(),
+  toolConfig: Tool.Config.optional(),
   permissions: Policy.Permission.optional(),
   credentials: z.record(z.string()).optional(),
   budget: AgentProfile.AgentBudget.optional(),
