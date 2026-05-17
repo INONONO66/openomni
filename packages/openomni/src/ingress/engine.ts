@@ -1,6 +1,6 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import {
-  Ingress,
+  type Ingress,
   type Policy,
   IngressEvent,
   PolicyDecision as Decision,

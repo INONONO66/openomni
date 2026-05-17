@@ -52,7 +52,15 @@ function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
 }
 
 function extractAgentName(event: Ingress.ResolvedInboundEvent): string | undefined {
-  const raw = event.meta?.agentName ?? event.meta?.agent;
+  const internalEvent = event as unknown as {
+    mode?: string;
+    agentName?: unknown;
+    meta?: { agentName?: unknown; agent?: unknown };
+  };
+  if (internalEvent.mode === "internal") {
+    return typeof internalEvent.agentName === "string" ? internalEvent.agentName : undefined;
+  }
+  const raw = internalEvent.meta?.agentName ?? internalEvent.meta?.agent;
   return typeof raw === "string" ? raw : undefined;
 }
 
@@ -226,7 +234,7 @@ export class ResidentRuntime {
       Bus.publish(IngressEvent.Completed, {
         traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
-        mode: "direct",
+        mode: ctx.event.mode,
         target: "resident",
         durationMs: Date.now() - start,
         time: Date.now(),
@@ -243,7 +251,7 @@ export class ResidentRuntime {
       Bus.publish(IngressEvent.Failed, {
         traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
-        mode: "direct",
+        mode: ctx.event.mode,
         target: "resident",
         durationMs: Date.now() - start,
         error: error instanceof Error ? error.message : String(error),

@@ -426,8 +426,8 @@ export namespace IngressHandlers {
           SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
           publishCompleted(ctx, target, start);
           return {
-      mode: ctx.event.mode,
-      target: resolveTarget(ctx.event),
+            mode: ctx.event.mode,
+            target: resolveTarget(ctx.event),
             sessionId: ctx.sessionId,
             result: {
               output,
