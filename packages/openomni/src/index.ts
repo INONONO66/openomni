@@ -4,6 +4,7 @@ export type { DAGStep, DAGStructure } from "./dag";
 
 // Ingress
 export {
+  CronAdapter,
   IngressEngine,
   IngressEventProjector,
   IngressAuthorityMiddleware,
@@ -24,10 +25,6 @@ export type {
   ResidentRunResult,
   ResidentWorkerToolsOptions,
 } from "./resident";
-
-// Runtime
-export { BusTransport } from "./runtime/bus-transport";
-export type { Transport } from "./runtime/bus-transport";
 
 // Skill loader and activation
 export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";

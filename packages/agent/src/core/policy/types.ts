@@ -1,4 +1,4 @@
-import type { Message, Messenger, TraceContext, Policy } from "@openomni/protocol";
+import type { Message, TraceContext, Policy } from "@openomni/protocol";
 import type { AgentStep, TokenUsage, AgentBudget, AgentEventEmitter } from "../types";
 import type { BudgetState } from "../budget";
 
@@ -21,7 +21,6 @@ export interface PolicyContext {
   eventEmitter?: AgentEventEmitter;
   budget?: AgentBudget;
   traceContext?: TraceContext.Type;
-  envelope?: Messenger.MessageEnvelope;
   labels?: Policy.LabelEntry[];
 }
 

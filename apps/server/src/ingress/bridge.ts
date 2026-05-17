@@ -100,7 +100,7 @@ export function buildResidentAgentDef(agentName: string, deps: BridgeDeps): Ingr
 function createBaseEvent(
   message: Adapter.InboundMessage,
   payload: string,
-): Omit<Ingress.InboundEvent, "mode" | "agent" | "agents"> {
+): Omit<Ingress.DirectEvent, "mode" | "agent"> {
   const descriptor = SurfaceKey.parse(message.surfaceKey);
 
   return {
@@ -134,7 +134,7 @@ export function buildInboundEvent(
   message: Adapter.InboundMessage,
   agentName: string,
   deps: BridgeDeps,
-): Ingress.InboundEvent {
+): Ingress.DirectEvent {
   const base = createBaseEvent(message, message.text);
   const agent = buildResidentAgentDef(agentName, deps);
 

@@ -68,6 +68,16 @@ const ActivationMetadataSchemaImpl = z
         "exited",
       ])
       .optional(),
+    trigger: z
+      .object({
+        kind: z.enum(["cron", "webhook", "manual", "internal"]),
+        id: z.string().optional(),
+        scheduledAt: z.number().optional(),
+        firedAt: z.number().optional(),
+        attempt: z.number().optional(),
+      })
+      .catchall(z.unknown())
+      .optional(),
   })
   .catchall(z.unknown());
 
@@ -134,8 +144,19 @@ export namespace Ingress {
   });
   export type DirectEvent = z.infer<typeof DirectEventSchema> & { agent: AgentDef };
 
-  export const InboundEventSchema = DirectEventSchema;
-  export type InboundEvent = DirectEvent;
+  export const InternalEventSchema = z.object({
+    ...InboundEventBase,
+    mode: z.literal("internal"),
+    agentName: z.string(),
+  });
+  export type InternalEvent = z.infer<typeof InternalEventSchema>;
+
+  export const InboundEventSchema = z.discriminatedUnion("mode", [
+    DirectEventSchema,
+    InternalEventSchema,
+  ]);
+  export type InboundEvent = DirectEvent | InternalEvent;
+  export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
   export type DirectResult = {
     output: string;
@@ -143,7 +164,7 @@ export namespace Ingress {
   };
 
   export type IngressResult = {
-    mode: "direct";
+    mode: "direct" | "internal";
     target: Target;
     sessionId: string;
     result: DirectResult;

@@ -4,6 +4,7 @@ import {
   type Policy,
   IngressEvent,
   PolicyDecision as Decision,
+  type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
@@ -12,16 +13,21 @@ import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
-import { targetKey } from "./target";
+import { resolveTarget, targetKey } from "./target";
 
 export type { CoordinatorLike };
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+export interface AgentResolver {
+  resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
+}
+
 let _coordinator: CoordinatorLike | undefined;
 let _residentRuntime: ResidentRuntime | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
+let _agentResolver: AgentResolver | undefined;
 
 function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   if (!Decision.isBlocking(decision)) return;
@@ -37,6 +43,7 @@ export namespace IngressEngine {
     _residentRuntime = undefined;
     _middlewareDecisionObserver = undefined;
     _ingressPolicies = [];
+    _agentResolver = undefined;
   }
 
   export function setCoordinator(c: CoordinatorLike): void {
@@ -55,6 +62,14 @@ export namespace IngressEngine {
     _residentRuntime = undefined;
   }
 
+  export function setAgentResolver(resolver: AgentResolver): void {
+    _agentResolver = resolver;
+  }
+
+  export function clearAgentResolver(): void {
+    _agentResolver = undefined;
+  }
+
   export function setPolicyDecisionObserver(
     observer: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
   ): void {
@@ -66,6 +81,10 @@ export namespace IngressEngine {
   }
 
   export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
+    if ((event as { mode: string }).mode === "internal") {
+      throw new Error("internal mode not allowed on external ingress path");
+    }
+
     const trace = TraceContext.create();
     const preRun = await IngressAuthorityMiddleware.runPreRun({
       event,
@@ -74,8 +93,33 @@ export namespace IngressEngine {
       onDecision: _middlewareDecisionObserver,
     });
 
-    const inboundEvent = preRun.event;
-    const target = preRun.target;
+    if ((preRun.event as { mode: string }).mode !== "direct") {
+      throw new Error("internal mode not allowed on external ingress path");
+    }
+
+    const inboundEvent = preRun.event as Ingress.ResolvedInboundEvent;
+    return ingestResolved(inboundEvent, trace, preRun.coordinator);
+  }
+
+  export async function ingestInternal(
+    event: Ingress.InternalEvent,
+  ): Promise<Ingress.IngressResult> {
+    if (!_agentResolver) {
+      throw new Error("agent resolver not configured");
+    }
+
+    const trace = TraceContext.create();
+    const agent = await _agentResolver.resolve(event.agentName, event);
+    const resolvedEvent: Ingress.ResolvedInboundEvent = { ...event, agent };
+    return ingestResolved(resolvedEvent, trace, _coordinator);
+  }
+
+  async function ingestResolved(
+    inboundEvent: Ingress.ResolvedInboundEvent,
+    trace: TraceContextProtocol.Type,
+    coordinator: CoordinatorLike | undefined,
+  ): Promise<Ingress.IngressResult> {
+    const target = resolveTarget(inboundEvent);
     const targetLabel = targetKey(target);
 
     const payloadLength =
@@ -149,7 +193,7 @@ export namespace IngressEngine {
     const handlerContext = {
       sessionId: session.id,
       event: inboundEvent,
-      coordinator: preRun.coordinator,
+      coordinator,
       residentRuntime: _residentRuntime,
       traceContext: activeTrace,
       policies: _ingressPolicies,
@@ -163,3 +207,7 @@ export namespace IngressEngine {
     return IngressHandlers.handleDirect(handlerContext);
   }
 }
+
+export const ingestInternal = IngressEngine.ingestInternal;
+export const setAgentResolver = IngressEngine.setAgentResolver;
+export const clearAgentResolver = IngressEngine.clearAgentResolver;

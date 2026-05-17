@@ -7,15 +7,15 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
-| `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `resolveTarget`, `targetKey` |
-| `src/runtime/` | Session bus transport bridge | `BusTransport`, `Transport` |
+| `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
+| `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
 | `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
 
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
-- `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `direct` handler.
+- `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `direct` handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
 - Persona workforce direction: `src/ingress/` remains the external/internal inbound seam, `src/subagent/` remains the child persona execution seam, and a future self-loop/writeback layer should live in this package rather than in `agent`.
 
@@ -25,7 +25,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 
 ```
 dag/                → no internal deps
-runtime/            → @openomni/session + @openomni/agent transport contracts
+runtime/            → @openomni/session + @openomni/agent (worker middleware, no bus transport)
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → no sibling deps
 subagent/           → execution-runtime/ (uses @openomni/agent + @openomni/session + protocol directly)
@@ -39,8 +39,7 @@ Consumers should only use `@openomni/openomni` exports:
 
 - DAG helpers from `src/dag/`
 - Ingress orchestration from `src/ingress/`
-- Ingress target helpers from `src/ingress/`
-- Bus transport bridge from `src/runtime/`
+
 - Subagent runtime + background manager from `src/subagent/`
 - Tool system, workspace lock, and worker middleware from `src/execution-runtime/`
 

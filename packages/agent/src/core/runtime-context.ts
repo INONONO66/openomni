@@ -1,4 +1,4 @@
-import type { AgentProfile, Messenger } from "@openomni/protocol";
+import type { AgentProfile } from "@openomni/protocol";
 
 export type RuntimeInstanceStatus = "idle" | "busy" | "error";
 
@@ -20,68 +20,12 @@ export interface AgentRegistryStore {
   replaceAll(defs: AgentProfile.Definition[]): void;
 }
 
-export interface InstanceRegistryStore {
-  register(instanceId: string, agentId: string, metadata?: Record<string, unknown>): () => void;
-  unregister(instanceId: string): void;
-  getById(instanceId: string): RuntimeAgentInstance | undefined;
-  getByAgent(agentId: string): RuntimeAgentInstance[];
-  updateStatus(instanceId: string, status: RuntimeInstanceStatus): void;
-  clear(): void;
-}
-
-export interface MessageLogStore {
-  append(envelope: Messenger.MessageEnvelope): void;
-  getLog(): Messenger.MessageEnvelope[];
-  reset(): void;
-}
-
 export interface AgentRuntimeContext {
   readonly registry: AgentRegistryStore;
-  readonly instances: InstanceRegistryStore;
-  readonly messageLog: MessageLogStore;
 }
-
-const MAX_MESSAGE_LOG_SIZE = 1000;
 
 export function createAgentRuntimeContext(): AgentRuntimeContext {
   const agentDefinitions = new Map<string, AgentProfile.Definition>();
-  const instances = new Map<string, RuntimeAgentInstance>();
-  const messageLog: Messenger.MessageEnvelope[] = [];
-
-  const instanceStore: InstanceRegistryStore = {
-    register(instanceId: string, agentId: string, metadata?: Record<string, unknown>): () => void {
-      instances.set(instanceId, {
-        instanceId,
-        agentId,
-        status: "idle",
-        registeredAt: Date.now(),
-        metadata,
-      });
-      return () => instanceStore.unregister(instanceId);
-    },
-
-    unregister(instanceId: string): void {
-      instances.delete(instanceId);
-    },
-
-    getById(instanceId: string): RuntimeAgentInstance | undefined {
-      return instances.get(instanceId);
-    },
-
-    getByAgent(agentId: string): RuntimeAgentInstance[] {
-      return Array.from(instances.values()).filter((instance) => instance.agentId === agentId);
-    },
-
-    updateStatus(instanceId: string, status: RuntimeInstanceStatus): void {
-      const instance = instances.get(instanceId);
-      if (!instance) throw new Error(`Instance '${instanceId}' not registered`);
-      instances.set(instanceId, { ...instance, status });
-    },
-
-    clear(): void {
-      instances.clear();
-    },
-  };
 
   return {
     registry: {
@@ -116,25 +60,6 @@ export function createAgentRuntimeContext(): AgentRuntimeContext {
         for (const def of defs) {
           agentDefinitions.set(def.name, def);
         }
-      },
-    },
-
-    instances: instanceStore,
-
-    messageLog: {
-      append(envelope: Messenger.MessageEnvelope): void {
-        if (messageLog.length >= MAX_MESSAGE_LOG_SIZE) {
-          messageLog.splice(0, Math.floor(MAX_MESSAGE_LOG_SIZE / 2));
-        }
-        messageLog.push(envelope);
-      },
-
-      getLog(): Messenger.MessageEnvelope[] {
-        return [...messageLog];
-      },
-
-      reset(): void {
-        messageLog.length = 0;
       },
     },
   };

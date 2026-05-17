@@ -16,8 +16,7 @@ src/
 ├── event/                # Event contracts + event/agent-execution.ts (AgentExecution.*)
 ├── notification/         # NotificationRequest / Result / Severity / DeliveryMode
 ├── adapter/              # Adapter.Surface / Capabilities / TriggerRule / Inbound-OutboundMessage
-├── ingress/              # InboundEvent (direct), AgentDef, IngressResult
-├── messenger/            # MessageEnvelope, PersistencePolicy, AllowPattern, AuditEntry
+├── ingress/              # InboundEvent discriminated union (DirectEvent | InternalEvent, mode: "direct" | "internal"), AgentDef, IngressResult, ResolvedInboundEvent
 ├── policy/               # Policy.Permission, Policy.InputRule, Policy.DelegationPolicy, Policy.Timing (14), Policy.PolicyDecision, Policy.Definition + FailPolicy, Policy.PolicyEffect, RuntimeResource.Descriptor
 ├── event-log/            # ExecutionEvent discriminated union (LLM / tool / step / session)
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
@@ -36,7 +35,7 @@ src/
 
 - **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `AuthError`, `ProviderError`, etc. use this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
-- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.PolicyDecision` on `verdict`. `InboundEvent` currently uses a single `mode: "direct"` variant.
+- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.PolicyDecision` on `verdict`. `InboundEvent` is a discriminated union on `mode`: `DirectEvent` (`mode: "direct"`) for external inbound and `InternalEvent` (`mode: "internal"`) for system-origin events (e.g., cron). The external `ingest()` path rejects `mode: "internal"` for security.
 - **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Tool.Call`, `Tool.Result`, `Run.Snapshot`.
 - **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
 - **Policy timings**: 14 policy timing points — `inbound.receive`, `run.start`, `turn.start`, `context.prepare`, `resources.prepare`, `model.request`, `model.response`, `invoke.prepare`, `invoke.result`, `turn.finish`, `completion.prepare`, `writeback.commit`, `run.finish`, `error`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`; legacy permission evaluators still use `EvaluationResult.action` (`continue | abort`).
