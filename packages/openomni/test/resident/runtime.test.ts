@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Session, Storage } from "@openomni/session";
+import { IngressEvent } from "@openomni/protocol";
+import { Bus, Session, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
 
 function makeEvent() {
@@ -83,10 +84,39 @@ test("ResidentRuntime enforces maximum resident activations", async () => {
   const firstRun = manager.run({ sessionId: "resident-a", event: makeEvent() });
   await firstRunStarted;
 
-  await expect(manager.run({ sessionId: "resident-b", event: makeEvent() })).rejects.toThrow(
-    "maximum resident activations reached",
-  );
+  let secondError: unknown;
+  try {
+    await Promise.resolve(manager.run({ sessionId: "resident-b", event: makeEvent() }));
+  } catch (error) {
+    secondError = error;
+  }
+  expect(secondError).toBeInstanceOf(Error);
+  expect((secondError as Error).message).toContain("maximum resident activations reached");
 
   releaseFirstRun();
   await firstRun;
+});
+
+test("ResidentRuntime reuses fallback traceId for agent input and completion event", async () => {
+  let inputTraceId: string | undefined;
+  const completedTraceIds: string[] = [];
+  const unsubscribe = Bus.subscribe(IngressEvent.Completed, (event) => {
+    completedTraceIds.push(event.traceId);
+  });
+
+  const manager = ResidentRuntime.create({
+    runAgent: async (_config, input) => {
+      inputTraceId = input.traceContext?.traceId;
+      return { text: "ok", finishReason: "stop" };
+    },
+  });
+
+  try {
+    await manager.run({ sessionId: "resident-trace", event: makeEvent() });
+  } finally {
+    unsubscribe();
+  }
+
+  expect(inputTraceId).toBeString();
+  expect(completedTraceIds.at(-1)).toBe(inputTraceId);
 });

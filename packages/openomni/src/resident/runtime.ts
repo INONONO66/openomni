@@ -200,6 +200,11 @@ export class ResidentRuntime {
     const activation = this.ensureActivation(ctx.sessionId);
     const runId = crypto.randomUUID();
     const start = Date.now();
+    const traceContext = {
+      ...(ctx.traceContext ?? { traceId: crypto.randomUUID() }),
+      sessionId: ctx.sessionId,
+      runId,
+    };
 
     try {
       if (activation.idleTimer) clearTimeout(activation.idleTimer);
@@ -214,16 +219,12 @@ export class ResidentRuntime {
       const agentConfig = this.buildAgentConfig(ctx, runId);
       const result = await this.runAgent(agentConfig, {
         messages,
-        traceContext: {
-          ...(ctx.traceContext ?? { traceId: crypto.randomUUID() }),
-          sessionId: ctx.sessionId,
-          runId,
-        },
+        traceContext,
       });
       activation.lastUsedAt = Date.now();
       this.scheduleIdleRelease(ctx.sessionId, activation);
       Bus.publish(IngressEvent.Completed, {
-        traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+        traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
         mode: "direct",
         target: "resident",
@@ -240,7 +241,7 @@ export class ResidentRuntime {
       activation.lastUsedAt = Date.now();
       this.scheduleIdleRelease(ctx.sessionId, activation);
       Bus.publish(IngressEvent.Failed, {
-        traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+        traceId: traceContext.traceId,
         sessionId: ctx.sessionId,
         mode: "direct",
         target: "resident",
