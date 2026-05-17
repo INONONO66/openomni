@@ -114,7 +114,7 @@ function createSpawnWorkerTool(options: ResidentWorkerToolsOptions): NativeTool 
         workerEvent(
           options,
           { ...input, payload: input.prompt },
-          { durableSessionId: input.sessionId, lifecycle: "starting", background: true },
+          { lifecycle: "starting", background: true },
           { kind: "worker", parentSessionId: input.sessionId },
         ),
       );

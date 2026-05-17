@@ -423,6 +423,7 @@ export namespace IngressHandlers {
             coordinatorResult.output ?? coordinatorResult.error ?? "cancelled",
           );
           SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
+          publishCompleted(ctx, target, start);
           return {
             mode: "direct",
             target: Ingress.resolveTarget(ctx.event),
