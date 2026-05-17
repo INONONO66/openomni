@@ -1,9 +1,10 @@
 import {
-  Ingress,
+  type Ingress,
   IngressEvent,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, Session, SurfaceKey, TraceContext } from "@openomni/session";
+import { resolveTarget, targetKey } from "./target";
 
 interface ResolvableEvent {
   surface: string;
@@ -30,9 +31,9 @@ export namespace IngressSessionResolver {
   // `target:<target-key>` so resident and worker sessions do not collide.
   export function extractSurfaceKey(event: ResolvableEvent): string {
     const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
-    const target = event.target || event.meta?.target ? Ingress.resolveTarget(event) : undefined;
+    const target = event.target || event.meta?.target ? resolveTarget(event) : undefined;
     if (target && target.kind !== "resident") {
-      parts.push("target", Ingress.targetKey(target));
+      parts.push("target", targetKey(target));
     }
     return SurfaceKey.create(parts);
   }
@@ -45,7 +46,7 @@ export namespace IngressSessionResolver {
     },
     traceContext?: TraceContextProtocol.Type,
   ): ResolveResult {
-    const target = Ingress.resolveTarget(event);
+    const target = resolveTarget(event);
     let session: Session.Info;
     let isNew: boolean;
 
