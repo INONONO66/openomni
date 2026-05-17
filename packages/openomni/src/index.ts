@@ -10,6 +10,8 @@ export {
   IngressHandlers,
   IngressSessionResolver,
   SessionBridge,
+  resolveTarget,
+  targetKey,
 } from "./ingress";
 export type { CoordinatorLike } from "./ingress";
 
