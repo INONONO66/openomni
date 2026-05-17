@@ -172,7 +172,7 @@ export namespace IngressHandlers {
     );
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
     return {
-      mode: "direct",
+      mode: ctx.event.mode,
       target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: { output, finishReason: "cancelled" },
@@ -204,7 +204,7 @@ export namespace IngressHandlers {
     );
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
     return {
-      mode: "direct",
+      mode: ctx.event.mode,
       target,
       sessionId: ctx.sessionId,
       result: { output, finishReason: "delivered" },
@@ -272,7 +272,7 @@ export namespace IngressHandlers {
     Bus.publish(IngressEvent.Completed, {
       traceId: ctx.traceContext.traceId,
       sessionId: ctx.sessionId,
-      mode: "direct",
+      mode: ctx.event.mode,
       ...(target ? { target } : {}),
       durationMs: Date.now() - start,
       time: Date.now(),
@@ -290,7 +290,7 @@ export namespace IngressHandlers {
     Bus.publish(IngressEvent.Failed, {
       traceId: ctx.traceContext.traceId,
       sessionId: ctx.sessionId,
-      mode: "direct",
+      mode: ctx.event.mode,
       ...(target ? { target } : {}),
       durationMs: Date.now() - start,
       error: message,
@@ -382,7 +382,7 @@ export namespace IngressHandlers {
         Bus.publish(IngressEvent.Completed, {
           traceId: ctx.traceContext.traceId,
           sessionId: ctx.sessionId,
-          mode: "direct",
+          mode: ctx.event.mode,
           ...(target ? { target } : {}),
           durationMs: Date.now() - start,
           time: Date.now(),
@@ -407,7 +407,7 @@ export namespace IngressHandlers {
       );
       SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
       return {
-        mode: "direct",
+        mode: ctx.event.mode,
         target: resolveTarget(ctx.event),
         sessionId: ctx.sessionId,
         result: { output, finishReason: "background" },
