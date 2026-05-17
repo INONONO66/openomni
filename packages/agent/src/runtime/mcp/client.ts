@@ -2,31 +2,48 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, RuntimeResource, Tool } from "@openomni/protocol";
 import { Mcp, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { convertMcpTool, convertMcpResult } from "./convert";
 
+/** @internal Test-oriented seam for replacing the underlying MCP SDK client. */
+export type McpClientHandle = Pick<Client, "connect" | "close" | "listTools" | "callTool">;
+/** @internal Test-oriented seam for replacing the underlying MCP transport factory. */
+export type McpTransportFactory = (config: McpServerConfig) => Transport;
+
+/** @internal Constructor dependencies are intended for tests and package-internal adapters. */
+export interface McpClientDependencies {
+  readonly client?: McpClientHandle;
+  readonly createTransport?: McpTransportFactory;
+}
+
 export class McpClient {
-  private client: Client;
+  private client: McpClientHandle;
   private config: McpServerConfig;
+  private createTransport: McpTransportFactory;
   private connected = false;
 
-  constructor(config: McpServerConfig) {
+  constructor(config: McpServerConfig, dependencies: McpClientDependencies = {}) {
     this.config = config;
-    this.client = new Client({ name: "openomni-agent", version: "0.1.0" });
+    this.client = dependencies.client ?? new Client({ name: "openomni-agent", version: "0.1.0" });
+    this.createTransport = dependencies.createTransport ?? createTransport;
   }
 
   async connect(): Promise<void> {
     const traceId = randomUUID();
-    const transport = createTransport(this.config);
+    let transport: Transport | undefined;
+    let closeTracker: TransportCloseTracker | undefined;
     const transportType =
       this.config.transport === "streamable-http"
         ? ("streamable-http" as const)
         : (this.config.transport as "stdio" | "sse" | "http");
 
     try {
+      transport = this.createTransport(this.config);
+      closeTracker = trackTransportCloseRequests(transport);
       await this.client.connect(transport);
       const tools = await this.client.listTools();
       this.connected = true;
@@ -42,13 +59,21 @@ export class McpClient {
       });
     } catch (err) {
       this.connected = false;
+      const cleanupError = transport
+        ? await cleanupFailedConnection(this.client, transport, closeTracker)
+        : undefined;
+      const context: Record<string, unknown> = { serverName: this.config.name };
+      if (cleanupError) {
+        context.cleanupError = String(cleanupError);
+      }
+
       Bus.publish(Operational.Error, {
         traceId,
         time: Date.now(),
         component: "agent.mcp",
         msg: "MCP connection failed",
         error: String(err),
-        context: { serverName: this.config.name },
+        context,
       });
       throw err;
     }
@@ -144,6 +169,51 @@ export class McpClient {
   }
 }
 
+interface TransportCloseTracker {
+  readonly isClosed: () => boolean;
+}
+
+function trackTransportCloseRequests(transport: Transport): TransportCloseTracker {
+  let closeRequested = false;
+  const close = transport.close.bind(transport);
+  // Wrap this freshly created transport so cleanup can tell whether the SDK
+  // client actually attempted to close it, independent of onclose callback timing.
+  transport.close = async () => {
+    closeRequested = true;
+    await close();
+  };
+
+  return {
+    isClosed: () => closeRequested,
+  };
+}
+
+async function cleanupFailedConnection(
+  client: McpClientHandle,
+  transport: Transport,
+  closeTracker?: TransportCloseTracker,
+): Promise<unknown | undefined> {
+  let cleanupError: unknown;
+  try {
+    await client.close();
+  } catch (err) {
+    cleanupError = err;
+  }
+
+  // The SDK client normally owns and closes the transport after connect() starts.
+  // If close() failed before it reached the transport, close it directly while
+  // still preserving the original connection error for callers.
+  if (!closeTracker?.isClosed()) {
+    try {
+      await transport.close();
+    } catch (err) {
+      cleanupError ??= err;
+    }
+  }
+
+  return cleanupError;
+}
+
 type McpToolSpec = Tool.Spec & {
   readonly descriptor: RuntimeResource.Descriptor;
 };
@@ -177,7 +247,7 @@ function attachMcpToolDescriptor(
   };
 }
 
-function createTransport(config: McpServerConfig) {
+function createTransport(config: McpServerConfig): Transport {
   switch (config.transport) {
     case "stdio": {
       if (!config.command) throw new Error("stdio transport requires command");
