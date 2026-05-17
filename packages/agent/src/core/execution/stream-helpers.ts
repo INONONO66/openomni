@@ -15,7 +15,7 @@ import {
 import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import { PolicyEngine } from "../policy";
-import type { PolicyEngineInstance } from "../policy";
+import type { DispatchContext, PolicyEngineInstance } from "../policy";
 import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
@@ -276,23 +276,47 @@ function resolvePolicyToolName(toolName: string, labels: Map<string, string[]>):
   return canonical ? canonical.slice(5) : toolName;
 }
 
+type LifecyclePolicyContextOverrides = Partial<
+  Pick<
+    DispatchContext,
+    "turnCount" | "continuationCount" | "elapsedMs" | "isCompletion" | "toolInput"
+  >
+>;
+
+function buildLifecyclePolicyContext(
+  state: StreamRunState,
+  config: ChatAgentConfig,
+  overrides: LifecyclePolicyContextOverrides = {},
+): DispatchContext {
+  const { elapsedMs = Date.now() - state.startTime, ...rest } = overrides;
+  return {
+    steps: state.steps,
+    usage: state.totalUsage,
+    turnCount: state.budgetState.turns,
+    isCompletion: false,
+    continuationCount: state.continuationCount,
+    elapsedMs,
+    messages: state.messages,
+    budgetState: state.budgetState,
+    budget: config.budget,
+    eventEmitter: config.eventEmitter,
+    ...rest,
+  };
+}
+
 export async function dispatchPreRun(
   state: StreamRunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const preRunDecision = await engine.dispatch("run.start", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const preRunDecision = await engine.dispatch(
+    "run.start",
+    buildLifecyclePolicyContext(state, config, {
+      turnCount: 0,
+      continuationCount: 0,
+      elapsedMs: 0,
+    }),
+  );
 
   if (PolicyDecision.isBlocking(preRunDecision)) {
     return createGuardCompleteEvent(state, { text: "", steps: [] });
@@ -311,18 +335,12 @@ export async function dispatchBudgetCheck(
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
 
-  const postRunDecision = await engine.dispatch("run.finish", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: true,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const postRunDecision = await engine.dispatch(
+    "run.finish",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion: true,
+    }),
+  );
   if (PolicyDecision.isBlocking(postRunDecision)) {
     publishDenyDiagnostic("run.finish", postRunDecision, state, config, agentBase);
   }
@@ -355,18 +373,10 @@ export async function dispatchModelRequest(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
-  const decision = await engine.dispatch("model.request", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const decision = await engine.dispatch(
+    "model.request",
+    buildLifecyclePolicyContext(state, config),
+  );
 
   if (PolicyDecision.isBlocking(decision)) return createGuardCompleteEvent(state);
   applyPromptMessageEffects(state, decision);
@@ -379,19 +389,13 @@ export async function dispatchModelResponse(
   config: ChatAgentConfig,
   outcomeType: string,
 ): Promise<AgentEvent | null> {
-  const decision = await engine.dispatch("model.response", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: outcomeType === "stop",
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-    toolInput: { outcomeType },
-  });
+  const decision = await engine.dispatch(
+    "model.response",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion: outcomeType === "stop",
+      toolInput: { outcomeType },
+    }),
+  );
 
   if (!PolicyDecision.isBlocking(decision)) {
     try {
@@ -472,18 +476,10 @@ export async function buildTurn(
   agentBase: StreamAgentBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnDecision = await engine.dispatch("turn.start", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const preTurnDecision = await engine.dispatch(
+    "turn.start",
+    buildLifecyclePolicyContext(state, config),
+  );
 
   let budgetReassuranceEvent: Extract<AgentEvent, { type: "budget_reassurance" }> | undefined;
   let budgetWarningEvent: Extract<AgentEvent, { type: "budget_warning" }> | undefined;
@@ -727,18 +723,12 @@ export async function* handleStop(
     return "complete";
   }
 
-  const postTurnDecision = await engine.dispatch("turn.finish", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: true,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const postTurnDecision = await engine.dispatch(
+    "turn.finish",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion: true,
+    }),
+  );
 
   yield {
     type: "hook_verdict",
@@ -860,19 +850,13 @@ export async function dispatchWritebackCommit(
   config: ChatAgentConfig,
   output: string,
 ): Promise<string> {
-  const decision = await engine.dispatch("writeback.commit", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: true,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-    toolInput: { output },
-  });
+  const decision = await engine.dispatch(
+    "writeback.commit",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion: true,
+      toolInput: { output },
+    }),
+  );
 
   if (PolicyDecision.isBlocking(decision)) {
     throw new Error(PolicyDecision.reason(decision, "writeback.commit policy denied"));
@@ -893,19 +877,12 @@ export async function* handleError(
   retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const onErrorDecision = await engine.dispatch("error", {
-    toolInput: { error: normalizedError },
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const onErrorDecision = await engine.dispatch(
+    "error",
+    buildLifecyclePolicyContext(state, config, {
+      toolInput: { error: normalizedError },
+    }),
+  );
 
   if (PolicyDecision.isBlocking(onErrorDecision)) {
     if (effectOf(onErrorDecision, "run.abort")) {
@@ -992,18 +969,10 @@ async function buildTurnSystemPrompt(
   engine: PolicyEngineInstance,
 ): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
-  const decision = await engine.dispatch("context.prepare", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const decision = await engine.dispatch(
+    "context.prepare",
+    buildLifecyclePolicyContext(state, config),
+  );
   if (PolicyDecision.isBlocking(decision)) return { system, blocked: decision };
 
   for (const effect of decision.effects) {
@@ -1031,18 +1000,12 @@ async function dispatchPostRunTransform(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<void> {
-  const postRunDecision = await engine.dispatch("run.finish", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: true,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const postRunDecision = await engine.dispatch(
+    "run.finish",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion: true,
+    }),
+  );
   if (PolicyDecision.isBlocking(postRunDecision)) {
     publishDenyDiagnostic("run.finish", postRunDecision, state, config);
   }
@@ -1055,18 +1018,12 @@ async function applyPostCompaction(
   agentBase: StreamAgentBase,
   isCompletion: boolean,
 ): Promise<AgentEvent | null> {
-  const compactionDecision = await engine.dispatch("completion.prepare", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    eventEmitter: config.eventEmitter,
-  });
+  const compactionDecision = await engine.dispatch(
+    "completion.prepare",
+    buildLifecyclePolicyContext(state, config, {
+      isCompletion,
+    }),
+  );
 
   if (PolicyDecision.isBlocking(compactionDecision)) {
     publishDenyDiagnostic("completion.prepare", compactionDecision, state, config, agentBase);
