@@ -24,7 +24,7 @@ OpenOmni will adopt a two-tier execution model:
 
 ### Execution Model
 
-```
+```text
 Server Process (always on, lightweight)
 ├── ResidentRuntime
 │   ├── conversation handling (in-process)
@@ -48,7 +48,7 @@ Server Process (always on, lightweight)
 
 Workers are disposable. Sessions are durable.
 
-```
+```text
 Process: none → starting → ready → busy → idle → stopping → exited
                                               ↓
                                          (idle timeout)
@@ -61,7 +61,7 @@ Resume:  new process + existing sessionId + transcript reload
 
 ### Communication
 
-```
+```text
 User ←→ Resident (in-process, zero IPC)
 Resident → Worker: spawn, cancel, deliver message (IPC)
 Worker → Resident: ask_main, heartbeat, run_completed (IPC)
@@ -116,7 +116,7 @@ User: "show me Worker A" → tail persisted bus events (not live subscription)
 
 #### Worker Process (non-durable, runtime only)
 
-```
+```text
 none
   → starting       Bun.spawn worker-entry, create socket token
   → ready          IPC bootstrap handshake complete
@@ -131,7 +131,7 @@ crashed → none     mark active run interrupted, session remains resumable
 
 #### Worker Run (durable, SQLite)
 
-```
+```text
 queued → starting → running → succeeded
                            → failed
                            → waiting_input (ask escalated to user)
@@ -150,7 +150,7 @@ Existing methods kept as-is:
 
 New methods:
 
-```
+```text
 server → worker:
   worker.deliver_message     Direct user/Resident message to active worker
   worker.shutdown_idle       Graceful idle shutdown request
