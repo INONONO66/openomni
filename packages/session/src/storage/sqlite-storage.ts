@@ -1,24 +1,28 @@
 import { Database } from "bun:sqlite";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Message, WorkItem, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { getPartStartTime } from "./part-time";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
+import { Migration } from "./migration-runner";
 import type { Storage } from "./storage";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 
-const ORDERED_MIGRATIONS = [
-  "0001_initial/migration.sql",
-  "0002_pragma_fk_indices/migration.sql",
-  "0003_new_tables/migration.sql",
-  "0004_message_status/migration.sql",
-  "0005_background_task/migration.sql",
-  "0006_task_plan_todo/migration.sql",
-  "0007_todo_fk_idempotency_idx/migration.sql",
-  "0008_unified_observability/migration.sql",
-  "0009_work_item/migration.sql",
+const ORDERED_MIGRATIONS: Migration.Definition[] = [
+  { name: "0001_initial/migration.sql" },
+  { name: "0002_pragma_fk_indices/migration.sql" },
+  { name: "0003_new_tables/migration.sql" },
+  {
+    name: "0004_message_status/migration.sql",
+    compatApplied: hasMessageStatusColumn,
+    compatInsert: "insertOrIgnore",
+  },
+  { name: "0005_background_task/migration.sql" },
+  { name: "0006_task_plan_todo/migration.sql" },
+  { name: "0007_todo_fk_idempotency_idx/migration.sql" },
+  { name: "0008_unified_observability/migration.sql" },
+  { name: "0009_work_item/migration.sql" },
 ];
 
 function applyPragmas(db: Database): void {
@@ -33,22 +37,7 @@ function applyPragmas(db: Database): void {
 }
 
 function applyMigrations(db: Database): void {
-  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
-
-  for (const name of ORDERED_MIGRATIONS) {
-    const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(name);
-    if (applied) continue;
-
-    // 0004 compat: if status column already exists (from an older migration path), skip DDL
-    if (name === "0004_message_status/migration.sql" && hasMessageStatusColumn(db)) {
-      db.exec(`INSERT OR IGNORE INTO _migrations (name) VALUES ('${name}')`);
-      continue;
-    }
-
-    const sql = readFileSync(join(MIGRATION_DIR, name), "utf-8");
-    db.exec(sql);
-    db.exec(`INSERT INTO _migrations (name) VALUES ('${name}')`);
-  }
+  Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS);
 }
 
 function hasMessageStatusColumn(db: Database): boolean {
@@ -61,8 +50,13 @@ export class SqliteStorageAdapter implements Storage.Adapter {
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
-    applyPragmas(this.db);
-    applyMigrations(this.db);
+    try {
+      applyPragmas(this.db);
+      applyMigrations(this.db);
+    } catch (err) {
+      this.db.close();
+      throw err;
+    }
   }
 
   session = {

@@ -103,6 +103,16 @@ function tempDbPath(): string {
   return join(tmpdir(), `test-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
 }
 
+function removeSqliteFiles(path: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    try {
+      unlinkSync(`${path}${suffix}`);
+    } catch (_err) {
+      void _err;
+    }
+  }
+}
+
 function storageDb(adapter: SqliteStorageAdapter): Database {
   return (adapter as unknown as { db: Database }).db;
 }
@@ -134,11 +144,7 @@ describe("SqliteStorageAdapter", () => {
     } catch (_err) {
       void _err;
     }
-    try {
-      unlinkSync(dbPath);
-    } catch (_err) {
-      void _err;
-    }
+    removeSqliteFiles(dbPath);
   });
 
   describe("PRAGMA verification", () => {
@@ -230,6 +236,43 @@ describe("SqliteStorageAdapter", () => {
       const adapter2 = new SqliteStorageAdapter(dbPath);
       expect(adapter2.session.get("s1")).toBeDefined();
       adapter2.close();
+    });
+
+    test("failed migration does not leave partially applied schema behind", () => {
+      adapter.close();
+      removeSqliteFiles(dbPath);
+
+      const db = new Database(dbPath);
+      db.exec("CREATE TABLE _migrations (name TEXT PRIMARY KEY)");
+      for (const name of [
+        "0001_initial/migration.sql",
+        "0002_pragma_fk_indices/migration.sql",
+        "0003_new_tables/migration.sql",
+        "0004_message_status/migration.sql",
+        "0005_background_task/migration.sql",
+        "0006_task_plan_todo/migration.sql",
+      ]) {
+        db.query("INSERT INTO _migrations (name) VALUES (?)").run(name);
+      }
+      db.close();
+
+      expect(() => new SqliteStorageAdapter(dbPath)).toThrow();
+
+      const checkDb = new Database(dbPath);
+      try {
+        expect(
+          checkDb
+            .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'todo_new'")
+            .get(),
+        ).toBeNull();
+        expect(
+          checkDb
+            .query("SELECT name FROM _migrations WHERE name = ?")
+            .get("0007_todo_fk_idempotency_idx/migration.sql"),
+        ).toBeNull();
+      } finally {
+        checkDb.close();
+      }
     });
   });
 
