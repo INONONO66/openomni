@@ -1,6 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { PolicyDecision, type Messenger, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { createToolExecutor } from "../../../../src/core/execution/tool-executor";
 import {
   createStreamRunState,
@@ -11,7 +10,6 @@ import {
   type PolicyContext,
   type PolicyRegistration,
 } from "../../../../src/core/policy";
-import { AgentMessenger, type Transport } from "../../../../src/runtime/messenger/messenger";
 
 const itSkip = Reflect.get(it, "skip") as (label: string, fn: () => void) => void;
 const documentedSkip = () => {
@@ -44,31 +42,6 @@ function basePolicyContext(): Omit<PolicyContext, "timing"> {
     isCompletion: false,
     continuationCount: 0,
     elapsedMs: 0,
-  };
-}
-
-function envelope(fromAgentId: string, toAgentId: string): Messenger.MessageEnvelope {
-  return {
-    id: "env-no-bypass",
-    traceId: "trace-no-bypass",
-    correlationId: null,
-    sessionId: "session-no-bypass",
-    runId: "run-no-bypass",
-    fromAgentId,
-    toAgentId,
-    sentAt: new Date().toISOString(),
-    schemaRef: "test",
-    payload: {},
-    persistencePolicy: "both",
-  };
-}
-
-function makeTransport(): Transport & { readonly sendMock: ReturnType<typeof mock> } {
-  const sendMock = mock(async () => undefined);
-  return {
-    sendMock,
-    send: sendMock,
-    subscribe: () => () => undefined,
   };
 }
 
@@ -127,20 +100,6 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     expect(result.isError).toBe(true);
     expect(result.output).toContain("mcp tool denied by conformance policy");
     expect(capturedLabels).toEqual([["source.mcp", "mcp.fixture"]]);
-  });
-
-  it("blocks messenger send before transport delivery", async () => {
-    const transport = makeTransport();
-    const messenger = AgentMessenger.create(transport, {
-      allowPatterns: [{ from: "allowed", to: "allowed" }],
-    });
-
-    const error = await messenger.send(envelope("blocked", "worker")).catch((err: unknown) => err);
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("authorization denied");
-    expect(transport.sendMock).toHaveBeenCalledTimes(0);
-    Bus.reset();
   });
 
   it("blocks system prompt composition before prompt content is returned", async () => {

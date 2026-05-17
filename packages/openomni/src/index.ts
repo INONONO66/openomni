@@ -25,10 +25,6 @@ export type {
   ResidentWorkerToolsOptions,
 } from "./resident";
 
-// Runtime
-export { BusTransport } from "./runtime/bus-transport";
-export type { Transport } from "./runtime/bus-transport";
-
 // Skill loader and activation
 export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
 export type {

@@ -33,7 +33,6 @@ export type SubagentRuntime = {
 export interface SubagentToolOptions {
   context?: AgentRuntimeContext;
   delegationContext?: DelegationContext;
-  messengerAllowPatterns?: Array<{ from: string; to: string }>;
   middleware?: PolicyRegistration[];
   defaultModel?: { provider: string; id: string };
   subagentRuntime: SubagentRuntime;

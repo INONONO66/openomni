@@ -15,8 +15,6 @@ export {
 export type {
   AgentRuntimeContext,
   AgentRegistryStore,
-  InstanceRegistryStore,
-  MessageLogStore,
   RuntimeAgentInstance,
   RuntimeInstanceStatus,
 } from "./runtime-context";
