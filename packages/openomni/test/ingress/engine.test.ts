@@ -2,10 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun
 import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
 import {
   Ingress as IngressNamespace,
+  IngressEvent,
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
 } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { Bus, Session, Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -94,6 +95,38 @@ describe("IngressEngine", () => {
     expect(result.mode).toBe("direct");
     expect(result.result.output).toBe("direct response");
     expect(result.result.finishReason).toBe("stop");
+  });
+
+  it("emits canonical target keys for worker ingress events", async () => {
+    testState.responseQueue.push("worker response");
+    const workerSession = Session.create({
+      title: "worker target key test",
+      model: { providerID: "test", modelID: "fixture" },
+    });
+    const received: Array<{ target?: string }> = [];
+    const unsubscribe = Bus.subscribe(IngressEvent.Received, (event) => {
+      received.push(event);
+    });
+
+    try {
+      await IngressEngine.ingest({
+        id: "event-worker-target-key-1",
+        surface: "slack",
+        workspace: "team-a",
+        channel: "C1",
+        mode: "direct",
+        payload: "hello",
+        target: { kind: "worker", sessionId: workerSession.id },
+        meta: { actor: { role: "user" } },
+        agent: {
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        },
+      });
+    } finally {
+      unsubscribe();
+    }
+
+    expect(received.at(-1)?.target).toBe(`worker-session:${workerSession.id}`);
   });
 
   it("ingest() with invalid event throws", async () => {

@@ -1,10 +1,5 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
-import {
-  type Ingress,
-  type Policy,
-  IngressEvent,
-  PolicyDecision as Decision,
-} from "@openomni/protocol";
+import { Ingress, type Policy, IngressEvent, PolicyDecision as Decision } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { ResidentRuntime } from "../resident/runtime";
@@ -75,10 +70,7 @@ export namespace IngressEngine {
 
     const inboundEvent = preRun.event;
     const target = preRun.target;
-    const targetLabel =
-      target.kind === "worker"
-        ? `worker:${target.workerId ?? target.sessionId ?? ""}`
-        : target.kind;
+    const targetLabel = Ingress.targetKey(target);
 
     const payloadLength =
       typeof inboundEvent.payload === "string"
