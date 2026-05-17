@@ -53,7 +53,11 @@ export async function createResidentProfile(
 
   try {
     watchers.push(...createWatchers(profileDir, scheduleReload));
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[resident-profile] failed to create file watchers for ${profileDir}, live reload disabled`,
+      err,
+    );
     watchers.length = 0;
   }
 

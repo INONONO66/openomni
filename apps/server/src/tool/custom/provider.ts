@@ -8,7 +8,7 @@ export class CustomToolProvider implements ToolProvider {
   private tools: NativeTool[] = [];
 
   constructor(extraTools: NativeTool[] = []) {
-    this.tools = [
+    const builtInTools: NativeTool[] = [
       {
         spec: {
           name: "weather_lookup",
@@ -50,8 +50,22 @@ export class CustomToolProvider implements ToolProvider {
           };
         },
       },
-      ...extraTools,
     ];
+
+    const duplicate = extraTools.find((candidate) =>
+      builtInTools.some((base) => base.spec.name === candidate.spec.name),
+    );
+    if (duplicate) {
+      throw new Error(`Duplicate custom tool name: ${duplicate.spec.name}`);
+    }
+    const extraDuplicates = extraTools.filter(
+      (tool, i) => extraTools.findIndex((t) => t.spec.name === tool.spec.name) !== i,
+    );
+    if (extraDuplicates.length > 0) {
+      throw new Error(`Duplicate custom tool name: ${extraDuplicates[0]!.spec.name}`);
+    }
+
+    this.tools = [...builtInTools, ...extraTools];
   }
 
   listTools(): NativeTool[] {

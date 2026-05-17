@@ -23,7 +23,8 @@ export function resolveWorkerDbPath(config: Pick<ServerConfig, "storage">): stri
 export function buildWorkerInputMessages(sessionId: string, prompt: string): WorkerInputMessage[] {
   const messages = SessionBridge.buildDirectMessages(sessionId).filter(
     (message): message is WorkerInputMessage =>
-      message.role === "user" || message.role === "assistant",
+      (message.role === "user" || message.role === "assistant") &&
+      typeof message.content === "string",
   );
   const latest = messages.at(-1);
   if (latest?.role === "user" && latest.content === prompt) {

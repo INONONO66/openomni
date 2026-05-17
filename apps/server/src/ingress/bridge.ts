@@ -71,15 +71,23 @@ function buildAgentDefFromEntries(
   };
 }
 
+function fallbackDefinition(agentName: string, deps: BridgeDeps): AgentDefinition {
+  return {
+    name: agentName,
+    description: `Fallback agent definition for ${agentName}`,
+    model: deps.defaultModel ?? { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+    systemPrompt: "",
+    tools: { categories: ["filesystem", "execution", "delegation", "mcp", "custom"] },
+  };
+}
+
 export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName);
-  if (!definition) throw new Error(`unknown agent: ${agentName}`);
+  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
 export function buildResidentAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName);
-  if (!definition) throw new Error(`unknown agent: ${agentName}`);
+  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
   const mainEntries = selectToolEntries(
     { ...definition, tools: { categories: ["custom"] } },
     deps,

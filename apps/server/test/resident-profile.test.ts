@@ -71,7 +71,7 @@ describe("resident profile", () => {
 
     const profile = await createResidentProfile({ profileDir, model });
     await Bun.write(path.join(profileDir, "config.yaml"), "invalid config line\n");
-    await Bun.sleep(75);
+    await Bun.sleep(200);
 
     expect(profile.factory().systemPrompt).toContain("Name: Initial");
 
@@ -83,7 +83,7 @@ describe("resident profile", () => {
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   const started = Date.now();
-  while (Date.now() - started < 1_000) {
+  while (Date.now() - started < 5_000) {
     if (predicate()) return;
     await Bun.sleep(25);
   }

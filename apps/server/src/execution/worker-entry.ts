@@ -519,18 +519,27 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
     const sessionId = typeof params?.sessionId === "string" ? params.sessionId : undefined;
     const runId = typeof params?.runId === "string" ? params.runId : undefined;
     const message = typeof params?.message === "string" ? params.message : undefined;
-    const active = [...activeRuns.entries()].find(
-      ([activeRunId, run]) =>
-        run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
-    );
-    if (!sessionId || !message || !active) {
+    const matches = sessionId
+      ? [...activeRuns.entries()].filter(
+          ([activeRunId, run]) =>
+            run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
+        )
+      : [];
+    if (!sessionId || !message || matches.length === 0) {
       respond({
         accepted: false,
         error: `run not active for session: ${sessionId ?? "unknown"}`,
       });
       return;
     }
-    const [, run] = active;
+    if (!runId && matches.length > 1) {
+      respond({
+        accepted: false,
+        error: `multiple active runs for session: ${sessionId}`,
+      });
+      return;
+    }
+    const [activeRunId, run] = matches[0]!;
     if (run.inbox.length >= MAX_INBOX_MESSAGES) {
       run.inbox.shift();
     }
@@ -543,7 +552,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       context: {
         workerId,
         sessionId,
-        runId: active[0],
+        runId: activeRunId,
         bytes: message.length,
         inboxDepth: run.inbox.length,
       },
