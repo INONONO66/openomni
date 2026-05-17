@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the multi-agent runtime (messenger, registry, subagent / background tools, MCP client). Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the multi-agent runtime (registry, subagent / background tools, MCP client). Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
 
 ## STRUCTURE
 
@@ -35,11 +35,7 @@ src/
 │           ├── idle-nudge.ts   # createIdleNudgePolicy (turn.start + invoke.result)
 │           └── tool-permission.ts # createToolPermissionPolicy (invoke.prepare, fail-closed)
 └── runtime/
-    ├── index.ts                # Re-exports messenger / registry / tools / mcp
-    ├── messenger/
-    │   ├── messenger.ts        # AgentMessenger.create — send / subscribe / request with correlationId
-    │   ├── transport.ts        # BusTransport — Transport interface implementation over @openomni/session Bus
-    │   └── instance-registry.ts# InstanceRegistry — track live agent instances by ID + status
+    ├── index.ts                # Re-exports registry / tools / mcp
     ├── registry/
     │   └── registry.ts         # AgentRegistry.define / get / list / override (AgentProfile.Definition store)
     ├── tools/
@@ -77,7 +73,7 @@ Also exported from `@openomni/agent`:
 
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentEvent`, `AgentBudget`, `TokenUsage`, `Sink`, `AgentEventEmitter`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `PolicyRegistration`, `PolicyEngineInstance`
-- Runtime: `AgentMessenger`, `BusTransport`, `Transport`, `AgentMessengerOptions`, `AgentRegistry`, `SubagentTool`, `SubagentToolOptions`, `BackgroundOutputTool`, `BackgroundCancelTool`, `McpClient`, `McpServerConfig`
+- Runtime: `AgentRegistry`, `SubagentTool`, `SubagentToolOptions`, `BackgroundOutputTool`, `BackgroundCancelTool`, `McpClient`, `McpServerConfig`
 
 ## ChatAgentConfig
 
@@ -150,8 +146,6 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 ## RUNTIME (MULTI-AGENT)
 
 - **AgentRegistry** — global in-memory store of `AgentProfile.Definition` entries keyed by `name`. `define`, `get`, `has`, `list`, `override`, `clear`.
-- **AgentMessenger** + **BusTransport** — `send` / `subscribe` / `request` with `correlationId` matching, timeout, and abort signal support. Transport is pluggable; `BusTransport` maps `Messenger.MessageEnvelope` onto `@openomni/session` `Bus`.
-- **InstanceRegistry** — track live agent instances (id, agentId, status `idle | busy | error`, metadata).
 - **SubagentTool** — tool spec that delegates to another agent through the orchestration layer. Checks `DelegationContext` (depth, circular visited set) before calling `subagentRuntime.spawn / send` or, when `background: true`, a `backgroundManager`. Only middleware with `propagate: true` is inherited.
 - **BackgroundOutputTool / BackgroundCancelTool** — companions to the background path. Fetch or cancel results by `task_id`.
 - **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`.
