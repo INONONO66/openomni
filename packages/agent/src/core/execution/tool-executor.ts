@@ -1,5 +1,5 @@
 import type { Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
-import { PolicyDecision, ToolExecution } from "@openomni/protocol";
+import { Operational, PolicyDecision, ToolExecution } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
@@ -27,7 +27,7 @@ export interface ToolExecutorOptions {
   getPolicyToolName?: (toolName: string) => string | undefined;
   getToolLabels?: (toolName: string) => string[] | undefined;
   onToolComplete?: (durationMs: number) => void;
-  onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void;
+  onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void | Promise<void>;
   traceContext?: TraceContext.Type;
 }
 
@@ -84,6 +84,30 @@ export function createToolExecutor(
     ...(traceContext?.agentName !== undefined && { actor: { agentName: traceContext.agentName } }),
   };
 
+  function publishDecisionObserverError(
+    timing: Policy.Timing,
+    decision: Policy.PolicyDecision,
+    err: unknown,
+  ): void {
+    Bus.publish(Operational.Warn, {
+      traceId,
+      time: Date.now(),
+      component: "agent.tool-executor",
+      msg: "onDecision observer error",
+      context: { timing, policyId: decision.policyId, error: String(err) },
+    });
+  }
+
+  function recordDecision(timing: Policy.Timing, decision: Policy.PolicyDecision): void {
+    try {
+      void Promise.resolve(onDecision?.(timing, decision)).catch((err) => {
+        publishDecisionObserverError(timing, decision, err);
+      });
+    } catch (err) {
+      publishDecisionObserverError(timing, decision, err);
+    }
+  }
+
   function publishBlocked(call: Tool.Call, toolName: string, reason: string): void {
     Bus.publish(ToolExecution.PermissionDenied, {
       ...eventBase,
@@ -128,7 +152,7 @@ export function createToolExecutor(
       resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
     });
 
-    onDecision?.("invoke.prepare", preDecision);
+    recordDecision("invoke.prepare", preDecision);
 
     if (PolicyDecision.isBlocking(preDecision)) {
       const reason = PolicyDecision.reason(preDecision, "middleware");
@@ -219,7 +243,7 @@ export function createToolExecutor(
       resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
     });
 
-    onDecision?.("invoke.result", postDecision);
+    recordDecision("invoke.result", postDecision);
     const postAbort = effectOf(postDecision, "run.abort");
     if (PolicyDecision.isBlocking(postDecision) && postAbort) {
       const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");

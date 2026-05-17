@@ -142,8 +142,28 @@ export function shouldRetry(
 
 export const shouldAgentRetry = shouldRetry;
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new Error("aborted"));
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      Math.max(0, Math.floor(ms)),
+    );
+
+    function onAbort(): void {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new Error("aborted"));
+    }
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export const agentSleep = sleep;

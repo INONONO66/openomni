@@ -69,8 +69,12 @@ export namespace Bus {
     };
     subs.add(subscription);
     const captured = subs;
+    const eventName = event.name;
     return () => {
       captured.delete(subscription);
+      if (captured.size === 0 && subscribers.get(eventName) === captured) {
+        subscribers.delete(eventName);
+      }
     };
   }
 
@@ -84,6 +88,24 @@ export namespace Bus {
   export function reset(): void {
     subscribers.clear();
     observers.clear();
+  }
+
+  /** Diagnostic counters for tests and runtime observability; not control-flow state. */
+  export function stats(): {
+    readonly subscriberEventCount: number;
+    readonly subscriberCount: number;
+    readonly observerCount: number;
+  } {
+    let subscriberCount = 0;
+    for (const subs of subscribers.values()) {
+      subscriberCount += subs.size;
+    }
+
+    return {
+      subscriberEventCount: subscribers.size,
+      subscriberCount,
+      observerCount: observers.size,
+    };
   }
 
   function matches(data: unknown, match: Record<string, unknown>): boolean {

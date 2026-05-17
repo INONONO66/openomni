@@ -433,6 +433,110 @@ describe("PolicyEngine", () => {
     }
   });
 
+  it("isolates onDecision observer errors from policy dispatch", async () => {
+    Bus.reset();
+    const warnings: unknown[] = [];
+    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    try {
+      const engine = PolicyEngine.create({
+        onDecision: () => {
+          throw new Error("observer failed");
+        },
+      });
+      engine.register({
+        name: "observer-isolation",
+        timing: "turn.finish",
+        priority: 100,
+        fn: () => PolicyDecision.allow({ policyId: "observer-isolation" }),
+      });
+
+      const decision = await engine.dispatch("turn.finish", {
+        ...baseCtx(),
+        traceContext: { traceId: "trace-observer", sessionId: "session-observer" },
+      });
+      await new Promise((resolve) => queueMicrotask(resolve));
+
+      expect(decision.verdict).toBe("allow");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        traceId: "trace-observer",
+        sessionId: "session-observer",
+        component: "agent.policy",
+        msg: "onDecision observer error",
+        context: {
+          timing: "turn.finish",
+          policyId: "observer-isolation",
+          error: "Error: observer failed",
+        },
+      });
+    } finally {
+      unsub();
+      Bus.reset();
+    }
+  });
+
+  it("isolates async onDecision observer rejections from policy dispatch", async () => {
+    Bus.reset();
+    const warnings: unknown[] = [];
+    const unsub = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+    try {
+      const engine = PolicyEngine.create({
+        onDecision: async () => {
+          throw new Error("async observer failed");
+        },
+      });
+      engine.register({
+        name: "async-observer-isolation",
+        timing: "turn.finish",
+        priority: 100,
+        fn: () => PolicyDecision.allow({ policyId: "async-observer-isolation" }),
+      });
+
+      const decision = await engine.dispatch("turn.finish", baseCtx());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(decision.verdict).toBe("allow");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        component: "agent.policy",
+        msg: "onDecision observer error",
+        context: {
+          timing: "turn.finish",
+          policyId: "async-observer-isolation",
+          error: "Error: async observer failed",
+        },
+      });
+    } finally {
+      unsub();
+      Bus.reset();
+    }
+  });
+
+  it("does not wait for async onDecision observers before returning decisions", async () => {
+    let observerStarted = false;
+    let releaseObserver: (() => void) | undefined;
+    const engine = PolicyEngine.create({
+      onDecision: async () => {
+        observerStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseObserver = resolve;
+        });
+      },
+    });
+    engine.register({
+      name: "observer-latency-isolation",
+      timing: "turn.finish",
+      priority: 100,
+      fn: () => PolicyDecision.allow({ policyId: "observer-latency-isolation" }),
+    });
+
+    const decision = await engine.dispatch("turn.finish", baseCtx());
+
+    expect(decision.verdict).toBe("allow");
+    expect(observerStarted).toBe(true);
+    releaseObserver?.();
+  });
+
   it("publishes PolicyEvent.Evaluated via Bus when session context is available", async () => {
     const published: unknown[] = [];
     const unsub = Bus.subscribe(PolicyEvent.Evaluated, (data) => {
