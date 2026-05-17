@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
@@ -47,7 +48,7 @@ const methods = {
       runId: z.string(),
       sessionId: z.string(),
       prompt: z.string(),
-      model: z.object({ provider: z.string(), id: z.string() }),
+      model: Model.Ref,
       systemPrompt: z.string().optional(),
       // IronClaw capability injection — workers never read env vars for API keys
       credentials: z.record(z.string()).optional(),

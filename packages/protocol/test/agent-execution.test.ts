@@ -18,6 +18,16 @@ describe("AgentExecution BusEvents", () => {
     ).not.toThrow();
   });
 
+  test("TurnComplete requires total usage", () => {
+    expect(() =>
+      AgentExecution.TurnComplete.schema.parse({
+        ...base,
+        turnIndex: 0,
+        usage: { inputTokens: 100, outputTokens: 50 },
+      }),
+    ).toThrow();
+  });
+
   test("tool execution events are not duplicated under AgentExecution", () => {
     expect("ToolInvoked" in AgentExecution).toBe(false);
     expect("ToolBlocked" in AgentExecution).toBe(false);

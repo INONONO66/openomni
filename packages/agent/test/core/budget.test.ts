@@ -1,5 +1,23 @@
 import { describe, expect, it } from "bun:test";
-import { checkBudget, describeBudgetRemaining, createBudgetState } from "../../src/core/budget";
+import {
+  checkBudget,
+  describeBudgetRemaining,
+  createBudgetState,
+  effectiveBudgetThresholds,
+} from "../../src/core/budget";
+
+describe("effectiveBudgetThresholds", () => {
+  it("uses protocol-owned defaults and runtime-local resolution", () => {
+    expect(effectiveBudgetThresholds()).toEqual({
+      reassuranceThreshold: 0.6,
+      warningThreshold: 0.8,
+    });
+    expect(effectiveBudgetThresholds({ warningThreshold: 0.9 })).toEqual({
+      reassuranceThreshold: 0.6,
+      warningThreshold: 0.9,
+    });
+  });
+});
 
 describe("checkBudget 4-state", () => {
   it("returns ok when below reassurance threshold", () => {

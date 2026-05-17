@@ -7,6 +7,7 @@ import {
   checkBudget,
   createBudgetState,
   describeBudgetRemaining,
+  effectiveBudgetThresholds,
   recordToolCall,
   recordTokenUsage,
   recordTurn,
@@ -512,7 +513,7 @@ export async function buildTurn(
       ...agentBase,
       time: Date.now(),
       remaining,
-      threshold: config.budget?.reassuranceThreshold ?? 0.6,
+      threshold: effectiveBudgetThresholds(config.budget).reassuranceThreshold,
     });
     budgetReassuranceEvent = { type: "budget_reassurance", remaining };
   }
@@ -522,7 +523,7 @@ export async function buildTurn(
       ...agentBase,
       time: Date.now(),
       remaining,
-      threshold: config.budget?.warningThreshold ?? 0.8,
+      threshold: effectiveBudgetThresholds(config.budget).warningThreshold,
     });
     budgetWarningEvent = { type: "budget_warning", remaining };
   }

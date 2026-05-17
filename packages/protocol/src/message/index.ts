@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { APIError } from "../error/index.js";
+import { Token } from "../token/index.js";
 import { Tool } from "../tool/index.js";
 
 export namespace Message {
@@ -43,13 +44,13 @@ export namespace Message {
     reason: z.string(),
     cost: z.number(),
     tokens: z.object({
-      input: z.number(),
-      output: z.number(),
-      reasoning: z.number().default(0),
+      input: Token.Count,
+      output: Token.Count,
+      reasoning: Token.Count.default(0),
       cache: z
         .object({
-          read: z.number().default(0),
-          write: z.number().default(0),
+          read: Token.Count.default(0),
+          write: Token.Count.default(0),
         })
         .default({ read: 0, write: 0 }),
     }),
@@ -135,12 +136,12 @@ export namespace Message {
     }),
     cost: z.number(),
     tokens: z.object({
-      input: z.number(),
-      output: z.number(),
-      reasoning: z.number(),
+      input: Token.Count,
+      output: Token.Count,
+      reasoning: Token.Count,
       cache: z.object({
-        read: z.number(),
-        write: z.number(),
+        read: Token.Count,
+        write: Token.Count,
       }),
     }),
     finish: z.string().optional(),

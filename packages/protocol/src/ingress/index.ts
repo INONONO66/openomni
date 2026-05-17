@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
+import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 
@@ -99,7 +100,7 @@ export namespace Ingress {
 
   export const AgentDefSchema = z
     .object({
-      model: z.object({ provider: z.string(), id: z.string() }),
+      model: Model.Ref,
       systemPrompt: z.string().optional(),
       tools: z.array(Tool.Spec).optional(),
       budget: AgentProfile.AgentBudget.optional(),

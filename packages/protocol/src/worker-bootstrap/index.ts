@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
+import { Model } from "../model/index.js";
 import { Policy, RuntimeResource } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 import { ToolSelection } from "../tool-selection/index.js";
@@ -8,12 +9,7 @@ export namespace WorkerBootstrap {
   export const RuntimeAgentDefinition = z.object({
     name: z.string(),
     description: z.string(),
-    model: z
-      .object({
-        provider: z.string(),
-        id: z.string(),
-      })
-      .optional(),
+    model: Model.Ref.optional(),
     systemPrompt: z.string().optional(),
     tools: ToolSelection.Selection,
     permissions: Policy.Permission.optional(),

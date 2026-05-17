@@ -67,6 +67,10 @@ describe("Execution", () => {
       usage: {
         inputTokens: 50,
         outputTokens: 25,
+        totalTokens: 75,
+        reasoningTokens: 5,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 1,
       },
     };
 
@@ -76,6 +80,8 @@ describe("Execution", () => {
     const json = JSON.stringify(parsed);
     const reparsed = Execution.Result.parse(JSON.parse(json));
     expect(reparsed).toEqual(result);
+    expect(reparsed.usage?.totalTokens).toBe(75);
+    expect(reparsed.usage?.reasoningTokens).toBe(5);
   });
 
   test("ExecutionRequest with minimal fields", () => {

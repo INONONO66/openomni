@@ -1,14 +1,11 @@
-import type { Message } from "@openomni/protocol";
+import type { Message, Model } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
 
 // legacy marker from removed plan mode; filter from history to avoid leaking into model input
 const LEGACY_PLAN_MARKER = "__OPENOMNI_PLANID__";
 
-function createAssistantMessage(
-  sessionId: string,
-  model: { provider: string; id: string },
-): Message.AssistantMessage {
+function createAssistantMessage(sessionId: string, model: Model.Ref): Message.AssistantMessage {
   return {
     id: crypto.randomUUID(),
     sessionID: sessionId,
@@ -48,11 +45,7 @@ export namespace SessionBridge {
     return result;
   }
 
-  export function storeDirectResult(
-    sessionId: string,
-    output: string,
-    model: { provider: string; id: string },
-  ): void {
+  export function storeDirectResult(sessionId: string, output: string, model: Model.Ref): void {
     const message = createAssistantMessage(sessionId, model);
     const part: Message.TextPart = {
       id: crypto.randomUUID(),

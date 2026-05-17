@@ -58,7 +58,7 @@ type InboundEvent = {
 };
 
 type AgentDef = {
-  model: { provider: string; id: string };
+  model: Model.Ref;
   systemPrompt?: string;
   tools?: Tool.Spec[];
   budget?: { maxTurns?: number };

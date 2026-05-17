@@ -126,6 +126,28 @@ describe("Message.StepFinishPart", () => {
       }),
     ).toThrow();
   });
+
+  test("rejects negative and fractional token counts", () => {
+    expect(() =>
+      Message.StepFinishPart.parse({
+        ...base,
+        type: "step-finish",
+        reason: "end_turn",
+        cost: 0.05,
+        tokens: { input: -1, output: 50 },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      Message.StepFinishPart.parse({
+        ...base,
+        type: "step-finish",
+        reason: "end_turn",
+        cost: 0.05,
+        tokens: { input: 100, output: 50, cache: { read: 1.5, write: 0 } },
+      }),
+    ).toThrow();
+  });
 });
 
 describe("Message.RetryPart", () => {
@@ -358,6 +380,25 @@ describe("Message.AssistantMessage", () => {
   test("rejects missing parentID", () => {
     const { parentID: _, ...noParent } = validAssistant;
     expect(() => Message.AssistantMessage.parse(noParent)).toThrow();
+  });
+
+  test("rejects negative and fractional token counts", () => {
+    expect(() =>
+      Message.AssistantMessage.parse({
+        ...validAssistant,
+        tokens: { ...validAssistant.tokens, output: -1 },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      Message.AssistantMessage.parse({
+        ...validAssistant,
+        tokens: {
+          ...validAssistant.tokens,
+          cache: { read: 1.5, write: 50 },
+        },
+      }),
+    ).toThrow();
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Tool, Sink, Policy, Message } from "@openomni/protocol";
+import type { AgentProfile, Tool, Sink, Policy, Message, Token, Model } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
@@ -8,28 +8,14 @@ export interface AgentEventEmitter {
   emit(eventName: string, data: Record<string, unknown>): void;
 }
 
-export interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-}
+export interface TokenUsage extends Token.AgentUsage {}
 
-export interface AgentBudget {
-  maxTurns?: number;
-  maxToolCalls?: number;
-  maxWallTimeMs?: number;
-  maxToolRuntimeMs?: number;
-  warningThreshold?: number; // 0.0-1.0, default 0.8
-  reassuranceThreshold?: number; // 0.0-1.0, default 0.6
-}
+export interface AgentBudget extends AgentProfile.AgentBudget {}
 
 export interface ChatAgentConfig {
   systemPrompt?: string;
   tools?: Tool.Spec[];
-  model: {
-    provider: string;
-    id: string;
-  };
+  model: Model.Ref;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
@@ -52,7 +38,7 @@ export interface ChatAgentConfig {
   context?: AgentRuntimeContext;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
-    resolveProviderModel?: (model: { provider: string; id: string }) => Promise<Provider.Model>;
+    resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
   };
 }
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { Token } from "../token/index.js";
 
 const AgentBase = z.object({
   traceId: z.string(),
@@ -21,11 +22,7 @@ export namespace AgentExecution {
     "agent.turn.complete",
     AgentBase.extend({
       turnIndex: z.number(),
-      usage: z.object({
-        inputTokens: z.number(),
-        outputTokens: z.number(),
-        totalTokens: z.number(),
-      }),
+      usage: Token.AgentUsage,
     }),
   );
 

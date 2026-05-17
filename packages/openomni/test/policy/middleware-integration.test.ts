@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine, type PolicyContext, type PolicyRegistration } from "@openomni/agent";
-import { PolicyDecision, type Ingress, type Policy, type Subagent } from "@openomni/protocol";
+import {
+  PolicyDecision,
+  type Ingress,
+  type Model,
+  type Policy,
+  type Subagent,
+} from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 import { BackgroundLimitsPolicy } from "../../src/policy/background-limits";
@@ -40,7 +46,7 @@ function makeLaunchRequest(
   overrides?: Partial<{
     agentName: string;
     prompt: string;
-    model: { provider: string; id: string };
+    model: Model.Ref;
     parentSessionId: string;
     depth: number;
   }>,
