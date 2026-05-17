@@ -1,37 +1,33 @@
-import type { Tool, Adapter, Ingress } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 import { SurfaceKey } from "@openomni/session";
-import type { AgentToolProvider, NativeTool, SystemToolProvider } from "@openomni/openomni";
-import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
+import type { NativeTool } from "@openomni/openomni";
+import { buildToolCatalog, createToolExecutor, resolveToolSelection } from "@openomni/openomni";
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
-const fallbackModel = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+const residentWorkerControlTools = new Set([
+  "spawn_worker",
+  "send_worker_message",
+  "cancel_worker",
+  "resume_worker",
+]);
 
 export interface BridgeDeps {
-  systemProvider: SystemToolProvider;
-  agentProvider: AgentToolProvider;
-  mcpProvider: McpToolProvider;
+  systemProvider: ToolListProvider;
+  agentProvider: ToolListProvider;
+  mcpProvider: ToolListProvider;
   customProvider?: { listTools(): NativeTool[] };
   defaultModel?: { provider: string; id: string };
   workspaceRoot: string;
 }
 
+type ToolListProvider = Pick<McpToolProvider, "listTools">;
+
 function sanitizeToolName(name: string): string {
   return name.replace(/\./g, "_");
 }
 
-function createFallbackDefinition(agentName: string, deps: BridgeDeps): AgentDefinition {
-  return {
-    name: agentName,
-    description: "fallback agent",
-    model: deps.defaultModel ?? fallbackModel,
-    systemPrompt: "You are a helpful assistant.",
-    tools: { all: false },
-    budget: { maxTurns: 10 },
-  };
-}
-
-function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[] {
+function selectToolEntries(definition: AgentDefinition, deps: BridgeDeps) {
   const catalog = buildToolCatalog([
     { tools: deps.systemProvider.listTools(), source: "system" },
     { tools: deps.agentProvider.listTools(), source: "agent" },
@@ -41,16 +37,19 @@ function selectTools(definition: AgentDefinition, deps: BridgeDeps): Tool.Spec[]
       : []),
   ]);
 
-  const selected = resolveToolSelection(catalog, definition.tools);
-  return selected.map((entry) => ({
+  return resolveToolSelection(catalog, definition.tools);
+}
+
+function buildAgentDefFromEntries(
+  definition: AgentDefinition,
+  deps: BridgeDeps,
+  selectedEntries: ReturnType<typeof selectToolEntries>,
+): Ingress.AgentDef {
+  const specs = selectedEntries.map((entry) => ({
     ...entry.tool.spec,
     name: sanitizeToolName(entry.tool.spec.name),
   }));
-}
-
-function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName) ?? createFallbackDefinition(agentName, deps);
-  const specs = selectTools(definition, deps);
+  const nativeTools = selectedEntries.map((entry) => entry.tool);
 
   return {
     model: definition.model,
@@ -61,7 +60,41 @@ function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },
+    toolExecutorFactory: ({ sessionId, runId, agentName, workspaceRoot }) =>
+      createToolExecutor({
+        tools: nativeTools,
+        config: {
+          workspaceRoot,
+          runtime: { sessionId, runId, agentName, workspaceRoot },
+        },
+      }),
   };
+}
+
+function fallbackDefinition(agentName: string, deps: BridgeDeps): AgentDefinition {
+  return {
+    name: agentName,
+    description: `Fallback agent definition for ${agentName}`,
+    model: deps.defaultModel ?? { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+    systemPrompt: "",
+    tools: { categories: ["filesystem", "execution", "delegation", "mcp", "custom"] },
+  };
+}
+
+export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
+  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
+  return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
+}
+
+export function buildResidentAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
+  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
+  const mainEntries = selectToolEntries(
+    { ...definition, tools: { categories: ["custom"] } },
+    deps,
+  ).filter(
+    (entry) => entry.source === "server" && residentWorkerControlTools.has(entry.tool.spec.name),
+  );
+  return buildAgentDefFromEntries(definition, deps, mainEntries);
 }
 
 function createBaseEvent(
@@ -77,7 +110,15 @@ function createBaseEvent(
     channel: descriptor.id ?? undefined,
     userId: message.sender.id,
     payload,
+    target: { kind: "resident" },
     meta: {
+      actor: {
+        role: "user",
+        id: message.sender.id,
+      },
+      target: {
+        kind: "resident",
+      },
       surfaceKey: message.surfaceKey,
       kind: descriptor.kind,
       sender: message.sender,
@@ -95,10 +136,14 @@ export function buildInboundEvent(
   deps: BridgeDeps,
 ): Ingress.InboundEvent {
   const base = createBaseEvent(message, message.text);
-  const agent = buildAgentDef(agentName, deps);
+  const agent = buildResidentAgentDef(agentName, deps);
 
   return {
     ...base,
+    meta: {
+      ...base.meta,
+      agentName,
+    },
     mode: "direct",
     agent,
   };

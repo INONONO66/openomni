@@ -15,6 +15,7 @@ type SdkOptions = {
 
 type ProviderSDK = {
   languageModel(modelID: string): unknown;
+  chat?: (modelID: string) => unknown;
   responses?: (modelID: string) => unknown;
 };
 
@@ -110,15 +111,25 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageMod
   const customLoader = CUSTOM_LOADERS[providerID];
   const custom = customLoader ? customLoader() : undefined;
 
-  if (custom?.getModel) {
-    const languageModel = custom.getModel(sdk, modelID) as LanguageModel;
-    LANGUAGE_CACHE.set(cacheKey, languageModel);
-    return languageModel;
-  }
-
-  const languageModel = sdk.languageModel(modelID) as LanguageModel;
+  const languageModel = resolveLanguageModel(sdk, modelID, providerID, auth, custom);
   LANGUAGE_CACHE.set(cacheKey, languageModel);
   return languageModel;
+}
+
+function resolveLanguageModel(
+  sdk: ProviderSDK,
+  modelID: string,
+  providerID: string,
+  auth: Auth.Info,
+  custom: CustomLoaderResult | undefined,
+): LanguageModel {
+  if (providerID === "openai" && auth.type === "proxy" && sdk.chat) {
+    return sdk.chat(modelID) as LanguageModel;
+  }
+  if (custom?.getModel) {
+    return custom.getModel(sdk, modelID) as LanguageModel;
+  }
+  return sdk.languageModel(modelID) as LanguageModel;
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {

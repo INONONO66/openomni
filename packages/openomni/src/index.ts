@@ -13,6 +13,16 @@ export {
 } from "./ingress";
 export type { CoordinatorLike } from "./ingress";
 
+// Resident activation/runtime
+export { ResidentRuntime, createResidentWorkerTools } from "./resident";
+export type {
+  ResidentLifecycle,
+  ResidentRuntimeOptions,
+  ResidentRunContext,
+  ResidentRunResult,
+  ResidentWorkerToolsOptions,
+} from "./resident";
+
 // Runtime
 export { BusTransport } from "./runtime/bus-transport";
 export type { Transport } from "./runtime/bus-transport";

@@ -19,6 +19,7 @@ Each ADR follows: Context → Decision → Rationale → Consequences.
 | [005](./005-persona-workforce-runtime.md)    | Persona workforce runtime direction              | Accepted   |
 | [006](./006-persistent-subagent-team-orchestration.md) | Persistent subagent sessions (partial ship) | Superseded |
 | [007](./007-policy-kernel-v2.md)             | Policy Kernel v2 as resource/effect governance VM | Proposed   |
+| [008](./008-lightweight-main-persona-on-demand-workers.md) | Lightweight Resident + on-demand worker processes | Proposed   |
 
 ## Adding a New ADR
 

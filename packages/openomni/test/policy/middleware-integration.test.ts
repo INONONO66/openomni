@@ -92,9 +92,9 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.mode).toBe("direct");
   });
 
-  test("allows main persona actor", async () => {
+  test("allows resident actor", async () => {
     const event = makeInboundEvent({
-      meta: { actor: { role: "main_persona" } },
+      meta: { actor: { role: "resident" } },
     });
 
     const result = await IngressAuthorityMiddleware.runPreRun({
@@ -144,11 +144,23 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.event.id).toBe("evt-1");
   });
 
-  test("aborts when coordinator is missing", async () => {
-    const event = makeInboundEvent();
+  test("allows explicit resident target when coordinator is missing", async () => {
+    const event = makeInboundEvent({
+      target: { kind: "resident" },
+      meta: { actor: { role: "user" } },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({ event });
+
+    expect(result.target.kind).toBe("resident");
+    expect(result.coordinator).toBeUndefined();
+  });
+
+  test("aborts when coordinator is missing for worker creation target", async () => {
+    const event = makeInboundEvent({ target: { kind: "worker" } });
 
     await expect(IngressAuthorityMiddleware.runPreRun({ event })).rejects.toThrow(
-      "coordinator is required",
+      "coordinator is required for worker target",
     );
   });
 

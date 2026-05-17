@@ -1,82 +1,28 @@
-import fs from "node:fs";
-import path from "node:path";
-import type { WorkerBootstrap } from "@openomni/protocol";
-import { SessionRouting } from "./session-routing";
-import { WorkerSupervisor, type ToolCallParams, type ToolCallResult } from "./supervisor";
+import {
+  createWorkerManager,
+  type ToolCallParams,
+  type ToolCallResult,
+  type WorkerManager,
+  type WorkerManagerStats,
+} from "../worker-manager";
+import type { WorkerManagerConfig } from "../worker-manager";
 
 export type { ToolCallParams, ToolCallResult };
 
-export type WorkerPoolConfig = {
+export type WorkerPoolConfig = Omit<WorkerManagerConfig, "maxActiveWorkers"> & {
+  /** Legacy alias for maxActiveWorkers. */
   size?: number;
-  workerScript: string;
-  socketDir?: string;
-  bootstrap?: WorkerBootstrap.Bootstrap;
-  onToolCall?: (params: ToolCallParams) => Promise<ToolCallResult>;
-  onWorkerSnapshot?: (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
+  maxActiveWorkers?: number;
 };
 
-export type WorkerPool = {
-  dispatch(sessionId: string, runId: string, params: Record<string, unknown>): Promise<unknown>;
-  getStats(): { workers: number; active: number; idle: number; ready: number };
-  waitUntilReady(timeoutMs?: number): Promise<void>;
-  killWorker(index: number): void;
-  shutdown(): Promise<void>;
-};
+export type WorkerPoolStats = WorkerManagerStats;
+
+export type WorkerPool = WorkerManager;
 
 export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
-  const size = config.size ?? 8;
-  const socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp");
-
-  const workers: WorkerSupervisor[] = Array.from(
-    { length: size },
-    (_, i) =>
-      new WorkerSupervisor(
-        i,
-        config.workerScript,
-        socketDir,
-        config.bootstrap,
-        config.onToolCall,
-        config.onWorkerSnapshot,
-      ),
-  );
-
-  return {
-    async dispatch(sessionId, runId, params) {
-      const index = SessionRouting.route(sessionId, size);
-      try {
-        const worker = workers[index];
-        if (worker == null) {
-          throw new Error(`Worker not found for route index ${index}`);
-        }
-        return await worker.dispatch(runId, { sessionId, ...params });
-      } finally {
-        SessionRouting.complete(sessionId);
-      }
-    },
-    getStats() {
-      return {
-        workers: size,
-        active: workers.filter((w) => w.isActive()).length,
-        idle: workers.filter((w) => !w.isActive()).length,
-        ready: workers.filter((w) => w.isReady()).length,
-      };
-    },
-    async waitUntilReady(timeoutMs = 15_000) {
-      await Promise.all(workers.map((w) => w.waitReady(timeoutMs)));
-    },
-    killWorker(index) {
-      workers[index]?.forceKill();
-    },
-    async shutdown() {
-      await Promise.all(workers.map((w) => w.stop()));
-      fs.rmSync(socketDir, { recursive: true, force: true });
-    },
-  };
-}
-
-function createPrivateSocketDir(baseDir: string): string {
-  fs.mkdirSync(baseDir, { recursive: true, mode: 0o700 });
-  const dir = fs.mkdtempSync(path.join(baseDir, "openomni-workers-"));
-  fs.chmodSync(dir, 0o700);
-  return dir;
+  const { size: _size, ...managerConfig } = config;
+  return createWorkerManager({
+    ...managerConfig,
+    maxActiveWorkers: config.maxActiveWorkers ?? config.size ?? 8,
+  });
 }

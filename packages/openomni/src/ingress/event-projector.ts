@@ -1,5 +1,9 @@
-import type { Ingress, Message, TraceContext as TraceContextProtocol } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import {
+  Ingress,
+  Operational,
+  type Message,
+  type TraceContext as TraceContextProtocol,
+} from "@openomni/protocol";
 import { Bus, Session } from "@openomni/session";
 import { createIngressAudit, summarizeText } from "./audit-envelope";
 
@@ -56,6 +60,8 @@ export namespace IngressEventProjector {
       channel: event.channel,
       workspace: event.workspace,
       userId: event.userId,
+      target: Ingress.resolveTarget(event).kind,
+      actor: event.meta?.actor,
       messageId: message.id,
       partId: part.id,
       role: message.role,
@@ -68,6 +74,7 @@ export namespace IngressEventProjector {
         eventId: event.id,
         mode: event.mode,
         source: event.surface,
+        target: Ingress.resolveTarget(event).kind,
         messageId: message.id,
         role: message.role,
       },
@@ -82,6 +89,7 @@ export namespace IngressEventProjector {
         eventId: event.id,
         mode: event.mode,
         source: event.surface,
+        target: Ingress.resolveTarget(event).kind,
         messageId: message.id,
         partId: part.id,
         role: message.role,

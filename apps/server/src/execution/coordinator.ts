@@ -1,7 +1,9 @@
 import { Execution, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import {
-  createWorkerPool,
-  type WorkerPool,
+  createWorkerManager,
+  type AskMainParams,
+  type AskMainResult,
+  type WorkerManager,
   recoverInterruptedRuns as _recoverInterruptedRuns,
   type RecoveryResult,
 } from "@openomni/coordinator";
@@ -10,9 +12,12 @@ import type { ToolProvider } from "@openomni/openomni";
 export type CoordinatorConfig = {
   workerScript: string;
   workerCount?: number;
+  maxWorkers?: number;
+  workerIdleTimeoutMs?: number;
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
   toolDispatcher?: Map<string, (call: Tool.Call) => Promise<Tool.Result>>;
+  askResident?: (params: AskMainParams) => Promise<AskMainResult>;
 };
 
 export function buildToolDispatcher(
@@ -35,7 +40,16 @@ export function buildToolDispatcher(
 
 export type ExecutionCoordinator = {
   dispatch(sessionTreeId: string, request: Execution.Request): Promise<Execution.Result>;
-  getStats(): { workers: number; active: number; idle: number; ready: number; activeRuns: number };
+  cancelRun(runId: string): Promise<unknown>;
+  deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown>;
+  getStats(): {
+    workers: number;
+    active: number;
+    idle: number;
+    ready: number;
+    activeRuns: number;
+    maxActiveWorkers: number;
+  };
   getWorkerSnapshots(): Map<number, WorkerBootstrap.WorkerSnapshot>;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   recoverInterruptedRuns(): Promise<RecoveryResult>;
@@ -46,11 +60,13 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
   const workerSnapshots = new Map<number, WorkerBootstrap.WorkerSnapshot>();
   const { toolDispatcher } = config;
 
-  const workerPool: WorkerPool = createWorkerPool({
+  const workerManager: WorkerManager = createWorkerManager({
     workerScript: config.workerScript,
-    size: config.workerCount,
+    maxActiveWorkers: config.maxWorkers ?? config.workerCount,
+    idleShutdownMs: config.workerIdleTimeoutMs,
     socketDir: config.socketDir,
     bootstrap: config.bootstrap,
+    onAskMain: config.askResident,
     onToolCall: toolDispatcher
       ? async (params) => {
           const call: Tool.Call = {
@@ -93,15 +109,23 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       activeRuns.add(request.runId);
 
       try {
-        const raw = await workerPool.dispatch(sessionTreeId, request.runId, { ...request });
+        const raw = await workerManager.dispatch(sessionTreeId, request.runId, { ...request });
         return Execution.Result.parse(raw);
       } finally {
         activeRuns.delete(request.runId);
       }
     },
 
+    async cancelRun(runId) {
+      return workerManager.cancelRun(runId);
+    },
+
+    async deliverMessage(sessionId, message, runId) {
+      return workerManager.deliverMessage(sessionId, message, runId);
+    },
+
     getStats() {
-      return { ...workerPool.getStats(), activeRuns: activeRuns.size };
+      return { ...workerManager.getStats(), activeRuns: activeRuns.size };
     },
 
     getWorkerSnapshots() {
@@ -109,7 +133,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     },
 
     async waitUntilReady(timeoutMs) {
-      await workerPool.waitUntilReady(timeoutMs);
+      await workerManager.waitUntilReady(timeoutMs);
     },
 
     async recoverInterruptedRuns() {
@@ -124,7 +148,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
       }
 
-      await workerPool.shutdown();
+      await workerManager.shutdown();
     },
   };
 }

@@ -13,7 +13,7 @@ function toResponseText(result: Ingress.IngressResult): string {
 
 async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps): Promise<string> {
   try {
-    const agentName = resolveAgentName({ message, defaultAgent: "dev" });
+    const agentName = resolveAgentName({ message, defaultAgent: "resident" });
     const event = buildInboundEvent(message, agentName, deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
     return toResponseText(await IngressEngine.ingest(event));

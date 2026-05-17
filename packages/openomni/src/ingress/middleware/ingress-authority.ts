@@ -13,6 +13,7 @@ interface PreRunState {
   parsedEvent?: Ingress.InboundEvent;
   schemaError?: ZodError;
   mode?: Ingress.InboundEvent["mode"];
+  target?: Ingress.Target;
 }
 
 function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
@@ -34,25 +35,32 @@ function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
     : undefined;
 }
 
+function targetRequiresCoordinator(target: Ingress.Target): boolean {
+  return target.kind !== "resident";
+}
+
 function isTrustedManager(actor: ActorRecord): boolean {
   return actor.trusted === true || actor.isTrustedManager === true;
 }
 
 function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   const actor = getActor(event);
-  if (!actor) return true;
+  if (!actor) return false;
 
+  const target = Ingress.resolveTarget(event);
   const role = String(actor.role ?? actor.kind ?? actor.type ?? "").toLowerCase();
   if (role === "user") return true;
-  if (role === "main" || role === "main_persona" || actor.isMain === true) return true;
+  if (role === "resident") return true;
   if (role === "manager") return isTrustedManager(actor);
+  if (role === "worker" && target.kind === "resident") return isTrustedManager(actor);
 
   return false;
 }
 
 function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDecision {
-  const action = "ingress.top_level.create";
-  const resource = `ingress.${event.surface}`;
+  const target = Ingress.resolveTarget(event);
+  const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
+  const resource = `ingress.${event.surface}.${Ingress.targetKey(target)}`;
   return PolicyDecision.fromEvaluation(
     Policy.evaluate(
       {
@@ -81,7 +89,7 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
         resource,
         actor: getActor(event),
         input: { authorized: String(isAuthorizedTopLevelActor(event)) },
-        metadata: { mode: event.mode, surface: event.surface },
+        metadata: { mode: event.mode, surface: event.surface, target },
       },
     ),
   );
@@ -99,10 +107,23 @@ function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
     ...IngressAuthorityMiddleware.CoordinatorPresence,
     failPolicy: "fail-closed",
     fn: () => {
-      if (state.coordinator === undefined) {
-        return abortDecision("ingress.coordinator", "coordinator is required");
+      const event = requireParsedEvent(state);
+      const target = Ingress.resolveTarget(event);
+      state.target = target;
+
+      if (!targetRequiresCoordinator(target)) {
+        return allowDecision("ingress.coordinator", "coordinator not required for resident target");
       }
-      return allowDecision("ingress.coordinator", "coordinator available");
+      if (state.coordinator === undefined) {
+        return abortDecision(
+          "ingress.coordinator",
+          `coordinator is required for ${target.kind} target`,
+        );
+      }
+      return allowDecision(
+        "ingress.coordinator",
+        `coordinator available for ${target.kind} target`,
+      );
     },
   };
 }
@@ -162,14 +183,14 @@ export namespace IngressAuthorityMiddleware {
   export const CoordinatorPresence = {
     name: "ingress:coordinator-presence",
     timing: "run.start",
-    priority: 0,
+    priority: 10,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
   export const SchemaValidation = {
     name: "ingress:schema-validation",
     timing: "run.start",
-    priority: 10,
+    priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
@@ -183,7 +204,7 @@ export namespace IngressAuthorityMiddleware {
   export const ModeDispatch = {
     name: "ingress:mode-dispatch",
     timing: "run.start",
-    priority: 30,
+    priority: 35,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
@@ -196,14 +217,15 @@ export namespace IngressAuthorityMiddleware {
 
   export interface PreRunResult {
     readonly event: Ingress.InboundEvent;
-    readonly coordinator: CoordinatorLike;
+    readonly coordinator?: CoordinatorLike;
     readonly mode: Ingress.InboundEvent["mode"];
+    readonly target: Ingress.Target;
   }
 
   export function registrations(state: PreRunState): PolicyRegistration[] {
     return [
-      createCoordinatorPresence(state),
       createSchemaValidation(state),
+      createCoordinatorPresence(state),
       createAuthorityCheck(state),
       createModeDispatch(state),
     ];
@@ -232,14 +254,19 @@ export namespace IngressAuthorityMiddleware {
     });
 
     if (PolicyDecision.isBlocking(decision)) throwAbort(decision, state);
-    if (!state.parsedEvent || !state.coordinator || !state.mode) {
+    if (!state.parsedEvent || !state.mode) {
       throw new Error("ingress run.start middleware did not produce dispatch context");
+    }
+    const target = state.target ?? Ingress.resolveTarget(state.parsedEvent);
+    if (targetRequiresCoordinator(target) && !state.coordinator) {
+      throw new Error("ingress run.start middleware did not produce coordinator for worker target");
     }
 
     return {
       event: state.parsedEvent,
       coordinator: state.coordinator,
       mode: state.mode,
+      target,
     };
   }
 }

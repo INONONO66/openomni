@@ -11,9 +11,11 @@ import {
 } from "./_llm-mock";
 
 let IngressEngine: typeof import("../../src/ingress/engine").IngressEngine;
+let ResidentRuntime: typeof import("../../src/resident/runtime").ResidentRuntime;
 
 beforeAll(async () => {
   ({ IngressEngine } = await import("../../src/ingress/engine"));
+  ({ ResidentRuntime } = await import("../../src/resident/runtime"));
 });
 
 afterAll(() => {
@@ -27,6 +29,14 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  IngressEngine.setResidentRuntime(
+    ResidentRuntime.create({
+      runAgent: async (_config, input) => {
+        testState.llmInputs.push(input);
+        return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
+      },
+    }),
+  );
   IngressEngine.setCoordinator({
     async dispatch(_sessionId, request) {
       const output = testState.responseQueue.shift() ?? "{}";
@@ -54,6 +64,7 @@ describe("IngressEngine integration pipeline", () => {
         workspace: "team-a",
         channel: "C123",
         payload: "Hello",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -66,6 +77,7 @@ describe("IngressEngine integration pipeline", () => {
         workspace: "team-a",
         channel: "C123",
         payload: "Follow up",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -88,6 +100,7 @@ describe("IngressEngine integration pipeline", () => {
         surface: "tui",
         workspace: "/project-a",
         payload: "Message A",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },
@@ -99,6 +112,7 @@ describe("IngressEngine integration pipeline", () => {
         surface: "tui",
         workspace: "/project-b",
         payload: "Message B",
+        meta: { actor: { role: "user" } },
         agent: {
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         },

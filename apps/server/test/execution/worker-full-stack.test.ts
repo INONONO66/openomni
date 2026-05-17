@@ -20,12 +20,21 @@ let mockPoolDispatch: (
 ) => Promise<unknown>;
 
 mock.module("@openomni/coordinator", () => ({
-  createWorkerPool: (config: { onToolCall?: typeof capturedOnToolCall }) => {
+  createWorkerManager: (config: { onToolCall?: typeof capturedOnToolCall }) => {
     capturedOnToolCall = config.onToolCall;
     return {
       dispatch: (sessionId: string, runId: string, params: Record<string, unknown>) =>
         mockPoolDispatch(sessionId, runId, params),
-      getStats: () => ({ workers: 1, active: 0, idle: 1, ready: 1 }),
+      cancelRun: async () => ({ cancelled: true }),
+      killWorker: () => undefined,
+      getStats: () => ({
+        workers: 1,
+        active: 0,
+        idle: 1,
+        ready: 1,
+        activeRuns: 0,
+        maxActiveWorkers: 10,
+      }),
       waitUntilReady: async () => undefined,
       shutdown: async () => undefined,
     };
@@ -79,6 +88,8 @@ function makeDirectEvent(): Ingress.DirectEvent {
     surface: "test",
     mode: "direct",
     payload: "hello",
+    target: { kind: "worker" },
+    meta: { actor: { role: "user" }, target: { kind: "worker" } },
     agent: {
       model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
       tools: [],

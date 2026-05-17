@@ -20,6 +20,20 @@ afterAll(async () => {
 }, 10_000);
 
 describe("worker pool dispatch", () => {
+  test("legacy WorkerPool defaults to eight active workers", async () => {
+    const defaultSocketDir = `${socketDir}-default`;
+    fs.mkdirSync(defaultSocketDir, { recursive: true });
+    const defaultPool = createWorkerPool({
+      workerScript: WORKER_ENTRY,
+      socketDir: defaultSocketDir,
+    });
+    try {
+      expect(defaultPool.getStats().maxActiveWorkers).toBe(8);
+    } finally {
+      await defaultPool.shutdown();
+    }
+  });
+
   test("all 16 parallel dispatches succeed", async () => {
     const runs = Array.from({ length: 16 }, (_, i) => ({
       sessionId: `session-${i}`,
@@ -61,12 +75,12 @@ describe("worker pool dispatch", () => {
     expect(parMs).toBeLessThan(seqMs);
   });
 
-  test("getStats reflects pool configuration", () => {
+  test("getStats reflects on-demand worker limit", () => {
     const stats = pool.getStats();
-    expect(stats.workers).toBe(4);
-    expect(stats.ready).toBe(4);
-    expect(stats.active).toBe(4);
-    expect(stats.idle).toBe(0);
+    expect(stats.maxActiveWorkers).toBe(4);
+    expect(stats.workers).toBeLessThanOrEqual(4);
+    expect(stats.ready).toBeLessThanOrEqual(stats.workers);
+    expect(stats.active + stats.idle).toBe(stats.workers);
   });
 
   test("creates a private per-pool socket directory", () => {

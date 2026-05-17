@@ -1,7 +1,11 @@
 import type { Execution, Tool } from "@openomni/protocol";
-import { createToolExecutor } from "@openomni/openomni";
+import { SessionBridge, createToolExecutor } from "@openomni/openomni";
 import type { NativeTool } from "@openomni/openomni";
 import type { ServerConfig } from "../config";
+
+type WorkerInputMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string };
 
 function expandRequestedToolNames(tools: Tool.Spec[] | undefined): Set<string> {
   const names = new Set<string>();
@@ -14,6 +18,20 @@ function expandRequestedToolNames(tools: Tool.Spec[] | undefined): Set<string> {
 
 export function resolveWorkerDbPath(config: Pick<ServerConfig, "storage">): string {
   return process.env.OPENOMNI_DB_PATH ?? config.storage.dbPath;
+}
+
+export function buildWorkerInputMessages(sessionId: string, prompt: string): WorkerInputMessage[] {
+  const messages = SessionBridge.buildDirectMessages(sessionId).filter(
+    (message): message is WorkerInputMessage =>
+      (message.role === "user" || message.role === "assistant") &&
+      typeof message.content === "string",
+  );
+  const latest = messages.at(-1);
+  if (latest?.role === "user" && latest.content === prompt) {
+    return messages;
+  }
+
+  return [...messages, { role: "user", content: prompt }];
 }
 
 export function selectRequestedTools(
@@ -44,8 +62,14 @@ export function createExecutionToolContext(
   }
 
   const selectedTools = selectRequestedTools(availableTools, request.tools);
+  if (selectedTools.length === 0) {
+    return {};
+  }
   return {
-    tools: request.tools,
+    tools: selectedTools.map((tool) => ({
+      ...tool.spec,
+      name: tool.spec.name.replace(/\./g, "_"),
+    })),
     toolExecutor: createToolExecutor({
       tools: selectedTools,
       config: {
