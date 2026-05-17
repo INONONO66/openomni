@@ -20,6 +20,20 @@ afterAll(async () => {
 }, 10_000);
 
 describe("worker pool dispatch", () => {
+  test("legacy WorkerPool defaults to eight active workers", async () => {
+    const defaultSocketDir = `${socketDir}-default`;
+    fs.mkdirSync(defaultSocketDir, { recursive: true });
+    const defaultPool = createWorkerPool({
+      workerScript: WORKER_ENTRY,
+      socketDir: defaultSocketDir,
+    });
+    try {
+      expect(defaultPool.getStats().maxActiveWorkers).toBe(8);
+    } finally {
+      await defaultPool.shutdown();
+    }
+  });
+
   test("all 16 parallel dispatches succeed", async () => {
     const runs = Array.from({ length: 16 }, (_, i) => ({
       sessionId: `session-${i}`,

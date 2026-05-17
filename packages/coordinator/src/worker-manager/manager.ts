@@ -388,6 +388,7 @@ export class OnDemandWorkerManager implements WorkerManager {
     }
 
     slot.reserved = false;
+    this.releaseOneWaiter();
     if (slot.load === 0) {
       this.scheduleIdleShutdown(slot);
     }
