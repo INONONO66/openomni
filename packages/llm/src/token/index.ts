@@ -1,10 +1,6 @@
-export interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens?: number;
-  cacheReadTokens?: number;
-  cacheWriteTokens?: number;
-}
+import type { Token } from "@openomni/protocol";
+
+export interface TokenUsage extends Token.ProviderUsage {}
 
 export interface TokenCost {
   inputCost: number;

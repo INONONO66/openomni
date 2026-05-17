@@ -1,8 +1,8 @@
-import type { Message } from "@openomni/protocol";
+import type { Message, Model } from "@openomni/protocol";
 import { Subagent } from "@openomni/protocol";
 import { Bus, type BusEvent, Session } from "@openomni/session";
 
-export type RuntimeModel = { provider: string; id: string };
+export type RuntimeModel = Model.Ref;
 
 export type RuntimeMessage = { role: "user" | "assistant"; content: string };
 

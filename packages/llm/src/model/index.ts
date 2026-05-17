@@ -7,6 +7,9 @@ const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");
 
 export namespace ModelsDev {
+  export const ModelStatus = z.enum(["alpha", "beta", "deprecated", "active"]);
+  export type ModelStatus = z.infer<typeof ModelStatus>;
+
   export const Model = z.object({
     id: z.string(),
     name: z.string(),
@@ -47,7 +50,7 @@ export namespace ModelsDev {
         output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
       })
       .optional(),
-    status: z.enum(["alpha", "beta", "deprecated"]).optional(),
+    status: ModelStatus.optional(),
     options: z.record(z.string(), z.any()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string() }).optional(),

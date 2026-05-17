@@ -1,5 +1,6 @@
 import {
   type Message,
+  type Model,
   PolicyDecision,
   type Policy,
   Subagent,
@@ -15,7 +16,7 @@ import type { RuntimeConfig } from "./transcript.js";
 type LaunchInput = {
   agentName: string;
   prompt: string;
-  model: { provider: string; id: string };
+  model: Model.Ref;
   parentSessionId: string;
   depth?: number;
 };

@@ -1,3 +1,4 @@
+import type { Model } from "@openomni/protocol";
 import type { SDKMessage } from "../session/convert";
 import type { Provider } from "../provider/index";
 
@@ -103,19 +104,16 @@ export namespace ProviderTransform {
   }
 
   export function resolveVariant(model: Provider.Model, variant?: string): Record<string, unknown>;
+  export function resolveVariant(model: Model.Ref, variant?: string): Record<string, unknown>;
   export function resolveVariant(
-    model: { provider: string; id: string },
-    variant?: string,
-  ): Record<string, unknown>;
-  export function resolveVariant(
-    model: Provider.Model | { provider: string; id: string },
+    model: Provider.Model | Model.Ref,
     variant?: string,
   ): Record<string, unknown> {
     if (!variant) return {};
     if ("providerID" in model || "capabilities" in model) {
       return variants(model as Provider.Model)[variant] ?? {};
     }
-    const providerName = (model as { provider: string; id: string }).provider;
+    const providerName = (model as Model.Ref).provider;
     const npm =
       providerName === "anthropic"
         ? "@ai-sdk/anthropic"
@@ -124,7 +122,7 @@ export namespace ProviderTransform {
           : undefined;
     if (!npm) return {};
     const syntheticModel = {
-      id: (model as { provider: string; id: string }).id,
+      id: (model as Model.Ref).id,
       api: { npm },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },

@@ -1,17 +1,16 @@
 import { z } from "zod";
-import { Tool } from "../tool/index.js";
-import { Policy } from "../policy/index.js";
 import { AgentProfile } from "../agent/index.js";
+import { Model } from "../model/index.js";
+import { Policy } from "../policy/index.js";
+import { Token } from "../token/index.js";
+import { Tool } from "../tool/index.js";
 
 const requestSchema = z.object({
   runId: z.string(),
   sessionId: z.string(),
   mode: z.literal("direct"),
   prompt: z.string(),
-  model: z.object({
-    provider: z.string(),
-    id: z.string(),
-  }),
+  model: Model.Ref,
   systemPrompt: z.string().optional(),
   tools: z.array(Tool.Spec).optional(),
   toolConfig: Tool.Config.optional(),
@@ -32,12 +31,7 @@ const resultSchema = z.object({
   status: z.enum(["succeeded", "failed", "cancelled", "interrupted"]),
   output: z.string().optional(),
   finishReason: z.string().optional(),
-  usage: z
-    .object({
-      inputTokens: z.number().optional(),
-      outputTokens: z.number().optional(),
-    })
-    .optional(),
+  usage: Token.ExecutionUsage.optional(),
   error: z.string().optional(),
 });
 

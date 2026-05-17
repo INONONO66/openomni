@@ -9,6 +9,7 @@ src/
 ├── index.ts              # Package barrel (re-exports all domains)
 ├── error/                # NamedError factory + built-in error classes
 ├── tool/                 # Tool.Spec / Call / Result / State (discriminated union)
+├── token/                # Token.Usage / AgentUsage / ProviderUsage / ExecutionUsage
 ├── message/              # Message.Part (8 variants), Message.Info, Message.WithParts
 ├── run/                  # Run.Snapshot / Outcome / RetryPolicy / Budget
 ├── sink/                 # Sink — streaming callback contract (TS interface, not Zod)
@@ -21,6 +22,7 @@ src/
 ├── event-log/            # ExecutionEvent discriminated union (LLM / tool / step / session)
 ├── execution/            # ExecutionRequest / ExecutionResult / WorkerCommand contracts
 ├── agent/                # AgentProfile.Definition, AgentProfile.AgentBudget
+├── model/                # Model.Ref shared model identity
 ├── artifact/             # Artifact.Meta, Artifact.Part
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.WorkItemSubAdapter interface

@@ -1,5 +1,5 @@
 import { PolicyDecision } from "@openomni/protocol";
-import { checkBudget, describeBudgetRemaining } from "../../budget";
+import { checkBudget, describeBudgetRemaining, effectiveBudgetThresholds } from "../../budget";
 import type { PolicyFactory, PolicyRegistration } from "../types";
 
 export function createBudgetReassurancePolicy(): PolicyRegistration {
@@ -19,7 +19,7 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
           sessionId: "chat-agent",
           time: Date.now(),
           remaining,
-          threshold: ctx.budget?.reassuranceThreshold ?? 0.6,
+          threshold: effectiveBudgetThresholds(ctx.budget).reassuranceThreshold,
         });
         return PolicyDecision.allow({
           policyId: "builtin.budget.reassurance",
@@ -59,7 +59,7 @@ export function createBudgetWarningPolicy(): PolicyRegistration {
           sessionId: "chat-agent",
           time: Date.now(),
           remaining,
-          threshold: ctx.budget?.warningThreshold ?? 0.8,
+          threshold: effectiveBudgetThresholds(ctx.budget).warningThreshold,
         });
         return PolicyDecision.allow({
           policyId: "builtin.budget.warning",

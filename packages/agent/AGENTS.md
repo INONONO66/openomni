@@ -79,7 +79,7 @@ Also exported from `@openomni/agent`:
 
 | Field            | Type                                     | Description                                                                 |
 | ---------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
-| `model`          | `{ provider: string; id: string }`       | Required LLM provider + model id                                            |
+| `model`          | `Model.Ref`                              | Required LLM provider + model id                                            |
 | `systemPrompt?`  | `string`                                 | Base system prompt                                                          |
 | `tools?`         | `Tool.Spec[]`                            | Tool specs available to the LLM                                             |
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |

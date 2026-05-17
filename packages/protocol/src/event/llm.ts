@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { Token } from "../token/index.js";
 
 const Base = z.object({
   traceId: z.string(),
@@ -25,8 +26,8 @@ export namespace LlmCall {
       provider: z.string(),
       model: z.string(),
       durationMs: z.number(),
-      inputTokens: z.number(),
-      outputTokens: z.number(),
+      inputTokens: Token.Count,
+      outputTokens: Token.Count,
       finishReason: z.string(),
     }),
   );

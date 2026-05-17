@@ -86,7 +86,7 @@ describe("ModelsDev", () => {
     });
 
     it("should validate Model with status field", () => {
-      for (const status of ["alpha", "beta", "deprecated"] as const) {
+      for (const status of ["alpha", "beta", "deprecated", "active"] as const) {
         const result = ModelsDev.Model.safeParse({
           id: "test",
           name: "Test",
@@ -94,6 +94,11 @@ describe("ModelsDev", () => {
         });
         expect(result.success).toBe(true);
       }
+    });
+
+    it("should reuse the same model status schema for provider models", () => {
+      const result = ModelsDev.ModelStatus.safeParse("active");
+      expect(result.success).toBe(true);
     });
 
     it("should validate Model with variants", () => {

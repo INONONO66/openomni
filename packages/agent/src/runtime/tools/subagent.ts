@@ -1,4 +1,4 @@
-import type { Tool, Subagent } from "@openomni/protocol";
+import type { Model, Tool, Subagent } from "@openomni/protocol";
 import { AgentRegistry } from "../registry/registry";
 import { checkDelegation, type DelegationContext } from "../../core/delegation";
 import type { PolicyRegistration } from "../../core/policy/types";
@@ -8,7 +8,7 @@ export interface SubagentRuntimeSpawnConfig {
   agentName: string;
   title: string;
   prompt: string;
-  model: { provider: string; id: string };
+  model: Model.Ref;
   systemPrompt?: string;
   middleware?: PolicyRegistration[];
 }
@@ -16,7 +16,7 @@ export interface SubagentRuntimeSpawnConfig {
 export interface SubagentRuntimeSendConfig {
   sessionId: string;
   prompt: string;
-  model: { provider: string; id: string };
+  model: Model.Ref;
   systemPrompt?: string;
   middleware?: PolicyRegistration[];
 }
@@ -34,13 +34,13 @@ export interface SubagentToolOptions {
   context?: AgentRuntimeContext;
   delegationContext?: DelegationContext;
   middleware?: PolicyRegistration[];
-  defaultModel?: { provider: string; id: string };
+  defaultModel?: Model.Ref;
   subagentRuntime: SubagentRuntime;
   backgroundManager?: {
     launch: (input: {
       agentName: string;
       prompt: string;
-      model: { provider: string; id: string };
+      model: Model.Ref;
       parentSessionId: string;
       depth?: number;
     }) => Promise<Subagent.BackgroundTask>;

@@ -72,7 +72,7 @@ export namespace Provider {
         output: z.number().optional(),
       })
       .optional(),
-    status: z.enum(["alpha", "beta", "deprecated", "active"]).optional(),
+    status: ModelsDev.ModelStatus.optional(),
     options: z.record(z.string(), z.any()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     release_date: z.string().optional(),

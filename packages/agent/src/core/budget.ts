@@ -1,4 +1,4 @@
-import { Operational } from "@openomni/protocol";
+import { AgentProfile, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentBudget } from "./types";
 
@@ -22,6 +22,17 @@ export function createBudgetState(): BudgetState {
   };
 }
 
+export function effectiveBudgetThresholds(budget?: AgentProfile.BudgetThresholdInput): {
+  reassuranceThreshold: number;
+  warningThreshold: number;
+} {
+  return {
+    reassuranceThreshold:
+      budget?.reassuranceThreshold ?? AgentProfile.DEFAULT_REASSURANCE_THRESHOLD,
+    warningThreshold: budget?.warningThreshold ?? AgentProfile.DEFAULT_WARNING_THRESHOLD,
+  };
+}
+
 export function checkBudget(
   state: BudgetState,
   budget?: AgentBudget,
@@ -30,8 +41,8 @@ export function checkBudget(
   const maxTurns = budget?.maxTurns ?? 24;
   const maxToolCalls = budget?.maxToolCalls ?? 40;
   const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
-  const warningRatio = budget?.warningThreshold ?? 0.8;
-  const reassuranceRatio = budget?.reassuranceThreshold ?? 0.6;
+  const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
+    effectiveBudgetThresholds(budget);
 
   const elapsed = Date.now() - state.startTime;
 
