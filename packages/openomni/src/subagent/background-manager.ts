@@ -78,8 +78,9 @@ export const BackgroundManager = {
 
     type QueuedItem = { input: LaunchInput; id: string };
     const pendingQueue: QueuedItem[] = [];
-    // Tracks spawning + running tasks synchronously (incremented before async spawn)
+    // Tracks spawning + running tasks synchronously before async spawn completes.
     let activeCount = 0;
+    const activeTaskIds = new Set<string>();
     let launchLock: Promise<void> = Promise.resolve();
 
     for (const interrupted of BackgroundStore.loadInterrupted()) {
@@ -144,16 +145,23 @@ export const BackgroundManager = {
         // task may have been cancelled while queued
         if (!task || task.status !== "pending") continue;
 
-        activeCount++;
-        spawnTask(next.id, next.input, task);
+        markActive(next.id);
+        spawnTask(next.id, next.input);
       }
     }
 
-    function spawnTask(
-      id: string,
-      input: LaunchInput,
-      task: Subagent.BackgroundTask,
-    ): Promise<void> {
+    function markActive(taskId: string): void {
+      if (activeTaskIds.has(taskId)) return;
+      activeTaskIds.add(taskId);
+      activeCount++;
+    }
+
+    function releaseActive(taskId: string): void {
+      if (!activeTaskIds.delete(taskId)) return;
+      activeCount--;
+    }
+
+    function spawnTask(id: string, input: LaunchInput): Promise<void> {
       const controller = new AbortController();
       controllers.set(id, controller);
 
@@ -170,9 +178,22 @@ export const BackgroundManager = {
           }),
         )
         .then(
-          ({ sessionId, runId }) => {
+          async ({ sessionId, runId }) => {
+            const currentTask = tasks.get(id);
+            if (!currentTask || currentTask.status === "cancelled") {
+              try {
+                await SubagentRuntime.cancel({ sessionId, runId });
+              } catch {
+                // The run may already be terminal; local background accounting still needs cleanup.
+              }
+              controllers.delete(id);
+              releaseActive(id);
+              drainQueue();
+              return;
+            }
+
             const running: Subagent.BackgroundTask = {
-              ...task,
+              ...currentTask,
               status: "running",
               sessionId,
               runId,
@@ -187,18 +208,20 @@ export const BackgroundManager = {
 
             runUnsubs.push(
               Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
-                if (data.payload.sessionId !== sessionId) return;
+                if (data.payload.sessionId !== sessionId || data.payload.runId !== runId) return;
                 cleanupRunSubs();
                 taskUnsubs.delete(id);
 
                 const current = tasks.get(id);
                 if (!current || current.status === "cancelled") {
-                  activeCount--;
+                  controllers.delete(id);
+                  releaseActive(id);
                   drainQueue();
                   return;
                 }
 
-                activeCount--;
+                controllers.delete(id);
+                releaseActive(id);
 
                 const completed: Subagent.BackgroundTask = {
                   ...current,
@@ -244,18 +267,20 @@ export const BackgroundManager = {
 
             runUnsubs.push(
               Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
-                if (data.payload.sessionId !== sessionId) return;
+                if (data.payload.sessionId !== sessionId || data.payload.runId !== runId) return;
                 cleanupRunSubs();
                 taskUnsubs.delete(id);
 
                 const current = tasks.get(id);
                 if (!current || current.status === "cancelled") {
-                  activeCount--;
+                  controllers.delete(id);
+                  releaseActive(id);
                   drainQueue();
                   return;
                 }
 
-                activeCount--;
+                controllers.delete(id);
+                releaseActive(id);
 
                 const failed: Subagent.BackgroundTask = {
                   ...current,
@@ -293,9 +318,16 @@ export const BackgroundManager = {
           },
           (err) => {
             controllers.delete(id);
-            activeCount--;
+            releaseActive(id);
+
+            const current = tasks.get(id);
+            if (!current || current.status === "cancelled") {
+              drainQueue();
+              return;
+            }
+
             const failed: Subagent.BackgroundTask = {
-              ...task,
+              ...current,
               status: "failed",
               completedAt: Date.now(),
               error: err instanceof Error ? err.message : String(err),
@@ -348,11 +380,12 @@ export const BackgroundManager = {
 
         if (policy.shouldQueue) {
           pendingQueue.push({ input, id });
-          return task;
+          drainQueue();
+          return tasks.get(id) ?? task;
         }
 
-        activeCount++;
-        await spawnTask(id, input, task);
+        markActive(id);
+        await spawnTask(id, input);
         return tasks.get(id) ?? task;
       });
     }
@@ -371,6 +404,7 @@ export const BackgroundManager = {
       controllers.get(taskId)?.abort();
       taskUnsubs.get(taskId)?.();
       taskUnsubs.delete(taskId);
+      controllers.delete(taskId);
       const cancelled: Subagent.BackgroundTask = {
         ...task,
         status: "cancelled",
@@ -378,12 +412,15 @@ export const BackgroundManager = {
       };
       tasks.set(taskId, cancelled);
       BackgroundStore.persist(cancelled);
+      releaseActive(taskId);
 
       Bus.publish(Subagent.Events.BackgroundTaskCancelled, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         payload: { taskId },
       });
+
+      drainQueue();
 
       return true;
     }

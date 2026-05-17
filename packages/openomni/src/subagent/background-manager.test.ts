@@ -8,6 +8,13 @@ import { BackgroundLimitsMiddleware } from "./middleware/background-limits";
 import { SubagentRuntime } from "./runtime";
 
 let spawnBackgroundSpy: ReturnType<typeof spyOn> | undefined;
+let cancelSpy: ReturnType<typeof spyOn> | undefined;
+
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+};
 
 function makeTask(id: string): import("@openomni/protocol").Subagent.BackgroundTask {
   return {
@@ -46,9 +53,25 @@ function mockSpawnBackground(): void {
   });
 }
 
+function createDeferred<T>(): Deferred<T> {
+  let resolve: Deferred<T>["resolve"] = () => {
+    throw new Error("deferred resolve called before initialization");
+  };
+  let reject: Deferred<T>["reject"] = () => {
+    throw new Error("deferred reject called before initialization");
+  };
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   spawnBackgroundSpy?.mockRestore();
   spawnBackgroundSpy = undefined;
+  cancelSpy?.mockRestore();
+  cancelSpy = undefined;
   Bus.reset();
 });
 
@@ -282,6 +305,106 @@ describe("BackgroundManager — launch limit policy", () => {
       expect(task.error).toBe("auth unavailable");
       expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
       expect(spawnBackgroundSpy).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("preserves cancelled task state when spawn fails after cancellation", async () => {
+    const deferred = createDeferred<{ sessionId: string; runId: string }>();
+    spawnBackgroundSpy?.mockRestore();
+    spawnBackgroundSpy = spyOn(SubagentRuntime, "spawnBackground").mockImplementation(
+      () => deferred.promise,
+    );
+    const manager = BackgroundManager.create();
+
+    try {
+      const launchPromise = manager.launch(makeLaunchInput());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const task = manager.listByParent("parent-session-1")[0];
+      expect(task?.status).toBe("pending");
+      expect(manager.stats()).toEqual({ active: 1, pending: 0, total: 1 });
+      if (!task) throw new Error("expected launched task");
+
+      await manager.cancel(task.id);
+      expect(manager.getTask(task.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+
+      deferred.reject(new Error("spawn failed after cancel"));
+      const result = await launchPromise;
+
+      expect(result.status).toBe("cancelled");
+      expect(result.error).toBeUndefined();
+      expect(manager.getTask(task.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("does not resurrect a cleaned cancelled task when spawn fails late", async () => {
+    const deferred = createDeferred<{ sessionId: string; runId: string }>();
+    spawnBackgroundSpy?.mockRestore();
+    spawnBackgroundSpy = spyOn(SubagentRuntime, "spawnBackground").mockImplementation(
+      () => deferred.promise,
+    );
+    const manager = BackgroundManager.create({ taskTtlMs: 0 });
+
+    try {
+      const launchPromise = manager.launch(makeLaunchInput());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const task = manager.listByParent("parent-session-1")[0];
+      expect(task?.status).toBe("pending");
+      if (!task) throw new Error("expected launched task");
+
+      await manager.cancel(task.id);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      manager.cleanup();
+      expect(manager.getTask(task.id)).toBeUndefined();
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 0 });
+
+      deferred.reject(new Error("spawn failed after cleanup"));
+      await launchPromise;
+
+      expect(manager.getTask(task.id)).toBeUndefined();
+      expect(manager.getResult(task.id)).toBeUndefined();
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 0 });
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  it("preserves cancelled task state when spawn resolves after cancellation", async () => {
+    const deferred = createDeferred<{ sessionId: string; runId: string }>();
+    spawnBackgroundSpy?.mockRestore();
+    spawnBackgroundSpy = spyOn(SubagentRuntime, "spawnBackground").mockImplementation(
+      () => deferred.promise,
+    );
+    cancelSpy = spyOn(SubagentRuntime, "cancel").mockResolvedValue();
+    const manager = BackgroundManager.create();
+
+    try {
+      const launchPromise = manager.launch(makeLaunchInput());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const task = manager.listByParent("parent-session-1")[0];
+      expect(task?.status).toBe("pending");
+      expect(manager.stats()).toEqual({ active: 1, pending: 0, total: 1 });
+      if (!task) throw new Error("expected launched task");
+
+      await manager.cancel(task.id);
+      expect(manager.getTask(task.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+
+      deferred.resolve({ sessionId: "late-session", runId: "late-run" });
+      const result = await launchPromise;
+
+      expect(result.status).toBe("cancelled");
+      expect(manager.getTask(task.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 1 });
+      expect(cancelSpy).toHaveBeenCalledWith({ sessionId: "late-session", runId: "late-run" });
     } finally {
       manager.dispose();
     }

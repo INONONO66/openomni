@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { type AgentResult, type ChatAgentInput, ChatAgent } from "@openomni/agent";
 import { Bus, Storage } from "@openomni/session";
 import { BackgroundManager } from "../../src/subagent/background-manager";
+import { BackgroundLimitsMiddleware } from "../../src/subagent/middleware/background-limits";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -13,8 +14,12 @@ type Deferred<T> = {
 };
 
 function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: Error) => void;
+  let resolve: Deferred<T>["resolve"] = () => {
+    throw new Error("deferred resolve called before initialization");
+  };
+  let reject: Deferred<T>["reject"] = () => {
+    throw new Error("deferred reject called before initialization");
+  };
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -31,8 +36,19 @@ function makeAgentResult(text = "done"): AgentResult {
   };
 }
 
+async function waitFor(predicate: () => boolean, message: string, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(message);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 let createSpy: ReturnType<typeof spyOn> | undefined;
 let spawnSpy: ReturnType<typeof spyOn> | undefined;
+let policySpy: ReturnType<typeof spyOn> | undefined;
 
 beforeEach(() => {
   Storage.reset();
@@ -43,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   createSpy?.mockRestore();
   spawnSpy?.mockRestore();
+  policySpy?.mockRestore();
   Bus.reset();
 });
 
@@ -255,5 +272,128 @@ describe("BackgroundManager bounded queue", () => {
 
     expect(manager.stats().pending).toBe(0);
     manager.dispose();
+  });
+
+  it("drains a queued launch when cancellation frees capacity before enqueue", async () => {
+    const deferred = createDeferred<AgentResult>();
+    let callCount = 0;
+    createSpy = spyOn(ChatAgent, "create").mockImplementation(
+      () =>
+        ({
+          run: async (_input: ChatAgentInput) => {
+            if (callCount++ === 0) return deferred.promise;
+            return makeAgentResult();
+          },
+        }) as ReturnType<typeof ChatAgent.create>,
+    );
+
+    const parentSessionId = crypto.randomUUID();
+    const manager = BackgroundManager.create({
+      maxConcurrentTotal: 1,
+      maxConcurrentPerAgent: 10,
+      maxDescendants: 10,
+    });
+    try {
+      const running = await manager.launch({
+        agentName: "worker",
+        prompt: "running",
+        model,
+        parentSessionId,
+      });
+      await waitFor(
+        () => manager.getTask(running.id)?.status === "running",
+        "expected first task to start running",
+      );
+
+      const evaluatePreLaunch = BackgroundLimitsMiddleware.evaluatePreLaunch;
+      policySpy = spyOn(BackgroundLimitsMiddleware, "evaluatePreLaunch").mockImplementation(
+        async (ctx) => {
+          const result = await evaluatePreLaunch(ctx);
+          if (ctx.input.prompt === "queued") {
+            await manager.cancel(running.id);
+          }
+          return result;
+        },
+      );
+
+      const queued = await manager.launch({
+        agentName: "worker",
+        prompt: "queued",
+        model,
+        parentSessionId,
+      });
+
+      await waitFor(
+        () => manager.getTask(queued.id)?.status === "completed",
+        "expected queued task to drain after cancellation freed capacity",
+      );
+      expect(manager.getTask(running.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 2 });
+    } finally {
+      deferred.resolve(makeAgentResult());
+      await Promise.resolve();
+      manager.dispose();
+    }
+  });
+
+  it("cancelled running task releases capacity and drains the queue immediately", async () => {
+    const deferred = createDeferred<AgentResult>();
+    let callCount = 0;
+    createSpy = spyOn(ChatAgent, "create").mockImplementation(
+      () =>
+        ({
+          run: async (_input: ChatAgentInput) => {
+            if (callCount++ === 0) return deferred.promise;
+            return makeAgentResult();
+          },
+        }) as ReturnType<typeof ChatAgent.create>,
+    );
+
+    const parentSessionId = crypto.randomUUID();
+    const manager = BackgroundManager.create({
+      maxConcurrentTotal: 1,
+      maxConcurrentPerAgent: 10,
+      maxDescendants: 10,
+    });
+    try {
+      const running = await manager.launch({
+        agentName: "worker",
+        prompt: "running",
+        model,
+        parentSessionId,
+      });
+      const queued = await manager.launch({
+        agentName: "worker",
+        prompt: "queued",
+        model,
+        parentSessionId,
+      });
+
+      await waitFor(
+        () => manager.getTask(queued.id)?.status === "pending",
+        "expected second task to remain pending while capacity is saturated",
+      );
+      expect(manager.stats()).toEqual({ active: 1, pending: 1, total: 2 });
+      expect(manager.getTask(queued.id)?.status).toBe("pending");
+
+      await manager.cancel(running.id);
+      await waitFor(
+        () => manager.getTask(queued.id)?.status === "completed",
+        "expected queued task to complete after cancellation drained the queue",
+      );
+
+      expect(manager.getTask(running.id)?.status).toBe("cancelled");
+      expect(manager.getTask(queued.id)?.status).toBe("completed");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 2 });
+
+      deferred.resolve(makeAgentResult());
+      await Promise.resolve();
+      expect(manager.getTask(running.id)?.status).toBe("cancelled");
+      expect(manager.stats()).toEqual({ active: 0, pending: 0, total: 2 });
+    } finally {
+      deferred.resolve(makeAgentResult());
+      await Promise.resolve();
+      manager.dispose();
+    }
   });
 });
