@@ -229,7 +229,7 @@ export class OnDemandWorkerManager implements WorkerManager {
 
   async shutdown(): Promise<void> {
     this.stopping = true;
-    await Promise.all(
+    const results = await Promise.allSettled(
       [...this.slots.values()].map(async (slot) => {
         this.clearIdleTimer(slot);
         const supervisor = slot.supervisor;
@@ -244,6 +244,15 @@ export class OnDemandWorkerManager implements WorkerManager {
       waiter.reject(new Error("worker manager is shutting down"));
     }
     fs.rmSync(this.socketDir, { recursive: true, force: true });
+
+    const failures = results.filter(
+      (r): r is PromiseSettledResult<void> & { status: "rejected" } => r.status === "rejected",
+    );
+    if (failures.length > 0) {
+      const err = new Error(`${failures.length} worker(s) failed to stop cleanly`);
+      (err as Error & { errors: unknown[] }).errors = failures.map((f) => f.reason);
+      throw err;
+    }
   }
 
   private async acquireSlot(sessionId: string): Promise<WorkerSlot> {
@@ -360,7 +369,10 @@ export class OnDemandWorkerManager implements WorkerManager {
       slot.idleTimer = null;
       if (this.stopping || slot.load > 0) return;
       slot.reserved = true;
-      void this.shutdownIdleSlot(slot);
+      this.shutdownIdleSlot(slot).catch(() => {
+        slot.reserved = false;
+        this.releaseOneWaiter();
+      });
     }, this.idleShutdownMs);
   }
 

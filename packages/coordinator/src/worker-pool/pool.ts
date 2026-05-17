@@ -20,8 +20,9 @@ export type WorkerPoolStats = WorkerManagerStats;
 export type WorkerPool = WorkerManager;
 
 export function createWorkerPool(config: WorkerPoolConfig): WorkerPool {
+  const { size: _size, ...managerConfig } = config;
   return createWorkerManager({
-    ...config,
+    ...managerConfig,
     maxActiveWorkers: config.maxActiveWorkers ?? config.size ?? 8,
   });
 }
