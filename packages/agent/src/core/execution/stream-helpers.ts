@@ -547,7 +547,9 @@ export async function buildTurn(
           elapsedMs: Date.now() - state.startTime,
           usage: state.totalUsage,
         }),
-        onDecision: (timing, decision) => toolPolicyDecisions.push({ timing, decision }),
+        onDecision: (timing, decision) => {
+          toolPolicyDecisions.push({ timing, decision });
+        },
         traceContext: trace,
       })
     : undefined;
@@ -945,7 +947,7 @@ export async function* handleError(
       error: normalizedError,
       willRetry: true,
     };
-    await Retry.agentSleep(backoffMs);
+    await Retry.agentSleep(backoffMs, config.signal);
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 

@@ -855,6 +855,44 @@ describe("handleError (error)", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(15);
   });
 
+  it("does not sleep when retry delay is already aborted", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-aborted-retry-delay",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.aborted-retry-delay", "retry-after", [
+          { type: "run.retry_after", delayMs: 5_000 },
+        ]),
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+    const state = makeState();
+    const config = makeConfig({ signal: controller.signal });
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const started = Date.now();
+    const gen = handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      1,
+      retryPolicy,
+    );
+    await gen.next();
+
+    await expect(gen.next()).rejects.toThrow("aborted");
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();

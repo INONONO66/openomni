@@ -21,6 +21,38 @@ describe("LineDecoder", () => {
     expect(dec.push(chunk)).toEqual([{ ok: true }]);
   });
 
+  test("preserves multibyte UTF-8 characters split across Uint8Array chunks", () => {
+    const dec = new LineDecoder();
+    const encoded = new TextEncoder().encode('{"text":"😀"}\n');
+    const emojiStart = encoded.findIndex((byte) => byte === 0xf0);
+    const split = emojiStart + 2;
+
+    expect(dec.push(encoded.slice(0, split))).toEqual([]);
+    expect(dec.push(encoded.slice(split))).toEqual([{ text: "😀" }]);
+  });
+
+  test("resets pending streaming decoder state before string chunks", () => {
+    const dec = new LineDecoder();
+    const encoder = new TextEncoder();
+    const prefix = encoder.encode('{"text":"');
+    const firstEmojiBytes = new Uint8Array(prefix.length + 2);
+    firstEmojiBytes.set(prefix);
+    firstEmojiBytes.set([0xf0, 0x9f], prefix.length);
+
+    expect(dec.push(firstEmojiBytes)).toEqual([]);
+    expect(dec.push('fallback"}\n')).toEqual([{ text: "fallback" }]);
+    expect(dec.push(encoder.encode('{"ok":true}\n'))).toEqual([{ ok: true }]);
+  });
+
+  test("keeps string chunks composable after Uint8Array frames", () => {
+    const dec = new LineDecoder();
+    const encoder = new TextEncoder();
+
+    expect(dec.push(encoder.encode('{"a":1}\n'))).toEqual([{ a: 1 }]);
+    expect(dec.push('{"b":')).toEqual([]);
+    expect(dec.push("2}\n")).toEqual([{ b: 2 }]);
+  });
+
   test("throws IpcProtocolError when buffer exceeds MAX_FRAME_BYTES", () => {
     const dec = new LineDecoder();
     // push slightly over the cap without a newline
@@ -39,6 +71,26 @@ describe("LineDecoder", () => {
     // buffer should be cleared — next valid push works normally
     const results = dec.push('{"recovered":true}\n');
     expect(results).toEqual([{ recovered: true }]);
+  });
+
+  test("resets streaming decoder state after oversized Uint8Array rejection", () => {
+    const dec = new LineDecoder();
+    const encoder = new TextEncoder();
+    const prefix = encoder.encode("x".repeat(MAX_FRAME_BYTES + 1));
+    const oversizedWithPartialUtf8 = new Uint8Array(prefix.length + 2);
+    oversizedWithPartialUtf8.set(prefix);
+    oversizedWithPartialUtf8.set([0xf0, 0x9f], prefix.length);
+
+    expect(() => dec.push(oversizedWithPartialUtf8)).toThrow(IpcProtocolError);
+    expect(dec.push(encoder.encode('{"ok":true}\n'))).toEqual([{ ok: true }]);
+  });
+
+  test("resets buffer after completed oversized frame rejection", () => {
+    const dec = new LineDecoder();
+    const oversizedLine = `${JSON.stringify({ data: "y".repeat(MAX_FRAME_BYTES) })}\npartial`;
+
+    expect(() => dec.push(oversizedLine)).toThrow(IpcProtocolError);
+    expect(dec.push('{"ok":true}\n')).toEqual([{ ok: true }]);
   });
 
   test("allows frames just under the cap", () => {

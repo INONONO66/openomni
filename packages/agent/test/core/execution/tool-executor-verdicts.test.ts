@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyDecision, ToolExecution, type Policy, type Tool } from "@openomni/protocol";
+import {
+  Operational,
+  PolicyDecision,
+  ToolExecution,
+  type Policy,
+  type Tool,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
@@ -537,6 +543,114 @@ describe("createToolExecutor effect application", () => {
       expect(invokeResultDecision).toBeDefined();
       expect(invokeResultDecision?.[1].verdict).toBe("deny");
       expect(invokeResultDecision?.[1].reasonCodes).toContain("post-deny");
+    });
+
+    it("isolates onDecision callback errors from tool execution", async () => {
+      Bus.reset();
+      const warnings: unknown[] = [];
+      const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+      const engine = engineWithRegistrations([
+        {
+          name: "pre",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => PolicyDecision.allow({ policyId: "pre" }),
+        },
+      ]);
+      const executor = createToolExecutor({
+        engine,
+        onDecision: () => {
+          throw new Error("observer failed");
+        },
+        toolExecutor: async (call) => ({
+          id: "result-on-decision-error",
+          toolCallId: call.id,
+          output: "ok",
+        }),
+      });
+
+      try {
+        const result = await executor(makeCall("call-on-decision-error"));
+        await new Promise((resolve) => queueMicrotask(resolve));
+
+        expect(result.output).toBe("ok");
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0]).toMatchObject({
+          component: "agent.tool-executor",
+          msg: "onDecision observer error",
+          context: {
+            timing: "invoke.prepare",
+            policyId: "agent.policy.composed",
+            error: "Error: observer failed",
+          },
+        });
+        expect(warnings[1]).toMatchObject({
+          component: "agent.tool-executor",
+          msg: "onDecision observer error",
+          context: {
+            timing: "invoke.result",
+            policyId: "agent.policy.composed",
+            error: "Error: observer failed",
+          },
+        });
+      } finally {
+        unsubscribe();
+        Bus.reset();
+      }
+    });
+
+    it("isolates async onDecision callback rejections from tool execution", async () => {
+      Bus.reset();
+      const warnings: unknown[] = [];
+      const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+      const engine = engineWithRegistrations([
+        {
+          name: "pre",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => PolicyDecision.allow({ policyId: "pre" }),
+        },
+      ]);
+      const executor = createToolExecutor({
+        engine,
+        onDecision: async () => {
+          throw new Error("async observer failed");
+        },
+        toolExecutor: async (call) => ({
+          id: "result-async-on-decision-error",
+          toolCallId: call.id,
+          output: "ok",
+        }),
+      });
+
+      try {
+        const result = await executor(makeCall("call-async-on-decision-error"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(result.output).toBe("ok");
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0]).toMatchObject({
+          component: "agent.tool-executor",
+          msg: "onDecision observer error",
+          context: {
+            timing: "invoke.prepare",
+            policyId: "agent.policy.composed",
+            error: "Error: async observer failed",
+          },
+        });
+        expect(warnings[1]).toMatchObject({
+          component: "agent.tool-executor",
+          msg: "onDecision observer error",
+          context: {
+            timing: "invoke.result",
+            policyId: "agent.policy.composed",
+            error: "Error: async observer failed",
+          },
+        });
+      } finally {
+        unsubscribe();
+        Bus.reset();
+      }
     });
   });
 });

@@ -402,13 +402,35 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
     });
   }
 
-  async function recordDecision(
+  function publishDecisionObserverError(
+    ctx: AuditDispatchContext,
+    decision: Policy.PolicyDecision,
+    err: unknown,
+  ): void {
+    const traceContext = ctx.traceContext ?? options.traceContext;
+    Bus.publish(Operational.Warn, {
+      traceId: traceContext?.traceId ?? crypto.randomUUID(),
+      time: Date.now(),
+      ...(traceContext?.sessionId !== undefined && { sessionId: traceContext.sessionId }),
+      component: "agent.policy",
+      msg: "onDecision observer error",
+      context: { timing: ctx.timing, policyId: decision.policyId, error: String(err) },
+    });
+  }
+
+  function recordDecision(
     reg: PolicyRegistration,
     ctx: AuditDispatchContext,
     decision: Policy.PolicyDecision,
-  ): Promise<Policy.PolicyDecision> {
+  ): Policy.PolicyDecision {
     publishPolicyEvent(decision, reg, ctx);
-    await options.onDecision?.(decision);
+    try {
+      void Promise.resolve(options.onDecision?.(decision)).catch((err) => {
+        publishDecisionObserverError(ctx, decision, err);
+      });
+    } catch (err) {
+      publishDecisionObserverError(ctx, decision, err);
+    }
     return decision;
   }
 
@@ -464,7 +486,7 @@ function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
         timing,
         ctx.resourceDescriptor,
       );
-      decisions.push(await recordDecision(reg, fullCtx, normalized));
+      decisions.push(recordDecision(reg, fullCtx, normalized));
 
       Bus.publish(Operational.Debug, {
         traceId: options.traceContext?.traceId ?? crypto.randomUUID(),

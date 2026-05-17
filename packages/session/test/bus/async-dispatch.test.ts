@@ -98,4 +98,26 @@ describe("Bus async dispatch", () => {
 
     expect(results).toEqual(["handler1", "handler2"]);
   });
+
+  it("removes empty subscriber sets after the last unsubscribe", async () => {
+    const event = BusEvent.define("test:cleanup", (s) => s);
+    const unsubscribe = Bus.subscribe(event, () => undefined);
+    expect(Bus.stats().subscriberEventCount).toBe(1);
+
+    unsubscribe();
+    expect(Bus.stats()).toEqual({
+      subscriberEventCount: 0,
+      subscriberCount: 0,
+      observerCount: 0,
+    });
+
+    let called = false;
+    Bus.subscribe(event, () => {
+      called = true;
+    });
+    Bus.publish(event, "data");
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    expect(called).toBe(true);
+  });
 });
