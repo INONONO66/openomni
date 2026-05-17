@@ -137,20 +137,6 @@ export namespace Ingress {
   export const InboundEventSchema = DirectEventSchema;
   export type InboundEvent = DirectEvent;
 
-  export function resolveTarget(event: { target?: Target; meta?: { target?: Target } }): Target {
-    if (event.target) return TargetSchema.parse(event.target);
-    if (event.meta?.target) return TargetSchema.parse(event.meta.target);
-    return { kind: "resident" };
-  }
-
-  export function targetKey(target: Target): string {
-    if (target.kind === "resident") {
-      return target.sessionId ? `resident:${target.sessionId}` : "resident";
-    }
-    if (target.sessionId) return `worker-session:${target.sessionId}`;
-    return target.workerId ? `worker:${target.workerId}` : "worker";
-  }
-
   export type DirectResult = {
     output: string;
     finishReason: string;
