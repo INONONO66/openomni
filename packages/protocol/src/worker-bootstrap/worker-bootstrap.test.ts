@@ -37,6 +37,36 @@ describe("WorkerBootstrap", () => {
     expect(parsed.riskTier).toEqual(2);
   });
 
+  test("RuntimeToolCatalogEntry rejects non-canonical source and risk tier", () => {
+    expect(
+      WorkerBootstrap.RuntimeToolCatalogEntry.safeParse({
+        canonicalName: "fs.read",
+        exposedName: "read_file",
+        source: "custom",
+        category: "filesystem",
+        riskTier: 0,
+        spec: {
+          name: "read_file",
+          inputSchema: {},
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      WorkerBootstrap.RuntimeToolCatalogEntry.safeParse({
+        canonicalName: "fs.read",
+        exposedName: "read_file",
+        source: "system",
+        category: "filesystem",
+        riskTier: 4,
+        spec: {
+          name: "read_file",
+          inputSchema: {},
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("WorkerSnapshot round-trip parse", () => {
     const snapshot = {
       activeRuns: ["run1", "run2"],

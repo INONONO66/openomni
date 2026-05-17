@@ -1,13 +1,7 @@
 import { z } from "zod";
+import { AgentProfile } from "../agent/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
-
-const AgentToolConfigSchema = z.object({
-  systemTools: z.array(z.string()).optional(),
-  agentTools: z.array(z.string()).optional(),
-  mcpTools: z.array(z.string()).optional(),
-  workspaceRoot: z.string().optional(),
-});
 
 const ActorSchemaImpl = z
   .object({
@@ -108,10 +102,10 @@ export namespace Ingress {
       model: z.object({ provider: z.string(), id: z.string() }),
       systemPrompt: z.string().optional(),
       tools: z.array(Tool.Spec).optional(),
-      budget: z.object({ maxTurns: z.number().optional() }).optional(),
+      budget: AgentProfile.AgentBudget.optional(),
       permissions: Policy.Permission.optional(),
       policyPlan: Policy.PolicyPlan.optional(),
-      toolConfig: AgentToolConfigSchema.optional(),
+      toolConfig: Tool.Config.optional(),
     })
     .passthrough();
   // Runtime callbacks can't be expressed in Zod.

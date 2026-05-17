@@ -29,6 +29,8 @@ describe("Execution", () => {
       ],
       toolConfig: {
         systemTools: ["calculator"],
+        agentTools: ["delegate"],
+        mcpTools: ["search.query"],
         workspaceRoot: "/tmp",
       },
       permissions: {
@@ -47,6 +49,8 @@ describe("Execution", () => {
 
     const parsed = Execution.Request.parse(request);
     expect(parsed).toEqual(request);
+    expect(parsed.toolConfig?.agentTools).toEqual(["delegate"]);
+    expect(parsed.toolConfig?.mcpTools).toEqual(["search.query"]);
 
     const json = JSON.stringify(parsed);
     const reparsed = Execution.Request.parse(JSON.parse(json));

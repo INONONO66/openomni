@@ -147,8 +147,36 @@ describe("Ipc.Methods param schemas", () => {
         prompt: "do work",
         model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
         credentials: { ANTHROPIC_API_KEY: "sk-test" },
+        permissions: {
+          action: "tool.call",
+          allowlist: ["read_file"],
+          denyLabels: ["risk.tier-3"],
+          inputRules: [
+            {
+              toolPattern: "write_file",
+              field: "path",
+              pattern: "^/workspace/",
+              action: "allow",
+            },
+          ],
+        },
       }).success,
     ).toBe(true);
+  });
+
+  test("coordinator.spawn_run rejects permission payloads without canonical action", () => {
+    expect(
+      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
+        authToken: "token",
+        runId: "run-1",
+        sessionId: "sess-1",
+        prompt: "do work",
+        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+        permissions: {
+          allowlist: ["read_file"],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("coordinator.spawn_run rejects missing required fields", () => {

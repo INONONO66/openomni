@@ -31,7 +31,7 @@ export const SessionInfo = z.object({
   messageCount: z.number().optional(),
   summary: z.string().optional(),
   projectId: z.string().optional(),
-  workerMeta: z.record(z.unknown()).optional(),
+  workerMeta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type SessionInfo = z.infer<typeof SessionInfo>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Policy } from "../policy/index.js";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
 const baseMessage = z.object({
@@ -10,7 +11,7 @@ const requestSchema = baseMessage.extend({
   type: z.literal("request"),
   id: z.string(),
   method: z.string(),
-  params: z.record(z.unknown()).optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
 });
 
 const responseSchema = baseMessage.extend({
@@ -29,9 +30,16 @@ const responseSchema = baseMessage.extend({
 const notificationSchema = baseMessage.extend({
   type: z.literal("notification"),
   method: z.string(),
-  params: z.record(z.unknown()).optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
 });
 
+/**
+ * Same-version internal method parameter contracts.
+ *
+ * The generic request envelope above intentionally stays permissive; these
+ * method schemas document and test the canonical params expected by current
+ * workers/coordinators.
+ */
 const methods = {
   "coordinator.spawn_run": {
     params: z.object({
@@ -43,12 +51,7 @@ const methods = {
       systemPrompt: z.string().optional(),
       // IronClaw capability injection — workers never read env vars for API keys
       credentials: z.record(z.string()).optional(),
-      permissions: z
-        .object({
-          denylist: z.array(z.string()).optional(),
-          allowlist: z.array(z.string()).optional(),
-        })
-        .optional(),
+      permissions: Policy.Permission.optional(),
       softTimeoutMs: z.number().optional(),
       hardTimeoutMs: z.number().optional(),
     }),
@@ -100,7 +103,7 @@ const methods = {
       runId: z.string(),
       sessionId: z.string(),
       tool: z.string(),
-      input: z.record(z.unknown()),
+      input: z.record(z.string(), z.unknown()),
     }),
     result: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
   },
@@ -145,7 +148,7 @@ const methods = {
       sessionId: z.string(),
       callId: z.string(),
       tool: z.string(),
-      input: z.record(z.unknown()),
+      input: z.record(z.string(), z.unknown()),
     }),
     result: z.object({
       id: z.string(),
@@ -159,7 +162,7 @@ const methods = {
       runId: z.string(),
       sessionId: z.string(),
       event: z.string(),
-      data: z.record(z.unknown()).optional(),
+      data: z.record(z.string(), z.unknown()).optional(),
     }),
     result: z.null(),
   },

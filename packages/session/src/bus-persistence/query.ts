@@ -49,7 +49,7 @@ export namespace BusQuery {
     runId: z.string().optional().describe("Worker run ID if applicable"),
     eventType: z.string().describe("Event type name (e.g., 'agent.execution.started')"),
     category: z.string().describe("Event category"),
-    data: z.record(z.unknown()).describe("Event payload data"),
+    data: z.record(z.string(), z.unknown()).describe("Event payload data"),
     traceId: z.string().describe("Trace ID for correlation"),
     durationMs: z.number().optional().describe("Duration in milliseconds if applicable"),
     timeCreated: z.number().describe("Timestamp when event was created (ms since epoch)"),

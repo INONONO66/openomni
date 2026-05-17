@@ -18,7 +18,7 @@ export namespace Notification {
     artifactRefs: z.array(z.string()).optional(),
     conversationSessionId: z.string().optional(),
     deliveryHint: DeliveryMode.optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   });
   export type Request = z.infer<typeof Request>;
 

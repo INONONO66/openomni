@@ -24,9 +24,9 @@ export namespace WorkerBootstrap {
   export const RuntimeToolCatalogEntry = z.object({
     canonicalName: z.string(),
     exposedName: z.string(),
-    source: z.enum(["system", "agent", "mcp", "server"]),
+    source: Tool.Source,
     category: ToolSelection.Category,
-    riskTier: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+    riskTier: Tool.RiskTier,
     spec: Tool.Spec,
     descriptor: RuntimeResource.Descriptor.optional(),
     mcpServer: z.string().optional(),
