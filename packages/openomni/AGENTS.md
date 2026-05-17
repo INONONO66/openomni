@@ -7,7 +7,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
-| `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge` |
+| `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `resolveTarget`, `targetKey` |
 | `src/runtime/` | Session bus transport bridge | `BusTransport`, `Transport` |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
 | `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
@@ -39,6 +39,7 @@ Consumers should only use `@openomni/openomni` exports:
 
 - DAG helpers from `src/dag/`
 - Ingress orchestration from `src/ingress/`
+- Ingress target helpers from `src/ingress/`
 - Bus transport bridge from `src/runtime/`
 - Subagent runtime + background manager from `src/subagent/`
 - Tool system, workspace lock, and worker middleware from `src/execution-runtime/`

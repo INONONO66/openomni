@@ -81,8 +81,6 @@ describe("Ingress meta contracts", () => {
     });
 
     expect(meta.target).toEqual({ kind: "worker" });
-    if (!meta.target) throw new Error("expected target");
-    expect(Ingress.targetKey(meta.target)).toBe("worker");
   });
 });
 
@@ -149,7 +147,7 @@ describe("InboundEvent", () => {
       meta: { actor: { role: "user", id: "u1" } },
       agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
-    expect(Ingress.resolveTarget(resident)).toEqual({ kind: "resident" });
+    expect(resident.target).toEqual({ kind: "resident" });
     expect(resident.meta?.actor?.role).toBe("user");
 
     const worker = Ingress.InboundEventSchema.parse({
@@ -161,7 +159,7 @@ describe("InboundEvent", () => {
       meta: { actor: { role: "resident" } },
       agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
-    expect(Ingress.resolveTarget(worker)).toEqual({ kind: "worker", workerId: "worker-7" });
+    expect(worker.target).toEqual({ kind: "worker", workerId: "worker-7" });
   });
 
   test("parses worker target without workerId or sessionId", () => {
@@ -174,7 +172,7 @@ describe("InboundEvent", () => {
       agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
 
-    expect(Ingress.resolveTarget(event)).toEqual({ kind: "worker" });
+    expect(event.target).toEqual({ kind: "worker" });
   });
 
   test("should reject missing id", () => {

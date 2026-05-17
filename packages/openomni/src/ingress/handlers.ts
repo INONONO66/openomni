@@ -1,7 +1,7 @@
 import {
   IngressEvent,
   type Execution,
-  Ingress,
+  type Ingress,
   PolicyDecision as Decision,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
@@ -10,6 +10,7 @@ import { Bus, WorkerRun } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { ResidentRuntime } from "../resident/runtime";
 import { SessionBridge } from "./session-bridge";
+import { resolveTarget } from "./target";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -60,12 +61,12 @@ export namespace IngressHandlers {
       elapsedMs: 0,
       labels: [
         { value: `surface.${ctx.event.surface}`, source: "system" },
-        { value: `target.${Ingress.resolveTarget(ctx.event).kind}`, source: "system" },
+        { value: `target.${resolveTarget(ctx.event).kind}`, source: "system" },
       ],
       toolInput: {
         sessionId: ctx.sessionId,
         mode: ctx.event.mode,
-        target: Ingress.resolveTarget(ctx.event).kind,
+        target: resolveTarget(ctx.event).kind,
         surface: ctx.event.surface,
         output,
       },
@@ -76,7 +77,7 @@ export namespace IngressHandlers {
   }
 
   function summarizeTarget(event: Ingress.InboundEvent): string | undefined {
-    return Ingress.resolveTarget(event).kind;
+    return resolveTarget(event).kind;
   }
 
   function resolveWritebackDecision(decision: Decision, output: string): string {
@@ -172,7 +173,7 @@ export namespace IngressHandlers {
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
     return {
       mode: "direct",
-      target: Ingress.resolveTarget(ctx.event),
+      target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: { output, finishReason: "cancelled" },
     };
@@ -181,7 +182,7 @@ export namespace IngressHandlers {
   async function handleWorkerDelivery(
     ctx: HandlerContext,
   ): Promise<Ingress.IngressResult | undefined> {
-    const target = Ingress.resolveTarget(ctx.event);
+    const target = resolveTarget(ctx.event);
     if (target.kind !== "worker" || !ctx.coordinator?.deliverMessage) return undefined;
 
     const raw = await ctx.coordinator.deliverMessage(
@@ -350,7 +351,7 @@ export namespace IngressHandlers {
 
     return {
       mode: "direct",
-      target: Ingress.resolveTarget(ctx.event),
+      target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: {
         output,
@@ -407,7 +408,7 @@ export namespace IngressHandlers {
       SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
       return {
         mode: "direct",
-        target: Ingress.resolveTarget(ctx.event),
+        target: resolveTarget(ctx.event),
         sessionId: ctx.sessionId,
         result: { output, finishReason: "background" },
       };
@@ -426,7 +427,7 @@ export namespace IngressHandlers {
           publishCompleted(ctx, target, start);
           return {
             mode: "direct",
-            target: Ingress.resolveTarget(ctx.event),
+            target: resolveTarget(ctx.event),
             sessionId: ctx.sessionId,
             result: {
               output,
@@ -450,7 +451,7 @@ export namespace IngressHandlers {
 
     return {
       mode: "direct",
-      target: Ingress.resolveTarget(ctx.event),
+      target: resolveTarget(ctx.event),
       sessionId: ctx.sessionId,
       result: {
         output,
