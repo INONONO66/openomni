@@ -2,6 +2,7 @@ import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import { Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
+import { resolveTarget, targetKey } from "../target";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -47,7 +48,7 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   const actor = getActor(event);
   if (!actor) return false;
 
-  const target = Ingress.resolveTarget(event);
+  const target = resolveTarget(event);
   const role = String(actor.role ?? actor.kind ?? actor.type ?? "").toLowerCase();
   if (role === "user") return true;
   if (role === "resident") return true;
@@ -58,9 +59,9 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
 }
 
 function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDecision {
-  const target = Ingress.resolveTarget(event);
+  const target = resolveTarget(event);
   const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
-  const resource = `ingress.${event.surface}.${Ingress.targetKey(target)}`;
+  const resource = `ingress.${event.surface}.${targetKey(target)}`;
   return PolicyDecision.fromEvaluation(
     Policy.evaluate(
       {
@@ -108,7 +109,7 @@ function createCoordinatorPresence(state: PreRunState): PolicyRegistration {
     failPolicy: "fail-closed",
     fn: () => {
       const event = requireParsedEvent(state);
-      const target = Ingress.resolveTarget(event);
+      const target = resolveTarget(event);
       state.target = target;
 
       if (!targetRequiresCoordinator(target)) {
@@ -257,7 +258,7 @@ export namespace IngressAuthorityMiddleware {
     if (!state.parsedEvent || !state.mode) {
       throw new Error("ingress run.start middleware did not produce dispatch context");
     }
-    const target = state.target ?? Ingress.resolveTarget(state.parsedEvent);
+    const target = state.target ?? resolveTarget(state.parsedEvent);
     if (targetRequiresCoordinator(target) && !state.coordinator) {
       throw new Error("ingress run.start middleware did not produce coordinator for worker target");
     }
