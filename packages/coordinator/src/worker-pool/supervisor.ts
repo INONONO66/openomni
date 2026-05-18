@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import { Operational, type WorkerBootstrap } from "@openomni/protocol";
+import { Operational, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
 
@@ -30,13 +30,7 @@ export type ToolCallContext = {
   readonly signal?: AbortSignal;
 };
 
-export type ToolCallResult = {
-  id: string;
-  toolCallId: string;
-  output: string;
-  isError?: boolean;
-  settlement?: "settled" | "unknown";
-};
+export type ToolCallResult = Tool.Result;
 
 export type AskMainParams = {
   workerId: string;
