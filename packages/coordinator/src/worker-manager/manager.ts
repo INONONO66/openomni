@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import type { WorkerBootstrap } from "@openomni/protocol";
+import { Operational, type WorkerBootstrap } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import {
   WorkerSupervisor,
   type AskMainParams,
@@ -441,14 +442,34 @@ function createPrivateSocketDir(baseDir: string): string {
   return dir;
 }
 
+const SOCKET_PROBE_TIMEOUT_MS = 1000;
+
 function isSocketAlive(socketPath: string): Promise<boolean> {
   return new Promise((resolve) => {
     const conn = net.createConnection(socketPath);
+    conn.setTimeout(SOCKET_PROBE_TIMEOUT_MS);
     conn.once("connect", () => {
       conn.destroy();
       resolve(true);
     });
-    conn.once("error", () => resolve(false));
+    conn.once("error", () => {
+      conn.destroy();
+      resolve(false);
+    });
+    conn.once("timeout", () => {
+      conn.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function warnCleanup(msg: string, context: Record<string, unknown>): void {
+  Bus.publish(Operational.Warn, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "coordinator.worker-manager",
+    msg,
+    context,
   });
 }
 
@@ -456,7 +477,11 @@ function cleanupStaleSocketDirs(baseDir: string): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(baseDir);
-  } catch {
+  } catch (err) {
+    warnCleanup("failed to read socket base directory", {
+      baseDir,
+      error: String(err),
+    });
     return;
   }
 
@@ -465,7 +490,11 @@ function cleanupStaleSocketDirs(baseDir: string): void {
     const dirPath = path.join(baseDir, entry);
     try {
       if (!fs.statSync(dirPath).isDirectory()) continue;
-    } catch {
+    } catch (err) {
+      warnCleanup("failed to stat worker directory during cleanup", {
+        dirPath,
+        error: String(err),
+      });
       continue;
     }
 
@@ -476,8 +505,11 @@ function cleanupStaleSocketDirs(baseDir: string): void {
 async function cleanupIfStale(dirPath: string): Promise<void> {
   try {
     await cleanupIfStaleUnsafe(dirPath);
-  } catch {
-    // best-effort: directory may still be in use by another process
+  } catch (err) {
+    warnCleanup("stale worker directory cleanup failed", {
+      dirPath,
+      error: String(err),
+    });
   }
 }
 
