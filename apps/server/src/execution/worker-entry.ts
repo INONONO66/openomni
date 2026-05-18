@@ -23,14 +23,7 @@ import {
 import { createContextMiddleware } from "../context/index";
 import { WorkerHeartbeat } from "./worker-heartbeat";
 import { WorkerInternalTools } from "./worker-internal-tools";
-
-const MAX_INBOX_MESSAGES = 100;
-
-interface WorkerActiveRun {
-  readonly sessionId: string;
-  readonly controller: AbortController;
-  readonly inbox: string[];
-}
+import { WorkerIpcHandlers } from "./worker-ipc-handlers";
 
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -69,7 +62,7 @@ initialize({
 BusPersistence.start();
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
-const activeRuns = new Map<string, WorkerActiveRun>();
+const activeRuns = new Map<string, WorkerIpcHandlers.ActiveRun>();
 let resolveBootstrapReady: () => void = () => undefined;
 let rejectBootstrapReady: (_error: Error) => void = () => undefined;
 const bootstrapReady = new Promise<void>((resolve, reject) => {
@@ -421,81 +414,17 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       }
     })();
   } else if (method === "coordinator.cancel_run") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ cancelled: false, error: "unauthorized coordinator request" });
-      return;
-    }
-    const runId = typeof params?.runId === "string" ? params.runId : undefined;
-    const sessionId = typeof params?.sessionId === "string" ? params.sessionId : undefined;
-    const active = runId ? activeRuns.get(runId) : undefined;
-    if (!runId || !active || (sessionId && active.sessionId !== sessionId)) {
-      respond({ cancelled: false, error: `run not active: ${runId ?? "unknown"}` });
-      return;
-    }
-    active.controller.abort(new Error("cancelled by coordinator"));
-    respond({ cancelled: true, runId, sessionId: active.sessionId });
+    respond(WorkerIpcHandlers.cancelRun({ params, ipcAuthToken, activeRuns }));
   } else if (method === "worker.deliver_message") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ accepted: false, error: "unauthorized coordinator request" });
-      return;
-    }
-    const sessionId = typeof params?.sessionId === "string" ? params.sessionId : undefined;
-    const runId = typeof params?.runId === "string" ? params.runId : undefined;
-    const message = typeof params?.message === "string" ? params.message : undefined;
-    const matches = sessionId
-      ? [...activeRuns.entries()].filter(
-          ([activeRunId, run]) =>
-            run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
-        )
-      : [];
-    if (!sessionId || !message || matches.length === 0) {
-      respond({
-        accepted: false,
-        error: `run not active for session: ${sessionId ?? "unknown"}`,
-      });
-      return;
-    }
-    if (!runId && matches.length > 1) {
-      respond({
-        accepted: false,
-        error: `multiple active runs for session: ${sessionId}`,
-      });
-      return;
-    }
-    const [activeRunId, run] = matches[0]!;
-    if (run.inbox.length >= MAX_INBOX_MESSAGES) {
-      run.inbox.shift();
-    }
-    run.inbox.push(message);
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "live worker message delivered to active worker inbox",
-      context: {
-        workerId,
-        sessionId,
-        runId: activeRunId,
-        bytes: message.length,
-        inboxDepth: run.inbox.length,
-      },
-    });
-    respond({
-      accepted: true,
-    });
+    respond(WorkerIpcHandlers.deliverMessage({ params, ipcAuthToken, workerId, activeRuns }));
   } else if (method === "worker.shutdown_idle") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ acknowledged: false, error: "unauthorized coordinator request" });
-      return;
+    const result = WorkerIpcHandlers.canShutdownIdle({ params, ipcAuthToken, activeRuns });
+    respond(result);
+    if (result.acknowledged) {
+      setTimeout(() => {
+        void shutdownWorker(0);
+      }, 0);
     }
-    if (activeRuns.size > 0) {
-      respond({ acknowledged: false, error: "worker is busy" });
-      return;
-    }
-    respond({ acknowledged: true });
-    setTimeout(() => {
-      void shutdownWorker(0);
-    }, 0);
   } else {
     respond({ ok: true });
   }
