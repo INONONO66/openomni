@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import {
@@ -434,7 +435,62 @@ function normalizeMaxActiveWorkers(value: number | undefined): number {
 
 function createPrivateSocketDir(baseDir: string): string {
   fs.mkdirSync(baseDir, { recursive: true, mode: 0o700 });
+  cleanupStaleSocketDirs(baseDir);
   const dir = fs.mkdtempSync(path.join(baseDir, "openomni-workers-"));
   fs.chmodSync(dir, 0o700);
   return dir;
+}
+
+function isSocketAlive(socketPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const conn = net.createConnection(socketPath);
+    conn.once("connect", () => {
+      conn.destroy();
+      resolve(true);
+    });
+    conn.once("error", () => resolve(false));
+  });
+}
+
+function cleanupStaleSocketDirs(baseDir: string): void {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(baseDir);
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.startsWith("openomni-workers-")) continue;
+    const dirPath = path.join(baseDir, entry);
+    try {
+      if (!fs.statSync(dirPath).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+
+    void cleanupIfStale(dirPath);
+  }
+}
+
+async function cleanupIfStale(dirPath: string): Promise<void> {
+  try {
+    await cleanupIfStaleUnsafe(dirPath);
+  } catch {
+    // best-effort: directory may still be in use by another process
+  }
+}
+
+async function cleanupIfStaleUnsafe(dirPath: string): Promise<void> {
+  const files = fs.readdirSync(dirPath);
+  const sockets = files.filter((f) => f.endsWith(".sock"));
+
+  if (sockets.length > 0) {
+    const results = await Promise.all(
+      sockets.map((sock) => isSocketAlive(path.join(dirPath, sock))),
+    );
+    if (results.some(Boolean)) return;
+  }
+
+  fs.rmSync(dirPath, { recursive: true, force: true });
 }
