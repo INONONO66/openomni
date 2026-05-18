@@ -220,7 +220,7 @@ describe("Ipc.Methods param schemas", () => {
     ).toBe(true);
   });
 
-  test("worker.tool_call_settled requires coordinator auth token", () => {
+  test("worker.tool_call_settled accepts optional auth token for version-skew tolerance", () => {
     expect(
       Ipc.Methods["worker.tool_call_settled"].params.safeParse({
         authToken: "token",
@@ -234,6 +234,6 @@ describe("Ipc.Methods param schemas", () => {
         callId: "call-1",
         workspaceRoot: "/workspace",
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 });

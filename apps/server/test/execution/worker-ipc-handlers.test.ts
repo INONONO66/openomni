@@ -162,4 +162,49 @@ describe("worker IPC handlers", () => {
       }),
     ).toEqual({ acknowledged: true });
   });
+
+  it("rejects unauthorized tool-settled notifications without clearing unsafe markers", () => {
+    const cleared: Array<{ workspaceRoot: string; callId: string }> = [];
+
+    const result = WorkerIpcHandlers.toolCallSettled({
+      params: { authToken: "wrong", workspaceRoot: "/workspace", callId: "call-1" },
+      ipcAuthToken: "token",
+      clearUnsafe: (workspaceRoot, callId) => cleared.push({ workspaceRoot, callId }),
+    });
+
+    expect(result).toEqual({
+      acknowledged: false,
+      error: "unauthorized coordinator request",
+    });
+    expect(cleared).toEqual([]);
+  });
+
+  it("rejects malformed tool-settled notifications without acknowledging success", () => {
+    const cleared: Array<{ workspaceRoot: string; callId: string }> = [];
+
+    const result = WorkerIpcHandlers.toolCallSettled({
+      params: { authToken: "token", callId: "call-1" },
+      ipcAuthToken: "token",
+      clearUnsafe: (workspaceRoot, callId) => cleared.push({ workspaceRoot, callId }),
+    });
+
+    expect(result).toEqual({
+      acknowledged: false,
+      error: "invalid worker.tool_call_settled params",
+    });
+    expect(cleared).toEqual([]);
+  });
+
+  it("clears unsafe markers for authorized tool-settled notifications", () => {
+    const cleared: Array<{ workspaceRoot: string; callId: string }> = [];
+
+    const result = WorkerIpcHandlers.toolCallSettled({
+      params: { authToken: "token", workspaceRoot: "/workspace", callId: "call-1" },
+      ipcAuthToken: "token",
+      clearUnsafe: (workspaceRoot, callId) => cleared.push({ workspaceRoot, callId }),
+    });
+
+    expect(result).toEqual({ acknowledged: true });
+    expect(cleared).toEqual([{ workspaceRoot: "/workspace", callId: "call-1" }]);
+  });
 });

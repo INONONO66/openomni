@@ -186,7 +186,7 @@ const methods = {
   },
   "worker.tool_call_settled": {
     params: z.object({
-      authToken: z.string(),
+      authToken: z.string().optional(),
       callId: z.string(),
       workspaceRoot: z.string().optional(),
     }),
