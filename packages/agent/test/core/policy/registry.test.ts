@@ -9,9 +9,6 @@ const builtinPolicyIds = [
   "builtin:budget-reassurance",
   "builtin:budget-warning",
   "builtin:compaction",
-  "builtin:memory",
-  "builtin:post-tool",
-  "builtin:post-turn",
   "builtin:idle-nudge",
   "builtin:tool-permission",
 ];
