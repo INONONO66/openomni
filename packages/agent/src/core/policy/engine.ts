@@ -63,8 +63,10 @@ function selectRegistrations(
   agentType: string | undefined,
 ): PolicyRegistration[] {
   return registrations
-    .filter((reg) => matchesTiming(reg, timing) && matchesScope(reg, agentType))
-    .sort((a, b) => a.priority - b.priority);
+    .map((reg, index) => ({ index, reg }))
+    .filter(({ reg }) => matchesTiming(reg, timing) && matchesScope(reg, agentType))
+    .sort((a, b) => a.reg.priority - b.reg.priority || a.index - b.index)
+    .map(({ reg }) => reg);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
