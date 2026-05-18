@@ -99,7 +99,8 @@ describe("worker IPC handlers", () => {
   });
 
   it("falls back to the default inbox cap for invalid numeric caps", () => {
-    const run = createRun("session-1", ["existing"]);
+    const seedInbox = Array.from({ length: 100 }, (_, index) => `message-${index}`);
+    const run = createRun("session-1", seedInbox);
     const activeRuns = new Map([["run-1", run]]);
 
     const result = WorkerIpcHandlers.deliverMessage({
@@ -111,7 +112,9 @@ describe("worker IPC handlers", () => {
     });
 
     expect(result).toEqual({ accepted: true });
-    expect(run.inbox).toEqual(["existing", "new"]);
+    expect(run.inbox).toHaveLength(100);
+    expect(run.inbox[0]).toBe("message-1");
+    expect(run.inbox.at(-1)).toBe("new");
   });
 
   it("rejects ambiguous session-only delivery when multiple runs are active", () => {
