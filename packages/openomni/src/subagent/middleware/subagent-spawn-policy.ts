@@ -279,12 +279,24 @@ export namespace SubagentSpawnPolicyMiddleware {
     };
   }
 
+  export interface ChildRuntimeMiddlewareInput {
+    readonly middleware?: PolicyRegistration[];
+    readonly hasExplicitRuntimePolicy: boolean;
+  }
+
+  export function buildChildRuntimeMiddleware(
+    input: ChildRuntimeMiddlewareInput,
+  ): PolicyRegistration[] {
+    return childMiddleware(input.middleware, input.hasExplicitRuntimePolicy) ?? [];
+  }
+
   export function childMiddleware(
     middleware: PolicyRegistration[] | undefined,
-    hasExplicitPermissions: boolean,
+    hasExplicitRuntimePolicy: boolean,
   ): PolicyRegistration[] | undefined {
-    if (hasExplicitPermissions) return middleware;
-    return [createDefaultDenylist(), ...(middleware ?? [])];
+    const childMiddleware = middleware === undefined ? undefined : [...middleware];
+    if (hasExplicitRuntimePolicy) return childMiddleware;
+    return [createDefaultDenylist(), ...(childMiddleware ?? [])];
   }
 
   export function registrations(state: PreSpawnState): PolicyRegistration[] {

@@ -315,6 +315,112 @@ describe("WorkerRunner", () => {
     }
   });
 
+  it("applies parent policy plans as delegation admission middleware", async () => {
+    const responses: unknown[] = [];
+    let subagentResult: Tool.Result | undefined;
+    const bootstrap: WorkerBootstrap.Bootstrap = {
+      configEpoch: "epoch-1",
+      toolCatalog: [],
+      agents: [
+        {
+          name: "child",
+          description: "child",
+          model: { provider: "test", id: "child" },
+          tools: { all: true },
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: { permission: { action: "tool.call", allowlist: ["read"] } },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+      ],
+    };
+    AgentRegistry.define({
+      name: "child",
+      description: "child",
+      model: { provider: "test", id: "child" },
+    });
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...createValidRequest(),
+          tools: [{ name: "subagent", inputSchema: {} }],
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: {
+                  permission: {
+                    action: "tool.call",
+                    inputRules: [
+                      {
+                        toolPattern: "subagent",
+                        field: "childRuntimeMiddlewareNames",
+                        pattern: "builtin:tool-permission",
+                        action: "deny",
+                        reason: "child runtime policy requires admission review",
+                        priority: 1,
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          getBootstrap: () => bootstrap,
+          server: {
+            async call() {
+              throw new Error("unexpected server call");
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              subagentResult = await options.toolExecutor({
+                id: "agent-tool-call",
+                tool: "subagent",
+                input: { agentName: "child", prompt: "delegate" },
+              });
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    try {
+      await responseReceived;
+
+      expect(responses[0]).toMatchObject({ status: "succeeded" });
+      expect(subagentResult).toMatchObject({
+        id: expect.any(String),
+        toolCallId: expect.any(String),
+        isError: true,
+        output: "child runtime policy requires admission review",
+      });
+    } finally {
+      AgentRegistry.clear();
+    }
+  });
+
   it("enriches background subagent launches with child runtime policy config", async () => {
     const responses: unknown[] = [];
     const notifications: Array<{ method: string; params?: Record<string, unknown> }> = [];

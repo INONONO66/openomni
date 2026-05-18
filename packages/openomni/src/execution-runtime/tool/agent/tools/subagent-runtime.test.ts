@@ -43,7 +43,6 @@ function makeRuntime(
   options: {
     child?: Partial<WorkerBootstrap.RuntimeAgentDefinition>;
     parentPermissions?: WorkerBootstrap.RuntimeAgentDefinition["permissions"];
-    parentPolicyPlan?: WorkerBootstrap.RuntimeAgentDefinition["policyPlan"];
   } = {},
 ) {
   const readTool = makeTool("read");
@@ -75,7 +74,6 @@ function makeRuntime(
     catalogRef: { catalog },
     agentDefinitionsRef: { definitions },
     parentPermissions: options.parentPermissions,
-    parentPolicyPlan: options.parentPolicyPlan,
     resolveAuth: (provider) =>
       provider === "anthropic"
         ? { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "proxy" }
@@ -197,6 +195,10 @@ describe("createWorkerSubagentRuntime", () => {
     expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
     const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
     expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    expect(spawnSpy.mock.calls[0]?.[0].admissionPermissions).toEqual({
+      action: "tool.call",
+      allowlist: ["read"],
+    });
     await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
       verdict: "allow",
     });
@@ -241,6 +243,16 @@ describe("createWorkerSubagentRuntime", () => {
     expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
     const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
     expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    expect(spawnSpy.mock.calls[0]?.[0].admissionPermissions).toEqual({
+      action: "tool.call",
+      allowlist: [],
+      denylist: [],
+      denyLabels: [],
+      allowLabels: undefined,
+      requireApproval: [],
+      requireApprovalLabels: [],
+      inputRules: [],
+    });
     await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
       verdict: "deny",
     });
@@ -249,20 +261,23 @@ describe("createWorkerSubagentRuntime", () => {
     });
   });
 
-  test("spawn keeps parent policy plans constraining child policy plans", async () => {
+  test("spawn keeps admission middleware separate from child policy plan middleware", async () => {
+    const admissionMiddleware: PolicyRegistration[] = [
+      {
+        name: "parent:admission-only",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => ({
+          policyId: "parent:admission-only",
+          verdict: "allow",
+          reasonCodes: [],
+          effects: [],
+        }),
+      },
+    ];
     const runtime = makeRuntime(
       { all: true },
       {
-        parentPolicyPlan: {
-          policies: [
-            {
-              id: "builtin:tool-permission",
-              required: true,
-              config: { permission: { action: "tool.call", allowlist: ["read"] } },
-            },
-          ],
-          labels: ["security"],
-        },
         child: {
           policyPlan: {
             policies: [
@@ -289,95 +304,20 @@ describe("createWorkerSubagentRuntime", () => {
       title: "child task",
       prompt: "run",
       model: { provider: "test", id: "model" },
+      middleware: admissionMiddleware,
     });
 
-    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
-    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
-    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
-      verdict: "deny",
-    });
-    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
-      verdict: "deny",
-    });
-  });
-
-  test("spawn keeps parent policy plans constraining legacy child agents", async () => {
-    const runtime = makeRuntime(
-      { all: true },
-      {
-        parentPolicyPlan: {
-          policies: [
-            {
-              id: "builtin:tool-permission",
-              required: true,
-              config: { permission: { action: "tool.call", allowlist: ["read"] } },
-            },
-          ],
-          labels: ["security"],
-        },
-      },
+    expect(spawnSpy.mock.calls[0]?.[0].middleware).toBe(admissionMiddleware);
+    const childMiddleware = spawnSpy.mock.calls[0]?.[0].childMiddleware as
+      | PolicyRegistration[]
+      | undefined;
+    expect(childMiddleware?.map((registration) => registration.name)).not.toContain(
+      "parent:admission-only",
     );
-    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
-      sessionId: "child-session",
-      runId: "child-run",
-      output: "done",
-      finishReason: "stop",
-    });
-
-    await runtime.spawn({
-      agentName: "child",
-      title: "child task",
-      prompt: "run",
-      model: { provider: "test", id: "model" },
-    });
-
-    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
-    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
-    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
-      verdict: "allow",
-    });
-    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+    await expect(evaluateTool(childMiddleware, "read")).resolves.toMatchObject({
       verdict: "deny",
     });
-  });
-
-  test("spawn lets parent policy plans own legacy parent permission hydration", async () => {
-    const runtime = makeRuntime(
-      { all: true },
-      {
-        parentPermissions: { action: "tool.call", allowlist: ["read"] },
-        parentPolicyPlan: {
-          policies: [
-            {
-              id: "builtin:tool-permission",
-              required: true,
-              config: { permission: { action: "tool.call", allowlist: ["bash"] } },
-            },
-          ],
-          labels: ["security"],
-        },
-      },
-    );
-    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
-      sessionId: "child-session",
-      runId: "child-run",
-      output: "done",
-      finishReason: "stop",
-    });
-
-    await runtime.spawn({
-      agentName: "child",
-      title: "child task",
-      prompt: "run",
-      model: { provider: "test", id: "model" },
-    });
-
-    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
-    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
-    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
-      verdict: "deny",
-    });
-    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+    await expect(evaluateTool(childMiddleware, "bash")).resolves.toMatchObject({
       verdict: "allow",
     });
   });

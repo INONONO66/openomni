@@ -19,8 +19,12 @@ export type RuntimeConfig = {
   tools?: ChatAgentConfig["tools"];
   toolExecutor?: ChatAgentConfig["toolExecutor"];
   budget?: ChatAgentConfig["budget"];
+  /** Parent-scoped delegation/admission middleware; never reused for child runs. */
   middleware?: PolicyRegistration[];
+  /** Child-run middleware assembled from explicit child context only. */
   childMiddleware?: PolicyRegistration[];
+  /** Effective child authority exposed to parent-scoped delegation admission only. */
+  admissionPermissions?: ChatAgentConfig["permissions"];
 };
 
 export type SendCompactionConfig = {

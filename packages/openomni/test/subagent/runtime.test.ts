@@ -426,6 +426,33 @@ describe("SubagentRuntime", () => {
       expect(result.output).toBe("child runtime output");
     });
 
+    it("does not reuse admission middleware as child runtime middleware", async () => {
+      queueResult("child runtime output");
+
+      const admissionOnlyPolicy: PolicyRegistration = {
+        name: "test:admission-only",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "test:admission-only" }),
+      };
+
+      await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "admission-only policy",
+        prompt: "do work",
+        model,
+        middleware: [admissionOnlyPolicy],
+      });
+
+      const childRuntimeMiddleware = createSpy.mock.calls[0]?.[0].middleware ?? [];
+      expect(childRuntimeMiddleware.map((registration) => registration.name)).toContain(
+        "subagent:default-denylist",
+      );
+      expect(childRuntimeMiddleware.map((registration) => registration.name)).not.toContain(
+        "test:admission-only",
+      );
+    });
+
     it("spawn applies transform constraints from invoke.prepare verdict", async () => {
       queueResult("transformed output");
 
@@ -440,7 +467,11 @@ describe("SubagentRuntime", () => {
             effects: [
               {
                 type: "delegation.set_constraints",
-                constraints: { softTimeoutMs: 5000, hardTimeoutMs: 10000 },
+                constraints: {
+                  softTimeoutMs: 5000,
+                  hardTimeoutMs: 10000,
+                  permissions: { action: "tool.call", allowlist: ["read"] },
+                },
               },
             ],
           }),
@@ -459,6 +490,11 @@ describe("SubagentRuntime", () => {
       expect(result.output).toBe("transformed output");
       expect(config.softTimeoutMs).toBe(5000);
       expect(config.hardTimeoutMs).toBe(10000);
+      expect(config.permissions).toEqual({ action: "tool.call", allowlist: ["read"] });
+      const childRuntimeMiddleware = createSpy.mock.calls[0]?.[0].middleware ?? [];
+      expect(childRuntimeMiddleware.map((registration) => registration.name)).toContain(
+        "subagent:default-denylist",
+      );
     });
 
     it("invoke.prepare receives parent/child agent labels", async () => {
@@ -497,6 +533,53 @@ describe("SubagentRuntime", () => {
         { value: "actor.child:child-agent", source: "system" },
         { value: `actor.parent:${parentSessionId}`, source: "system" },
       ]);
+    });
+
+    it("invoke.prepare exposes child runtime authority summary for admission policy", async () => {
+      queueResult("admission summary output");
+
+      let capturedToolInput: unknown;
+      const capturePolicy: PolicyRegistration = {
+        name: "test:capture-child-runtime",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: (ctx) => {
+          capturedToolInput = ctx.toolInput;
+          return PolicyDecision.allow({ policyId: "test:capture-child-runtime" });
+        },
+      };
+      const childRuntimePolicy: PolicyRegistration = {
+        name: "child:runtime-policy",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "child:runtime-policy" }),
+      };
+
+      await SubagentRuntime.spawn({
+        agentName: "child-agent",
+        title: "summarized child task",
+        prompt: "test child authority",
+        model,
+        tools: [{ name: "bash", inputSchema: { type: "object", properties: {} } }],
+        permissions: { action: "tool.call", allowlist: ["bash"] },
+        middleware: [capturePolicy],
+        childMiddleware: [childRuntimePolicy],
+      });
+
+      expect(capturedToolInput).toEqual({
+        operation: "spawn",
+        childAgent: "child-agent",
+        prompt: "test child authority",
+        childRuntime: {
+          toolNames: ["bash"],
+          permissions: { action: "tool.call", allowlist: ["bash"] },
+          childRuntimeMiddlewareNames: ["child:runtime-policy"],
+          hasExplicitRuntimePolicy: true,
+        },
+        childToolNames: "bash",
+        childRuntimeMiddlewareNames: "child:runtime-policy",
+        childHasExplicitRuntimePolicy: "true",
+      });
     });
 
     it("emits durable audit events for parent-scoped delegation policy", async () => {

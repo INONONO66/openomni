@@ -50,6 +50,55 @@ type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
 
 type PreDelegationOperation = "spawn" | "spawn_background" | "send";
 
+interface ChildRuntimeAdmissionSummary {
+  readonly toolNames?: string[];
+  readonly permissions?: Policy.Permission;
+  readonly childRuntimeMiddlewareNames?: string[];
+  readonly hasExplicitRuntimePolicy: boolean;
+}
+
+function hasExplicitRuntimePolicy(config: RuntimeConfig & { permissions?: Policy.Permission }) {
+  return config.permissions !== undefined || config.childMiddleware !== undefined;
+}
+
+function summarizeChildRuntimeAdmission(
+  config: RuntimeConfig & { permissions?: Policy.Permission },
+): ChildRuntimeAdmissionSummary | undefined {
+  const toolNames = config.tools?.map((tool) => tool.name);
+  const permissions = config.admissionPermissions ?? config.permissions;
+  const childRuntimeMiddlewareNames = config.childMiddleware?.map(
+    (registration) => registration.name,
+  );
+  if (
+    toolNames === undefined &&
+    permissions === undefined &&
+    childRuntimeMiddlewareNames === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...(toolNames !== undefined && { toolNames }),
+    ...(permissions !== undefined && { permissions }),
+    ...(childRuntimeMiddlewareNames !== undefined && { childRuntimeMiddlewareNames }),
+    hasExplicitRuntimePolicy: hasExplicitRuntimePolicy(config),
+  };
+}
+
+function childRuntimeAdmissionFields(
+  summary: ChildRuntimeAdmissionSummary | undefined,
+): Record<string, unknown> {
+  if (summary === undefined) return {};
+  return {
+    childRuntime: summary,
+    ...(summary.toolNames !== undefined && { childToolNames: summary.toolNames.join(",") }),
+    ...(summary.childRuntimeMiddlewareNames !== undefined && {
+      childRuntimeMiddlewareNames: summary.childRuntimeMiddlewareNames.join(","),
+    }),
+    childHasExplicitRuntimePolicy: String(summary.hasExplicitRuntimePolicy),
+  };
+}
+
 function createDelegationTrace(parentSessionId: string | undefined) {
   if (parentSessionId === undefined) return undefined;
   return { traceId: crypto.randomUUID(), sessionId: parentSessionId };
@@ -97,6 +146,7 @@ async function dispatchPreDelegation(input: {
   parentSessionId?: string;
   operation: PreDelegationOperation;
   prompt: string;
+  childRuntime?: ChildRuntimeAdmissionSummary;
 }): Promise<Policy.PolicyDecision> {
   if (!input.middleware?.length) {
     return PolicyDecision.allow({
@@ -136,6 +186,7 @@ async function dispatchPreDelegation(input: {
       childAgent: input.childAgent,
       prompt: input.prompt,
       ...(input.parentSessionId !== undefined && { parentSessionId: input.parentSessionId }),
+      ...childRuntimeAdmissionFields(input.childRuntime),
     },
     labels: [
       { value: `actor.child:${input.childAgent}`, source: "system" as const },
@@ -183,22 +234,24 @@ function applyPreDelegationDecision(
   applyDelegationConstraints(config, decision);
 }
 
-function buildChildRunMiddleware(config: RuntimeConfig & { permissions?: Policy.Permission }) {
-  // Used by spawn/send/resume for the child run itself. Admission still reads
-  // config.middleware before this helper, so childMiddleware never participates
-  // in the parent-scoped delegation decision.
-  const inheritedMiddleware = SubagentSpawnPolicyMiddleware.childMiddleware(
-    config.childMiddleware ?? config.middleware,
-    config.permissions !== undefined || config.childMiddleware !== undefined,
-  );
-  const inherited = inheritedMiddleware ?? [];
+function buildChildRunMiddleware(
+  config: RuntimeConfig & { permissions?: Policy.Permission },
+  hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config),
+) {
+  // Used by spawn/send/resume for the child run itself. Delegation admission
+  // reads config.middleware separately when applicable, so parent-scoped
+  // policies are not reused as child runtime policies.
+  const childRuntimeMiddleware = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
+    middleware: config.childMiddleware,
+    hasExplicitRuntimePolicy: hasExplicitChildRuntimePolicy,
+  });
   return [
-    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), inherited),
+    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), childRuntimeMiddleware),
     // Subagent run middleware preserves the prior child-run defaults:
     // budget lifecycle + permission constraints only. Send transcript compaction
     // is handled separately before resume; idle nudge is worker-runtime owned.
     ...(config.permissions ? [createToolPermissionPolicy({ permission: config.permissions })] : []),
-    ...inherited,
+    ...childRuntimeMiddleware,
   ];
 }
 
@@ -271,12 +324,14 @@ export namespace SubagentRuntime {
   }
 
   export async function spawn(config: SpawnConfig): Promise<RunResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
       operation: "spawn",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted spawn");
 
@@ -299,7 +354,7 @@ export namespace SubagentRuntime {
       );
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const middleware = buildChildRunMiddleware(config);
+      const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
       const runConfig = { ...config, middleware };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, runConfig, signal),
@@ -309,12 +364,14 @@ export namespace SubagentRuntime {
   }
 
   export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
       operation: "spawn_background",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted background spawn");
 
@@ -333,7 +390,7 @@ export namespace SubagentRuntime {
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
 
-    const middleware = buildChildRunMiddleware(config);
+    const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
     const runConfig = { ...config, middleware };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
@@ -348,6 +405,7 @@ export namespace SubagentRuntime {
   }
 
   export async function send(config: SendConfig): Promise<RunResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const childMeta = Session.getWorkerMeta(config.sessionId);
     const childAgent =
       typeof childMeta?.agentName === "string" ? childMeta.agentName : config.sessionId;
@@ -358,6 +416,7 @@ export namespace SubagentRuntime {
       parentSessionId: childSession?.parentSessionId,
       operation: "send",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, sendDecision, "invoke.prepare policy aborted send");
 
@@ -386,7 +445,7 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      const middleware = buildChildRunMiddleware(config);
+      const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
       const runConfig = { ...config, middleware };
       const messages = await maybeCompactSendTranscript(
         session.id,
