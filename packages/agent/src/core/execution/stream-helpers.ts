@@ -150,7 +150,7 @@ export function buildPolicyEngine(
 export function resolveToolChoice(
   config: ChatAgentConfig,
 ): "auto" | "required" | "none" | undefined {
-  return (config as ChatAgentConfig & { toolChoice?: "auto" | "required" | "none" }).toolChoice;
+  return config.toolChoice;
 }
 
 export function assertToolExecutor(config: ChatAgentConfig): void {
@@ -259,13 +259,12 @@ function createGuardCompleteEvent(
 function buildToolLabelMap(tools: ChatAgentConfig["tools"]): Map<string, string[]> {
   const labels = new Map<string, string[]>();
   for (const tool of tools ?? []) {
-    const labelledTool = tool as typeof tool & { labels?: string[] };
-    if (!labelledTool.labels || labelledTool.labels.length === 0) continue;
-    labels.set(tool.name, labelledTool.labels);
-    const canonical = labelledTool.labels.find((label) => label.startsWith("tool:"))?.slice(5);
-    if (canonical) labels.set(canonical, labelledTool.labels);
+    if (!tool.labels || tool.labels.length === 0) continue;
+    labels.set(tool.name, tool.labels);
+    const canonical = tool.labels.find((label) => label.startsWith("tool:"))?.slice(5);
+    if (canonical) labels.set(canonical, tool.labels);
     const dotted = tool.name.replace(/_/g, ".");
-    if (dotted !== tool.name) labels.set(dotted, labelledTool.labels);
+    if (dotted !== tool.name) labels.set(dotted, tool.labels);
   }
   return labels;
 }
@@ -401,12 +400,13 @@ export async function dispatchModelResponse(
     try {
       applyMessageReplacementEffect(state, decision);
     } catch (error) {
+      const reason = errorMessage(error);
       publishDenyDiagnostic(
         "model.response",
         PolicyDecision.deny({
           policyId: "agent.policy.composed",
-          reasonCodes: [(error as Error).message],
-          effects: [{ type: "run.abort", reason: (error as Error).message }],
+          reasonCodes: [reason],
+          effects: [{ type: "run.abort", reason }],
         }),
         state,
         config,
@@ -635,7 +635,7 @@ export function createTrackingSink(
   return {
     onMessage: (message: Message.WithParts) => {
       if (message.info.role === "assistant") {
-        const tokens = (message.info as Message.AssistantMessage).tokens;
+        const tokens = message.info.tokens;
         const deltaInput = tokens.input - prevInputTokens;
         const deltaOutput = tokens.output - prevOutputTokens;
         prevInputTokens = tokens.input;
@@ -742,12 +742,13 @@ export async function* handleStop(
     try {
       applyMessageReplacementEffect(state, postTurnDecision);
     } catch (error) {
+      const reason = errorMessage(error);
       publishDenyDiagnostic(
         "turn.finish",
         PolicyDecision.deny({
           policyId: "agent.policy.composed",
-          reasonCodes: [(error as Error).message],
-          effects: [{ type: "run.abort", reason: (error as Error).message }],
+          reasonCodes: [reason],
+          effects: [{ type: "run.abort", reason }],
         }),
         state,
         config,
@@ -1035,12 +1036,13 @@ async function applyPostCompaction(
   try {
     messages = replacementMessages(compactionDecision);
   } catch (error) {
+    const reason = errorMessage(error);
     publishDenyDiagnostic(
       "completion.prepare",
       PolicyDecision.deny({
         policyId: "agent.policy.composed",
-        reasonCodes: [(error as Error).message],
-        effects: [{ type: "run.abort", reason: (error as Error).message }],
+        reasonCodes: [reason],
+        effects: [{ type: "run.abort", reason }],
       }),
       state,
       config,
@@ -1066,4 +1068,8 @@ async function applyPostCompaction(
 
 function getCompactionCount(state: StreamRunState): number | undefined {
   return state.compactionCount > 0 ? state.compactionCount : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
