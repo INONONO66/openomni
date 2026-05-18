@@ -184,6 +184,30 @@ describe("SurfaceKey", () => {
       expect(SurfaceKey.listBySession(sessionId2)).toContain(key);
     });
 
+    test("claim returns existing owner without overwriting it", () => {
+      const key = "slack:workspaceA:channel:C123";
+      seedSession("session-1");
+      seedSession("session-2");
+      SurfaceKey.register(key, "session-1");
+
+      const owner = SurfaceKey.claim(key, "session-2");
+
+      expect(owner).toBe("session-1");
+      expect(SurfaceKey.lookup(key)).toBe("session-1");
+    });
+
+    test("claim can replace an expected owner", () => {
+      const key = "slack:workspaceA:channel:C123";
+      seedSession("session-1");
+      seedSession("session-2");
+      SurfaceKey.register(key, "session-1");
+
+      const owner = SurfaceKey.claim(key, "session-2", "session-1");
+
+      expect(owner).toBe("session-2");
+      expect(SurfaceKey.lookup(key)).toBe("session-2");
+    });
+
     test("maintains bidirectional consistency", () => {
       const sessionId = "session-123";
       const key1 = "slack:workspaceA:channel:C123";

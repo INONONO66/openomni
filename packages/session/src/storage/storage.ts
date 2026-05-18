@@ -36,6 +36,7 @@ export namespace Storage {
 
     surfaceKey?: {
       register(key: string, sessionId: string): void;
+      claim(key: string, sessionId: string, expectedSessionId?: string): string;
       lookup(key: string): string | undefined;
       delete(key: string): void;
       listBySession?(sessionId: string): string[];
