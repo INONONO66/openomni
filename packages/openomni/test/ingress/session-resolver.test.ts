@@ -128,6 +128,59 @@ describe("IngressSessionResolver", () => {
       expect(result1.session.id).toBe(result2.session.id);
     });
 
+    it("returns a concurrent surface key owner instead of clobbering it", () => {
+      const event = {
+        surface: "slack",
+        workspace: "team-a",
+        channel: "C123",
+      };
+      const key = IngressSessionResolver.extractSurfaceKey(event);
+      const competing = Session.create({
+        title: "competing",
+        model: { providerID: "test", modelID: "fixture" },
+      });
+
+      const surfaceKey = Storage.get().surfaceKey;
+      if (!surfaceKey?.claim) throw new Error("surfaceKey claim adapter missing");
+      const originalClaim = surfaceKey.claim.bind(surfaceKey);
+      surfaceKey.claim = (claimKey, _candidateSessionId, expectedSessionId) => {
+        expect(claimKey).toBe(key);
+        return originalClaim(claimKey, competing.id, expectedSessionId);
+      };
+
+      try {
+        const result = IngressSessionResolver.resolve(event);
+
+        expect(result.isNew).toBe(false);
+        expect(result.session.id).toBe(competing.id);
+        expect(SurfaceKey.lookup(key)).toBe(competing.id);
+        expect(Session.list().map((session) => session.id)).toEqual([competing.id]);
+      } finally {
+        surfaceKey.claim = originalClaim;
+      }
+    });
+
+    it("removes the candidate session if claiming the surface key fails", () => {
+      const event = {
+        surface: "slack",
+        workspace: "team-a",
+        channel: "C123",
+      };
+      const surfaceKey = Storage.get().surfaceKey;
+      if (!surfaceKey?.claim) throw new Error("surfaceKey claim adapter missing");
+      const originalClaim = surfaceKey.claim.bind(surfaceKey);
+      surfaceKey.claim = () => {
+        throw new Error("claim failed");
+      };
+
+      try {
+        expect(() => IngressSessionResolver.resolve(event)).toThrow("claim failed");
+        expect(Session.list()).toEqual([]);
+      } finally {
+        surfaceKey.claim = originalClaim;
+      }
+    });
+
     it("creates different sessions for different surface keys", () => {
       const event1 = {
         surface: "slack",

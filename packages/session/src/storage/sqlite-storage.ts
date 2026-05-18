@@ -248,6 +248,42 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         .run(key, sessionId, Date.now());
     },
 
+    claim: (key: string, sessionId: string, expectedSessionId?: string): string => {
+      const now = Date.now();
+      this.db.exec("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        if (expectedSessionId !== undefined) {
+          this.db
+            .query(
+              `UPDATE surface_key
+               SET session_id = ?, time_created = ?
+               WHERE key = ? AND session_id = ?`,
+            )
+            .run(sessionId, now, key, expectedSessionId);
+        }
+
+        this.db
+          .query(
+            `INSERT OR IGNORE INTO surface_key (key, session_id, time_created)
+             VALUES (?, ?, ?)`,
+          )
+          .run(key, sessionId, now);
+
+        const row = this.db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
+          session_id: string;
+        } | null;
+        this.db.exec("COMMIT");
+        return row?.session_id ?? sessionId;
+      } catch (err) {
+        try {
+          this.db.exec("ROLLBACK");
+        } catch (_rollbackErr) {
+          void _rollbackErr;
+        }
+        throw err;
+      }
+    },
+
     lookup: (key: string): string | undefined => {
       const row = this.db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
         session_id: string;

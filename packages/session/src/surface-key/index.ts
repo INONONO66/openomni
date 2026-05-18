@@ -142,6 +142,24 @@ export namespace SurfaceKey {
   }
 
   /**
+   * Attempt to claim a surfaceKey for a session without clobbering a concurrent owner.
+   * With expectedSessionId, replaces only if the current owner still equals it.
+   * Without expectedSessionId, inserts only when the key is absent.
+   * Returns the session ID that owns the key after the claim attempt.
+   */
+  export function claim(key: string, sessionId: string, expectedSessionId?: string): string {
+    if (!validateFormat(key)) {
+      throw new Error(
+        `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
+      );
+    }
+
+    const surfaceKey = Storage.get().surfaceKey;
+    if (!surfaceKey) return sessionId;
+    return surfaceKey.claim(key, sessionId, expectedSessionId);
+  }
+
+  /**
    * Unregister a surfaceKey.
    * @param key - The surfaceKey to unregister
    * @returns true if key was found and removed, false otherwise

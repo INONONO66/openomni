@@ -90,27 +90,9 @@ export namespace IngressSessionResolver {
         isNew = false;
       } else {
         const surfaceKey = extractSurfaceKey(event);
-        const existingSessionId = SurfaceKey.lookup(surfaceKey);
-
-        if (existingSessionId) {
-          const existing = Session.get(existingSessionId);
-          if (existing) {
-            session = existing;
-            isNew = false;
-          } else {
-            // Stale entry — session was deleted, create new
-            session = Session.create({
-              title: `Session from ${event.surface}`,
-              model: defaultModel,
-            });
-            SurfaceKey.register(surfaceKey, session.id);
-            isNew = true;
-          }
-        } else {
-          session = Session.create({ title: `Session from ${event.surface}`, model: defaultModel });
-          SurfaceKey.register(surfaceKey, session.id);
-          isNew = true;
-        }
+        const resolved = resolveResidentSurfaceSession(surfaceKey, event.surface, defaultModel);
+        session = resolved.session;
+        isNew = resolved.isNew;
       }
     }
 
@@ -126,5 +108,52 @@ export namespace IngressSessionResolver {
     }
 
     return { session, isNew };
+  }
+
+  function resolveResidentSurfaceSession(
+    surfaceKey: string,
+    surface: string,
+    defaultModel: ModelConfig,
+  ): ResolveResult {
+    let staleSessionId: string | undefined;
+    let lastOwnerSessionId: string | undefined;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const existingSessionId = SurfaceKey.lookup(surfaceKey);
+      if (existingSessionId) {
+        const existing = Session.get(existingSessionId);
+        if (existing) return { session: existing, isNew: false };
+        staleSessionId = existingSessionId;
+      } else {
+        staleSessionId = undefined;
+      }
+
+      // Optimistically create a candidate and keep it only if the surface-key
+      // claim succeeds; losing candidates are removed below.
+      const candidate = Session.create({
+        title: `Session from ${surface}`,
+        model: defaultModel,
+      });
+      let ownerSessionId: string;
+      try {
+        ownerSessionId = SurfaceKey.claim(surfaceKey, candidate.id, staleSessionId);
+      } catch (err) {
+        Session.remove(candidate.id);
+        throw err;
+      }
+      lastOwnerSessionId = ownerSessionId;
+      if (ownerSessionId === candidate.id) {
+        return { session: candidate, isNew: true };
+      }
+
+      Session.remove(candidate.id);
+      const owner = Session.get(ownerSessionId);
+      if (owner) return { session: owner, isNew: false };
+      staleSessionId = ownerSessionId;
+    }
+
+    throw new Error(
+      `unable to resolve surface key owner after 3 attempts: ${surfaceKey} lastOwner=${lastOwnerSessionId ?? "unknown"}`,
+    );
   }
 }
