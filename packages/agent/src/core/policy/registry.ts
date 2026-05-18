@@ -5,9 +5,6 @@ import {
   createBudgetWarningPolicy,
   createCompactionPolicy,
   createIdleNudgePolicy,
-  createMemoryPolicy,
-  createPostToolPolicy,
-  createPostTurnPolicy,
   createToolPermissionPolicy,
 } from "./builtin";
 import type { PolicyRegistration } from "./types";
@@ -87,15 +84,6 @@ function defaultRegistry(): PolicyRegistryInstance {
   registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());
   registry.register("builtin:compaction", (config) =>
     createCompactionPolicy(config as Parameters<typeof createCompactionPolicy>[0]),
-  );
-  registry.register("builtin:memory", (config) =>
-    createMemoryPolicy(config as Parameters<typeof createMemoryPolicy>[0]),
-  );
-  registry.register("builtin:post-tool", (config) =>
-    createPostToolPolicy(config as Parameters<typeof createPostToolPolicy>[0]),
-  );
-  registry.register("builtin:post-turn", (config) =>
-    createPostTurnPolicy(config as Parameters<typeof createPostTurnPolicy>[0]),
   );
   registry.register("builtin:idle-nudge", (config) =>
     createIdleNudgePolicy(config as Parameters<typeof createIdleNudgePolicy>[0]),

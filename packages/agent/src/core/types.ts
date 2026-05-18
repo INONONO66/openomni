@@ -2,7 +2,6 @@ import type { AgentProfile, Tool, Sink, Policy, Message, Token, Model } from "@o
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
-import type { Memory } from "./memory";
 
 export interface AgentEventEmitter {
   emit(eventName: string, data: Record<string, unknown>): void;
@@ -29,7 +28,6 @@ export interface ChatAgentConfig {
     protectRecentMessages?: number;
     onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
   };
-  memory?: Memory;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];

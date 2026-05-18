@@ -20,7 +20,6 @@ import {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
   createCompactionPolicy,
-  createMemoryPolicy,
   createToolPermissionPolicy,
 } from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
@@ -137,9 +136,6 @@ export function buildPolicyEngine(
   }
   if (config.compaction) {
     engine.register(createCompactionPolicy(config.compaction));
-  }
-  if (config.memory) {
-    engine.register(createMemoryPolicy(config.memory));
   }
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
