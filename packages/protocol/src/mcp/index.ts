@@ -8,6 +8,7 @@ export namespace McpConfig {
     args: z.string().array().optional(),
     url: z.string().optional(),
     headers: z.record(z.string(), z.string()).optional(),
+    /** Per-request timeout in milliseconds for MCP tool discovery and tool calls. */
     timeout: z.number().optional(),
     retries: z.number().optional(),
   });
