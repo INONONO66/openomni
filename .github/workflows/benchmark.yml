@@ -1,0 +1,81 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@openomni/protocol
+
+      - name: Bench (session)
+        run: bun run bench
+        working-directory: packages/session
+
+      - name: Bench (agent)
+        run: bun run bench
+        working-directory: packages/agent
+
+      - name: Bench (openomni)
+        run: bun run bench
+        working-directory: packages/openomni
+
+      - name: Combine results
+        run: |
+          mkdir -p bench-results
+          combined="[]"
+          for f in packages/*/bench-results/*.json; do
+            if [ -f "$f" ]; then
+              combined=$(echo "$combined" | bun -e "
+                const existing = JSON.parse(await Bun.stdin.text());
+                const added = JSON.parse(await Bun.file('$f').text());
+                console.log(JSON.stringify([...existing, ...added]));
+              ")
+            fi
+          done
+          echo "$combined" > bench-results/combined.json
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        with:
+          name: OpenOmni Benchmarks
+          tool: customSmallerIsBetter
+          output-file-path: bench-results/combined.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.event_name == 'push' }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          alert-threshold: "150%"
+          comment-on-alert: true
+          fail-on-alert: ${{ github.event_name == 'pull_request' }}
+          summary-always: true
