@@ -26,6 +26,8 @@ const BUNDLED_PROVIDERS: Record<string, (options: SdkOptions) => ProviderSDK> = 
 
 const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
+export const PROVIDER_SDK_CACHE_MAX_ENTRIES = 64;
+export const PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES = 256;
 
 type CustomModelLoader = (
   sdk: ProviderSDK,
@@ -59,7 +61,7 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
 
 export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${JSON.stringify(auth)}`;
-  const cached = SDK_CACHE.get(cacheKey);
+  const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
@@ -91,19 +93,19 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
       baseURL,
       apiKey: sdkOptions.apiKey,
     });
-    SDK_CACHE.set(cacheKey, sdk);
+    setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
     return sdk;
   }
 
   const sdk = factory(sdkOptions);
-  SDK_CACHE.set(cacheKey, sdk);
+  setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
   return sdk;
 }
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const modelID = model.api?.id ?? model.id;
   const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${modelID}:${JSON.stringify(auth)}`;
-  const cached = LANGUAGE_CACHE.get(cacheKey);
+  const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 
   const sdk = getSDK(model, auth);
@@ -112,9 +114,44 @@ export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageMod
   const custom = customLoader ? customLoader() : undefined;
 
   const languageModel = resolveLanguageModel(sdk, modelID, providerID, auth, custom);
-  LANGUAGE_CACHE.set(cacheKey, languageModel);
+  setCached(LANGUAGE_CACHE, cacheKey, languageModel, PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES);
   return languageModel;
 }
+
+function getCached<T>(cache: Map<string, T>, key: string): T | undefined {
+  const cached = cache.get(key);
+  if (cached === undefined) return undefined;
+  cache.delete(key);
+  cache.set(key, cached);
+  return cached;
+}
+
+function setCached<T>(cache: Map<string, T>, key: string, value: T, maxEntries: number): void {
+  if (cache.has(key)) {
+    cache.delete(key);
+  }
+  cache.set(key, value);
+
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) return;
+    cache.delete(oldestKey);
+  }
+}
+
+export const ProviderCache = {
+  clear(): void {
+    SDK_CACHE.clear();
+    LANGUAGE_CACHE.clear();
+  },
+
+  stats(): { sdkEntries: number; languageEntries: number } {
+    return {
+      sdkEntries: SDK_CACHE.size,
+      languageEntries: LANGUAGE_CACHE.size,
+    };
+  },
+};
 
 function resolveLanguageModel(
   sdk: ProviderSDK,
