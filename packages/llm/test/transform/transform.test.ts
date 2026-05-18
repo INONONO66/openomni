@@ -421,6 +421,22 @@ describe("ProviderTransform.resolveVariant", () => {
     expect(result.reasoningSummary).toBe("auto");
   });
 
+  test("resolveVariant with openai model ref uses the shared model ref guard", () => {
+    const result = ProviderTransform.resolveVariant({ provider: "openai", id: "o4-mini" }, "low");
+
+    expect(result.reasoningEffort).toBe("low");
+    expect(result.reasoningSummary).toBe("auto");
+  });
+
+  test("resolveVariant with anthropic model ref returns thinking options", () => {
+    const result = ProviderTransform.resolveVariant(
+      { provider: "anthropic", id: "claude-sonnet-4-20250514" },
+      "high",
+    );
+
+    expect((result.thinking as Record<string, unknown>).type).toBe("enabled");
+  });
+
   test("resolveVariant with non-reasoning model returns empty object", () => {
     const model: Provider.Model = {
       id: "gpt-4o",
