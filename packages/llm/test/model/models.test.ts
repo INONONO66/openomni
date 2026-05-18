@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Model } from "@openomni/protocol";
 import { ModelsDev } from "../../src/model";
 
 describe("ModelsDev", () => {
@@ -99,6 +100,7 @@ describe("ModelsDev", () => {
     it("should reuse the same model status schema for provider models", () => {
       const result = ModelsDev.ModelStatus.safeParse("active");
       expect(result.success).toBe(true);
+      expect(ModelsDev.ModelStatus).toBe(Model.Status);
     });
 
     it("should validate Model with variants", () => {

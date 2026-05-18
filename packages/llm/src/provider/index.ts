@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
 import { fromModelsDevProvider, filterModels } from "./provider";
@@ -72,7 +73,7 @@ export namespace Provider {
         output: z.number().optional(),
       })
       .optional(),
-    status: ModelsDev.ModelStatus.optional(),
+    status: ProtocolModel.Status.optional(),
     options: z.record(z.string(), z.any()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     release_date: z.string().optional(),

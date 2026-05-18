@@ -1,4 +1,4 @@
-import type { Model } from "@openomni/protocol";
+import { Model } from "@openomni/protocol";
 import type { SDKMessage } from "../session/convert";
 import type { Provider } from "../provider/index";
 
@@ -110,10 +110,12 @@ export namespace ProviderTransform {
     variant?: string,
   ): Record<string, unknown> {
     if (!variant) return {};
-    if ("providerID" in model || "capabilities" in model) {
-      return variants(model as Provider.Model)[variant] ?? {};
+    if (isProviderModel(model)) {
+      return variants(model)[variant] ?? {};
     }
-    const providerName = (model as Model.Ref).provider;
+    if (!Model.isRef(model)) return {};
+
+    const providerName = model.provider;
     const npm =
       providerName === "anthropic"
         ? "@ai-sdk/anthropic"
@@ -121,13 +123,19 @@ export namespace ProviderTransform {
           ? "@ai-sdk/openai"
           : undefined;
     if (!npm) return {};
-    const syntheticModel = {
-      id: (model as Model.Ref).id,
+    const syntheticModel: Provider.Model = {
+      id: model.id,
+      providerID: model.provider,
+      name: model.id,
       api: { npm },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },
-    } as unknown as Provider.Model;
+    };
     return variants(syntheticModel)[variant] ?? {};
+  }
+
+  function isProviderModel(model: Provider.Model | Model.Ref): model is Provider.Model {
+    return "providerID" in model;
   }
 
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {

@@ -167,6 +167,16 @@ describe("acceptance (documents current behavior)", () => {
       provider: "openai",
       id: "gpt-4o",
     }));
+  it("recognizes model refs with the shared guard", () => {
+    expect(Model.isRef({ provider: "openai", id: "gpt-4o" })).toBe(true);
+    expect(Model.isRef({ providerID: "openai", id: "gpt-4o" })).toBe(false);
+  });
+  it("exposes shared model status values", () => {
+    for (const status of ["alpha", "beta", "deprecated", "active"] as const) {
+      expect(Model.Status.parse(status)).toBe(status);
+    }
+    expect(Model.Status.safeParse("unknown").success).toBe(false);
+  });
   it("keeps AgentProfile.ModelRef as a compatibility alias", () =>
     expect(AgentProfile.ModelRef.parse({ provider: "openai", id: "gpt-4o" })).toEqual({
       provider: "openai",

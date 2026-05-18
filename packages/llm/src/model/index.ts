@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { Model as ProtocolModel } from "@openomni/protocol";
 import { lazy } from "../util/lazy";
 
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");
 
 export namespace ModelsDev {
-  export const ModelStatus = z.enum(["alpha", "beta", "deprecated", "active"]);
+  export const ModelStatus = ProtocolModel.Status;
   export type ModelStatus = z.infer<typeof ModelStatus>;
 
   export const Model = z.object({
