@@ -178,6 +178,16 @@ function applyPreDelegationDecision(
   applyDelegationConstraints(config, decision);
 }
 
+function buildChildRunMiddleware(config: RuntimeConfig & { permissions?: Policy.Permission }) {
+  // Used by spawn/send/resume for the child run itself. Admission still reads
+  // config.middleware before this helper, so childMiddleware never participates
+  // in the parent-scoped delegation decision.
+  return SubagentSpawnPolicyMiddleware.childMiddleware(
+    config.childMiddleware ?? config.middleware,
+    config.permissions !== undefined || config.childMiddleware !== undefined,
+  );
+}
+
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
     parentSessionId?: string;
@@ -275,10 +285,7 @@ export namespace SubagentRuntime {
       );
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
-        config.middleware,
-        config.permissions !== undefined,
-      );
+      const middleware = buildChildRunMiddleware(config);
       const runConfig = { ...config, middleware };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, runConfig, signal, config.permissions),
@@ -312,10 +319,7 @@ export namespace SubagentRuntime {
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
 
-    const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
-      config.middleware,
-      config.permissions !== undefined,
-    );
+    const middleware = buildChildRunMiddleware(config);
     const runConfig = { ...config, middleware };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
@@ -368,10 +372,7 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      const middleware = SubagentSpawnPolicyMiddleware.childMiddleware(
-        config.middleware,
-        config.permissions !== undefined,
-      );
+      const middleware = buildChildRunMiddleware(config);
       const runConfig = { ...config, middleware };
       const messages = await maybeCompactSendTranscript(
         session.id,
@@ -416,7 +417,7 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(config.sessionId, runId, "running");
       const runConfig = {
         ...config,
-        middleware: SubagentSpawnPolicyMiddleware.childMiddleware(config.middleware, false),
+        middleware: buildChildRunMiddleware(config),
       };
       const result = await executeRun(config.sessionId, runId, config.model, undefined, () =>
         runWithTranscript(config.sessionId, runConfig, signal),

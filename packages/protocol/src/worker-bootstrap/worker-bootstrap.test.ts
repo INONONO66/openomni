@@ -9,11 +9,16 @@ describe("WorkerBootstrap", () => {
       tools: { allow: ["tool1", "tool2"] },
       model: { provider: "anthropic", id: "claude-3-sonnet" },
       systemPrompt: "You are helpful",
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["worker"],
+      },
     };
 
     const parsed = WorkerBootstrap.RuntimeAgentDefinition.parse(agent);
     expect(parsed.name).toBe("test-agent");
     expect(parsed.tools).toEqual({ allow: ["tool1", "tool2"] });
+    expect(parsed.policyPlan?.labels).toEqual(["worker"]);
   });
 
   test("RuntimeToolCatalogEntry round-trip parse", () => {

@@ -11,6 +11,10 @@ describe("RuntimeAgentDefinition", () => {
       model: { provider: "anthropic", id: "claude-sonnet-4-6" },
       systemPrompt: "Build carefully.",
       tools: { categories: ["filesystem", "execution"] },
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["dev-runtime"],
+      },
       budget: { maxTurns: 4, maxToolCalls: 8 },
     };
 

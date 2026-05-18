@@ -77,6 +77,7 @@ export namespace WorkerBootstrapHandler {
           systemPrompt: agent.systemPrompt,
           tools: agent.tools.allow ?? [],
           permissions: agent.permissions,
+          policyPlan: agent.policyPlan,
           budget: agent.budget,
         })),
       );

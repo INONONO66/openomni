@@ -115,6 +115,10 @@ describe("IngressHandlers", () => {
   it("buildExecutionRequest preserves tool execution config", () => {
     const toolConfig = { workspaceRoot: "/workspace/openomni" };
     const permissions = { action: "tool.call", denylist: ["bash"] };
+    const policyPlan = {
+      policies: [{ id: "builtin:tool-permission", required: true }],
+      labels: ["direct"],
+    };
     const event: Ingress.InboundEvent = {
       id: "event-request-1",
       surface: "tui",
@@ -125,6 +129,7 @@ describe("IngressHandlers", () => {
         tools: [{ name: "bash", inputSchema: { type: "object" } }],
         toolConfig,
         permissions,
+        policyPlan,
       },
     };
 
@@ -137,6 +142,7 @@ describe("IngressHandlers", () => {
     expect(request.tools).toEqual(event.agent.tools);
     expect(request.toolConfig).toEqual(toolConfig);
     expect(request.permissions).toEqual(permissions);
+    expect(request.policyPlan).toEqual(policyPlan);
   });
 
   it("handleDirect dispatches via coordinator and stores output", async () => {

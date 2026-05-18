@@ -53,6 +53,7 @@ const methods = {
       // IronClaw capability injection — workers never read env vars for API keys
       credentials: z.record(z.string()).optional(),
       permissions: Policy.Permission.optional(),
+      policyPlan: Policy.PolicyPlan.optional(),
       softTimeoutMs: z.number().optional(),
       hardTimeoutMs: z.number().optional(),
     }),

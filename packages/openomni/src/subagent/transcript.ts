@@ -21,6 +21,7 @@ export type RuntimeConfig = {
   toolExecutor?: ChatAgentConfig["toolExecutor"];
   budget?: ChatAgentConfig["budget"];
   middleware?: PolicyRegistration[];
+  childMiddleware?: PolicyRegistration[];
 };
 
 export type SendCompactionConfig = {

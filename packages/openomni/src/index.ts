@@ -94,6 +94,7 @@ export {
   WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
+  buildWorkerChildRuntimeConfig,
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,

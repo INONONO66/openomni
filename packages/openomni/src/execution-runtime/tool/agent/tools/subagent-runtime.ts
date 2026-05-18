@@ -1,9 +1,10 @@
-import { ChatAgent } from "@openomni/agent";
+import { ChatAgent, createToolPermissionPolicy } from "@openomni/agent";
 import type { SubagentToolOptions, ChatAgentConfig } from "@openomni/agent";
 import { Subagent } from "@openomni/protocol";
 import type { Policy, WorkerBootstrap } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { SubagentRuntime } from "../../../../subagent/runtime.js";
+import { buildWorkerMiddleware } from "../../../middleware.js";
 import { resolveToolSelection } from "../../catalog.js";
 import type { CatalogEntry } from "../../catalog.js";
 
@@ -83,16 +84,27 @@ function intersectAllowPatterns(
   return child.filter((pattern) => parentSet.has(pattern));
 }
 
-type WorkerRuntimeConfig = {
+export type WorkerRuntimeConfig = {
   // Lazily resolved after createExecutionToolContext — filled before any tool call.
   toolsRef: { tools?: ChatAgentConfig["tools"]; toolExecutor?: ChatAgentConfig["toolExecutor"] };
   parentSessionId: string;
   parentPermissions?: Policy.Permission;
+  parentPolicyPlan?: Policy.PolicyPlan;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
   agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };
   resolveAuth?: (provider: string) => ChatAgentConfig["auth"];
   allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
+};
+
+export type WorkerChildRuntimeConfig = {
+  childDefinition?: RuntimeAgentDefinition;
+  tools: ChatAgentConfig["tools"];
+  toolExecutor: ChatAgentConfig["toolExecutor"];
+  systemPrompt?: string;
+  permissions?: Policy.Permission;
+  middleware: ChatAgentConfig["middleware"];
+  childMiddleware: ChatAgentConfig["middleware"];
 };
 
 function resolveChildDefinition(
@@ -134,12 +146,83 @@ function resolveChildTools(
   return filtered.map((entry) => entry.tool.spec);
 }
 
+function buildChildRuntimeMiddleware(
+  childDefinition: RuntimeAgentDefinition | undefined,
+  childPermissions: Policy.Permission | undefined,
+  parentPolicyPlan: Policy.PolicyPlan | undefined,
+  parentPermissions: Policy.Permission | undefined,
+): ChatAgentConfig["middleware"] {
+  const middleware: ChatAgentConfig["middleware"] = [];
+  if (parentPolicyPlan) {
+    // Ancestor policy plans are runtime constraints for descendants, not
+    // delegation-admission guards for the spawn/send operation itself.
+    middleware.push(
+      ...buildWorkerMiddleware({
+        policyPlan: parentPolicyPlan,
+        // Used only when the parent plan selected the builtin guard without
+        // owning config yet; explicit parent plan config still wins.
+        permissions: parentPermissions,
+      }),
+    );
+  } else if (parentPermissions && childDefinition?.policyPlan) {
+    // Parent legacy permissions remain an ancestor runtime guard even when the
+    // child plan owns the child-scoped permission config.
+    middleware.push(createToolPermissionPolicy({ permission: parentPermissions }));
+  }
+  if (childDefinition?.policyPlan) {
+    middleware.push(
+      ...buildWorkerMiddleware({
+        policyPlan: childDefinition.policyPlan,
+        permissions: childPermissions,
+      }),
+    );
+  }
+  return middleware.length > 0 ? middleware : undefined;
+}
+
+export function buildWorkerChildRuntimeConfig(
+  cfg: WorkerRuntimeConfig,
+  input: {
+    agentName?: string;
+    childDefinition?: RuntimeAgentDefinition;
+    depth: number;
+    middleware?: ChatAgentConfig["middleware"];
+  },
+): WorkerChildRuntimeConfig {
+  const childDefinition = input.childDefinition ?? resolveChildDefinition(cfg, input.agentName);
+  const childPermissions = childDefinition?.permissions;
+  const permissions = childDefinition?.policyPlan
+    ? undefined
+    : cfg.parentPolicyPlan
+      ? // Parent legacy permissions are only a hydration fallback for parent
+        // policy plans; do not stack them as a separate child runtime guard.
+        // Child legacy permissions remain child-owned runtime config.
+        childPermissions
+      : intersectPermissions(cfg.parentPermissions, childPermissions);
+  return {
+    ...(childDefinition ? { childDefinition } : {}),
+    tools: resolveChildTools(cfg, childDefinition, input.depth),
+    toolExecutor: cfg.toolsRef.toolExecutor,
+    systemPrompt: childDefinition?.systemPrompt,
+    permissions,
+    middleware: input.middleware,
+    childMiddleware: buildChildRuntimeMiddleware(
+      childDefinition,
+      childPermissions,
+      cfg.parentPolicyPlan,
+      cfg.parentPermissions,
+    ),
+  };
+}
+
 export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentRuntimeInterface {
   return {
     async spawn(config) {
-      const childDefinition = resolveChildDefinition(cfg, config.agentName);
-      const permissions = intersectPermissions(cfg.parentPermissions, childDefinition?.permissions);
-      const childTools = resolveChildTools(cfg, childDefinition, 1);
+      const childRuntime = buildWorkerChildRuntimeConfig(cfg, {
+        agentName: config.agentName,
+        depth: 1,
+        middleware: config.middleware,
+      });
 
       const result = await SubagentRuntime.spawn({
         agentName: config.agentName,
@@ -148,12 +231,15 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         model: config.model,
         auth: cfg.resolveAuth?.(config.model.provider),
         allowAuthFallback: cfg.allowAuthFallback,
-        systemPrompt: config.systemPrompt,
-        tools: childTools,
-        toolExecutor: cfg.toolsRef.toolExecutor,
+        // Worker bootstrap definitions are the source of truth; config is only
+        // a compatibility fallback for runtimes without bootstrap context.
+        systemPrompt: childRuntime.systemPrompt ?? config.systemPrompt,
+        tools: childRuntime.tools,
+        toolExecutor: childRuntime.toolExecutor,
         parentSessionId: cfg.parentSessionId,
-        permissions,
-        middleware: config.middleware,
+        permissions: childRuntime.permissions,
+        middleware: childRuntime.middleware,
+        childMiddleware: childRuntime.childMiddleware,
         signal: config.signal,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
@@ -163,19 +249,26 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         cfg,
         resolveSessionAgentName(config.sessionId),
       );
-      const permissions = intersectPermissions(cfg.parentPermissions, childDefinition?.permissions);
       const depth = Session.get(config.sessionId)?.spawnDepth ?? 1;
+      const childRuntime = buildWorkerChildRuntimeConfig(cfg, {
+        childDefinition,
+        depth,
+        middleware: config.middleware,
+      });
       const result = await SubagentRuntime.send({
         sessionId: config.sessionId,
         prompt: config.prompt,
         model: config.model,
         auth: cfg.resolveAuth?.(config.model.provider),
         allowAuthFallback: cfg.allowAuthFallback,
-        systemPrompt: config.systemPrompt,
-        tools: resolveChildTools(cfg, childDefinition, depth),
-        toolExecutor: cfg.toolsRef.toolExecutor,
-        permissions,
-        middleware: config.middleware,
+        // Worker bootstrap definitions are the source of truth; config is only
+        // a compatibility fallback for runtimes without bootstrap context.
+        systemPrompt: childRuntime.systemPrompt ?? config.systemPrompt,
+        tools: childRuntime.tools,
+        toolExecutor: childRuntime.toolExecutor,
+        permissions: childRuntime.permissions,
+        middleware: childRuntime.middleware,
+        childMiddleware: childRuntime.childMiddleware,
         signal: config.signal,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };

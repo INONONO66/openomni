@@ -160,8 +160,29 @@ describe("Ipc.Methods param schemas", () => {
             },
           ],
         },
+        policyPlan: {
+          policies: [{ id: "builtin:tool-permission", required: true }],
+          labels: ["ipc"],
+        },
       }).success,
     ).toBe(true);
+  });
+
+  test("coordinator.spawn_run preserves policy plans", () => {
+    const parsed = Ipc.Methods["coordinator.spawn_run"].params.parse({
+      authToken: "token",
+      runId: "run-1",
+      sessionId: "sess-1",
+      prompt: "do work",
+      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["ipc"],
+      },
+    });
+
+    expect(parsed.policyPlan?.labels).toEqual(["ipc"]);
+    expect(parsed.policyPlan?.policies[0]?.id).toBe("builtin:tool-permission");
   });
 
   test("coordinator.spawn_run rejects permission payloads without canonical action", () => {

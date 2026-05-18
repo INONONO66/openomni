@@ -7,6 +7,7 @@ import {
   ToolProxyProvider,
   buildToolCatalog,
   buildWorkerMiddleware,
+  buildWorkerChildRuntimeConfig,
   createToolExecutor,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
@@ -218,23 +219,51 @@ export namespace WorkerRunner {
           definitions: new Map((bootstrap?.agents ?? []).map((agent) => [agent.name, agent])),
         };
 
+        const workerSubagentConfig: Parameters<typeof createWorkerSubagentRuntime>[0] = {
+          toolsRef,
+          catalogRef,
+          agentDefinitionsRef,
+          resolveAuth,
+          allowAuthFallback: false,
+          parentSessionId: sessionId,
+          parentPermissions: request.permissions,
+          parentPolicyPlan: request.policyPlan,
+        };
+        const scopedBackgroundManager: ReturnType<typeof BackgroundManager.create> = {
+          launch(input: Parameters<typeof backgroundManager.launch>[0]) {
+            const childRuntime = buildWorkerChildRuntimeConfig(workerSubagentConfig, {
+              agentName: input.agentName,
+              depth: input.depth ?? 1,
+              middleware: input.middleware,
+            });
+            return backgroundManager.launch({
+              ...input,
+              systemPrompt: childRuntime.systemPrompt,
+              tools: childRuntime.tools,
+              toolExecutor: childRuntime.toolExecutor,
+              permissions: childRuntime.permissions,
+              middleware: childRuntime.middleware,
+              childMiddleware: childRuntime.childMiddleware,
+            });
+          },
+          getTask: (taskId) => backgroundManager.getTask(taskId),
+          getResult: (taskId) => backgroundManager.getResult(taskId),
+          cancel: (taskId) => backgroundManager.cancel(taskId),
+          listByParent: (parentSessionId) => backgroundManager.listByParent(parentSessionId),
+          cleanup: () => backgroundManager.cleanup(),
+          stats: () => backgroundManager.stats(),
+          dispose: () => backgroundManager.dispose(),
+        };
+
         const agentProvider = new AgentToolProvider({
-          subagentRuntime: createWorkerSubagentRuntime({
-            toolsRef,
-            catalogRef,
-            agentDefinitionsRef,
-            resolveAuth,
-            allowAuthFallback: false,
-            parentSessionId: sessionId,
-            parentPermissions: request.permissions,
-          }),
+          subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
           delegationContext: {
             depth: 0,
             maxDepth: 3,
             visitedAgents: new Set([request.agentName ?? "dev"]),
             parentAbort: controller.signal,
           },
-          backgroundManager,
+          backgroundManager: scopedBackgroundManager,
         });
 
         const systemTools = systemProvider.listTools();
