@@ -17,6 +17,8 @@ import { WorkerInternalTools } from "./worker-internal-tools";
 import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
+const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
+
 export interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
@@ -117,15 +119,49 @@ export namespace WorkerRunner {
 
         const mcpProxyProvider = ToolProxyProvider.create(
           bootstrap?.toolCatalog ?? [],
-          async (toolName, toolArgs) => {
-            const raw = await server.call("worker.tool_call", {
-              runId,
-              sessionId,
-              callId: crypto.randomUUID(),
-              tool: toolName,
-              input: toolArgs,
-            });
-            return Tool.Result.parse(raw);
+          async (toolName, toolArgs, context) => {
+            const callId = crypto.randomUUID();
+            if (context?.signal?.aborted) {
+              return {
+                id: callId,
+                toolCallId: callId,
+                output: "Tool call aborted",
+                isError: true,
+              };
+            }
+
+            const cancelToolCall = () => {
+              void server
+                .call("worker.tool_call_cancel", { runId, sessionId, callId }, 5_000)
+                .catch(() => undefined);
+            };
+            context?.signal?.addEventListener("abort", cancelToolCall, { once: true });
+
+            try {
+              const raw = await server.call(
+                "worker.tool_call",
+                {
+                  runId,
+                  sessionId,
+                  callId,
+                  tool: toolName,
+                  input: toolArgs,
+                  ...(workspaceRoot ? { workspaceRoot } : {}),
+                },
+                WORKER_TOOL_CALL_IPC_TIMEOUT_MS,
+              );
+              return Tool.Result.parse(raw);
+            } catch (error) {
+              return {
+                id: callId,
+                toolCallId: callId,
+                output: error instanceof Error ? error.message : String(error),
+                isError: true,
+                settlement: "unknown",
+              };
+            } finally {
+              context?.signal?.removeEventListener("abort", cancelToolCall);
+            }
           },
         );
 
@@ -184,9 +220,12 @@ export namespace WorkerRunner {
         const internalToolNames = new Set(
           internalTools.flatMap((tool) => [tool.spec.name, tool.spec.name.replace(/\./g, "_")]),
         );
-        const combinedToolExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
-          if (internalToolNames.has(call.tool)) return internalToolExecutor(call);
-          if (toolExecutor) return toolExecutor(call);
+        const combinedToolExecutor = async (
+          call: Tool.Call,
+          context?: Tool.ExecutionContext,
+        ): Promise<Tool.Result> => {
+          if (internalToolNames.has(call.tool)) return internalToolExecutor(call, context);
+          if (toolExecutor) return toolExecutor(call, context);
           return {
             id: crypto.randomUUID(),
             toolCallId: call.id,

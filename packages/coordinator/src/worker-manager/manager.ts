@@ -5,6 +5,8 @@ import {
   WorkerSupervisor,
   type AskMainParams,
   type AskMainResult,
+  type ToolCallCancelParams,
+  type ToolCallContext,
   type ToolCallParams,
   type ToolCallResult,
 } from "../worker-pool/supervisor";
@@ -15,7 +17,7 @@ const DEFAULT_IDLE_SHUTDOWN_MS = 600_000;
 const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_QUEUED_DISPATCHES = 100;
 
-export type { ToolCallParams, ToolCallResult };
+export type { ToolCallCancelParams, ToolCallContext, ToolCallParams, ToolCallResult };
 export type { AskMainParams, AskMainResult };
 
 export type WorkerManagerConfig = {
@@ -26,7 +28,7 @@ export type WorkerManagerConfig = {
   slotWaitTimeoutMs?: number;
   maxQueuedDispatches?: number;
   bootstrap?: WorkerBootstrap.Bootstrap;
-  onToolCall?: (params: ToolCallParams) => Promise<ToolCallResult>;
+  onToolCall?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
   onAskMain?: (params: AskMainParams) => Promise<AskMainResult>;
   onWorkerSnapshot?: (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
 };

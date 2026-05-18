@@ -18,6 +18,7 @@ export function createSubagentRuntime(): SubagentRuntimeInterface {
         model: config.model,
         systemPrompt: config.systemPrompt,
         middleware: config.middleware,
+        signal: config.signal,
       });
       const result = await agent.run({
         messages: [{ role: "user", content: config.prompt }],
@@ -34,6 +35,7 @@ export function createSubagentRuntime(): SubagentRuntimeInterface {
         model: config.model,
         systemPrompt: config.systemPrompt,
         middleware: config.middleware,
+        signal: config.signal,
       });
       const result = await agent.run({
         messages: [{ role: "user", content: config.prompt }],
@@ -152,6 +154,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         parentSessionId: cfg.parentSessionId,
         permissions,
         middleware: config.middleware,
+        signal: config.signal,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
     },
@@ -173,6 +176,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         toolExecutor: cfg.toolsRef.toolExecutor,
         permissions,
         middleware: config.middleware,
+        signal: config.signal,
       });
       return { sessionId: result.sessionId, runId: result.runId, output: result.output };
     },

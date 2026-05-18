@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { PolicyEngine, type PolicyContext } from "@openomni/agent";
-import type { NativeTool } from "@openomni/openomni";
+import { createToolExecutor, WorkspaceLock, type NativeTool } from "@openomni/openomni";
 import type { RuntimeResource, Tool } from "@openomni/protocol";
 import { Mcp, PolicyDecision } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
@@ -126,6 +129,36 @@ describe("McpToolProvider", () => {
     });
   });
 
+  it("forwards execution context to resolved MCP tools", async () => {
+    const provider = new McpToolProvider();
+    let capturedSignal: AbortSignal | undefined;
+    const execute = mock(
+      async (call: Tool.Call, context?: { signal?: AbortSignal }): Promise<Tool.Result> => {
+        capturedSignal = context?.signal;
+        return { id: call.id, toolCallId: call.id, output: `${call.tool} ok` };
+      },
+    );
+    const tool: NativeTool = {
+      spec: { name: "search.query", description: "search.query tool", inputSchema: {} },
+      riskTier: 1,
+      isReadOnly: false,
+      isDestructive: false,
+      isConcurrencySafe: false,
+      source: "mcp",
+      execute,
+    };
+    seedProvider(provider, [tool], ["search"]);
+    const controller = new AbortController();
+
+    const result = await provider.execute(
+      { id: "call-context", tool: "search_query", input: { query: "hello" } },
+      { signal: controller.signal },
+    );
+
+    expect(result.output).toBe("search.query ok");
+    expect(capturedSignal).toBe(controller.signal);
+  });
+
   it("exposes MCP labels and descriptors on refreshed tools for agent policy dispatch", async () => {
     const client = makeClient();
     client.listTools.mockResolvedValueOnce([
@@ -148,6 +181,121 @@ describe("McpToolProvider", () => {
       kind: "tool",
       source: { type: "mcp", serverId: "search", remoteName: "search.query" },
     });
+  });
+
+  it("does not start direct MCP execution when context is already aborted", async () => {
+    const client = makeClient();
+    client.listTools.mockResolvedValueOnce([
+      { name: "search.query", description: "query", inputSchema: {} },
+    ]);
+    const provider = new McpToolProvider({ createClient: () => client.client });
+    await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
+    await provider.refreshTools();
+    const controller = new AbortController();
+    controller.abort(new Error("already cancelled"));
+
+    await expect(
+      provider.execute(
+        { id: "call-pre-abort", tool: "search.query", input: {} },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow("MCP tool execution aborted");
+    expect(client.callTool).not.toHaveBeenCalled();
+  });
+
+  it("keeps direct MCP execution pending after abort until the underlying call settles", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "openomni-mcp-abort-lock-"));
+    let settleCall: ((result: Tool.Result) => void) | undefined;
+    const client = makeClient();
+    client.listTools.mockResolvedValueOnce([
+      { name: "search.query", description: "query", inputSchema: {} },
+    ]);
+    client.callTool.mockImplementation(
+      async (toolName: string, _input: Record<string, unknown>, callId?: string) =>
+        await new Promise<Tool.Result>((resolve) => {
+          settleCall = () =>
+            resolve({
+              id: callId ?? crypto.randomUUID(),
+              toolCallId: callId ?? "call",
+              output: `${toolName} late`,
+            });
+        }),
+    );
+    const provider = new McpToolProvider({ createClient: () => client.client });
+
+    try {
+      await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
+      await provider.refreshTools();
+      const executor = createToolExecutor({
+        tools: provider.listTools(),
+        config: { workspaceRoot: workspace, timeoutMs: { tier1: 10 } },
+      });
+
+      const result = await executor({ id: "call-mcp", tool: "search.query", input: {} });
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("timeout after 10ms");
+
+      const blockedProbe = await WorkspaceLock.acquire(workspace, "probe-before-settle", 30).catch(
+        (error) => error,
+      );
+      expect(blockedProbe).toBeInstanceOf(Error);
+      expect((blockedProbe as Error).message).toContain("workspace lock timeout");
+
+      settleCall?.({ id: "late", toolCallId: "call-mcp", output: "late" });
+      await Bun.sleep(0);
+
+      await WorkspaceLock.acquire(workspace, "probe-after-settle", 50);
+      WorkspaceLock.release(workspace, "probe-after-settle");
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the workspace unsafe after MCP abort settlement grace when the call hangs", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "openomni-mcp-abort-grace-"));
+    const client = makeClient();
+    client.listTools.mockResolvedValueOnce([
+      { name: "search.query", description: "query", inputSchema: {} },
+    ]);
+    client.callTool.mockImplementation(
+      async () =>
+        await new Promise<Tool.Result>(() => {
+          // intentional: never resolves to exercise abort settlement grace
+        }),
+    );
+    const provider = new McpToolProvider({ createClient: () => client.client });
+
+    try {
+      await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
+      await provider.refreshTools();
+      const executor = createToolExecutor({
+        tools: provider.listTools(),
+        config: {
+          workspaceRoot: workspace,
+          timeoutMs: { tier1: 10 },
+          postTimeoutSettleGraceMs: 20,
+        },
+      });
+
+      const result = await executor({ id: "call-mcp-hung", tool: "search.query", input: {} });
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("timeout after 10ms");
+
+      const blockedProbe = await WorkspaceLock.acquire(workspace, "probe-before-grace", 5).catch(
+        (error) => error,
+      );
+      expect(blockedProbe).toBeInstanceOf(Error);
+
+      await Bun.sleep(40);
+      const unsafeProbe = await WorkspaceLock.acquire(workspace, "probe-after-grace", 50).catch(
+        (error) => error,
+      );
+      expect(unsafeProbe).toBeInstanceOf(Error);
+      expect((unsafeProbe as Error).message).toContain("workspace marked unsafe");
+      WorkspaceLock.clearUnsafe(workspace);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   it("preserves the unknown-tool error for unknown MCP prefixes", async () => {

@@ -83,11 +83,22 @@ export namespace Tool {
   });
   export type Call = z.infer<typeof Call>;
 
+  /**
+   * Per-call runtime context for tool execution callbacks. Cancellation is
+   * cooperative: executors pass an aborted signal before returning timeout or
+   * run-cancel results, and tools that start long-running work should stop their
+   * own side effects when it aborts.
+   */
+  export interface ExecutionContext {
+    readonly signal?: AbortSignal;
+  }
+
   export const Result = z.object({
     id: z.string(),
     toolCallId: z.string(),
     output: z.string(),
     isError: z.boolean().optional(),
+    settlement: z.enum(["settled", "unknown"]).optional(),
   });
   export type Result = z.infer<typeof Result>;
 

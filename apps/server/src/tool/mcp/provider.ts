@@ -3,16 +3,31 @@ import type { McpServerConfig, RuntimeResource, Tool } from "@openomni/protocol"
 import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
-import type { NativeTool, ToolCategory, ToolProvider } from "@openomni/openomni";
+import type {
+  NativeTool,
+  ToolCategory,
+  ToolExecutionContext,
+  ToolProvider,
+} from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
 
 const MCP_TOOL_ACTION = "mcp.tool.call";
+function createAbortError(): Error {
+  const error = new Error("MCP tool execution aborted");
+  error.name = "AbortError";
+  return error;
+}
 
 interface McpClientLike {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listTools(): Promise<Tool.Spec[]>;
-  callTool(toolName: string, input: Record<string, unknown>, callId?: string): Promise<Tool.Result>;
+  callTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    callId?: string,
+    context?: ToolExecutionContext,
+  ): Promise<Tool.Result>;
 }
 
 function uniqueLabels(labels: readonly string[]): string[] {
@@ -214,7 +229,10 @@ export class McpToolProvider implements ToolProvider {
             isDestructive: false,
             isConcurrencySafe: false,
             source: "mcp",
-            execute: (call) => client.callTool(call.tool, call.input, call.id),
+            execute: (call, context) => {
+              if (context?.signal?.aborted) return Promise.reject(createAbortError());
+              return client.callTool(call.tool, call.input, call.id, context);
+            },
           });
         }
       } catch (err) {
@@ -233,7 +251,7 @@ export class McpToolProvider implements ToolProvider {
     this.cachedTools = tools;
   }
 
-  async execute(call: Tool.Call): Promise<Tool.Result> {
+  async execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
     const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
       call,
       tools: this.listTools(),
@@ -281,7 +299,9 @@ export class McpToolProvider implements ToolProvider {
     });
 
     const startTime = Date.now();
-    const result = await tool.execute({ ...call, tool: tool.spec.name });
+    const result = await (context === undefined
+      ? tool.execute({ ...call, tool: tool.spec.name })
+      : tool.execute({ ...call, tool: tool.spec.name }, context));
     const durationMs = Date.now() - startTime;
 
     Bus.publish(ToolExecution.Completed, {

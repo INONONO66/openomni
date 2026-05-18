@@ -1,4 +1,5 @@
 import {
+  Operational,
   PolicyDecision,
   PolicyEvent,
   ToolExecution,
@@ -10,11 +11,14 @@ import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js
 import type {
   ImplicitInputSource,
   NativeTool,
+  ToolExecutionContext,
   ToolExecutorConfig,
   ToolRuntimeContext,
 } from "./types.js";
+import { WorkspaceLock } from "../workspace-lock.js";
 
 const TOOL_CALL_ACTION = "tool.call";
+const DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS = 5_000;
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
@@ -40,6 +44,16 @@ function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   };
 }
 
+function createAbortError(): Error {
+  const error = new Error("Tool execution aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function hasUnknownSettlement(result: Tool.Result): boolean {
+  return result.settlement === "unknown";
+}
+
 function buildActor(runtime: ToolRuntimeContext | undefined): Record<string, unknown> {
   return {
     kind: "agent",
@@ -51,6 +65,39 @@ function buildActor(runtime: ToolRuntimeContext | undefined): Record<string, unk
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return (signal as AbortSignal & { reason?: unknown }).reason;
+}
+
+function linkAbortSignals(
+  localSignal: AbortSignal,
+  parentSignal: AbortSignal | undefined,
+): { signal: AbortSignal; cleanup: () => void } {
+  if (!parentSignal) return { signal: localSignal, cleanup: () => undefined };
+
+  const linked = new AbortController();
+  const forwardLocalAbort = () => {
+    if (!linked.signal.aborted) linked.abort(abortReason(localSignal));
+  };
+  const forwardParentAbort = () => {
+    if (!linked.signal.aborted) linked.abort(abortReason(parentSignal));
+  };
+
+  if (localSignal.aborted) forwardLocalAbort();
+  if (parentSignal.aborted) forwardParentAbort();
+
+  localSignal.addEventListener("abort", forwardLocalAbort, { once: true });
+  parentSignal.addEventListener("abort", forwardParentAbort, { once: true });
+
+  return {
+    signal: linked.signal,
+    cleanup: () => {
+      localSignal.removeEventListener("abort", forwardLocalAbort);
+      parentSignal.removeEventListener("abort", forwardParentAbort);
+    },
+  };
 }
 
 function summarizeInput(input: unknown): string {
@@ -109,13 +156,106 @@ function publishPolicyEvaluated(
   });
 }
 
+type ToolSettlementOutcome =
+  | { readonly settled: true; readonly output: string }
+  | {
+      readonly settled: false;
+      readonly clearWhenToolSettles: boolean;
+      readonly unsafeToken?: string;
+    };
+
+function waitForToolSettlement(
+  promise: Promise<Tool.Result>,
+  graceMs: number,
+): Promise<ToolSettlementOutcome> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = globalThis.setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      resolve({ settled: false, clearWhenToolSettles: true });
+    }, graceMs);
+    const finish = (outcome: ToolSettlementOutcome) => {
+      if (resolved) return;
+      resolved = true;
+      globalThis.clearTimeout(timer);
+      resolve(outcome);
+    };
+
+    promise.then(
+      (result) => {
+        if (hasUnknownSettlement(result)) {
+          finish({
+            settled: false,
+            clearWhenToolSettles: false,
+            unsafeToken: result.toolCallId || result.id,
+          });
+          return;
+        }
+        finish({ settled: true, output: result.output });
+      },
+      (error: unknown) =>
+        finish({
+          settled: true,
+          output: error instanceof Error ? error.message : String(error),
+        }),
+    );
+  });
+}
+
+async function enforceTimeoutAndAbort<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onTimeout: (error: ToolRuntimePolicyMiddleware.TimeoutError) => void,
+): Promise<T> {
+  if (signal?.aborted) throw createAbortError();
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timeoutFired = false;
+    const cleanup = () => {
+      globalThis.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+    const onAbort = () => finish(() => reject(createAbortError()));
+    const timer = globalThis.setTimeout(() => {
+      timeoutFired = true;
+      const error = new ToolRuntimePolicyMiddleware.TimeoutError(timeoutMs);
+      finish(() => reject(error));
+      try {
+        onTimeout(error);
+      } catch {
+        // Timeout rejection is authoritative; cleanup callbacks must not
+        // escape the timer turn as uncaught exceptions.
+      }
+    }, timeoutMs);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => {
+        if (timeoutFired) return;
+        finish(() => reject(error));
+      },
+    );
+  });
+}
+
 export function createToolExecutor(
   ctx: ToolExecutorContext,
-): (call: Tool.Call) => Promise<Tool.Result> {
+): (call: Tool.Call, context?: ToolExecutionContext) => Promise<Tool.Result> {
   const dispatch = buildDispatchTable(ctx.tools);
   const config = ctx.config ?? {};
+  const postTimeoutSettleGraceMs =
+    config.postTimeoutSettleGraceMs ?? DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS;
   const { workspaceRoot } = config;
-  const lockOwnerId = crypto.randomUUID();
   const runtime = config.runtime;
 
   function eventBase() {
@@ -127,15 +267,24 @@ export function createToolExecutor(
     };
   }
 
-  return async (call: Tool.Call): Promise<Tool.Result> => {
+  return async (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
     if (!tool) {
       return createErrorResult(call, `Unknown tool: ${call.tool}`);
     }
 
+    if (context?.signal?.aborted) {
+      return createErrorResult(call, "Tool execution aborted");
+    }
+
     const originalName = tool.spec.name;
     const actionId = crypto.randomUUID();
     const actor = buildActor(runtime);
+    let cleanupAbortSignal: (() => void) | undefined;
+    const abortController = new AbortController();
+    const linkedAbort = linkAbortSignals(abortController.signal, context?.signal);
+    cleanupAbortSignal = linkedAbort.cleanup;
+    if (linkedAbort.signal.aborted) throw createAbortError();
 
     Bus.publish(PolicyEvent.ActionRequested, {
       ...eventBase(),
@@ -150,6 +299,64 @@ export function createToolExecutor(
     const dispatchedCall =
       originalName === enrichedCall.tool ? enrichedCall : { ...enrichedCall, tool: originalName };
     let policy: ToolRuntimePolicyMiddleware.PreToolResult | undefined;
+    let shouldEvaluatePostTool = false;
+    let postToolDeferred = false;
+    let postToolOutput: string | undefined;
+    let toolExecution: Promise<Tool.Result> | undefined;
+    const lockOwnerId = crypto.randomUUID();
+
+    function evaluatePostToolOnce(): void {
+      if (!policy || !shouldEvaluatePostTool || postToolDeferred) return;
+
+      shouldEvaluatePostTool = false;
+      const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
+        toolName: originalName,
+        toolCallId: call.id,
+        input: dispatchedCall.input,
+        output: postToolOutput,
+        handle: policy.handle,
+      });
+      publishPolicyEvaluated(eventBase(), actor, originalName, postDecision);
+    }
+
+    function deferPostToolUntilExecutionSettles(fallbackOutput: string): void {
+      if (!toolExecution || !policy || !shouldEvaluatePostTool || postToolDeferred) return;
+
+      postToolDeferred = true;
+      void waitForToolSettlement(toolExecution, postTimeoutSettleGraceMs).then((outcome) => {
+        if (outcome.settled) {
+          postToolOutput = outcome.output;
+        } else {
+          postToolOutput = fallbackOutput;
+          if (policy?.handle.workspaceRoot && policy.handle.lockAcquired) {
+            WorkspaceLock.markUnsafe(
+              policy.handle.workspaceRoot,
+              `tool "${originalName}" did not settle after timeout/abort grace`,
+              outcome.unsafeToken ?? call.id,
+            );
+            const unsafeWorkspace = policy.handle.workspaceRoot;
+            const unsafeToken = outcome.unsafeToken ?? call.id;
+            if (outcome.clearWhenToolSettles) {
+              void toolExecution
+                ?.finally(() => WorkspaceLock.clearUnsafe(unsafeWorkspace, unsafeToken))
+                .catch(() => undefined);
+            }
+          }
+          Bus.publish(Operational.Warn, {
+            ...eventBase(),
+            component: "executor",
+            msg: "timed-out tool did not settle before post-timeout grace elapsed",
+            context: {
+              toolName: originalName,
+              toolCallId: call.id,
+              graceMs: postTimeoutSettleGraceMs,
+            },
+          });
+        }
+        postToolDeferred = false;
+        evaluatePostToolOnce();
+      });
+    }
 
     try {
       policy = await ToolRuntimePolicyMiddleware.evaluatePreTool({
@@ -161,6 +368,7 @@ export function createToolExecutor(
         timeoutConfig: config.timeoutMs,
         workspaceRoot,
         lockOwnerId,
+        signal: linkedAbort.signal,
       });
 
       publishPolicyEvaluated(eventBase(), actor, originalName, policy.decision);
@@ -190,7 +398,10 @@ export function createToolExecutor(
         return result;
       }
 
+      shouldEvaluatePostTool = true;
       const startTime = Date.now();
+      if (linkedAbort.signal.aborted) throw createAbortError();
+
       Bus.publish(ToolExecution.Started, {
         ...eventBase(),
         actor,
@@ -198,20 +409,30 @@ export function createToolExecutor(
         toolName: originalName,
       });
 
-      const result = await ToolRuntimePolicyMiddleware.enforceTimeout(
-        tool.execute(dispatchedCall),
+      toolExecution = tool.execute(dispatchedCall, { signal: linkedAbort.signal });
+      const result = await enforceTimeoutAndAbort(
+        toolExecution,
         policy.handle.timeoutMs,
+        context?.signal,
+        (error) => abortController.abort(error),
       );
       const durationMs = Date.now() - startTime;
+      postToolOutput = result.output;
 
-      const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
-        toolName: originalName,
-        toolCallId: call.id,
-        input: dispatchedCall.input,
-        output: result.output,
-        handle: policy.handle,
-      });
-      publishPolicyEvaluated(eventBase(), actor, originalName, postDecision);
+      if (hasUnknownSettlement(result)) {
+        deferPostToolUntilExecutionSettles(result.output);
+        Bus.publish(ToolExecution.Completed, {
+          ...eventBase(),
+          actor,
+          toolCallId: call.id,
+          toolName: originalName,
+          durationMs,
+          isError: result.isError ?? false,
+        });
+        return result;
+      }
+
+      evaluatePostToolOnce();
 
       Bus.publish(ToolExecution.Completed, {
         ...eventBase(),
@@ -226,6 +447,7 @@ export function createToolExecutor(
       const message = error instanceof Error ? error.message : String(error);
       const isTimeout = error instanceof ToolRuntimePolicyMiddleware.TimeoutError;
       const isAbort = isAbortError(error);
+      postToolOutput = message;
 
       if (isTimeout && policy) {
         const timeoutMs = (error as ToolRuntimePolicyMiddleware.TimeoutError).timeoutMs;
@@ -237,15 +459,10 @@ export function createToolExecutor(
         });
       }
 
-      if (policy && !PolicyDecision.isBlocking(policy.decision)) {
-        const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
-          toolName: originalName,
-          toolCallId: call.id,
-          input: dispatchedCall.input,
-          output: message,
-          handle: policy.handle,
-        });
-        publishPolicyEvaluated(eventBase(), actor, originalName, postDecision);
+      if (isTimeout || isAbort) {
+        deferPostToolUntilExecutionSettles(message);
+      } else {
+        evaluatePostToolOnce();
       }
 
       const result = createErrorResult(call, message);
@@ -269,6 +486,9 @@ export function createToolExecutor(
         isError: true,
       });
       return result;
+    } finally {
+      cleanupAbortSignal?.();
+      evaluatePostToolOnce();
     }
   };
 }

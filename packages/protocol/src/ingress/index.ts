@@ -111,13 +111,13 @@ export namespace Ingress {
     .passthrough();
   // Runtime callbacks can't be expressed in Zod.
   export type AgentDef = z.infer<typeof AgentDefSchema> & {
-    toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+    toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
     toolExecutorFactory?: (ctx: {
       sessionId: string;
       runId: string;
       agentName?: string;
       workspaceRoot?: string;
-    }) => (call: Tool.Call) => Promise<Tool.Result>;
+    }) => (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   };
 
   const InboundEventBase = {

@@ -4,22 +4,79 @@ import { defineTool } from "../define.js";
 import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
-import type { NativeTool } from "../types.js";
+import type { NativeTool, ToolExecutionContext } from "../types.js";
 import { GREP_PROMPT } from "./grep-prompt.js";
 
 type MatchResult = { file: string; line: number; text: string };
 
 const MAX_MATCHES = 100;
 
+type PipeProcess = {
+  readonly stdout: ReadableStream<Uint8Array>;
+  readonly stderr: ReadableStream<Uint8Array>;
+  readonly exited: Promise<number | null>;
+  kill(): void;
+};
+
+function abortError(): Error {
+  const error = new Error("Tool execution aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+async function waitForProcess(
+  proc: PipeProcess,
+  signal?: AbortSignal,
+): Promise<readonly [string, string, number | null]> {
+  if (signal?.aborted) {
+    proc.kill();
+    throw abortError();
+  }
+
+  const abortProcess = () => proc.kill();
+  signal?.addEventListener("abort", abortProcess, { once: true });
+
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    if (signal?.aborted) {
+      throw abortError();
+    }
+
+    return [stdout, stderr, exitCode] as const;
+  } finally {
+    signal?.removeEventListener("abort", abortProcess);
+  }
+}
+
 function normalizeIncludePattern(include?: string): string | undefined {
   if (!include) return undefined;
   return include.includes("/") || include.startsWith("**/") ? include : `**/${include}`;
 }
 
-async function collectFiles(rootPath: string, include?: string): Promise<string[]> {
+async function collectFiles(
+  rootPath: string,
+  include?: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (signal?.aborted) throw abortError();
   if (statSync(rootPath).isFile()) return [rootPath];
   const glob = new Bun.Glob(normalizeIncludePattern(include) ?? "**/*");
-  return Array.fromAsync(glob.scan({ cwd: rootPath, absolute: true, onlyFiles: true, dot: true }));
+  const files: string[] = [];
+  for await (const filePath of glob.scan({
+    cwd: rootPath,
+    absolute: true,
+    onlyFiles: true,
+    dot: true,
+  })) {
+    if (signal?.aborted) throw abortError();
+    files.push(filePath);
+  }
+  return files;
 }
 
 async function searchWithRg(
@@ -28,9 +85,10 @@ async function searchWithRg(
   rootPath: string,
   include?: string,
   ignoreCase?: boolean,
+  signal?: AbortSignal,
 ): Promise<Tool.Result> {
   const binary = Bun.which("rg");
-  if (!binary) return searchWithGrep(call, pattern, rootPath, include, ignoreCase);
+  if (!binary) return searchWithGrep(call, pattern, rootPath, include, ignoreCase, signal);
 
   const args = [
     "--json",
@@ -46,13 +104,9 @@ async function searchWithRg(
     rootPath,
   ];
   const proc = Bun.spawn([binary, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const [stdout, stderr, exitCode] = await waitForProcess(proc, signal);
 
-  if (exitCode > 1) {
+  if (exitCode !== null && exitCode > 1) {
     const output = [stdout, stderr].filter(Boolean).join("\n").trim();
     return errorResult(call, output || `rg exited with code ${exitCode}`);
   }
@@ -86,24 +140,22 @@ async function searchWithGrep(
   rootPath: string,
   include?: string,
   ignoreCase?: boolean,
+  signal?: AbortSignal,
 ): Promise<Tool.Result> {
   const binary = Bun.which("grep");
   if (!binary) return errorResult(call, "Neither rg nor grep is available");
 
   const matches: MatchResult[] = [];
-  const files = await collectFiles(rootPath, include);
+  const files = await collectFiles(rootPath, include, signal);
   const command = [binary, "-rnH", "-E", ...(ignoreCase ? ["-i"] : []), "-e", pattern, "--"];
 
   for (const filePath of files) {
+    if (signal?.aborted) throw abortError();
     if (matches.length >= MAX_MATCHES) break;
     const proc = Bun.spawn([...command, filePath], { stdout: "pipe", stderr: "pipe" });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
+    const [stdout, stderr, exitCode] = await waitForProcess(proc, signal);
 
-    if (exitCode > 1) {
+    if (exitCode !== null && exitCode > 1) {
       const output = [stdout, stderr].filter(Boolean).join("\n").trim();
       return errorResult(call, output || `grep exited with code ${exitCode}`);
     }
@@ -139,7 +191,7 @@ export function createGrepTool(workspaceRoot: string): NativeTool {
     isReadOnly: true,
     isDestructive: false,
     isConcurrencySafe: true,
-    async execute(call) {
+    async execute(call, context?: ToolExecutionContext) {
       try {
         const pattern = requireString(call.input, "pattern");
         const targetPath = optionalString(call.input, "path") ?? ".";
@@ -147,7 +199,7 @@ export function createGrepTool(workspaceRoot: string): NativeTool {
         const ignoreCase = optionalBoolean(call.input, "ignoreCase");
         const resolved = resolveContainedPath(workspaceRoot, targetPath);
 
-        return await searchWithRg(call, pattern, resolved, include, ignoreCase);
+        return await searchWithRg(call, pattern, resolved, include, ignoreCase, context?.signal);
       } catch (err) {
         return fromError(call, err);
       }

@@ -60,6 +60,23 @@ describe("worker internal tools", () => {
     });
   });
 
+  it("ask_main is workspace-read-only and explicitly labeled as resident consultation", () => {
+    const tools = WorkerInternalTools.create({
+      runId: "run-1",
+      sessionId: "session-1",
+      server: { call: mock(async () => ({ accepted: true, output: "unused" })) },
+      ipcAuthToken: "token",
+      workerId: "worker-1",
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
+    });
+    const askMain = getTool(tools, "ask_main");
+
+    expect(askMain.riskTier).toBe(0);
+    expect(askMain.isReadOnly).toBe(true);
+    expect(askMain.labels).toContain("resident-consult");
+    expect(askMain.descriptor?.effects).toContain("authority.request");
+  });
+
   it("ask_main forwards the worker run context to the parent process", async () => {
     const serverCall = mock(async () => ({ accepted: true, output: "approved" }));
     const tools = WorkerInternalTools.create({
@@ -80,6 +97,7 @@ describe("worker internal tools", () => {
       workerId: "worker-1",
       sessionId: "session-1",
       runId: "run-1",
+      callId: "call-2",
       question: "Continue?",
     });
     expect(result).toMatchObject({
@@ -106,6 +124,80 @@ describe("worker internal tools", () => {
     expect(result).toMatchObject({
       toolCallId: "call-3",
       output: "no",
+      isError: true,
+    });
+  });
+
+  it("ask_main returns an abort result without starting when pre-aborted", async () => {
+    const serverCall = mock(async () => ({ accepted: true, output: "unused" }));
+    const tools = WorkerInternalTools.create({
+      runId: "run-1",
+      sessionId: "session-1",
+      server: { call: serverCall },
+      ipcAuthToken: "token",
+      workerId: "worker-1",
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await getTool(tools, "ask_main").execute(
+      createCall("call-abort", "ask_main", { question: "Continue?" }),
+      { signal: controller.signal },
+    );
+
+    expect(serverCall).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      toolCallId: "call-abort",
+      output: "worker.ask_main aborted",
+      isError: true,
+    });
+  });
+
+  it("ask_main sends a cancel request when aborted while waiting", async () => {
+    const controller = new AbortController();
+    let resolveAsk: ((value: unknown) => void) | undefined;
+    const serverCall = mock((method: string) => {
+      if (method === "worker.ask_main") {
+        return new Promise<unknown>((resolve) => {
+          resolveAsk = resolve;
+        });
+      }
+      return Promise.resolve({ cancelled: true });
+    });
+    const tools = WorkerInternalTools.create({
+      runId: "run-1",
+      sessionId: "session-1",
+      server: { call: serverCall },
+      ipcAuthToken: "token",
+      workerId: "worker-1",
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
+    });
+
+    const resultPromise = getTool(tools, "ask_main").execute(
+      createCall("call-waiting", "ask_main", { question: "Continue?" }),
+      { signal: controller.signal },
+    );
+    await Bun.sleep(0);
+    controller.abort();
+
+    const result = await resultPromise;
+    resolveAsk?.({ accepted: true, output: "late" });
+
+    expect(serverCall).toHaveBeenCalledWith(
+      "worker.ask_main_cancel",
+      {
+        authToken: "token",
+        workerId: "worker-1",
+        sessionId: "session-1",
+        runId: "run-1",
+        callId: "call-waiting",
+      },
+      5_000,
+    );
+    expect(result).toMatchObject({
+      toolCallId: "call-waiting",
+      output: "worker.ask_main aborted",
       isError: true,
     });
   });

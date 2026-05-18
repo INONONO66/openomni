@@ -1,5 +1,7 @@
 import {
   createWorkerManager,
+  type ToolCallCancelParams,
+  type ToolCallContext,
   type ToolCallParams,
   type ToolCallResult,
   type WorkerManager,
@@ -7,7 +9,7 @@ import {
 } from "../worker-manager";
 import type { WorkerManagerConfig } from "../worker-manager";
 
-export type { ToolCallParams, ToolCallResult };
+export type { ToolCallCancelParams, ToolCallContext, ToolCallParams, ToolCallResult };
 
 export type WorkerPoolConfig = Omit<WorkerManagerConfig, "maxActiveWorkers"> & {
   /** Legacy alias for maxActiveWorkers. */

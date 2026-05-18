@@ -1,7 +1,7 @@
 import { createIpcServer } from "@openomni/coordinator";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
-import { BackgroundManager } from "@openomni/openomni";
+import { BackgroundManager, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
@@ -101,6 +101,11 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
         void shutdownWorker(0);
       }, 0);
     }
+  } else if (method === "worker.tool_call_settled") {
+    if (typeof params?.workspaceRoot === "string" && typeof params.callId === "string") {
+      WorkspaceLock.clearUnsafe(params.workspaceRoot, params.callId);
+    }
+    respond({ acknowledged: true });
   } else {
     respond({ ok: true });
   }

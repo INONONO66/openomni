@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentResult } from "@openomni/agent";
-import { BackgroundManager } from "@openomni/openomni";
+import { BackgroundManager, WorkspaceLock } from "@openomni/openomni";
+import type { Tool, WorkerBootstrap } from "@openomni/protocol";
 
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 import { WorkerRunner } from "../../src/execution/worker-runner";
@@ -226,6 +227,88 @@ describe("WorkerRunner", () => {
       },
     ]);
     expect(activeRuns.size).toBe(0);
+  });
+
+  it("returns unknown settlement for proxied tool IPC failures and uses an extended call timeout", async () => {
+    const responses: unknown[] = [];
+    const workspaceRoot = `/tmp/openomni-worker-runner-test-${crypto.randomUUID()}`;
+    const serverCalls: Array<{
+      method: string;
+      params?: Record<string, unknown>;
+      timeoutMs?: number;
+    }> = [];
+    let proxiedResult: Tool.Result | undefined;
+    const bootstrap: WorkerBootstrap.Bootstrap = {
+      configEpoch: "epoch-1",
+      agents: [],
+      toolCatalog: [
+        {
+          canonicalName: "mcp.server.write_file",
+          exposedName: "mcp_server_write_file",
+          source: "mcp",
+          category: "execution",
+          riskTier: 1,
+          spec: { name: "mcp.server.write_file", inputSchema: {} },
+        },
+      ],
+    };
+    const request = createValidRequest();
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...request,
+          tools: [{ name: "mcp.server.write_file", inputSchema: {} }],
+          toolConfig: { workspaceRoot },
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          server: {
+            async call(method, params, timeoutMs) {
+              serverCalls.push({ method, params, timeoutMs });
+              throw new Error("request timeout: worker.tool_call");
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          getBootstrap: () => bootstrap,
+          createAgent: (options) => ({
+            async run() {
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              proxiedResult = await options.toolExecutor({
+                id: "agent-tool-call",
+                tool: "mcp_server_write_file",
+                input: {},
+              });
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(proxiedResult).toMatchObject({
+      id: expect.any(String),
+      toolCallId: expect.any(String),
+      output: "request timeout: worker.tool_call",
+      isError: true,
+      settlement: "unknown",
+    });
+    expect(serverCalls).toContainEqual(
+      expect.objectContaining({
+        method: "worker.tool_call",
+        timeoutMs: 300_000,
+      }),
+    );
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+    WorkspaceLock.clearUnsafe(workspaceRoot);
   });
 
   it("reports failed runs and cleans active run state after agent errors", async () => {

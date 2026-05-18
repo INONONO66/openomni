@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "./bash";
@@ -34,6 +34,34 @@ describe("bashTool", () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.output).toBe(`auth= db= home=${workspace}`);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("kills the subprocess when execution context is aborted", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-abort-"));
+    const marker = join(workspace, "late-write.txt");
+    const controller = new AbortController();
+
+    try {
+      const tool = bashTool(workspace);
+      const resultPromise = tool.execute(
+        {
+          id: "call-abort",
+          tool: "bash",
+          input: { command: "(sleep 0.2; touch late-write.txt) & wait" },
+        },
+        { signal: controller.signal },
+      );
+
+      setTimeout(() => controller.abort(), 20);
+      const result = await resultPromise;
+      await Bun.sleep(300);
+
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("Command aborted");
+      expect(existsSync(marker)).toBe(false);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }

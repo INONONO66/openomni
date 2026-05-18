@@ -15,8 +15,8 @@ export function createSubagentTool(options?: SubagentToolOptions): NativeTool {
     isDestructive: false,
     isConcurrencySafe: false,
     source: "agent",
-    async execute(call) {
-      const result = await tool.execute(call.input);
+    async execute(call, context) {
+      const result = await tool.execute(call.input, context);
       return { ...result, toolCallId: call.id };
     },
   };

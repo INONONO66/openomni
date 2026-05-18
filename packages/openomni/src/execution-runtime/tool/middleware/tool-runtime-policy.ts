@@ -76,6 +76,10 @@ export namespace ToolRuntimePolicyMiddleware {
     }
   }
 
+  export interface TimeoutOptions {
+    readonly onTimeout?: (error: TimeoutError) => void;
+  }
+
   export interface RuntimePolicyHandle {
     readonly timeoutMs: number;
     readonly lockOwnerId: string;
@@ -92,6 +96,7 @@ export namespace ToolRuntimePolicyMiddleware {
     readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
     readonly workspaceRoot?: string;
     readonly lockOwnerId: string;
+    readonly signal?: AbortSignal;
     readonly traceContext?: TraceContext.Type;
     readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
@@ -144,7 +149,7 @@ export namespace ToolRuntimePolicyMiddleware {
     }
 
     try {
-      await WorkspaceLock.acquire(ctx.workspaceRoot, ctx.lockOwnerId);
+      await WorkspaceLock.acquire(ctx.workspaceRoot, ctx.lockOwnerId, 30_000, ctx.signal);
       handle.lockAcquired = true;
       recordDecision(
         allowDecision("workspace lock acquired", [
@@ -154,6 +159,7 @@ export namespace ToolRuntimePolicyMiddleware {
       );
       return { decision: allowDecision("runtime policy evaluated"), handle };
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
       const decision = abortDecision(error instanceof Error ? error.message : String(error));
       recordDecision(decision, ctx.onDecision);
       return { decision, handle };
@@ -172,12 +178,23 @@ export namespace ToolRuntimePolicyMiddleware {
     return allowDecision("runtime policy post-tool evaluated");
   }
 
-  export function enforceTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  export function enforceTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    options: TimeoutOptions = {},
+  ): Promise<T> {
     return Promise.race([
       promise,
       new Promise<never>((_, reject) => {
         const timer = globalThis.setTimeout(() => {
-          reject(new TimeoutError(ms));
+          const error = new TimeoutError(ms);
+          reject(error);
+          try {
+            options.onTimeout?.(error);
+          } catch {
+            // Timeout rejection is authoritative; do not let cleanup callbacks
+            // escape the timer turn as uncaught exceptions.
+          }
         }, ms);
 
         promise.then(

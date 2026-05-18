@@ -55,7 +55,7 @@ export function createExecutionToolContext(
   availableTools: NativeTool[],
 ): {
   tools?: Execution.Request["tools"];
-  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
 } {
   if ((request.tools?.length ?? 0) === 0) {
     return {};

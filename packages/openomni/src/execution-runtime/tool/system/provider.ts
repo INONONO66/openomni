@@ -1,5 +1,5 @@
 import type { Tool } from "@openomni/protocol";
-import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
+import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
 import { bashTool } from "../builtins/bash.js";
 import { createEditTool } from "../builtins/edit.js";
 import { createGlobTool } from "../builtins/glob.js";
@@ -27,7 +27,7 @@ export class SystemToolProvider implements ToolProvider {
     return tools;
   }
 
-  execute(call: Tool.Call): Promise<Tool.Result> {
+  execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
     const tool = this.listTools().find(
       (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
     );
@@ -39,6 +39,8 @@ export class SystemToolProvider implements ToolProvider {
         isError: true,
       });
     }
-    return tool.execute({ ...call, tool: tool.spec.name });
+    return context === undefined
+      ? tool.execute({ ...call, tool: tool.spec.name })
+      : tool.execute({ ...call, tool: tool.spec.name }, context);
   }
 }

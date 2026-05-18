@@ -11,6 +11,7 @@ export type {
   ImplicitInputSource,
   NativeTool,
   ToolCategory,
+  ToolExecutionContext,
   ToolExecutorConfig,
   ToolMetaValue,
   ToolProvider,

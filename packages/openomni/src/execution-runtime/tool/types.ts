@@ -18,6 +18,8 @@ export interface ToolRuntimeContext {
   readonly workspaceRoot?: string;
 }
 
+export type ToolExecutionContext = Tool.ExecutionContext;
+
 export interface NativeTool {
   spec: Tool.Spec;
   riskTier: ToolRiskTier;
@@ -29,14 +31,14 @@ export interface NativeTool {
   source?: ToolSource;
   category?: ToolSelection.Category;
   implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
-  execute(call: Tool.Call): Promise<Tool.Result>;
+  execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result>;
 }
 
 export interface ToolProvider {
   readonly name: string;
   readonly category: ToolCategory;
   listTools(): NativeTool[];
-  execute(call: Tool.Call): Promise<Tool.Result>;
+  execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result>;
 }
 
 export interface ToolExecutorConfig {
@@ -48,4 +50,5 @@ export interface ToolExecutorConfig {
     tier1?: number;
     tier2?: number;
   };
+  postTimeoutSettleGraceMs?: number;
 }

@@ -40,8 +40,9 @@ const rules: readonly SideEffectRule[] = [
   {
     ruleId: "tool-ledger-before-execute",
     filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
-    sideEffect: /tool\.execute\(dispatchedCall\)/g,
-    scopeStart: /return async \(call: Tool\.Call\): Promise<Tool\.Result> => \{/g,
+    sideEffect: /tool\.execute\(dispatchedCall(?:, \{ signal: linkedAbort\.signal \})?\)/g,
+    scopeStart:
+      /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
     requiredBefore: [
       "Bus.publish(ToolExecution.Started, {",
       "toolCallId: call.id",
@@ -52,8 +53,9 @@ const rules: readonly SideEffectRule[] = [
   {
     ruleId: "mcp-ledger-before-execute",
     filePath: "apps/server/src/tool/mcp/provider.ts",
-    sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}\)/g,
-    scopeStart: /async execute\(call: Tool\.Call\): Promise<Tool\.Result> \{/g,
+    sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, context)?\)/g,
+    scopeStart:
+      /async execute\(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> \{/g,
     requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
     message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
   },

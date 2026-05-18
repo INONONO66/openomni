@@ -6,11 +6,14 @@ import { Subagent } from "@openomni/protocol";
 import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
 
 let capturedOnToolCall:
-  | ((params: {
-      callId: string;
-      tool: string;
-      input: Record<string, unknown>;
-    }) => Promise<{ id: string; toolCallId: string; output: string; isError?: boolean }>)
+  | ((
+      params: {
+        callId: string;
+        tool: string;
+        input: Record<string, unknown>;
+      },
+      context?: { signal?: AbortSignal },
+    ) => Promise<{ id: string; toolCallId: string; output: string; isError?: boolean }>)
   | undefined;
 
 let mockPoolDispatch: (
@@ -198,11 +201,14 @@ describe("builtin middleware — tool permission", () => {
 
 describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
   test("onToolCall callback delegates to toolDispatcher handler", async () => {
-    const captured: Tool.Call[] = [];
+    const captured: Array<{ call: Tool.Call; signal?: AbortSignal }> = [];
 
-    const toolDispatcher = new Map<string, (call: Tool.Call) => Promise<Tool.Result>>();
-    toolDispatcher.set("myserver.read_file", async (call: Tool.Call): Promise<Tool.Result> => {
-      captured.push(call);
+    const toolDispatcher = new Map<
+      string,
+      (call: Tool.Call, context?: { signal?: AbortSignal }) => Promise<Tool.Result>
+    >();
+    toolDispatcher.set("myserver.read_file", async (call, context): Promise<Tool.Result> => {
+      captured.push({ call, signal: context?.signal });
       return {
         id: crypto.randomUUID(),
         toolCallId: call.id,
@@ -217,15 +223,20 @@ describe("MCP proxy — worker.tool_call routes to generic dispatcher", () => {
     if (!capturedOnToolCall) throw new Error("onToolCall not captured by mock");
 
     const callId = crypto.randomUUID();
-    const result = await capturedOnToolCall({
-      callId,
-      tool: "myserver.read_file",
-      input: { path: "/tmp/test.txt" },
-    });
+    const controller = new AbortController();
+    const result = await capturedOnToolCall(
+      {
+        callId,
+        tool: "myserver.read_file",
+        input: { path: "/tmp/test.txt" },
+      },
+      { signal: controller.signal },
+    );
 
     expect(captured).toHaveLength(1);
-    expect(captured[0].id).toBe(callId);
-    expect(captured[0].tool).toBe("myserver.read_file");
+    expect(captured[0]?.call.id).toBe(callId);
+    expect(captured[0]?.call.tool).toBe("myserver.read_file");
+    expect(captured[0]?.signal).toBe(controller.signal);
     expect(result.output).toBe("mcp-result");
   });
 });

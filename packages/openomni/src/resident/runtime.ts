@@ -15,6 +15,7 @@ export interface ResidentRunContext {
   readonly sessionId: string;
   readonly event: Ingress.ResolvedInboundEvent;
   readonly traceContext?: TraceContextProtocol.Type;
+  readonly signal?: AbortSignal;
 }
 
 export interface ResidentRunResult {
@@ -49,6 +50,43 @@ type SlotWaiter = { resolve: () => void; reject: (error: Error) => void };
 
 function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
   return ChatAgent.create(config).run(input);
+}
+
+function createAbortError(): Error {
+  const error = new Error("resident run aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+function abortRace(signal: AbortSignal | undefined): {
+  readonly promise: Promise<never>;
+  readonly cleanup: () => void;
+} {
+  if (!signal) {
+    return {
+      promise: new Promise<never>(() => {
+        // No cancellation requested.
+      }),
+      cleanup: () => undefined,
+    };
+  }
+  if (signal.aborted) {
+    return { promise: Promise.reject(createAbortError()), cleanup: () => undefined };
+  }
+  let cleanup: () => void = () => undefined;
+  const promise = new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return { promise, cleanup };
 }
 
 function extractAgentName(event: Ingress.ResolvedInboundEvent): string | undefined {
@@ -106,11 +144,22 @@ export class ResidentRuntime {
   }
 
   async run(ctx: ResidentRunContext): Promise<ResidentRunResult> {
+    throwIfAborted(ctx.signal);
     const activation = this.ensureActivation(ctx.sessionId);
     const previous = activation.queue;
-    const chained = previous.catch(() => undefined).then(() => this.runExclusive(ctx));
+    const chained = previous
+      .catch(() => undefined)
+      .then(() => {
+        throwIfAborted(ctx.signal);
+        return this.runExclusive(ctx);
+      });
     activation.queue = chained;
-    return chained;
+    const abort = abortRace(ctx.signal);
+    try {
+      return await Promise.race([chained, abort.promise]);
+    } finally {
+      abort.cleanup();
+    }
   }
 
   private ensureActivation(sessionId: string): ActivationRecord {
@@ -195,7 +244,10 @@ export class ResidentRuntime {
       budget: ctx.event.agent.budget,
       tools: ctx.event.agent.tools,
       permissions: ctx.event.agent.permissions,
-      toolExecutor: toolExecutor as ((call: Tool.Call) => Promise<Tool.Result>) | undefined,
+      toolExecutor: toolExecutor as
+        | ((call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>)
+        | undefined,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
       middleware: buildWorkerMiddleware({
         permissions: ctx.event.agent.permissions,
         ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),

@@ -16,7 +16,7 @@ type BlockedResultMetadata = {
 type BlockedToolResult = Tool.Result & { metadata?: BlockedResultMetadata };
 
 export interface ToolExecutorOptions {
-  toolExecutor: (call: Tool.Call) => Promise<Tool.Result>;
+  toolExecutor: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   engine: PolicyEngineInstance;
   getContext?: () => {
     steps: AgentStep[];
@@ -29,6 +29,7 @@ export interface ToolExecutorOptions {
   onToolComplete?: (durationMs: number) => void;
   onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void | Promise<void>;
   traceContext?: TraceContext.Type;
+  signal?: AbortSignal;
 }
 
 function sourceFromLabels(
@@ -64,7 +65,7 @@ function toolDescriptor(
 
 export function createToolExecutor(
   options: ToolExecutorOptions,
-): (call: Tool.Call) => Promise<Tool.Result> {
+): (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result> {
   const {
     toolExecutor,
     engine,
@@ -74,6 +75,7 @@ export function createToolExecutor(
     onToolComplete,
     onDecision,
     traceContext,
+    signal,
   } = options;
   const traceId = traceContext?.traceId ?? crypto.randomUUID();
   const sessionId = traceContext?.sessionId ?? "";
@@ -133,7 +135,7 @@ export function createToolExecutor(
     return result;
   }
 
-  return async (call: Tool.Call): Promise<Tool.Result> => {
+  return async (call: Tool.Call, context?: Tool.ExecutionContext): Promise<Tool.Result> => {
     const ctx = getContext?.();
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -203,7 +205,9 @@ export function createToolExecutor(
     const startMs = Date.now();
     let result: Tool.Result;
     try {
-      result = await toolExecutor(effectiveCall);
+      result = await toolExecutor(effectiveCall, {
+        signal: context?.signal ?? signal,
+      });
     } catch (err) {
       const durationMs = Date.now() - startMs;
       onToolComplete?.(durationMs);

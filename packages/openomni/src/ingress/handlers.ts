@@ -345,6 +345,7 @@ export namespace IngressHandlers {
       sessionId: ctx.sessionId,
       event: ctx.event,
       traceContext: ctx.traceContext,
+      signal: (ctx.event.runtime as { signal?: AbortSignal } | undefined)?.signal,
     });
     const output = await dispatchWritebackCommit(ctx, residentResult.output);
     SessionBridge.storeDirectResult(ctx.sessionId, output, ctx.event.agent.model);
