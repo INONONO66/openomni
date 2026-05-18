@@ -89,7 +89,6 @@ export type WorkerRuntimeConfig = {
   toolsRef: { tools?: ChatAgentConfig["tools"]; toolExecutor?: ChatAgentConfig["toolExecutor"] };
   parentSessionId: string;
   parentPermissions?: Policy.Permission;
-  parentPolicyPlan?: Policy.PolicyPlan;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
   agentDefinitionsRef?: { definitions?: Map<string, RuntimeAgentDefinition> };
@@ -149,26 +148,13 @@ function resolveChildTools(
 function buildChildRuntimeMiddleware(
   childDefinition: RuntimeAgentDefinition | undefined,
   childPermissions: Policy.Permission | undefined,
-  parentPolicyPlan: Policy.PolicyPlan | undefined,
   parentPermissions: Policy.Permission | undefined,
 ): ChatAgentConfig["middleware"] {
   const middleware: ChatAgentConfig["middleware"] = [];
-  if (parentPolicyPlan) {
-    // Ancestor policy plans are runtime constraints for descendants, not
-    // delegation-admission guards for the spawn/send operation itself.
-    middleware.push(
-      ...buildWorkerMiddleware({
-        policyPlan: parentPolicyPlan,
-        // Used only when the parent plan selected the builtin guard without
-        // owning config yet; explicit parent plan config still wins.
-        permissions: parentPermissions,
-        includeLifecycle: false,
-        includeIdle: false,
-      }),
-    );
-  } else if (parentPermissions && childDefinition?.policyPlan) {
-    // Parent legacy permissions remain an ancestor runtime guard even when the
-    // child plan owns the child-scoped permission config.
+  if (parentPermissions && childDefinition?.policyPlan) {
+    // Legacy parent permissions remain an ancestor runtime guard even when the
+    // child plan owns the child-scoped permission config. Parent policy plans
+    // stay parent-scoped and are not copied into child runtime middleware.
     middleware.push(createToolPermissionPolicy({ permission: parentPermissions }));
   }
   if (childDefinition?.policyPlan) {
@@ -197,12 +183,7 @@ export function buildWorkerChildRuntimeConfig(
   const childPermissions = childDefinition?.permissions;
   const permissions = childDefinition?.policyPlan
     ? undefined
-    : cfg.parentPolicyPlan
-      ? // Parent legacy permissions are only a hydration fallback for parent
-        // policy plans; do not stack them as a separate child runtime guard.
-        // Child legacy permissions remain child-owned runtime config.
-        childPermissions
-      : intersectPermissions(cfg.parentPermissions, childPermissions);
+    : intersectPermissions(cfg.parentPermissions, childPermissions);
   return {
     ...(childDefinition ? { childDefinition } : {}),
     tools: resolveChildTools(cfg, childDefinition, input.depth),
@@ -213,7 +194,6 @@ export function buildWorkerChildRuntimeConfig(
     childMiddleware: buildChildRuntimeMiddleware(
       childDefinition,
       childPermissions,
-      cfg.parentPolicyPlan,
       cfg.parentPermissions,
     ),
   };

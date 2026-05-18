@@ -584,7 +584,7 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
     expect(names).toContain("subagent:wait-timeout");
   });
 
-  test("childMiddleware prepends default denylist when no explicit permissions", () => {
+  test("childMiddleware prepends default denylist when no explicit runtime policy exists", () => {
     const existing: PolicyRegistration[] = [
       {
         name: "custom-policy",
@@ -602,7 +602,7 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
     expect(result?.[1].name).toBe("custom-policy");
   });
 
-  test("childMiddleware passes through when explicit permissions exist", () => {
+  test("childMiddleware copies explicit child runtime middleware", () => {
     const existing: PolicyRegistration[] = [
       {
         name: "custom-policy",
@@ -615,7 +615,35 @@ describe("SubagentSpawnPolicyMiddleware integration", () => {
 
     const result = SubagentSpawnPolicyMiddleware.childMiddleware(existing, true);
 
-    expect(result).toBe(existing);
+    expect(result).toEqual(existing);
+    expect(result).not.toBe(existing);
+
+    existing.push({
+      name: "late-policy",
+      timing: "invoke.prepare",
+      priority: 1,
+      failPolicy: "fail-open",
+      fn: () => PolicyDecision.allow({ policyId: "late-policy" }),
+    });
+
+    expect(result).toHaveLength(1);
+  });
+
+  test("buildChildRuntimeMiddleware treats explicit empty child policy as an opt-out", () => {
+    const result = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
+      middleware: [],
+      hasExplicitRuntimePolicy: true,
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  test("buildChildRuntimeMiddleware creates default child guard without child policy", () => {
+    const result = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
+      hasExplicitRuntimePolicy: false,
+    });
+
+    expect(result.map((registration) => registration.name)).toEqual(["subagent:default-denylist"]);
   });
 
   test("evaluatePreSpawn full pipeline for send on existing session", async () => {

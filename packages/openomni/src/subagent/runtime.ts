@@ -50,6 +50,51 @@ type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
 
 type PreDelegationOperation = "spawn" | "spawn_background" | "send";
 
+interface ChildRuntimeAdmissionSummary {
+  readonly toolNames?: string[];
+  readonly permissions?: Policy.Permission;
+  readonly childRuntimeMiddlewareNames?: string[];
+  readonly hasExplicitRuntimePolicy: boolean;
+}
+
+function summarizeChildRuntimeAdmission(
+  config: RuntimeConfig & { permissions?: Policy.Permission },
+): ChildRuntimeAdmissionSummary | undefined {
+  const toolNames = config.tools?.map((tool) => tool.name);
+  const childRuntimeMiddlewareNames = config.childMiddleware?.map(
+    (registration) => registration.name,
+  );
+  if (
+    toolNames === undefined &&
+    config.permissions === undefined &&
+    childRuntimeMiddlewareNames === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...(toolNames !== undefined && { toolNames }),
+    ...(config.permissions !== undefined && { permissions: config.permissions }),
+    ...(childRuntimeMiddlewareNames !== undefined && { childRuntimeMiddlewareNames }),
+    hasExplicitRuntimePolicy:
+      config.permissions !== undefined || config.childMiddleware !== undefined,
+  };
+}
+
+function childRuntimeAdmissionFields(
+  summary: ChildRuntimeAdmissionSummary | undefined,
+): Record<string, unknown> {
+  if (summary === undefined) return {};
+  return {
+    childRuntime: summary,
+    ...(summary.toolNames !== undefined && { childToolNames: summary.toolNames.join(",") }),
+    ...(summary.childRuntimeMiddlewareNames !== undefined && {
+      childRuntimeMiddlewareNames: summary.childRuntimeMiddlewareNames.join(","),
+    }),
+    childHasExplicitRuntimePolicy: String(summary.hasExplicitRuntimePolicy),
+  };
+}
+
 function createDelegationTrace(parentSessionId: string | undefined) {
   if (parentSessionId === undefined) return undefined;
   return { traceId: crypto.randomUUID(), sessionId: parentSessionId };
@@ -97,6 +142,7 @@ async function dispatchPreDelegation(input: {
   parentSessionId?: string;
   operation: PreDelegationOperation;
   prompt: string;
+  childRuntime?: ChildRuntimeAdmissionSummary;
 }): Promise<Policy.PolicyDecision> {
   if (!input.middleware?.length) {
     return PolicyDecision.allow({
@@ -136,6 +182,7 @@ async function dispatchPreDelegation(input: {
       childAgent: input.childAgent,
       prompt: input.prompt,
       ...(input.parentSessionId !== undefined && { parentSessionId: input.parentSessionId }),
+      ...childRuntimeAdmissionFields(input.childRuntime),
     },
     labels: [
       { value: `actor.child:${input.childAgent}`, source: "system" as const },
@@ -184,21 +231,21 @@ function applyPreDelegationDecision(
 }
 
 function buildChildRunMiddleware(config: RuntimeConfig & { permissions?: Policy.Permission }) {
-  // Used by spawn/send/resume for the child run itself. Admission still reads
-  // config.middleware before this helper, so childMiddleware never participates
-  // in the parent-scoped delegation decision.
-  const inheritedMiddleware = SubagentSpawnPolicyMiddleware.childMiddleware(
-    config.childMiddleware ?? config.middleware,
-    config.permissions !== undefined || config.childMiddleware !== undefined,
-  );
-  const inherited = inheritedMiddleware ?? [];
+  // Used by spawn/send/resume for the child run itself. Delegation admission
+  // reads config.middleware separately when applicable, so parent-scoped
+  // policies are not reused as child runtime policies.
+  const childRuntimeMiddleware = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
+    middleware: config.childMiddleware,
+    hasExplicitRuntimePolicy:
+      config.permissions !== undefined || config.childMiddleware !== undefined,
+  });
   return [
-    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), inherited),
+    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), childRuntimeMiddleware),
     // Subagent run middleware preserves the prior child-run defaults:
     // budget lifecycle + permission constraints only. Send transcript compaction
     // is handled separately before resume; idle nudge is worker-runtime owned.
     ...(config.permissions ? [createToolPermissionPolicy({ permission: config.permissions })] : []),
-    ...inherited,
+    ...childRuntimeMiddleware,
   ];
 }
 
@@ -277,6 +324,7 @@ export namespace SubagentRuntime {
       parentSessionId: config.parentSessionId,
       operation: "spawn",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted spawn");
 
@@ -315,6 +363,7 @@ export namespace SubagentRuntime {
       parentSessionId: config.parentSessionId,
       operation: "spawn_background",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, decision, "invoke.prepare policy aborted background spawn");
 
@@ -358,6 +407,7 @@ export namespace SubagentRuntime {
       parentSessionId: childSession?.parentSessionId,
       operation: "send",
       prompt: config.prompt,
+      childRuntime: summarizeChildRuntimeAdmission(config),
     });
     applyPreDelegationDecision(config, sendDecision, "invoke.prepare policy aborted send");
 

@@ -20,6 +20,18 @@ import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-r
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
 
+function buildDelegationAdmissionMiddleware(
+  request: Execution.Request,
+): ReturnType<typeof buildWorkerMiddleware> | undefined {
+  if (!request.policyPlan) return undefined;
+  return buildWorkerMiddleware({
+    permissions: request.permissions,
+    policyPlan: request.policyPlan,
+    includeLifecycle: false,
+    includeIdle: false,
+  }).map((registration) => ({ ...registration, propagate: true }));
+}
+
 function createToolCallAbortError(): Error {
   const error = new Error("Tool call aborted");
   error.name = "AbortError";
@@ -227,7 +239,6 @@ export namespace WorkerRunner {
           allowAuthFallback: false,
           parentSessionId: sessionId,
           parentPermissions: request.permissions,
-          parentPolicyPlan: request.policyPlan,
         };
         const scopedBackgroundManager: ReturnType<typeof BackgroundManager.create> = {
           launch(input: Parameters<typeof backgroundManager.launch>[0]) {
@@ -257,6 +268,7 @@ export namespace WorkerRunner {
 
         const agentProvider = new AgentToolProvider({
           subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
+          middleware: buildDelegationAdmissionMiddleware(request),
           delegationContext: {
             depth: 0,
             maxDepth: 3,
