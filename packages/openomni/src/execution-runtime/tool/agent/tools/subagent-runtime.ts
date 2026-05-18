@@ -1,10 +1,10 @@
 import { ChatAgent, createToolPermissionPolicy } from "@openomni/agent";
 import type { SubagentToolOptions, ChatAgentConfig } from "@openomni/agent";
-import { Subagent } from "@openomni/protocol";
-import type { Policy, WorkerBootstrap } from "@openomni/protocol";
+import { type Policy, Subagent } from "@openomni/protocol";
+import type { WorkerBootstrap } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { SubagentRuntime } from "../../../../subagent/runtime.js";
-import { buildWorkerMiddleware } from "../../../middleware.js";
+import { buildWorkerMiddleware, resolvePolicyPlanToolPermission } from "../../../middleware.js";
 import { resolveToolSelection } from "../../catalog.js";
 import type { CatalogEntry } from "../../catalog.js";
 
@@ -102,6 +102,7 @@ export type WorkerChildRuntimeConfig = {
   toolExecutor: ChatAgentConfig["toolExecutor"];
   systemPrompt?: string;
   permissions?: Policy.Permission;
+  admissionPermissions?: Policy.Permission;
   middleware: ChatAgentConfig["middleware"];
   childMiddleware: ChatAgentConfig["middleware"];
 };
@@ -181,15 +182,22 @@ export function buildWorkerChildRuntimeConfig(
 ): WorkerChildRuntimeConfig {
   const childDefinition = input.childDefinition ?? resolveChildDefinition(cfg, input.agentName);
   const childPermissions = childDefinition?.permissions;
-  const permissions = childDefinition?.policyPlan
-    ? undefined
-    : intersectPermissions(cfg.parentPermissions, childPermissions);
+  const childPolicyPlanPermissions = resolvePolicyPlanToolPermission(
+    childDefinition?.policyPlan,
+    childPermissions,
+  );
+  const effectivePermissions = intersectPermissions(
+    cfg.parentPermissions,
+    childDefinition?.policyPlan ? childPolicyPlanPermissions : childPermissions,
+  );
+  const permissions = childDefinition?.policyPlan ? undefined : effectivePermissions;
   return {
     ...(childDefinition ? { childDefinition } : {}),
     tools: resolveChildTools(cfg, childDefinition, input.depth),
     toolExecutor: cfg.toolsRef.toolExecutor,
     systemPrompt: childDefinition?.systemPrompt,
     permissions,
+    admissionPermissions: effectivePermissions,
     middleware: input.middleware,
     childMiddleware: buildChildRuntimeMiddleware(
       childDefinition,
@@ -222,6 +230,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         toolExecutor: childRuntime.toolExecutor,
         parentSessionId: cfg.parentSessionId,
         permissions: childRuntime.permissions,
+        admissionPermissions: childRuntime.admissionPermissions,
         middleware: childRuntime.middleware,
         childMiddleware: childRuntime.childMiddleware,
         signal: config.signal,
@@ -251,6 +260,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         tools: childRuntime.tools,
         toolExecutor: childRuntime.toolExecutor,
         permissions: childRuntime.permissions,
+        admissionPermissions: childRuntime.admissionPermissions,
         middleware: childRuntime.middleware,
         childMiddleware: childRuntime.childMiddleware,
         signal: config.signal,

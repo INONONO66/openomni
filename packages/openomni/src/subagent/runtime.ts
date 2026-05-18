@@ -57,16 +57,21 @@ interface ChildRuntimeAdmissionSummary {
   readonly hasExplicitRuntimePolicy: boolean;
 }
 
+function hasExplicitRuntimePolicy(config: RuntimeConfig & { permissions?: Policy.Permission }) {
+  return config.permissions !== undefined || config.childMiddleware !== undefined;
+}
+
 function summarizeChildRuntimeAdmission(
   config: RuntimeConfig & { permissions?: Policy.Permission },
 ): ChildRuntimeAdmissionSummary | undefined {
   const toolNames = config.tools?.map((tool) => tool.name);
+  const permissions = config.admissionPermissions ?? config.permissions;
   const childRuntimeMiddlewareNames = config.childMiddleware?.map(
     (registration) => registration.name,
   );
   if (
     toolNames === undefined &&
-    config.permissions === undefined &&
+    permissions === undefined &&
     childRuntimeMiddlewareNames === undefined
   ) {
     return undefined;
@@ -74,10 +79,9 @@ function summarizeChildRuntimeAdmission(
 
   return {
     ...(toolNames !== undefined && { toolNames }),
-    ...(config.permissions !== undefined && { permissions: config.permissions }),
+    ...(permissions !== undefined && { permissions }),
     ...(childRuntimeMiddlewareNames !== undefined && { childRuntimeMiddlewareNames }),
-    hasExplicitRuntimePolicy:
-      config.permissions !== undefined || config.childMiddleware !== undefined,
+    hasExplicitRuntimePolicy: hasExplicitRuntimePolicy(config),
   };
 }
 
@@ -230,14 +234,16 @@ function applyPreDelegationDecision(
   applyDelegationConstraints(config, decision);
 }
 
-function buildChildRunMiddleware(config: RuntimeConfig & { permissions?: Policy.Permission }) {
+function buildChildRunMiddleware(
+  config: RuntimeConfig & { permissions?: Policy.Permission },
+  hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config),
+) {
   // Used by spawn/send/resume for the child run itself. Delegation admission
   // reads config.middleware separately when applicable, so parent-scoped
   // policies are not reused as child runtime policies.
   const childRuntimeMiddleware = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
     middleware: config.childMiddleware,
-    hasExplicitRuntimePolicy:
-      config.permissions !== undefined || config.childMiddleware !== undefined,
+    hasExplicitRuntimePolicy: hasExplicitChildRuntimePolicy,
   });
   return [
     ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), childRuntimeMiddleware),
@@ -318,6 +324,7 @@ export namespace SubagentRuntime {
   }
 
   export async function spawn(config: SpawnConfig): Promise<RunResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
@@ -347,7 +354,7 @@ export namespace SubagentRuntime {
       );
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
-      const middleware = buildChildRunMiddleware(config);
+      const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
       const runConfig = { ...config, middleware };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
         runWithTranscript(session.id, runConfig, signal),
@@ -357,6 +364,7 @@ export namespace SubagentRuntime {
   }
 
   export async function spawnBackground(config: SpawnConfig): Promise<SpawnBackgroundResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const decision = await dispatchPreDelegation({
       middleware: config.middleware,
       childAgent: config.agentName,
@@ -382,7 +390,7 @@ export namespace SubagentRuntime {
     await WorkerRun.updateStatus(session.id, runId, "starting");
     await WorkerRun.updateStatus(session.id, runId, "running");
 
-    const middleware = buildChildRunMiddleware(config);
+    const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
     const runConfig = { ...config, middleware };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
@@ -397,6 +405,7 @@ export namespace SubagentRuntime {
   }
 
   export async function send(config: SendConfig): Promise<RunResult> {
+    const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const childMeta = Session.getWorkerMeta(config.sessionId);
     const childAgent =
       typeof childMeta?.agentName === "string" ? childMeta.agentName : config.sessionId;
@@ -436,7 +445,7 @@ export namespace SubagentRuntime {
       await WorkerRun.updateStatus(session.id, runId, "starting");
       await WorkerRun.updateStatus(session.id, runId, "running");
 
-      const middleware = buildChildRunMiddleware(config);
+      const middleware = buildChildRunMiddleware(config, hasExplicitChildRuntimePolicy);
       const runConfig = { ...config, middleware };
       const messages = await maybeCompactSendTranscript(
         session.id,

@@ -195,6 +195,10 @@ describe("createWorkerSubagentRuntime", () => {
     expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
     const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
     expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    expect(spawnSpy.mock.calls[0]?.[0].admissionPermissions).toEqual({
+      action: "tool.call",
+      allowlist: ["read"],
+    });
     await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
       verdict: "allow",
     });
@@ -239,6 +243,16 @@ describe("createWorkerSubagentRuntime", () => {
     expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
     const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
     expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    expect(spawnSpy.mock.calls[0]?.[0].admissionPermissions).toEqual({
+      action: "tool.call",
+      allowlist: [],
+      denylist: [],
+      denyLabels: [],
+      allowLabels: undefined,
+      requireApproval: [],
+      requireApprovalLabels: [],
+      inputRules: [],
+    });
     await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
       verdict: "deny",
     });

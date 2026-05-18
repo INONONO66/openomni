@@ -467,7 +467,11 @@ describe("SubagentRuntime", () => {
             effects: [
               {
                 type: "delegation.set_constraints",
-                constraints: { softTimeoutMs: 5000, hardTimeoutMs: 10000 },
+                constraints: {
+                  softTimeoutMs: 5000,
+                  hardTimeoutMs: 10000,
+                  permissions: { action: "tool.call", allowlist: ["read"] },
+                },
               },
             ],
           }),
@@ -486,6 +490,11 @@ describe("SubagentRuntime", () => {
       expect(result.output).toBe("transformed output");
       expect(config.softTimeoutMs).toBe(5000);
       expect(config.hardTimeoutMs).toBe(10000);
+      expect(config.permissions).toEqual({ action: "tool.call", allowlist: ["read"] });
+      const childRuntimeMiddleware = createSpy.mock.calls[0]?.[0].middleware ?? [];
+      expect(childRuntimeMiddleware.map((registration) => registration.name)).toContain(
+        "subagent:default-denylist",
+      );
     });
 
     it("invoke.prepare receives parent/child agent labels", async () => {

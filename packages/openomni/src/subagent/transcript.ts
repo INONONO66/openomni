@@ -23,6 +23,8 @@ export type RuntimeConfig = {
   middleware?: PolicyRegistration[];
   /** Child-run middleware assembled from explicit child context only. */
   childMiddleware?: PolicyRegistration[];
+  /** Effective child authority exposed to parent-scoped delegation admission only. */
+  admissionPermissions?: ChatAgentConfig["permissions"];
 };
 
 export type SendCompactionConfig = {
