@@ -1,7 +1,23 @@
 import { Extension, Policy, Operational } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import { z } from "zod";
+import { actorKind, actorLabel, errorMessage, truncateAuditText } from "./audit-util";
+import {
+  AuditManifestSummarySchema,
+  auditManifestSummary,
+  auditValidationInput,
+  auditValidationResource,
+  parseExtensionManifest,
+} from "./manager-manifest";
+import type { ExtensionManifestSummary, ExtensionValidationResult } from "./manager-manifest";
 import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtime-binding";
+
+export type {
+  ExtensionManifestSummary,
+  ExtensionValidationFailure,
+  ExtensionValidationResult,
+  ExtensionValidationSuccess,
+} from "./manager-manifest";
 
 type ExtensionAction =
   | "extension.validate"
@@ -144,47 +160,6 @@ export interface ExtensionAuditOptions extends ExtensionOperationOptions {
   readonly extensionId?: string;
 }
 
-export interface ExtensionValidationSuccess {
-  readonly success: true;
-  readonly manifest: Extension.Manifest;
-}
-
-export interface ExtensionValidationFailure {
-  readonly success: false;
-  readonly errors: readonly string[];
-}
-
-export type ExtensionValidationResult = ExtensionValidationSuccess | ExtensionValidationFailure;
-
-export interface ExtensionManifestSummary {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string;
-  readonly description: string;
-  readonly author?: string;
-  readonly homepage?: string;
-  readonly permissionCount: number;
-  readonly contributes?: {
-    readonly agents: number;
-    readonly tools: number;
-    readonly skills: number;
-    readonly mcpServers: number;
-    readonly middlewares: number;
-    readonly surfaces: number;
-  };
-  readonly components?: Extension.Contributes;
-  readonly provenance?: {
-    readonly manifestHash: string;
-    readonly packageHash?: string;
-    readonly signedBy?: string;
-    readonly createdByRunId?: string;
-    readonly sourceSessionId?: string;
-  };
-  readonly compatibility?: {
-    readonly openomni: string;
-  };
-}
-
 export interface ExtensionManagerEntry {
   readonly id: string;
   readonly version: string;
@@ -236,7 +211,6 @@ export interface ExtensionOperationAuditEntry {
 export type ExtensionAuditEntry = ExtensionLifecycleAuditEntry | ExtensionOperationAuditEntry;
 
 const AUDIT_VISIBILITY: AuditVisibility = "internal";
-const MAX_AUDIT_TEXT_LENGTH = 256;
 const AUTHORITY_REQUIRED_REASON = "extension_authority_requires_user_main_or_trusted_manager";
 const authorityActorKinds: readonly string[] = ["user", "main", "trusted_manager"];
 const authorityActions = new Set<ExtensionAction>(["extension.approve", "extension.enable"]);
@@ -251,37 +225,6 @@ const lifecycleNames = new Set<LifecycleEventName>([
   "extension.failed",
 ]);
 
-const ManifestSummarySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  version: z.string(),
-  description: z.string(),
-  author: z.string().optional(),
-  homepage: z.string().optional(),
-  permissionCount: z.number(),
-  contributes: z
-    .object({
-      agents: z.number(),
-      tools: z.number(),
-      skills: z.number(),
-      mcpServers: z.number(),
-      middlewares: z.number(),
-      surfaces: z.number(),
-    })
-    .optional(),
-  components: Extension.Contributes.optional(),
-  provenance: z
-    .object({
-      manifestHash: z.string(),
-      packageHash: z.string().optional(),
-      signedBy: z.string().optional(),
-      createdByRunId: z.string().optional(),
-      sourceSessionId: z.string().optional(),
-    })
-    .optional(),
-  compatibility: z.object({ openomni: z.string() }).optional(),
-});
-
 const LifecyclePayloadSchema = z.object({
   extensionId: z.string(),
   version: z.string(),
@@ -290,7 +233,7 @@ const LifecyclePayloadSchema = z.object({
   reason: z.string().optional(),
   state: Extension.LifecycleState,
   fromVersion: z.string().optional(),
-  manifest: ManifestSummarySchema.optional(),
+  manifest: AuditManifestSummarySchema.optional(),
   error: z.string().optional(),
 });
 
@@ -303,10 +246,10 @@ export namespace ExtensionManager {
   ): Promise<ExtensionValidationResult> {
     const operation = await beginOperation(options, {
       action: "extension.validate",
-      resource: validationResource(manifest),
-      input: validationInput(manifest),
+      resource: auditValidationResource(manifest),
+      input: auditValidationInput(manifest),
     });
-    const result = parseManifest(manifest);
+    const result = parseExtensionManifest(manifest);
 
     await approveOperation(
       operation,
@@ -321,7 +264,7 @@ export namespace ExtensionManager {
     manifest: unknown,
     options: ExtensionRequestInstallOptions,
   ): Promise<ExtensionManagerEntry> {
-    const parsed = parseManifest(manifest);
+    const parsed = parseExtensionManifest(manifest);
     if (!parsed.success) {
       throw new Error(`Invalid extension manifest: ${parsed.errors.join("; ")}`);
     }
@@ -330,7 +273,7 @@ export namespace ExtensionManager {
       id: parsed.manifest.id,
       version: parsed.manifest.version,
       reason: options.reason,
-      manifest: manifestSummary(parsed.manifest),
+      manifest: auditManifestSummary(parsed.manifest),
     });
     const operation = await beginOperation(options, {
       action: "extension.requestInstall",
@@ -358,7 +301,7 @@ export namespace ExtensionManager {
       time: operation.now().getTime(),
       state: "proposed",
       ...(options.reason !== undefined ? { reason: truncateAuditText(options.reason) } : {}),
-      manifest: manifestSummary(parsed.manifest, { includeComponents: true }),
+      manifest: auditManifestSummary(parsed.manifest, { includeComponents: true }),
     });
   }
 
@@ -697,10 +640,6 @@ function policyInput(
   };
 }
 
-function actorKind(actor: Record<string, unknown>): string {
-  return typeof actor.kind === "string" ? truncateAuditText(actor.kind) : "unknown";
-}
-
 function canonicalVerdict(result: Policy.EvaluationResult): Policy.PolicyDecision["verdict"] {
   if (result.decision === "require_approval") return "pending";
   return result.action === "continue" ? "allow" : "deny";
@@ -994,108 +933,6 @@ function resolveRollbackTarget(
   return [...installed].reverse().find((version) => version !== fromVersion);
 }
 
-function manifestSummary(
-  manifest: Extension.Manifest,
-  options: { readonly includeComponents?: boolean } = {},
-): ExtensionManifestSummary {
-  const contributes = manifest.contributes;
-  return {
-    id: manifest.id,
-    name: truncateAuditText(manifest.name),
-    version: truncateAuditText(manifest.version),
-    description: truncateAuditText(manifest.description),
-    ...(manifest.author !== undefined ? { author: truncateAuditText(manifest.author) } : {}),
-    ...(manifest.homepage !== undefined ? { homepage: truncateAuditText(manifest.homepage) } : {}),
-    permissionCount: manifest.permissions?.length ?? 0,
-    ...(contributes !== undefined
-      ? {
-          contributes: {
-            agents: contributes.agents?.length ?? 0,
-            tools: contributes.tools?.length ?? 0,
-            skills: contributes.skills?.length ?? 0,
-            mcpServers: contributes.mcpServers?.length ?? 0,
-            middlewares: contributes.middlewares?.length ?? 0,
-            surfaces: contributes.surfaces?.length ?? 0,
-          },
-        }
-      : {}),
-    ...(options.includeComponents === true && contributes !== undefined
-      ? { components: contributes }
-      : {}),
-    ...(manifest.provenance !== undefined
-      ? {
-          provenance: {
-            manifestHash: truncateAuditText(manifest.provenance.manifestHash),
-            ...(manifest.provenance.packageHash !== undefined
-              ? { packageHash: truncateAuditText(manifest.provenance.packageHash) }
-              : {}),
-            ...(manifest.provenance.signedBy !== undefined
-              ? { signedBy: truncateAuditText(manifest.provenance.signedBy) }
-              : {}),
-            ...(manifest.provenance.createdByRunId !== undefined
-              ? { createdByRunId: truncateAuditText(manifest.provenance.createdByRunId) }
-              : {}),
-            ...(manifest.provenance.sourceSessionId !== undefined
-              ? { sourceSessionId: truncateAuditText(manifest.provenance.sourceSessionId) }
-              : {}),
-          },
-        }
-      : {}),
-    ...(manifest.compatibility !== undefined
-      ? { compatibility: { openomni: truncateAuditText(manifest.compatibility.openomni) } }
-      : {}),
-  };
-}
-
-function parseManifest(manifest: unknown): ExtensionValidationResult {
-  const parsed = Extension.Manifest.safeParse(manifest);
-  if (parsed.success) {
-    return { success: true, manifest: parsed.data };
-  }
-
-  return { success: false, errors: parsed.error.issues.map((issue) => issue.message) };
-}
-
-function validationResource(manifest: unknown): string {
-  return readStringField(manifest, "id") ?? "unknown";
-}
-
-function validationInput(manifest: unknown): Record<string, unknown> {
-  const record = manifestRecord(manifest);
-  if (!record) {
-    return { valueType: manifest === null ? "null" : typeof manifest };
-  }
-
-  return {
-    ...(readStringField(record, "id") !== undefined
-      ? { id: truncateAuditText(readStringField(record, "id") ?? "") }
-      : {}),
-    ...(readStringField(record, "version") !== undefined
-      ? { version: truncateAuditText(readStringField(record, "version") ?? "") }
-      : {}),
-    ...(readStringField(record, "name") !== undefined
-      ? { name: truncateAuditText(readStringField(record, "name") ?? "") }
-      : {}),
-    fieldCount: Object.keys(record).length,
-    hasContributes: typeof record.contributes === "object" && record.contributes !== null,
-    permissionCount: Array.isArray(record.permissions) ? record.permissions.length : 0,
-  };
-}
-
-function readStringField(value: unknown, field: string): string | undefined {
-  const record = manifestRecord(value);
-  const raw = record?.[field];
-  return typeof raw === "string" ? truncateAuditText(raw) : undefined;
-}
-
-function manifestRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-
-  return value as Record<string, unknown>;
-}
-
 function operationInput(input: {
   readonly id?: string;
   readonly version?: string;
@@ -1110,42 +947,6 @@ function operationInput(input: {
     ...(input.reason !== undefined ? { reason: truncateAuditText(input.reason) } : {}),
     ...(input.manifest !== undefined ? { manifest: input.manifest } : {}),
   };
-}
-
-function actorLabel(actor: Record<string, unknown>): string {
-  const kind = typeof actor.kind === "string" ? actor.kind : undefined;
-  const id = typeof actor.id === "string" ? actor.id : undefined;
-  if (kind !== undefined && id !== undefined) {
-    return truncateAuditText(`${kind}:${id}`);
-  }
-  if (id !== undefined) {
-    return truncateAuditText(id);
-  }
-
-  return truncateAuditText(stableStringify(actor));
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  }
-
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort((a, b) => a.localeCompare(b))
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    .join(",")}}`;
-}
-
-function truncateAuditText(value: string): string {
-  return value.length <= MAX_AUDIT_TEXT_LENGTH ? value : value.slice(0, MAX_AUDIT_TEXT_LENGTH);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function isLifecycleName(name: string): name is LifecycleEventName {
