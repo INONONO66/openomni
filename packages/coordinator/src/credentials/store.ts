@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 const DEFAULT_SECRETS_PATH = join(homedir(), ".openomni", "secrets.json");
 
@@ -12,9 +14,13 @@ export function loadCredentials(path = DEFAULT_SECRETS_PATH): Credentials {
     const content = readFileSync(path, "utf-8");
     return JSON.parse(content) as Credentials;
   } catch (error) {
-    console.warn(
-      `failed to load credentials from ${path}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "coordinator.credentials",
+      msg: `failed to load credentials from ${path}`,
+      context: { error: error instanceof Error ? error.message : String(error) },
+    });
     return {};
   }
 }
