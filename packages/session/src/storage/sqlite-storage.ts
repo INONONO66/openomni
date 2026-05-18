@@ -413,10 +413,45 @@ export class SqliteStorageAdapter implements Storage.Adapter {
                  WHEN status = 'waiting_input' AND ? = 'running' THEN resume_count + 1
                  ELSE resume_count
                END,
-               time_updated = ?
+               time_updated = MAX(?, time_updated + 1)
            WHERE session_id = ? AND run_id = ?`,
         )
         .run(status, extra?.error ?? null, status, Date.now(), sessionId, runId);
+      return result.changes > 0;
+    },
+
+    updateStatusIfCurrent: (
+      sessionId: string,
+      runId: string,
+      expected: WorkerRunStateStore.StatusPrecondition,
+      status: WorkerRunStateStore.Status,
+      extra?: WorkerRunStateStore.StatusExtra,
+    ): boolean => {
+      const result = this.db
+        .query(
+          `UPDATE worker_run_state
+           SET status = ?,
+               error = COALESCE(?, error),
+               resume_count = CASE
+                 WHEN status = 'waiting_input' AND ? = 'running' THEN resume_count + 1
+                 ELSE resume_count
+               END,
+               time_updated = MAX(?, time_updated + 1)
+           WHERE session_id = ?
+             AND run_id = ?
+             AND status = ?
+             AND time_updated = ?`,
+        )
+        .run(
+          status,
+          extra?.error ?? null,
+          status,
+          Date.now(),
+          sessionId,
+          runId,
+          expected.status,
+          expected.timeUpdated,
+        );
       return result.changes > 0;
     },
 

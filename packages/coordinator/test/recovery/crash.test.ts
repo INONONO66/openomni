@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, Storage, WorkerRun } from "@openomni/session";
+import { Bus, Storage, WorkerRun, WorkerRunStateStore } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
 import { recoverInterruptedRuns } from "../../src/recovery";
 
@@ -62,7 +62,7 @@ describe("recoverInterruptedRuns", () => {
     expect(result.sessions).toEqual(["s1"]);
   });
 
-  test("marks starting runs as interrupted via running transition", async () => {
+  test("marks starting runs as interrupted", async () => {
     seedSession("s2");
     await seedRunAtStatus("s2", "r2", "starting");
 
@@ -138,6 +138,55 @@ describe("recoverInterruptedRuns", () => {
     expect(result.recovered).toBe(0);
     const run = await WorkerRun.get("s5", "r5");
     expect(run?.status).toBe("queued");
+  });
+
+  test("skips runs changed by an active writer after the recovery scan", async () => {
+    seedSession("s-active");
+    await seedRunAtStatus("s-active", "r-active", "running");
+
+    const workerRunState = Storage.get().workerRunState;
+    if (!workerRunState) throw new Error("workerRunState adapter missing");
+
+    const listBySession = workerRunState.listBySession.bind(workerRunState);
+    let changedAfterScan = false;
+    workerRunState.listBySession = (sessionId) => {
+      const rows = listBySession(sessionId);
+      if (sessionId === "s-active" && !changedAfterScan) {
+        changedAfterScan = true;
+        WorkerRunStateStore.updateStatus(sessionId, "r-active", "succeeded");
+      }
+      return rows;
+    };
+
+    const result = await recoverInterruptedRuns();
+
+    const run = await WorkerRun.get("s-active", "r-active");
+    expect(run?.status).toBe("succeeded");
+    expect(result.recovered).toBe(0);
+    expect(result.sessions).toEqual([]);
+  });
+
+  test("status precondition rejects runs touched without a status change", async () => {
+    seedSession("s-touch");
+    await seedRunAtStatus("s-touch", "r-touch", "running");
+
+    const scanned = WorkerRunStateStore.get("s-touch", "r-touch");
+    expect(scanned?.status).toBe("running");
+    if (!scanned) throw new Error("r-touch not found before active write");
+    WorkerRunStateStore.updateStatus("s-touch", "r-touch", "running");
+
+    const interrupted = await WorkerRun.updateStatusIfCurrent(
+      "s-touch",
+      "r-touch",
+      { status: scanned.status, timeUpdated: scanned.timeUpdated },
+      "interrupted",
+      { endedAt: Date.now(), error: "stale recovery update" },
+    );
+
+    const run = await WorkerRun.get("s-touch", "r-touch");
+    expect(run?.status).toBe("running");
+    expect(run?.timeUpdated).toBeGreaterThan(scanned.timeUpdated);
+    expect(interrupted).toBe(false);
   });
 
   test("deduplicates sessions in result when multiple runs recovered from same session", async () => {

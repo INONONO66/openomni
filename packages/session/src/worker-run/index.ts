@@ -27,6 +27,7 @@ export interface WorkerRunRecord {
   lastMessageId?: string;
   error?: string;
   resumeCount: number;
+  timeUpdated: number;
 }
 
 type WorkerRunStatusExtra = {
@@ -103,6 +104,7 @@ function toWorkerRunRecord(record: WorkerRunStateStore.Record): WorkerRunRecord 
     lastMessageId: extras?.lastMessageId,
     error: record.error,
     resumeCount: record.resumeCount,
+    timeUpdated: record.timeUpdated,
   };
 }
 
@@ -171,5 +173,34 @@ export namespace WorkerRun {
     if (current.status !== status) {
       publishLifecycleEvent(sessionId, current, status, extra?.error);
     }
+  }
+
+  export async function updateStatusIfCurrent(
+    sessionId: string,
+    runId: string,
+    expected: WorkerRunStateStore.StatusPrecondition,
+    status: WorkerRunStatus,
+    extra?: WorkerRunStatusExtra,
+  ): Promise<boolean> {
+    const current = WorkerRunStateStore.get(sessionId, runId);
+    const updated = WorkerRunStateStore.updateStatusIfCurrent(sessionId, runId, expected, status, {
+      error: extra?.error,
+    });
+    if (!updated) return false;
+
+    if (extra?.endedAt !== undefined || extra?.lastMessageId !== undefined) {
+      const key = extraKey(sessionId, runId);
+      const previous = runExtras.get(key);
+      runExtras.set(key, {
+        endedAt: extra.endedAt ?? previous?.endedAt,
+        lastMessageId: extra.lastMessageId ?? previous?.lastMessageId,
+      });
+    }
+
+    if (current && expected.status !== status) {
+      publishLifecycleEvent(sessionId, toWorkerRunRecord(current), status, extra?.error);
+    }
+
+    return true;
   }
 }

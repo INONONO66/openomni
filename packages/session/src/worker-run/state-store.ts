@@ -1,4 +1,5 @@
-import type { Subagent } from "@openomni/protocol";
+import { Subagent } from "@openomni/protocol";
+import { z } from "zod";
 import { Storage } from "../storage/storage";
 
 const transitions: Record<Subagent.WorkerRunStatus, readonly Subagent.WorkerRunStatus[]> = {
@@ -55,9 +56,22 @@ export namespace WorkerRunStateStore {
     readonly error?: string;
   }
 
+  export const StatusPrecondition = z.object({
+    status: Subagent.WorkerRunStatus,
+    timeUpdated: z.number(),
+  });
+  export type StatusPrecondition = z.infer<typeof StatusPrecondition>;
+
   export interface Adapter {
     create(sessionId: string, record: CreateRecord): void;
     updateStatus(sessionId: string, runId: string, status: Status, extra?: StatusExtra): boolean;
+    updateStatusIfCurrent(
+      sessionId: string,
+      runId: string,
+      expected: StatusPrecondition,
+      status: Status,
+      extra?: StatusExtra,
+    ): boolean;
     get(sessionId: string, runId: string): Record | undefined;
     listBySession(sessionId: string): Record[];
     listByStatus(status: Status): Record[];
@@ -85,6 +99,22 @@ export namespace WorkerRunStateStore {
       throw new Error(`Invalid worker run status transition from ${current.status} to ${status}`);
     }
     adapter.updateStatus(sessionId, runId, status, extra);
+  }
+
+  export function updateStatusIfCurrent(
+    sessionId: string,
+    runId: string,
+    expected: StatusPrecondition,
+    status: Status,
+    extra?: StatusExtra,
+  ): boolean {
+    const parsedExpected = StatusPrecondition.parse(expected);
+    if (!isValidTransition(parsedExpected.status, status)) {
+      throw new Error(
+        `Invalid worker run status transition from ${parsedExpected.status} to ${status}`,
+      );
+    }
+    return requireAdapter().updateStatusIfCurrent(sessionId, runId, parsedExpected, status, extra);
   }
 
   export function get(sessionId: string, runId: string): Record | undefined {
