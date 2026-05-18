@@ -73,19 +73,30 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Bootstrap gh-pages branch
+        if: steps.ghp.outputs.exists == 'false' && github.event_name == 'push'
+        run: |
+          git checkout --orphan gh-pages
+          git reset --hard
+          mkdir -p dev/bench
+          echo '[]' > dev/bench/data.js
+          git add dev/bench/data.js
+          git -c user.name="github-actions" -c user.email="github-actions@github.com" commit -m "chore: bootstrap gh-pages for benchmarks"
+          git push origin gh-pages
+          git checkout -
+
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
+        if: steps.ghp.outputs.exists == 'true' || github.event_name == 'push'
         with:
           name: OpenOmni Benchmarks
           tool: customSmallerIsBetter
           output-file-path: bench-results/combined.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' && steps.ghp.outputs.exists == 'true' }}
+          auto-push: ${{ github.event_name == 'push' }}
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
-          comment-on-alert: ${{ github.event_name == 'push' && steps.ghp.outputs.exists == 'true' }}
+          comment-on-alert: ${{ github.event_name == 'push' }}
           fail-on-alert: false
           summary-always: true
-          save-data-file: ${{ github.event_name == 'push' }}
-          skip-fetch-gh-pages: ${{ steps.ghp.outputs.exists != 'true' }}
