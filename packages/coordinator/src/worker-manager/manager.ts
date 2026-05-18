@@ -517,12 +517,10 @@ async function cleanupIfStaleUnsafe(dirPath: string): Promise<void> {
   const files = fs.readdirSync(dirPath);
   const sockets = files.filter((f) => f.endsWith(".sock"));
 
-  if (sockets.length > 0) {
-    const results = await Promise.all(
-      sockets.map((sock) => isSocketAlive(path.join(dirPath, sock))),
-    );
-    if (results.some(Boolean)) return;
-  }
+  if (sockets.length === 0) return;
+
+  const results = await Promise.all(sockets.map((sock) => isSocketAlive(path.join(dirPath, sock))));
+  if (results.some(Boolean)) return;
 
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
