@@ -4,15 +4,7 @@ import { WorkerRunStateStore } from "./state-store.js";
 
 // Subagent execution lifecycle per session, kept separate from user-facing work items.
 
-export type WorkerRunStatus =
-  | "queued"
-  | "starting"
-  | "running"
-  | "waiting_input"
-  | "succeeded"
-  | "failed"
-  | "cancelled"
-  | "interrupted";
+export type WorkerRunStatus = Subagent.WorkerRunStatus;
 
 export interface WorkerRunRecord {
   runId: string;
