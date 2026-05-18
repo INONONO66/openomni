@@ -34,6 +34,7 @@ export interface ChatAgentConfig {
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];
   allowAuthFallback?: RunInput["allowAuthFallback"];
+  toolChoice?: "auto" | "required" | "none";
   middleware?: PolicyRegistration[];
   context?: AgentRuntimeContext;
   llm?: {

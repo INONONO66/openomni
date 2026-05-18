@@ -122,7 +122,7 @@ export async function* streamAgent(
         if (outcome.type === "aborted") throw new Error("aborted");
         if (outcome.type === "error") throw new Error(outcome.error.message);
         const _exhaustive: never = outcome;
-        throw new Error(`Unknown outcome type: ${(_exhaustive as { type?: string }).type}`);
+        throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
       }
     } catch (error) {
       const decision = yield* handleError(
@@ -145,4 +145,13 @@ export async function* streamAgent(
   }
 
   throw new Error(lastError || "Max retry attempts exceeded");
+}
+
+function unknownOutcomeType(value: unknown): string {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return "unknown";
+  }
+
+  const type = value.type;
+  return typeof type === "string" ? type : "unknown";
 }
