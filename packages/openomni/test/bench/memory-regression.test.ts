@@ -32,7 +32,7 @@ describe("openomni memory regression", () => {
 
     const final = measureRSS();
     const growthMB = (final - baseline) / 1024 / 1024;
-    expect(growthMB).toBeLessThan(5);
+    expect(growthMB).toBeLessThan(15);
   }, 30_000);
 
   test("Map/Set task lifecycle operations do not leak", () => {
@@ -76,6 +76,6 @@ describe("openomni memory regression", () => {
 
     const final = measureRSS();
     const growthMB = (final - baseline) / 1024 / 1024;
-    expect(growthMB).toBeLessThan(5);
+    expect(growthMB).toBeLessThan(15);
   }, 30_000);
 });

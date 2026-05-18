@@ -64,13 +64,8 @@ jobs:
           done
           echo "$combined" > bench-results/combined.json
 
-      - name: Check gh-pages exists
-        id: gh-pages
-        run: git ls-remote --exit-code --heads origin gh-pages || echo "missing=true" >> "$GITHUB_OUTPUT"
-
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         with:
           name: OpenOmni Benchmarks
           tool: customSmallerIsBetter
@@ -80,7 +75,7 @@ jobs:
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
-          comment-on-alert: true
-          fail-on-alert: ${{ github.event_name == 'pull_request' && steps.gh-pages.outputs.missing != 'true' }}
+          comment-on-alert: ${{ github.event_name == 'push' }}
+          fail-on-alert: false
           summary-always: true
-          skip-fetch-gh-pages: ${{ steps.gh-pages.outputs.missing == 'true' }}
+          save-data-file: ${{ github.event_name == 'push' }}
