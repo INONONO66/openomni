@@ -134,6 +134,27 @@ describe("deny-wins composition", () => {
     expect(verdict.verdict).toBe("allow");
   });
 
+  it("executes equal-priority policies in registration order", async () => {
+    const engine = PolicyEngine.create();
+    const executed: string[] = [];
+
+    for (const name of ["first", "second", "third"]) {
+      engine.register({
+        name,
+        timing: "turn.start",
+        priority: 10,
+        fn: () => {
+          executed.push(name);
+          return allow();
+        },
+      });
+    }
+
+    await engine.dispatch("turn.start", baseCtx());
+
+    expect(executed).toEqual(["first", "second", "third"]);
+  });
+
   it("deny-wins across all Policy.Timing values", async () => {
     const timings: Policy.Timing[] = [
       "inbound.receive",
