@@ -19,6 +19,49 @@ import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-r
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
 
+function createToolCallAbortError(): Error {
+  const error = new Error("Tool call aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function abortableIpcCall<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+  onAbort: () => void,
+): Promise<T> {
+  if (!signal) return operation();
+  if (signal.aborted) return Promise.reject(createToolCallAbortError());
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", handleAbort);
+    const finish = (complete: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      complete();
+    };
+    const handleAbort = () => {
+      onAbort();
+      finish(() => reject(createToolCallAbortError()));
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    let pending: Promise<T>;
+    try {
+      pending = operation();
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 export interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
@@ -135,20 +178,24 @@ export namespace WorkerRunner {
                 .call("worker.tool_call_cancel", { runId, sessionId, callId }, 5_000)
                 .catch(() => undefined);
             };
-            context?.signal?.addEventListener("abort", cancelToolCall, { once: true });
 
             try {
-              const raw = await server.call(
-                "worker.tool_call",
-                {
-                  runId,
-                  sessionId,
-                  callId,
-                  tool: toolName,
-                  input: toolArgs,
-                  ...(workspaceRoot ? { workspaceRoot } : {}),
-                },
-                WORKER_TOOL_CALL_IPC_TIMEOUT_MS,
+              const raw = await abortableIpcCall(
+                () =>
+                  server.call(
+                    "worker.tool_call",
+                    {
+                      runId,
+                      sessionId,
+                      callId,
+                      tool: toolName,
+                      input: toolArgs,
+                      ...(workspaceRoot ? { workspaceRoot } : {}),
+                    },
+                    WORKER_TOOL_CALL_IPC_TIMEOUT_MS,
+                  ),
+                context?.signal,
+                cancelToolCall,
               );
               return Tool.Result.parse(raw);
             } catch (error) {
@@ -159,8 +206,6 @@ export namespace WorkerRunner {
                 isError: true,
                 settlement: "unknown",
               };
-            } finally {
-              context?.signal?.removeEventListener("abort", cancelToolCall);
             }
           },
         );

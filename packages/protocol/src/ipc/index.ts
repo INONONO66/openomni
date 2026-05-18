@@ -186,10 +186,11 @@ const methods = {
   },
   "worker.tool_call_settled": {
     params: z.object({
+      authToken: z.string(),
       callId: z.string(),
       workspaceRoot: z.string().optional(),
     }),
-    result: z.object({ acknowledged: z.boolean() }),
+    result: z.object({ acknowledged: z.boolean(), error: z.string().optional() }),
   },
   "worker.state_update": {
     params: z.object({

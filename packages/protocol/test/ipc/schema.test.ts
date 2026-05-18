@@ -219,4 +219,21 @@ describe("Ipc.Methods param schemas", () => {
       }).success,
     ).toBe(true);
   });
+
+  test("worker.tool_call_settled requires coordinator auth token", () => {
+    expect(
+      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
+        authToken: "token",
+        callId: "call-1",
+        workspaceRoot: "/workspace",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
+        callId: "call-1",
+        workspaceRoot: "/workspace",
+      }).success,
+    ).toBe(false);
+  });
 });

@@ -188,6 +188,7 @@ export class WorkerSupervisor {
                     .call(
                       "worker.tool_call_settled",
                       {
+                        authToken,
                         callId: p.callId,
                         ...(active.workspaceRoot ? { workspaceRoot: active.workspaceRoot } : {}),
                       },
@@ -252,7 +253,7 @@ export class WorkerSupervisor {
               const question = typeof params?.question === "string" ? params.question : "";
               if (!this.askResidentHandler || !sessionId || !question) {
                 respond({
-                  requestId,
+                  requestId: callId,
                   accepted: false,
                   error: this.askResidentHandler
                     ? "worker.ask_main requires sessionId and question"

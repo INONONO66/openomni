@@ -102,6 +102,10 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       }, 0);
     }
   } else if (method === "worker.tool_call_settled") {
+    if (params?.authToken !== ipcAuthToken) {
+      respond({ acknowledged: false, error: "unauthorized coordinator request" });
+      return;
+    }
     if (typeof params?.workspaceRoot === "string" && typeof params.callId === "string") {
       WorkspaceLock.clearUnsafe(params.workspaceRoot, params.callId);
     }

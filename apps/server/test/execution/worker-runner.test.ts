@@ -314,6 +314,101 @@ describe("WorkerRunner", () => {
     }
   });
 
+  it("aborts a proxied tool IPC wait without waiting for the full IPC timeout", async () => {
+    const responses: unknown[] = [];
+    const activeRuns = new Map<string, WorkerRunState.ActiveRun>();
+    const serverCalls: Array<{
+      method: string;
+      params?: Record<string, unknown>;
+      timeoutMs?: number;
+    }> = [];
+    let proxiedResult: Tool.Result | undefined;
+    const bootstrap: WorkerBootstrap.Bootstrap = {
+      configEpoch: "epoch-1",
+      agents: [],
+      toolCatalog: [
+        {
+          canonicalName: "mcp.server.slow_write",
+          exposedName: "mcp_server_slow_write",
+          source: "mcp",
+          category: "execution",
+          riskTier: 1,
+          spec: { name: "mcp.server.slow_write", inputSchema: {} },
+        },
+      ],
+    };
+    const request = createValidRequest();
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...request,
+          tools: [{ name: "mcp.server.slow_write", inputSchema: {} }],
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          activeRuns,
+          server: {
+            call(method, params, timeoutMs) {
+              serverCalls.push({ method, params, timeoutMs });
+              if (method === "worker.tool_call") {
+                activeRuns.get("run-1")?.controller.abort();
+                return new Promise<unknown>(() => undefined);
+              }
+              if (method === "worker.tool_call_cancel") {
+                return Promise.resolve({ cancelled: true, settlement: "unknown" });
+              }
+              throw new Error(`unexpected server call: ${method}`);
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          getBootstrap: () => bootstrap,
+          createAgent: (options) => ({
+            async run() {
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              proxiedResult = await options.toolExecutor(
+                {
+                  id: "agent-tool-call",
+                  tool: "mcp_server_slow_write",
+                  input: {},
+                },
+                { signal: options.signal },
+              );
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(proxiedResult).toMatchObject({
+      id: expect.any(String),
+      toolCallId: expect.any(String),
+      isError: true,
+    });
+    expect(proxiedResult?.output).toContain("aborted");
+    expect(serverCalls).toContainEqual(
+      expect.objectContaining({
+        method: "worker.tool_call_cancel",
+        params: expect.objectContaining({
+          runId: "run-1",
+          sessionId: "session-1",
+          callId: expect.any(String),
+        }),
+        timeoutMs: 5_000,
+      }),
+    );
+    expect(responses[0]).toMatchObject({ status: "cancelled" });
+  });
+
   it("reports failed runs and cleans active run state after agent errors", async () => {
     const responses: unknown[] = [];
     const notifications: Array<{ method: string; params?: Record<string, unknown> }> = [];
