@@ -15,7 +15,7 @@ export namespace WorkerHeartbeat {
   export const Server = z.object({
     call: z
       .function()
-      .args(z.literal("worker.heartbeat"), z.record(z.unknown()))
+      .args(z.literal("worker.heartbeat"), z.record(z.string(), z.unknown()))
       .returns(z.promise(z.unknown())),
   });
   export type Server = {

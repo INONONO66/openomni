@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { resetConfig, loadConfig } from "../src/config";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
+import { resetConfig, loadConfig, type McpServerConfig } from "../src/config";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+
+async function flushBus(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe("config", () => {
   let tempDir: string;
@@ -17,11 +23,13 @@ describe("config", () => {
       WS_AUTH_TOKEN: process.env.WS_AUTH_TOKEN,
     };
     resetConfig();
+    Bus.reset();
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     resetConfig();
+    Bus.reset();
     Object.entries(originalEnv).forEach(([key, value]) => {
       if (value === undefined) {
         delete process.env[key];
@@ -48,6 +56,90 @@ describe("config", () => {
     expect(config.discord.token).toBe("file-discord-token");
     expect(config.github.secret).toBe("file-github-secret");
     expect(config.server.wsToken).toBe("file-ws-token");
+  });
+
+  it("preserves protocol MCP server fields from the config file", () => {
+    const configPath = join(tempDir, "config.json");
+    const servers: McpServerConfig[] = [
+      {
+        name: "remote",
+        transport: "streamable-http",
+        url: "https://mcp.example.com",
+        headers: { Authorization: "Bearer file-token" },
+        timeout: 12_000,
+        retries: 2,
+      },
+    ];
+    writeFileSync(configPath, JSON.stringify({ mcp: { servers } }));
+
+    const config = loadConfig(configPath);
+    expect(config.mcp.servers).toEqual(servers);
+  });
+
+  it("drops invalid MCP server entries at the config boundary", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    const valid: McpServerConfig = {
+      name: "valid",
+      transport: "stdio",
+      command: "node",
+    };
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        mcp: {
+          servers: [valid, { name: "invalid", transport: "websocket", url: "ws://localhost" }],
+        },
+      }),
+    );
+
+    const config = loadConfig(configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.mcp.servers).toEqual([valid]);
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid mcp server config ignored",
+        context: expect.objectContaining({
+          source: "server-config",
+          configPath,
+          rejected: [
+            expect.objectContaining({
+              index: 1,
+              name: "invalid",
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("treats non-array MCP servers as empty at the config boundary", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ mcp: { servers: { name: "bad", transport: "stdio" } } }),
+    );
+
+    const config = loadConfig(configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.mcp.servers).toEqual([]);
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid mcp server config ignored",
+        context: expect.objectContaining({
+          source: "server-config",
+          configPath,
+          rejected: [expect.objectContaining({ index: -1, error: "servers must be an array" })],
+        }),
+      }),
+    );
   });
 
   it("uses env var when config file value is missing for telegram token", () => {

@@ -10,3 +10,4 @@ export type {
   AgentFactory,
   AgentPromptMetadata,
 } from "./types";
+export { RuntimeAgentDefinition } from "./runtime-definition";

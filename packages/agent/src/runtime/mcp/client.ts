@@ -1,7 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  SSEClientTransport,
+  type SSEClientTransportOptions,
+} from "@modelcontextprotocol/sdk/client/sse.js";
+import {
+  StreamableHTTPClientTransport,
+  type StreamableHTTPClientTransportOptions,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { randomUUID } from "node:crypto";
@@ -273,24 +279,84 @@ function attachMcpToolDescriptor(
   };
 }
 
+const DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS = {
+  initialReconnectionDelay: 1_000,
+  maxReconnectionDelay: 30_000,
+  reconnectionDelayGrowFactor: 1.5,
+} as const;
+
 function createTransport(config: McpServerConfig): Transport {
   switch (config.transport) {
-    case "stdio": {
-      if (!config.command) throw new Error("stdio transport requires command");
+    case "stdio":
       return new StdioClientTransport({
         command: config.command,
         args: config.args,
       });
-    }
-    case "sse": {
-      if (!config.url) throw new Error("sse transport requires url");
-      return new SSEClientTransport(new URL(config.url));
-    }
-    case "streamable-http": {
-      if (!config.url) throw new Error("streamable-http transport requires url");
-      return new StreamableHTTPClientTransport(new URL(config.url));
-    }
+    case "sse":
+      return new SSEClientTransport(new URL(config.url), sseTransportOptions(config));
+    case "streamable-http":
+      return new StreamableHTTPClientTransport(
+        new URL(config.url),
+        streamableHttpTransportOptions(config),
+      );
     default:
-      throw new Error(`Unknown transport: ${String(config.transport)}`);
+      throw new Error("Unknown transport");
   }
+}
+
+function sseTransportOptions(config: McpServerConfig): SSEClientTransportOptions | undefined {
+  const headers = config.headers;
+  if (headers === undefined) return undefined;
+
+  // The SSE SDK transport exposes header injection but not a retry option; only
+  // streamable-http can apply `config.retries` below.
+  return {
+    requestInit: { headers: { ...headers } },
+    eventSourceInit: { fetch: createSseHeaderFetch(headers) },
+  };
+}
+
+function streamableHttpTransportOptions(
+  config: McpServerConfig,
+): StreamableHTTPClientTransportOptions | undefined {
+  const requestInit = requestInitForHeaders(config);
+  const maxRetries = normalizeRetries(config.retries);
+  if (requestInit === undefined && maxRetries === undefined) return undefined;
+
+  return {
+    ...(requestInit !== undefined && { requestInit }),
+    ...(maxRetries !== undefined && {
+      reconnectionOptions: {
+        ...DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS,
+        maxRetries,
+      },
+    }),
+  };
+}
+
+function requestInitForHeaders(config: McpServerConfig): RequestInit | undefined {
+  if (config.headers === undefined) return undefined;
+  return { headers: { ...config.headers } };
+}
+
+type SseEventSourceFetch = NonNullable<
+  NonNullable<SSEClientTransportOptions["eventSourceInit"]>["fetch"]
+>;
+type FetchRequestInit = NonNullable<Parameters<typeof fetch>[1]>;
+
+function createSseHeaderFetch(headers: Record<string, string>): SseEventSourceFetch {
+  const headerSnapshot = { ...headers };
+  return ((url: string | URL, init?: Parameters<SseEventSourceFetch>[1]) => {
+    const mergedHeaders = new Headers(init?.headers as FetchRequestInit["headers"] | undefined);
+    for (const [name, value] of Object.entries(headerSnapshot)) {
+      mergedHeaders.set(name, value);
+    }
+
+    return fetch(url, { ...init, headers: mergedHeaders });
+  }) as SseEventSourceFetch;
+}
+
+function normalizeRetries(retries: number | undefined): number | undefined {
+  if (retries === undefined) return undefined;
+  return Number.isFinite(retries) && retries >= 0 ? Math.trunc(retries) : undefined;
 }
