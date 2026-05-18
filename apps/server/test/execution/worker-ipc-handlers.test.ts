@@ -207,4 +207,19 @@ describe("worker IPC handlers", () => {
     expect(result).toEqual({ acknowledged: true });
     expect(cleared).toEqual([{ workspaceRoot: "/workspace", callId: "call-1" }]);
   });
+
+  it("rejects tool-settled notifications when clearing unsafe markers fails", () => {
+    const result = WorkerIpcHandlers.toolCallSettled({
+      params: { authToken: "token", workspaceRoot: "/workspace", callId: "call-1" },
+      ipcAuthToken: "token",
+      clearUnsafe: () => {
+        throw new Error("disk unavailable");
+      },
+    });
+
+    expect(result).toEqual({
+      acknowledged: false,
+      error: "failed to clear unsafe marker: disk unavailable",
+    });
+  });
 });

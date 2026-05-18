@@ -174,8 +174,18 @@ export namespace WorkerIpcHandlers {
       return { acknowledged: false, error: "invalid worker.tool_call_settled params" };
     }
 
-    clearUnsafe(workspaceRoot, callId);
-    return { acknowledged: true };
+    try {
+      clearUnsafe(workspaceRoot, callId);
+      return { acknowledged: true };
+    } catch (error) {
+      return {
+        acknowledged: false,
+        error:
+          error instanceof Error
+            ? `failed to clear unsafe marker: ${error.message}`
+            : "failed to clear unsafe marker",
+      };
+    }
   }
 }
 
