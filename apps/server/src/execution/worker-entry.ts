@@ -1,10 +1,9 @@
-import { AgentRegistry } from "@openomni/agent";
-import type { Auth } from "@openomni/llm";
 import { createIpcServer } from "@openomni/coordinator";
-import { Operational, WorkerBootstrap } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import { BackgroundManager } from "@openomni/openomni";
 import { loadConfig } from "../config";
+import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
 import { WorkerHeartbeat } from "./worker-heartbeat";
 import { WorkerIpcHandlers } from "./worker-ipc-handlers";
@@ -47,20 +46,14 @@ initialize({
 });
 BusPersistence.start();
 
-let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
 const activeRuns: WorkerRunState.ActiveRunRegistry = new Map();
-let resolveBootstrapReady: () => void = () => undefined;
-let rejectBootstrapReady: (_error: Error) => void = () => undefined;
-const bootstrapReady = new Promise<void>((resolve, reject) => {
-  resolveBootstrapReady = resolve;
-  rejectBootstrapReady = reject;
-});
+const workerBootstrapState = WorkerBootstrapHandler.createState();
 
 const backgroundManager = BackgroundManager.create({
   maxConcurrentPerAgent: 3,
   maxConcurrentTotal: 10,
   maxDepth: 3,
-  resolveAuth: resolveBootstrapAuth,
+  resolveAuth: workerBootstrapState.resolveAuth,
   allowAuthFallback: false,
 });
 
@@ -71,73 +64,17 @@ async function shutdownWorker(exitCode: number): Promise<never> {
   process.exit(exitCode);
 }
 
-function resolveBootstrapAuth(provider: string): Auth.Info | undefined {
-  const credentials = workerBootstrap?.credentials;
-  if (!credentials) return undefined;
-
-  const prefix = provider.toUpperCase();
-  const apiKey = credentials[`${prefix}_API_KEY`];
-  const baseURL = credentials[`${prefix}_BASE_URL`];
-
-  if (baseURL) {
-    return { type: "proxy", baseURL, ...(apiKey ? { apiKey } : {}) };
-  }
-  if (apiKey) {
-    return { type: "api", key: apiKey };
-  }
-  return undefined;
-}
-
 const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
   if (method === "coordinator.bootstrap") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({ ok: false, error: "unauthorized" });
-      return;
-    }
-
-    try {
-      const bootstrap = WorkerBootstrap.Bootstrap.parse(params.bootstrap);
-      workerBootstrap = bootstrap;
-      const agentDefs = bootstrap.agents.map((agent) => ({
-        name: agent.name,
-        description: agent.description,
-        model: agent.model,
-        systemPrompt: agent.systemPrompt,
-        tools: agent.tools.allow ?? [],
-        permissions: agent.permissions,
-        budget: agent.budget,
-      }));
-      AgentRegistry.replaceAll(agentDefs);
-      server.useConnection(connectionId);
-      resolveBootstrapReady();
-      server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
-      Bus.publish(Operational.Info, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        component: "server",
-        msg: "worker bootstrap received",
-        context: {
-          workerId,
-          agents: bootstrap.agents.length,
-          mcpTools: bootstrap.toolCatalog.length,
-        },
-      });
-      respond({ ok: true });
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      rejectBootstrapReady(error);
-      respond({ ok: false, error: error.message });
-      Bus.publish(Operational.Error, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        component: "server",
-        msg: "worker bootstrap failed",
-        context: {
-          workerId,
-          err: error.message,
-        },
-      });
-    }
+    WorkerBootstrapHandler.handleBootstrap({
+      params,
+      ipcAuthToken,
+      workerId,
+      server,
+      connectionId,
+      respond,
+      state: workerBootstrapState,
+    });
   } else if (method === "coordinator.spawn_run") {
     WorkerRunner.spawnRun({
       params,
@@ -145,11 +82,11 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       workerId,
       server,
       activeRuns,
-      bootstrapReady,
+      bootstrapReady: workerBootstrapState.ready,
       backgroundManager,
       defaultWorkspaceRoot: config.workspace?.root,
-      getBootstrap: () => workerBootstrap,
-      resolveAuth: resolveBootstrapAuth,
+      getBootstrap: workerBootstrapState.getBootstrap,
+      resolveAuth: workerBootstrapState.resolveAuth,
       respond,
     });
   } else if (method === "coordinator.cancel_run") {
@@ -174,7 +111,7 @@ WorkerHeartbeat.start({
   ipcAuthToken,
   server,
   getActiveRunIds: () => [...activeRuns.keys()],
-  getConfigEpoch: () => workerBootstrap?.configEpoch ?? "",
+  getConfigEpoch: () => workerBootstrapState.getBootstrap()?.configEpoch ?? "",
 });
 
 process.on("SIGTERM", async () => {
@@ -188,5 +125,3 @@ Bus.publish(Operational.Info, {
   msg: "worker started",
   context: { workerId, pid: process.pid, socketPath },
 });
-
-export { workerBootstrap };
