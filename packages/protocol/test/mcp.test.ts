@@ -37,6 +37,44 @@ describe("McpConfig.ServerConfig", () => {
       }),
     ).toThrow();
   });
+
+  test("rejects transport configs missing runtime-required fields", () => {
+    expect(() =>
+      McpConfig.ServerConfig.parse({
+        name: "stdio-missing-command",
+        transport: "stdio",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      McpConfig.ServerConfig.parse({
+        name: "http-missing-url",
+        transport: "streamable-http",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      McpConfig.ServerConfig.parse({
+        name: "http-invalid-url",
+        transport: "sse",
+        url: "not a url",
+      }),
+    ).toThrow();
+  });
+
+  test("rejects invalid timeout and retry numbers", () => {
+    const base = {
+      name: "remote",
+      transport: "streamable-http" as const,
+      url: "https://example.com/mcp",
+    };
+
+    for (const field of ["timeout", "retries"] as const) {
+      for (const value of [-1, 0.5, Infinity, Number.NaN]) {
+        expect(() => McpConfig.ServerConfig.parse({ ...base, [field]: value })).toThrow();
+      }
+    }
+  });
 });
 
 describe("Mcp.ToolCompleted event", () => {

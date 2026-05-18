@@ -228,7 +228,128 @@ describe("McpClient request options", () => {
     expect(options?.timeout).toBe(5000);
     expect(options?.maxTotalTimeout).toBe(5000);
   });
+
+  test("passes configured headers to SSE transports", async () => {
+    const sdkClient = createTransportCaptureClient();
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "sse",
+        url: "https://example.test/mcp",
+        headers: { Authorization: "Bearer token" },
+      },
+      { client: sdkClient },
+    );
+
+    await client.connect();
+
+    const options = capturedHttpTransportOptions(sdkClient.transport());
+    expect(new Headers(options.requestInit?.headers).get("Authorization")).toBe("Bearer token");
+    expect(options.eventSourceFetch).toBeFunction();
+  });
+
+  test("SSE EventSource header fetch handles omitted init", async () => {
+    const sdkClient = createTransportCaptureClient();
+    const originalFetch = globalThis.fetch;
+    const fetchCalls: Array<{ readonly url: string | URL; readonly init?: RequestInit }> = [];
+    globalThis.fetch = (async (url, init) => {
+      fetchCalls.push({ url, init });
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+
+    try {
+      const client = new McpClient(
+        {
+          name: "search-server",
+          transport: "sse",
+          url: "https://example.test/mcp",
+          headers: { Authorization: "Bearer token" },
+        },
+        { client: sdkClient },
+      );
+
+      await client.connect();
+
+      const eventSourceFetch = capturedHttpTransportOptions(sdkClient.transport()).eventSourceFetch;
+      expect(eventSourceFetch).toBeFunction();
+      await eventSourceFetch("https://example.test/mcp");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(new Headers(fetchCalls[0]?.init?.headers).get("Authorization")).toBe("Bearer token");
+  });
+
+  test("passes configured headers and retries to streamable HTTP transports", async () => {
+    const sdkClient = createTransportCaptureClient();
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "streamable-http",
+        url: "https://example.test/mcp",
+        headers: { "x-api-key": "secret" },
+        retries: 4,
+      },
+      { client: sdkClient },
+    );
+
+    await client.connect();
+
+    const options = capturedHttpTransportOptions(sdkClient.transport());
+    expect(new Headers(options.requestInit?.headers).get("x-api-key")).toBe("secret");
+    expect(options.reconnectionOptions?.maxRetries).toBe(4);
+  });
 });
+
+function createTransportCaptureClient(tools: McpToolStub[] = []): McpClientHandle & {
+  readonly transport: () => Transport | undefined;
+} {
+  let transport: Transport | undefined;
+  return {
+    connect: async (nextTransport) => {
+      transport = nextTransport;
+    },
+    close: async () => undefined,
+    listTools: async () => ({ tools }),
+    callTool: async () => {
+      throw new Error("callTool is not implemented by this test stub");
+    },
+    transport: () => transport,
+  };
+}
+
+interface CapturedHttpTransportOptions {
+  readonly eventSourceFetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
+  readonly requestInit?: RequestInit;
+  readonly reconnectionOptions?: { readonly maxRetries?: number };
+}
+
+// The MCP SDK accepts these options through public transport constructors, but
+// does not expose them through a public read API. These transport-option tests
+// therefore use guarded, documented white-box reads as the smallest connect-free
+// assertion point for verifying the options passed by McpClient.
+function capturedHttpTransportOptions(
+  transport: Transport | undefined,
+): CapturedHttpTransportOptions {
+  expect(transport).toBeDefined();
+  const captured = transport as TransportWithCapturedHttpOptions;
+  const eventSourceFetch = captured._eventSourceInit?.fetch;
+  return {
+    eventSourceFetch:
+      typeof eventSourceFetch === "function"
+        ? (eventSourceFetch as CapturedHttpTransportOptions["eventSourceFetch"])
+        : undefined,
+    requestInit: captured._requestInit,
+    reconnectionOptions: captured._reconnectionOptions,
+  };
+}
+
+type TransportWithCapturedHttpOptions = Transport & {
+  readonly _eventSourceInit?: { readonly fetch?: unknown };
+  readonly _requestInit?: RequestInit;
+  readonly _reconnectionOptions?: { readonly maxRetries?: number };
+};
 
 function createTransportStub(options: { readonly emitOnClose?: boolean } = {}): Transport & {
   readonly closeCalls: () => number;

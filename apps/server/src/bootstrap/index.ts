@@ -27,6 +27,7 @@ import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { installShutdownHandlers } from "./shutdown";
 import { createAllAgents, registerAgent } from "../agents";
+import { RuntimeAgentDefinition } from "../agents/runtime-definition";
 import { createResidentProfile } from "../profile/resident";
 
 function djb2Hash(s: string): string {
@@ -38,17 +39,7 @@ function djb2Hash(s: string): string {
 }
 
 async function assembleBootstrap(mcpProvider: McpToolProvider): Promise<WorkerBootstrap.Bootstrap> {
-  const agents = [...createAllAgents().values()].map(
-    (def): WorkerBootstrap.RuntimeAgentDefinition => ({
-      name: def.name,
-      description: def.description,
-      model: def.model,
-      systemPrompt: def.systemPrompt,
-      tools: def.tools,
-      permissions: def.permissions,
-      budget: def.budget,
-    }),
-  );
+  const agents = [...createAllAgents().values()].map(RuntimeAgentDefinition.create);
 
   const toolCatalog = mcpProvider.listTools().map(
     (tool): WorkerBootstrap.RuntimeToolCatalogEntry => ({

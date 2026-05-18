@@ -2,9 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { ServerConfig } from "../config.js";
-
-type McpServerConfig = ServerConfig["mcp"]["servers"][number];
+import { parseMcpServerConfigs, type McpServerConfig } from "../config/mcp-server-config";
 
 const discoverCache = new Map<string, { result: McpServerConfig[] | null }>();
 
@@ -37,17 +35,12 @@ export namespace McpConfigLoader {
     let result: McpServerConfig[] | null;
 
     if (Array.isArray(parsed)) {
-      result = parsed.filter(
-        (e): e is McpServerConfig =>
-          e !== null && typeof e === "object" && typeof (e as { name?: unknown }).name === "string",
-      );
-    } else if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      "servers" in parsed &&
-      Array.isArray((parsed as { servers: unknown }).servers)
-    ) {
-      result = (parsed as { servers: McpServerConfig[] }).servers;
+      result = parseMcpServerConfigs(parsed, { source: "project-config", configPath });
+    } else if (parsed !== null && typeof parsed === "object" && "servers" in parsed) {
+      result = parseMcpServerConfigs((parsed as { servers: unknown }).servers, {
+        source: "project-config",
+        configPath,
+      });
     } else {
       Bus.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),

@@ -368,16 +368,23 @@ function latestSession(): { readonly id: string } | undefined {
 }
 
 function summarizeServerConfig(config: McpServerConfig): Record<string, unknown> {
-  return {
+  const summary: Record<string, unknown> = {
     serverName: config.name,
     transport: config.transport,
-    ...(config.command !== undefined && { command: config.command }),
-    ...(config.url !== undefined && { url: config.url }),
-    ...(config.args !== undefined && { argsCount: config.args.length }),
     ...(config.timeout !== undefined && { timeout: config.timeout }),
     ...(config.retries !== undefined && { retries: config.retries }),
     ...(config.headers !== undefined && { headerNames: Object.keys(config.headers).sort() }),
   };
+
+  if (config.transport === "stdio") {
+    return {
+      ...summary,
+      command: config.command,
+      ...(config.args !== undefined && { argsCount: config.args.length }),
+    };
+  }
+
+  return { ...summary, url: config.url };
 }
 
 function lifecycleBase(audit: ResolvedLifecycleAudit) {

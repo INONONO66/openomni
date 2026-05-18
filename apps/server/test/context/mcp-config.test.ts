@@ -2,17 +2,16 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { McpConfigLoader } from "../../src/context/mcp-config";
-
-type McpServerConfig = {
-  name: string;
-  transport: "stdio" | "sse" | "streamable-http";
-  command?: string;
-  args?: string[];
-  url?: string;
-};
+import type { McpServerConfig } from "../../src/config";
 
 let tempRoot: string;
+
+async function flushBus(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 beforeAll(() => {
   tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "mcp-config-test-")));
@@ -20,6 +19,11 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(tempRoot, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  Bus.reset();
+  McpConfigLoader._resetCache();
 });
 
 describe("McpConfigLoader.discover", () => {
@@ -49,7 +53,14 @@ describe("McpConfigLoader.discover", () => {
     mkdirSync(openomniDir, { recursive: true });
 
     const servers: McpServerConfig[] = [
-      { name: "server-b", transport: "sse", url: "http://localhost:8080" },
+      {
+        name: "server-b",
+        transport: "sse",
+        url: "http://localhost:8080",
+        headers: { Authorization: "Bearer project-token" },
+        timeout: 5_000,
+        retries: 1,
+      },
     ];
     writeFileSync(join(openomniDir, "mcp.json"), JSON.stringify(servers), "utf-8");
 
@@ -64,6 +75,65 @@ describe("McpConfigLoader.discover", () => {
     writeFileSync(join(openomniDir, "mcp.json"), "{ not valid json", "utf-8");
 
     expect(McpConfigLoader.discover(dir)).toBeNull();
+  });
+
+  it("drops invalid server entries through the protocol MCP schema", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const dir = join(tempRoot, "invalid-server-entry");
+    const openomniDir = join(dir, ".openomni");
+    const configPath = join(openomniDir, "mcp.json");
+    mkdirSync(openomniDir, { recursive: true });
+    const valid: McpServerConfig = { name: "valid", transport: "stdio", command: "node" };
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        servers: [valid, { name: "bad", transport: "websocket", url: "ws://localhost" }],
+      }),
+      "utf-8",
+    );
+
+    expect(McpConfigLoader.discover(dir)).toEqual([valid]);
+    await flushBus();
+    unsubscribe();
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid mcp server config ignored",
+        context: expect.objectContaining({
+          source: "project-config",
+          configPath,
+          rejected: [expect.objectContaining({ index: 1, name: "bad" })],
+        }),
+      }),
+    );
+  });
+
+  it("routes non-array object-format servers through the shared parser", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (payload) => warnings.push(payload));
+    const dir = join(tempRoot, "object-format-non-array");
+    const openomniDir = join(dir, ".openomni");
+    const configPath = join(openomniDir, "mcp.json");
+    mkdirSync(openomniDir, { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({ servers: { name: "bad", transport: "stdio" } }),
+      "utf-8",
+    );
+
+    expect(McpConfigLoader.discover(dir)).toEqual([]);
+    await flushBus();
+    unsubscribe();
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid mcp server config ignored",
+        context: expect.objectContaining({
+          source: "project-config",
+          configPath,
+          rejected: [expect.objectContaining({ index: -1, error: "servers must be an array" })],
+        }),
+      }),
+    );
   });
 });
 
@@ -101,6 +171,22 @@ describe("McpConfigLoader.merge", () => {
     expect(overridden?.command).toBeUndefined();
   });
 
+  it("project overrides preserve protocol MCP fields", () => {
+    const conflictProject: McpServerConfig[] = [
+      {
+        name: "global-b",
+        transport: "streamable-http",
+        url: "https://override.example.com",
+        headers: { "x-project": "yes" },
+        timeout: 9_000,
+        retries: 3,
+      },
+    ];
+
+    const result = McpConfigLoader.merge(globalServers, conflictProject);
+    expect(result.find((s) => s.name === "global-b")).toEqual(conflictProject[0]);
+  });
+
   it("returns project servers when global is empty", () => {
     expect(McpConfigLoader.merge([], projectServers)).toEqual(projectServers);
   });
@@ -111,8 +197,6 @@ describe("McpConfigLoader.merge", () => {
 });
 
 describe("McpConfigLoader caching", () => {
-  afterEach(() => McpConfigLoader._resetCache());
-
   it("discover returns cached result on repeated calls", () => {
     const dir = join(tempRoot, "cache-repeat");
     const openomniDir = join(dir, ".openomni");
@@ -139,7 +223,7 @@ describe("McpConfigLoader caching", () => {
     mkdirSync(join(dir, ".openomni"), { recursive: true });
     writeFileSync(
       join(dir, ".openomni", "mcp.json"),
-      JSON.stringify([{ name: "late", transport: "stdio" }]),
+      JSON.stringify([{ name: "late", transport: "stdio", command: "node" }]),
     );
 
     const cached = McpConfigLoader.discover(dir);

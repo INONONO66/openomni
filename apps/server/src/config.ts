@@ -3,14 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-
-type McpServerConfig = {
-  name: string;
-  transport: "stdio" | "sse" | "streamable-http";
-  command?: string;
-  args?: string[];
-  url?: string;
-};
+import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";
+export type { McpServerConfig } from "./config/mcp-server-config";
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".openomni", "config.json");
 
@@ -19,7 +13,7 @@ interface RawConfig {
     root?: string;
   };
   mcp?: {
-    servers?: McpServerConfig[];
+    servers?: unknown;
   };
   server?: {
     port?: number;
@@ -74,7 +68,7 @@ function loadRaw(configPath: string): RawConfig {
   }
 }
 
-function resolve(raw: RawConfig): ServerConfig {
+function resolve(raw: RawConfig, configPath: string): ServerConfig {
   const defaultDbPath = join(homedir(), ".openomni", "storage.db");
   const workspaceRoot = raw.workspace?.root;
 
@@ -91,7 +85,10 @@ function resolve(raw: RawConfig): ServerConfig {
   return {
     workspace: workspaceRoot ? { root: workspaceRoot } : undefined,
     mcp: {
-      servers: raw.mcp?.servers ?? [],
+      servers: parseMcpServerConfigs(raw.mcp?.servers, {
+        source: "server-config",
+        configPath,
+      }),
     },
     server: {
       port: raw.server?.port ?? 3000,
@@ -120,7 +117,7 @@ function resolve(raw: RawConfig): ServerConfig {
 
 export function loadConfig(configPath = DEFAULT_CONFIG_PATH): ServerConfig {
   if (_config && _configPath === configPath) return _config;
-  _config = resolve(loadRaw(configPath));
+  _config = resolve(loadRaw(configPath), configPath);
   _configPath = configPath;
   return _config;
 }
