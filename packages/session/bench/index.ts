@@ -48,8 +48,8 @@ function assistantMessage(sessionID: string, index: number): Message.Info {
     providerID: MODEL.providerID,
     agent: "bench-agent",
     path: {
-      cwd: "/Users/ino/Develop/openomni",
-      root: "/Users/ino/Develop/openomni",
+      cwd: "/tmp/openomni",
+      root: "/tmp/openomni",
     },
     cost: 0.00042,
     tokens: {

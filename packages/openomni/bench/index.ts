@@ -115,7 +115,7 @@ console.table(bench.table());
 
 const results = bench.tasks.map((task): BenchmarkResult => {
   const result = task.result;
-  if (!("latency" in result)) {
+  if (!result || !("latency" in result)) {
     throw new Error(`Benchmark did not complete: ${task.name}`);
   }
 
