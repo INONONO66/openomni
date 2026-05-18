@@ -16,7 +16,8 @@
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
     "gray-matter": "^4.0.3",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bun": "latest"

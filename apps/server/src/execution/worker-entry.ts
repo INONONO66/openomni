@@ -13,7 +13,6 @@ import {
   buildWorkerMiddleware,
   createToolExecutor,
   createWorkerSubagentRuntime,
-  type NativeTool,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import {
@@ -22,8 +21,15 @@ import {
   resolveWorkerDbPath,
 } from "./worker-runtime";
 import { createContextMiddleware } from "../context/index";
+import { WorkerInternalTools } from "./worker-internal-tools";
 
 const MAX_INBOX_MESSAGES = 100;
+
+interface WorkerActiveRun {
+  readonly sessionId: string;
+  readonly controller: AbortController;
+  readonly inbox: string[];
+}
 
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -62,10 +68,7 @@ initialize({
 BusPersistence.start();
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
-const activeRuns = new Map<
-  string,
-  { sessionId: string; controller: AbortController; inbox: string[] }
->();
+const activeRuns = new Map<string, WorkerActiveRun>();
 let resolveBootstrapReady: () => void = () => undefined;
 let rejectBootstrapReady: (_error: Error) => void = () => undefined;
 const bootstrapReady = new Promise<void>((resolve, reject) => {
@@ -103,94 +106,6 @@ function resolveBootstrapAuth(provider: string): Auth.Info | undefined {
     return { type: "api", key: apiKey };
   }
   return undefined;
-}
-
-function createWorkerInternalTools(runId: string, sessionId: string): NativeTool[] {
-  const askMain: NativeTool = {
-    spec: {
-      name: "ask_main",
-      description:
-        "Ask the Resident for guidance, approval, or missing context. Blocks until Resident answers.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          question: { type: "string", description: "Question or decision request for Resident" },
-        },
-        required: ["question"],
-      },
-    },
-    source: "server",
-    category: "delegation",
-    riskTier: 1,
-    isReadOnly: false,
-    isDestructive: false,
-    isConcurrencySafe: false,
-    async execute(call) {
-      const question =
-        call.input && typeof call.input === "object" && "question" in call.input
-          ? String((call.input as { question?: unknown }).question ?? "")
-          : "";
-      if (!question) {
-        return {
-          id: crypto.randomUUID(),
-          toolCallId: call.id,
-          output: "ask_main requires a question",
-          isError: true,
-        };
-      }
-
-      const raw = await server.call("worker.ask_main", {
-        authToken: ipcAuthToken,
-        workerId,
-        sessionId,
-        runId,
-        question,
-      });
-      const response =
-        raw && typeof raw === "object"
-          ? (raw as { accepted?: unknown; output?: unknown; error?: unknown })
-          : undefined;
-      const accepted = response?.accepted === true;
-      const output = accepted
-        ? String(response?.output ?? "")
-        : String(response?.error ?? "worker.ask_main was rejected");
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output,
-        ...(accepted ? {} : { isError: true }),
-      };
-    },
-  };
-
-  const checkInbox: NativeTool = {
-    spec: {
-      name: "check_inbox",
-      description:
-        "Fetch live messages delivered by Resident/User while this worker run is active.",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    source: "server",
-    category: "delegation",
-    riskTier: 0,
-    isReadOnly: false,
-    isDestructive: false,
-    isConcurrencySafe: false,
-    async execute(call) {
-      const active = activeRuns.get(runId);
-      const messages = active?.inbox.splice(0) ?? [];
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: JSON.stringify({ messages, count: messages.length }),
-      };
-    },
-  };
-
-  return [askMain, checkInbox];
 }
 
 const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
@@ -334,7 +249,14 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
         const agentTools = agentProvider.listTools();
         const proxyTools = mcpProxyProvider.listTools();
         const availableTools = [...systemTools, ...agentTools, ...proxyTools];
-        const internalTools = createWorkerInternalTools(runId, sessionId);
+        const internalTools = WorkerInternalTools.create({
+          runId,
+          sessionId,
+          server,
+          ipcAuthToken,
+          workerId,
+          activeRuns,
+        });
         const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
         const internalToolExecutor = createToolExecutor({
           tools: internalTools,
