@@ -15,17 +15,18 @@ export async function recoverInterruptedRuns(): Promise<RecoveryResult> {
     );
 
     for (const run of incompleteRuns) {
-      // starting → running is the only valid transition before → interrupted
-      if (run.status === "starting") {
-        await WorkerRun.updateStatus(session.id, run.runId, "running");
-      }
+      const interrupted = await WorkerRun.updateStatusIfCurrent(
+        session.id,
+        run.runId,
+        { status: run.status, timeUpdated: run.timeUpdated },
+        "interrupted",
+        {
+          endedAt: Date.now(),
+          error: "coordinator restarted: run interrupted",
+        },
+      );
 
-      await WorkerRun.updateStatus(session.id, run.runId, "interrupted", {
-        endedAt: Date.now(),
-        error: "coordinator restarted: run interrupted",
-      });
-
-      recovered.push(session.id);
+      if (interrupted) recovered.push(session.id);
     }
   }
 
