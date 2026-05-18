@@ -84,7 +84,7 @@ export namespace WorkerIpcHandlers {
 
   export function deliverMessage(options: DeliverMessageOptions): DeliverMessageResponse {
     const { params, ipcAuthToken, workerId, activeRuns } = options;
-    const maxInboxMessages = options.maxInboxMessages ?? DEFAULT_MAX_INBOX_MESSAGES;
+    const maxInboxMessages = normalizeMaxInboxMessages(options.maxInboxMessages);
 
     if (!isAuthorized(params, ipcAuthToken)) {
       return { accepted: false, error: "unauthorized coordinator request" };
@@ -114,10 +114,10 @@ export namespace WorkerIpcHandlers {
     }
 
     const [activeRunId, run] = matches[0] as [string, ActiveRun];
-    if (run.inbox.length >= maxInboxMessages) {
+    run.inbox.push(message);
+    while (run.inbox.length > maxInboxMessages) {
       run.inbox.shift();
     }
-    run.inbox.push(message);
 
     Bus.publish(Operational.Info, {
       traceId: crypto.randomUUID(),
@@ -146,6 +146,18 @@ export namespace WorkerIpcHandlers {
     }
     return { acknowledged: true };
   }
+}
+
+function normalizeMaxInboxMessages(value: number | undefined): number {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 1
+  ) {
+    return value;
+  }
+  return DEFAULT_MAX_INBOX_MESSAGES;
 }
 
 function isAuthorized(params: Record<string, unknown> | undefined, ipcAuthToken: string): boolean {
