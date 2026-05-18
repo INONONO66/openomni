@@ -8,7 +8,6 @@ export * from "./sink/index.js";
 export * from "./bus/index.js";
 export * from "./event/index.js";
 export * from "./mcp/index.js";
-export * from "./notification/index.js";
 export * from "./adapter/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
