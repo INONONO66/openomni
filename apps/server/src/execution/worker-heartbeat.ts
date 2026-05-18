@@ -12,16 +12,15 @@ export namespace WorkerHeartbeat {
   });
   export type SnapshotInput = z.infer<typeof SnapshotInput>;
 
-  export const Server = z.custom<{
+  export const Server = z.object({
+    call: z
+      .function()
+      .args(z.literal("worker.heartbeat"), z.record(z.unknown()))
+      .returns(z.promise(z.unknown())),
+  });
+  export type Server = {
     call(method: "worker.heartbeat", params: Record<string, unknown>): Promise<unknown>;
-  }>(
-    (value) =>
-      typeof value === "object" &&
-      value !== null &&
-      "call" in value &&
-      typeof value.call === "function",
-  );
-  export type Server = z.infer<typeof Server>;
+  };
 
   export const Options = z.object({
     workerId: z.string(),
@@ -33,7 +32,8 @@ export namespace WorkerHeartbeat {
     readMemoryRssMb: z.custom<() => number>((value) => typeof value === "function").optional(),
     nowMs: z.custom<() => number>((value) => typeof value === "function").optional(),
   });
-  export type Options = z.infer<typeof Options>;
+  type ParsedOptions = z.infer<typeof Options>;
+  export type Options = Omit<ParsedOptions, "server"> & { server: Server };
 
   export function createSnapshot(input: SnapshotInput): WorkerBootstrap.WorkerSnapshot {
     const { activeRunIds, configEpoch, memoryRssMb, lastHeartbeat } = SnapshotInput.parse(input);
