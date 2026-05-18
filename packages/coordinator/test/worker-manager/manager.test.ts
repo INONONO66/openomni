@@ -158,6 +158,86 @@ describe("on-demand WorkerManager", () => {
     });
   });
 
+  test("rejects duplicate run ids across concurrent sessions before worker delivery", async () => {
+    manager = createWorkerManager({
+      workerScript: WORKER_ENTRY,
+      socketDir: makeSocketDir("dup-diff"),
+      maxActiveWorkers: 2,
+      idleShutdownMs: 1_000,
+    });
+
+    const first = manager.dispatch("duplicate-session-a", "run-duplicate", {
+      delayMs: 100,
+      prompt: "test",
+    });
+    await expect(
+      manager.dispatch("duplicate-session-b", "run-duplicate", {
+        delayMs: 100,
+        prompt: "test",
+      }),
+    ).rejects.toThrow("run already active: run-duplicate");
+
+    await expect(first).resolves.toMatchObject({
+      runId: "run-duplicate",
+      sessionId: "duplicate-session-a",
+    });
+  });
+
+  test("rejects duplicate run ids for the same session while the original is active", async () => {
+    manager = createWorkerManager({
+      workerScript: WORKER_ENTRY,
+      socketDir: makeSocketDir("dup-same"),
+      maxActiveWorkers: 1,
+      idleShutdownMs: 1_000,
+    });
+
+    const first = manager.dispatch("duplicate-session", "run-duplicate-same-session", {
+      delayMs: 100,
+      prompt: "test",
+    });
+    await waitFor(() => manager?.getStats().activeRuns === 1);
+
+    await expect(
+      manager.dispatch("duplicate-session", "run-duplicate-same-session", {
+        prompt: "test",
+      }),
+    ).rejects.toThrow("run already active: run-duplicate-same-session");
+    expect(manager.getStats().activeRuns).toBe(1);
+
+    await first;
+  });
+
+  test("duplicate run rejection preserves cancellation for the original run", async () => {
+    process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
+    manager = createWorkerManager({
+      workerScript: WORKER_ENTRY,
+      socketDir: makeSocketDir("dup-cancel"),
+      maxActiveWorkers: 1,
+      idleShutdownMs: 1_000,
+    });
+
+    const original = manager.dispatch("duplicate-cancel-session", "run-duplicate-cancel", {
+      prompt: "test",
+    });
+    await waitFor(() => manager?.getStats().activeRuns === 1);
+
+    await expect(
+      manager.dispatch("other-session", "run-duplicate-cancel", {
+        prompt: "test",
+      }),
+    ).rejects.toThrow("run already active: run-duplicate-cancel");
+    await expect(manager.cancelRun("run-duplicate-cancel")).resolves.toMatchObject({
+      cancelled: true,
+      runId: "run-duplicate-cancel",
+      sessionId: "duplicate-cancel-session",
+    });
+    await expect(original).resolves.toMatchObject({
+      status: "cancelled",
+      runId: "run-duplicate-cancel",
+      sessionId: "duplicate-cancel-session",
+    });
+  });
+
   test("times out queued dispatches when all workers stay busy", async () => {
     manager = createWorkerManager({
       workerScript: WORKER_ENTRY,

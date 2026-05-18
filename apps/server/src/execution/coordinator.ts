@@ -106,6 +106,10 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
         throw new Error("Execution coordinator is draining");
       }
 
+      if (activeRuns.has(request.runId)) {
+        throw new Error(`run already active: ${request.runId}`);
+      }
+
       activeRuns.add(request.runId);
 
       try {

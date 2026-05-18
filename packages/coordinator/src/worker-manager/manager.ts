@@ -100,6 +100,9 @@ export class OnDemandWorkerManager implements WorkerManager {
     if (this.stopping) {
       throw new Error("worker manager is shutting down");
     }
+    if (this.activeRuns.has(runId)) {
+      throw new Error(`run already active: ${runId}`);
+    }
 
     const activeRun: ActiveRun = { sessionId };
     this.activeRuns.set(runId, activeRun);

@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 
 import type { Tool } from "@openomni/protocol";
 import { WorkerInternalTools } from "../../src/execution/worker-internal-tools";
+import type { WorkerRunState } from "../../src/execution/worker-run-state";
 
 function createCall(id: string, tool: string, input: Tool.Call["input"] = {}): Tool.Call {
   return { id, tool, input };
@@ -26,7 +27,7 @@ describe("worker internal tools", () => {
       server: { call: mock(async () => ({ accepted: true, output: "unused" })) },
       ipcAuthToken: "token",
       workerId: "worker-1",
-      activeRuns: new Map<string, WorkerInternalTools.InboxRun>(),
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
     });
 
     const result = await getTool(tools, "ask_main").execute(createCall("call-1", "ask_main", {}));
@@ -45,7 +46,7 @@ describe("worker internal tools", () => {
       server: { call: mock(async () => ({ accepted: true, output: "unused" })) },
       ipcAuthToken: "token",
       workerId: "worker-1",
-      activeRuns: new Map<string, WorkerInternalTools.InboxRun>(),
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
     });
 
     const result = await getTool(tools, "ask_main").execute(
@@ -67,7 +68,7 @@ describe("worker internal tools", () => {
       server: { call: serverCall },
       ipcAuthToken: "token",
       workerId: "worker-1",
-      activeRuns: new Map<string, WorkerInternalTools.InboxRun>(),
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
     });
 
     const result = await getTool(tools, "ask_main").execute(
@@ -95,7 +96,7 @@ describe("worker internal tools", () => {
       server: { call: mock(async () => ({ accepted: false, error: "no" })) },
       ipcAuthToken: "token",
       workerId: "worker-1",
-      activeRuns: new Map<string, WorkerInternalTools.InboxRun>(),
+      activeRuns: new Map<string, WorkerRunState.ActiveRun>(),
     });
 
     const result = await getTool(tools, "ask_main").execute(
@@ -110,10 +111,12 @@ describe("worker internal tools", () => {
   });
 
   it("check_inbox drains queued messages for the active run", async () => {
-    const activeRuns = new Map<string, WorkerInternalTools.InboxRun>([
+    const activeRuns = new Map<string, WorkerRunState.ActiveRun>([
       [
         "run-1",
         {
+          sessionId: "session-1",
+          controller: new AbortController(),
           inbox: ["hello", "world"],
         },
       ],
