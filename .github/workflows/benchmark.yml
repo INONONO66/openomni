@@ -67,10 +67,17 @@ jobs:
       - name: Check gh-pages exists
         id: ghp
         run: |
-          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+          set +e
+          git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$rc" -eq 2 ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::git ls-remote failed with exit code $rc"
+            exit 1
           fi
 
       - name: Bootstrap gh-pages branch
@@ -97,6 +104,6 @@ jobs:
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
-          comment-on-alert: ${{ github.event_name == 'push' }}
-          fail-on-alert: false
+          comment-on-alert: true
+          fail-on-alert: ${{ steps.ghp.outputs.exists == 'true' }}
           summary-always: true
