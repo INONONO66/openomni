@@ -4,7 +4,6 @@ import {
   type ChatAgentConfig,
   type PolicyRegistration,
 } from "@openomni/agent";
-import type { Policy } from "@openomni/protocol";
 import type { RuntimeModel, RuntimeMessage } from "./shared";
 import {
   buildRuntimeMessages,
@@ -79,7 +78,6 @@ export async function runWithTranscript(
   sessionId: string,
   config: RuntimeConfig,
   signal?: AbortSignal,
-  permissions?: Policy.Permission,
   messages = buildChildMessagesInternal(sessionId),
 ): Promise<Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>> {
   const agent = ChatAgent.create({
@@ -91,7 +89,6 @@ export async function runWithTranscript(
     budget: config.budget,
     toolExecutor: config.toolExecutor,
     signal,
-    permissions,
     middleware: config.middleware,
   });
 

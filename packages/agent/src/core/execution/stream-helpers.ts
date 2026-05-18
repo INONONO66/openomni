@@ -16,12 +16,6 @@ import type { BudgetState } from "../budget";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import { PolicyEngine } from "../policy";
 import type { DispatchContext, PolicyEngineInstance } from "../policy";
-import {
-  createBudgetReassurancePolicy,
-  createBudgetWarningPolicy,
-  createCompactionPolicy,
-  createToolPermissionPolicy,
-} from "../policy/builtin";
 import { buildSystemPrompt } from "../prompt-builder";
 import * as Retry from "../retry";
 import type { AgentEvent, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
@@ -116,6 +110,7 @@ export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: StreamAgentBase,
 ): PolicyEngineInstance {
+  publishIgnoredPolicyConfigWarnings(config, agentBase);
   const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
@@ -123,24 +118,56 @@ export function buildPolicyEngine(
       ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
     },
   });
-  engine.register(createBudgetReassurancePolicy());
-  engine.register(createBudgetWarningPolicy());
-  if (config.permissions) {
-    engine.register(
-      createToolPermissionPolicy({
-        permission: config.permissions,
-        eventEmitter: config.eventEmitter,
-        source: "stream-engine",
-      }),
-    );
-  }
-  if (config.compaction) {
-    engine.register(createCompactionPolicy(config.compaction));
-  }
   for (const reg of config.middleware ?? []) {
     engine.register(reg);
   }
   return engine;
+}
+
+function publishIgnoredPolicyConfigWarnings(
+  config: ChatAgentConfig,
+  agentBase: StreamAgentBase,
+): void {
+  publishIgnoredPolicyConfigWarning(config, agentBase, {
+    field: "permissions",
+    replacement: "createToolPermissionPolicy()",
+    middlewareName: "builtin:tool-permission",
+  });
+  publishIgnoredPolicyConfigWarning(config, agentBase, {
+    field: "compaction",
+    replacement: "createCompactionPolicy()",
+    middlewareName: "builtin:compaction",
+  });
+}
+
+function publishIgnoredPolicyConfigWarning(
+  config: ChatAgentConfig,
+  agentBase: StreamAgentBase,
+  options: {
+    readonly field: "permissions" | "compaction";
+    readonly replacement: string;
+    readonly middlewareName: string;
+  },
+): void {
+  if (config[options.field] === undefined) return;
+  const replacementMiddlewarePresent = config.middleware?.some(
+    (registration) => registration.name === options.middlewareName,
+  );
+
+  Bus.publish(Operational.Warn, {
+    traceId: agentBase.traceId,
+    ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
+    ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
+    time: Date.now(),
+    component: "agent.policy",
+    msg: `ChatAgentConfig.${options.field} is deprecated and ignored`,
+    context: {
+      field: options.field,
+      replacement: options.replacement,
+      middlewareName: options.middlewareName,
+      replacementMiddlewarePresent: replacementMiddlewarePresent ?? false,
+    },
+  });
 }
 
 export function resolveToolChoice(

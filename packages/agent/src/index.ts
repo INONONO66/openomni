@@ -45,6 +45,7 @@ export {
   createBudgetReassurancePolicy,
   createBudgetWarningPolicy,
 } from "./core/policy/builtin/budget";
+export { createCompactionPolicy } from "./core/policy/builtin/compaction";
 export { createIdleNudgePolicy } from "./core/policy/builtin/idle-nudge";
 export { createToolPermissionPolicy } from "./core/policy/builtin/tool-guard";
 export { InMemoryCompactor } from "./core/execution/compaction";

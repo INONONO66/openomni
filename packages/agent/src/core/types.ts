@@ -19,7 +19,15 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
+  /**
+   * @deprecated Runtime builders should pass createToolPermissionPolicy() via middleware.
+   * ChatAgent no longer auto-registers this field.
+   */
   permissions?: Policy.Permission;
+  /**
+   * @deprecated Runtime builders should pass createCompactionPolicy() via middleware.
+   * ChatAgent no longer auto-registers this field.
+   */
   compaction?: {
     contextWindowTokens: number;
     thresholdRatio?: number;

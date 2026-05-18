@@ -2,6 +2,10 @@ import { describe, expect, it } from "bun:test";
 import type { Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "./middleware";
 
+function findRegistration(registrations: ReturnType<typeof buildWorkerMiddleware>, name: string) {
+  return registrations.find((registration) => registration.name === name);
+}
+
 function invokeTool(
   registration: ReturnType<typeof buildWorkerMiddleware>[number] | undefined,
   toolName: string,
@@ -23,14 +27,16 @@ describe("buildWorkerMiddleware", () => {
     it("returns worker-owned registrations", () => {
       const registrations = buildWorkerMiddleware({});
       expect(registrations.map((r) => r.name)).toEqual([
+        "builtin:budget-reassurance",
+        "builtin:budget-warning",
         "builtin:tool-permission",
         "builtin:idle-nudge",
       ]);
     });
 
-    it("first registration is tool permission with fail-closed policy", () => {
+    it("tool permission registration is fail-closed", () => {
       const registrations = buildWorkerMiddleware({});
-      const toolPermission = registrations[0];
+      const toolPermission = findRegistration(registrations, "builtin:tool-permission");
       if (toolPermission == null) {
         throw new Error("expected tool permission registration");
       }
@@ -47,7 +53,35 @@ describe("buildWorkerMiddleware", () => {
     it("passes permissions to tool permission middleware", () => {
       const permissions = { action: "tool.call", allowlist: ["tool:read"] };
       const registrations = buildWorkerMiddleware({ permissions });
-      expect(registrations[0]?.name).toBe("builtin:tool-permission");
+      expect(findRegistration(registrations, "builtin:tool-permission")?.name).toBe(
+        "builtin:tool-permission",
+      );
+    });
+
+    it("forwards event emitter metadata to legacy tool permission middleware", async () => {
+      const events: Array<{ name: string; data: Record<string, unknown> }> = [];
+      const registrations = buildWorkerMiddleware({
+        permissions: { action: "tool.call", allowlist: ["tool:read"] },
+        eventEmitter: {
+          emit: (name, data) => events.push({ name, data }),
+        },
+        source: "worker-runtime",
+      });
+      const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+
+      await expect(invokeTool(toolPermission, "tool:read")).resolves.toMatchObject({
+        verdict: "allow",
+      });
+
+      expect(events).toEqual([
+        {
+          name: "tool.execution.started",
+          data: expect.objectContaining({
+            sessionId: "worker-runtime",
+            toolName: "tool:read",
+          }),
+        },
+      ]);
     });
   });
 
@@ -85,8 +119,64 @@ describe("buildWorkerMiddleware", () => {
 
       const registrations = buildWorkerMiddleware({ policyPlan });
       expect(registrations.map((r) => r.name)).toEqual([
+        "builtin:budget-reassurance",
+        "builtin:budget-warning",
         "builtin:tool-permission",
         "builtin:idle-nudge",
+      ]);
+    });
+
+    it("does not duplicate lifecycle defaults that a policyPlan already owns", () => {
+      const policyPlan: Policy.PolicyPlan = {
+        policies: [
+          { id: "builtin:budget-reassurance", required: true, config: {} },
+          { id: "builtin:budget-warning", required: true, config: {} },
+          {
+            id: "builtin:compaction",
+            required: true,
+            config: { contextWindowTokens: 1000 },
+          },
+          {
+            id: "builtin:tool-permission",
+            required: true,
+            config: { permission: { action: "tool.call" } },
+          },
+        ],
+        labels: ["security"],
+      };
+
+      const registrations = buildWorkerMiddleware({
+        policyPlan,
+        compaction: { contextWindowTokens: 2000 },
+      });
+      expect(registrations.map((registration) => registration.name)).toEqual([
+        "builtin:budget-reassurance",
+        "builtin:budget-warning",
+        "builtin:compaction",
+        "builtin:tool-permission",
+        "builtin:idle-nudge",
+      ]);
+    });
+
+    it("can resolve only policy-owned middleware for nested child policy plans", () => {
+      const policyPlan: Policy.PolicyPlan = {
+        policies: [
+          {
+            id: "builtin:tool-permission",
+            required: true,
+            config: { permission: { action: "tool.call" } },
+          },
+        ],
+        labels: ["security"],
+      };
+
+      const registrations = buildWorkerMiddleware({
+        policyPlan,
+        includeLifecycle: false,
+        includeIdle: false,
+      });
+      expect(registrations.map((registration) => registration.name)).toEqual([
+        "builtin:tool-permission",
       ]);
     });
 
@@ -103,11 +193,17 @@ describe("buildWorkerMiddleware", () => {
       const permissions = { action: "tool.call", allowlist: ["tool:read"] };
 
       const registrations = buildWorkerMiddleware({ policyPlan, permissions });
-      expect(registrations.map((r) => r.name)).toEqual(["builtin:tool-permission"]);
-      await expect(invokeTool(registrations[0], "tool:read")).resolves.toMatchObject({
+      expect(registrations.map((r) => r.name)).toEqual([
+        "builtin:budget-reassurance",
+        "builtin:budget-warning",
+        "builtin:tool-permission",
+        "builtin:idle-nudge",
+      ]);
+      const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+      await expect(invokeTool(toolPermission, "tool:read")).resolves.toMatchObject({
         verdict: "allow",
       });
-      await expect(invokeTool(registrations[0], "tool:write")).resolves.toMatchObject({
+      await expect(invokeTool(toolPermission, "tool:write")).resolves.toMatchObject({
         verdict: "deny",
       });
     });
@@ -126,12 +222,50 @@ describe("buildWorkerMiddleware", () => {
       const permissions = { action: "tool.call", allowlist: ["tool:legacy"] };
 
       const registrations = buildWorkerMiddleware({ policyPlan, permissions });
-      await expect(invokeTool(registrations[0], "tool:plan")).resolves.toMatchObject({
+      const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+      await expect(invokeTool(toolPermission, "tool:plan")).resolves.toMatchObject({
         verdict: "allow",
       });
-      await expect(invokeTool(registrations[0], "tool:legacy")).resolves.toMatchObject({
+      await expect(invokeTool(toolPermission, "tool:legacy")).resolves.toMatchObject({
         verdict: "deny",
       });
+    });
+
+    it("hydrates event emitter metadata into policyPlan tool permission middleware", async () => {
+      const events: Array<{ name: string; data: Record<string, unknown> }> = [];
+      const policyPlan: Policy.PolicyPlan = {
+        policies: [
+          {
+            id: "builtin:tool-permission",
+            required: true,
+            config: { permission: { action: "tool.call", allowlist: ["tool:read"] } },
+          },
+        ],
+        labels: ["security"],
+      };
+
+      const registrations = buildWorkerMiddleware({
+        policyPlan,
+        eventEmitter: {
+          emit: (name, data) => events.push({ name, data }),
+        },
+        source: "policy-plan-runtime",
+      });
+      const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+
+      await expect(invokeTool(toolPermission, "tool:read")).resolves.toMatchObject({
+        verdict: "allow",
+      });
+
+      expect(events).toEqual([
+        {
+          name: "tool.execution.started",
+          data: expect.objectContaining({
+            sessionId: "policy-plan-runtime",
+            toolName: "tool:read",
+          }),
+        },
+      ]);
     });
 
     it("fails closed for malformed explicit policyPlan permission config", async () => {
@@ -154,7 +288,8 @@ describe("buildWorkerMiddleware", () => {
         };
 
         const registrations = buildWorkerMiddleware({ policyPlan, permissions });
-        await expect(invokeTool(registrations[0], "tool:legacy")).resolves.toMatchObject({
+        const toolPermission = findRegistration(registrations, "builtin:tool-permission");
+        await expect(invokeTool(toolPermission, "tool:legacy")).resolves.toMatchObject({
           verdict: "deny",
         });
       }

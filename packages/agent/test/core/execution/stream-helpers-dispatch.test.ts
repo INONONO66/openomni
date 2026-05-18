@@ -3,7 +3,7 @@ import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig, ChatAgentInput, AgentEvent } from "../../../src/core/types";
-import type { TraceContext } from "@openomni/protocol";
+import { Operational, type TraceContext } from "@openomni/protocol";
 import {
   abortRun,
   allow,
@@ -136,7 +136,8 @@ describe("dispatchPreRun (run.start)", () => {
 
     expect(result).toBeNull();
     expect(state.messages.length).toBe(messagesBefore + 1);
-    const lastMsg = state.messages.at(-1)!;
+    const lastMsg = state.messages.at(-1);
+    if (!lastMsg) throw new Error("expected injected message");
     expect(lastMsg.info.role).toBe("user");
     const text = lastMsg.parts
       .filter(
@@ -1015,16 +1016,118 @@ describe("completion.prepare dispatch", () => {
   });
 });
 
-describe("buildPolicyEngine registers builtins", () => {
-  it("creates engine with builtins from config", () => {
+describe("buildPolicyEngine policy ownership", () => {
+  it("registers only caller-supplied middleware", async () => {
+    Bus.reset();
     const config = makeConfig({
-      budget: { maxTurns: 10 },
+      permissions: { action: "tool.call", denylist: ["bash"] },
       compaction: { contextWindowTokens: 1000 },
     });
 
     const engine = buildPolicyEngine(config, makeAgentBase());
-    expect(engine).toBeDefined();
-    expect(typeof engine.dispatch).toBe("function");
-    expect(typeof engine.register).toBe("function");
+    await expect(
+      engine.dispatch("invoke.prepare", {
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 0,
+        isCompletion: false,
+        continuationCount: 0,
+        elapsedMs: 0,
+        toolName: "bash",
+      }),
+    ).resolves.toMatchObject({ verdict: "allow" });
+  });
+
+  it("does not auto-register compaction from deprecated config", async () => {
+    Bus.reset();
+    const config = makeConfig({
+      compaction: { contextWindowTokens: 1, thresholdRatio: 0 },
+    });
+    const engine = buildPolicyEngine(config, makeAgentBase());
+    const state = makeState();
+    const originalMessages = state.messages;
+
+    await handleCompact(state, engine, config, makeAgentBase());
+
+    expect(state.messages).toBe(originalMessages);
+    expect(state.compactionCount).toBe(0);
+  });
+
+  it("publishes warnings for deprecated policy config fields that are ignored", async () => {
+    Bus.reset();
+    const warnings: Array<{ msg?: string; context?: Record<string, unknown> }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+
+    buildPolicyEngine(
+      makeConfig({
+        permissions: { action: "tool.call" },
+        compaction: { contextWindowTokens: 1 },
+      }),
+      { traceId: "trace-warning", sessionId: "sess-1" },
+    );
+    await Promise.resolve();
+    unsubscribe();
+
+    expect(warnings.map((warning) => warning.context?.field)).toEqual([
+      "permissions",
+      "compaction",
+    ]);
+    expect(warnings.every((warning) => warning.msg?.includes("deprecated and ignored"))).toBe(true);
+  });
+
+  it("warns for deprecated permissions even when replacement middleware is present", async () => {
+    Bus.reset();
+    const warnings: Array<{ context?: Record<string, unknown> }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (data) => warnings.push(data));
+
+    buildPolicyEngine(
+      makeConfig({
+        permissions: { action: "tool.call", denylist: ["bash"] },
+        middleware: [
+          {
+            name: "builtin:tool-permission",
+            timing: "invoke.prepare",
+            priority: 0,
+            fn: () => allow(),
+          },
+        ],
+      }),
+      { traceId: "trace-replacement-warning", sessionId: "sess-1" },
+    );
+    await Promise.resolve();
+    unsubscribe();
+
+    expect(warnings.map((warning) => warning.context)).toContainEqual(
+      expect.objectContaining({
+        field: "permissions",
+        replacementMiddlewarePresent: true,
+      }),
+    );
+  });
+
+  it("honors explicit middleware supplied by the runtime builder", async () => {
+    const config = makeConfig({
+      middleware: [
+        {
+          name: "test:deny-bash",
+          timing: "invoke.prepare",
+          priority: 0,
+          fn: () => abortRun("test.deny", "blocked"),
+        },
+      ],
+    });
+
+    const engine = buildPolicyEngine(config, makeAgentBase());
+    await expect(
+      engine.dispatch("invoke.prepare", {
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 0,
+        isCompletion: false,
+        continuationCount: 0,
+        elapsedMs: 0,
+        toolName: "bash",
+      }),
+    ).resolves.toMatchObject({ verdict: "deny" });
   });
 });

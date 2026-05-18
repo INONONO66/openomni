@@ -26,5 +26,5 @@ Split responsibilities across two packages:
 
 - `SubagentRuntime` creates fresh `ChatAgent` instances per run while persisting the transcript into `@openomni/session` — `ChatAgent` itself stays stateless.
 - `openomni` depends on `agent`, but `agent` knows nothing about `openomni` or about session storage.
-- Extension points are standardized on the policy engine (`PolicyEngine`). All agent behavior extensions use `policies: [...]`.
+- Extension points are standardized on the policy engine (`PolicyEngine`). `ChatAgent` mounts caller-supplied `middleware: [...]`; orchestration/runtime builders own default policy assembly.
 - `ChatAgent.stream()` is implemented as an `AsyncGenerator<AgentEvent>` via `streamAgent()`; `run()` is a thin wrapper that drains `stream()`.
