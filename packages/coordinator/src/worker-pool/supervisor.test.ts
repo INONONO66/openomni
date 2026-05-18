@@ -1,6 +1,18 @@
-import { describe, test, expect, mock } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { IpcClient } from "../ipc/client";
 import { WorkerSupervisor } from "./supervisor";
+
+const originalStopGraceMs = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
+
+afterEach(() => {
+  if (originalStopGraceMs === undefined) {
+    delete process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
+  } else {
+    process.env.OPENOMNI_WORKER_STOP_GRACE_MS = originalStopGraceMs;
+  }
+});
 
 describe("WorkerSupervisor dispatch timeout ceiling", () => {
   function createTestSupervisor(mockClient: IpcClient): WorkerSupervisor {
@@ -98,5 +110,103 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
 
     // Math.max(300_000, 300_000) + 30_000 = 330_000
     expect(capturedTimeoutMs).toBe(330_000);
+  });
+});
+
+describe("WorkerSupervisor stop", () => {
+  function createStopSupervisor(proc: {
+    kill: (signal: NodeJS.Signals) => void;
+    exited: Promise<number>;
+  }): WorkerSupervisor {
+    const supervisor = Object.create(WorkerSupervisor.prototype) as WorkerSupervisor;
+    Reflect.set(supervisor, "id", 0);
+    Reflect.set(supervisor, "proc", proc);
+    Reflect.set(supervisor, "running", true);
+    Reflect.set(supervisor, "client", {
+      connected: true,
+      call: mock(async () => ({})),
+      close: mock(() => undefined),
+    } satisfies IpcClient);
+    return supervisor;
+  }
+
+  test("escalates from SIGTERM to SIGKILL when the worker ignores graceful shutdown", async () => {
+    process.env.OPENOMNI_WORKER_STOP_GRACE_MS = "1";
+
+    const warnings: Array<{ msg: string; context?: Record<string, unknown> }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
+      warnings.push(event);
+    });
+    let resolveExit!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const signals: NodeJS.Signals[] = [];
+    const proc = {
+      exited,
+      kill: mock((signal: NodeJS.Signals) => {
+        signals.push(signal);
+        if (signal === "SIGKILL") resolveExit(137);
+      }),
+    };
+
+    try {
+      await createStopSupervisor(proc).stop();
+      await Promise.resolve();
+    } finally {
+      unsubscribe();
+    }
+
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "worker did not stop within grace period; sending SIGKILL",
+        context: { workerId: 0, graceMs: 1 },
+      }),
+    );
+  });
+
+  test("does not send SIGKILL when the worker exits during the graceful window", async () => {
+    process.env.OPENOMNI_WORKER_STOP_GRACE_MS = "50";
+
+    let resolveExit!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const signals: NodeJS.Signals[] = [];
+    const proc = {
+      exited,
+      kill: mock((signal: NodeJS.Signals) => {
+        signals.push(signal);
+        if (signal === "SIGTERM") resolveExit(0);
+      }),
+    };
+
+    await createStopSupervisor(proc).stop();
+
+    expect(signals).toEqual(["SIGTERM"]);
+  });
+
+  test("treats an empty grace env var as unset instead of immediate escalation", async () => {
+    process.env.OPENOMNI_WORKER_STOP_GRACE_MS = "";
+
+    let resolveExit!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const signals: NodeJS.Signals[] = [];
+    const proc = {
+      exited,
+      kill: mock((signal: NodeJS.Signals) => {
+        signals.push(signal);
+        if (signal === "SIGTERM") {
+          setTimeout(() => resolveExit(0), 1);
+        }
+      }),
+    };
+
+    await createStopSupervisor(proc).stop();
+
+    expect(signals).toEqual(["SIGTERM"]);
   });
 });

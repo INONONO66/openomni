@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import type { WorkerBootstrap } from "@openomni/protocol";
+import { Operational, type WorkerBootstrap } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
 
 const MAX_RESTARTS_PER_WINDOW = 10;
@@ -8,6 +9,7 @@ const RESTART_WINDOW_MS = 60_000;
 const MAX_BACKOFF_MS = 30_000;
 const WORKER_CONNECT_TIMEOUT_MS = 10_000;
 const MAX_DISPATCH_TIMEOUT_MS = 600_000;
+const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;
 
 export type ToolCallParams = {
   runId: string;
@@ -465,12 +467,48 @@ export class WorkerSupervisor {
     const c = this.client;
     this.client = null;
     c?.close();
-    if (this.proc && this.running) {
-      this.proc.kill("SIGTERM");
-      await this.proc.exited;
+    const proc = this.proc;
+    if (proc && this.running) {
+      proc.kill("SIGTERM");
+      const graceMs = workerStopGraceMs();
+      if ((await waitForWorkerExit(proc, graceMs)) === "timeout") {
+        Bus.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "coordinator.worker",
+          msg: "worker did not stop within grace period; sending SIGKILL",
+          context: { workerId: this.id, graceMs },
+        });
+        proc.kill("SIGKILL");
+        await proc.exited;
+      }
     }
     this.proc = null;
     this.running = false;
+  }
+}
+
+function workerStopGraceMs(): number {
+  const raw = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
+  if (!raw) return DEFAULT_WORKER_STOP_GRACE_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WORKER_STOP_GRACE_MS;
+}
+
+async function waitForWorkerExit(
+  proc: Pick<Subprocess, "exited">,
+  timeoutMs: number,
+): Promise<"exited" | "timeout"> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      proc.exited.then(() => "exited" as const),
+      new Promise<"timeout">((resolve) => {
+        timeout = setTimeout(() => resolve("timeout"), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
