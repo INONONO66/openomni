@@ -1,5 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { z } from "zod";
 
 const DEFAULT_MAX_INBOX_MESSAGES = 100;
 
@@ -33,22 +34,36 @@ export namespace WorkerIpcHandlers {
     readonly activeRuns: Pick<ActiveRuns, "size">;
   }
 
-  export type CancelRunResponse = {
-    readonly cancelled: boolean;
-    readonly runId?: string;
-    readonly sessionId?: string;
-    readonly error?: string;
-  };
+  export const CancelRunResponse = z.discriminatedUnion("cancelled", [
+    z.object({
+      cancelled: z.literal(true),
+      runId: z.string(),
+      sessionId: z.string(),
+    }),
+    z.object({
+      cancelled: z.literal(false),
+      error: z.string(),
+    }),
+  ]);
+  export type CancelRunResponse = z.infer<typeof CancelRunResponse>;
 
-  export type DeliverMessageResponse = {
-    readonly accepted: boolean;
-    readonly error?: string;
-  };
+  export const DeliverMessageResponse = z.discriminatedUnion("accepted", [
+    z.object({ accepted: z.literal(true) }),
+    z.object({
+      accepted: z.literal(false),
+      error: z.string(),
+    }),
+  ]);
+  export type DeliverMessageResponse = z.infer<typeof DeliverMessageResponse>;
 
-  export type ShutdownIdleResponse = {
-    readonly acknowledged: boolean;
-    readonly error?: string;
-  };
+  export const ShutdownIdleResponse = z.discriminatedUnion("acknowledged", [
+    z.object({ acknowledged: z.literal(true) }),
+    z.object({
+      acknowledged: z.literal(false),
+      error: z.string(),
+    }),
+  ]);
+  export type ShutdownIdleResponse = z.infer<typeof ShutdownIdleResponse>;
 
   export function cancelRun(options: CancelRunOptions): CancelRunResponse {
     const { params, ipcAuthToken, activeRuns } = options;
