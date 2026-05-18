@@ -27,6 +27,11 @@ export namespace WorkerIpcHandlers {
     readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "size">;
   }
 
+  export interface ToolCallSettledOptions extends Pick<SharedOptions, "ipcAuthToken"> {
+    readonly params: Record<string, unknown> | undefined;
+    readonly clearUnsafe: (workspaceRoot: string, callId: string) => void;
+  }
+
   export const CancelRunResponse = z.discriminatedUnion("cancelled", [
     z.object({
       cancelled: z.literal(true),
@@ -57,6 +62,15 @@ export namespace WorkerIpcHandlers {
     }),
   ]);
   export type ShutdownIdleResponse = z.infer<typeof ShutdownIdleResponse>;
+
+  export const ToolCallSettledResponse = z.discriminatedUnion("acknowledged", [
+    z.object({ acknowledged: z.literal(true) }),
+    z.object({
+      acknowledged: z.literal(false),
+      error: z.string(),
+    }),
+  ]);
+  export type ToolCallSettledResponse = z.infer<typeof ToolCallSettledResponse>;
 
   export function cancelRun(options: CancelRunOptions): CancelRunResponse {
     const { params, ipcAuthToken, activeRuns } = options;
@@ -146,6 +160,32 @@ export namespace WorkerIpcHandlers {
       return { acknowledged: false, error: "worker is busy" };
     }
     return { acknowledged: true };
+  }
+
+  export function toolCallSettled(options: ToolCallSettledOptions): ToolCallSettledResponse {
+    const { params, ipcAuthToken, clearUnsafe } = options;
+    if (!isAuthorized(params, ipcAuthToken)) {
+      return { acknowledged: false, error: "unauthorized coordinator request" };
+    }
+
+    const workspaceRoot = readString(params, "workspaceRoot");
+    const callId = readString(params, "callId");
+    if (!workspaceRoot || !callId) {
+      return { acknowledged: false, error: "invalid worker.tool_call_settled params" };
+    }
+
+    try {
+      clearUnsafe(workspaceRoot, callId);
+      return { acknowledged: true };
+    } catch (error) {
+      return {
+        acknowledged: false,
+        error:
+          error instanceof Error
+            ? `failed to clear unsafe marker: ${error.message}`
+            : "failed to clear unsafe marker",
+      };
+    }
   }
 }
 

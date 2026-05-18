@@ -145,6 +145,133 @@ describe("createToolExecutor", () => {
     expect(result.output).toBe("timeout after 10ms");
   });
 
+  it("does not invoke tools when execution context is already aborted", async () => {
+    let invoked = false;
+    const executor = createToolExecutor({
+      tools: [
+        makeTool("read", {
+          execute: async (call) => {
+            invoked = true;
+            return { id: "r1", toolCallId: call.id, output: "unexpected" };
+          },
+        }),
+      ],
+    });
+    const controller = new AbortController();
+    controller.abort(new Error("already cancelled"));
+
+    const result = await executor(makeCall("read"), { signal: controller.signal });
+
+    expect(invoked).toBe(false);
+    expect(result.toolCallId).toBe("call-1");
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("Tool execution aborted");
+  });
+
+  it("keeps timeout authoritative when cooperative abort rejects immediately", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const { events, stop } = collectBusEvents();
+    const executor = createToolExecutor({
+      tools: [
+        makeTool("slow", {
+          execute: (_call, context) => {
+            const signal = context?.signal;
+            receivedSignal = signal;
+            return new Promise<Tool.Result>((_, reject) => {
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  const error = new Error("cooperative abort");
+                  error.name = "AbortError";
+                  reject(error);
+                },
+                { once: true },
+              );
+            });
+          },
+        }),
+      ],
+      config: { timeoutMs: { tier0: 10 } },
+    });
+
+    try {
+      const result = await executor(makeCall("slow"));
+
+      expect(receivedSignal?.aborted).toBe(true);
+      expect(result.toolCallId).toBe("call-1");
+      expect(result.isError).toBe(true);
+      expect(result.output).toBe("timeout after 10ms");
+      expect(events.some((event) => event.name === "tool.execution.timed_out")).toBe(true);
+    } finally {
+      stop();
+    }
+  });
+
+  it("aborts cooperative native tools when executor timeout fires", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    let abortReason: unknown;
+    const executor = createToolExecutor({
+      tools: [
+        makeTool("slow", {
+          execute: async (_call, context) => {
+            const signal = context?.signal;
+            receivedSignal = signal;
+            return await new Promise<Tool.Result>((_, reject) => {
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  abortReason = (signal as AbortSignal & { reason?: unknown }).reason;
+                  const error = new Error("cooperative abort");
+                  error.name = "AbortError";
+                  reject(error);
+                },
+                { once: true },
+              );
+            });
+          },
+        }),
+      ],
+      config: { timeoutMs: { tier0: 10 } },
+    });
+
+    const result = await executor(makeCall("slow"));
+
+    expect(receivedSignal).toBeInstanceOf(AbortSignal);
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(abortReason).toBeInstanceOf(ToolRuntimePolicyMiddleware.TimeoutError);
+    expect(result.toolCallId).toBe("call-1");
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("timeout after 10ms");
+  });
+
+  it("returns abort promptly when the parent signal aborts before timeout", async () => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const executor = createToolExecutor({
+      tools: [
+        makeTool("slow", {
+          execute: (_call, context) => {
+            receivedSignal = context?.signal;
+            return new Promise<Tool.Result>(() => {
+              // intentional: non-cooperative tool ignores abort
+            });
+          },
+        }),
+      ],
+      config: { timeoutMs: { tier0: 1_000 }, postTimeoutSettleGraceMs: 10 },
+    });
+
+    const resultPromise = executor(makeCall("slow"), { signal: controller.signal });
+    await Bun.sleep(0);
+    controller.abort();
+    const result = await resultPromise;
+
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(result.toolCallId).toBe("call-1");
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("Tool execution aborted");
+  });
+
   it("dispatches to a dotted-name tool via its underscore alias", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("grep.search")],

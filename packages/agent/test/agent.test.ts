@@ -283,6 +283,43 @@ it("uses toolExecutor when provided to execute tool calls", async () => {
   expect(result.finishReason).toBe("stop");
 });
 
+it("passes the agent abort signal to toolExecutor calls", async () => {
+  let capturedSignal: AbortSignal | undefined;
+  const controller = new AbortController();
+  const executor = async (_call: Tool.Call, context?: Tool.ExecutionContext) => {
+    capturedSignal = context?.signal;
+    return {
+      id: crypto.randomUUID(),
+      toolCallId: "call-1",
+      output: "signal captured",
+      isError: false,
+    };
+  };
+
+  mockRunFn = async (input, sink): Promise<Run.Outcome> => {
+    const call = createToolCall("call-1", "custom_tool");
+    if (!input.toolExecutor) throw new Error("expected tool executor");
+    const result = await input.toolExecutor(call);
+    sink.onToolCall(call);
+    sink.onToolResult(result);
+    sink.onMessage(createAssistantMessage("done"));
+    return createStopOutcome();
+  };
+
+  const agent = ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
+    signal: controller.signal,
+    toolExecutor: executor,
+  });
+
+  await agent.run({
+    messages: [{ role: "user", content: "Use a tool" }],
+  });
+
+  expect(capturedSignal).toBe(controller.signal);
+});
+
 it("handles toolExecutor errors by setting isError: true", async () => {
   mockRunFn = async (input, sink): Promise<Run.Outcome> => {
     const call = createToolCall("call-1", "failing_tool");

@@ -121,6 +121,38 @@ describe("SubagentTool background mode", () => {
     expect(result.output).toContain("background");
   });
 
+  it("does not launch background task when execution is already aborted", async () => {
+    resetState();
+    let launched = false;
+    const manager = {
+      ...createMockBackgroundManager(),
+      launch: async (input: unknown) => {
+        launched = true;
+        return createMockBackgroundManager().launch(input);
+      },
+    };
+    AgentRegistry.define(makeDefinition("test"));
+    const { execute } = SubagentTool.create({
+      backgroundManager: manager,
+      subagentRuntime: makeRuntime(),
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await execute(
+      {
+        agentName: "test",
+        prompt: "hello",
+        background: true,
+      },
+      { signal: controller.signal },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toContain("aborted");
+    expect(launched).toBe(false);
+  });
+
   it("uses sync path when background is false", async () => {
     resetState();
     const { execute } = SubagentTool.create({ subagentRuntime: makeRuntime() });

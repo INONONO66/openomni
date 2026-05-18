@@ -17,6 +17,51 @@ import { WorkerInternalTools } from "./worker-internal-tools";
 import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
+const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
+
+function createToolCallAbortError(): Error {
+  const error = new Error("Tool call aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function abortableIpcCall<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+  onAbort: () => void,
+): Promise<T> {
+  if (!signal) return operation();
+  if (signal.aborted) return Promise.reject(createToolCallAbortError());
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", handleAbort);
+    const finish = (complete: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      complete();
+    };
+    const handleAbort = () => {
+      onAbort();
+      finish(() => reject(createToolCallAbortError()));
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    let pending: Promise<T>;
+    try {
+      pending = operation();
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 export interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
@@ -117,15 +162,51 @@ export namespace WorkerRunner {
 
         const mcpProxyProvider = ToolProxyProvider.create(
           bootstrap?.toolCatalog ?? [],
-          async (toolName, toolArgs) => {
-            const raw = await server.call("worker.tool_call", {
-              runId,
-              sessionId,
-              callId: crypto.randomUUID(),
-              tool: toolName,
-              input: toolArgs,
-            });
-            return Tool.Result.parse(raw);
+          async (toolName, toolArgs, context) => {
+            const callId = crypto.randomUUID();
+            if (context?.signal?.aborted) {
+              return {
+                id: callId,
+                toolCallId: callId,
+                output: "Tool call aborted",
+                isError: true,
+              };
+            }
+
+            const cancelToolCall = () => {
+              void server
+                .call("worker.tool_call_cancel", { runId, sessionId, callId }, 5_000)
+                .catch(() => undefined);
+            };
+
+            try {
+              const raw = await abortableIpcCall(
+                () =>
+                  server.call(
+                    "worker.tool_call",
+                    {
+                      runId,
+                      sessionId,
+                      callId,
+                      tool: toolName,
+                      input: toolArgs,
+                      ...(workspaceRoot ? { workspaceRoot } : {}),
+                    },
+                    WORKER_TOOL_CALL_IPC_TIMEOUT_MS,
+                  ),
+                context?.signal,
+                cancelToolCall,
+              );
+              return Tool.Result.parse(raw);
+            } catch (error) {
+              return {
+                id: callId,
+                toolCallId: callId,
+                output: error instanceof Error ? error.message : String(error),
+                isError: true,
+                settlement: "unknown",
+              };
+            }
           },
         );
 
@@ -184,9 +265,12 @@ export namespace WorkerRunner {
         const internalToolNames = new Set(
           internalTools.flatMap((tool) => [tool.spec.name, tool.spec.name.replace(/\./g, "_")]),
         );
-        const combinedToolExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
-          if (internalToolNames.has(call.tool)) return internalToolExecutor(call);
-          if (toolExecutor) return toolExecutor(call);
+        const combinedToolExecutor = async (
+          call: Tool.Call,
+          context?: Tool.ExecutionContext,
+        ): Promise<Tool.Result> => {
+          if (internalToolNames.has(call.tool)) return internalToolExecutor(call, context);
+          if (toolExecutor) return toolExecutor(call, context);
           return {
             id: crypto.randomUUID(),
             toolCallId: call.id,

@@ -15,6 +15,17 @@ export type ToolCallParams = {
   callId: string;
   tool: string;
   input: Record<string, unknown>;
+  workspaceRoot?: string;
+};
+
+export type ToolCallCancelParams = {
+  runId: string;
+  sessionId: string;
+  callId: string;
+};
+
+export type ToolCallContext = {
+  readonly signal?: AbortSignal;
 };
 
 export type ToolCallResult = {
@@ -22,13 +33,16 @@ export type ToolCallResult = {
   toolCallId: string;
   output: string;
   isError?: boolean;
+  settlement?: "settled" | "unknown";
 };
 
 export type AskMainParams = {
   workerId: string;
   sessionId: string;
+  callId?: string;
   runId?: string;
   question: string;
+  signal?: AbortSignal;
 };
 
 export type AskMainResult = {
@@ -36,6 +50,15 @@ export type AskMainResult = {
   accepted: boolean;
   output?: string;
   error?: string;
+};
+
+type ActiveRequest = {
+  readonly runId?: string;
+  readonly sessionId: string;
+  readonly workspaceRoot?: string;
+  readonly controller: AbortController;
+  readonly respond: (result: unknown) => void;
+  completed: boolean;
 };
 
 export class WorkerSupervisor {
@@ -48,6 +71,8 @@ export class WorkerSupervisor {
   private generation = 0;
   private running = false;
   private stopping = false;
+  private readonly activeToolCalls = new Map<string, ActiveRequest>();
+  private readonly activeAskMainCalls = new Map<string, ActiveRequest>();
   readonly socketPath: string;
 
   constructor(
@@ -55,7 +80,10 @@ export class WorkerSupervisor {
     private readonly script: string,
     socketDir = "/tmp",
     private readonly bootstrap?: WorkerBootstrap.Bootstrap,
-    private readonly toolCallHandler?: (params: ToolCallParams) => Promise<ToolCallResult>,
+    private readonly toolCallHandler?: (
+      params: ToolCallParams,
+      context?: ToolCallContext,
+    ) => Promise<ToolCallResult>,
     private readonly snapshotHandler?: (
       workerId: number,
       snapshot: WorkerBootstrap.WorkerSnapshot,
@@ -107,18 +135,99 @@ export class WorkerSupervisor {
         const c = await connectIpcClient(this.socketPath, {
           connectTimeoutMs: 500,
           onRequest: (method, params, respond) => {
+            if (method === "worker.tool_call_cancel") {
+              const p = parseToolCallCancelParams(params);
+              if (!p) {
+                respond({ cancelled: false, error: "invalid worker.tool_call_cancel params" });
+                return;
+              }
+              const active = this.activeToolCalls.get(p.callId);
+              if (!active || active.runId !== p.runId || active.sessionId !== p.sessionId) {
+                respond({ cancelled: false });
+                return;
+              }
+              active.controller.abort();
+              this.respondAndForget(this.activeToolCalls, p.callId, active, {
+                id: p.callId,
+                toolCallId: p.callId,
+                output: "Tool call aborted",
+                isError: true,
+                settlement: "unknown",
+              });
+              respond({ cancelled: true, settlement: "unknown" });
+              return;
+            }
+
             if (method === "worker.tool_call" && toolCallHandler) {
               const p = params as ToolCallParams;
-              toolCallHandler(p)
-                .then((result) => respond(result))
+              const controller = new AbortController();
+              const active: ActiveRequest = {
+                runId: p.runId,
+                sessionId: p.sessionId,
+                ...(typeof p.workspaceRoot === "string" ? { workspaceRoot: p.workspaceRoot } : {}),
+                controller,
+                respond,
+                completed: false,
+              };
+              this.activeToolCalls.set(p.callId, active);
+              toolCallHandler(p, { signal: controller.signal })
+                .then((result) =>
+                  this.respondAndForget(this.activeToolCalls, p.callId, active, result),
+                )
                 .catch((err) =>
-                  respond({
+                  this.respondAndForget(this.activeToolCalls, p.callId, active, {
                     id: p.callId,
                     toolCallId: p.callId,
                     output: err instanceof Error ? err.message : String(err),
                     isError: true,
                   }),
-                );
+                )
+                .finally(() => {
+                  this.activeToolCalls.delete(p.callId);
+                  void c
+                    .call(
+                      "worker.tool_call_settled",
+                      {
+                        authToken,
+                        callId: p.callId,
+                        ...(active.workspaceRoot ? { workspaceRoot: active.workspaceRoot } : {}),
+                      },
+                      5_000,
+                    )
+                    .catch((err) => {
+                      console.warn("worker.tool_call_settled notification failed", {
+                        callId: p.callId,
+                        workspaceRoot: active.workspaceRoot,
+                        error: err instanceof Error ? err.message : String(err),
+                      });
+                    });
+                });
+              return;
+            }
+
+            if (method === "worker.ask_main_cancel") {
+              const p = parseAskMainCancelParams(params);
+              if (!p) {
+                respond({ cancelled: false, error: "invalid worker.ask_main_cancel params" });
+                return;
+              }
+              const callId = p.callId;
+              const active = this.activeAskMainCalls.get(callId);
+              if (
+                !active ||
+                active.sessionId !== p.sessionId ||
+                (active.runId ?? "") !== (p.runId ?? "")
+              ) {
+                respond({ cancelled: false });
+                return;
+              }
+              active.controller.abort();
+              this.respondAndForget(this.activeAskMainCalls, callId, active, {
+                requestId: callId,
+                accepted: false,
+                error: "worker.ask_main aborted",
+              });
+              respond({ cancelled: true, settlement: "unknown" });
               return;
             }
 
@@ -137,10 +246,14 @@ export class WorkerSupervisor {
                 return;
               }
               const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "";
+              const callId =
+                typeof params?.callId === "string" && params.callId.length > 0
+                  ? params.callId
+                  : requestId;
               const question = typeof params?.question === "string" ? params.question : "";
               if (!this.askResidentHandler || !sessionId || !question) {
                 respond({
-                  requestId,
+                  requestId: callId,
                   accepted: false,
                   error: this.askResidentHandler
                     ? "worker.ask_main requires sessionId and question"
@@ -149,20 +262,38 @@ export class WorkerSupervisor {
                 return;
               }
 
+              const controller = new AbortController();
+              const runId = typeof params?.runId === "string" ? params.runId : undefined;
+              const active: ActiveRequest = {
+                ...(runId !== undefined && { runId }),
+                sessionId,
+                controller,
+                respond,
+                completed: false,
+              };
+              this.activeAskMainCalls.set(callId, active);
+
               this.askResidentHandler({
                 workerId: String(workerId),
                 sessionId,
-                ...(typeof params?.runId === "string" ? { runId: params.runId } : {}),
+                callId,
+                ...(runId !== undefined && { runId }),
                 question,
+                signal: controller.signal,
               })
-                .then((result: AskMainResult) => respond(result))
+                .then((result: AskMainResult) =>
+                  this.respondAndForget(this.activeAskMainCalls, callId, active, result),
+                )
                 .catch((err: unknown) =>
-                  respond({
+                  this.respondAndForget(this.activeAskMainCalls, callId, active, {
                     requestId,
                     accepted: false,
                     error: err instanceof Error ? err.message : String(err),
                   }),
-                );
+                )
+                .finally(() => {
+                  this.activeAskMainCalls.delete(callId);
+                });
               return;
             }
 
@@ -223,6 +354,18 @@ export class WorkerSupervisor {
     setTimeout(() => {
       if (!this.stopping) this.doStart();
     }, delay);
+  }
+
+  private respondAndForget(
+    activeRequests: Map<string, ActiveRequest>,
+    callId: string,
+    active: ActiveRequest,
+    result: unknown,
+  ): void {
+    if (active.completed) return;
+    active.completed = true;
+    active.respond(result);
+    activeRequests.delete(callId);
   }
 
   isActive(): boolean {
@@ -354,6 +497,30 @@ function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
     if (value !== undefined) env[key] = value;
   }
   return env;
+}
+
+function parseToolCallCancelParams(
+  params: Record<string, unknown> | undefined,
+): ToolCallCancelParams | undefined {
+  if (!params) return undefined;
+  const { runId, sessionId, callId } = params;
+  if (typeof runId !== "string" || typeof sessionId !== "string" || typeof callId !== "string") {
+    return undefined;
+  }
+  return { runId, sessionId, callId };
+}
+
+function parseAskMainCancelParams(
+  params: Record<string, unknown> | undefined,
+): { runId?: string; sessionId: string; callId: string } | undefined {
+  if (!params) return undefined;
+  const { runId, sessionId, callId } = params;
+  if (typeof sessionId !== "string" || typeof callId !== "string") return undefined;
+  return {
+    ...(typeof runId === "string" ? { runId } : {}),
+    sessionId,
+    callId,
+  };
 }
 
 function isBootstrapAccepted(value: unknown): boolean {

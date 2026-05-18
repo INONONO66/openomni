@@ -3,11 +3,17 @@ import {
   createWorkerManager,
   type AskMainParams,
   type AskMainResult,
+  type ToolCallContext,
   type WorkerManager,
   recoverInterruptedRuns as _recoverInterruptedRuns,
   type RecoveryResult,
 } from "@openomni/coordinator";
-import type { ToolProvider } from "@openomni/openomni";
+import type { ToolExecutionContext, ToolProvider } from "@openomni/openomni";
+
+export type ToolDispatchHandler = (
+  call: Tool.Call,
+  context?: ToolExecutionContext,
+) => Promise<Tool.Result>;
 
 export type CoordinatorConfig = {
   workerScript: string;
@@ -16,14 +22,12 @@ export type CoordinatorConfig = {
   workerIdleTimeoutMs?: number;
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
-  toolDispatcher?: Map<string, (call: Tool.Call) => Promise<Tool.Result>>;
+  toolDispatcher?: Map<string, ToolDispatchHandler>;
   askResident?: (params: AskMainParams) => Promise<AskMainResult>;
 };
 
-export function buildToolDispatcher(
-  providers: ToolProvider[],
-): Map<string, (call: Tool.Call) => Promise<Tool.Result>> {
-  const dispatcher = new Map<string, (call: Tool.Call) => Promise<Tool.Result>>();
+export function buildToolDispatcher(providers: ToolProvider[]): Map<string, ToolDispatchHandler> {
+  const dispatcher = new Map<string, ToolDispatchHandler>();
 
   for (const provider of providers) {
     for (const tool of provider.listTools()) {
@@ -31,7 +35,7 @@ export function buildToolDispatcher(
       if (dispatcher.has(canonicalName)) {
         throw new Error(`Duplicate tool in dispatcher: "${canonicalName}"`);
       }
-      dispatcher.set(canonicalName, (call) => provider.execute(call));
+      dispatcher.set(canonicalName, (call, context) => provider.execute(call, context));
     }
   }
 
@@ -68,7 +72,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     bootstrap: config.bootstrap,
     onAskMain: config.askResident,
     onToolCall: toolDispatcher
-      ? async (params) => {
+      ? async (params, context?: ToolCallContext) => {
           const call: Tool.Call = {
             id: params.callId,
             tool: params.tool,
@@ -83,7 +87,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
               isError: true,
             };
           }
-          const result = await handler(call);
+          const result = await handler(call, context);
           return {
             id: result.id,
             toolCallId: result.toolCallId,

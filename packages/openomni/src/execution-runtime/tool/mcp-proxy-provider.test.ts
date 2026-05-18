@@ -75,6 +75,33 @@ describe("ToolProxyProvider", () => {
     expect(result).toEqual(mockResult);
   });
 
+  it("execute forwards execution context to the proxy caller", async () => {
+    const controller = new AbortController();
+    const mockResult: Tool.Result = {
+      id: crypto.randomUUID(),
+      toolCallId: "call-1",
+      output: "file content",
+    };
+    const callTool = mock(
+      async (_name: string, _args: Record<string, unknown>, _context?: { signal?: AbortSignal }) =>
+        mockResult,
+    );
+
+    const provider = ToolProxyProvider.create([makeEntry()], callTool);
+    const tool = getTool(provider.listTools(), 0);
+
+    const result = await tool.execute(makeCall("filesystem.read_file", { path: "/tmp/test.txt" }), {
+      signal: controller.signal,
+    });
+
+    expect(result).toEqual(mockResult);
+    expect(callTool).toHaveBeenCalledWith(
+      "filesystem.read_file",
+      { path: "/tmp/test.txt" },
+      { signal: controller.signal },
+    );
+  });
+
   it("returns empty list when no entries", () => {
     const callTool = mock(async () => ({ id: "r1", toolCallId: "c1", output: "" }));
     const provider = ToolProxyProvider.create([], callTool);

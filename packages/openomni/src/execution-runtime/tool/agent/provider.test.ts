@@ -67,6 +67,24 @@ describe("AgentToolProvider", () => {
     expect(result.output).toBe("helper-agent-result");
   });
 
+  it("execute forwards execution context to registered tools", async () => {
+    const provider = new AgentToolProvider();
+    let capturedSignal: AbortSignal | undefined;
+    provider.register({
+      ...makeTool("helper-agent"),
+      execute: async (call, context) => {
+        capturedSignal = context?.signal;
+        return { id: crypto.randomUUID(), toolCallId: call.id, output: "ok" };
+      },
+    });
+    const controller = new AbortController();
+
+    const result = await provider.execute(makeCall("helper-agent"), { signal: controller.signal });
+
+    expect(result.output).toBe("ok");
+    expect(capturedSignal).toBe(controller.signal);
+  });
+
   it("execute resolves underscore-to-dot alias for registered tools", async () => {
     const provider = new AgentToolProvider();
     provider.register(makeTool("my.agent.tool"));

@@ -11,6 +11,7 @@ export interface SubagentRuntimeSpawnConfig {
   model: Model.Ref;
   systemPrompt?: string;
   middleware?: PolicyRegistration[];
+  signal?: AbortSignal;
 }
 
 export interface SubagentRuntimeSendConfig {
@@ -19,6 +20,7 @@ export interface SubagentRuntimeSendConfig {
   model: Model.Ref;
   systemPrompt?: string;
   middleware?: PolicyRegistration[];
+  signal?: AbortSignal;
 }
 
 export type SubagentRuntime = {
@@ -50,9 +52,13 @@ export interface SubagentToolOptions {
   };
 }
 
+export interface SubagentToolExecutionContext {
+  readonly signal?: AbortSignal;
+}
+
 export interface SubagentToolSpec {
   spec: Tool.Spec;
-  execute: (args: unknown) => Promise<Tool.Result>;
+  execute: (args: unknown, context?: SubagentToolExecutionContext) => Promise<Tool.Result>;
 }
 
 export namespace SubagentTool {
@@ -90,7 +96,10 @@ export namespace SubagentTool {
       },
     };
 
-    const execute = async (args: unknown): Promise<Tool.Result> => {
+    const execute = async (
+      args: unknown,
+      context?: SubagentToolExecutionContext,
+    ): Promise<Tool.Result> => {
       const { agentName, prompt, sessionId, background } = args as {
         agentName: string;
         prompt: string;
@@ -132,6 +141,14 @@ export namespace SubagentTool {
       const model = definition.model ?? options.defaultModel ?? DEFAULT_SUBAGENT_MODEL;
 
       if (background) {
+        if (context?.signal?.aborted) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: "subagent execution aborted",
+            isError: true,
+          };
+        }
         if (!options.backgroundManager) {
           return {
             id: crypto.randomUUID(),
@@ -172,6 +189,7 @@ export namespace SubagentTool {
               model,
               systemPrompt: definition.systemPrompt,
               middleware: propagated.length > 0 ? propagated : undefined,
+              signal: context?.signal,
             })
           : await options.subagentRuntime.spawn({
               agentName,
@@ -180,6 +198,7 @@ export namespace SubagentTool {
               model,
               systemPrompt: definition.systemPrompt,
               middleware: propagated.length > 0 ? propagated : undefined,
+              signal: context?.signal,
             });
 
         return {

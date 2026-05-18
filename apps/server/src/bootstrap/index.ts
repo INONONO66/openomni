@@ -166,8 +166,11 @@ export async function main(): Promise<void> {
     workerScript,
     bootstrap,
     toolDispatcher,
-    askResident: async ({ workerId, sessionId, runId, question }) => {
+    askResident: async ({ workerId, sessionId, runId, question, signal }) => {
       const requestId = crypto.randomUUID();
+      if (signal?.aborted) {
+        return { requestId, accepted: false, error: "worker.ask_main aborted" };
+      }
       if (!model) {
         return { requestId, accepted: false, error: "worker.ask_main requires a configured model" };
       }
@@ -200,6 +203,7 @@ export async function main(): Promise<void> {
           runtime: {
             durableSessionId: mainSessionId,
             lifecycle: "active",
+            ...(signal ? { signal } : {}),
           },
           target: { kind: "resident" },
           meta: {

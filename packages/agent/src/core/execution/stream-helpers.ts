@@ -548,6 +548,7 @@ export async function buildTurn(
           toolPolicyDecisions.push({ timing, decision });
         },
         traceContext: trace,
+        signal: config.signal,
       })
     : undefined;
 

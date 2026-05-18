@@ -117,6 +117,7 @@ export class McpClient {
     name: string,
     args: Record<string, unknown>,
     toolCallId: string,
+    context?: { readonly signal?: AbortSignal },
   ): Promise<Tool.Result> {
     const traceId = randomUUID();
     const strippedName = name.startsWith(`${this.config.name}.`)
@@ -134,10 +135,14 @@ export class McpClient {
     });
 
     try {
-      const response = await this.client.callTool({
-        name: strippedName,
-        arguments: args,
-      });
+      const response = await this.client.callTool(
+        {
+          name: strippedName,
+          arguments: args,
+        },
+        undefined,
+        { signal: context?.signal },
+      );
 
       const _durationMs = Date.now() - startTime;
 

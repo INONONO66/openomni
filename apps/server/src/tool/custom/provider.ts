@@ -1,5 +1,11 @@
 import type { Tool } from "@openomni/protocol";
-import type { NativeTool, ToolCategory, ToolProvider, ToolSource } from "@openomni/openomni";
+import type {
+  NativeTool,
+  ToolCategory,
+  ToolExecutionContext,
+  ToolProvider,
+  ToolSource,
+} from "@openomni/openomni";
 
 export class CustomToolProvider implements ToolProvider {
   readonly name = "custom";
@@ -61,8 +67,9 @@ export class CustomToolProvider implements ToolProvider {
     const extraDuplicates = extraTools.filter(
       (tool, i) => extraTools.findIndex((t) => t.spec.name === tool.spec.name) !== i,
     );
-    if (extraDuplicates.length > 0) {
-      throw new Error(`Duplicate custom tool name: ${extraDuplicates[0]!.spec.name}`);
+    const firstDuplicate = extraDuplicates[0];
+    if (firstDuplicate) {
+      throw new Error(`Duplicate custom tool name: ${firstDuplicate.spec.name}`);
     }
 
     this.tools = [...builtInTools, ...extraTools];
@@ -72,7 +79,7 @@ export class CustomToolProvider implements ToolProvider {
     return this.tools;
   }
 
-  execute(call: Tool.Call): Promise<Tool.Result> {
+  execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
     const tool = this.tools.find((t) => t.spec.name === call.tool);
     if (!tool) {
       return Promise.resolve({
@@ -82,6 +89,6 @@ export class CustomToolProvider implements ToolProvider {
         isError: true,
       });
     }
-    return tool.execute(call);
+    return context === undefined ? tool.execute(call) : tool.execute(call, context);
   }
 }

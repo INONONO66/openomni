@@ -19,6 +19,7 @@ export type {
   CatalogEntry,
   NativeTool,
   ToolCategory,
+  ToolExecutionContext,
   ToolExecutorConfig,
   ToolExecutorContext,
   ToolMetaValue,

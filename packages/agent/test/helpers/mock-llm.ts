@@ -4,7 +4,11 @@ import type { ChatAgentConfig } from "../../src/core/types";
 export type MockLlmInput = {
   readonly messages?: readonly unknown[];
   readonly maxSteps?: number;
-  readonly toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  readonly signal?: AbortSignal;
+  readonly toolExecutor?: (
+    call: Tool.Call,
+    context?: Tool.ExecutionContext,
+  ) => Promise<Tool.Result>;
 };
 
 export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;

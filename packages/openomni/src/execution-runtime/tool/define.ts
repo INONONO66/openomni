@@ -2,6 +2,7 @@ import type { RuntimeResource, Tool as ProtocolTool } from "@openomni/protocol";
 import type {
   ImplicitInputSource,
   NativeTool,
+  ToolExecutionContext,
   ToolMetaValue,
   ToolRiskTier,
   ToolSource,
@@ -34,6 +35,7 @@ export interface ToolDefinition<TInput = Record<string, unknown>> {
   readonly implicitInputs?: Readonly<Record<string, ImplicitInputSource>>;
   execute(
     call: ProtocolTool.Call & { input: TInput extends Record<string, unknown> ? TInput : never },
+    context?: ToolExecutionContext,
   ): Promise<ProtocolTool.Result>;
 }
 

@@ -18,7 +18,7 @@ export interface ChatAgentConfig {
   model: Model.Ref;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
-  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
   permissions?: Policy.Permission;
   compaction?: {

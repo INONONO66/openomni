@@ -22,7 +22,7 @@ export interface RunInput {
   model?: Provider.Model;
   auth?: Auth.Info;
   allowAuthFallback?: boolean;
-  toolExecutor?: (call: Tool.Call) => Promise<Tool.Result>;
+  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   providerOptions?: Record<string, unknown>;
@@ -96,7 +96,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
                 tool: spec.name,
                 input: args,
               };
-              const result = await input.toolExecutor?.(call);
+              const result = await input.toolExecutor?.(call, { signal: abortSignal });
               if (!result) return "";
               sink.onToolCall(call);
               sink.onToolResult(result);

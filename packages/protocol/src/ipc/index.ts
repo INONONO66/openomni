@@ -150,13 +150,47 @@ const methods = {
       callId: z.string(),
       tool: z.string(),
       input: z.record(z.string(), z.unknown()),
+      workspaceRoot: z.string().optional(),
     }),
     result: z.object({
       id: z.string(),
       toolCallId: z.string(),
       output: z.string(),
       isError: z.boolean().optional(),
+      settlement: z.enum(["settled", "unknown"]).optional(),
     }),
+  },
+  "worker.tool_call_cancel": {
+    params: z.object({
+      runId: z.string(),
+      sessionId: z.string(),
+      callId: z.string(),
+    }),
+    result: z.object({
+      cancelled: z.boolean(),
+      settlement: z.enum(["settled", "unknown"]).optional(),
+      error: z.string().optional(),
+    }),
+  },
+  "worker.ask_main_cancel": {
+    params: z.object({
+      runId: z.string().optional(),
+      sessionId: z.string(),
+      callId: z.string(),
+    }),
+    result: z.object({
+      cancelled: z.boolean(),
+      settlement: z.enum(["settled", "unknown"]).optional(),
+      error: z.string().optional(),
+    }),
+  },
+  "worker.tool_call_settled": {
+    params: z.object({
+      authToken: z.string().optional(),
+      callId: z.string(),
+      workspaceRoot: z.string().optional(),
+    }),
+    result: z.object({ acknowledged: z.boolean(), error: z.string().optional() }),
   },
   "worker.state_update": {
     params: z.object({

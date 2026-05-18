@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { defineTool } from "../define.js";
 import { optionalPositiveNumber, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
-import type { NativeTool } from "../types.js";
+import type { NativeTool, ToolExecutionContext } from "../types.js";
 import { BASH_PROMPT } from "./bash-prompt.js";
 import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./bash-classify.js";
 
@@ -43,6 +43,17 @@ function resolveTimeout(input: Record<string, unknown>): number {
   return Math.min(value, MAX_TIMEOUT_MS);
 }
 
+function terminateProcessGroup(proc: { readonly pid: number; kill(): void }): void {
+  try {
+    process.kill(-proc.pid, "SIGTERM");
+    return;
+  } catch {
+    // Windows and non-detached fallback.
+  }
+
+  proc.kill();
+}
+
 function buildBashEnv(workspaceRoot: string | undefined): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of bashEnvKeys) {
@@ -78,48 +89,67 @@ export function bashTool(workspaceRoot?: string): NativeTool {
     isDestructive: (input) => isDestructiveCommand(readCommandFromMeta(input)),
     isConcurrencySafe: false,
     source: "system",
-    async execute(call) {
+    async execute(call, context?: ToolExecutionContext) {
       let timedOut = false;
+      let aborted = false;
 
       try {
         const command = requireString(call.input, "command");
         const cwd = resolveWorkingDirectory(workspaceRoot, optionalString(call.input, "workdir"));
         const timeoutMs = resolveTimeout(call.input);
 
+        if (context?.signal?.aborted) {
+          return errorResult(call, "Command aborted");
+        }
+
         const proc = Bun.spawn(["bash", "-lc", command], {
           cwd,
+          detached: true,
           env: buildBashEnv(workspaceRoot),
           stdout: "pipe",
           stderr: "pipe",
         });
 
+        const abortCommand = () => {
+          aborted = true;
+          terminateProcessGroup(proc);
+        };
+        context?.signal?.addEventListener("abort", abortCommand, { once: true });
+
         const timer = setTimeout(() => {
           timedOut = true;
-          proc.kill();
+          terminateProcessGroup(proc);
         }, timeoutMs);
 
-        const [stdout, stderr, exitCode] = await Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
-          proc.exited,
-        ]);
+        try {
+          const [stdout, stderr, exitCode] = await Promise.all([
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+            proc.exited,
+          ]);
 
-        clearTimeout(timer);
+          const output = [stdout, stderr]
+            .filter((chunk) => chunk.length > 0)
+            .join("\n")
+            .trim();
 
-        const output = [stdout, stderr]
-          .filter((chunk) => chunk.length > 0)
-          .join("\n")
-          .trim();
+          if (aborted) {
+            return errorResult(call, output || "Command aborted");
+          }
 
-        if (timedOut) {
-          return errorResult(call, output || `Command timed out after ${timeoutMs}ms`);
+          if (timedOut) {
+            return errorResult(call, output || `Command timed out after ${timeoutMs}ms`);
+          }
+
+          if (exitCode !== 0) {
+            return errorResult(call, output || `Command exited with code ${exitCode}`);
+          }
+
+          return successResult(call, output);
+        } finally {
+          clearTimeout(timer);
+          context?.signal?.removeEventListener("abort", abortCommand);
         }
-
-        if (exitCode !== 0) {
-          return errorResult(call, output || `Command exited with code ${exitCode}`);
-        }
-
-        return successResult(call, output);
       } catch (err) {
         return fromError(call, err);
       }

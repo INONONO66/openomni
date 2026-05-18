@@ -1,6 +1,6 @@
 import type { SubagentToolOptions } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
-import type { NativeTool, ToolCategory, ToolProvider } from "../types.js";
+import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
 import { createSubagentTool } from "./tools/subagent.js";
 
 export class AgentToolProvider implements ToolProvider {
@@ -22,7 +22,7 @@ export class AgentToolProvider implements ToolProvider {
     return [createSubagentTool(this.subagentOptions), ...this.extraTools];
   }
 
-  execute(call: Tool.Call): Promise<Tool.Result> {
+  execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
     const tool = this.listTools().find(
       (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
     );
@@ -34,6 +34,8 @@ export class AgentToolProvider implements ToolProvider {
         isError: true,
       });
     }
-    return tool.execute({ ...call, tool: tool.spec.name });
+    return context === undefined
+      ? tool.execute({ ...call, tool: tool.spec.name })
+      : tool.execute({ ...call, tool: tool.spec.name }, context);
   }
 }

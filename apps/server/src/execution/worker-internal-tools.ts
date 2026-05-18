@@ -5,7 +5,11 @@ import type { WorkerRunState } from "./worker-run-state";
 
 export namespace WorkerInternalTools {
   export const Server = z.custom<{
-    call(method: "worker.ask_main", params: Record<string, unknown>): Promise<unknown>;
+    call(
+      method: "worker.ask_main" | "worker.ask_main_cancel",
+      params: Record<string, unknown>,
+      timeoutMs?: number,
+    ): Promise<unknown>;
   }>(
     (value) =>
       typeof value === "object" &&
@@ -51,11 +55,21 @@ export namespace WorkerInternalTools {
       },
       source: "server",
       category: "delegation",
-      riskTier: 1,
-      isReadOnly: false,
+      labels: ["authority.read", "human-attention", "resident-consult"],
+      descriptor: {
+        id: "tool:server:ask_main",
+        kind: "tool",
+        source: { type: "server" },
+        labels: ["authority.read", "human-attention", "resident-consult"],
+        capabilities: ["resident.consult", "human-attention"],
+        effects: ["authority.request"],
+        risk: 0,
+      },
+      riskTier: 0,
+      isReadOnly: true,
       isDestructive: false,
       isConcurrencySafe: false,
-      async execute(call) {
+      async execute(call, context) {
         const question = readQuestion(call);
         if (!question) {
           return {
@@ -66,13 +80,46 @@ export namespace WorkerInternalTools {
           };
         }
 
-        const raw = await server.call("worker.ask_main", {
-          authToken: ipcAuthToken,
-          workerId,
-          sessionId,
-          runId,
-          question,
-        });
+        if (context?.signal?.aborted) return askMainAbortedResult(call);
+
+        const cancelAskMain = () => {
+          void server
+            .call(
+              "worker.ask_main_cancel",
+              {
+                authToken: ipcAuthToken,
+                workerId,
+                sessionId,
+                runId,
+                callId: call.id,
+              },
+              5_000,
+            )
+            .catch(() => undefined);
+        };
+        context?.signal?.addEventListener("abort", cancelAskMain, { once: true });
+
+        let raw: unknown;
+        const abort = abortRace(context?.signal);
+        try {
+          raw = await Promise.race([
+            server.call("worker.ask_main", {
+              authToken: ipcAuthToken,
+              workerId,
+              sessionId,
+              runId,
+              callId: call.id,
+              question,
+            }),
+            abort.promise,
+          ]);
+        } catch (error) {
+          if (isAbortError(error)) return askMainAbortedResult(call);
+          throw error;
+        } finally {
+          context?.signal?.removeEventListener("abort", cancelAskMain);
+          abort.cleanup();
+        }
         const response =
           raw && typeof raw === "object"
             ? (raw as { accepted?: unknown; output?: unknown; error?: unknown })
@@ -127,4 +174,49 @@ function readQuestion(call: Tool.Call): string {
   }
   const question = (call.input as { question?: unknown }).question;
   return typeof question === "string" ? question : "";
+}
+
+function askMainAbortedResult(call: Tool.Call): Tool.Result {
+  return {
+    id: crypto.randomUUID(),
+    toolCallId: call.id,
+    output: "worker.ask_main aborted",
+    isError: true,
+  };
+}
+
+function createAbortError(): Error {
+  const error = new Error("worker.ask_main aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function abortRace(signal: AbortSignal | undefined): {
+  readonly promise: Promise<never>;
+  readonly cleanup: () => void;
+} {
+  if (!signal) {
+    return {
+      promise: new Promise<never>(() => {
+        // The caller did not provide cancellation.
+      }),
+      cleanup: () => undefined,
+    };
+  }
+  if (signal.aborted)
+    return { promise: Promise.reject(createAbortError()), cleanup: () => undefined };
+  let cleanup: () => void = () => undefined;
+  const promise = new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return { promise, cleanup };
 }

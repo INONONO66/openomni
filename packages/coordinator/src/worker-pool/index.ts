@@ -2,6 +2,8 @@ export {
   createWorkerPool,
   type WorkerPool,
   type WorkerPoolConfig,
+  type ToolCallCancelParams,
+  type ToolCallContext,
   type ToolCallParams,
   type ToolCallResult,
 } from "./pool";

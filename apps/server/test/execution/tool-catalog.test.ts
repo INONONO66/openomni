@@ -14,7 +14,7 @@ function makeTool(name: string, category?: ToolSelection.Category): NativeTool {
     isDestructive: false,
     isConcurrencySafe: false,
     category,
-    execute: mock(async (call: Tool.Call) => ({
+    execute: mock(async (call: Tool.Call, _context?: { signal?: AbortSignal }) => ({
       id: call.id,
       toolCallId: call.id,
       output: `${name} result`,
@@ -27,7 +27,7 @@ function makeProvider(name: string, tools: NativeTool[]): ToolProvider {
     name,
     category: "system",
     listTools: () => tools,
-    execute: mock(async (call: Tool.Call) => ({
+    execute: mock(async (call: Tool.Call, _context?: { signal?: AbortSignal }) => ({
       id: call.id,
       toolCallId: call.id,
       output: `${name} result`,
@@ -132,7 +132,7 @@ describe("tool catalog", () => {
     await dispatchWithFallback(dispatcher, call);
 
     expect(mcpProvider.execute).toHaveBeenCalledTimes(1);
-    expect(mcpProvider.execute).toHaveBeenCalledWith(call);
+    expect(mcpProvider.execute).toHaveBeenCalledWith(call, undefined);
   });
 
   it("server-source fixture tool is dispatched through the server provider", async () => {
@@ -144,7 +144,19 @@ describe("tool catalog", () => {
     await dispatchWithFallback(dispatcher, call);
 
     expect(serverProvider.execute).toHaveBeenCalledTimes(1);
-    expect(serverProvider.execute).toHaveBeenCalledWith(call);
+    expect(serverProvider.execute).toHaveBeenCalledWith(call, undefined);
+  });
+
+  it("dispatcher forwards execution context to providers", async () => {
+    const provider = makeProvider("mock-provider", [makeTool("known_tool")]);
+    const dispatcher = buildToolDispatcher([provider]);
+    const controller = new AbortController();
+    const call: Tool.Call = { id: "call-ctx", tool: "known_tool", input: {} };
+
+    const result = await dispatcher.get("known_tool")?.(call, { signal: controller.signal });
+
+    expect(result?.output).toBe("mock-provider result");
+    expect(provider.execute).toHaveBeenCalledWith(call, { signal: controller.signal });
   });
 
   it("unknown tool name produces an isError result containing the tool name", async () => {
