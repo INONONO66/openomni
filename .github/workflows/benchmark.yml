@@ -64,6 +64,15 @@ jobs:
           done
           echo "$combined" > bench-results/combined.json
 
+      - name: Check gh-pages exists
+        id: ghp
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
@@ -71,11 +80,12 @@ jobs:
           tool: customSmallerIsBetter
           output-file-path: bench-results/combined.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' }}
+          auto-push: ${{ github.event_name == 'push' && steps.ghp.outputs.exists == 'true' }}
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
-          comment-on-alert: ${{ github.event_name == 'push' }}
+          comment-on-alert: ${{ github.event_name == 'push' && steps.ghp.outputs.exists == 'true' }}
           fail-on-alert: false
           summary-always: true
           save-data-file: ${{ github.event_name == 'push' }}
+          skip-fetch-gh-pages: ${{ steps.ghp.outputs.exists != 'true' }}
