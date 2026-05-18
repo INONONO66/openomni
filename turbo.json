@@ -22,6 +22,10 @@
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
+    "bench": {
+      "dependsOn": ["^build"],
+      "outputs": ["bench-results/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
