@@ -489,7 +489,7 @@ function cleanupStaleSocketDirs(baseDir: string): void {
     if (!entry.startsWith("openomni-workers-")) continue;
     const dirPath = path.join(baseDir, entry);
     try {
-      if (!fs.statSync(dirPath).isDirectory()) continue;
+      if (!fs.lstatSync(dirPath).isDirectory()) continue;
     } catch (err) {
       warnCleanup("failed to stat worker directory during cleanup", {
         dirPath,
