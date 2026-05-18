@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, RuntimeResource, Tool } from "@openomni/protocol";
@@ -45,7 +46,7 @@ export class McpClient {
       transport = this.createTransport(this.config);
       closeTracker = trackTransportCloseRequests(transport);
       await this.client.connect(transport);
-      const tools = await this.client.listTools();
+      const tools = await this.client.listTools(undefined, requestOptions(this.config));
       this.connected = true;
 
       const toolCount = tools.tools.length;
@@ -106,8 +107,8 @@ export class McpClient {
     }
   }
 
-  async listTools(): Promise<Tool.Spec[]> {
-    const response = await this.client.listTools();
+  async listTools(context?: { readonly signal?: AbortSignal }): Promise<Tool.Spec[]> {
+    const response = await this.client.listTools(undefined, requestOptions(this.config, context));
     return response.tools.map((t) =>
       attachMcpToolDescriptor(convertMcpTool(t, this.config.name), this.config.name, t.name),
     );
@@ -141,7 +142,7 @@ export class McpClient {
           arguments: args,
         },
         undefined,
-        { signal: context?.signal },
+        requestOptions(this.config, context),
       );
 
       const _durationMs = Date.now() - startTime;
@@ -172,6 +173,26 @@ export class McpClient {
   get serverName(): string {
     return this.config.name;
   }
+}
+
+function requestOptions(
+  config: McpServerConfig,
+  context?: { readonly signal?: AbortSignal },
+): RequestOptions | undefined {
+  const timeout = normalizeTimeout(config.timeout);
+  if (context?.signal === undefined && timeout === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(context?.signal !== undefined && { signal: context.signal }),
+    ...(timeout !== undefined && { timeout, maxTotalTimeout: timeout }),
+  };
+}
+
+function normalizeTimeout(timeout: number | undefined): number | undefined {
+  if (timeout === undefined) return undefined;
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : undefined;
 }
 
 interface TransportCloseTracker {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Operational, type RuntimeResource, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -22,6 +23,29 @@ function createStubClient(tools: McpToolStub[]): McpClientHandle {
     callTool: async () => {
       throw new Error("callTool is not implemented by this test stub");
     },
+  };
+}
+
+function createRequestOptionsCaptureClient(tools: McpToolStub[] = []): McpClientHandle & {
+  readonly listOptions: () => Array<RequestOptions | undefined>;
+  readonly callOptions: () => Array<RequestOptions | undefined>;
+} {
+  const capturedListOptions: Array<RequestOptions | undefined> = [];
+  const capturedCallOptions: Array<RequestOptions | undefined> = [];
+
+  return {
+    connect: async () => undefined,
+    close: async () => undefined,
+    listTools: async (_params, options) => {
+      capturedListOptions.push(options);
+      return { tools };
+    },
+    callTool: async (_params, _resultSchema, options) => {
+      capturedCallOptions.push(options);
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+    listOptions: () => capturedListOptions,
+    callOptions: () => capturedCallOptions,
   };
 }
 
@@ -81,6 +105,128 @@ describe("McpClient tool descriptors", () => {
       serverId: "search-server",
       remoteName: "search",
     });
+  });
+});
+
+describe("McpClient request options", () => {
+  test("preserves SDK defaults when neither timeout nor signal is configured", async () => {
+    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "sse",
+        url: "https://example.test/mcp",
+      },
+      { client: sdkClient },
+    );
+
+    await client.listTools();
+
+    expect(sdkClient.listOptions()[0]).toBeUndefined();
+  });
+
+  test("passes abort signal without requiring a timeout override", async () => {
+    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const signal = new AbortController().signal;
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "sse",
+        url: "https://example.test/mcp",
+      },
+      { client: sdkClient },
+    );
+
+    await client.listTools({ signal });
+
+    const options = sdkClient.listOptions()[0];
+    expect(options?.signal).toBe(signal);
+    expect(options?.timeout).toBeUndefined();
+    expect(options?.maxTotalTimeout).toBeUndefined();
+  });
+
+  test("ignores non-positive timeout overrides", async () => {
+    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "sse",
+        url: "https://example.test/mcp",
+        timeout: 0,
+      },
+      { client: sdkClient },
+    );
+
+    await client.listTools();
+
+    expect(sdkClient.listOptions()[0]).toBeUndefined();
+  });
+
+  test("passes configured timeout to initial tool discovery during connect", async () => {
+    const sdkClient = createRequestOptionsCaptureClient();
+    const client = new McpClient(
+      {
+        name: "filesystem",
+        transport: "stdio",
+        command: "mcp-server-filesystem",
+        timeout: 1234,
+      },
+      {
+        client: sdkClient,
+        createTransport: () => createTransportStub(),
+      },
+    );
+
+    await client.connect();
+
+    const options = sdkClient.listOptions()[0];
+    expect(options?.timeout).toBe(1234);
+    expect(options?.maxTotalTimeout).toBe(1234);
+  });
+
+  test("passes configured timeout and abort signal to listTools", async () => {
+    const sdkClient = createRequestOptionsCaptureClient([{ name: "search" }]);
+    const signal = new AbortController().signal;
+    const client = new McpClient(
+      {
+        name: "search-server",
+        transport: "sse",
+        url: "https://example.test/mcp",
+        timeout: 2500,
+      },
+      { client: sdkClient },
+    );
+
+    await client.listTools({ signal });
+
+    const options = sdkClient.listOptions()[0];
+    expect(options?.signal).toBe(signal);
+    expect(options?.timeout).toBe(2500);
+    expect(options?.maxTotalTimeout).toBe(2500);
+  });
+
+  test("passes configured timeout and abort signal to callTool", async () => {
+    const sdkClient = createRequestOptionsCaptureClient();
+    const signal = new AbortController().signal;
+    const client = new McpClient(
+      {
+        name: "filesystem",
+        transport: "stdio",
+        command: "mcp-server-filesystem",
+        timeout: 5000,
+      },
+      { client: sdkClient },
+    );
+
+    const result = await client.callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
+      signal,
+    });
+
+    expect(result.output).toBe("ok");
+    const options = sdkClient.callOptions()[0];
+    expect(options?.signal).toBe(signal);
+    expect(options?.timeout).toBe(5000);
+    expect(options?.maxTotalTimeout).toBe(5000);
   });
 });
 
