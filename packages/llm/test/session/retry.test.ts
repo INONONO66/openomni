@@ -57,6 +57,23 @@ describe("Retry", () => {
       }
     });
 
+    test("rejects immediately when signal is already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const start = Date.now();
+
+      try {
+        await Retry.sleep(5000, controller.signal);
+        expect.unreachable("Should have thrown AbortError");
+      } catch (e) {
+        expect(e).toBeInstanceOf(DOMException);
+        expect((e as DOMException).name).toBe("AbortError");
+      }
+
+      expect(Date.now() - start).toBeLessThan(100);
+    });
+
     test("caps delay at RETRY_MAX_DELAY", async () => {
       const controller = new AbortController();
       // Request a delay larger than RETRY_MAX_DELAY

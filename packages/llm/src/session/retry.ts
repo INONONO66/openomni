@@ -9,6 +9,10 @@ export namespace Retry {
   export const RETRY_MAX_DELAY = 2_147_483_647;
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
     return new Promise((resolve, reject) => {
       const abortHandler = () => {
         clearTimeout(timeout);
