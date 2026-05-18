@@ -1,18 +1,11 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { z } from "zod";
+import type { WorkerRunState } from "./worker-run-state";
 
 const DEFAULT_MAX_INBOX_MESSAGES = 100;
 
 export namespace WorkerIpcHandlers {
-  export interface ActiveRun {
-    readonly sessionId: string;
-    readonly controller: AbortController;
-    readonly inbox: string[];
-  }
-
-  export type ActiveRuns = Pick<Map<string, ActiveRun>, "get" | "entries" | "size">;
-
   export interface SharedOptions {
     readonly ipcAuthToken: string;
     readonly workerId: string;
@@ -21,17 +14,17 @@ export namespace WorkerIpcHandlers {
 
   export interface CancelRunOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<ActiveRuns, "get">;
+    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
   }
 
   export interface DeliverMessageOptions extends SharedOptions {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<ActiveRuns, "entries">;
+    readonly activeRuns: Pick<WorkerRunState.ActiveRunRegistry, "entries">;
   }
 
   export interface ShutdownIdleOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<ActiveRuns, "size">;
+    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "size">;
   }
 
   export const CancelRunResponse = z.discriminatedUnion("cancelled", [
@@ -113,7 +106,15 @@ export namespace WorkerIpcHandlers {
       };
     }
 
-    const [activeRunId, run] = matches[0] as [string, ActiveRun];
+    const match = matches[0];
+    if (!match) {
+      return {
+        accepted: false,
+        error: `run not active for session: ${sessionId}`,
+      };
+    }
+
+    const [activeRunId, run] = match;
     run.inbox.push(message);
     while (run.inbox.length > maxInboxMessages) {
       run.inbox.shift();

@@ -1,11 +1,9 @@
 import type { NativeTool } from "@openomni/openomni";
 import type { Tool } from "@openomni/protocol";
 import { z } from "zod";
+import type { WorkerRunState } from "./worker-run-state";
 
 export namespace WorkerInternalTools {
-  export const InboxRun = z.object({ inbox: z.array(z.string()) });
-  export type InboxRun = z.infer<typeof InboxRun>;
-
   export const Server = z.custom<{
     call(method: "worker.ask_main", params: Record<string, unknown>): Promise<unknown>;
   }>(
@@ -17,7 +15,7 @@ export namespace WorkerInternalTools {
   );
   export type Server = z.infer<typeof Server>;
 
-  export const ActiveRuns = z.custom<Pick<Map<string, InboxRun>, "get">>(
+  export const ActiveRuns = z.custom<WorkerRunState.InboxReadableActiveRuns>(
     (value) =>
       typeof value === "object" &&
       value !== null &&

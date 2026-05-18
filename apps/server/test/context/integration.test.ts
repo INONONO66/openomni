@@ -82,16 +82,16 @@ describe("local-runner disabled", () => {
 });
 
 describe("worker-entry wiring", () => {
-  const workerEntrySrc = readFileSync(join(serverSrc, "execution/worker-entry.ts"), "utf-8");
+  const workerRunnerSrc = readFileSync(join(serverSrc, "execution/worker-runner.ts"), "utf-8");
 
-  it("imports createContextMiddleware from context/index", () => {
-    expect(workerEntrySrc).toContain("createContextMiddleware");
-    expect(workerEntrySrc).toContain("../context/index");
+  it("worker runner imports createContextMiddleware from context/index", () => {
+    expect(workerRunnerSrc).toContain("createContextMiddleware");
+    expect(workerRunnerSrc).toContain("../context/index");
   });
 
-  it("uses createContextMiddleware in middleware array", () => {
-    expect(workerEntrySrc).toContain("createContextMiddleware(");
-    expect(workerEntrySrc).toContain("...buildWorkerMiddleware(");
+  it("worker runner uses createContextMiddleware in middleware array", () => {
+    expect(workerRunnerSrc).toContain("createContextMiddleware(");
+    expect(workerRunnerSrc).toContain("...buildWorkerMiddleware(");
   });
 });
 

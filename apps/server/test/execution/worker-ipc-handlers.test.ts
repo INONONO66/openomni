@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { WorkerIpcHandlers } from "../../src/execution/worker-ipc-handlers";
+import type { WorkerRunState } from "../../src/execution/worker-run-state";
 
-function createRun(sessionId: string, inbox: string[] = []): WorkerIpcHandlers.ActiveRun {
+function createRun(sessionId: string, inbox: string[] = []): WorkerRunState.ActiveRun {
   return { sessionId, controller: new AbortController(), inbox };
 }
 

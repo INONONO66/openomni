@@ -129,4 +129,40 @@ describe("ExecutionCoordinator", () => {
 
     await shutdown;
   });
+
+  test("rejects duplicate run ids without clearing the original active run", async () => {
+    const coordinator = createExecutionCoordinator({
+      workerScript: "unused-in-test",
+      workerCount: 1,
+    });
+
+    const firstRun = coordinator.dispatch(
+      "tree-1",
+      makeRequest({
+        runId: "run-1",
+        sessionId: "session-1",
+        prompt: "long",
+        delayMs: 150,
+      } as never),
+    );
+
+    expect(coordinator.getStats().activeRuns).toBe(1);
+
+    await expect(
+      coordinator.dispatch(
+        "tree-2",
+        makeRequest({ runId: "run-1", sessionId: "session-2", prompt: "duplicate" }),
+      ),
+    ).rejects.toThrow("run already active: run-1");
+
+    expect(coordinator.getStats().activeRuns).toBe(1);
+
+    await expect(firstRun).resolves.toMatchObject({
+      runId: "run-1",
+      sessionId: "session-1",
+      status: "succeeded",
+    });
+
+    expect(coordinator.getStats().activeRuns).toBe(0);
+  });
 });

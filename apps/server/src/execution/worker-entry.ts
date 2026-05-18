@@ -1,29 +1,15 @@
-import { ChatAgent, AgentRegistry } from "@openomni/agent";
+import { AgentRegistry } from "@openomni/agent";
 import type { Auth } from "@openomni/llm";
 import { createIpcServer } from "@openomni/coordinator";
-import { Execution, Subagent, Tool, WorkerBootstrap } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { Operational, WorkerBootstrap } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
-import {
-  AgentToolProvider,
-  BackgroundManager,
-  ToolProxyProvider,
-  SystemToolProvider,
-  buildToolCatalog,
-  buildWorkerMiddleware,
-  createToolExecutor,
-  createWorkerSubagentRuntime,
-} from "@openomni/openomni";
+import { BackgroundManager } from "@openomni/openomni";
 import { loadConfig } from "../config";
-import {
-  buildWorkerInputMessages,
-  createExecutionToolContext,
-  resolveWorkerDbPath,
-} from "./worker-runtime";
-import { createContextMiddleware } from "../context/index";
+import { resolveWorkerDbPath } from "./worker-runtime";
 import { WorkerHeartbeat } from "./worker-heartbeat";
-import { WorkerInternalTools } from "./worker-internal-tools";
 import { WorkerIpcHandlers } from "./worker-ipc-handlers";
+import type { WorkerRunState } from "./worker-run-state";
+import { WorkerRunner } from "./worker-runner";
 
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -62,7 +48,7 @@ initialize({
 BusPersistence.start();
 
 let workerBootstrap: WorkerBootstrap.Bootstrap | null = null;
-const activeRuns = new Map<string, WorkerIpcHandlers.ActiveRun>();
+const activeRuns: WorkerRunState.ActiveRunRegistry = new Map();
 let resolveBootstrapReady: () => void = () => undefined;
 let rejectBootstrapReady: (_error: Error) => void = () => undefined;
 const bootstrapReady = new Promise<void>((resolve, reject) => {
@@ -153,266 +139,19 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       });
     }
   } else if (method === "coordinator.spawn_run") {
-    if (params?.authToken !== ipcAuthToken) {
-      respond({
-        runId: typeof params?.runId === "string" ? params.runId : "unknown",
-        sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
-        status: "failed",
-        error: "unauthorized coordinator request",
-      });
-      return;
-    }
-
-    let request: Execution.Request;
-    try {
-      request = Execution.Request.parse(params);
-    } catch (err) {
-      respond({
-        runId: typeof params?.runId === "string" ? params.runId : "unknown",
-        sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
-        status: "failed",
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return;
-    }
-
-    const { runId, sessionId } = request;
-
-    (async () => {
-      const traceId = request.traceId ?? crypto.randomUUID();
-      const controller = new AbortController();
-      activeRuns.set(runId, { sessionId, controller, inbox: [] });
-      server.notify("worker.run_started", { runId, sessionId });
-      Bus.publish(Subagent.Events.WorkerRunStarted, {
-        traceId,
-        sessionId,
-        runId,
-        time: Date.now(),
-        payload: { sessionId, runId, title: request.prompt.slice(0, 80) },
-      });
-
-      try {
-        await bootstrapReady;
-        const messages = buildWorkerInputMessages(sessionId, request.prompt);
-        const workspaceRoot =
-          request.workspaceRoot ?? request.toolConfig?.workspaceRoot ?? config.workspace?.root;
-        const systemProvider = new SystemToolProvider(workspaceRoot);
-
-        const mcpProxyProvider = ToolProxyProvider.create(
-          workerBootstrap?.toolCatalog ?? [],
-          async (toolName, toolArgs) => {
-            const raw = await server.call("worker.tool_call", {
-              runId,
-              sessionId,
-              callId: crypto.randomUUID(),
-              tool: toolName,
-              input: toolArgs,
-            });
-            return Tool.Result.parse(raw);
-          },
-        );
-
-        const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
-        const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
-        const agentDefinitionsRef: {
-          definitions?: Map<string, WorkerBootstrap.RuntimeAgentDefinition>;
-        } = {
-          definitions: new Map((workerBootstrap?.agents ?? []).map((agent) => [agent.name, agent])),
-        };
-
-        const agentProvider = new AgentToolProvider({
-          subagentRuntime: createWorkerSubagentRuntime({
-            toolsRef,
-            catalogRef,
-            agentDefinitionsRef,
-            resolveAuth: resolveBootstrapAuth,
-            allowAuthFallback: false,
-            parentSessionId: sessionId,
-            parentPermissions: request.permissions,
-          }),
-          delegationContext: {
-            depth: 0,
-            maxDepth: 3,
-            visitedAgents: new Set([request.agentName ?? "dev"]),
-            parentAbort: controller.signal,
-          },
-          backgroundManager,
-        });
-
-        const systemTools = systemProvider.listTools();
-        const agentTools = agentProvider.listTools();
-        const proxyTools = mcpProxyProvider.listTools();
-        const availableTools = [...systemTools, ...agentTools, ...proxyTools];
-        const internalTools = WorkerInternalTools.create({
-          runId,
-          sessionId,
-          server,
-          ipcAuthToken,
-          workerId,
-          activeRuns,
-        });
-        const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
-        const internalToolExecutor = createToolExecutor({
-          tools: internalTools,
-          config: {
-            workspaceRoot,
-            runtime: {
-              sessionId,
-              runId,
-              agentName: request.agentName,
-              workspaceRoot,
-            },
-          },
-        });
-        const internalToolNames = new Set(
-          internalTools.flatMap((tool) => [tool.spec.name, tool.spec.name.replace(/\./g, "_")]),
-        );
-        const combinedToolExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
-          if (internalToolNames.has(call.tool)) return internalToolExecutor(call);
-          if (toolExecutor) return toolExecutor(call);
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Unknown worker tool: ${call.tool}`,
-            isError: true,
-          };
-        };
-        const exposedTools = [
-          ...(tools ?? []),
-          ...internalTools.map((tool) => ({
-            ...tool.spec,
-            name: tool.spec.name.replace(/\./g, "_"),
-          })),
-        ];
-
-        toolsRef.tools = exposedTools;
-        toolsRef.toolExecutor = combinedToolExecutor;
-        catalogRef.catalog = buildToolCatalog([
-          { tools: systemTools, source: "system" },
-          { tools: agentTools, source: "agent" },
-          { tools: proxyTools, source: "mcp" },
-        ]);
-
-        const agent = ChatAgent.create({
-          model: request.model,
-          auth: resolveBootstrapAuth(request.model.provider),
-          allowAuthFallback: false,
-          signal: controller.signal,
-          budget: request.budget,
-          systemPrompt: [
-            request.systemPrompt,
-            "Worker runtime tools: use ask_main when you need Resident guidance or approval; use check_inbox to read live messages delivered while this run is active.",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          tools: exposedTools,
-          toolExecutor: combinedToolExecutor,
-          middleware: [
-            createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
-            ...buildWorkerMiddleware({
-              permissions: request.permissions,
-              ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
-            }),
-          ],
-        });
-        const runResult = await agent.run({
-          messages,
-          traceContext: { traceId, sessionId, runId },
-        });
-        if (controller.signal.aborted) {
-          server.notify("worker.run_completed", {
-            runId,
-            sessionId,
-            status: "cancelled",
-          });
-          Bus.publish(Subagent.Events.WorkerSessionCancelled, {
-            traceId,
-            sessionId,
-            runId,
-            time: Date.now(),
-            payload: { sessionId, runId },
-          });
-
-          respond({
-            runId,
-            sessionId,
-            status: "cancelled",
-            error: "cancelled by coordinator",
-          });
-          return;
-        }
-
-        server.notify("worker.run_completed", {
-          runId,
-          sessionId,
-          status: "succeeded",
-          output: runResult.text,
-        });
-        Bus.publish(Subagent.Events.WorkerRunCompleted, {
-          traceId,
-          sessionId,
-          runId,
-          time: Date.now(),
-          payload: { sessionId, runId, status: "succeeded" },
-        });
-
-        respond({
-          runId,
-          sessionId,
-          status: "succeeded",
-          output: runResult.text,
-          finishReason: runResult.finishReason,
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wasCancelled = controller.signal.aborted;
-        if (wasCancelled) {
-          server.notify("worker.run_completed", {
-            runId,
-            sessionId,
-            status: "cancelled",
-            error: errorMessage,
-          });
-          Bus.publish(Subagent.Events.WorkerSessionCancelled, {
-            traceId,
-            sessionId,
-            runId,
-            time: Date.now(),
-            payload: { sessionId, runId },
-          });
-
-          respond({
-            runId,
-            sessionId,
-            status: "cancelled",
-            error: errorMessage,
-          });
-          return;
-        }
-        server.notify("worker.run_completed", {
-          runId,
-          sessionId,
-          status: "failed",
-          error: errorMessage,
-        });
-        Bus.publish(Subagent.Events.WorkerRunFailed, {
-          traceId,
-          sessionId,
-          runId,
-          time: Date.now(),
-          payload: { sessionId, runId, error: errorMessage },
-        });
-
-        respond({
-          runId,
-          sessionId,
-          status: "failed",
-          error: errorMessage,
-        });
-      } finally {
-        activeRuns.delete(runId);
-      }
-    })();
+    WorkerRunner.spawnRun({
+      params,
+      ipcAuthToken,
+      workerId,
+      server,
+      activeRuns,
+      bootstrapReady,
+      backgroundManager,
+      defaultWorkspaceRoot: config.workspace?.root,
+      getBootstrap: () => workerBootstrap,
+      resolveAuth: resolveBootstrapAuth,
+      respond,
+    });
   } else if (method === "coordinator.cancel_run") {
     respond(WorkerIpcHandlers.cancelRun({ params, ipcAuthToken, activeRuns }));
   } else if (method === "worker.deliver_message") {
