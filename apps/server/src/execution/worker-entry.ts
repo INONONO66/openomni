@@ -21,6 +21,7 @@ import {
   resolveWorkerDbPath,
 } from "./worker-runtime";
 import { createContextMiddleware } from "../context/index";
+import { WorkerHeartbeat } from "./worker-heartbeat";
 import { WorkerInternalTools } from "./worker-internal-tools";
 
 const MAX_INBOX_MESSAGES = 100;
@@ -500,29 +501,13 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
   }
 });
 
-const HEARTBEAT_INTERVAL_MS = 15_000;
-
-setInterval(() => {
-  const snapshot: WorkerBootstrap.WorkerSnapshot = {
-    activeRuns: [...activeRuns.keys()],
-    backgroundTasks: [],
-    lastHeartbeat: Date.now(),
-    memoryRss: process.memoryUsage().rss / 1024 / 1024,
-    configEpoch: workerBootstrap?.configEpoch ?? "",
-  };
-
-  server
-    .call("worker.heartbeat", {
-      workerId,
-      authToken: ipcAuthToken,
-      activeRunIds: [...activeRuns.keys()],
-      memoryRssMb: process.memoryUsage().rss / 1024 / 1024,
-      snapshot,
-    })
-    .catch(() => {
-      // heartbeat failure is non-fatal; supervisor may not be connected yet
-    });
-}, HEARTBEAT_INTERVAL_MS);
+WorkerHeartbeat.start({
+  workerId,
+  ipcAuthToken,
+  server,
+  getActiveRunIds: () => [...activeRuns.keys()],
+  getConfigEpoch: () => workerBootstrap?.configEpoch ?? "",
+});
 
 process.on("SIGTERM", async () => {
   await shutdownWorker(0);
