@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import { Subagent, type ToolSelection, type WorkerBootstrap } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { SubagentRuntime } from "../../../../subagent/runtime.js";
@@ -21,7 +22,30 @@ function makeTool(name: string): NativeTool {
   };
 }
 
-function makeRuntime(selection: ToolSelection.Selection) {
+async function evaluateTool(middleware: PolicyRegistration[] | undefined, toolName: string) {
+  const engine = PolicyEngine.create({ audit: false });
+  for (const registration of middleware ?? []) {
+    engine.register(registration);
+  }
+  return engine.dispatch("invoke.prepare", {
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    toolName,
+  });
+}
+
+function makeRuntime(
+  selection: ToolSelection.Selection,
+  options: {
+    child?: Partial<WorkerBootstrap.RuntimeAgentDefinition>;
+    parentPermissions?: WorkerBootstrap.RuntimeAgentDefinition["permissions"];
+    parentPolicyPlan?: WorkerBootstrap.RuntimeAgentDefinition["policyPlan"];
+  } = {},
+) {
   const readTool = makeTool("read");
   const bashTool = makeTool("bash");
   const subagentTool = makeTool("subagent");
@@ -37,6 +61,7 @@ function makeRuntime(selection: ToolSelection.Selection) {
         name: "child",
         description: "child",
         tools: selection,
+        ...options.child,
       },
     ],
   ]);
@@ -49,6 +74,8 @@ function makeRuntime(selection: ToolSelection.Selection) {
     parentSessionId: "parent-session",
     catalogRef: { catalog },
     agentDefinitionsRef: { definitions },
+    parentPermissions: options.parentPermissions,
+    parentPolicyPlan: options.parentPolicyPlan,
     resolveAuth: (provider) =>
       provider === "anthropic"
         ? { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "proxy" }
@@ -113,6 +140,246 @@ describe("createWorkerSubagentRuntime", () => {
       apiKey: "proxy",
     });
     expect(spawnSpy.mock.calls[0]?.[0].allowAuthFallback).toBe(false);
+  });
+
+  test("spawn prefers bootstrap child system prompt over registry call config", async () => {
+    const runtime = makeRuntime({ all: true }, { child: { systemPrompt: "bootstrap prompt" } });
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+      systemPrompt: "registry prompt",
+    });
+
+    expect(spawnSpy.mock.calls[0]?.[0].systemPrompt).toBe("bootstrap prompt");
+  });
+
+  test("spawn applies child policy plans when legacy permissions are absent", async () => {
+    const runtime = makeRuntime(
+      { all: true },
+      {
+        child: {
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: { permission: { action: "tool.call", allowlist: ["read"] } },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+      },
+    );
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+    });
+
+    expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
+    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
+    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
+      verdict: "allow",
+    });
+    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
+  test("spawn keeps parent permissions constraining child policy plans", async () => {
+    const runtime = makeRuntime(
+      { all: true },
+      {
+        parentPermissions: { action: "tool.call", allowlist: ["read"] },
+        child: {
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: { permission: { action: "tool.call", allowlist: ["bash"] } },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+      },
+    );
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+    });
+
+    expect(spawnSpy.mock.calls[0]?.[0].middleware).toBeUndefined();
+    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
+    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
+  test("spawn keeps parent policy plans constraining child policy plans", async () => {
+    const runtime = makeRuntime(
+      { all: true },
+      {
+        parentPolicyPlan: {
+          policies: [
+            {
+              id: "builtin:tool-permission",
+              required: true,
+              config: { permission: { action: "tool.call", allowlist: ["read"] } },
+            },
+          ],
+          labels: ["security"],
+        },
+        child: {
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: { permission: { action: "tool.call", allowlist: ["bash"] } },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+      },
+    );
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+    });
+
+    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
+    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
+  test("spawn keeps parent policy plans constraining legacy child agents", async () => {
+    const runtime = makeRuntime(
+      { all: true },
+      {
+        parentPolicyPlan: {
+          policies: [
+            {
+              id: "builtin:tool-permission",
+              required: true,
+              config: { permission: { action: "tool.call", allowlist: ["read"] } },
+            },
+          ],
+          labels: ["security"],
+        },
+      },
+    );
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+    });
+
+    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
+    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
+      verdict: "allow",
+    });
+    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
+  test("spawn lets parent policy plans own legacy parent permission hydration", async () => {
+    const runtime = makeRuntime(
+      { all: true },
+      {
+        parentPermissions: { action: "tool.call", allowlist: ["read"] },
+        parentPolicyPlan: {
+          policies: [
+            {
+              id: "builtin:tool-permission",
+              required: true,
+              config: { permission: { action: "tool.call", allowlist: ["bash"] } },
+            },
+          ],
+          labels: ["security"],
+        },
+      },
+    );
+    spawnSpy = spyOn(SubagentRuntime, "spawn").mockResolvedValue({
+      sessionId: "child-session",
+      runId: "child-run",
+      output: "done",
+      finishReason: "stop",
+    });
+
+    await runtime.spawn({
+      agentName: "child",
+      title: "child task",
+      prompt: "run",
+      model: { provider: "test", id: "model" },
+    });
+
+    const middleware = spawnSpy.mock.calls[0]?.[0].childMiddleware;
+    expect(spawnSpy.mock.calls[0]?.[0].permissions).toBeUndefined();
+    await expect(evaluateTool(middleware, "read")).resolves.toMatchObject({
+      verdict: "deny",
+    });
+    await expect(evaluateTool(middleware, "bash")).resolves.toMatchObject({
+      verdict: "allow",
+    });
   });
 
   test("send resolves tools from the child session metadata and depth", async () => {

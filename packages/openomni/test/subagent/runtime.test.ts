@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import {
   ChatAgent,
+  createToolPermissionPolicy,
   type AgentResult,
   type ChatAgentInput,
   type PolicyRegistration,
@@ -397,6 +398,32 @@ describe("SubagentRuntime", () => {
       });
 
       expect(result.output).toBe("allowed output");
+    });
+
+    it("does not evaluate child runtime middleware during spawn admission", async () => {
+      queueResult("child runtime output");
+
+      const allowAdmissionPolicy: PolicyRegistration = {
+        name: "test:allow-admission",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () => PolicyDecision.allow({ policyId: "test:allow-admission" }),
+      };
+
+      const result = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "child runtime policy",
+        prompt: "do work",
+        model,
+        middleware: [allowAdmissionPolicy],
+        childMiddleware: [
+          createToolPermissionPolicy({
+            permission: { action: "tool.call", allowlist: ["read"] },
+          }),
+        ],
+      });
+
+      expect(result.output).toBe("child runtime output");
     });
 
     it("spawn applies transform constraints from invoke.prepare verdict", async () => {

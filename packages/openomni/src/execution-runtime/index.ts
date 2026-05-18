@@ -7,6 +7,7 @@ export {
   SystemToolProvider,
   Tool,
   buildToolCatalog,
+  buildWorkerChildRuntimeConfig,
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,

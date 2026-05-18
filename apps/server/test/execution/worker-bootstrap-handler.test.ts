@@ -76,6 +76,10 @@ describe("worker bootstrap handler", () => {
               description: "Plans work",
               systemPrompt: "Plan carefully",
               tools: { allow: ["read"] },
+              policyPlan: {
+                policies: [{ id: "builtin:tool-permission", required: true }],
+                labels: ["planner"],
+              },
             },
           ],
           toolCatalog: [],
@@ -103,6 +107,10 @@ describe("worker bootstrap handler", () => {
       description: "Plans work",
       systemPrompt: "Plan carefully",
       tools: ["read"],
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["planner"],
+      },
     });
     expect(mirroredEpoch).toBe("epoch-1");
     expect(state.resolveAuth("openai")).toEqual({ type: "api", key: "openai-key" });

@@ -60,6 +60,7 @@ export namespace AgentProfile {
     tools: z.string().array().default([]),
     model: ModelRef.optional(),
     permissions: Policy.Permission.optional(),
+    policyPlan: Policy.PolicyPlan.optional(),
     variant: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
     budget: AgentBudget.optional(),

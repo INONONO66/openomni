@@ -21,6 +21,10 @@ describe("AgentProfile.Definition", () => {
       tools: ["read_file", "write_file"],
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       permissions: { action: "tool.call", allowlist: ["read_file"] },
+      policyPlan: {
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["runtime"],
+      },
       variant: "high",
       temperature: 0.7,
       budget: { maxTurns: 10, warningThreshold: 0.75, reassuranceThreshold: 0.5 },
@@ -29,6 +33,8 @@ describe("AgentProfile.Definition", () => {
     expect(result.model?.id).toBe("claude-3-haiku-20240307");
     expect(result.permissions?.action).toBe("tool.call");
     expect(result.permissions?.allowlist).toEqual(["read_file"]);
+    expect(result.policyPlan?.policies[0]?.id).toBe("builtin:tool-permission");
+    expect(result.policyPlan?.labels).toEqual(["runtime"]);
     expect(result.variant).toBe("high");
     expect(result.temperature).toBe(0.7);
     expect(result.budget?.maxTurns).toBe(10);

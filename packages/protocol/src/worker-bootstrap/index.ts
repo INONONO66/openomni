@@ -13,6 +13,7 @@ export namespace WorkerBootstrap {
     systemPrompt: z.string().optional(),
     tools: ToolSelection.Selection,
     permissions: Policy.Permission.optional(),
+    policyPlan: Policy.PolicyPlan.optional(),
     budget: AgentProfile.AgentBudget.optional(),
   });
   export type RuntimeAgentDefinition = z.infer<typeof RuntimeAgentDefinition>;

@@ -19,6 +19,12 @@ type LaunchInput = {
   model: Model.Ref;
   parentSessionId: string;
   depth?: number;
+  permissions?: Policy.Permission;
+  systemPrompt?: RuntimeConfig["systemPrompt"];
+  tools?: RuntimeConfig["tools"];
+  toolExecutor?: RuntimeConfig["toolExecutor"];
+  middleware?: RuntimeConfig["middleware"];
+  childMiddleware?: RuntimeConfig["childMiddleware"];
 };
 
 type Config = {
@@ -175,6 +181,12 @@ export const BackgroundManager = {
             model: input.model,
             auth: resolveAuth?.(input.model.provider),
             allowAuthFallback,
+            permissions: input.permissions,
+            systemPrompt: input.systemPrompt,
+            tools: input.tools,
+            toolExecutor: input.toolExecutor,
+            middleware: input.middleware,
+            childMiddleware: input.childMiddleware,
             signal: controller.signal,
           }),
         )

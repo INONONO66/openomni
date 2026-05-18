@@ -57,6 +57,7 @@ function buildAgentDefFromEntries(
     tools: specs,
     budget: definition.budget,
     permissions: definition.permissions,
+    policyPlan: definition.policyPlan,
     toolConfig: {
       workspaceRoot: deps.workspaceRoot,
     },

@@ -2,6 +2,22 @@ import { describe, expect, it } from "bun:test";
 import type { Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "./middleware";
 
+function invokeTool(
+  registration: ReturnType<typeof buildWorkerMiddleware>[number] | undefined,
+  toolName: string,
+) {
+  return registration?.fn({
+    timing: "invoke.prepare",
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    toolName,
+  });
+}
+
 describe("buildWorkerMiddleware", () => {
   describe("backward compatibility (no policyPlan)", () => {
     it("returns worker-owned registrations", () => {
@@ -74,13 +90,12 @@ describe("buildWorkerMiddleware", () => {
       ]);
     });
 
-    it("ignores permissions when policyPlan is provided", () => {
+    it("preserves legacy permissions when policyPlan omits tool permission config", async () => {
       const policyPlan: Policy.PolicyPlan = {
         policies: [
           {
             id: "builtin:tool-permission",
             required: true,
-            config: { permission: { action: "tool.call" } },
           },
         ],
         labels: ["security"],
@@ -89,6 +104,60 @@ describe("buildWorkerMiddleware", () => {
 
       const registrations = buildWorkerMiddleware({ policyPlan, permissions });
       expect(registrations.map((r) => r.name)).toEqual(["builtin:tool-permission"]);
+      await expect(invokeTool(registrations[0], "tool:read")).resolves.toMatchObject({
+        verdict: "allow",
+      });
+      await expect(invokeTool(registrations[0], "tool:write")).resolves.toMatchObject({
+        verdict: "deny",
+      });
+    });
+
+    it("keeps explicit policyPlan permission config ahead of legacy permissions", async () => {
+      const policyPlan: Policy.PolicyPlan = {
+        policies: [
+          {
+            id: "builtin:tool-permission",
+            required: true,
+            config: { permission: { action: "tool.call", allowlist: ["tool:plan"] } },
+          },
+        ],
+        labels: ["security"],
+      };
+      const permissions = { action: "tool.call", allowlist: ["tool:legacy"] };
+
+      const registrations = buildWorkerMiddleware({ policyPlan, permissions });
+      await expect(invokeTool(registrations[0], "tool:plan")).resolves.toMatchObject({
+        verdict: "allow",
+      });
+      await expect(invokeTool(registrations[0], "tool:legacy")).resolves.toMatchObject({
+        verdict: "deny",
+      });
+    });
+
+    it("fails closed for malformed explicit policyPlan permission config", async () => {
+      const permissions = { action: "tool.call", allowlist: ["tool:legacy"] };
+
+      for (const permission of [
+        { action: "tool.call", allowlist: "tool:plan" },
+        undefined,
+        null,
+      ] as const) {
+        const policyPlan: Policy.PolicyPlan = {
+          policies: [
+            {
+              id: "builtin:tool-permission",
+              required: true,
+              config: { permission },
+            },
+          ],
+          labels: ["security"],
+        };
+
+        const registrations = buildWorkerMiddleware({ policyPlan, permissions });
+        await expect(invokeTool(registrations[0], "tool:legacy")).resolves.toMatchObject({
+          verdict: "deny",
+        });
+      }
     });
   });
 });

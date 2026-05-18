@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Adapter, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
+import { agentMetadata, getAgentDefinition, registerAgent } from "../src/agents";
 import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
 
 function makeTool(name: string): NativeTool {
@@ -77,5 +78,41 @@ describe("ingress bridge tool surfaces", () => {
       "read",
       "subagent",
     ]);
+  });
+
+  it("propagates per-agent policy plans into ingress agent definitions", () => {
+    const originalDev = getAgentDefinition("dev");
+    const originalDevMeta = agentMetadata.get("dev");
+    if (!originalDev || !originalDevMeta) {
+      throw new Error("expected dev agent fixture");
+    }
+
+    try {
+      registerAgent(
+        () => ({
+          name: "dev",
+          description: "Policy test agent",
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+          systemPrompt: "Follow the policy plan.",
+          tools: { categories: ["filesystem"] },
+          permissions: { action: "tool.call", allowlist: ["read"] },
+          policyPlan: {
+            policies: [{ id: "builtin:tool-permission", required: true }],
+            labels: ["policy-dev"],
+          },
+        }),
+        { name: "dev", description: "Policy test agent" },
+      );
+
+      const workerAgent = buildAgentDef("dev", deps);
+
+      expect(workerAgent.permissions).toEqual({ action: "tool.call", allowlist: ["read"] });
+      expect(workerAgent.policyPlan).toEqual({
+        policies: [{ id: "builtin:tool-permission", required: true }],
+        labels: ["policy-dev"],
+      });
+    } finally {
+      registerAgent(() => originalDev, originalDevMeta);
+    }
   });
 });

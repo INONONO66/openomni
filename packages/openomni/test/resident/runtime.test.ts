@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { PolicyEngine, type ChatAgentConfig } from "@openomni/agent";
 import { IngressEvent } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
@@ -12,6 +13,22 @@ function makeEvent() {
     meta: { target: { kind: "resident" as const } },
     agent: { model: { provider: "test", id: "fixture" } },
   };
+}
+
+async function evaluateTool(middleware: ChatAgentConfig["middleware"], toolName: string) {
+  const engine = PolicyEngine.create({ audit: false });
+  for (const registration of middleware ?? []) {
+    engine.register(registration);
+  }
+  return engine.dispatch("invoke.prepare", {
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+    toolName,
+  });
 }
 
 describe("ResidentRuntime", () => {
@@ -59,6 +76,50 @@ describe("ResidentRuntime", () => {
 
     expect(manager.getLifecycle(session.id)).toBe("sleeping");
     expect(manager.stats().activations).toBe(0);
+  });
+
+  test("lets policyPlan own resident tool permissions", async () => {
+    let capturedConfig: ChatAgentConfig | undefined;
+    const manager = ResidentRuntime.create({
+      runAgent: async (config) => {
+        capturedConfig = config;
+        return { text: "ok", finishReason: "stop" };
+      },
+    });
+
+    const session = Session.create({
+      title: "resident-policy-plan-test",
+      model: { providerID: "test", modelID: "fixture" },
+    });
+
+    await manager.run({
+      sessionId: session.id,
+      event: {
+        ...makeEvent(),
+        agent: {
+          model: { provider: "test", id: "fixture" },
+          permissions: { action: "tool.call", allowlist: ["tool:legacy"] },
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: { permission: { action: "tool.call", allowlist: ["tool:plan"] } },
+              },
+            ],
+            labels: ["security"],
+          },
+        },
+      },
+    });
+
+    expect(capturedConfig?.permissions).toBeUndefined();
+    await expect(evaluateTool(capturedConfig?.middleware, "tool:plan")).resolves.toMatchObject({
+      verdict: "allow",
+    });
+    await expect(evaluateTool(capturedConfig?.middleware, "tool:legacy")).resolves.toMatchObject({
+      verdict: "deny",
+    });
   });
 });
 

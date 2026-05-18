@@ -260,7 +260,7 @@ export class ResidentRuntime {
       systemPrompt: ctx.event.agent.systemPrompt,
       budget: ctx.event.agent.budget,
       tools: ctx.event.agent.tools,
-      permissions: ctx.event.agent.permissions,
+      ...(ctx.event.agent.policyPlan ? {} : { permissions: ctx.event.agent.permissions }),
       toolExecutor: toolExecutor as
         | ((call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>)
         | undefined,

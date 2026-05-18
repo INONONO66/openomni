@@ -45,6 +45,7 @@ export interface SubagentToolOptions {
       model: Model.Ref;
       parentSessionId: string;
       depth?: number;
+      middleware?: PolicyRegistration[];
     }) => Promise<Subagent.BackgroundTask>;
     getTask: (taskId: string) => Subagent.BackgroundTask | undefined;
     getResult: (taskId: string) => Subagent.BackgroundTaskResult | undefined;
@@ -139,6 +140,7 @@ export namespace SubagentTool {
       }
 
       const model = definition.model ?? options.defaultModel ?? DEFAULT_SUBAGENT_MODEL;
+      const propagated = options.middleware?.filter((m) => m.propagate === true) ?? [];
 
       if (background) {
         if (context?.signal?.aborted) {
@@ -162,6 +164,7 @@ export namespace SubagentTool {
           prompt,
           model,
           parentSessionId: sessionId ?? `anon_${crypto.randomUUID().slice(0, 8)}`,
+          middleware: propagated.length > 0 ? propagated : undefined,
         });
         if (task.status === "failed") {
           return {
@@ -178,8 +181,6 @@ export namespace SubagentTool {
           isError: false,
         };
       }
-
-      const propagated = options.middleware?.filter((m) => m.propagate === true) ?? [];
 
       try {
         const result = sessionId
