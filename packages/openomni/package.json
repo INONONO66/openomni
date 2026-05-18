@@ -9,6 +9,7 @@
     "check-types": "tsc --noEmit",
     "lint": "bunx biome check ./src",
     "test": "bun test",
+    "bench": "bun run bench/index.ts",
     "test:ci": "bun test"
   },
   "dependencies": {

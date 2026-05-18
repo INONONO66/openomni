@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
-import { Policy } from "@openomni/protocol";
+import { Operational, Policy } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 
 const TOOL_CALL_ACTION = "tool.call";
 const OVERRIDE_TOOL_FIELD = "__openomniCoordinatorTool";
@@ -54,9 +55,13 @@ export function loadPolicy(path = DEFAULT_POLICY_PATH): PolicyConfig {
   try {
     return JSON.parse(readFileSync(path, "utf-8")) as PolicyConfig;
   } catch (error) {
-    console.warn(
-      `failed to load tool policy from ${path}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    Bus.publish(Operational.Warn, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      component: "coordinator.tool-permission",
+      msg: `failed to load tool policy from ${path}`,
+      context: { error: error instanceof Error ? error.message : String(error) },
+    });
     return {};
   }
 }
