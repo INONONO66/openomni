@@ -20,9 +20,11 @@ const mockLlm = createMockLlmConfig({
 });
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
+let createToolPermissionPolicy: typeof import("../../src/core/policy/builtin/tool-guard").createToolPermissionPolicy;
 
 beforeAll(async () => {
   ({ ChatAgent } = await import("../../src/core/chat-agent"));
+  ({ createToolPermissionPolicy } = await import("../../src/core/policy/builtin/tool-guard"));
 });
 
 function createAssistantMessage(text: string) {
@@ -113,18 +115,22 @@ describe("tool permission integration via toolExecutor", () => {
         },
       ],
       toolExecutor: executor,
-      permissions: {
-        action: "tool.call",
-        inputRules: [
-          {
-            toolPattern: "bash",
-            field: "command",
-            pattern: "rm\\s+-rf",
-            action: "deny",
-            priority: 10,
+      middleware: [
+        createToolPermissionPolicy({
+          permission: {
+            action: "tool.call",
+            inputRules: [
+              {
+                toolPattern: "bash",
+                field: "command",
+                pattern: "rm\\s+-rf",
+                action: "deny",
+                priority: 10,
+              },
+            ],
           },
-        ],
-      },
+        }),
+      ],
     });
 
     await agent.run(
@@ -175,10 +181,14 @@ describe("tool permission integration via toolExecutor", () => {
         },
       ],
       toolExecutor: executor,
-      permissions: {
-        action: "tool.call",
-        requireApproval: ["bash"],
-      },
+      middleware: [
+        createToolPermissionPolicy({
+          permission: {
+            action: "tool.call",
+            requireApproval: ["bash"],
+          },
+        }),
+      ],
     });
 
     await agent.run(
@@ -229,10 +239,14 @@ describe("tool permission integration via toolExecutor", () => {
         },
       ],
       toolExecutor: executor,
-      permissions: {
-        action: "tool.call",
-        allowlist: ["bash"],
-      },
+      middleware: [
+        createToolPermissionPolicy({
+          permission: {
+            action: "tool.call",
+            allowlist: ["bash"],
+          },
+        }),
+      ],
     });
 
     await agent.run(
@@ -289,7 +303,7 @@ describe("tool permission integration via toolExecutor", () => {
       llm: mockLlm,
       tools: [writeTool],
       toolExecutor: executor,
-      permissions: labelPermission,
+      middleware: [createToolPermissionPolicy({ permission: labelPermission })],
     });
 
     await agent.run(
@@ -346,7 +360,7 @@ describe("tool permission integration via toolExecutor", () => {
       llm: mockLlm,
       tools: [grepTool],
       toolExecutor: executor,
-      permissions: permission,
+      middleware: [createToolPermissionPolicy({ permission })],
     });
 
     await agent.run(
@@ -433,18 +447,22 @@ describe("tool permission integration via toolExecutor", () => {
         },
       ],
       toolExecutor: executor,
-      permissions: {
-        action: "tool.call",
-        inputRules: [
-          {
-            toolPattern: "bash",
-            field: "command",
-            pattern: "rm\\s+-rf",
-            action: "deny",
-            priority: 10,
+      middleware: [
+        createToolPermissionPolicy({
+          permission: {
+            action: "tool.call",
+            inputRules: [
+              {
+                toolPattern: "bash",
+                field: "command",
+                pattern: "rm\\s+-rf",
+                action: "deny",
+                priority: 10,
+              },
+            ],
           },
-        ],
-      },
+        }),
+      ],
     });
 
     const events = [] as Array<{ type: string; result?: Tool.Result }>;

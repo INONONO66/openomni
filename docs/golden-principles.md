@@ -126,7 +126,7 @@ This allows `Todo` to work as both a namespace (`Todo.Schema`, `Todo.Item`) and 
 - Register policies via `PolicyRegistration { name, timing, priority, fn }`. Lower `priority` runs first within a timing.
 - `Policy.evaluate()` is the single call site for permission checks. Do not duplicate permission logic inside individual tools or callers.
 - `Policy.Permission` (from `@openomni/protocol`) is the cross-package contract for tool access rules. Upper packages must not define parallel permission schemas.
-- Built-in policies (`tool-permission`, `budget-*`, `memory`, `compaction`, `post-tool`, `post-turn`, `idle-nudge`) are registered automatically by `PolicyEngine.create()`. Custom policies append to this list via `policies: [...]` in `ChatAgentConfig`.
+- `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (`tool-permission`, `budget-*`, `compaction`, `idle-nudge`) and custom policies append through `middleware: [...]`.
 
 ## 10. Documentation Freshness
 

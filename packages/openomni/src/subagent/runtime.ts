@@ -1,5 +1,6 @@
 import {
   PolicyEngine,
+  createToolPermissionPolicy,
   type ChatAgent,
   type PolicyContext,
   type PolicyRegistration,
@@ -12,6 +13,10 @@ import {
   type RuntimeResource,
 } from "@openomni/protocol";
 import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
+import {
+  buildAgentLifecycleMiddleware,
+  registrationsAbsentFrom,
+} from "../execution-runtime/middleware.js";
 import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
 import {
@@ -182,10 +187,19 @@ function buildChildRunMiddleware(config: RuntimeConfig & { permissions?: Policy.
   // Used by spawn/send/resume for the child run itself. Admission still reads
   // config.middleware before this helper, so childMiddleware never participates
   // in the parent-scoped delegation decision.
-  return SubagentSpawnPolicyMiddleware.childMiddleware(
+  const inheritedMiddleware = SubagentSpawnPolicyMiddleware.childMiddleware(
     config.childMiddleware ?? config.middleware,
     config.permissions !== undefined || config.childMiddleware !== undefined,
   );
+  const inherited = inheritedMiddleware ?? [];
+  return [
+    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), inherited),
+    // Subagent run middleware preserves the prior child-run defaults:
+    // budget lifecycle + permission constraints only. Send transcript compaction
+    // is handled separately before resume; idle nudge is worker-runtime owned.
+    ...(config.permissions ? [createToolPermissionPolicy({ permission: config.permissions })] : []),
+    ...inherited,
+  ];
 }
 
 export namespace SubagentRuntime {
@@ -288,7 +302,7 @@ export namespace SubagentRuntime {
       const middleware = buildChildRunMiddleware(config);
       const runConfig = { ...config, middleware };
       const result = await executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, runConfig, signal, config.permissions),
+        runWithTranscript(session.id, runConfig, signal),
       );
       return result;
     });
@@ -323,7 +337,7 @@ export namespace SubagentRuntime {
     const runConfig = { ...config, middleware };
     const backgroundRun = sendToMailbox(session.id, () =>
       executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, runConfig, signal, config.permissions),
+        runWithTranscript(session.id, runConfig, signal),
       ),
     );
     backgroundRun.catch(() => {
@@ -380,7 +394,7 @@ export namespace SubagentRuntime {
         config.compaction,
       );
       return executeRun(session.id, runId, config.model, timers, () =>
-        runWithTranscript(session.id, runConfig, signal, config.permissions, messages),
+        runWithTranscript(session.id, runConfig, signal, messages),
       );
     });
   }

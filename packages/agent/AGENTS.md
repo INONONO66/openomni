@@ -85,10 +85,10 @@ Also exported from `@openomni/agent`:
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call) => Promise<Tool.Result>`         | Custom tool executor; wrapped by `createToolExecutor`                       |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
-| `permissions?`   | `Policy.Permission`                      | Evaluated by the built-in `tool-permission` policy                          |
-| `compaction?`    | `{ contextWindowTokens, ... }`           | Trigger message compaction via `InMemoryCompactor`                          |
+| `permissions?`   | `Policy.Permission`                      | Deprecated; ignored by ChatAgent core. Runtime builders must pass `createToolPermissionPolicy()` via `middleware` |
+| `compaction?`    | `{ contextWindowTokens, ... }`           | Deprecated; ignored by ChatAgent core. Runtime builders must pass `createCompactionPolicy()` via `middleware` |
 | `memory?`        | `Memory`                                 | Memory interface retrieved by the `memory` policy                           |
-| `policies?`      | `PolicyRegistration[]`                   | **Preferred extension mechanism**                                           |
+| `middleware?`    | `PolicyRegistration[]`                   | Caller-owned policy registrations                                           |
 | `eventEmitter?`  | `AgentEventEmitter`                      | Optional event emitter for external observers                               |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |
 
@@ -106,6 +106,7 @@ run.start → turn.start → context.prepare → resources.prepare
 - **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`.
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatch("context.prepare", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
+- **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction, idle nudge).
 - **Builtins** (priority in parentheses):
   - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns deny with `tool.skip_invocation` / `run.abort` / `tool.require_approval`
   - `budget-reassurance` (10) — injects a reassurance system message around 60% budget
@@ -121,7 +122,7 @@ run.start → turn.start → context.prepare → resources.prepare
 ```
 streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   ├─ retry loop (maxAttempts)
-  │   ├─ build PolicyEngine (builtins + config.policies)
+  │   ├─ build PolicyEngine (config.middleware only)
   │   ├─ dispatch(run.start)                    → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
   │       ├─ checkBudget → if exceeded, dispatch(run.finish) + yield complete
@@ -154,7 +155,7 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 
 - **Stateless core**: Every `ChatAgent.run()` is independent — no session mutation, no storage. State (budget, memory, delegation) lives on a per-call context.
 - **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
-- **Policy > ad-hoc hooks**: New extensions MUST use `policies: [...]`. `PolicyEngine.create()` is the single extension surface.
+- **Policy > ad-hoc hooks**: New extensions MUST use `middleware: [...]`. `PolicyEngine.create()` is the single extension surface.
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
 - **Delegation safety**: `DelegationContext` with `visitedAgents: Set<string>` and `maxDepth` prevents circular / runaway delegation.
 - **Message format**: `ChatAgentInput.messages` is a simple `{ role: "user" | "assistant"; content: string }[]`. Richer `Message.WithParts[]` is used internally only.
@@ -162,5 +163,5 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 ## ANTI-PATTERNS
 
 - Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
-- Do NOT extend behavior outside `policies: [...]`. `PolicyEngine` is the single extension surface.
+- Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `invoke.prepare` policy so behavior is uniform.

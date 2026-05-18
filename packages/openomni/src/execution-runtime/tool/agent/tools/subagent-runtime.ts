@@ -162,6 +162,8 @@ function buildChildRuntimeMiddleware(
         // Used only when the parent plan selected the builtin guard without
         // owning config yet; explicit parent plan config still wins.
         permissions: parentPermissions,
+        includeLifecycle: false,
+        includeIdle: false,
       }),
     );
   } else if (parentPermissions && childDefinition?.policyPlan) {
@@ -174,6 +176,8 @@ function buildChildRuntimeMiddleware(
       ...buildWorkerMiddleware({
         policyPlan: childDefinition.policyPlan,
         permissions: childPermissions,
+        includeLifecycle: false,
+        includeIdle: false,
       }),
     );
   }
