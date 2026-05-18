@@ -35,9 +35,7 @@ export function buildToolDispatcher(providers: ToolProvider[]): Map<string, Tool
       if (dispatcher.has(canonicalName)) {
         throw new Error(`Duplicate tool in dispatcher: "${canonicalName}"`);
       }
-      dispatcher.set(canonicalName, (call, context) =>
-        context === undefined ? provider.execute(call) : provider.execute(call, context),
-      );
+      dispatcher.set(canonicalName, (call, context) => provider.execute(call, context));
     }
   }
 

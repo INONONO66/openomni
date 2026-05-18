@@ -189,24 +189,41 @@ export class ResidentRuntime {
     }
   }
 
-  private async acquireSlot(): Promise<void> {
+  private async acquireSlot(signal?: AbortSignal): Promise<void> {
+    throwIfAborted(signal);
     if (this.activeRuns < this.maxActive) {
       this.activeRuns++;
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     await new Promise<void>((resolve, reject) => {
-      const waiter = { resolve, reject };
+      const waiter = {
+        resolve: () => {
+          if (timer) clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        },
+        reject: (error: Error) => {
+          if (timer) clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      };
+      const onAbort = () => {
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        waiter.reject(createAbortError());
+      };
       this.waiters.push(waiter);
+      signal?.addEventListener("abort", onAbort, { once: true });
       timer = setTimeout(() => {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
-        reject(
+        waiter.reject(
           new Error(`resident activation slot wait timed out after ${this.slotWaitTimeoutMs}ms`),
         );
       }, this.slotWaitTimeoutMs);
     });
-    if (timer) clearTimeout(timer);
   }
 
   private releaseSlot(): void {
@@ -256,8 +273,9 @@ export class ResidentRuntime {
   }
 
   private async runExclusive(ctx: ResidentRunContext): Promise<ResidentRunResult> {
-    await this.acquireSlot();
-    const activation = this.ensureActivation(ctx.sessionId);
+    let slotAcquired = false;
+    await this.acquireSlot(ctx.signal);
+    slotAcquired = true;
     const runId = crypto.randomUUID();
     const start = Date.now();
     const traceContext = {
@@ -267,6 +285,8 @@ export class ResidentRuntime {
     };
 
     try {
+      throwIfAborted(ctx.signal);
+      const activation = this.ensureActivation(ctx.sessionId);
       if (activation.idleTimer) clearTimeout(activation.idleTimer);
       activation.lifecycle = "hydrating";
       const messages = SessionBridge.buildDirectMessages(ctx.sessionId).filter(
@@ -298,6 +318,8 @@ export class ResidentRuntime {
         activationId: activation.activationId,
       };
     } catch (error) {
+      const activation = this.activations.get(ctx.sessionId);
+      if (!activation) throw error;
       activation.lastUsedAt = Date.now();
       this.scheduleIdleRelease(ctx.sessionId, activation);
       Bus.publish(IngressEvent.Failed, {
@@ -311,7 +333,7 @@ export class ResidentRuntime {
       });
       throw error;
     } finally {
-      this.releaseSlot();
+      if (slotAcquired) this.releaseSlot();
     }
   }
 }

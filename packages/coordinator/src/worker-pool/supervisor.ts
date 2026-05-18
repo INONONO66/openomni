@@ -193,7 +193,13 @@ export class WorkerSupervisor {
                       },
                       5_000,
                     )
-                    .catch(() => undefined);
+                    .catch((err) => {
+                      console.warn("worker.tool_call_settled notification failed", {
+                        callId: p.callId,
+                        workspaceRoot: active.workspaceRoot,
+                        error: err instanceof Error ? err.message : String(err),
+                      });
+                    });
                 });
               return;
             }

@@ -141,6 +141,14 @@ export namespace SubagentTool {
       const model = definition.model ?? options.defaultModel ?? DEFAULT_SUBAGENT_MODEL;
 
       if (background) {
+        if (context?.signal?.aborted) {
+          return {
+            id: crypto.randomUUID(),
+            toolCallId: "",
+            output: "subagent execution aborted",
+            isError: true,
+          };
+        }
         if (!options.backgroundManager) {
           return {
             id: crypto.randomUUID(),

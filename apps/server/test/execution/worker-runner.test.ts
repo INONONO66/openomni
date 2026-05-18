@@ -292,23 +292,26 @@ describe("WorkerRunner", () => {
       WorkerRunner.spawnRun(options);
     });
 
-    await responseReceived;
+    try {
+      await responseReceived;
 
-    expect(proxiedResult).toMatchObject({
-      id: expect.any(String),
-      toolCallId: expect.any(String),
-      output: "request timeout: worker.tool_call",
-      isError: true,
-      settlement: "unknown",
-    });
-    expect(serverCalls).toContainEqual(
-      expect.objectContaining({
-        method: "worker.tool_call",
-        timeoutMs: 300_000,
-      }),
-    );
-    expect(responses[0]).toMatchObject({ status: "succeeded" });
-    WorkspaceLock.clearUnsafe(workspaceRoot);
+      expect(proxiedResult).toMatchObject({
+        id: expect.any(String),
+        toolCallId: expect.any(String),
+        output: "request timeout: worker.tool_call",
+        isError: true,
+        settlement: "unknown",
+      });
+      expect(serverCalls).toContainEqual(
+        expect.objectContaining({
+          method: "worker.tool_call",
+          timeoutMs: 300_000,
+        }),
+      );
+      expect(responses[0]).toMatchObject({ status: "succeeded" });
+    } finally {
+      WorkspaceLock.clearUnsafe(workspaceRoot);
+    }
   });
 
   it("reports failed runs and cleans active run state after agent errors", async () => {

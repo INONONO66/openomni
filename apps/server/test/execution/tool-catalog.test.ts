@@ -132,7 +132,7 @@ describe("tool catalog", () => {
     await dispatchWithFallback(dispatcher, call);
 
     expect(mcpProvider.execute).toHaveBeenCalledTimes(1);
-    expect(mcpProvider.execute).toHaveBeenCalledWith(call);
+    expect(mcpProvider.execute).toHaveBeenCalledWith(call, undefined);
   });
 
   it("server-source fixture tool is dispatched through the server provider", async () => {
@@ -144,7 +144,7 @@ describe("tool catalog", () => {
     await dispatchWithFallback(dispatcher, call);
 
     expect(serverProvider.execute).toHaveBeenCalledTimes(1);
-    expect(serverProvider.execute).toHaveBeenCalledWith(call);
+    expect(serverProvider.execute).toHaveBeenCalledWith(call, undefined);
   });
 
   it("dispatcher forwards execution context to providers", async () => {
