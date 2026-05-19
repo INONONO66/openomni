@@ -1,7 +1,8 @@
 import type { InboundMessage, Ingress, Tool } from "@openomni/protocol";
 import { InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
+import { WorkerRunStateStore } from "@openomni/session";
 import { defineTool } from "../../define.js";
-import type { NativeTool } from "../../types.js";
+import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
 const MAX_DEPTH = 10;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -111,19 +112,49 @@ function eventFromInput(input: RuntimeInput, parsed: InboundMessage.Input): Ingr
   };
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, messageId: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  messageId: string,
+  signal?: AbortSignal,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = globalThis.setTimeout(() => {
-      reject(new TimeoutError(`inbound_message timed out after ${timeoutMs}ms`, messageId));
+    let settled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let onAbort: () => void = () => undefined;
+    const cleanup = () => {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const resolveOnce = (value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const rejectOnce = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    onAbort = () => rejectOnce(new AbortWaitError("inbound_message aborted", messageId));
+
+    if (signal?.aborted) {
+      reject(new AbortWaitError("inbound_message aborted", messageId));
+      return;
+    }
+
+    timer = globalThis.setTimeout(() => {
+      rejectOnce(new TimeoutError(`inbound_message timed out after ${timeoutMs}ms`, messageId));
     }, timeoutMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
     promise.then(
       (value) => {
-        globalThis.clearTimeout(timer);
-        resolve(value);
+        resolveOnce(value);
       },
       (error: unknown) => {
-        globalThis.clearTimeout(timer);
-        reject(error);
+        rejectOnce(error);
       },
     );
   });
@@ -136,6 +167,48 @@ class TimeoutError extends Error {
   ) {
     super(message);
     this.name = "TimeoutError";
+  }
+}
+
+class AbortWaitError extends Error {
+  constructor(
+    message: string,
+    readonly messageId: string,
+  ) {
+    super(message);
+    this.name = "AbortError";
+  }
+}
+
+function markRunWaiting(input: RuntimeInput): void {
+  const { sessionId, runId } = input;
+  if (!sessionId || !runId) return;
+
+  try {
+    const current = WorkerRunStateStore.get(sessionId, runId);
+    if (current?.status === "starting") {
+      WorkerRunStateStore.updateStatus(sessionId, runId, "running");
+    }
+    const running = WorkerRunStateStore.get(sessionId, runId);
+    if (running?.status === "running") {
+      WorkerRunStateStore.updateStatus(sessionId, runId, "waiting_input");
+    }
+  } catch {
+    // WorkerRun state is best-effort for compatibility with non-worker test/tool contexts.
+  }
+}
+
+function restoreRunRunning(input: RuntimeInput): void {
+  const { sessionId, runId } = input;
+  if (!sessionId || !runId) return;
+
+  try {
+    const current = WorkerRunStateStore.get(sessionId, runId);
+    if (current?.status === "waiting_input") {
+      WorkerRunStateStore.updateStatus(sessionId, runId, "running");
+    }
+  } catch {
+    // WorkerRun state is best-effort for compatibility with non-worker test/tool contexts.
   }
 }
 
@@ -154,21 +227,31 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
       agentName: "agentName",
       workspaceRoot: "workspaceRoot",
     },
-    async execute(call) {
+    async execute(call, context?: ToolExecutionContext) {
       const input = call.input;
       const parsed = InboundMessageProtocol.Input.parse(input);
       if (parsed.depth > MAX_DEPTH) return depthError(call);
 
       const event = eventFromInput(input, parsed);
-      const ingest = ingressEngine.ingest(event);
 
       if (!parsed.wait) {
+        const ingest = ingressEngine.ingest(event);
         ingest.catch(() => undefined);
         return toolResult(call, { status: "sent", messageId: event.id });
       }
 
+      if (context?.signal?.aborted) {
+        return errorResult(call, "inbound_message aborted", event.id);
+      }
+
+      markRunWaiting(input);
       try {
-        const ingressResult = await withTimeout(ingest, parsed.timeoutMs, event.id);
+        const ingressResult = await withTimeout(
+          ingressEngine.ingest(event),
+          parsed.timeoutMs,
+          event.id,
+          context?.signal,
+        );
         return toolResult(call, {
           status: "delivered",
           messageId: event.id,
@@ -187,7 +270,12 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
             true,
           );
         }
+        if (error instanceof AbortWaitError) {
+          return errorResult(call, error.message, error.messageId);
+        }
         return errorResult(call, error instanceof Error ? error.message : String(error), event.id);
+      } finally {
+        restoreRunRunning(input);
       }
     },
   });

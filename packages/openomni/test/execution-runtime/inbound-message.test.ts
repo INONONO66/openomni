@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
+import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
 import { createInboundMessageTool } from "../../src/execution-runtime/tool/agent/tools/inbound-message";
 
@@ -12,7 +13,44 @@ function result(output: string): Ingress.IngressResult {
   };
 }
 
+function createWorkerRun(runId: string): void {
+  const now = Date.now();
+  Session.storage.set("caller-session", {
+    id: "caller-session",
+    title: "caller",
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  });
+  WorkerRunStateStore.create("caller-session", {
+    runId,
+    agentName: "worker",
+    status: "running",
+    title: "test run",
+    prompt: "test",
+  });
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 describe("inbound_message tool", () => {
+  beforeEach(() => {
+    Storage.reset();
+  });
+
+  afterEach(() => {
+    Storage.reset();
+  });
+
   test("wait:false returns immediately after sending through ingress", async () => {
     const events: Ingress.InboundEvent[] = [];
     const tool = createInboundMessageTool({
@@ -52,11 +90,13 @@ describe("inbound_message tool", () => {
   });
 
   test("wait:true returns delivered output from ingress", async () => {
+    createWorkerRun("run-sync");
+    const pendingIngress = deferred<Ingress.IngressResult>();
     const tool = createInboundMessageTool({
-      ingest: async () => result("done"),
+      ingest: () => pendingIngress.promise,
     });
 
-    const response = await tool.execute({
+    const responsePromise = tool.execute({
       id: "call-sync",
       tool: "inbound_message",
       input: {
@@ -65,8 +105,13 @@ describe("inbound_message tool", () => {
         wait: true,
         sessionId: "caller-session",
         agentName: "worker",
+        runId: "run-sync",
       },
     });
+
+    expect(WorkerRunStateStore.get("caller-session", "run-sync")?.status).toBe("waiting_input");
+    pendingIngress.resolve(result("done"));
+    const response = await responsePromise;
 
     expect(response.isError).toBeUndefined();
     expect(JSON.parse(response.output)).toEqual({
@@ -74,9 +119,14 @@ describe("inbound_message tool", () => {
       messageId: expect.any(String),
       output: "done",
     });
+    expect(WorkerRunStateStore.get("caller-session", "run-sync")).toMatchObject({
+      status: "running",
+      resumeCount: 1,
+    });
   });
 
   test("wait:true times out when ingress does not resolve", async () => {
+    createWorkerRun("run-timeout");
     const tool = createInboundMessageTool({
       ingest: () => new Promise(() => undefined),
     });
@@ -91,6 +141,7 @@ describe("inbound_message tool", () => {
         timeoutMs: 1,
         sessionId: "caller-session",
         agentName: "worker",
+        runId: "run-timeout",
       },
     });
 
@@ -101,6 +152,44 @@ describe("inbound_message tool", () => {
       error: "inbound_message timed out after 1ms",
       timedOut: true,
     });
+    expect(WorkerRunStateStore.get("caller-session", "run-timeout")?.status).toBe("running");
+  });
+
+  test("wait:true abort signal cancels the wait", async () => {
+    createWorkerRun("run-abort");
+    const controller = new AbortController();
+    const tool = createInboundMessageTool({
+      ingest: () => new Promise(() => undefined),
+    });
+
+    const responsePromise = tool.execute(
+      {
+        id: "call-abort",
+        tool: "inbound_message",
+        input: {
+          target: { kind: "worker", sessionId: "worker-session" },
+          payload: "finish",
+          wait: true,
+          timeoutMs: 1_000,
+          sessionId: "caller-session",
+          agentName: "worker",
+          runId: "run-abort",
+        },
+      },
+      { signal: controller.signal },
+    );
+
+    expect(WorkerRunStateStore.get("caller-session", "run-abort")?.status).toBe("waiting_input");
+    controller.abort();
+    const response = await responsePromise;
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toEqual({
+      status: "error",
+      messageId: expect.any(String),
+      error: "inbound_message aborted",
+    });
+    expect(WorkerRunStateStore.get("caller-session", "run-abort")?.status).toBe("running");
   });
 
   test("rejects calls beyond the depth limit before ingress", async () => {
