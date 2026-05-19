@@ -230,6 +230,49 @@ describe("WorkerRunner", () => {
     expect(activeRuns.size).toBe(0);
   });
 
+  it("exposes inbound_message instead of ask_main for resident guidance", async () => {
+    const responses: unknown[] = [];
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...createValidRequest(),
+          tools: [{ name: "inbound_message", inputSchema: {} }],
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          server: {
+            async call() {
+              throw new Error("unexpected server call");
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              const toolNames = options.tools?.map((tool) => tool.name) ?? [];
+              expect(toolNames).toContain("inbound_message");
+              expect(toolNames).toContain("check_inbox");
+              expect(toolNames).not.toContain("ask_main");
+              expect(options.systemPrompt).toContain("inbound_message with wait: true");
+              expect(options.systemPrompt).not.toContain("use ask_main");
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+  });
+
   it("returns unknown settlement for proxied tool IPC failures and uses an extended call timeout", async () => {
     const responses: unknown[] = [];
     const workspaceRoot = `/tmp/openomni-worker-runner-test-${crypto.randomUUID()}`;

@@ -106,7 +106,6 @@ export namespace WorkerRunner {
     const {
       params,
       ipcAuthToken,
-      workerId,
       server,
       activeRuns,
       bootstrapReady,
@@ -283,12 +282,7 @@ export namespace WorkerRunner {
         const proxyTools = mcpProxyProvider.listTools();
         const availableTools = [...systemTools, ...agentTools, ...proxyTools];
         const internalTools = WorkerInternalTools.create({
-          runId,
-          sessionId,
-          server,
-          ipcAuthToken,
-          workerId,
-          activeRuns,
+          readInbox: () => activeRuns.get(runId)?.inbox.splice(0) ?? [],
         });
         const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
         const internalToolExecutor = createToolExecutor({
@@ -343,7 +337,7 @@ export namespace WorkerRunner {
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use ask_main when you need Resident guidance or approval; use check_inbox to read live messages delivered while this run is active.",
+            "Worker runtime tools: use inbound_message with wait: true to ask the Resident for guidance or approval; use check_inbox to read live messages delivered while this run is active.",
           ]
             .filter(Boolean)
             .join("\n\n"),
