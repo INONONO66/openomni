@@ -4,19 +4,20 @@ import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
+import { buildTurn } from "../../../src/core/execution/stream-turn";
 import {
-  buildTurn,
   createStreamRunState,
-  dispatchModelRequest,
-  dispatchModelResponse,
-  dispatchPreRun,
-  dispatchWritebackCommit,
-  handleCompact,
-  handleStop,
   type StreamAgentBase,
   type StreamRunState,
   type TurnArtifacts,
-} from "../../../src/core/execution/stream-helpers";
+} from "../../../src/core/execution/stream-state";
+import {
+  dispatchModelRequest,
+  dispatchModelResponse,
+  dispatchPreRun,
+} from "../../../src/core/execution/stream-policy-dispatch";
+import { dispatchWritebackCommit } from "../../../src/core/execution/stream-writeback-policy";
+import { handleCompact, handleStop } from "../../../src/core/execution/stream-flow";
 import { deny } from "../../helpers/policy-decision";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
@@ -175,11 +176,51 @@ describe("stream helper deny verdicts", () => {
     });
 
     try {
-      const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop");
+      const result = await dispatchModelResponse(
+        makeState(),
+        engine,
+        makeConfig(),
+        "stop",
+        makeAgentBase(),
+      );
       await Promise.resolve();
 
       expect(result).toBeNull();
-      expect(hasDenyDiagnostic(diagnostics, "model.response")).toBe(true);
+      const diagnostic = findDenyDiagnostic(diagnostics, "model.response");
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic?.traceId).toBe("trace-1");
+      expect(diagnostic?.sessionId).toBe("sess-1");
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("omits fallback sessionId from model.response deny diagnostics", async () => {
+    Bus.reset();
+    const diagnostics: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === Operational.Info.name) diagnostics.push(payload);
+    });
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "deny-model-response-empty-session",
+      timing: "model.response",
+      priority: 100,
+      fn: () => deny("test.deny", "after-provider"),
+    });
+
+    try {
+      const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop", {
+        traceId: "trace-empty-session",
+        sessionId: "",
+      });
+      await Promise.resolve();
+
+      expect(result).toBeNull();
+      const diagnostic = findDenyDiagnostic(diagnostics, "model.response");
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic?.traceId).toBe("trace-empty-session");
+      expect(diagnostic?.sessionId).toBeUndefined();
     } finally {
       unsubscribe();
     }
@@ -260,7 +301,14 @@ describe("stream helper deny verdicts", () => {
 });
 
 function hasDenyDiagnostic(diagnostics: unknown[], timing: string): boolean {
-  return diagnostics.some((diagnostic) => {
+  return Boolean(findDenyDiagnostic(diagnostics, timing));
+}
+
+function findDenyDiagnostic(
+  diagnostics: unknown[],
+  timing: string,
+): { traceId?: unknown; sessionId?: unknown } | undefined {
+  return diagnostics.find((diagnostic) => {
     if (!diagnostic || typeof diagnostic !== "object") return false;
     const payload = diagnostic as { component?: unknown; msg?: unknown; context?: unknown };
     if (payload.component !== "agent" || payload.msg !== "agent.policy.deny.diagnostic") {
@@ -268,5 +316,5 @@ function hasDenyDiagnostic(diagnostics: unknown[], timing: string): boolean {
     }
     if (!payload.context || typeof payload.context !== "object") return false;
     return (payload.context as { timing?: unknown }).timing === timing;
-  });
+  }) as { traceId?: unknown; sessionId?: unknown } | undefined;
 }

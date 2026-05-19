@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import { buildTurn, createStreamRunState } from "../../../src/core/execution/stream-helpers";
+import { buildTurn } from "../../../src/core/execution/stream-turn";
+import { createStreamRunState } from "../../../src/core/execution/stream-state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool, TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";

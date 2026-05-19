@@ -1,25 +1,20 @@
 import { run as llmRun } from "@openomni/llm";
-import { Operational, type Sink } from "@openomni/protocol";
-import { Bus, TraceContext } from "@openomni/session";
+import type { Sink } from "@openomni/protocol";
+import { TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { resolveProviderModel } from "./shared";
+import { emitRunStarted, emitTurnStart } from "./stream-events";
+import { handleCompact, handleContinue, handleError, handleStop } from "./stream-flow";
+import { assertToolExecutor, buildTurn, resolveToolChoice } from "./stream-turn";
+import { buildPolicyEngine } from "./stream-policy-engine";
 import {
-  assertToolExecutor,
-  buildPolicyEngine,
-  buildTurn,
-  createStreamRunState,
   dispatchBudgetCheck,
   dispatchModelRequest,
   dispatchModelResponse,
   dispatchPreRun,
-  emitTurnStart,
-  handleCompact,
-  handleContinue,
-  handleError,
-  handleStop,
-  resolveToolChoice,
-} from "./stream-helpers";
+} from "./stream-policy-dispatch";
+import { createStreamRunState } from "./stream-state";
 
 export async function* streamAgent(
   input: ChatAgentInput,
@@ -36,14 +31,7 @@ export async function* streamAgent(
     sessionId: trace.sessionId ?? "",
     runId: trace.runId,
   };
-  Bus.publish(Operational.Info, {
-    traceId: trace.traceId,
-    time: Date.now(),
-    sessionId: trace.sessionId,
-    component: "agent",
-    msg: "agent.run.started",
-    context: { model: config.model.id },
-  });
+  emitRunStarted(trace, config.model.id);
 
   while (attempt <= retryPolicy.maxAttempts) {
     const state = createStreamRunState(input);
@@ -93,7 +81,13 @@ export async function* streamAgent(
           return;
         }
         const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
-        const modelResponseEvent = await dispatchModelResponse(state, engine, config, outcome.type);
+        const modelResponseEvent = await dispatchModelResponse(
+          state,
+          engine,
+          config,
+          outcome.type,
+          agentBase,
+        );
         if (modelResponseEvent) {
           yield modelResponseEvent;
           return;
