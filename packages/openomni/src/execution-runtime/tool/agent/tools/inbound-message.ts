@@ -157,7 +157,7 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
     async execute(call) {
       const input = call.input;
       const parsed = InboundMessageProtocol.Input.parse(input);
-      if (parsed.depth > MAX_DEPTH) return depthError(call);
+      if (parsed.depth >= MAX_DEPTH) return depthError(call);
 
       const event = eventFromInput(input, parsed);
       const ingest = ingressEngine.ingest(event);

@@ -13,6 +13,44 @@ function result(output: string): Ingress.IngressResult {
 }
 
 describe("inbound_message tool", () => {
+  test("increments depth across legitimate multi-hop calls", async () => {
+    const events: Ingress.InboundEvent[] = [];
+    const tool = createInboundMessageTool({
+      ingest: async (event) => {
+        events.push(event);
+        return result("accepted");
+      },
+    });
+
+    const first = await tool.execute({
+      id: "call-depth-0",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker", sessionId: "worker-session" },
+        payload: "hop-1",
+        wait: false,
+        depth: 0,
+      },
+    });
+
+    const second = await tool.execute({
+      id: "call-depth-1",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker", sessionId: "worker-session" },
+        payload: "hop-2",
+        wait: false,
+        depth: 1,
+      },
+    });
+
+    expect(first.isError).toBeUndefined();
+    expect(second.isError).toBeUndefined();
+    expect(events).toHaveLength(2);
+    expect(events[0]?.meta?.depth).toBe(1);
+    expect(events[1]?.meta?.depth).toBe(2);
+  });
+
   test("wait:false returns immediately after sending through ingress", async () => {
     const events: Ingress.InboundEvent[] = [];
     const tool = createInboundMessageTool({
@@ -103,16 +141,26 @@ describe("inbound_message tool", () => {
     });
   });
 
-  test("rejects calls beyond the depth limit before ingress", async () => {
-    let called = false;
+  test("rejects calls at and beyond the depth limit before ingress", async () => {
+    const calls: number[] = [];
     const tool = createInboundMessageTool({
       ingest: async () => {
-        called = true;
+        calls.push(Date.now());
         return result("should not happen");
       },
     });
 
-    const response = await tool.execute({
+    const atLimit = await tool.execute({
+      id: "call-depth-10",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker" },
+        payload: "loop",
+        depth: 10,
+      },
+    });
+
+    const beyondLimit = await tool.execute({
       id: "call-depth",
       tool: "inbound_message",
       input: {
@@ -122,9 +170,35 @@ describe("inbound_message tool", () => {
       },
     });
 
-    expect(response.isError).toBe(true);
-    expect(response.output).toContain("depth limit exceeded");
-    expect(called).toBe(false);
+    expect(atLimit.isError).toBe(true);
+    expect(atLimit.output).toContain("depth limit exceeded");
+    expect(beyondLimit.isError).toBe(true);
+    expect(beyondLimit.output).toContain("depth limit exceeded");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("allows depth just under the limit", async () => {
+    const events: Ingress.InboundEvent[] = [];
+    const tool = createInboundMessageTool({
+      ingest: async (event) => {
+        events.push(event);
+        return result("accepted");
+      },
+    });
+
+    const response = await tool.execute({
+      id: "call-depth-9",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker", sessionId: "worker-session" },
+        payload: "loop",
+        depth: 9,
+      },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.meta?.depth).toBe(10);
   });
 
   test("authority-denied ingress errors return error-shaped tool results", async () => {
