@@ -115,6 +115,106 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.event.id).toBe("evt-1");
   });
 
+  test("denies worker actor action spawn", async () => {
+    const event = makeInboundEvent({
+      meta: { actor: { role: "worker" }, action: "spawn" },
+    });
+
+    await expect(
+      IngressAuthorityMiddleware.runPreRun({
+        event,
+        coordinator: stubCoordinator,
+      }),
+    ).rejects.toThrow("worker cannot spawn workers");
+  });
+
+  test("allows resident actor action spawn", async () => {
+    const event = makeInboundEvent({
+      meta: { actor: { role: "resident" }, action: "spawn" },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({
+      event,
+      coordinator: stubCoordinator,
+    });
+
+    expect(result.event.id).toBe("evt-1");
+  });
+
+  test("allows worker actor action send to worker target", async () => {
+    const event = makeInboundEvent({
+      target: { kind: "worker", sessionId: "worker-session-1" },
+      meta: { actor: { role: "worker" }, action: "send" },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({
+      event,
+      coordinator: stubCoordinator,
+    });
+
+    expect(result.target.kind).toBe("worker");
+  });
+
+  test("allows worker actor action send to resident target", async () => {
+    const event = makeInboundEvent({
+      target: { kind: "resident" },
+      meta: { actor: { role: "worker" }, action: "send" },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({ event });
+
+    expect(result.target.kind).toBe("resident");
+  });
+
+  test.each(["cancel", "resume", "schedule"] as const)(
+    "denies worker actor action %s",
+    async (action) => {
+      const event = makeInboundEvent({
+        meta: { actor: { role: "worker" }, action },
+      });
+
+      await expect(
+        IngressAuthorityMiddleware.runPreRun({
+          event,
+          coordinator: stubCoordinator,
+        }),
+      ).rejects.toThrow(`worker cannot ${action} workers`);
+    },
+  );
+
+  test.each(["cancel", "resume", "schedule"] as const)(
+    "allows resident actor action %s",
+    async (action) => {
+      const event = makeInboundEvent({
+        meta: { actor: { role: "resident" }, action },
+      });
+
+      const result = await IngressAuthorityMiddleware.runPreRun({
+        event,
+        coordinator: stubCoordinator,
+      });
+
+      expect(result.event.id).toBe("evt-1");
+    },
+  );
+
+  test("adds action labels to authority policy decisions", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const event = makeInboundEvent({
+      meta: { actor: { role: "worker" }, action: "spawn" },
+    });
+
+    await expect(
+      IngressAuthorityMiddleware.runPreRun({
+        event,
+        coordinator: stubCoordinator,
+        onDecision: (decision) => decisions.push(decision),
+      }),
+    ).rejects.toThrow("worker cannot spawn workers");
+
+    expect(decisions.some((decision) => decision.factsUsed?.includes("action.spawn"))).toBe(true);
+  });
+
   test("denies untrusted sub-persona actor", async () => {
     const event = makeInboundEvent({
       meta: { actor: { role: "sub_persona" } },
