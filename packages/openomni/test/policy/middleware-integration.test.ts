@@ -8,6 +8,10 @@ import {
   type Subagent,
 } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
+import {
+  BackgroundLimitsMiddleware as RootBackgroundLimitsMiddleware,
+  BackgroundLimitsPolicy as RootBackgroundLimitsPolicy,
+} from "../../src";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
 import { BackgroundLimitsPolicy } from "../../src/policy/background-limits";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent/middleware/subagent-spawn-policy";
@@ -367,6 +371,13 @@ describe("BackgroundLimitsPolicy integration", () => {
     expect(names).toContain("background:descendant-limit");
     expect(names).toContain("background:total-limit");
     expect(names).toContain("background:queue-limit");
+  });
+
+  test("package root exports canonical background limits symbols", () => {
+    expect(RootBackgroundLimitsMiddleware).toBeDefined();
+    expect(RootBackgroundLimitsPolicy).toBe(BackgroundLimitsPolicy);
+    expect(RootBackgroundLimitsMiddleware).toBe(BackgroundLimitsPolicy);
+    expect(RootBackgroundLimitsMiddleware.PerAgent).toBe(BackgroundLimitsPolicy.PerAgent);
   });
 
   test("all definitions use Policy.Timing invoke.prepare", () => {

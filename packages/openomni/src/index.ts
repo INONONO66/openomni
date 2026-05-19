@@ -72,12 +72,17 @@ export type {
 export {
   SubagentRuntime,
   SubagentSpawnPolicyMiddleware,
+  BackgroundLimitsMiddleware,
   SubagentConsultation,
   BackgroundManager,
 } from "./subagent";
 
 // Policy compatibility exports
-export { BackgroundLimitsPolicy, PolicyResolver } from "./policy";
+/**
+ * @deprecated Use `BackgroundLimitsMiddleware` from the package root for new code.
+ */
+export { BackgroundLimitsPolicy } from "./policy";
+export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,
   PolicyResolverInstance,
