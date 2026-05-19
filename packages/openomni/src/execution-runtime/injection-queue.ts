@@ -1,4 +1,25 @@
+import { Bus, BusEvent } from "@openomni/session";
+import { z } from "zod";
+
 export namespace InjectionQueue {
+  export const Events = {
+    ResponseQueued: BusEvent.define(
+      "injection_queue.response.queued",
+      z.object({
+        runId: z.string(),
+        messageId: z.string(),
+        timestamp: z.number(),
+      }),
+    ),
+    ResponseDrained: BusEvent.define(
+      "injection_queue.response.drained",
+      z.object({
+        runId: z.string(),
+        count: z.number(),
+      }),
+    ),
+  };
+
   export interface PendingResponse {
     readonly messageId: string;
     readonly output: string;
@@ -17,6 +38,12 @@ export namespace InjectionQueue {
     const pendingByRunId = new Map<string, PendingResponse[]>();
 
     function enqueue(runId: string, response: PendingResponse): void {
+      Bus.publish(Events.ResponseQueued, {
+        runId,
+        messageId: response.messageId,
+        timestamp: response.timestamp,
+      });
+
       const pending = pendingByRunId.get(runId);
       if (pending === undefined) {
         pendingByRunId.set(runId, [response]);
@@ -28,9 +55,13 @@ export namespace InjectionQueue {
 
     function drain(runId: string): PendingResponse[] {
       const pending = pendingByRunId.get(runId);
-      if (pending === undefined) return [];
+      if (pending === undefined) {
+        Bus.publish(Events.ResponseDrained, { runId, count: 0 });
+        return [];
+      }
 
       pendingByRunId.delete(runId);
+      Bus.publish(Events.ResponseDrained, { runId, count: pending.length });
       return pending.slice();
     }
 
