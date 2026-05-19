@@ -9,6 +9,8 @@ export * from "./bus/index.js";
 export * from "./event/index.js";
 export * from "./mcp/index.js";
 export * from "./adapter/index.js";
+export { InboundMessage } from "./inbound-message/index.js";
+export * from "./inbound-message/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./agent/index.js";
