@@ -146,5 +146,9 @@ describe("RuntimeResource descriptors", () => {
         }).success,
       ).toBe(false);
     });
+
+    test("createSessionDescriptor rejects non-canonical session types", () => {
+      expect(() => RuntimeResource.createSessionDescriptor("ses_bad", "typo")).toThrow();
+    });
   });
 });

@@ -32,14 +32,20 @@ describe("PolicyPoint migration mapping", () => {
     expect(mapping[Policy.Timing.ERROR]).toEqual(["run.error.error"]);
   });
 
-  test("exposes a point resolver type signature", () => {
-    const resolve: Policy.PolicyPointResolver = (timing, context) => {
-      void context?.resourceKind;
-      return Policy.PolicyPoint.MigrationMapping[timing];
-    };
+  test("resolves migrated point ids by optional resource kind", () => {
+    const resolve: Policy.PolicyPointResolver = Policy.PolicyPoint.resolve;
 
-    expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "tool" })).toEqual(
+    expect(resolve(Policy.Timing.INVOKE_PREPARE)).toEqual(
       Policy.PolicyPoint.MigrationMapping[Policy.Timing.INVOKE_PREPARE],
     );
+    expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "tool" })).toEqual([
+      "tool.native.pre",
+      "tool.mcp.pre",
+    ]);
+    expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "worker" })).toEqual([
+      "delegation.subagent.pre",
+      "delegation.background.pre",
+    ]);
+    expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "delegation" })).toEqual([]);
   });
 });

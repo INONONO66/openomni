@@ -87,6 +87,50 @@ describe("Policy schemas", () => {
         priority: 0,
       });
     });
+
+    it("rejects unsafe regex patterns", () => {
+      for (const pattern of [
+        "(a+)+b",
+        "^(a|aa)+$",
+        "^(a{1,2})+$",
+        "^a*a*a*$",
+        String.raw`([\\]+)+b`,
+        "((a)+)+$",
+        "((a|aa))+$",
+        "(a(b+))+c",
+        "^(a+)(a+)(a+)(a+)(a+)(a+)(a+)(a+)(a+)(a+)(a+)(a+)$",
+        String.raw`^(a)\1+$`,
+        "^.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a$",
+      ]) {
+        expect(() =>
+          Policy.InputRule.parse({
+            toolPattern: "bash",
+            field: "command",
+            pattern,
+            action: "deny",
+          }),
+        ).toThrow();
+      }
+    });
+
+    it("accepts linear regex patterns used by policy callsites", () => {
+      for (const pattern of [
+        String.raw`rm\s+-rf`,
+        "^/safe/.*",
+        "^(?!(?:user|main|trusted_manager)$).*$",
+        String.raw`[\\]+`,
+        String.raw`[a\\]*`,
+      ]) {
+        expect(
+          Policy.InputRule.safeParse({
+            toolPattern: "bash",
+            field: "command",
+            pattern,
+            action: "deny",
+          }).success,
+        ).toBe(true);
+      }
+    });
   });
 
   describe("evaluate", () => {
@@ -354,6 +398,34 @@ describe("Policy schemas", () => {
         policyId: "guardrail.permission",
         matchedPattern: "bash",
       });
+    });
+
+    it("fails closed when unsafe or invalid runtime input rules reach evaluation", () => {
+      for (const pattern of ["^a*a*a*$", "("]) {
+        expect(
+          Policy.evaluate(
+            {
+              action: "tool.call",
+              allowlist: ["*"],
+              inputRules: [
+                {
+                  toolPattern: "bash",
+                  field: "command",
+                  pattern,
+                  action: "allow",
+                  priority: 100,
+                },
+              ],
+            },
+            request("bash", { command: "aaaaab" }),
+          ),
+        ).toMatchObject({
+          action: "abort",
+          decision: "deny",
+          reason: "unsafe_input_rule",
+          matchedPattern: "bash",
+        });
+      }
     });
 
     it("uses highest priority matching input rule before list policies", () => {
