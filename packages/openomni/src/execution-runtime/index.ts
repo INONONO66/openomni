@@ -1,5 +1,6 @@
 export { buildWorkerMiddleware } from "./middleware.js";
 export type { WorkerMiddlewareConfig } from "./middleware.js";
+export { InjectionQueue } from "./injection-queue.js";
 export { CronJobRegistry } from "./cron-job-registry.js";
 export { WorkspaceLock } from "./workspace-lock.js";
 export {

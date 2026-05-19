@@ -1,15 +1,11 @@
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import type { InjectionQueue } from "@openomni/openomni";
 import { z } from "zod";
 import type { WorkerRunState } from "./worker-run-state";
-
-const DEFAULT_MAX_INBOX_MESSAGES = 100;
 
 export namespace WorkerIpcHandlers {
   export interface SharedOptions {
     readonly ipcAuthToken: string;
     readonly workerId: string;
-    readonly maxInboxMessages?: number;
   }
 
   export interface CancelRunOptions extends Pick<SharedOptions, "ipcAuthToken"> {
@@ -19,7 +15,8 @@ export namespace WorkerIpcHandlers {
 
   export interface DeliverMessageOptions extends SharedOptions {
     readonly params: Record<string, unknown> | undefined;
-    readonly activeRuns: Pick<WorkerRunState.ActiveRunRegistry, "entries">;
+    readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
+    readonly injectionQueue: InjectionQueue.Instance;
   }
 
   export interface ShutdownIdleOptions extends Pick<SharedOptions, "ipcAuthToken"> {
@@ -90,8 +87,7 @@ export namespace WorkerIpcHandlers {
   }
 
   export function deliverMessage(options: DeliverMessageOptions): DeliverMessageResponse {
-    const { params, ipcAuthToken, workerId, activeRuns } = options;
-    const maxInboxMessages = normalizeMaxInboxMessages(options.maxInboxMessages);
+    const { params, ipcAuthToken, activeRuns, injectionQueue } = options;
 
     if (!isAuthorized(params, ipcAuthToken)) {
       return { accepted: false, error: "unauthorized coordinator request" };
@@ -100,52 +96,26 @@ export namespace WorkerIpcHandlers {
     const sessionId = readString(params, "sessionId");
     const runId = readString(params, "runId");
     const message = readString(params, "message");
-    const matches = sessionId
-      ? [...activeRuns.entries()].filter(
-          ([activeRunId, run]) =>
-            run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
-        )
-      : [];
 
-    if (!sessionId || !message || matches.length === 0) {
+    if (!sessionId || !runId || !message) {
       return {
         accepted: false,
         error: `run not active for session: ${sessionId ?? "unknown"}`,
       };
     }
-    if (!runId && matches.length > 1) {
-      return {
-        accepted: false,
-        error: `multiple active runs for session: ${sessionId}`,
-      };
-    }
 
-    const match = matches[0];
-    if (!match) {
+    const active = activeRuns.get(runId);
+    if (!active || active.sessionId !== sessionId) {
       return {
         accepted: false,
         error: `run not active for session: ${sessionId}`,
       };
     }
 
-    const [activeRunId, run] = match;
-    run.inbox.push(message);
-    while (run.inbox.length > maxInboxMessages) {
-      run.inbox.shift();
-    }
-
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "live worker message delivered to active worker inbox",
-      context: {
-        workerId,
-        sessionId,
-        runId: activeRunId,
-        bytes: message.length,
-        inboxDepth: run.inbox.length,
-      },
+    injectionQueue.enqueue(runId, {
+      messageId: crypto.randomUUID(),
+      output: message,
+      timestamp: Date.now(),
     });
 
     return { accepted: true };
@@ -187,18 +157,6 @@ export namespace WorkerIpcHandlers {
       };
     }
   }
-}
-
-function normalizeMaxInboxMessages(value: number | undefined): number {
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    Number.isInteger(value) &&
-    value >= 1
-  ) {
-    return value;
-  }
-  return DEFAULT_MAX_INBOX_MESSAGES;
 }
 
 function isAuthorized(params: Record<string, unknown> | undefined, ipcAuthToken: string): boolean {

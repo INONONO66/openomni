@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
+import { InjectionQueue } from "@openomni/openomni";
 import { WorkerIpcHandlers } from "../../src/execution/worker-ipc-handlers";
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 
-function createRun(sessionId: string, inbox: string[] = []): WorkerRunState.ActiveRun {
-  return { sessionId, controller: new AbortController(), inbox };
+function createRun(sessionId: string): WorkerRunState.ActiveRun {
+  return { sessionId, controller: new AbortController() };
 }
 
 describe("worker IPC handlers", () => {
@@ -50,91 +51,84 @@ describe("worker IPC handlers", () => {
     expect(run.controller.signal.aborted).toBe(false);
   });
 
-  it("rejects unauthorized message delivery without mutating the inbox", () => {
-    const run = createRun("session-1", ["existing"]);
+  it("rejects unauthorized message delivery without queuing an injection", () => {
+    const run = createRun("session-1");
     const activeRuns = new Map([["run-1", run]]);
+    const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
       params: { authToken: "wrong", sessionId: "session-1", runId: "run-1", message: "new" },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
+      injectionQueue,
     });
 
     expect(result).toEqual({ accepted: false, error: "unauthorized coordinator request" });
-    expect(run.inbox).toEqual(["existing"]);
+    expect(injectionQueue.hasPending("run-1")).toBe(false);
   });
 
   it("rejects message delivery when an explicit run id does not match", () => {
-    const run = createRun("session-1", []);
+    const run = createRun("session-1");
     const activeRuns = new Map([["run-1", run]]);
+    const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
       params: { authToken: "token", sessionId: "session-1", runId: "missing", message: "new" },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
+      injectionQueue,
     });
 
     expect(result).toEqual({
       accepted: false,
       error: "run not active for session: session-1",
     });
-    expect(run.inbox).toEqual([]);
+    expect(injectionQueue.hasPending("missing")).toBe(false);
   });
 
-  it("delivers messages to a matching active run and caps inbox depth", () => {
-    const run = createRun("session-1", ["oldest", "older", "old"]);
+  it("queues delivered messages for automatic prompt injection", () => {
+    const run = createRun("session-1");
     const activeRuns = new Map([["run-1", run]]);
+    const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
       params: { authToken: "token", sessionId: "session-1", runId: "run-1", message: "new" },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
-      maxInboxMessages: 2,
+      injectionQueue,
     });
 
     expect(result).toEqual({ accepted: true });
-    expect(run.inbox).toEqual(["old", "new"]);
-  });
-
-  it("falls back to the default inbox cap for invalid numeric caps", () => {
-    const seedInbox = Array.from({ length: 100 }, (_, index) => `message-${index}`);
-    const run = createRun("session-1", seedInbox);
-    const activeRuns = new Map([["run-1", run]]);
-
-    const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", runId: "run-1", message: "new" },
-      ipcAuthToken: "token",
-      workerId: "worker-1",
-      activeRuns,
-      maxInboxMessages: Number.NaN,
-    });
-
-    expect(result).toEqual({ accepted: true });
-    expect(run.inbox).toHaveLength(100);
-    expect(run.inbox[0]).toBe("message-1");
-    expect(run.inbox.at(-1)).toBe("new");
-  });
-
-  it("rejects ambiguous session-only delivery when multiple runs are active", () => {
-    const activeRuns = new Map([
-      ["run-1", createRun("session-1")],
-      ["run-2", createRun("session-1")],
+    expect(injectionQueue.drain("run-1")).toEqual([
+      {
+        messageId: expect.any(String),
+        output: "new",
+        timestamp: expect.any(Number),
+      },
     ]);
+  });
+
+  it("requires a run id before queuing message injections", () => {
+    const run = createRun("session-1");
+    const activeRuns = new Map([["run-1", run]]);
+    const injectionQueue = InjectionQueue.create();
 
     const result = WorkerIpcHandlers.deliverMessage({
-      params: { authToken: "token", sessionId: "session-1", message: "hello" },
+      params: { authToken: "token", sessionId: "session-1", message: "new" },
       ipcAuthToken: "token",
       workerId: "worker-1",
       activeRuns,
+      injectionQueue,
     });
 
     expect(result).toEqual({
       accepted: false,
-      error: "multiple active runs for session: session-1",
+      error: "run not active for session: session-1",
     });
+    expect(injectionQueue.hasPending("run-1")).toBe(false);
   });
 
   it("reports idle shutdown readiness only when authorized and idle", () => {

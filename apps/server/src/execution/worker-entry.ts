@@ -1,7 +1,7 @@
 import { createIpcServer } from "@openomni/coordinator";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
-import { BackgroundManager, WorkspaceLock } from "@openomni/openomni";
+import { BackgroundManager, InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
@@ -48,6 +48,7 @@ BusPersistence.start();
 
 const activeRuns: WorkerRunState.ActiveRunRegistry = new Map();
 const workerBootstrapState = WorkerBootstrapHandler.createState();
+const injectionQueue = InjectionQueue.create();
 
 const backgroundManager = BackgroundManager.create({
   maxConcurrentPerAgent: 3,
@@ -84,6 +85,7 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       activeRuns,
       bootstrapReady: workerBootstrapState.ready,
       backgroundManager,
+      injectionQueue,
       defaultWorkspaceRoot: config.workspace?.root,
       getBootstrap: workerBootstrapState.getBootstrap,
       resolveAuth: workerBootstrapState.resolveAuth,
@@ -92,7 +94,15 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
   } else if (method === "coordinator.cancel_run") {
     respond(WorkerIpcHandlers.cancelRun({ params, ipcAuthToken, activeRuns }));
   } else if (method === "worker.deliver_message") {
-    respond(WorkerIpcHandlers.deliverMessage({ params, ipcAuthToken, workerId, activeRuns }));
+    respond(
+      WorkerIpcHandlers.deliverMessage({
+        params,
+        ipcAuthToken,
+        workerId,
+        activeRuns,
+        injectionQueue,
+      }),
+    );
   } else if (method === "worker.shutdown_idle") {
     const result = WorkerIpcHandlers.canShutdownIdle({ params, ipcAuthToken, activeRuns });
     respond(result);
