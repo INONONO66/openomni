@@ -13,22 +13,22 @@ import {
   replacePrompt,
   rewriteWriteback,
 } from "../../helpers/policy-decision";
+import { buildPolicyEngine } from "../../../src/core/execution/stream-policy-engine";
+import { buildTurn } from "../../../src/core/execution/stream-turn";
 import {
-  buildPolicyEngine,
-  buildTurn,
   createStreamRunState,
-  dispatchBudgetCheck,
-  dispatchWritebackCommit,
-  dispatchModelRequest,
-  dispatchModelResponse,
-  dispatchPreRun,
-  handleCompact,
-  handleError,
-  handleStop,
   type StreamAgentBase,
   type StreamRunState,
   type TurnArtifacts,
-} from "../../../src/core/execution/stream-helpers";
+} from "../../../src/core/execution/stream-state";
+import {
+  dispatchBudgetCheck,
+  dispatchModelRequest,
+  dispatchModelResponse,
+  dispatchPreRun,
+} from "../../../src/core/execution/stream-policy-dispatch";
+import { dispatchWritebackCommit } from "../../../src/core/execution/stream-writeback-policy";
+import { handleCompact, handleError, handleStop } from "../../../src/core/execution/stream-flow";
 
 function makeInput(): ChatAgentInput {
   return { messages: [{ role: "user", content: "hello" }] };
@@ -483,7 +483,13 @@ describe("model dispatch points", () => {
 
     const state = makeState();
     state.lastAssistantText = "original";
-    const result = await dispatchModelResponse(state, engine, makeConfig(), "stop");
+    const result = await dispatchModelResponse(
+      state,
+      engine,
+      makeConfig(),
+      "stop",
+      makeAgentBase(),
+    );
 
     expect(result).toBeNull();
     expect(state.lastAssistantText).toBe("original");
@@ -525,7 +531,13 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelResponse(state, engine, makeConfig(), "stop");
+    const result = await dispatchModelResponse(
+      state,
+      engine,
+      makeConfig(),
+      "stop",
+      makeAgentBase(),
+    );
 
     expect(result).toBeNull();
     expect(state.messages).toEqual(replacement);
@@ -544,7 +556,13 @@ describe("model dispatch points", () => {
         ]),
     });
 
-    const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop");
+    const result = await dispatchModelResponse(
+      makeState(),
+      engine,
+      makeConfig(),
+      "stop",
+      makeAgentBase(),
+    );
 
     expect(result?.type).toBe("complete");
     if (result?.type === "complete") expect(result.result.guardAborted).toBe(true);

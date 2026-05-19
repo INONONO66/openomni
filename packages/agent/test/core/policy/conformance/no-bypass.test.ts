@@ -1,10 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { createToolExecutor } from "../../../../src/core/execution/tool-executor";
-import {
-  createStreamRunState,
-  dispatchWritebackCommit,
-} from "../../../../src/core/execution/stream-helpers";
+import { createStreamRunState } from "../../../../src/core/execution/stream-state";
+import { dispatchWritebackCommit } from "../../../../src/core/execution/stream-writeback-policy";
 import {
   PolicyEngine,
   type PolicyContext,
