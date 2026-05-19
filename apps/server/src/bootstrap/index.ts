@@ -152,13 +152,17 @@ export async function main(): Promise<void> {
     workerScript,
     bootstrap,
     toolDispatcher,
-    askResident: async ({ workerId, sessionId, runId, question, signal }) => {
+    askResident: async ({ workerId, sessionId, runId, payload, signal }) => {
       const requestId = crypto.randomUUID();
       if (signal?.aborted) {
-        return { requestId, accepted: false, error: "worker.ask_main aborted" };
+        return { requestId, accepted: false, error: "worker.inbound_wait aborted" };
       }
       if (!model) {
-        return { requestId, accepted: false, error: "worker.ask_main requires a configured model" };
+        return {
+          requestId,
+          accepted: false,
+          error: "worker.inbound_wait requires a configured model",
+        };
       }
       const run = runId ? await WorkerRun.get(sessionId, runId) : undefined;
       const mainSessionId = run?.parentSessionId;
@@ -166,7 +170,7 @@ export async function main(): Promise<void> {
         return {
           requestId,
           accepted: false,
-          error: `worker.ask_main requires a worker run with parent Resident session: ${runId ?? "unknown"}`,
+          error: `worker.inbound_wait requires a worker run with parent Resident session: ${runId ?? "unknown"}`,
         };
       }
 
@@ -185,7 +189,7 @@ export async function main(): Promise<void> {
           surface: "worker-ask-resident",
           workspace: config.workspace?.root ?? process.cwd(),
           mode: "direct",
-          payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${question}`,
+          payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`,
           runtime: {
             durableSessionId: mainSessionId,
             lifecycle: "active",

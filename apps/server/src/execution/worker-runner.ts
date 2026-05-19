@@ -11,13 +11,14 @@ import {
   buildWorkerChildRuntimeConfig,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
-import { Execution, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Execution, type Ingress, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createContextMiddleware } from "../context/index";
 import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
+const WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS = 5 * 60_000;
 
 function buildDelegationAdmissionMiddleware(
   request: Execution.Request,
@@ -72,6 +73,81 @@ function abortableIpcCall<T>(
       (error) => finish(() => reject(error)),
     );
   });
+}
+
+function createWorkerInboundIngress(options: {
+  readonly server: WorkerRunIpcServer;
+  readonly ipcAuthToken: string;
+  readonly workerId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+}): {
+  ingest(
+    event: Ingress.InboundEvent,
+    context?: { readonly signal?: AbortSignal; readonly wait?: boolean },
+  ): Promise<Ingress.IngressResult>;
+} {
+  return {
+    async ingest(event, context) {
+      if (!context?.wait) {
+        throw new Error("worker inbound_message async delivery requires coordinator routing");
+      }
+      if (event.target?.kind !== "resident") {
+        throw new Error("worker inbound_message wait currently supports resident targets only");
+      }
+
+      const callId = crypto.randomUUID();
+      const payload =
+        typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
+      const cancelInboundWait = () => {
+        void options.server
+          .call(
+            "worker.inbound_wait_cancel",
+            { sessionId: options.sessionId, runId: options.runId, callId },
+            5_000,
+          )
+          .catch(() => undefined);
+      };
+
+      const raw = await abortableIpcCall(
+        () =>
+          options.server.call(
+            "worker.inbound_wait",
+            {
+              authToken: options.ipcAuthToken,
+              workerId: options.workerId,
+              sessionId: options.sessionId,
+              runId: options.runId,
+              callId,
+              payload,
+            },
+            WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
+          ),
+        context.signal,
+        cancelInboundWait,
+      );
+
+      if (raw === null || typeof raw !== "object") {
+        throw new Error("invalid worker.inbound_wait response");
+      }
+      const result = raw as { accepted?: unknown; output?: unknown; error?: unknown };
+      if (result.accepted !== true) {
+        throw new Error(
+          typeof result.error === "string" ? result.error : "worker.inbound_wait rejected",
+        );
+      }
+
+      return {
+        mode: "direct",
+        target: { kind: "resident" },
+        sessionId: options.sessionId,
+        result: {
+          output: typeof result.output === "string" ? result.output : "",
+          finishReason: "stop",
+        },
+      };
+    },
+  };
 }
 
 export interface WorkerRunIpcServer {
@@ -268,6 +344,13 @@ export namespace WorkerRunner {
 
         const agentProvider = new AgentToolProvider({
           subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
+          ingressEngine: createWorkerInboundIngress({
+            server,
+            ipcAuthToken,
+            workerId: options.workerId,
+            sessionId,
+            runId,
+          }),
           middleware: buildDelegationAdmissionMiddleware(request),
           delegationContext: {
             depth: 0,

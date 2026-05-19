@@ -9,7 +9,10 @@ const MAX_DEPTH = 10;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 type InboundMessageIngress = {
-  ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult>;
+  ingest(
+    event: Ingress.InboundEvent,
+    options?: { readonly signal?: AbortSignal; readonly wait?: boolean },
+  ): Promise<Ingress.IngressResult>;
 };
 
 type RuntimeInput = InboundMessage.Input & {
@@ -264,7 +267,7 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
       const event = eventFromInput(input, parsed);
 
       if (!parsed.wait) {
-        const ingest = ingressEngine.ingest(event);
+        const ingest = ingressEngine.ingest(event, { wait: false });
         ingest.catch(() => undefined);
         return toolResult(call, { status: "sent", messageId: event.id });
       }
@@ -276,7 +279,7 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
       markRunWaiting(input);
       try {
         const ingressResult = await withTimeout(
-          ingressEngine.ingest(event),
+          ingressEngine.ingest(event, { signal: context?.signal, wait: true }),
           parsed.timeoutMs,
           event.id,
           context?.signal,

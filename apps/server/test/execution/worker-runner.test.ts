@@ -276,6 +276,82 @@ describe("WorkerRunner", () => {
     expect(responses[0]).toMatchObject({ status: "succeeded" });
   });
 
+  it("routes inbound_message wait requests through worker.inbound_wait IPC", async () => {
+    const responses: unknown[] = [];
+    const serverCalls: Array<{
+      method: string;
+      params?: Record<string, unknown>;
+      timeoutMs?: number;
+    }> = [];
+    let inboundResult: Tool.Result | undefined;
+
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...createValidRequest(),
+          tools: [{ name: "inbound_message", inputSchema: {} }],
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          server: {
+            async call(method, params, timeoutMs) {
+              serverCalls.push({ method, params, timeoutMs });
+              if (method === "worker.inbound_wait") {
+                return { requestId: "request-1", accepted: true, output: "approved" };
+              }
+              throw new Error(`unexpected server call: ${method}`);
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              inboundResult = await options.toolExecutor({
+                id: "agent-inbound-call",
+                tool: "inbound_message",
+                input: {
+                  target: { kind: "resident" },
+                  payload: "Need approval",
+                  wait: true,
+                },
+              });
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(JSON.parse(inboundResult?.output ?? "{}")).toMatchObject({
+      status: "delivered",
+      output: "approved",
+    });
+    expect(serverCalls).toContainEqual(
+      expect.objectContaining({
+        method: "worker.inbound_wait",
+        params: expect.objectContaining({
+          authToken: "token",
+          workerId: "worker-1",
+          sessionId: "session-1",
+          runId: "run-1",
+          callId: expect.any(String),
+          payload: "Need approval",
+        }),
+        timeoutMs: 300_000,
+      }),
+    );
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+  });
+
   it("wires queued responses into turn-finish prompt injection", async () => {
     const responses: unknown[] = [];
     const injectionQueue = InjectionQueue.create();

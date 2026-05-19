@@ -32,16 +32,16 @@ export type ToolCallContext = {
 
 export type ToolCallResult = Tool.Result;
 
-export type AskMainParams = {
+export type InboundWaitParams = {
   workerId: string;
   sessionId: string;
   callId?: string;
   runId?: string;
-  question: string;
+  payload: string;
   signal?: AbortSignal;
 };
 
-export type AskMainResult = {
+export type InboundWaitResult = {
   requestId: string;
   accepted: boolean;
   output?: string;
@@ -68,7 +68,7 @@ export class WorkerSupervisor {
   private running = false;
   private stopping = false;
   private readonly activeToolCalls = new Map<string, ActiveRequest>();
-  private readonly activeAskMainCalls = new Map<string, ActiveRequest>();
+  private readonly activeInboundWaitCalls = new Map<string, ActiveRequest>();
   readonly socketPath: string;
 
   constructor(
@@ -84,7 +84,7 @@ export class WorkerSupervisor {
       workerId: number,
       snapshot: WorkerBootstrap.WorkerSnapshot,
     ) => void,
-    private readonly askResidentHandler?: (params: AskMainParams) => Promise<AskMainResult>,
+    private readonly inboundWaitHandler?: (params: InboundWaitParams) => Promise<InboundWaitResult>,
   ) {
     this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
     this.doStart();
@@ -201,14 +201,14 @@ export class WorkerSupervisor {
               return;
             }
 
-            if (method === "worker.ask_main_cancel") {
-              const p = parseAskMainCancelParams(params);
+            if (method === "worker.inbound_wait_cancel") {
+              const p = parseInboundWaitCancelParams(params);
               if (!p) {
-                respond({ cancelled: false, error: "invalid worker.ask_main_cancel params" });
+                respond({ cancelled: false, error: "invalid worker.inbound_wait_cancel params" });
                 return;
               }
               const callId = p.callId;
-              const active = this.activeAskMainCalls.get(callId);
+              const active = this.activeInboundWaitCalls.get(callId);
               if (
                 !active ||
                 active.sessionId !== p.sessionId ||
@@ -218,10 +218,10 @@ export class WorkerSupervisor {
                 return;
               }
               active.controller.abort();
-              this.respondAndForget(this.activeAskMainCalls, callId, active, {
+              this.respondAndForget(this.activeInboundWaitCalls, callId, active, {
                 requestId: callId,
                 accepted: false,
-                error: "worker.ask_main aborted",
+                error: "worker.inbound_wait aborted",
               });
               respond({ cancelled: true, settlement: "unknown" });
               return;
@@ -235,7 +235,7 @@ export class WorkerSupervisor {
               return;
             }
 
-            if (method === "worker.ask_main") {
+            if (method === "worker.inbound_wait") {
               const requestId = crypto.randomUUID();
               if (params?.authToken !== authToken) {
                 respond({ requestId, accepted: false, error: "unauthorized worker request" });
@@ -246,14 +246,14 @@ export class WorkerSupervisor {
                 typeof params?.callId === "string" && params.callId.length > 0
                   ? params.callId
                   : requestId;
-              const question = typeof params?.question === "string" ? params.question : "";
-              if (!this.askResidentHandler || !sessionId || !question) {
+              const payload = typeof params?.payload === "string" ? params.payload : "";
+              if (!this.inboundWaitHandler || !sessionId || !payload) {
                 respond({
                   requestId: callId,
                   accepted: false,
-                  error: this.askResidentHandler
-                    ? "worker.ask_main requires sessionId and question"
-                    : "worker.ask_main is not configured",
+                  error: this.inboundWaitHandler
+                    ? "worker.inbound_wait requires sessionId and payload"
+                    : "worker.inbound_wait is not configured",
                 });
                 return;
               }
@@ -267,28 +267,28 @@ export class WorkerSupervisor {
                 respond,
                 completed: false,
               };
-              this.activeAskMainCalls.set(callId, active);
+              this.activeInboundWaitCalls.set(callId, active);
 
-              this.askResidentHandler({
+              this.inboundWaitHandler({
                 workerId: String(workerId),
                 sessionId,
                 callId,
                 ...(runId !== undefined && { runId }),
-                question,
+                payload,
                 signal: controller.signal,
               })
-                .then((result: AskMainResult) =>
-                  this.respondAndForget(this.activeAskMainCalls, callId, active, result),
+                .then((result: InboundWaitResult) =>
+                  this.respondAndForget(this.activeInboundWaitCalls, callId, active, result),
                 )
                 .catch((err: unknown) =>
-                  this.respondAndForget(this.activeAskMainCalls, callId, active, {
+                  this.respondAndForget(this.activeInboundWaitCalls, callId, active, {
                     requestId,
                     accepted: false,
                     error: err instanceof Error ? err.message : String(err),
                   }),
                 )
                 .finally(() => {
-                  this.activeAskMainCalls.delete(callId);
+                  this.activeInboundWaitCalls.delete(callId);
                 });
               return;
             }
@@ -542,7 +542,7 @@ function parseToolCallCancelParams(
   return { runId, sessionId, callId };
 }
 
-function parseAskMainCancelParams(
+function parseInboundWaitCancelParams(
   params: Record<string, unknown> | undefined,
 ): { runId?: string; sessionId: string; callId: string } | undefined {
   if (!params) return undefined;

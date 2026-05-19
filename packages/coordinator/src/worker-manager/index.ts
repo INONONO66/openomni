@@ -8,6 +8,6 @@ export {
   type ToolCallContext,
   type ToolCallParams,
   type ToolCallResult,
-  type AskMainParams,
-  type AskMainResult,
+  type InboundWaitParams,
+  type InboundWaitResult,
 } from "./manager";

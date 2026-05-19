@@ -5,8 +5,8 @@ import { Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import {
   WorkerSupervisor,
-  type AskMainParams,
-  type AskMainResult,
+  type InboundWaitParams,
+  type InboundWaitResult,
   type ToolCallCancelParams,
   type ToolCallContext,
   type ToolCallParams,
@@ -20,7 +20,7 @@ const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_QUEUED_DISPATCHES = 100;
 
 export type { ToolCallCancelParams, ToolCallContext, ToolCallParams, ToolCallResult };
-export type { AskMainParams, AskMainResult };
+export type { InboundWaitParams, InboundWaitResult };
 
 export type WorkerManagerConfig = {
   workerScript: string;
@@ -31,7 +31,7 @@ export type WorkerManagerConfig = {
   maxQueuedDispatches?: number;
   bootstrap?: WorkerBootstrap.Bootstrap;
   onToolCall?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
-  onAskMain?: (params: AskMainParams) => Promise<AskMainResult>;
+  onInboundWait?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
   onWorkerSnapshot?: (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
 };
 
@@ -363,7 +363,7 @@ export class OnDemandWorkerManager implements WorkerManager {
       this.config.bootstrap,
       this.config.onToolCall,
       this.config.onWorkerSnapshot,
-      this.config.onAskMain,
+      this.config.onInboundWait,
     );
     return slot.supervisor;
   }
