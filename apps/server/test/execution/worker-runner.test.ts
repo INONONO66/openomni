@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { AgentRegistry } from "@openomni/agent";
 import type { AgentResult } from "@openomni/agent";
-import { BackgroundManager, WorkspaceLock } from "@openomni/openomni";
+import { BackgroundManager, InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import type { Tool, WorkerBootstrap } from "@openomni/protocol";
 
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
@@ -41,6 +41,7 @@ function createSpawnOptions(
       resolveAuth: () => undefined,
       allowAuthFallback: false,
     }),
+    injectionQueue: InjectionQueue.create(),
     defaultWorkspaceRoot: undefined,
     getBootstrap: () => null,
     resolveAuth: () => undefined,
@@ -112,7 +113,6 @@ describe("WorkerRunner", () => {
     const existingRun: WorkerRunState.ActiveRun = {
       sessionId: "session-1",
       controller: new AbortController(),
-      inbox: ["existing"],
     };
     const activeRuns = new Map([["run-1", existingRun]]);
     const options = createSpawnOptions(createValidRequest(), (result) => responses.push(result), {
@@ -230,7 +230,7 @@ describe("WorkerRunner", () => {
     expect(activeRuns.size).toBe(0);
   });
 
-  it("exposes inbound_message instead of ask_main for resident guidance", async () => {
+  it("exposes inbound_message without polling tools for resident guidance", async () => {
     const responses: unknown[] = [];
     const responseReceived = new Promise<void>((resolve) => {
       const options = createSpawnOptions(
@@ -255,10 +255,75 @@ describe("WorkerRunner", () => {
             async run() {
               const toolNames = options.tools?.map((tool) => tool.name) ?? [];
               expect(toolNames).toContain("inbound_message");
-              expect(toolNames).toContain("check_inbox");
+              expect(toolNames).not.toContain("check_inbox");
               expect(toolNames).not.toContain("ask_main");
               expect(options.systemPrompt).toContain("inbound_message with wait: true");
+              expect(options.systemPrompt).toContain(
+                "responses from other agents arrive automatically, no polling needed",
+              );
               expect(options.systemPrompt).not.toContain("use ask_main");
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+  });
+
+  it("wires queued responses into turn-finish prompt injection", async () => {
+    const responses: unknown[] = [];
+    const injectionQueue = InjectionQueue.create();
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        createValidRequest(),
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          injectionQueue,
+          server: {
+            async call() {
+              throw new Error("unexpected server call");
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              const drainPolicy = options.middleware?.find(
+                (registration) => registration.name === "builtin:injection-queue-drain",
+              );
+              if (!drainPolicy) throw new Error("injection queue drain policy missing");
+
+              injectionQueue.enqueue("run-1", {
+                messageId: "message-1",
+                output: "queued response",
+                timestamp: Date.now(),
+              });
+
+              const decision = await drainPolicy.fn({
+                timing: "turn.finish",
+                steps: [],
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                turnCount: 1,
+                isCompletion: true,
+                continuationCount: 0,
+                elapsedMs: 0,
+                traceContext: { runId: "run-1", sessionId: "session-1" },
+              });
+
+              expect(decision.effects).toEqual([
+                { type: "prompt.inject_message", message: "queued response", role: "assistant" },
+              ]);
+              expect(injectionQueue.hasPending("run-1")).toBe(false);
               return successfulResult;
             },
           }),

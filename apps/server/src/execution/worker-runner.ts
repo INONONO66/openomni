@@ -3,18 +3,17 @@ import type { Auth } from "@openomni/llm";
 import {
   AgentToolProvider,
   type BackgroundManager,
+  type InjectionQueue,
   SystemToolProvider,
   ToolProxyProvider,
   buildToolCatalog,
   buildWorkerMiddleware,
   buildWorkerChildRuntimeConfig,
-  createToolExecutor,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
 import { Execution, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createContextMiddleware } from "../context/index";
-import { WorkerInternalTools } from "./worker-internal-tools";
 import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
@@ -91,6 +90,7 @@ export namespace WorkerRunner {
     readonly activeRuns: WorkerRunState.ActiveRunRegistry;
     readonly bootstrapReady: Promise<void>;
     readonly backgroundManager: ReturnType<typeof BackgroundManager.create>;
+    readonly injectionQueue: InjectionQueue.Instance;
     readonly defaultWorkspaceRoot: string | undefined;
     readonly getBootstrap: () => WorkerBootstrap.Bootstrap | null;
     readonly resolveAuth: (provider: string) => Auth.Info | undefined;
@@ -110,6 +110,7 @@ export namespace WorkerRunner {
       activeRuns,
       bootstrapReady,
       backgroundManager,
+      injectionQueue,
       defaultWorkspaceRoot,
       getBootstrap,
       resolveAuth,
@@ -156,7 +157,7 @@ export namespace WorkerRunner {
       const controller = new AbortController();
 
       try {
-        activeRuns.set(runId, { sessionId, controller, inbox: [] });
+        activeRuns.set(runId, { sessionId, controller });
         server.notify("worker.run_started", { runId, sessionId });
         Bus.publish(Subagent.Events.WorkerRunStarted, {
           traceId,
@@ -281,48 +282,11 @@ export namespace WorkerRunner {
         const agentTools = agentProvider.listTools();
         const proxyTools = mcpProxyProvider.listTools();
         const availableTools = [...systemTools, ...agentTools, ...proxyTools];
-        const internalTools = WorkerInternalTools.create({
-          readInbox: () => activeRuns.get(runId)?.inbox.splice(0) ?? [],
-        });
         const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
-        const internalToolExecutor = createToolExecutor({
-          tools: internalTools,
-          config: {
-            workspaceRoot,
-            runtime: {
-              sessionId,
-              runId,
-              agentName: request.agentName,
-              workspaceRoot,
-            },
-          },
-        });
-        const internalToolNames = new Set(
-          internalTools.flatMap((tool) => [tool.spec.name, tool.spec.name.replace(/\./g, "_")]),
-        );
-        const combinedToolExecutor = async (
-          call: Tool.Call,
-          context?: Tool.ExecutionContext,
-        ): Promise<Tool.Result> => {
-          if (internalToolNames.has(call.tool)) return internalToolExecutor(call, context);
-          if (toolExecutor) return toolExecutor(call, context);
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Unknown worker tool: ${call.tool}`,
-            isError: true,
-          };
-        };
-        const exposedTools = [
-          ...(tools ?? []),
-          ...internalTools.map((tool) => ({
-            ...tool.spec,
-            name: tool.spec.name.replace(/\./g, "_"),
-          })),
-        ];
+        const exposedTools = tools ?? [];
 
         toolsRef.tools = exposedTools;
-        toolsRef.toolExecutor = combinedToolExecutor;
+        toolsRef.toolExecutor = toolExecutor;
         catalogRef.catalog = buildToolCatalog([
           { tools: systemTools, source: "system" },
           { tools: agentTools, source: "agent" },
@@ -337,16 +301,17 @@ export namespace WorkerRunner {
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use inbound_message with wait: true to ask the Resident for guidance or approval; use check_inbox to read live messages delivered while this run is active.",
+            "Worker runtime tools: use inbound_message with wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
           ]
             .filter(Boolean)
             .join("\n\n"),
           tools: exposedTools,
-          toolExecutor: combinedToolExecutor,
+          toolExecutor,
           middleware: [
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,
+              injectionQueue,
               ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
             }),
           ],
@@ -446,6 +411,7 @@ export namespace WorkerRunner {
           error: errorMessage,
         });
       } finally {
+        injectionQueue.dispose(runId);
         activeRuns.delete(runId);
       }
     })();

@@ -95,6 +95,7 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   CronJobRegistry,
+  InjectionQueue,
   Tool,
   WorkspaceLock,
   buildToolCatalog,
