@@ -5,12 +5,6 @@ import { buildToolCatalog, createToolExecutor, resolveToolSelection } from "@ope
 import { getAgentDefinition } from "../agents/registry";
 import type { AgentDefinition } from "../agents/types";
 import type { McpToolProvider } from "../tool/mcp/provider";
-const residentWorkerControlTools = new Set([
-  "spawn_worker",
-  "send_worker_message",
-  "cancel_worker",
-  "resume_worker",
-]);
 
 export interface BridgeDeps {
   systemProvider: ToolListProvider;
@@ -88,14 +82,7 @@ export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.Agen
 }
 
 export function buildResidentAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
-  const mainEntries = selectToolEntries(
-    { ...definition, tools: { categories: ["custom"] } },
-    deps,
-  ).filter(
-    (entry) => entry.source === "server" && residentWorkerControlTools.has(entry.tool.spec.name),
-  );
-  return buildAgentDefFromEntries(definition, deps, mainEntries);
+  return buildAgentDef(agentName, deps);
 }
 
 function createBaseEvent(

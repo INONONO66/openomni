@@ -8,7 +8,6 @@ import {
   AgentToolProvider,
   IngressEngine,
   ResidentRuntime,
-  createResidentWorkerTools,
   SystemToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
@@ -16,7 +15,7 @@ import { Auth } from "@openomni/llm";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/index";
 import { createMessageHandler } from "../handler/conversation";
-import { buildAgentDef, buildResidentAgentDef } from "../ingress/bridge";
+import { buildResidentAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
@@ -136,22 +135,7 @@ export async function main(): Promise<void> {
     ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
     : undefined;
   if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
-  const residentWorkerTools = model
-    ? createResidentWorkerTools({
-        ingest: IngressEngine.ingest,
-        surface: "resident-worker-tool",
-        residentAgentNames: ["resident"],
-        resolveWorkerAgent: ({ agentName, workspaceRoot }) =>
-          buildAgentDef(agentName, {
-            systemProvider,
-            agentProvider,
-            mcpProvider,
-            defaultModel: { provider: model.providerID, id: model.id },
-            workspaceRoot: workspaceRoot ?? config.workspace?.root ?? process.cwd(),
-          }),
-      })
-    : [];
-  const customProvider = new CustomToolProvider(residentWorkerTools);
+  const customProvider = new CustomToolProvider();
   const toolDispatcher = buildToolDispatcher([mcpProvider]);
   const coordinator = createExecutionCoordinator({
     workerScript,
