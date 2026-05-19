@@ -8,7 +8,6 @@ import {
   AgentToolProvider,
   IngressEngine,
   ResidentRuntime,
-  createResidentWorkerTools,
   SystemToolProvider,
   resolveCategory,
 } from "@openomni/openomni";
@@ -136,22 +135,7 @@ export async function main(): Promise<void> {
     ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
     : undefined;
   if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
-  const residentWorkerTools = model
-    ? createResidentWorkerTools({
-        ingest: IngressEngine.ingest,
-        surface: "resident-worker-tool",
-        residentAgentNames: ["resident"],
-        resolveWorkerAgent: ({ agentName, workspaceRoot }) =>
-          buildAgentDef(agentName, {
-            systemProvider,
-            agentProvider,
-            mcpProvider,
-            defaultModel: { provider: model.providerID, id: model.id },
-            workspaceRoot: workspaceRoot ?? config.workspace?.root ?? process.cwd(),
-          }),
-      })
-    : [];
-  const customProvider = new CustomToolProvider(residentWorkerTools);
+  const customProvider = new CustomToolProvider();
   IngressEngine.setAgentResolver({
     resolve: async (agentName, event) =>
       buildAgentDef(agentName, {

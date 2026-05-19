@@ -43,29 +43,24 @@ function makeMessage(): Adapter.InboundMessage {
 
 const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
-  agentProvider: makeProvider([makeTool("subagent")]),
+  agentProvider: makeProvider([makeTool("subagent"), makeTool("inbound_message")]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
-  customProvider: makeProvider([
-    makeTool("spawn_worker"),
-    makeTool("send_worker_message"),
-    makeTool("cancel_worker"),
-    makeTool("resume_worker"),
-    makeTool("weather_lookup"),
-  ]),
+  customProvider: makeProvider([makeTool("weather_lookup")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   workspaceRoot: "/workspace",
 };
 
 describe("ingress bridge tool surfaces", () => {
-  it("keeps resident lightweight with only server custom worker-control tools", () => {
+  it("uses normal resident tool selection including inbound_message", () => {
     const event = buildInboundEvent(makeMessage(), "dev", deps);
 
     expect(event.target).toEqual({ kind: "resident" });
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
-      "cancel_worker",
-      "resume_worker",
-      "send_worker_message",
-      "spawn_worker",
+      "bash",
+      "inbound_message",
+      "read",
+      "subagent",
+      "weather_lookup",
     ]);
   });
 
@@ -75,6 +70,7 @@ describe("ingress bridge tool surfaces", () => {
 
     expect(workerAgent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
+      "inbound_message",
       "read",
       "subagent",
     ]);
