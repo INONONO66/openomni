@@ -14,7 +14,9 @@ src/
 ├── storage/
 │   ├── index.ts          # Barrel
 │   ├── storage.ts        # Storage.Adapter interface + InMemoryStorage + Storage singleton
-│   ├── sqlite-storage.ts # SqliteStorageAdapter (Drizzle-backed persistence)
+│   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
+│   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
+│   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
 │   ├── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 │   ├── part-time.ts      # Message-part timestamp helpers
 │   ├── wal-maintenance.ts # SQLite WAL checkpoint helpers
@@ -37,7 +39,7 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
-- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the persistent backend bootstrapped via `initialize({ dbPath })`. Adapter sub-objects: required `session` / `message` / `part`; optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `workItem`, and `workerRunState`. Unimplemented optional sub-objects gracefully degrade.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and optional `artifact`, `surfaceKey`, `backgroundTask`, `workItem`, and `workerRunState`. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Unimplemented optional sub-objects gracefully degrade.
 - **Migration 0006**: Legacy task/todo tables remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) flow through the shared `Bus` too.
 - **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.
