@@ -5,6 +5,7 @@ import { attachRuntimeDescriptors } from "./descriptors";
 import { parseSkillMarkdown } from "./markdown";
 import { SkillRegistry } from "./registry";
 import {
+  assertSafeSkillId,
   isEnoent,
   resolveGlobalSkillsRoot,
   resolveLocalSkillsRoot,
@@ -48,6 +49,7 @@ export namespace SkillLoader {
     id: string,
     options: SkillLoaderOptions = {},
   ): Promise<Skill.Definition> {
+    assertSafeSkillId(id);
     const skillPath = join(resolveLocalSkillsRoot(options), id, SKILL_FILE_NAME);
 
     return loadSkillDefinition(skillPath, "local", id);
@@ -57,6 +59,7 @@ export namespace SkillLoader {
     id: string,
     options: SkillLoaderOptions = {},
   ): Promise<Skill.Definition> {
+    assertSafeSkillId(id);
     const skillPath = join(resolveGlobalSkillsRoot(options), id, SKILL_FILE_NAME);
 
     return loadSkillDefinition(skillPath, "global", id);

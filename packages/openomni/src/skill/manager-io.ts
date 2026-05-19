@@ -3,37 +3,13 @@ import { mkdir, readdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { SkillManagerEntry, SkillManagerRoots } from "./manager";
 import {
-  errorMessage,
   isEnoent,
   resolveGlobalSkillsRoot,
   resolveLocalSkillsRoot,
   resolveRegistryPath,
   skillPath,
   sortRegistryEntries,
-  SKILL_FILE_NAME,
 } from "./shared";
-
-export async function readRegistry(options: SkillManagerRoots): Promise<Skill.RegistryEntry[]> {
-  const path = resolveRegistryPath(options);
-  const file = Bun.file(path);
-  if (!(await file.exists())) {
-    return [];
-  }
-
-  let raw: unknown;
-  try {
-    raw = await file.json();
-  } catch (error) {
-    throw new Error(`Failed to read skill registry at ${path}: ${errorMessage(error)}`);
-  }
-
-  const parsed = Skill.RegistryEntry.array().safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`Invalid skill registry at ${path}: ${parsed.error.message}`);
-  }
-
-  return sortRegistryEntries(parsed.data);
-}
 
 export async function writeRegistry(
   entries: readonly Skill.RegistryEntry[],

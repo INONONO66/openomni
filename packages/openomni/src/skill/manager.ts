@@ -1,6 +1,6 @@
 import { type Policy, Skill } from "@openomni/protocol";
 import {
-  type AuditState,
+  type SkillAction,
   approveOperation,
   beginOperation,
   blockOperation,
@@ -9,20 +9,18 @@ import {
 import {
   globalManagerEntry,
   readLocalEntries,
-  readRegistry,
   removeSkillDirectory,
   upsertRegistryEntry,
   writeRegistry,
   writeSkillDefinition,
 } from "./manager-io";
-import { resolveGlobalSkillsRoot, resolveLocalSkillsRoot, skillPath } from "./shared";
-
-type SkillAction =
-  | "skill.install"
-  | "skill.enable"
-  | "skill.disable"
-  | "skill.uninstall"
-  | "skill.list";
+import { SkillRegistry } from "./registry";
+import {
+  assertSafeSkillId,
+  resolveGlobalSkillsRoot,
+  resolveLocalSkillsRoot,
+  skillPath,
+} from "./shared";
 
 const DEFAULT_VERSION = "0.0.0";
 
@@ -98,7 +96,7 @@ export namespace SkillManager {
       return { id: parsed.id, scope: "local", enabled: true, path, source };
     }
 
-    const registry = await readRegistry(options);
+    const registry = await SkillRegistry.read(options);
     const existing = registry.find((entry) => entry.id === parsed.id);
     const entry: Skill.RegistryEntry = {
       id: parsed.id,
@@ -157,7 +155,7 @@ export namespace SkillManager {
       return { id, scope, enabled: false, path };
     }
 
-    const registry = await readRegistry(options);
+    const registry = await SkillRegistry.read(options);
     const existing = registry.find((entry) => entry.id === id);
     if (!existing) {
       await blockOperation(operation, "skill.manager.registry", "skill_not_installed");
@@ -186,7 +184,7 @@ export namespace SkillManager {
     const entries: SkillManagerEntry[] = [];
     if (scope === undefined || scope === "global") {
       entries.push(
-        ...(await readRegistry(options)).map((entry) => globalManagerEntry(entry, options)),
+        ...(await SkillRegistry.read(options)).map((entry) => globalManagerEntry(entry, options)),
       );
     }
     if (scope === undefined || scope === "local") {
@@ -210,7 +208,7 @@ async function updateGlobalRegistryEntry(
     resource: id,
     input: operationInput({ id, scope: "global", enabled }),
   });
-  const registry = await readRegistry(options);
+  const registry = await SkillRegistry.read(options);
   const existing = registry.find((entry) => entry.id === id);
   if (!existing) {
     await blockOperation(operation, "skill.manager.registry", "skill_not_installed");
@@ -225,13 +223,6 @@ async function updateGlobalRegistryEntry(
   await writeRegistry(upsertRegistryEntry(registry, next), options);
 
   return globalManagerEntry(next, options);
-}
-
-function assertSafeSkillId(id: string): void {
-  if (id !== "." && id !== ".." && /^[A-Za-z0-9._-]+$/.test(id)) {
-    return;
-  }
-  throw new Error(`Invalid skill id "${id}"`);
 }
 
 function sortManagerEntries(entries: readonly SkillManagerEntry[]): SkillManagerEntry[] {

@@ -68,6 +68,13 @@ export function isEnoent(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as ErrorWithCode).code === "ENOENT";
 }
 
+export function assertSafeSkillId(id: string): void {
+  if (id !== "." && id !== ".." && /^[A-Za-z0-9._-]+$/.test(id)) {
+    return;
+  }
+  throw new Error(`Invalid skill id "${id}"`);
+}
+
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

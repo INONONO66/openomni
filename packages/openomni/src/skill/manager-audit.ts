@@ -2,7 +2,7 @@ import { Policy, Operational } from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
 import type { SkillOperationOptions } from "./manager";
 
-type SkillAction =
+export type SkillAction =
   | "skill.install"
   | "skill.enable"
   | "skill.disable"
