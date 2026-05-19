@@ -74,7 +74,7 @@ describe("SubagentRuntime permissions", () => {
     expect(verdict).toBe("require_approval");
   });
 
-  test("invalid regex in inputRule does not match, falls through to default allow", () => {
+  test("invalid regex in inputRule fails closed", () => {
     const permissions: Policy.Permission = {
       action: "tool.call",
       inputRules: [
@@ -89,7 +89,7 @@ describe("SubagentRuntime permissions", () => {
     };
 
     const verdict = checkPermission("test_tool", { input_field: "value" }, permissions);
-    expect(verdict).toBe("allow");
+    expect(verdict).toBe("deny");
   });
 
   test("invalid regex with denylist fallback still denies", () => {

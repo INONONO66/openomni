@@ -22,7 +22,9 @@ const scanRoots = ["packages", "apps"];
 const excludedPathParts = ["/dist/", "/node_modules/", "/coverage/", "/generated/"];
 const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 
-const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/index.ts"]);
+// Only the private policy permission leaf may implement raw allowlist/denylist membership;
+// every public caller still routes through Policy.evaluate.
+const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/permission.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/ingress/middleware/ingress-authority.ts",
   "packages/openomni/src/subagent/middleware/subagent-spawn-policy.ts",
@@ -32,7 +34,6 @@ const canonicalPolicyRequiredFiles = new Set([
   "apps/server/src/channel/channel-authn.ts",
 ]);
 const approvedAuthorizationFiles = new Set([
-  "packages/protocol/src/policy/index.ts",
   "packages/openomni/src/extension/manager.ts",
   "packages/coordinator/src/tool-permission/policy.ts",
 ]);
