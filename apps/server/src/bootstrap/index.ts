@@ -152,6 +152,17 @@ export async function main(): Promise<void> {
       })
     : [];
   const customProvider = new CustomToolProvider(residentWorkerTools);
+  IngressEngine.setAgentResolver({
+    resolve: async (agentName, event) =>
+      buildAgentDef(agentName, {
+        systemProvider,
+        agentProvider,
+        mcpProvider,
+        customProvider,
+        defaultModel: model ? { provider: model.providerID, id: model.id } : undefined,
+        workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
+      }),
+  });
   const toolDispatcher = buildToolDispatcher([mcpProvider]);
   const coordinator = createExecutionCoordinator({
     workerScript,

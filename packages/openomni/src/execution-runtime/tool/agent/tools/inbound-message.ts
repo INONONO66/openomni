@@ -1,6 +1,7 @@
 import type { InboundMessage, Ingress, Tool } from "@openomni/protocol";
-import { InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
+import { CronJob, InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
 import { WorkerRunStateStore } from "@openomni/session";
+import { CronJobRegistry } from "../../../cron-job-registry.js";
 import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
@@ -110,6 +111,25 @@ function eventFromInput(input: RuntimeInput, parsed: InboundMessage.Input): Ingr
       model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
     },
   };
+}
+
+function scheduleJobFromInput(input: RuntimeInput, parsed: InboundMessage.Input): CronJob.Info {
+  const agentName = parsed.target.agentName ?? input.agentName;
+  if (!agentName) {
+    throw new Error("target.agentName is required when action is schedule");
+  }
+
+  return CronJob.Info.parse({
+    id: crypto.randomUUID(),
+    agentName,
+    payload: parsed.payload,
+    schedule: parsed.schedule,
+    target: {
+      kind: parsed.target.kind,
+      ...(parsed.target.sessionId ? { sessionId: parsed.target.sessionId } : {}),
+    },
+    createdAt: Date.now(),
+  });
 }
 
 function withTimeout<T>(
@@ -231,6 +251,15 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
       const input = call.input;
       const parsed = InboundMessageProtocol.Input.parse(input);
       if (parsed.depth >= MAX_DEPTH) return depthError(call);
+
+      if (parsed.action === "schedule") {
+        try {
+          const jobId = CronJobRegistry.register(scheduleJobFromInput(input, parsed));
+          return toolResult(call, { status: "scheduled", messageId: jobId, jobId });
+        } catch (error) {
+          return errorResult(call, error instanceof Error ? error.message : String(error));
+        }
+      }
 
       const event = eventFromInput(input, parsed);
 

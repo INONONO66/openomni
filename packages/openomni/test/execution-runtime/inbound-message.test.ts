@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
 import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
+import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
 import { createInboundMessageTool } from "../../src/execution-runtime/tool/agent/tools/inbound-message";
 
@@ -31,6 +32,12 @@ function createWorkerRun(runId: string): void {
   });
 }
 
+function clearCronJobs(): void {
+  for (const job of CronJobRegistry.list()) {
+    CronJobRegistry.remove(job.id);
+  }
+}
+
 function deferred<T>(): {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
@@ -45,10 +52,12 @@ function deferred<T>(): {
 describe("inbound_message tool", () => {
   beforeEach(() => {
     Storage.reset();
+    clearCronJobs();
   });
 
   afterEach(() => {
     Storage.reset();
+    clearCronJobs();
   });
 
   test("increments depth across legitimate multi-hop calls", async () => {
@@ -161,6 +170,47 @@ describe("inbound_message tool", () => {
       status: "running",
       resumeCount: 1,
     });
+  });
+
+  test("schedule action registers a cron job without calling ingress", async () => {
+    const events: Ingress.InboundEvent[] = [];
+    const tool = createInboundMessageTool({
+      ingest: async (event) => {
+        events.push(event);
+        return result("should not run");
+      },
+    });
+
+    const response = await tool.execute({
+      id: "call-schedule",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "resident", agentName: "dev" },
+        action: "schedule",
+        payload: "daily summary",
+        schedule: "0 9 * * *",
+      },
+    });
+
+    const output = JSON.parse(response.output);
+    const jobs = CronJobRegistry.list();
+
+    expect(response.isError).toBeUndefined();
+    expect(output.status).toBe("scheduled");
+    expect(typeof output.messageId).toBe("string");
+    expect(typeof output.jobId).toBe("string");
+    expect(output.jobId).toBe(output.messageId);
+    expect(events).toHaveLength(0);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      id: output.jobId,
+      agentName: "dev",
+      payload: "daily summary",
+      schedule: "0 9 * * *",
+      target: { kind: "resident" },
+    });
+    expect(CronJobRegistry.remove(output.jobId)).toBe(true);
+    expect(CronJobRegistry.list()).toEqual([]);
   });
 
   test("wait:true times out when ingress does not resolve", async () => {

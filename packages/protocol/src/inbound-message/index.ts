@@ -57,6 +57,7 @@ const ResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("scheduled"),
     messageId: z.string().optional(),
+    jobId: z.string().optional(),
   }),
   z.object({
     status: z.literal("error"),
