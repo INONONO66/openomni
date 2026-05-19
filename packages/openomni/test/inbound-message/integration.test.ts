@@ -217,7 +217,7 @@ describe("inbound_message integration flows", () => {
     expect(response.isError).toBe(true);
     expect(JSON.parse(response.output)).toMatchObject({
       status: "error",
-      error: "actor is not authorized to create top-level inbound work",
+      error: "worker cannot spawn workers",
     });
     expect(dispatches).toHaveLength(0);
   });
