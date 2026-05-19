@@ -8,6 +8,8 @@ import {
 } from "@openomni/agent";
 import type { ChatAgentConfig, PolicyRegistration } from "@openomni/agent";
 import { Policy } from "@openomni/protocol";
+import type { InjectionQueue } from "./injection-queue.js";
+import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
 
 export interface WorkerMiddlewareConfig {
   permissions?: Policy.Permission;
@@ -17,6 +19,7 @@ export interface WorkerMiddlewareConfig {
   source?: string;
   includeLifecycle?: boolean;
   includeIdle?: boolean;
+  injectionQueue?: InjectionQueue.Instance;
 }
 
 const FAIL_CLOSED_TOOL_PERMISSION: Policy.Permission = { action: "tool.call", denylist: ["*"] };
@@ -37,6 +40,7 @@ export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyReg
   return [
     ...lifecycleMiddleware,
     ...(policyPlanMiddleware ?? buildLegacyPermissionMiddleware(config)),
+    ...(config.injectionQueue ? [createInjectionQueueDrainPolicy(config.injectionQueue)] : []),
     ...(shouldAppendIdleNudge(config, policyPlanMiddleware) ? [createIdleNudgePolicy()] : []),
   ];
 }
