@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779260686614,
+  "lastUpdate": 1779282880029,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -1487,6 +1487,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 399236,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "34b731b0d86aaec09cc4200bb195a8bdbd3ac681",
+          "message": "docs: overhaul public documentation and terminology (#186)\n\n* docs: move internal docs to .local.md (untracked)\n\nRemove golden-principles, repository-guidelines, observability-doctrine,\npolicy-kernel-spec, and quality-score from committed docs. These are\ninternal development references, not public-facing documentation.\nContent preserved as .local.md files (gitignored).\n\n* docs: replace persona-workforce with core-model\n\nRemove persona-workforce.md (old Main Persona / Sub Persona terminology)\nand replace with core-model.md using new product vocabulary:\nResident, Worker, System Governor.\n\nCovers: single Resident, Workers as applications, System Governor,\ncontrolled inbound authority, execution layers, session hygiene,\nworker lifecycle, memory readiness, and terminology mapping table.\n\n* docs: update design-philosophy for new terminology\n\nReplace Main Persona with Resident, workers with Workers (capital W),\nadd System Governor as the driver of the compounding loop.\nRemove 'What OpenOmni Is' section (now covered by README).\nTighten from 86 to 82 lines.\n\n* docs: rewrite README for new product model\n\nReplace implementation-heavy README with conceptual entry point.\nNew terminology (Resident, Worker, System Governor) throughout.\nRemove System Architecture, Documentation Map, runtime details.\nKeep Development commands and License. Add Further Reading links.\n\n* docs: add CONTRIBUTING.md\n\nMinimal contributing guide: prerequisites, setup, dev commands,\ncode style, commit message format, architecture overview, license.\n\n* docs: update cross-references for new doc structure\n\nUpdate AGENTS.md, ADR-007, ADR-008, and protocol AGENTS.md to\nreference core-model.md instead of persona-workforce.md. Replace\nlinks to removed internal docs with .local.md references. Align\nproduct model table with Resident/Worker/Governor terminology.\n\n* docs: align remaining references with new terminology\n\nUpdate ADR-007, openomni AGENTS.md, and ingress-engine.md to use\nResident/Worker terminology instead of Main Persona/Sub Persona.\n\n* docs: add project evolution narrative to ADR index\n\nGroup ADRs into foundation, agent architecture, product model,\nand runtime capabilities phases. Add brief descriptions of how\neach phase built on the previous one.",
+          "timestamp": "2026-05-20T22:14:03+09:00",
+          "tree_id": "7180628b403b64c8c1303b7a1b15abbeb472a032",
+          "url": "https://github.com/INONONO66/openomni/commit/34b731b0d86aaec09cc4200bb195a8bdbd3ac681"
+        },
+        "date": 1779282879099,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 675.6089923317998,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 840.1345302405024,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1405.916200410684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.27731682410522,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 639.5469871196659,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451.6828790170303,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3096.1888352216292,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2529.3477842980096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11340.855749603465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5996.860578076484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2209,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9083,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 80909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 409544,
             "unit": "ns/op"
           }
         ]
