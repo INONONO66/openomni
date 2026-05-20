@@ -1,6 +1,6 @@
 # packages/session
 
-Session lifecycle, message/part storage, event bus, logs, telemetry, trace context, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`. In the persona workforce model, this package owns the durable substrate for original sessions, self-loop sessions, child persona sessions, and worker-run history.
+Session lifecycle, message/part storage, event bus, logs, telemetry, trace context, snapshots, artifacts, event log, surface-key routing, and worker-run records. Depends only on `@openomni/protocol`. In the workforce model, this package owns the durable substrate for original sessions, self-loop sessions, child Worker sessions, and worker-run history.
 
 ## STRUCTURE
 
@@ -47,7 +47,7 @@ src/
 - **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.complete()`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.setVerificationGate()`, `.areDependenciesMet()`, `.retry()`. Publishes `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed) on every mutation. Gracefully degrades when `Storage.Adapter.workItem` is absent. Terminal state transitions are validated (e.g. cannot complete a failed item without retry). `parentHash` is create-only immutable.
 - **WorkerRun**: Event-sourced via `Storage.Adapter.eventLog`. `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.listBySession()`. State transitions (e.g. `waiting_input → running`) increment `resumeCount`. Used by `SubagentRuntime` / `BackgroundManager` to persist subagent runs.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
-- **Persona session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child persona trees. Future work should add explicit metadata conventions before adding new storage shapes.
+- **Session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child Worker trees. Future work should add explicit metadata conventions before adding new storage shapes.
 
 ## ANTI-PATTERNS
 

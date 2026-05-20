@@ -51,7 +51,7 @@ src/
 
 The product model is documented in `docs/core-model.md`. Future schemas should live here when they become implementation work:
 
-- persona profile and lifecycle contracts;
+- Resident/Worker profile and lifecycle contracts;
 - inbound authority / actor role contracts;
 - self-loop session metadata;
 - distilled writeback records;

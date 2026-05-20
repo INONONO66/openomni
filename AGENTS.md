@@ -18,7 +18,7 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
-│   ├── llm/             # LLM abstraction: providers, auth (API key + OAuth), streaming, retry, token/cost tracking, provider transforms
+│   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — depends on session for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
@@ -106,7 +106,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
-| Resident | Always-on user-facing assistant | Ingress target agent + future persona policy |
+| Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
 | Worker | Delegated execution actor (internal agent, external AI, human) | `AgentRegistry`, `SubagentRuntime`, `WorkerRun` |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |

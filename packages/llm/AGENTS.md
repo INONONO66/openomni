@@ -1,6 +1,6 @@
 # packages/llm
 
-LLM provider abstraction. Handles auth (API key + OAuth), provider SDK wiring, streaming, retry, message conversion, token/cost tracking, and the `run()` entry point. Depends on `@openomni/protocol` and `@openomni/session`.
+LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, streaming, retry, message conversion, token/cost tracking, and the `run()` entry point. Depends on `@openomni/protocol` and `@openomni/session`.
 
 ## STRUCTURE
 
@@ -17,7 +17,7 @@ src/
 │   └── retry.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
 ├── auth/
 │   ├── storage.ts    # Auth namespace: get / set / remove / all (credential storage)
-│   └── registry.ts   # Provider auth registry (OAuth methods + API key paths)
+│   └── registry.ts   # Provider auth registry (API key + proxy paths)
 ├── provider/
 │   ├── index.ts      # Provider + ProviderTransform + ModelsDev namespaces
 │   └── provider.ts   # getSDK() + getLanguage() — maps Provider.Model to @ai-sdk/* instance
@@ -37,7 +37,7 @@ src/
 
 - **`run()` entry point**: Takes `RunInput` (messages, tools, system, model, toolExecutor, toolChoice, maxSteps, providerOptions), drives a Processor loop, and returns `Run.Outcome` via the injected `Sink`.
 - **Provider.Model**: Zod schema with capabilities, cost, limits, status. Built from `models.dev` data via `Provider.fromModelsDevModel()`. `Provider.listModels()` / `listProviders()` / `getProviderInfo()` surface catalog lookups.
-- **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "oauth", access, refresh, expires, accountId? }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.
+- **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.
 - **SDK wiring**: `getSDK(model, auth)` resolves to Anthropic / OpenAI / OpenAI-compatible. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key. Provider-specific behavior belongs in `provider/`, `auth/`, or `transform/`, not in call sites.
 - **Provider transforms** (`transform/index.ts`): `normalizeMessages()` filters empty blocks, sanitizes tool-call IDs, applies Anthropic ephemeral caching to the last two user/assistant messages. `variants(model)` exposes per-provider thinking / reasoning presets; `resolveVariant(model, variant?)` picks one.
 - **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink, onToolCall, createStream })`. `process()` returns `"stop" | "continue" | "compact"`. Accumulates `TextPart` / `ReasoningPart` / `ToolPart` and publishes through `Sink`.
