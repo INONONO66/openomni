@@ -3,6 +3,7 @@ import { mkdir, readdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { SkillManagerEntry, SkillManagerRoots } from "./manager";
 import {
+  assertSafeSkillId,
   isEnoent,
   resolveGlobalSkillsRoot,
   resolveLocalSkillsRoot,
@@ -59,6 +60,11 @@ export async function readLocalEntries(options: SkillManagerRoots): Promise<Skil
 
   const skills: SkillManagerEntry[] = [];
   for (const id of entries.sort((a, b) => a.localeCompare(b))) {
+    try {
+      assertSafeSkillId(id);
+    } catch {
+      continue;
+    }
     const path = skillPath(root, id);
     if (await Bun.file(path).exists()) {
       skills.push({ id, scope: "local", enabled: true, path });

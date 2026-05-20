@@ -36,7 +36,11 @@ export function parseSkillMarkdown(text: string): SkillMetadata {
       const previous = metadata[currentKey];
       const next = stripQuotes(continuation[1] ?? "");
       if (typeof previous === "string") {
-        metadata = assignSkillMetadata(metadata, currentKey, `${previous}\n${next}`);
+        metadata = assignSkillMetadata(
+          metadata,
+          currentKey,
+          previous.length === 0 ? next : `${previous}\n${next}`,
+        );
       }
       continue;
     }
