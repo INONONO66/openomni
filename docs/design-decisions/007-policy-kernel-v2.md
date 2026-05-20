@@ -40,7 +40,7 @@ The `audit.annotate` effect is the primary mechanism for policies to attach stru
 - **Determinism and replay**: policy evaluation must be based on request snapshots so decisions can be audited and replayed.
 - **Composable behavior**: effect arrays allow multiple policies to contribute compatible outcomes while preserving deny dominance.
 - **Interpreter-grade evolution**: versioned points and conformance fixtures make future changes explicit instead of silently changing behavior.
-- **Persona safety**: Main/Sub Persona authority, skill composition, MCP access, and worker delegation all need the same structural control plane.
+- **Authority safety**: Resident/Worker authority, skill composition, MCP access, and worker delegation all need the same structural control plane.
 
 ## Consequences
 

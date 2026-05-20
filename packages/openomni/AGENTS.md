@@ -1,6 +1,6 @@
 # packages/openomni
 
-Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add DAG utilities, inbound event handling, and a session-backed subagent runtime. This package is the future home for the Main Persona orchestration seams: controlled inbound authority, self-loop session creation, persona delegation, and distilled writeback.
+Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add DAG utilities, inbound event handling, and a session-backed subagent runtime. This package is the future home for Resident orchestration seams: controlled inbound authority, self-loop session creation, Worker delegation, and distilled writeback.
 
 ## Module Map
 
