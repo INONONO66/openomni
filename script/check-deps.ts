@@ -253,10 +253,10 @@ async function validateDeepImports(): Promise<string[]> {
   return violations;
 }
 
-// See docs/golden-principles.md for the full list.
+// See docs/golden-principles.local.md for the full list.
 
 // Allowed `as any` locations:
-// - protocol/error: sole exception per golden-principles.md #5
+// - protocol/error: sole exception per golden-principles.local.md #5
 // - remaining entries: pre-existing tech debt (do not extend)
 const ALLOWED_AS_ANY_FILES = new Set([
   "packages/protocol/src/error/index.ts",
@@ -304,14 +304,14 @@ async function validateGoldenPrinciples(): Promise<string[]> {
       // #5: No `as any` (except allowed files)
       if (!ALLOWED_AS_ANY_FILES.has(filePath) && /\bas\s+any\b/.test(line)) {
         violations.push(
-          `VIOLATION: ${filePath}:${lineNum} — \`as any\` detected. See docs/golden-principles.md #5`,
+          `VIOLATION: ${filePath}:${lineNum} — \`as any\` detected. See docs/golden-principles.local.md #5`,
         );
       }
 
       // #5: No @ts-ignore or @ts-expect-error
       if (/@ts-ignore|@ts-expect-error/.test(line)) {
         violations.push(
-          `VIOLATION: ${filePath}:${lineNum} — type suppression directive detected. See docs/golden-principles.md #5`,
+          `VIOLATION: ${filePath}:${lineNum} — type suppression directive detected. See docs/golden-principles.local.md #5`,
         );
       }
 
@@ -328,7 +328,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
         console.warn(`KNOWN: ${key} — empty catch block (tracked tech debt)`);
       } else {
         violations.push(
-          `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.md #5`,
+          `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.local.md #5`,
         );
       }
       emptyCatchMatch = emptyCatchPattern.exec(source);
@@ -342,7 +342,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
       !KNOWN_CATCHALL_FILES.has(filePath)
     ) {
       violations.push(
-        `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.md #7`,
+        `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.local.md #7`,
       );
     }
   }
@@ -357,8 +357,8 @@ const TRACKED_DOCS = [
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
   "packages/openomni/AGENTS.md",
-  "docs/golden-principles.md",
-  "docs/quality-score.md",
+  "packages/coordinator/AGENTS.md",
+  "apps/server/AGENTS.md",
 ];
 
 const STALE_THRESHOLD = 50; // commits since last modification
