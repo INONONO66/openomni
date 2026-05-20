@@ -47,9 +47,9 @@ src/
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
 - **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/session`.
 
-## FUTURE PERSONA CONTRACTS
+## FUTURE PRODUCT MODEL CONTRACTS
 
-The persona workforce direction is documented in `docs/persona-workforce.md`. Future schemas should live here when they become implementation work:
+The product model is documented in `docs/core-model.md`. Future schemas should live here when they become implementation work:
 
 - persona profile and lifecycle contracts;
 - inbound authority / actor role contracts;

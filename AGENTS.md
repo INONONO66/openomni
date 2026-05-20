@@ -5,9 +5,9 @@
 
 OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) for full rationale.
 
-The user primarily talks to one Main Persona, which manages specialized Sub Personas through controlled delegation, isolated sessions, and auditable lineage. The first user-facing domain persona is SNS / viral marketing; coding remains a first-class internal capability for automation and self-improvement. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
+The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
 
-Product direction lives in `docs/persona-workforce.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
+Product model lives in `docs/core-model.md`; the accepted architecture decision is [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md).
 
 ## STRUCTURE
 
@@ -85,12 +85,12 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | In-memory cron job registry; populated by `inbound_message` schedule action |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
-| Persona workforce direction | `docs/persona-workforce.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Main Persona, Sub Personas, self-loop sessions, controlled inbound authority |
+| Product model | `docs/core-model.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
 ## CONVENTIONS
 
-See [Golden Principles](docs/golden-principles.md) for hard coding invariants and [Repository Guidelines](docs/repository-guidelines.md) for operating rules, cleanup priorities, and documentation/test policy.
+Key coding invariants and repository operating rules are maintained as internal references (`.local.md` files, not committed).
 
 Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent extension.
 
@@ -98,17 +98,20 @@ Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object
 
 Ingress supports a single execution mode: `direct`. All inbound events dispatch through `handleDirect` to the coordinator.
 
-Target direction: the user and Main Persona may submit new inbound work; ordinary Sub Personas cannot create new top-level inbound work unless explicitly granted manager authority.
+Target direction: the user and Resident may submit new inbound work; ordinary Workers cannot create new top-level inbound work unless explicitly granted manager authority.
 
-## PERSONA WORKFORCE MODEL
+## PRODUCT MODEL
+
+> Product terminology: Resident (formerly Main Persona), Worker (formerly Sub Persona + external actors), System Governor (structural improvement layer). See `docs/core-model.md` for full model.
 
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
-| Main Persona | Default user-facing assistant and workforce manager | Ingress target agent + future persona policy |
-| Sub Persona | Specialized worker identity for a domain or role | `AgentRegistry`, `SubagentRuntime` |
+| Resident | Always-on user-facing assistant | Ingress target agent + future persona policy |
+| Worker | Delegated execution actor (internal agent, external AI, human) | `AgentRegistry`, `SubagentRuntime`, `WorkerRun` |
+| System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
-| Controlled inbound | Only user/Main/trusted managers create top-level work | Future `IngressEngine` authority policy |
-| Persona promotion | Temporary worker becomes persistent after repeated value | Future persona lifecycle schema |
+| Controlled inbound | Only user/Resident/trusted managers create top-level work | Future `IngressEngine` authority policy |
+| Worker promotion | Ephemeral worker becomes persistent after repeated value | Future lifecycle schema |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -139,7 +142,7 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 
 ## NOTES
 
-- README.md describes product direction, project architecture, dependency graph, and getting started.
+- README.md describes the product model and design philosophy. Architecture details live in internal docs.
 - `packages/protocol` publishes built `dist/` artifacts (`main: ./dist/index.js`). Other packages point `main` at source (`./src/index.ts`) for Bun's native TS support.
 - Lint + format via Biome (`biome.json`). No ESLint.
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.

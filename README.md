@@ -1,170 +1,74 @@
 # OpenOmni
 
-**Personal AI workforce infrastructure.**
+**An agent operating system built around a single permanent Resident, where failures make the system structurally stronger.**
 
-> ⚠️ This project is under active development.
+OpenOmni is a personal AI workforce built around one Resident. That Resident is always on — it understands the user's intent and context, handles what it can directly, and delegates everything else to Workers. Workers can be internal agents, external AI services, or people. From the system's perspective, they're all the same thing.
 
-OpenOmni is a runtime for managing AI personas as a personal workforce. The user talks primarily to one Main Persona. That Main Persona understands the user's goals, decides what should be handled directly, delegates specialized work to Sub Personas, and keeps the original user-facing session clean by isolating complex internal work in separate sessions.
+What makes OpenOmni different from a typical agent framework is where the improvement logic lives. The Resident doesn't reflect on itself or rewrite its own behavior. Instead, a separate low-privilege layer called the System Governor watches execution patterns, identifies recurring failures, and adjusts Policy and Skills to prevent them from happening again. The Resident stays focused on the user. The system gets better underneath it.
+
+This separation isn't just an architectural preference. It's the only way to build something you can trust over time.
+
+## What is OpenOmni?
+
+OpenOmni is a system for building an AI workforce one person can rely on for the long term.
+
+Most agent projects focus on making a single agent more capable. OpenOmni focuses on something different: creating the conditions where one Resident can work stably and reliably over months and years. The user has one relationship, with one Resident. That Resident decides what to handle directly and what to hand off. Workers — whether internal tools, other AI agents, or humans — are all treated the same way. They receive work, return results, and don't create new top-level work on their own.
+
+The goal isn't a smarter agent. It's a trustworthy one.
+
+## The Core Model
+
+### The Single Resident
+
+There's exactly one entity the user talks to. The Resident owns the relationship, understands accumulated context, and is responsible for every response the user sees. It doesn't expose internal complexity — Workers, failures, retries, and intermediate reasoning all stay out of the user-facing session.
+
+### Workers as Applications
+
+Everything except the Resident is a Worker. Internal subagents, external AI APIs, human collaborators — they're all the same abstraction. Workers receive a scoped task, execute it in isolation, and return a result. They don't have standing authority to create new inbound work.
+
+### The System Governor
+
+The System Governor is a separate, low-privilege layer that observes the system through the event bus. It reads execution records and failure patterns, then adjusts Policy and Skills to address root causes structurally. The Resident never has to think about self-improvement. The Governor handles it.
+
+## How Improvement Happens
+
+Recurring mistakes get encoded as Policy constraints so they can't happen again. Frequently repeated tasks get distilled into Skills or workflows so the Resident doesn't have to rediscover the same approach each time. Dangerous patterns get flagged and blocked before they cause damage.
+
+The key is that none of this requires the Resident to evaluate itself. Execution and judgment are separate. The entity that did the work doesn't grade it.
+
+## How Work Flows
+
+All work enters the system through a single ingress point. There's no side channel, no direct worker invocation from outside. This keeps authority boundaries clean.
+
+When a request arrives, the Resident decides how to handle it. Simple requests get answered directly in the user session. More complex work gets delegated to a Worker, which runs in an isolated session with a scoped context. The Worker completes its task and returns a result. The Resident integrates that result, decides what the user needs to see, and responds. The user never sees the Worker's internal process — only the distilled outcome.
+
+This delegation chain can go deeper. Workers can spawn sub-workers for specialized subtasks. But the authority to create new top-level inbound work stays with the user and the Resident. Workers return results; they don't generate new mandates.
 
 ## Design Philosophy
 
-OpenOmni is built on the premise that agent capability is no longer the bottleneck — reliability is. Models can research, draft, schedule, and execute. What they cannot do reliably is verify their own work, accumulate evidence from past executions, or operate within constraints they cannot circumvent.
-
-Three principles guide every design decision:
-
-- **Experience is judgment.** Agent decisions are grounded in accumulated outcome evidence, not in pattern-matching from training data. Operational knowledge shapes strategy; outcome evidence grounds truth.
-- **Structure determines behavior.** Agent capabilities are bounded by schemas and guardrails, not by instructions. The same structure that constrains agents also serves as their map of the system — enabling self-extension without code changes.
-- **Execution and judgment are separate concerns.** The agent that performed the work does not evaluate it. Structural checks are deterministic. Semantic evaluation happens in an independent context.
+Agent capability is no longer the bottleneck — reliability is. OpenOmni is built on three principles: reliability over raw capability, structure over instructions, and strict separation between execution and judgment.
 
 → [Design Philosophy](docs/design-philosophy.md)
 
-## Product Model
+## Current Status
 
-```txt
-User
-  ↕
-Main Persona
-  ├─ SNS / Viral Marketing Persona
-  ├─ Coding Persona
-  ├─ Research Persona
-  ├─ Reviewer Persona
-  └─ Future domain personas
-```
-
-The Main Persona is the relationship owner and workforce manager. Sub Personas are specialized workers. The user may target a specific persona directly, but ordinary Sub Personas cannot recursively create new top-level inbound work unless they are explicitly trusted as manager personas.
-
-The first user-facing domain is SNS and viral marketing. Coding remains a first-class internal capability because the system must build automations, improve tooling, and maintain itself.
-
-## Core Runtime Ideas
-
-### Main Persona as the default interface
-
-The user should not need to pick the right worker for every request. The Main Persona receives the request, decides whether it is simple or complex, chooses the right execution layer, and reports back with the distilled result.
-
-### Controlled inbound authority
-
-OpenOmni treats inbound work as an authority boundary.
-
-```txt
-External inbound
-  User / surface / API → IngressEngine → target persona
-
-Internal inbound
-  Main Persona → inbound.submit → IngressEngine → new work item
-```
-
-The user and Main Persona can create new inbound work. Normal Sub Personas return results and suggestions, but they cannot create new top-level work by default. This prevents unmanaged recursive task growth.
-
-### Three-layer execution
-
-| Layer | Name | Used when | Session behavior |
-| --- | --- | --- | --- |
-| 1 | Direct | The Main Persona can answer or act directly | Original session only |
-| 2 | Delegate | A specialized Sub Persona should handle the task | Child persona session |
-| 3 | Fork | The task needs deeper reasoning, planning, or multi-persona coordination | Isolated self-loop session |
-
-Layer 3 is not just a background job. It is a separate internal work session where the request can be restated, refined, debated, delegated, reviewed, and then written back as a clean result.
-
-### Session hygiene
-
-The original user session is the relationship and decision record. Internal thinking, failed attempts, worker transcripts, and experiments belong in child or self-loop sessions. This keeps the Main Persona's user-facing context readable and auditable.
-
-### Persona lifecycle
-
-Sub Personas can start as temporary workers. If a worker is repeatedly useful, its role can become a persistent persona.
-
-```txt
-ephemeral worker
-  → repeated useful work
-  → persona candidate
-  → evaluation
-  → approval or policy acceptance
-  → persistent persona
-```
-
-This lets OpenOmni grow a useful workforce without making every generated worker permanent.
-
-### Memory-ready design
-
-OpenOmni is designed to be integrated with [Anamnesis](https://github.com/inonono66/anamnesis), an associative cognitive graph engine. OpenOmni should provide session lineage, provenance, worker records, and memory candidates. Anamnesis can later decide how verified experience becomes long-term memory.
-
-Raw chat history is not treated as behavioral memory by default. Durable memory should be scoped, attributed, and reviewable.
-
-## System Architecture
-
-OpenOmni is a TypeScript monorepo powered by [Bun](https://bun.sh) and [Turborepo](https://turborepo.dev).
-
-```txt
-openomni/
-├── apps/
-│   └── server/          # Hono server with Discord / Telegram / GitHub / WebSocket channels
-├── packages/
-│   ├── protocol/        # Shared Zod schemas and cross-package contracts
-│   ├── session/         # Sessions, messages, storage, bus, event log, worker runs
-│   ├── llm/             # Model providers, auth, streaming, retry, token/cost tracking
-│   ├── agent/           # Stateless ChatAgent primitive, middleware, messenger, registry, tools, MCP
-│   ├── openomni/        # Ingress, DAG, subagent runtime, background manager, execution runtime
-│   └── coordinator/     # Worker pool, IPC, recovery, credentials, tool-permission policy
-```
-
-### Dependency graph
-
-```txt
-protocol ← session ← llm ← agent ← openomni ← coordinator ← server
-```
-
-Each package depends only on packages to its left. `protocol` is the leaf with zero internal dependencies. `agent` owns execution behavior, not durable session state; sanctioned observability primitives may come from `session`. Session-backed orchestration belongs in `openomni`.
-
-### Runtime path
-
-```txt
-Surface event
-  → IngressEngine
-  → SurfaceKey / Session resolution
-  → message projection
-  → CoordinatorLike.dispatch
-  → worker execution runtime
-  → ChatAgent / SubagentRuntime
-  → result integration
-```
-
-Ingress supports a single execution mode:
-
-- **`direct`** — dispatches a persona run against session history and returns the response.
-
-## Documentation Map
-
-- [Design Philosophy](docs/design-philosophy.md) — why this project exists and the principles behind its design.
-- [Persona Workforce Direction](docs/persona-workforce.md) — product model, runtime concepts, persona lifecycle, and gaps.
-- [Golden Principles](docs/golden-principles.md) — package boundaries, dependency direction, and coding invariants.
-- [Repository Guidelines](docs/repository-guidelines.md) — operating rules for docs, tests, contract placement, and cleanup priorities.
-- [Observability Doctrine](docs/observability-doctrine.md) — Log, Bus, Telemetry, trace context, and sensitive data policy.
-- [Policy Kernel v2 Specification](docs/policy-kernel-spec.md) — resource/effect governance VM semantics and conformance requirements.
-- [Quality Score](docs/quality-score.md) — package quality status and known technical debt.
-- [Architecture Decision Records](docs/design-decisions/index.md) — design decisions that shaped this project.
-- [Daemon Packaging](packaging/README.md) — Linux systemd user-service installation and operations notes.
+The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, and the subagent runtime all function. The single-Resident operational model and the System Governor are early stage — the architectural foundations are in place, but the behavioral layer that makes them meaningful is still being built.
 
 ## Development
 
 ```bash
-# Install dependencies
 bun install
-
-# Build all packages
 bun run build
-
-# Run tests
 bun test
-
-# Type check
 bun run check-types
-
-# Check package boundaries and golden principles
-bun run script/check-deps.ts
-
-# Format
 bun run format
 ```
+
+## Further Reading
+
+- [Design Philosophy](docs/design-philosophy.md)
+- [Core Model](docs/core-model.md)
+- [Architecture Decision Records](docs/design-decisions/index.md)
 
 ## License
 

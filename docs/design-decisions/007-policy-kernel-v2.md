@@ -14,7 +14,7 @@ The product philosophy says structure determines behavior. Governance therefore 
 
 OpenOmni will define **Policy Kernel v2** as a resource/effect governance VM.
 
-The kernel is specified in [Policy Kernel v2 Specification](../policy-kernel-spec.md). The key model is:
+The kernel is specified in the Policy Kernel v2 Specification (internal reference: `docs/policy-kernel-spec.local.md`). The key model is:
 
 - `PolicyPoint` is a versioned ABI contract for a governance boundary. Points are identified by a **3-tier ID scheme**: `{tier1}.{tier2}.{tier3}`, where tier 1 is the resource domain (`tool`, `prompt`, `delegation`, `session`, `credential`, `connection`, `run`), tier 2 is the resource subtype, and tier 3 is the lifecycle phase (`pre`, `post`, `error`). This 3-tier scheme is the primary point identification model going forward.
 - `RuntimeResource.Descriptor` is the canonical identity for governed tools, skills, MCP resources, workers, credentials, sessions, and other runtime capabilities. All tools share `kind: "tool"` and are distinguished by `source.type` (`system`, `mcp`, `skill`). This unified kind model keeps policy evaluation consistent across tool origins while preserving per-source routing.
@@ -40,7 +40,7 @@ The `audit.annotate` effect is the primary mechanism for policies to attach stru
 - **Determinism and replay**: policy evaluation must be based on request snapshots so decisions can be audited and replayed.
 - **Composable behavior**: effect arrays allow multiple policies to contribute compatible outcomes while preserving deny dominance.
 - **Interpreter-grade evolution**: versioned points and conformance fixtures make future changes explicit instead of silently changing behavior.
-- **Persona safety**: Main/Sub Persona authority, skill composition, MCP access, and worker delegation all need the same structural control plane.
+- **Authority safety**: Resident/Worker authority, skill composition, MCP access, and worker delegation all need the same structural control plane.
 
 ## Consequences
 

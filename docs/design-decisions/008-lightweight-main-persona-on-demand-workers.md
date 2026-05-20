@@ -6,7 +6,7 @@
 
 The current coordinator spawns a fixed pool of 8 worker processes at server startup. Each worker loads Bun + SQLite + LLM SDK, resulting in ~9 processes always running regardless of workload. This is excessive for a personal server.
 
-Meanwhile, the product direction (ADR-005, persona-workforce.md) calls for a Resident that handles conversation directly and delegates heavy work to specialized workers. The current architecture routes ALL execution through the coordinator, even simple conversation.
+Meanwhile, the product direction (ADR-005, `docs/core-model.md`) calls for a Resident that handles conversation directly and delegates heavy work to Workers. The current architecture routes ALL execution through the coordinator, even simple conversation.
 
 Comparable systems:
 - **Hermes**: single gateway process, in-process session management, lightweight

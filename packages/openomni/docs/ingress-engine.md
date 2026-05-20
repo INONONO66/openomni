@@ -20,13 +20,13 @@ InboundEvent
 
 Only `direct` mode exists. Delegated or asynchronous work is handled through `SubagentRuntime` / `BackgroundManager`.
 
-### Persona Workforce Direction
+### Controlled Inbound Authority
 
 Ingress is the authority boundary for work entering the runtime.
 
-- **External inbound**: user, surface, or API submits work to a target persona.
-- **Internal inbound**: the Main Persona or an explicitly trusted manager persona submits new work back through ingress.
-- **Ordinary Sub Personas**: should return results or suggestions; they should not create new top-level inbound work by default.
+- **External inbound**: user, surface, or API submits work to the Resident or a specific Worker.
+- **Internal inbound**: the Resident or an explicitly trusted manager Worker submits new work back through ingress.
+- **Ordinary Workers**: should return results or suggestions; they should not create new top-level inbound work by default.
 
 This authority model is target direction, not the full current implementation. When implemented, inbound authority checks should happen before work is projected into durable session history.
 
