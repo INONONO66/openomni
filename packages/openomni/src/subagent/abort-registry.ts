@@ -83,8 +83,8 @@ export function sweep(maxAgeMs: number = MAX_ENTRY_AGE_MS): number {
 }
 
 export function startSweep(intervalMs = 300_000): void {
-  sweepRefCount++;
   if (sweepTimer !== undefined) return;
+  sweepRefCount++;
   sweepTimer = setInterval(sweep, intervalMs);
 }
 

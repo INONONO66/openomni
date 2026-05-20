@@ -3,22 +3,22 @@ import type { Auth } from "@openomni/llm";
 import {
   AgentToolProvider,
   type BackgroundManager,
+  type InjectionQueue,
   SystemToolProvider,
   ToolProxyProvider,
   buildToolCatalog,
   buildWorkerMiddleware,
   buildWorkerChildRuntimeConfig,
-  createToolExecutor,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
-import { Execution, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Execution, type Ingress, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createContextMiddleware } from "../context/index";
-import { WorkerInternalTools } from "./worker-internal-tools";
 import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
+const WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS = 5 * 60_000;
 
 function buildDelegationAdmissionMiddleware(
   request: Execution.Request,
@@ -75,6 +75,81 @@ function abortableIpcCall<T>(
   });
 }
 
+function createWorkerInboundIngress(options: {
+  readonly server: WorkerRunIpcServer;
+  readonly ipcAuthToken: string;
+  readonly workerId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+}): {
+  ingest(
+    event: Ingress.InboundEvent,
+    context?: { readonly signal?: AbortSignal; readonly wait?: boolean },
+  ): Promise<Ingress.IngressResult>;
+} {
+  return {
+    async ingest(event, context) {
+      if (!context?.wait) {
+        throw new Error("worker inbound_message async delivery requires coordinator routing");
+      }
+      if (event.target?.kind !== "resident") {
+        throw new Error("worker inbound_message wait currently supports resident targets only");
+      }
+
+      const callId = crypto.randomUUID();
+      const payload =
+        typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
+      const cancelInboundWait = () => {
+        void options.server
+          .call(
+            "worker.inbound_wait_cancel",
+            { sessionId: options.sessionId, runId: options.runId, callId },
+            5_000,
+          )
+          .catch(() => undefined);
+      };
+
+      const raw = await abortableIpcCall(
+        () =>
+          options.server.call(
+            "worker.inbound_wait",
+            {
+              authToken: options.ipcAuthToken,
+              workerId: options.workerId,
+              sessionId: options.sessionId,
+              runId: options.runId,
+              callId,
+              payload,
+            },
+            WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
+          ),
+        context.signal,
+        cancelInboundWait,
+      );
+
+      if (raw === null || typeof raw !== "object") {
+        throw new Error("invalid worker.inbound_wait response");
+      }
+      const result = raw as { accepted?: unknown; output?: unknown; error?: unknown };
+      if (result.accepted !== true) {
+        throw new Error(
+          typeof result.error === "string" ? result.error : "worker.inbound_wait rejected",
+        );
+      }
+
+      return {
+        mode: "direct",
+        target: { kind: "resident" },
+        sessionId: options.sessionId,
+        result: {
+          output: typeof result.output === "string" ? result.output : "",
+          finishReason: "stop",
+        },
+      };
+    },
+  };
+}
+
 export interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
@@ -91,6 +166,7 @@ export namespace WorkerRunner {
     readonly activeRuns: WorkerRunState.ActiveRunRegistry;
     readonly bootstrapReady: Promise<void>;
     readonly backgroundManager: ReturnType<typeof BackgroundManager.create>;
+    readonly injectionQueue: InjectionQueue.Instance;
     readonly defaultWorkspaceRoot: string | undefined;
     readonly getBootstrap: () => WorkerBootstrap.Bootstrap | null;
     readonly resolveAuth: (provider: string) => Auth.Info | undefined;
@@ -106,11 +182,11 @@ export namespace WorkerRunner {
     const {
       params,
       ipcAuthToken,
-      workerId,
       server,
       activeRuns,
       bootstrapReady,
       backgroundManager,
+      injectionQueue,
       defaultWorkspaceRoot,
       getBootstrap,
       resolveAuth,
@@ -157,7 +233,7 @@ export namespace WorkerRunner {
       const controller = new AbortController();
 
       try {
-        activeRuns.set(runId, { sessionId, controller, inbox: [] });
+        activeRuns.set(runId, { sessionId, controller });
         server.notify("worker.run_started", { runId, sessionId });
         Bus.publish(Subagent.Events.WorkerRunStarted, {
           traceId,
@@ -268,6 +344,13 @@ export namespace WorkerRunner {
 
         const agentProvider = new AgentToolProvider({
           subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
+          ingressEngine: createWorkerInboundIngress({
+            server,
+            ipcAuthToken,
+            workerId: options.workerId,
+            sessionId,
+            runId,
+          }),
           middleware: buildDelegationAdmissionMiddleware(request),
           delegationContext: {
             depth: 0,
@@ -282,53 +365,11 @@ export namespace WorkerRunner {
         const agentTools = agentProvider.listTools();
         const proxyTools = mcpProxyProvider.listTools();
         const availableTools = [...systemTools, ...agentTools, ...proxyTools];
-        const internalTools = WorkerInternalTools.create({
-          runId,
-          sessionId,
-          server,
-          ipcAuthToken,
-          workerId,
-          activeRuns,
-        });
         const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
-        const internalToolExecutor = createToolExecutor({
-          tools: internalTools,
-          config: {
-            workspaceRoot,
-            runtime: {
-              sessionId,
-              runId,
-              agentName: request.agentName,
-              workspaceRoot,
-            },
-          },
-        });
-        const internalToolNames = new Set(
-          internalTools.flatMap((tool) => [tool.spec.name, tool.spec.name.replace(/\./g, "_")]),
-        );
-        const combinedToolExecutor = async (
-          call: Tool.Call,
-          context?: Tool.ExecutionContext,
-        ): Promise<Tool.Result> => {
-          if (internalToolNames.has(call.tool)) return internalToolExecutor(call, context);
-          if (toolExecutor) return toolExecutor(call, context);
-          return {
-            id: crypto.randomUUID(),
-            toolCallId: call.id,
-            output: `Unknown worker tool: ${call.tool}`,
-            isError: true,
-          };
-        };
-        const exposedTools = [
-          ...(tools ?? []),
-          ...internalTools.map((tool) => ({
-            ...tool.spec,
-            name: tool.spec.name.replace(/\./g, "_"),
-          })),
-        ];
+        const exposedTools = tools ?? [];
 
         toolsRef.tools = exposedTools;
-        toolsRef.toolExecutor = combinedToolExecutor;
+        toolsRef.toolExecutor = toolExecutor;
         catalogRef.catalog = buildToolCatalog([
           { tools: systemTools, source: "system" },
           { tools: agentTools, source: "agent" },
@@ -343,16 +384,17 @@ export namespace WorkerRunner {
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use ask_main when you need Resident guidance or approval; use check_inbox to read live messages delivered while this run is active.",
+            "Worker runtime tools: use inbound_message with wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
           ]
             .filter(Boolean)
             .join("\n\n"),
           tools: exposedTools,
-          toolExecutor: combinedToolExecutor,
+          toolExecutor,
           middleware: [
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
               permissions: request.permissions,
+              injectionQueue,
               ...(request.policyPlan ? { policyPlan: request.policyPlan } : {}),
             }),
           ],
@@ -452,6 +494,7 @@ export namespace WorkerRunner {
           error: errorMessage,
         });
       } finally {
+        injectionQueue.dispose(runId);
         activeRuns.delete(runId);
       }
     })();

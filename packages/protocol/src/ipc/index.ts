@@ -80,13 +80,14 @@ const methods = {
     }),
     result: z.object({ acknowledged: z.boolean(), error: z.string().optional() }),
   },
-  "worker.ask_main": {
+  "worker.inbound_wait": {
     params: z.object({
       authToken: z.string(),
       workerId: z.string(),
       sessionId: z.string(),
       runId: z.string().optional(),
-      question: z.string(),
+      callId: z.string().optional(),
+      payload: z.string(),
     }),
     result: z.object({
       requestId: z.string(),
@@ -173,7 +174,7 @@ const methods = {
       error: z.string().optional(),
     }),
   },
-  "worker.ask_main_cancel": {
+  "worker.inbound_wait_cancel": {
     params: z.object({
       runId: z.string().optional(),
       sessionId: z.string(),

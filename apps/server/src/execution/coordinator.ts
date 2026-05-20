@@ -1,8 +1,8 @@
 import { Execution, type Tool, type WorkerBootstrap } from "@openomni/protocol";
 import {
   createWorkerManager,
-  type AskMainParams,
-  type AskMainResult,
+  type InboundWaitParams,
+  type InboundWaitResult,
   type ToolCallContext,
   type WorkerManager,
   recoverInterruptedRuns as _recoverInterruptedRuns,
@@ -23,7 +23,7 @@ export type CoordinatorConfig = {
   socketDir?: string;
   bootstrap?: WorkerBootstrap.Bootstrap;
   toolDispatcher?: Map<string, ToolDispatchHandler>;
-  askResident?: (params: AskMainParams) => Promise<AskMainResult>;
+  askResident?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
 };
 
 export function buildToolDispatcher(providers: ToolProvider[]): Map<string, ToolDispatchHandler> {
@@ -70,7 +70,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     idleShutdownMs: config.workerIdleTimeoutMs,
     socketDir: config.socketDir,
     bootstrap: config.bootstrap,
-    onAskMain: config.askResident,
+    onInboundWait: config.askResident,
     onToolCall: toolDispatcher
       ? async (params, context?: ToolCallContext) => {
           const call: Tool.Call = {

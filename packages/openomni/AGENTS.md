@@ -10,13 +10,16 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
-| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool` |
+| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry` |
 
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
 - `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `direct` handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
+- `src/execution-runtime/tool/agent/tools/inbound-message.ts` is the `inbound_message` tool — a cross-sandbox IPC syscall that lets worker agents spawn, send, cancel, resume, or schedule messages to resident or worker agents. It replaces the legacy per-action tools. `wait=true` blocks until the target responds; `action=schedule` registers a cron job via `CronJobRegistry`.
+- `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
+- `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) is an in-memory registry of scheduled jobs. `CronAdapter` reads from it to fire periodic internal inbound events.
 - Persona workforce direction: `src/ingress/` remains the external/internal inbound seam, `src/subagent/` remains the child persona execution seam, and a future self-loop/writeback layer should live in this package rather than in `agent`.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.

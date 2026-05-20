@@ -241,6 +241,29 @@ describe("Ipc.Methods param schemas", () => {
     ).toBe(true);
   });
 
+  test("worker.inbound_wait params valid", () => {
+    expect(
+      Ipc.Methods["worker.inbound_wait"].params.safeParse({
+        authToken: "token",
+        workerId: "worker-1",
+        sessionId: "session-1",
+        runId: "run-1",
+        callId: "call-1",
+        payload: "Need approval",
+      }).success,
+    ).toBe(true);
+  });
+
+  test("worker.inbound_wait_cancel params valid", () => {
+    expect(
+      Ipc.Methods["worker.inbound_wait_cancel"].params.safeParse({
+        sessionId: "session-1",
+        runId: "run-1",
+        callId: "call-1",
+      }).success,
+    ).toBe(true);
+  });
+
   test("worker.tool_call_settled accepts optional auth token for version-skew tolerance", () => {
     expect(
       Ipc.Methods["worker.tool_call_settled"].params.safeParse({

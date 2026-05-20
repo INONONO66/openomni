@@ -13,8 +13,8 @@ export type {
 } from "./worker-pool";
 export { createWorkerManager, OnDemandWorkerManager } from "./worker-manager";
 export type {
-  AskMainParams,
-  AskMainResult,
+  InboundWaitParams,
+  InboundWaitResult,
   WorkerManager,
   WorkerManagerConfig,
   WorkerManagerStats,

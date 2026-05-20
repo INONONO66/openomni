@@ -8,6 +8,17 @@ const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 type ActorRecord = Record<string, unknown>;
 
+const workerControlActions = ["spawn", "send", "cancel", "resume", "schedule"] as const;
+type WorkerControlAction = (typeof workerControlActions)[number];
+
+const actionLabels: Record<WorkerControlAction, `action.${WorkerControlAction}`> = {
+  spawn: "action.spawn",
+  send: "action.send",
+  cancel: "action.cancel",
+  resume: "action.resume",
+  schedule: "action.schedule",
+};
+
 interface PreRunState {
   readonly input: unknown;
   readonly coordinator?: CoordinatorLike;
@@ -36,6 +47,39 @@ function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
     : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function actorRole(actor: ActorRecord | undefined): string {
+  return String(actor?.role ?? actor?.kind ?? actor?.type ?? "").toLowerCase();
+}
+
+function normalizeControlAction(value: unknown): WorkerControlAction | undefined {
+  if (typeof value !== "string") return undefined;
+  const action = value.toLowerCase();
+  return workerControlActions.includes(action as WorkerControlAction)
+    ? (action as WorkerControlAction)
+    : undefined;
+}
+
+function inputAction(input: unknown): WorkerControlAction | undefined {
+  const record = asRecord(input);
+  return normalizeControlAction(record?.action);
+}
+
+function getEventAction(event: Ingress.InboundEvent): WorkerControlAction | undefined {
+  const meta = asRecord(event.meta);
+  return (
+    normalizeControlAction(meta?.action) ??
+    inputAction(meta?.input) ??
+    inputAction(event.payload) ??
+    inputAction(asRecord(event.payload)?.input)
+  );
+}
+
 function targetRequiresCoordinator(target: Ingress.Target): boolean {
   return target.kind !== "resident";
 }
@@ -49,7 +93,7 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
   if (!actor) return false;
 
   const target = resolveTarget(event);
-  const role = String(actor.role ?? actor.kind ?? actor.type ?? "").toLowerCase();
+  const role = actorRole(actor);
   if (role === "user") return true;
   if (role === "resident") return true;
   if (role === "manager") return isTrustedManager(actor);
@@ -60,13 +104,70 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
 
 function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDecision {
   const target = resolveTarget(event);
+  const actor = getActor(event);
+  const role = actorRole(actor);
+  const eventAction = getEventAction(event);
   const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
   const resource = `ingress.${event.surface}.${targetKey(target)}`;
-  return PolicyDecision.fromEvaluation(
+  const resourceLabels = [
+    `surface.${event.surface}`,
+    `target.${target.kind}`,
+    ...(role ? [`actor.${role}`] : []),
+    ...(eventAction ? [actionLabels[eventAction]] : []),
+  ];
+  const decision = PolicyDecision.fromEvaluation(
     Policy.evaluate(
       {
         action,
         inputRules: [
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^worker\\.spawn$",
+            action: "deny",
+            reason: "worker cannot spawn workers",
+            priority: 4,
+          },
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^worker\\.cancel$",
+            action: "deny",
+            reason: "worker cannot cancel workers",
+            priority: 4,
+          },
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^worker\\.resume$",
+            action: "deny",
+            reason: "worker cannot resume workers",
+            priority: 4,
+          },
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^worker\\.schedule$",
+            action: "deny",
+            reason: "worker cannot schedule workers",
+            priority: 4,
+          },
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^resident\\.(spawn|send|cancel|resume|schedule)$",
+            action: "allow",
+            reason: "resident authorized for worker control action",
+            priority: 3,
+          },
+          {
+            toolPattern: resource,
+            field: "actionPermission",
+            pattern: "^worker\\.send$",
+            action: "allow",
+            reason: "worker authorized to send worker messages",
+            priority: 3,
+          },
           {
             toolPattern: resource,
             field: "authorized",
@@ -88,12 +189,18 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
       {
         action,
         resource,
-        actor: getActor(event),
-        input: { authorized: String(isAuthorizedTopLevelActor(event)) },
-        metadata: { mode: event.mode, surface: event.surface, target },
+        resourceLabels,
+        actor,
+        input: {
+          actionPermission: eventAction ? `${role}.${eventAction}` : "",
+          authorized: String(isAuthorizedTopLevelActor(event)),
+        },
+        metadata: { action: eventAction, mode: event.mode, surface: event.surface, target },
       },
     ),
   );
+
+  return { ...decision, factsUsed: resourceLabels };
 }
 
 function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {

@@ -13,13 +13,12 @@ export {
 export type { CoordinatorLike } from "./ingress";
 
 // Resident activation/runtime
-export { ResidentRuntime, createResidentWorkerTools } from "./resident";
+export { ResidentRuntime } from "./resident";
 export type {
   ResidentLifecycle,
   ResidentRuntimeOptions,
   ResidentRunContext,
   ResidentRunResult,
-  ResidentWorkerToolsOptions,
 } from "./resident";
 
 // Skill loader and activation
@@ -95,6 +94,8 @@ export {
   AgentToolProvider,
   ToolProxyProvider,
   SystemToolProvider,
+  CronJobRegistry,
+  InjectionQueue,
   Tool,
   WorkspaceLock,
   buildToolCatalog,
