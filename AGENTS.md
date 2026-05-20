@@ -106,7 +106,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
-| Resident | Always-on user-facing assistant | Ingress target agent + future persona policy |
+| Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
 | Worker | Delegated execution actor (internal agent, external AI, human) | `AgentRegistry`, `SubagentRuntime`, `WorkerRun` |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
