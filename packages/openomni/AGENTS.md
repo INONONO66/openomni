@@ -10,7 +10,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
-| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `createInboundMessageTool` |
+| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry` |
 
 ## Architecture
 
