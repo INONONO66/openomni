@@ -25,7 +25,11 @@ export function createInjectionQueueDrainPolicy(
 
       for (const response of pending) {
         if (response.injectToHistory === true && sessionId !== undefined) {
-          persistResponse(sessionId, agentName ?? "injection-queue", response);
+          try {
+            persistResponse(sessionId, agentName ?? "injection-queue", response);
+          } catch {
+            // storage failure must not abort the drain — effects still need to be emitted
+          }
         }
       }
 

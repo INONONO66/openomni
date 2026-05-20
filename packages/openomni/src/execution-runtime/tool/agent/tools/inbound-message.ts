@@ -74,12 +74,11 @@ function errorResult(call: Tool.Call, message: string, messageId?: string): Tool
 }
 
 function depthError(call: Tool.Call): Tool.Result {
-  return {
-    id: crypto.randomUUID(),
-    toolCallId: call.id,
-    output: `depth limit exceeded: inbound_message maxDepth is ${MAX_DEPTH}`,
-    isError: true,
-  };
+  return toolResult(
+    call,
+    { status: "error", error: `depth limit exceeded: inbound_message maxDepth is ${MAX_DEPTH}` },
+    true,
+  );
 }
 
 function actorFromInput(input: RuntimeInput): Ingress.ActorMetadata {
@@ -267,8 +266,16 @@ export function createInboundMessageTool(ingressEngine: InboundMessageIngress): 
       const event = eventFromInput(input, parsed);
 
       if (!parsed.wait) {
-        const ingest = ingressEngine.ingest(event, { wait: false });
-        ingest.catch(() => undefined);
+        try {
+          const ingest = ingressEngine.ingest(event, { wait: false });
+          ingest.catch(() => undefined);
+        } catch (error) {
+          return errorResult(
+            call,
+            error instanceof Error ? error.message : String(error),
+            event.id,
+          );
+        }
         return toolResult(call, { status: "sent", messageId: event.id });
       }
 

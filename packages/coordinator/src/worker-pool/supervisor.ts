@@ -282,7 +282,7 @@ export class WorkerSupervisor {
                 )
                 .catch((err: unknown) =>
                   this.respondAndForget(this.activeInboundWaitCalls, callId, active, {
-                    requestId,
+                    requestId: callId,
                     accepted: false,
                     error: err instanceof Error ? err.message : String(err),
                   }),
