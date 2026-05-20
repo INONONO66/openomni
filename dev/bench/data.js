@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779282880029,
+  "lastUpdate": 1779301683261,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -1611,6 +1611,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 409544,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "539234a70351ea561b92a727a916c739c1b515cd",
+          "message": "docs: update AGENTS.md files for new terminology and stale content (#187)\n\n* docs(session,openomni,server): update AGENTS.md terminology and modules\n\nsession: replace persona workforce terminology with Resident/Worker\nopenomni: add profile/ and resident/ to module map and deps\nserver: add resident profile subsystem documentation\n\n* docs(llm): remove stale OAuth references from AGENTS.md\n\nOAuth auth was removed; only api and proxy auth types remain.\nUpdate Auth.Info description and registry.ts comment.\n\n* docs: fix stale OAuth reference in root AGENTS.md\n\n* docs: fix remaining persona references in AGENTS.md files\n\n* chore: update check-deps tracked docs for new doc structure\n\nRemove deleted docs (golden-principles.md, quality-score.md) from\nTRACKED_DOCS. Add coordinator and server AGENTS.md. Update\ngolden-principles.md references to .local.md paths.",
+          "timestamp": "2026-05-21T03:27:35+09:00",
+          "tree_id": "4e5c15c33bb946ed52bf7097762351dc4408e281",
+          "url": "https://github.com/INONONO66/openomni/commit/539234a70351ea561b92a727a916c739c1b515cd"
+        },
+        "date": 1779301682834,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 701.9330221457896,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 824.9209562461708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1350.2418141799578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.05311449242714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 654.8560458415684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 483.90213109840226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3025.683579921833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2563.1572984750815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10090.187872061311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5904.680444024813,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2029,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 21049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7954,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1724,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 9126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 81916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 403824,
             "unit": "ns/op"
           }
         ]
