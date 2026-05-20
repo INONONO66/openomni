@@ -50,6 +50,8 @@ src/
 │   ├── types.ts          # AgentDefinition + factory types
 │   ├── model-resolution.ts # resolveRuntimeModel() — alias resolution for per-message models
 │   └── dev-agent/        # Default "dev" agent factory + prompt
+├── profile/
+│   └── resident.ts       # createResidentProfile() — file-based profile loader with hot reload
 ├── tool/
 │   ├── custom/           # CustomToolProvider — user-defined tool provider
 │   └── mcp/              # McpToolProvider — MCP-backed tool provider
@@ -134,6 +136,10 @@ Add a new channel by:
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
+
+## RESIDENT PROFILE
+
+`src/profile/resident.ts` provides `createResidentProfile()` which loads a Resident profile from `~/.openomni/profile/` (or `OPENOMNI_PROFILE_DIR`). It reads `SOUL.md` (persona identity), `MEMORY.md`, `USER.md`, and an optional JSON config. The profile is hot-reloaded on file change via `fs.watch`. The factory produces an `AgentDefinition` used by the bootstrap to register the Resident agent.
 
 ## CONTEXT SYSTEM
 

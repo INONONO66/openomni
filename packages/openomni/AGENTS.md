@@ -7,6 +7,8 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
+| `src/profile/` | Agent profile middleware (soul/user/memory from `~/.openomni/profiles/`) | `Profile` |
+| `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
@@ -15,12 +17,14 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 ## Architecture
 
 - `src/dag/` is structural only — it knows step topology, not runtime state.
+- `src/profile/` loads `SOUL.md`, `USER.md`, and `MEMORY.md` from the file system and injects them as `context.prepare` policy effects before agent execution.
+- `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
 - `src/ingress/` is the entry path for inbound events. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the `direct` handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
 - `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
 - `src/execution-runtime/tool/agent/tools/inbound-message.ts` is the `inbound_message` tool — a cross-sandbox IPC syscall that lets worker agents spawn, send, cancel, resume, or schedule messages to resident or worker agents. It replaces the legacy per-action tools. `wait=true` blocks until the target responds; `action=schedule` registers a cron job via `CronJobRegistry`.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
 - `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) is an in-memory registry of scheduled jobs. `CronAdapter` reads from it to fire periodic internal inbound events.
-- Persona workforce direction: `src/ingress/` remains the external/internal inbound seam, `src/subagent/` remains the child persona execution seam, and a future self-loop/writeback layer should live in this package rather than in `agent`.
+- Persona workforce direction: Resident orchestration seams: controlled inbound authority, self-loop session creation, Worker delegation, and distilled writeback.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.
 
@@ -28,6 +32,8 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 
 ```
 dag/                → no internal deps
+profile/            → @openomni/session + @openomni/agent + @openomni/protocol
+resident/           → @openomni/session + @openomni/agent + @openomni/llm
 runtime/            → @openomni/session + @openomni/agent (worker middleware, no bus transport)
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → no sibling deps
@@ -41,6 +47,8 @@ subagent/           → execution-runtime/ (uses @openomni/agent + @openomni/ses
 Consumers should only use `@openomni/openomni` exports:
 
 - DAG helpers from `src/dag/`
+- Profile middleware from `src/profile/`
+- Resident runtime from `src/resident/`
 - Ingress orchestration from `src/ingress/`
 
 - Subagent runtime + background manager from `src/subagent/`
@@ -53,7 +61,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface.
 - Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 - Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.
-- Add persona workforce orchestration here when implementing persona runtime contracts: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
+- Add Resident/Worker orchestration here when implementing product model contracts: authority checks near ingress, self-loop creation near session-backed orchestration, and distilled writeback near `SessionBridge`.
 
 ## What This Package Is Not
 
@@ -64,6 +72,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 ## Domain Docs
 
 - `src/dag/AGENTS.md` — dependency-graph helpers
+- `src/profile/AGENTS.md` and `src/resident/AGENTS.md` do not exist yet; these are intentionally small modules.
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
 - `src/subagent/AGENTS.md` — session-backed subagent runtime and background manager
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware
