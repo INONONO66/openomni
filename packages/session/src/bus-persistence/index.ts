@@ -173,18 +173,23 @@ function defaultResolveSessionId(
   const root = toRecord(payload);
   if (!root) return undefined;
 
-  const direct = stringFromRecord(root, "sessionId") ?? stringFromRecord(root, "id");
+  const direct = sessionIdFromRecord(root) ?? stringFromRecord(root, "id");
   if (direct !== undefined) return direct;
 
   const nestedPayload = toRecord(root.payload);
   const nested = nestedPayload
-    ? (stringFromRecord(nestedPayload, "sessionId") ??
-      stringFromRecord(nestedPayload, "parentSessionId"))
+    ? (sessionIdFromRecord(nestedPayload) ?? stringFromRecord(nestedPayload, "parentSessionId"))
     : undefined;
   if (nested !== undefined) return nested;
 
   const info = toRecord(root.info);
-  return info ? stringFromRecord(info, "id") : undefined;
+  return info ? (sessionIdFromRecord(info) ?? stringFromRecord(info, "id")) : undefined;
+}
+
+function sessionIdFromRecord(record: Record<string, unknown> | undefined): string | undefined {
+  // Bus payloads historically use both spellings: newer event envelopes prefer
+  // sessionId, while message/snapshot payloads use sessionID.
+  return stringFromRecord(record, "sessionId") ?? stringFromRecord(record, "sessionID");
 }
 
 function parsePayload(event: Bus.PublishedDescriptor, payload: unknown): unknown {

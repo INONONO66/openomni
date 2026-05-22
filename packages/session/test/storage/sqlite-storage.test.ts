@@ -287,6 +287,26 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.session.get("s1")).toEqual(session);
     });
 
+    test("get and list apply SessionInfo schema defaults to legacy rows", () => {
+      const legacySession = {
+        id: "legacy",
+        title: "Legacy Session",
+        model: { providerID: "test", modelID: "test-model" },
+        time: { created: 100, updated: 100 },
+      };
+
+      storageDb(adapter)
+        .query(
+          `INSERT INTO session (id, data, time_created, time_updated)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run("legacy", JSON.stringify(legacySession), 100, 100);
+
+      const expected = { ...legacySession, spawnDepth: 0 };
+      expect(adapter.session.get("legacy")).toEqual(expected);
+      expect(adapter.session.list()).toEqual([expected]);
+    });
+
     test("set: upsert overwrites existing session", () => {
       const session = makeSession("s1");
       adapter.session.set("s1", session);

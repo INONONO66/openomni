@@ -3,7 +3,9 @@ import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import { Bus, BusEvent } from "../../src/bus/index.js";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
+import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
+import { Snapshot } from "../../src/snapshot/index.js";
 import { Storage } from "../../src/storage/storage.js";
 import "../../src/storage/initialize.js";
 
@@ -59,6 +61,7 @@ describe("BusPersistence", () => {
   afterEach(() => {
     BusPersistence.stop();
     Bus.reset();
+    Snapshot.reset();
     Storage.reset();
   });
 
@@ -144,6 +147,35 @@ describe("BusPersistence", () => {
     expect(persisted).toHaveLength(5);
     expect(persisted.map((row) => JSON.parse(row.data).index)).toEqual([0, 1, 2, 3, 4]);
     expect(persisted.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("resolves snapshot events that use sessionID for session-scoped queries", async () => {
+    const session = createSession();
+
+    BusPersistence.start();
+    const snapshotID = Snapshot.track(session.id);
+    Snapshot.restore(session.id, snapshotID);
+    const persisted = await waitForRows(2);
+
+    expect(persisted.map((row) => row.event_type)).toEqual([
+      "snapshot.tracked",
+      "snapshot.restored",
+    ]);
+    for (const row of persisted) {
+      expect(row.session_id).toBe(session.id);
+      expect(JSON.parse(row.data)).toEqual({ sessionID: session.id, snapshotID });
+    }
+    expect(persisted[0]).toMatchObject({
+      session_id: session.id,
+      event_type: "snapshot.tracked",
+      category: "snapshot",
+    });
+
+    const sessionEvents = await BusQuery.listBySession(session.id);
+    expect(sessionEvents.map((event) => event.eventType).sort()).toEqual([
+      "snapshot.restored",
+      "snapshot.tracked",
+    ]);
   });
 
   test("observer errors do not crash publishers", async () => {
