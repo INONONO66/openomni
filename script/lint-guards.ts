@@ -31,7 +31,7 @@ const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/subagent/middleware/background-limits.ts",
   "packages/agent/src/core/policy/builtin/messenger-allow-pattern.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
-  "apps/server/src/channel/channel-authn.ts",
+  "apps/server/src/channel/authn/decision.ts",
 ]);
 const approvedAuthorizationFiles = new Set([
   "packages/openomni/src/extension/manager.ts",

@@ -1,0 +1,37 @@
+import type { Adapter, Policy } from "@openomni/protocol";
+
+export type ChannelAuthnPolicyId = string;
+
+export interface ChannelAuthnDecision {
+  readonly timing: Policy.Timing;
+  readonly name: string;
+  readonly policyId: ChannelAuthnPolicyId;
+  readonly verdict: Policy.PolicyDecision["verdict"];
+  readonly reason: string;
+  readonly durationMs: number;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export type ChannelAuthnDecisionObserver = (decision: ChannelAuthnDecision) => void | Promise<void>;
+
+export interface WebSocketAuthResult {
+  readonly verdict: Policy.PolicyDecision;
+  readonly headers?: Record<string, string>;
+  readonly response?: Response;
+}
+
+export interface GitHubAuthResult {
+  readonly verdict: Policy.PolicyDecision;
+  readonly body?: string;
+  readonly response?: Response;
+}
+
+export interface ChannelTriggerAuthResult {
+  readonly verdict: Policy.PolicyDecision;
+}
+
+export interface ChannelTriggerAuthInput {
+  readonly triggers: Adapter.TriggerRule[];
+  readonly ctx: Adapter.TriggerContext;
+  readonly onDecision?: ChannelAuthnDecisionObserver;
+}
