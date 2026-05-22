@@ -307,6 +307,23 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.session.list()).toEqual([expected]);
     });
 
+    test("get rejects malformed legacy rows while applying SessionInfo defaults", () => {
+      const malformedLegacySession = {
+        title: "Malformed Legacy Session",
+        model: { providerID: "test", modelID: "test-model" },
+        time: { created: 100, updated: 100 },
+      };
+
+      storageDb(adapter)
+        .query(
+          `INSERT INTO session (id, data, time_created, time_updated)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run("malformed-legacy", JSON.stringify(malformedLegacySession), 100, 100);
+
+      expect(() => adapter.session.get("malformed-legacy")).toThrow();
+    });
+
     test("set: upsert overwrites existing session", () => {
       const session = makeSession("s1");
       adapter.session.set("s1", session);
