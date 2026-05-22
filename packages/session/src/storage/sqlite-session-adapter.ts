@@ -16,10 +16,6 @@ export function createSqliteSessionAdapter(db: Database): Storage.Adapter["sessi
     },
 
     set: (id: string, info: SessionInfo): void => {
-      const normalized = SessionInfo.parse(info);
-      const data = JSON.stringify(normalized);
-      rememberParsedSessionInfo(parseCache, data, data);
-
       db.query(
         `INSERT INTO session (id, data, time_created, time_updated)
          VALUES (?, ?, ?, ?)
@@ -27,7 +23,7 @@ export function createSqliteSessionAdapter(db: Database): Storage.Adapter["sessi
            data = excluded.data,
            time_created = excluded.time_created,
            time_updated = excluded.time_updated`,
-      ).run(id, data, normalized.time.created, normalized.time.updated);
+      ).run(id, JSON.stringify(info), info.time.created, info.time.updated);
     },
 
     list: (): SessionInfo[] => {
