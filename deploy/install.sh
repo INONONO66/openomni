@@ -9,29 +9,10 @@ source "${SCRIPT_DIR}/lib/paths.sh"
 source "${SCRIPT_DIR}/lib/bun.sh"
 source "${SCRIPT_DIR}/lib/service.sh"
 
-PORT=3000
-
 print_status_commands() {
   printf '%s\n' "systemctl --user status openomni"
   printf '%s\n' "journalctl --user -u openomni -f"
 }
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --port)
-      if [[ $# -lt 2 || "$2" == --* ]]; then
-        log_error "--port requires a value"
-        exit 1
-      fi
-      PORT="$2"
-      shift 2
-      ;;
-    *)
-      log_error "Unknown option: $1"
-      exit 1
-      ;;
-  esac
-done
 
 log_info "Installing OpenOmni"
 
@@ -81,6 +62,8 @@ cp "${SCRIPT_DIR}/systemd/openomni.service" "${SERVICE_DIR}/openomni.service"
 systemctl --user daemon-reload
 systemctl --user enable openomni
 start_service
+
+PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "${OPENOMNI_CONFIG}" | grep -o '[0-9]*$' || echo 3000)
 
 health_ok=0
 for _ in {1..15}; do
