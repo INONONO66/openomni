@@ -9,6 +9,12 @@ source "${SCRIPT_DIR}/lib/paths.sh"
 source "${SCRIPT_DIR}/lib/bun.sh"
 source "${SCRIPT_DIR}/lib/service.sh"
 
+if [[ -f "${OPENOMNI_CONFIG}" ]]; then
+  PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "${OPENOMNI_CONFIG}" | grep -o '[0-9]*$' || echo 3000)
+else
+  PORT=3000
+fi
+
 overall=0
 passed=0
 
@@ -86,19 +92,19 @@ else
   check_fail "Service active: ${SERVICE_NAME} is not running"
 fi
 
-if curl -sf --max-time 5 "http://127.0.0.1:3000/health" >/dev/null 2>&1; then
-  check_pass "Health endpoint: http://127.0.0.1:3000/health"
+if curl -sf --max-time 5 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+  check_pass "Health endpoint: http://127.0.0.1:${PORT}/health"
 else
-  check_fail "Health endpoint: http://127.0.0.1:3000/health did not respond"
+  check_fail "Health endpoint: http://127.0.0.1:${PORT}/health did not respond"
 fi
 
 if is_service_active >/dev/null 2>&1; then
   check_pass "Port conflict: skipped because ${SERVICE_NAME} is active"
 else
-  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
-    check_warn "Port conflict: port 3000 is already in use"
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
+    check_warn "Port conflict: port ${PORT} is already in use"
   else
-    check_pass "Port conflict: port 3000 is free"
+    check_pass "Port conflict: port ${PORT} is free"
   fi
 fi
 
