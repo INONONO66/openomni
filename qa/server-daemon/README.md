@@ -40,7 +40,7 @@ Checks whether the server daemon is responding on its health endpoint.
 
 **Expected output:**
 
-```
+```text
 PASS: OpenOmni is healthy on port 3000
 ```
 
@@ -71,7 +71,7 @@ Verifies that all expected artifacts of a successful install are present and the
 
 **Expected output:**
 
-```
+```text
 5/5 checks passed
 ```
 
@@ -100,7 +100,7 @@ Verifies clean removal after `./deploy/uninstall.sh`. Checks pass when artifacts
 
 **Expected output:**
 
-```
+```text
 3/3 checks passed
 ```
 
