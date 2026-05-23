@@ -17,14 +17,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
       if [[ $# -lt 2 ]]; then
-        echo "FAIL: OpenOmni is not responding on port ${PORT}"
+        echo "ERROR: --port requires a value"
         exit 1
       fi
       PORT="$2"
       shift 2
       ;;
     *)
-      echo "FAIL: OpenOmni is not responding on port ${PORT}"
+      echo "ERROR: Unknown argument: $1"
       exit 1
       ;;
   esac

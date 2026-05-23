@@ -4,6 +4,13 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+_config="${HOME}/.openomni/config.json"
+if [[ -f "${_config}" ]]; then
+  PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "${_config}" | grep -o '[0-9]*$' || echo 3000)
+else
+  PORT=3000
+fi
+
 overall=0
 passed=0
 
@@ -29,7 +36,7 @@ else
   smoke_fail "Service not active"
 fi
 
-if ! curl -sf --max-time 3 "http://127.0.0.1:3000/health" >/dev/null 2>&1; then
+if ! curl -sf --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
   smoke_pass "Health endpoint not responding"
 else
   smoke_fail "Health endpoint not responding"

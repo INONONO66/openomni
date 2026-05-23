@@ -5,6 +5,13 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 : "${SCRIPT_DIR}"
 
+_config="${HOME}/.openomni/config.json"
+if [[ -f "${_config}" ]]; then
+  PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "${_config}" | grep -o '[0-9]*$' || echo 3000)
+else
+  PORT=3000
+fi
+
 overall=0
 passed=0
 
@@ -27,7 +34,7 @@ check_service_active() {
 }
 
 check_health_endpoint() {
-  curl -sf --max-time 5 "http://127.0.0.1:3000/health" | grep -q '"ok":true'
+  curl -sf --max-time 5 "http://127.0.0.1:${PORT}/health" | grep -q '"ok":true'
 }
 
 check_config_file() {
