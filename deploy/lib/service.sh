@@ -43,14 +43,14 @@ __deploy_service_init_platform() {
 
 __deploy_service_mac_stub() {
   printf '%s\n' "macOS launchd support coming soon — use launchctl manually or wait for full launchd wiring" >&2
+  return 1
 }
 
 install_service() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user enable "${SERVICE_UNIT}"
@@ -60,8 +60,7 @@ uninstall_service() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user disable --now "${SERVICE_UNIT}"
@@ -71,8 +70,7 @@ start_service() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user start "${SERVICE_UNIT}"
@@ -82,8 +80,7 @@ stop_service() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user stop "${SERVICE_UNIT}"
@@ -93,8 +90,7 @@ is_service_active() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user is-active --quiet "${SERVICE_UNIT}"
@@ -104,8 +100,7 @@ service_status() {
   __deploy_service_init_platform
 
   if [[ "${OS}" == "macos" ]]; then
-    __deploy_service_mac_stub
-    return 0
+    __deploy_service_mac_stub || return 1
   fi
 
   systemctl --user status "${SERVICE_UNIT}"
