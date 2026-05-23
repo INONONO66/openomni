@@ -1,0 +1,30 @@
+{
+  "workspace": {
+    "root": "/path/to/your/workspace"
+  },
+  "mcp": {
+    "servers": []
+  },
+  "server": {
+    "port": 3000,
+    "host": "127.0.0.1",
+    "wsToken": "your-ws-auth-token"
+  },
+  "storage": {
+    "dbPath": "~/.openomni/storage.db"
+  },
+  "telegram": {
+    "token": "your-telegram-bot-token",
+    "allowedUsers": []
+  },
+  "github": {
+    "secret": "your-github-webhook-secret",
+    "token": "your-github-token",
+    "botUsername": "your-bot-username",
+    "allowedUsers": []
+  },
+  "discord": {
+    "token": "your-discord-bot-token",
+    "allowedUsers": []
+  }
+}

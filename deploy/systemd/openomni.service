@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenOmni Server
+After=network.target
+Documentation=https://github.com/openomni/openomni
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.openomni/app
+ExecStart=/usr/bin/env bun run apps/server/src/index.ts
+EnvironmentFile=-%h/.openomni/.env
+Environment=OPENOMNI_PROCESS=server
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=3
+StartLimitIntervalSec=60s
+MemoryMax=2G
+TasksMax=500
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openomni
+
+[Install]
+WantedBy=default.target
