@@ -34,8 +34,10 @@ check_config_file() {
   [ -f "${HOME}/.openomni/config.json" ]
 }
 
-check_app_dir() {
-  [ -d "${HOME}/.openomni/app" ]
+check_db_path() {
+  local db_dir
+  db_dir="$(dirname "${HOME}/.openomni/storage.db")"
+  [ -f "${HOME}/.openomni/storage.db" ] || [ -w "${db_dir}" ]
 }
 
 if check_service_unit; then
@@ -62,10 +64,10 @@ else
   smoke_fail "Config file exists"
 fi
 
-if check_app_dir; then
-  smoke_pass "App dir exists"
+if check_db_path; then
+  smoke_pass "DB file exists or path writable"
 else
-  smoke_fail "App dir exists"
+  smoke_fail "DB file exists or path writable"
 fi
 
 printf '%s/5 checks passed\n' "$passed"

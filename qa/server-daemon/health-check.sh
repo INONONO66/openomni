@@ -3,7 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-PORT=3000
+# Default port: read from ~/.openomni/config.json if available, else 3000
+_config="${HOME}/.openomni/config.json"
+if [[ -f "${_config}" ]] && command -v python3 >/dev/null 2>&1; then
+  PORT="$(python3 -c "import json,sys; d=json.load(open('${_config}')); print(d.get('server',{}).get('port',3000))" 2>/dev/null || echo 3000)"
+elif [[ -f "${_config}" ]]; then
+  PORT="$(grep -o '"port":[[:space:]]*[0-9]*' "${_config}" | grep -o '[0-9]*$' || echo 3000)"
+else
+  PORT=3000
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

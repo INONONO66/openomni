@@ -42,7 +42,7 @@ __deploy_service_init_platform() {
 }
 
 __deploy_service_mac_stub() {
-  printf '%s\n' "macOS launchd support coming soon" >&2
+  printf '%s\n' "macOS launchd support coming soon — use launchctl manually or wait for full launchd wiring" >&2
 }
 
 install_service() {
