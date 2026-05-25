@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779471338032,
+  "lastUpdate": 1779717714676,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -2107,6 +2107,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516734,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9eaa047b18a8886e252db86e15f218e0239f1ff6",
+          "message": "feat(openomni,server): add built-in resident prompt and make SOUL.md optional (#196)\n\n* feat(openomni): add resident agent prompt with model-specific variants\n\nResidentAgent namespace provides getPrompt({ model }) which selects\na Claude or GPT prompt variant based on the provider. Prompt sections\ncover identity, operating philosophy, philosophical alignment, workflow,\ndelegation, tool use, verification, and boundaries.\n\nExported from packages/openomni barrel as ResidentAgent.\n\n* feat(server): use built-in resident prompt, make SOUL.md optional\n\ncreateResidentProfile() now uses ResidentAgent.getPrompt({ model }) as\nthe base system prompt. SOUL.md is no longer required — when present it\noverlays onto the base prompt as a Soul section. USER.md, MEMORY.md, and\nconfig.yaml remain optional overlays.\n\nRemoves requiredText() since all profile files are now optional. Updates\ntests to verify built-in prompt fallback and Soul overlay behavior.\n\n* docs: update AGENTS.md for resident prompt domain\n\nAdd agents/resident/prompt/ to openomni module map, dependency shape,\nand public surface. Update server AGENTS.md to reflect SOUL.md is now\noptional with built-in prompt as base. Add WHERE TO LOOK entry in root.\nRemove stale storage/AGENTS.md.",
+          "timestamp": "2026-05-25T14:01:24Z",
+          "tree_id": "efb4992105c5d34490cc03802ca7d04eccfd6ffe",
+          "url": "https://github.com/INONONO66/openomni/commit/9eaa047b18a8886e252db86e15f218e0239f1ff6"
+        },
+        "date": 1779717713909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 754.325468246694,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 892.3728772722775,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1521.5439648221407,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50.581351472405345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 717.618435593795,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 473.9661304541971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3086.9336317334173,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2601.8243267856546,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11158.526608772987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6199.395387762461,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2362,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2475,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102959,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 548224,
             "unit": "ns/op"
           }
         ]
