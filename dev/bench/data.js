@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779717714676,
+  "lastUpdate": 1779722017806,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -2231,6 +2231,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 548224,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec8a0b324fd3a981e85bfcac24843aa78abc70b8",
+          "message": "feat(llm,server): proxy model discovery and improved default selection (#197)\n\n* feat(llm): add proxy model discovery via /v1/models\n\nWhen auth type is proxy, Provider.listModels() now queries the proxy\nendpoint /v1/models to discover available models. Results are cached\nwith a 5-minute TTL and enriched with models.dev catalog metadata.\n\nNon-bundled proxy providers fall back to @ai-sdk/openai instead of\n@ai-sdk/openai-compatible to avoid AI SDK 6 spec v1 rejection.\nRemove CODEX-only filter for openai proxy — proxy availability is\nthe filter now.\n\n* feat(server): select default model by release date\n\nresolveDefaultProviderModel() now sorts candidate models by\nrelease_date descending before picking the default, replacing the\nprevious arbitrary Object.values() ordering.\n\n* test(llm): update proxy model tests for CODEX filter removal\n\nProxy auth no longer restricts OpenAI models to CODEX-only list.\nUpdate assertions to reflect that all catalog models are returned\nfor both proxy and API auth types.",
+          "timestamp": "2026-05-25T15:13:04Z",
+          "tree_id": "93a62571a89ba52507634213070af5c1e95ba4c2",
+          "url": "https://github.com/INONONO66/openomni/commit/ec8a0b324fd3a981e85bfcac24843aa78abc70b8"
+        },
+        "date": 1779722017137,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 674.1950366085455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 778.6307277838246,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1312.6162711329837,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.103493901276956,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 630.6617643348815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 455.2205267805761,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2884.959034128722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2576.183368540321,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9288.504551365935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5995.468824939313,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 21617,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2496,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15377,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102427,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515974,
             "unit": "ns/op"
           }
         ]
