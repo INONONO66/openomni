@@ -1,6 +1,7 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ResidentAgent } from "@openomni/openomni";
 import type { AgentDefinition, AgentFactory, AgentPromptMetadata } from "../agents/types";
 
 const defaultProfileDir = path.join(os.homedir(), ".openomni", "profile");
@@ -17,7 +18,7 @@ export interface ResidentProfile {
 }
 
 interface ProfileSnapshot {
-  readonly soul: string;
+  readonly soul?: string;
   readonly memory?: string;
   readonly user?: string;
   readonly config: ResidentProfileConfig;
@@ -70,7 +71,7 @@ export async function createResidentProfile(
       name: "resident",
       description: snapshot.config.description ?? "Local Resident profile",
       model: options.model,
-      systemPrompt: renderPrompt(snapshot),
+      systemPrompt: renderPrompt(snapshot, options.model),
       tools: { categories: ["custom"] },
       budget: { maxTurns: snapshot.config.maxTurns ?? 20 },
     }),
@@ -93,9 +94,8 @@ function createWatchers(profileDir: string, listener: () => void): FSWatcher[] {
 }
 
 async function loadSnapshot(profileDir: string): Promise<ProfileSnapshot> {
-  const soul = await requiredText(path.join(profileDir, "SOUL.md"));
   return {
-    soul,
+    soul: await optionalText(path.join(profileDir, "SOUL.md")),
     config: await optionalConfig(path.join(profileDir, "config.yaml")),
     ...(await optionalText(path.join(profileDir, "USER.md")).then((user) =>
       user ? { user } : {},
@@ -104,16 +104,6 @@ async function loadSnapshot(profileDir: string): Promise<ProfileSnapshot> {
       memory ? { memory } : {},
     )),
   };
-}
-
-async function requiredText(filePath: string): Promise<string> {
-  const file = Bun.file(filePath);
-  if (!(await file.exists())) {
-    throw new Error(`resident profile requires ${filePath}`);
-  }
-  const text = (await file.text()).trim();
-  if (!text) throw new Error(`resident profile file is empty: ${filePath}`);
-  return text;
 }
 
 async function optionalText(filePath: string): Promise<string | undefined> {
@@ -170,9 +160,12 @@ function parseMaxTurns(value: string, filePath: string): number {
   return parsed;
 }
 
-function renderPrompt(snapshot: ProfileSnapshot): string {
+function renderPrompt(snapshot: ProfileSnapshot, model: AgentDefinition["model"]): string {
+  const base = ResidentAgent.getPrompt({ model });
+
   return [
-    snapshot.soul,
+    base,
+    snapshot.soul ? `\n## Soul\n${snapshot.soul}` : undefined,
     renderConfig(snapshot.config),
     snapshot.user ? `\n## User\n${snapshot.user}` : undefined,
     snapshot.memory ? `\n## Memory\n${snapshot.memory}` : undefined,

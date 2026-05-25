@@ -139,7 +139,7 @@ Add a new channel by:
 
 ## RESIDENT PROFILE
 
-`src/profile/resident.ts` provides `createResidentProfile()` which loads a Resident profile from `~/.openomni/profile/` (or `OPENOMNI_PROFILE_DIR`). It reads `SOUL.md` (persona identity), `MEMORY.md`, `USER.md`, and an optional JSON config. The profile is hot-reloaded on file change via `fs.watch`. The factory produces an `AgentDefinition` used by the bootstrap to register the Resident agent.
+`src/profile/resident.ts` provides `createResidentProfile()` which loads a Resident profile from `~/.openomni/profile/` (or `OPENOMNI_PROFILE_DIR`). The base system prompt comes from `ResidentAgent.getPrompt()` in `@openomni/openomni`, which selects a model-specific variant (Claude or GPT). Optional overlay files — `SOUL.md` (persona identity), `USER.md`, `MEMORY.md`, and `config.yaml` — are appended when present. None are required; without any files the built-in prompt is used as-is. The profile is hot-reloaded on file change via `fs.watch`. The factory produces an `AgentDefinition` used by the bootstrap to register the Resident agent.
 
 ## CONTEXT SYSTEM
 

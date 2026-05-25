@@ -20,10 +20,16 @@ async function createProfileDir(): Promise<string> {
 }
 
 describe("resident profile", () => {
-  it("requires SOUL.md", async () => {
+  it("works without SOUL.md using built-in prompt", async () => {
     const profileDir = await createProfileDir();
 
-    await expectProfileFailure(profileDir, "resident profile requires");
+    const profile = await createResidentProfile({ profileDir, model });
+    const agent = profile.factory();
+    profile.close();
+
+    expect(agent.name).toBe("resident");
+    expect(agent.systemPrompt).toContain("OpenOmni Resident");
+    expect(agent.systemPrompt).not.toContain("## Soul");
   });
 
   it("builds the resident agent from local profile files", async () => {
@@ -45,7 +51,8 @@ describe("resident profile", () => {
     expect(agent.name).toBe("resident");
     expect(agent.description).toBe("Local relationship owner");
     expect(agent.model).toEqual(model);
-    expect(agent.systemPrompt).toContain("You are the local resident.");
+    expect(agent.systemPrompt).toContain("OpenOmni Resident");
+    expect(agent.systemPrompt).toContain("## Soul\nYou are the local resident.");
     expect(agent.systemPrompt).toContain("## Profile\nName: Hermes");
     expect(agent.systemPrompt).toContain("## User\nThe user prefers Korean.");
     expect(agent.systemPrompt).toContain("## Memory\nRemember the current project.");
@@ -60,7 +67,7 @@ describe("resident profile", () => {
     const profile = await createResidentProfile({ profileDir, model });
     await Bun.write(path.join(profileDir, "SOUL.md"), "Updated soul.");
 
-    await waitFor(() => profile.factory().systemPrompt.includes("Updated soul."));
+    await waitFor(() => profile.factory().systemPrompt.includes("## Soul\nUpdated soul."));
     profile.close();
   });
 
@@ -88,14 +95,4 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await Bun.sleep(25);
   }
   throw new Error("timed out waiting for resident profile reload");
-}
-
-async function expectProfileFailure(profileDir: string, expected: string): Promise<void> {
-  try {
-    await createResidentProfile({ profileDir, model });
-  } catch (err) {
-    expect(err instanceof Error ? err.message : String(err)).toContain(expected);
-    return;
-  }
-  throw new Error("expected resident profile creation to fail");
 }
