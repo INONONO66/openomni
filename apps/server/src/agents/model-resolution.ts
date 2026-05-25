@@ -158,7 +158,7 @@ export async function resolveDefaultProviderModel(): Promise<CatalogModel | unde
     const [providerID, auth] = firstEntry;
     const authType = auth.type === "proxy" ? "proxy" : "api";
     const models = await Provider.listModels(providerID, authType);
-    const preferred = models[0];
+    const preferred = sortModels(models)[0];
     if (!preferred) return undefined;
     return resolveCatalogModel(preferred.id, models) ?? preferred;
   } catch (error) {

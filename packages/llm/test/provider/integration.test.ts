@@ -106,11 +106,10 @@ describe("Provider Integration", () => {
     expect(openaiModels.length).toBeGreaterThan(0);
   });
 
-  it("should filter OpenAI models by auth type", async () => {
+  it("should return all OpenAI models for both proxy and api auth types", async () => {
     const proxyModels = await Provider.listModels("openai", "proxy");
     expect(Array.isArray(proxyModels)).toBe(true);
-    expect(proxyModels.find((m) => m.id === "gpt-5.1-codex-max")).toBeDefined();
-    expect(proxyModels.find((m) => m.id === "gpt-4o")).toBeUndefined();
+    expect(proxyModels.length).toBeGreaterThan(0);
 
     const apiModels = await Provider.listModels("openai", "api");
     expect(Array.isArray(apiModels)).toBe(true);

@@ -78,14 +78,11 @@ describe("Provider Registry", () => {
       expect(models.length).toBeGreaterThan(0);
     });
 
-    it("should return filtered OpenAI models for proxy auth type", async () => {
+    it("should return OpenAI models for proxy auth type without CODEX filter", async () => {
       const models = await Provider.listModels("openai", "proxy");
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
-      expect(models.find((m) => m.id === "gpt-5.1-codex-max")).toBeDefined();
-      const nonCodexModel = models.find((m) => m.id === "gpt-4o");
-      expect(nonCodexModel).toBeUndefined();
     });
 
     it("should return all OpenAI models for API auth type", async () => {
