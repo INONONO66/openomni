@@ -21,6 +21,15 @@ export type {
   ResidentRunResult,
 } from "./resident";
 
+// Resident agent prompts
+export { ResidentAgent } from "./agents";
+export type {
+  ResidentPromptFamily,
+  ResidentPromptOptions,
+  ResidentPromptSections,
+  ResidentPromptVariant,
+} from "./agents";
+
 // Skill loader and activation
 export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
 export type {
