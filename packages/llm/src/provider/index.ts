@@ -2,7 +2,9 @@ import { z } from "zod";
 import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
+import { Auth } from "../auth/storage";
 import { fromModelsDevProvider, filterModels } from "./provider";
+import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
   export const Model = z.object({
@@ -169,6 +171,16 @@ export namespace Provider {
       });
     }
     const info = fromModelsDevProvider(provider);
+    if (authType === "proxy") {
+      const auth = await Auth.get(providerID);
+      if (auth?.type === "proxy") {
+        const proxyModelIds = await fetchProxyModels(auth.baseURL);
+        if (proxyModelIds.length > 0) {
+          return enrichWithCatalog(proxyModelIds, info.models, providerID);
+        }
+      }
+    }
+
     const models = Object.values(info.models);
     return filterModels(providerID, authType ?? "api", models);
   }
@@ -194,6 +206,8 @@ export {
   PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES,
   PROVIDER_SDK_CACHE_MAX_ENTRIES,
 } from "./provider";
+
+export { fetchProxyModels, enrichWithCatalog } from "./proxy-models";
 
 export { ModelsDev } from "../model";
 

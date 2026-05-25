@@ -88,11 +88,17 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
     if (!baseURL) {
       throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
     }
-    const sdk = createOpenAICompatible({
-      name: providerID,
-      baseURL,
-      apiKey: sdkOptions.apiKey,
-    });
+    const sdk =
+      auth.type === "proxy"
+        ? createOpenAI({
+            baseURL,
+            apiKey: sdkOptions.apiKey,
+          })
+        : createOpenAICompatible({
+            name: providerID,
+            baseURL,
+            apiKey: sdkOptions.apiKey,
+          });
     setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
     return sdk;
   }
@@ -203,8 +209,7 @@ export function filterModels(
   authType: "api" | "proxy",
   models: Provider.Model[],
 ): Provider.Model[] {
-  if (providerID === "openai" && authType === "proxy") {
-    return models.filter((m) => CODEX_ALLOWED_MODELS.has(m.id));
-  }
+  void providerID;
+  void authType;
   return models;
 }
