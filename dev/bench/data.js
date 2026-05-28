@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779722017806,
+  "lastUpdate": 1779967164415,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -2355,6 +2355,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515974,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2101f54cb495a9ac1c60fbec0797c30f581d79d8",
+          "message": "feat(protocol,server,openomni): add config-driven model and providerOptions override (#198)\n\n* feat(protocol,server): add model override to server config\n\nAllow config.json to specify model.provider, model.id, and\nmodel.providerOptions. resolveModel() prefers the explicit config\nover catalog auto-selection, enabling pinned model + reasoning\neffort without code changes.\n\n* feat(server): thread providerOptions through ingress bridge\n\nBridgeDeps accepts providerOptions and spreads it onto AgentDef.\nWorker runner forwards request.providerOptions to ChatAgent.create()\nso the AI SDK receives reasoning effort and similar settings.\n\n* feat(openomni): propagate providerOptions to agent execution\n\nbuildExecutionRequest() copies providerOptions from AgentDef into\nExecution.Request. ResidentRuntime.buildAgentConfig() reads the\npassthrough field and forwards it to ChatAgentConfig so both\nresident and worker paths honour the configured reasoning effort.",
+          "timestamp": "2026-05-28T20:18:57+09:00",
+          "tree_id": "b96f28fb29dc6a6dcfeebd1e1e94e4f66ac4652b",
+          "url": "https://github.com/INONONO66/openomni/commit/2101f54cb495a9ac1c60fbec0797c30f581d79d8"
+        },
+        "date": 1779967164019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 700.1947933733602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 856.607589515103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1302.0090749303388,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 46.93924044809387,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 621.8260518101217,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 442.56920877697377,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2803.477082223293,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2506.145377540718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10148.345849401454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5860.295417252295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 21193,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2395,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1623,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10882,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513616,
             "unit": "ns/op"
           }
         ]
