@@ -130,7 +130,7 @@ export async function main(): Promise<void> {
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
   );
-  const model = await resolveModel();
+  const model = await resolveModel(config);
   const residentProfile = model
     ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
     : undefined;
@@ -144,6 +144,7 @@ export async function main(): Promise<void> {
         mcpProvider,
         customProvider,
         defaultModel: model ? { provider: model.providerID, id: model.id } : undefined,
+        providerOptions: config.model?.providerOptions,
         workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
       }),
   });
@@ -213,6 +214,7 @@ export async function main(): Promise<void> {
             mcpProvider,
             customProvider,
             defaultModel: { provider: model.providerID, id: model.id },
+            providerOptions: config.model?.providerOptions,
             workspaceRoot: config.workspace?.root ?? process.cwd(),
           }),
         });
