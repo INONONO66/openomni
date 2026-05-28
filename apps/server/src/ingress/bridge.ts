@@ -12,6 +12,7 @@ export interface BridgeDeps {
   mcpProvider: ToolListProvider;
   customProvider?: { listTools(): NativeTool[] };
   defaultModel?: { provider: string; id: string };
+  providerOptions?: Record<string, unknown>;
   workspaceRoot: string;
 }
 
@@ -63,6 +64,7 @@ function buildAgentDefFromEntries(
           runtime: { sessionId, runId, agentName, workspaceRoot },
         },
       }),
+    ...(deps.providerOptions ? { providerOptions: deps.providerOptions } : {}),
   };
 }
 

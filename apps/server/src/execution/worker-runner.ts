@@ -390,6 +390,7 @@ export namespace WorkerRunner {
             .join("\n\n"),
           tools: exposedTools,
           toolExecutor,
+          ...(request.providerOptions ? { providerOptions: request.providerOptions } : {}),
           middleware: [
             createContextMiddleware({ workspaceRoot: workspaceRoot ?? process.cwd() }),
             ...buildWorkerMiddleware({
