@@ -22,6 +22,7 @@ const requestSchema = z.object({
   workspaceRoot: z.string().optional(),
   middleware: z.array(z.string()).optional(),
   policyPlan: Policy.PolicyPlan.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
   traceId: z.string().optional(),
 });
 
