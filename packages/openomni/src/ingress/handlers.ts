@@ -226,6 +226,8 @@ export namespace IngressHandlers {
       budget: ctx.event.agent.budget,
       workspaceRoot: ctx.event.agent.toolConfig?.workspaceRoot,
       policyPlan: ctx.event.agent.policyPlan,
+      providerOptions: (ctx.event.agent as { providerOptions?: Record<string, unknown> })
+        .providerOptions,
       traceId: ctx.traceContext?.traceId,
       agentName:
         typeof ctx.event.meta?.agentName === "string" ? ctx.event.meta.agentName : undefined,

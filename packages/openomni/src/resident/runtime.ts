@@ -255,6 +255,9 @@ export class ResidentRuntime {
         })
       : ctx.event.agent.toolExecutor;
 
+    const agentProviderOptions = (ctx.event.agent as { providerOptions?: Record<string, unknown> })
+      .providerOptions;
+
     return {
       model: ctx.event.agent.model,
       systemPrompt: ctx.event.agent.systemPrompt,
@@ -264,6 +267,7 @@ export class ResidentRuntime {
         | ((call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>)
         | undefined,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
+      ...(agentProviderOptions ? { providerOptions: agentProviderOptions } : {}),
       middleware: buildWorkerMiddleware({
         permissions: ctx.event.agent.permissions,
         ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
