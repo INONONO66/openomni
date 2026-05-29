@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779967164415,
+  "lastUpdate": 1780075501864,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -2479,6 +2479,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513616,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eac1bce0328ea285b2c09d8f33fbe600476d147d",
+          "message": "feat(session): add SHA-256 hash chain for tamper-evident event log (#202)\n\n* feat(session): add SHA-256 hash chain for tamper-evident event log\n\nEach persisted bus event now includes prev_hash and event_hash columns\nforming a session-scoped hash chain. A separate append-only event_chain\ntable preserves integrity proofs even after CASCADE deletes on bus_event.\n\nBusQuery gains verifyChainIntegrity() to walk the chain and detect\ntampering, and listAuditChain() to read the durable audit trail.\n\n* refactor(session): squash migrations into single schema\n\nNo existing users so incremental migrations are unnecessary overhead.\nRemoves compatApplied/compatInsert from migration runner since there\nare no legacy compat scenarios to handle.\n\n* fix(session): address review feedback on hash chain\n\nWrap bus_event + event_chain inserts in a single transaction to\nprevent inconsistent state on partial failure. Make sessionId\noptional in verifyChainIntegrity to support sessionless events.\nDocument threat model limitations in hash utility.",
+          "timestamp": "2026-05-30T02:24:36+09:00",
+          "tree_id": "67e02f1c3329c8edd1fc18fda97e8b242a62d802",
+          "url": "https://github.com/INONONO66/openomni/commit/eac1bce0328ea285b2c09d8f33fbe600476d147d"
+        },
+        "date": 1780075501517,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 949.9153741676352,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 816.8580063879117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1389.2766007696632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 49.59350652699947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 675.631437064996,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 475.2656635411528,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2998.253920187116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2659.3723107201295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9724.367269543944,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6422.694367735404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 26868,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 17316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 765,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 519766,
             "unit": "ns/op"
           }
         ]
