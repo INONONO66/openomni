@@ -18,9 +18,11 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0007_todo_fk_idempotency_idx/migration.sql" },
   { name: "0008_unified_observability/migration.sql" },
   { name: "0009_work_item/migration.sql" },
+  { name: "0010_hash_chain/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
+  "event_chain",
   "worker_run_state",
   "bus_event",
   "background_task",

@@ -1,0 +1,359 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { z } from "zod";
+import { Bus, BusEvent } from "../../src/bus/index.js";
+import { BusPersistence } from "../../src/bus-persistence/index.js";
+import { BusQuery } from "../../src/bus-persistence/query.js";
+import { GENESIS_SEED, computeEventHash } from "../../src/bus-persistence/hash.js";
+import { Session } from "../../src/session/index.js";
+import { Storage } from "../../src/storage/storage.js";
+import "../../src/storage/initialize.js";
+
+interface BusEventRow {
+  readonly id: number;
+  readonly session_id: string | null;
+  readonly event_type: string;
+  readonly data: string;
+  readonly trace_id: string;
+  readonly time_created: number;
+  readonly prev_hash: string | null;
+  readonly event_hash: string | null;
+}
+
+interface EventChainRow {
+  readonly seq: number;
+  readonly session_id: string | null;
+  readonly event_type: string;
+  readonly event_hash: string;
+  readonly prev_hash: string;
+  readonly time_created: number;
+}
+
+function db(): Database {
+  return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
+}
+
+function busRows(sessionId?: string): BusEventRow[] {
+  if (sessionId) {
+    return db()
+      .query("SELECT * FROM bus_event WHERE session_id = ? ORDER BY id ASC")
+      .all(sessionId) as BusEventRow[];
+  }
+  return db().query("SELECT * FROM bus_event ORDER BY id ASC").all() as BusEventRow[];
+}
+
+function chainRows(sessionId?: string): EventChainRow[] {
+  if (sessionId) {
+    return db()
+      .query("SELECT * FROM event_chain WHERE session_id = ? ORDER BY seq ASC")
+      .all(sessionId) as EventChainRow[];
+  }
+  return db().query("SELECT * FROM event_chain ORDER BY seq ASC").all() as EventChainRow[];
+}
+
+async function flushPersistence(): Promise<void> {
+  await new Promise((resolve) => queueMicrotask(resolve));
+  await new Promise((resolve) => queueMicrotask(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function waitForRows(expectedCount: number): Promise<BusEventRow[]> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const current = busRows();
+    if (current.length >= expectedCount) return current;
+    await flushPersistence();
+  }
+  return busRows();
+}
+
+function createSession(): ReturnType<typeof Session.create> {
+  return Session.create({
+    title: "hash chain test",
+    model: { providerID: "test", modelID: "test-model" },
+  });
+}
+
+const testEvent = BusEvent.define(
+  "test.hash.event",
+  z.object({
+    sessionId: z.string(),
+    traceId: z.string(),
+    time: z.number(),
+    index: z.number(),
+  }),
+);
+
+describe("Hash Chain", () => {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+    Bus.reset();
+  });
+
+  afterEach(() => {
+    BusPersistence.stop();
+    Bus.reset();
+    Storage.reset();
+  });
+
+  test("persisted events include prev_hash and event_hash", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    Bus.publish(testEvent, {
+      sessionId: session.id,
+      traceId: "trace-1",
+      time: 1000,
+      index: 0,
+    });
+
+    const rows = await waitForRows(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].prev_hash).toBe(GENESIS_SEED);
+    expect(rows[0].event_hash).toBeString();
+    expect(rows[0].event_hash).toHaveLength(64);
+  });
+
+  test("hash chain links consecutive events", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 1000 + i,
+        index: i,
+      });
+    }
+
+    const rows = await waitForRows(3);
+    expect(rows).toHaveLength(3);
+
+    expect(rows[0].prev_hash).toBe(GENESIS_SEED);
+    expect(rows[1].prev_hash).toBe(rows[0].event_hash);
+    expect(rows[2].prev_hash).toBe(rows[1].event_hash);
+  });
+
+  test("event_chain audit table mirrors bus_event hashes", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    Bus.publish(testEvent, {
+      sessionId: session.id,
+      traceId: "trace-audit",
+      time: 2000,
+      index: 0,
+    });
+
+    await waitForRows(1);
+    const chain = chainRows(session.id);
+    const events = busRows(session.id);
+
+    expect(chain).toHaveLength(1);
+    expect(chain[0].event_hash).toBe(events[0].event_hash);
+    expect(chain[0].prev_hash).toBe(events[0].prev_hash);
+    expect(chain[0].event_type).toBe("test.hash.event");
+    expect(chain[0].session_id).toBe(session.id);
+  });
+
+  test("verifyChainIntegrity reports valid for untampered chain", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 5; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 3000 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(5);
+    const result = await BusQuery.verifyChainIntegrity(session.id);
+
+    expect(result.valid).toBe(true);
+    expect(result.totalVerified).toBe(5);
+    expect(result.brokenAtId).toBeUndefined();
+  });
+
+  test("verifyChainIntegrity detects tampered event_hash", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 4000 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(3);
+    const rows = busRows(session.id);
+
+    db()
+      .query("UPDATE bus_event SET event_hash = ? WHERE id = ?")
+      .run("deadbeef".repeat(8), rows[1].id);
+
+    const result = await BusQuery.verifyChainIntegrity(session.id);
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtId).toBe(rows[1].id);
+  });
+
+  test("verifyChainIntegrity detects tampered data", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    Bus.publish(testEvent, {
+      sessionId: session.id,
+      traceId: "trace-tamper",
+      time: 5000,
+      index: 0,
+    });
+
+    await waitForRows(1);
+    const rows = busRows(session.id);
+
+    db().query("UPDATE bus_event SET data = ? WHERE id = ?").run('{"tampered":true}', rows[0].id);
+
+    const result = await BusQuery.verifyChainIntegrity(session.id);
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtId).toBe(rows[0].id);
+  });
+
+  test("verifyChainIntegrity detects broken prev_hash link", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 6000 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(3);
+    const rows = busRows(session.id);
+
+    db()
+      .query("UPDATE bus_event SET prev_hash = ? WHERE id = ?")
+      .run("wrong_prev_hash", rows[2].id);
+
+    const result = await BusQuery.verifyChainIntegrity(session.id);
+
+    expect(result.valid).toBe(false);
+    expect(result.brokenAtId).toBe(rows[2].id);
+  });
+
+  test("session-scoped chains are independent", async () => {
+    const sessionA = createSession();
+    const sessionB = createSession();
+    BusPersistence.start();
+
+    Bus.publish(testEvent, {
+      sessionId: sessionA.id,
+      traceId: "trace-a",
+      time: 7000,
+      index: 0,
+    });
+    Bus.publish(testEvent, {
+      sessionId: sessionB.id,
+      traceId: "trace-b",
+      time: 7001,
+      index: 0,
+    });
+
+    await waitForRows(2);
+    const rowsA = busRows(sessionA.id);
+    const rowsB = busRows(sessionB.id);
+
+    expect(rowsA[0].prev_hash).toBe(GENESIS_SEED);
+    expect(rowsB[0].prev_hash).toBe(GENESIS_SEED);
+
+    const resultA = await BusQuery.verifyChainIntegrity(sessionA.id);
+    const resultB = await BusQuery.verifyChainIntegrity(sessionB.id);
+
+    expect(resultA.valid).toBe(true);
+    expect(resultB.valid).toBe(true);
+  });
+
+  test("event_chain survives CASCADE delete of bus_event", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 8000 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(3);
+    const chainBefore = chainRows(session.id);
+    expect(chainBefore).toHaveLength(3);
+
+    db().query("DELETE FROM session WHERE id = ?").run(session.id);
+
+    expect(busRows(session.id)).toHaveLength(0);
+
+    const chainAfter = chainRows(session.id);
+    expect(chainAfter).toHaveLength(3);
+    expect(chainAfter.map((r) => r.event_hash)).toEqual(chainBefore.map((r) => r.event_hash));
+  });
+
+  test("listAuditChain returns ordered records", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-${i}`,
+        time: 9000 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(3);
+    const audit = await BusQuery.listAuditChain(session.id);
+
+    expect(audit).toHaveLength(3);
+    expect(audit[0].prevHash).toBe(GENESIS_SEED);
+    expect(audit[1].prevHash).toBe(audit[0].eventHash);
+    expect(audit[2].prevHash).toBe(audit[1].eventHash);
+    for (const record of audit) {
+      expect(record.sessionId).toBe(session.id);
+      expect(record.eventType).toBe("test.hash.event");
+    }
+  });
+
+  test("verifyChainIntegrity returns valid for empty session", async () => {
+    const result = await BusQuery.verifyChainIntegrity("nonexistent");
+    expect(result).toEqual({ valid: true, totalVerified: 0 });
+  });
+
+  test("computeEventHash is deterministic", () => {
+    const input = {
+      prevHash: GENESIS_SEED,
+      eventType: "test.event",
+      data: '{"ok":true}',
+      traceId: "trace-deterministic",
+      timeCreated: 10000,
+    };
+
+    const hash1 = computeEventHash(input);
+    const hash2 = computeEventHash(input);
+
+    expect(hash1).toBe(hash2);
+    expect(hash1).toHaveLength(64);
+  });
+});

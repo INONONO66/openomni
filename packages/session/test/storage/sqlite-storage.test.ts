@@ -197,6 +197,16 @@ describe("SqliteStorageAdapter", () => {
         "trace_id",
         "duration_ms",
         "time_created",
+        "prev_hash",
+        "event_hash",
+      ]);
+      expect(tableColumns(db, "event_chain")).toEqual([
+        "seq",
+        "session_id",
+        "event_type",
+        "event_hash",
+        "prev_hash",
+        "time_created",
       ]);
       expect(tableColumns(db, "worker_run_state")).toEqual([
         "run_id",
@@ -224,7 +234,11 @@ describe("SqliteStorageAdapter", () => {
           "idx_bus_event_type_session",
           "idx_bus_event_category_session",
           "idx_bus_event_trace",
+          "idx_bus_event_hash",
         ]),
+      );
+      expect(indexNames(db, "event_chain")).toEqual(
+        expect.arrayContaining(["idx_event_chain_session", "idx_event_chain_hash"]),
       );
       expect(indexNames(db, "worker_run_state")).toContain("idx_worker_run_state_session_time");
     });
