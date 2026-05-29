@@ -9,21 +9,7 @@ export type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 const MIGRATION_DIR = join(import.meta.dir, "../../../migration");
 
 function applyMigrations(sqlite: Database): void {
-  // Drizzle storage is legacy bootstrap code and only has schema definitions for the
-  // original core session tables; keep its migration list intentionally bounded.
-  const migrations: Migration.Definition[] = [
-    { name: "0001_initial/migration.sql" },
-    { name: "0002_pragma_fk_indices/migration.sql" },
-    { name: "0003_new_tables/migration.sql" },
-    { name: "0004_message_status/migration.sql", compatApplied: hasMessageStatusColumn },
-  ];
-
-  Migration.applyOrdered(sqlite, MIGRATION_DIR, migrations);
-}
-
-function hasMessageStatusColumn(sqlite: Database): boolean {
-  const rows = sqlite.query("PRAGMA table_info(message)").all() as Array<{ name: string }>;
-  return rows.some((row) => row.name === "status");
+  Migration.applyOrdered(sqlite, MIGRATION_DIR, [{ name: "0001_initial/migration.sql" }]);
 }
 
 export function createDb(dbPath: string): { db: DrizzleDb; sqlite: Database } {

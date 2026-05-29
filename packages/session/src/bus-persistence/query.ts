@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import { Storage } from "../storage/storage.js";
+import { GENESIS_SEED, computeEventHash } from "./hash.js";
 
 type SqlValue = string | number;
 
@@ -187,6 +188,73 @@ export namespace BusQuery {
       })),
     );
   }
+
+  export const ChainIntegrityResult = z.object({
+    valid: z.boolean().describe("Whether the entire chain is intact"),
+    totalVerified: z.number().describe("Number of events verified"),
+    brokenAtId: z.number().optional().describe("bus_event id where the chain first broke"),
+    brokenAtEventType: z.string().optional().describe("Event type of the broken link"),
+  });
+  export type ChainIntegrityResult = z.infer<typeof ChainIntegrityResult>;
+
+  /**
+   * Walk the hash chain for a session (or all sessionless events) and
+   * re-compute every hash to detect tampering.
+   */
+  export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrityResult> {
+    const db = getDatabase();
+    const rows =
+      sessionId === undefined
+        ? (db
+            .query(
+              `SELECT id, event_type, data, trace_id, time_created, prev_hash, event_hash
+               FROM bus_event WHERE session_id IS NULL ORDER BY id ASC`,
+            )
+            .all() as HashChainRow[])
+        : (db
+            .query(
+              `SELECT id, event_type, data, trace_id, time_created, prev_hash, event_hash
+               FROM bus_event WHERE session_id = ? ORDER BY id ASC`,
+            )
+            .all(sessionId) as HashChainRow[]);
+
+    return Promise.resolve(walkChain(rows));
+  }
+
+  export const AuditChainRecord = z.object({
+    seq: z.number(),
+    sessionId: z.string().optional(),
+    eventType: z.string(),
+    eventHash: z.string(),
+    prevHash: z.string(),
+    timeCreated: z.number(),
+  });
+  export type AuditChainRecord = z.infer<typeof AuditChainRecord>;
+
+  /**
+   * Read the append-only audit chain for a session. This table survives
+   * CASCADE deletes on bus_event, preserving the integrity proof even
+   * after session data is purged.
+   */
+  export function listAuditChain(sessionId: string): Promise<AuditChainRecord[]> {
+    const rows = getDatabase()
+      .query(
+        `SELECT seq, session_id, event_type, event_hash, prev_hash, time_created
+         FROM event_chain WHERE session_id = ? ORDER BY seq ASC`,
+      )
+      .all(sessionId) as AuditChainRow[];
+
+    return Promise.resolve(
+      rows.map((row) => ({
+        seq: row.seq,
+        sessionId: row.session_id ?? undefined,
+        eventType: row.event_type,
+        eventHash: row.event_hash,
+        prevHash: row.prev_hash,
+        timeCreated: row.time_created,
+      })),
+    );
+  }
 }
 
 function getDatabase(): Database {
@@ -242,4 +310,69 @@ function toEventRecord(row: BusEventRow): BusQuery.EventRecord {
     durationMs: row.duration_ms ?? undefined,
     timeCreated: row.time_created,
   };
+}
+
+interface HashChainRow {
+  readonly id: number;
+  readonly event_type: string;
+  readonly data: string;
+  readonly trace_id: string;
+  readonly time_created: number;
+  readonly prev_hash: string | null;
+  readonly event_hash: string | null;
+}
+
+interface AuditChainRow {
+  readonly seq: number;
+  readonly session_id: string | null;
+  readonly event_type: string;
+  readonly event_hash: string;
+  readonly prev_hash: string;
+  readonly time_created: number;
+}
+
+function walkChain(rows: HashChainRow[]): BusQuery.ChainIntegrityResult {
+  if (rows.length === 0) return { valid: true, totalVerified: 0 };
+
+  let expectedPrev = GENESIS_SEED;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] as HashChainRow | undefined;
+    if (!row) continue;
+
+    // Events persisted before the hash chain migration have null hashes.
+    // They cannot be verified so we skip them without breaking the chain.
+    if (row.event_hash === null || row.prev_hash === null) {
+      continue;
+    }
+
+    if (row.prev_hash !== expectedPrev) {
+      return {
+        valid: false,
+        totalVerified: i,
+        brokenAtId: row.id,
+        brokenAtEventType: row.event_type,
+      };
+    }
+
+    const recomputed = computeEventHash({
+      prevHash: row.prev_hash,
+      eventType: row.event_type,
+      data: row.data,
+      traceId: row.trace_id,
+      timeCreated: row.time_created,
+    });
+
+    if (recomputed !== row.event_hash) {
+      return {
+        valid: false,
+        totalVerified: i,
+        brokenAtId: row.id,
+        brokenAtEventType: row.event_type,
+      };
+    }
+
+    expectedPrev = row.event_hash;
+  }
+
+  return { valid: true, totalVerified: rows.length };
 }

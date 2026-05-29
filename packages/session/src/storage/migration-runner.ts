@@ -6,8 +6,6 @@ import { z } from "zod";
 export namespace Migration {
   export const Definition = z.object({
     name: z.string(),
-    compatApplied: z.function().args(z.custom<Database>()).returns(z.boolean()).optional(),
-    compatInsert: z.enum(["insert", "insertOrIgnore"]).optional(),
   });
 
   export type Definition = z.infer<typeof Definition>;
@@ -26,13 +24,9 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
   try {
     const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
     if (!applied) {
-      if (migration.compatApplied?.(db)) {
-        insertMigrationMarker(db, migration.name, migration.compatInsert ?? "insert");
-      } else {
-        const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
-        db.exec(sql);
-        insertMigrationMarker(db, migration.name, "insert");
-      }
+      const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
+      db.exec(sql);
+      db.query("INSERT INTO _migrations (name) VALUES (?)").run(migration.name);
     }
     db.exec("COMMIT");
   } catch (err) {
@@ -43,16 +37,4 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
     }
     throw err;
   }
-}
-
-function insertMigrationMarker(
-  db: Database,
-  migrationName: string,
-  conflictMode: "insert" | "insertOrIgnore",
-): void {
-  const sql =
-    conflictMode === "insertOrIgnore"
-      ? "INSERT OR IGNORE INTO _migrations (name) VALUES (?)"
-      : "INSERT INTO _migrations (name) VALUES (?)";
-  db.query(sql).run(migrationName);
 }

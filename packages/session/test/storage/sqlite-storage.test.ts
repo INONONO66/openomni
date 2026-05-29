@@ -197,6 +197,16 @@ describe("SqliteStorageAdapter", () => {
         "trace_id",
         "duration_ms",
         "time_created",
+        "prev_hash",
+        "event_hash",
+      ]);
+      expect(tableColumns(db, "event_chain")).toEqual([
+        "seq",
+        "session_id",
+        "event_type",
+        "event_hash",
+        "prev_hash",
+        "time_created",
       ]);
       expect(tableColumns(db, "worker_run_state")).toEqual([
         "run_id",
@@ -224,7 +234,11 @@ describe("SqliteStorageAdapter", () => {
           "idx_bus_event_type_session",
           "idx_bus_event_category_session",
           "idx_bus_event_trace",
+          "idx_bus_event_hash",
         ]),
+      );
+      expect(indexNames(db, "event_chain")).toEqual(
+        expect.arrayContaining(["idx_event_chain_session", "idx_event_chain_hash"]),
       );
       expect(indexNames(db, "worker_run_state")).toContain("idx_worker_run_state_session_time");
     });
@@ -244,16 +258,7 @@ describe("SqliteStorageAdapter", () => {
 
       const db = new Database(dbPath);
       db.exec("CREATE TABLE _migrations (name TEXT PRIMARY KEY)");
-      for (const name of [
-        "0001_initial/migration.sql",
-        "0002_pragma_fk_indices/migration.sql",
-        "0003_new_tables/migration.sql",
-        "0004_message_status/migration.sql",
-        "0005_background_task/migration.sql",
-        "0006_task_plan_todo/migration.sql",
-      ]) {
-        db.query("INSERT INTO _migrations (name) VALUES (?)").run(name);
-      }
+      db.exec("CREATE TABLE message (id TEXT PRIMARY KEY)");
       db.close();
 
       expect(() => new SqliteStorageAdapter(dbPath)).toThrow();
@@ -262,13 +267,8 @@ describe("SqliteStorageAdapter", () => {
       try {
         expect(
           checkDb
-            .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'todo_new'")
-            .get(),
-        ).toBeNull();
-        expect(
-          checkDb
             .query("SELECT name FROM _migrations WHERE name = ?")
-            .get("0007_todo_fk_idempotency_idx/migration.sql"),
+            .get("0001_initial/migration.sql"),
         ).toBeNull();
       } finally {
         checkDb.close();

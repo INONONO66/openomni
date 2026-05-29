@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Bus, BusEvent } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
+import { GENESIS_SEED, computeEventHash } from "./hash.js";
 
 const noSessionKey = "__openomni_bus_event_without_session__";
 
@@ -109,20 +110,50 @@ async function persist(input: PersistInput): Promise<void> {
   const durationMs = getNumberTraceField(input.payload, "durationMs");
   const timeCreated = getNumberTraceField(input.payload, "time") ?? input.now().getTime();
 
-  db.query(
-    `INSERT INTO bus_event
-       (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    input.sessionId ?? null,
-    runId ?? null,
-    input.event.name,
-    categoryOf(input.event.name),
+  const prevHash = resolveChainTip(db, input.sessionId);
+  const eventHash = computeEventHash({
+    prevHash,
+    eventType: input.event.name,
     data,
     traceId,
-    durationMs ?? null,
     timeCreated,
-  );
+  });
+
+  db.transaction(() => {
+    db.query(
+      `INSERT INTO bus_event
+         (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.sessionId ?? null,
+      runId ?? null,
+      input.event.name,
+      categoryOf(input.event.name),
+      data,
+      traceId,
+      durationMs ?? null,
+      timeCreated,
+      prevHash,
+      eventHash,
+    );
+
+    db.query(
+      `INSERT INTO event_chain (session_id, event_type, event_hash, prev_hash, time_created)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(input.sessionId ?? null, input.event.name, eventHash, prevHash, timeCreated);
+  })();
+}
+
+function resolveChainTip(db: Database, sessionId: string | undefined): string {
+  const scope = sessionId ?? null;
+  const row = db
+    .query(
+      sessionId === undefined
+        ? "SELECT event_hash FROM bus_event WHERE session_id IS NULL ORDER BY id DESC LIMIT 1"
+        : "SELECT event_hash FROM bus_event WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+    )
+    .get(...(sessionId === undefined ? [] : [scope])) as { event_hash: string | null } | null;
+  return row?.event_hash ?? GENESIS_SEED;
 }
 
 const sensitiveKeyPattern =
