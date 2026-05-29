@@ -12,6 +12,13 @@ export const GENESIS_SEED = "openomni:genesis:v1";
  * string suitable for storage and comparison.
  *
  * Field order matters — changing it invalidates every existing chain.
+ *
+ * Threat model: this is a public hash (no secret key / HMAC). Any party
+ * with write access to both bus_event and event_chain can recompute a
+ * consistent chain from scratch. The chain detects accidental corruption
+ * and uncoordinated edits, NOT a determined attacker with full DB access.
+ * For stronger guarantees, add external anchoring (e.g. periodic merkle
+ * root to an on-chain registry or RFC 3161 timestamping service).
  */
 export function computeEventHash(input: {
   readonly prevHash: string;

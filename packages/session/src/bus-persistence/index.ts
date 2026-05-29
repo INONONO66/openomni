@@ -119,27 +119,29 @@ async function persist(input: PersistInput): Promise<void> {
     timeCreated,
   });
 
-  db.query(
-    `INSERT INTO bus_event
-       (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    input.sessionId ?? null,
-    runId ?? null,
-    input.event.name,
-    categoryOf(input.event.name),
-    data,
-    traceId,
-    durationMs ?? null,
-    timeCreated,
-    prevHash,
-    eventHash,
-  );
+  db.transaction(() => {
+    db.query(
+      `INSERT INTO bus_event
+         (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.sessionId ?? null,
+      runId ?? null,
+      input.event.name,
+      categoryOf(input.event.name),
+      data,
+      traceId,
+      durationMs ?? null,
+      timeCreated,
+      prevHash,
+      eventHash,
+    );
 
-  db.query(
-    `INSERT INTO event_chain (session_id, event_type, event_hash, prev_hash, time_created)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(input.sessionId ?? null, input.event.name, eventHash, prevHash, timeCreated);
+    db.query(
+      `INSERT INTO event_chain (session_id, event_type, event_hash, prev_hash, time_created)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(input.sessionId ?? null, input.event.name, eventHash, prevHash, timeCreated);
+  })();
 }
 
 function resolveChainTip(db: Database, sessionId: string | undefined): string {

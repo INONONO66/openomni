@@ -201,14 +201,22 @@ export namespace BusQuery {
    * Walk the hash chain for a session (or all sessionless events) and
    * re-compute every hash to detect tampering.
    */
-  export function verifyChainIntegrity(sessionId: string): Promise<ChainIntegrityResult> {
+  export function verifyChainIntegrity(sessionId?: string): Promise<ChainIntegrityResult> {
     const db = getDatabase();
-    const rows = db
-      .query(
-        `SELECT id, event_type, data, trace_id, time_created, prev_hash, event_hash
-         FROM bus_event WHERE session_id = ? ORDER BY id ASC`,
-      )
-      .all(sessionId) as HashChainRow[];
+    const rows =
+      sessionId === undefined
+        ? (db
+            .query(
+              `SELECT id, event_type, data, trace_id, time_created, prev_hash, event_hash
+               FROM bus_event WHERE session_id IS NULL ORDER BY id ASC`,
+            )
+            .all() as HashChainRow[])
+        : (db
+            .query(
+              `SELECT id, event_type, data, trace_id, time_created, prev_hash, event_hash
+               FROM bus_event WHERE session_id = ? ORDER BY id ASC`,
+            )
+            .all(sessionId) as HashChainRow[]);
 
     return Promise.resolve(walkChain(rows));
   }
