@@ -32,9 +32,6 @@ describe("drizzle createDb migrations", () => {
     const db = new Database(dbPath);
     db.exec(`
       CREATE TABLE _migrations (name TEXT PRIMARY KEY);
-      INSERT INTO _migrations (name) VALUES ('0001_initial/migration.sql');
-      INSERT INTO _migrations (name) VALUES ('0002_pragma_fk_indices/migration.sql');
-      INSERT INTO _migrations (name) VALUES ('0003_new_tables/migration.sql');
       CREATE TABLE message (id TEXT PRIMARY KEY);
     `);
     db.close();
@@ -43,12 +40,10 @@ describe("drizzle createDb migrations", () => {
 
     const checkDb = new Database(dbPath);
     try {
-      const columns = checkDb.query("PRAGMA table_info(message)").all() as Array<{ name: string }>;
-      expect(columns.map((row) => row.name)).not.toContain("status");
       expect(
         checkDb
           .query("SELECT name FROM _migrations WHERE name = ?")
-          .get("0004_message_status/migration.sql"),
+          .get("0001_initial/migration.sql"),
       ).toBeNull();
     } finally {
       checkDb.close();

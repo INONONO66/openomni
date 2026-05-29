@@ -4,22 +4,7 @@ import { Migration } from "./migration-runner";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 
-const ORDERED_MIGRATIONS: Migration.Definition[] = [
-  { name: "0001_initial/migration.sql" },
-  { name: "0002_pragma_fk_indices/migration.sql" },
-  { name: "0003_new_tables/migration.sql" },
-  {
-    name: "0004_message_status/migration.sql",
-    compatApplied: hasMessageStatusColumn,
-    compatInsert: "insertOrIgnore",
-  },
-  { name: "0005_background_task/migration.sql" },
-  { name: "0006_task_plan_todo/migration.sql" },
-  { name: "0007_todo_fk_idempotency_idx/migration.sql" },
-  { name: "0008_unified_observability/migration.sql" },
-  { name: "0009_work_item/migration.sql" },
-  { name: "0010_hash_chain/migration.sql" },
-];
+const ORDERED_MIGRATIONS: Migration.Definition[] = [{ name: "0001_initial/migration.sql" }];
 
 const CLEAR_ORDER = [
   "event_chain",
@@ -57,9 +42,4 @@ function applyPragmas(db: Database): void {
   db.query("PRAGMA temp_store = MEMORY").get();
   db.query("PRAGMA foreign_keys = ON").get();
   db.query("PRAGMA wal_checkpoint(PASSIVE)").get();
-}
-
-function hasMessageStatusColumn(db: Database): boolean {
-  const rows = db.query("PRAGMA table_info(message)").all() as Array<{ name: string }>;
-  return rows.some((r) => r.name === "status");
 }
