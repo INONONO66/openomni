@@ -15,11 +15,15 @@ export async function resolveProviderModel(model: {
   }
 
   const rawModel = providerData.models?.[model.id];
-  if (!rawModel) {
-    throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
+  if (rawModel) {
+    return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
   }
 
-  return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
+  const proxyModels = await Provider.listModels(model.provider, "proxy").catch(() => []);
+  const match = proxyModels.find((m) => m.id === model.id);
+  if (match) return match;
+
+  throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
 export function getLastUserMessageText(messages: Message.WithParts[]): string | null {
