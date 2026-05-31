@@ -174,7 +174,7 @@ export namespace Provider {
     if (authType === "proxy") {
       const auth = await Auth.get(providerID);
       if (auth?.type === "proxy") {
-        const proxyModelIds = await fetchProxyModels(auth.baseURL);
+        const proxyModelIds = await fetchProxyModels(auth.baseURL, auth.apiKey);
         if (proxyModelIds.length > 0) {
           return enrichWithCatalog(proxyModelIds, info.models, providerID);
         }
