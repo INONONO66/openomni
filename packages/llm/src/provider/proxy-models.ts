@@ -26,13 +26,17 @@ function readModelIds(value: unknown): string[] {
     .filter((id): id is string => Boolean(id));
 }
 
-export async function fetchProxyModels(baseURL: string): Promise<string[]> {
+export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
   const cached = modelCache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.ids;
 
   try {
-    const response = await fetch(url);
+    const headers: Record<string, string> = {};
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    const response = await fetch(url, { headers });
     if (!response.ok) return [];
     const ids = readModelIds(await response.json());
     modelCache.set(url, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
