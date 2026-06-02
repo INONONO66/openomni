@@ -13,6 +13,7 @@ const target: Dispatch.Target = {
   kind: "resident",
   id: "resident-main",
   sessionId: "resident-session",
+  parentSessionId: "parent-session",
 };
 
 const eventBase = {
@@ -41,6 +42,7 @@ describe("Dispatch protocol schemas", () => {
 
     expect(parsed.action).toBe("resident.deliver");
     expect(parsed.target.kind).toBe("resident");
+    expect(parsed.target.parentSessionId).toBe("parent-session");
     expect(parsed.wait).toBe(true);
   });
 

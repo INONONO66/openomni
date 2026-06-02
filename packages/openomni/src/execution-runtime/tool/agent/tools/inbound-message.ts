@@ -1,6 +1,6 @@
 import type { InboundMessage, Tool } from "@openomni/protocol";
-import { InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
-import { WorkerRunStateStore } from "@openomni/session";
+import { InboundMessage as InboundMessageProtocol, Operational } from "@openomni/protocol";
+import { Bus, WorkerRunStateStore } from "@openomni/session";
 import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
@@ -49,6 +49,7 @@ type InboundMessageDispatchResult = {
   readonly jobId?: string;
   readonly output?: string;
   readonly error?: string;
+  readonly reason?: string;
   readonly timedOut?: boolean;
   readonly result?: { readonly output?: unknown };
 };
@@ -197,18 +198,46 @@ function dispatchMessageId(result: InboundMessageDispatchResult, fallback: strin
   return result.messageId ?? result.dispatchId ?? fallback;
 }
 
+function dispatchError(result: InboundMessageDispatchResult): string | undefined {
+  return result.error ?? result.reason;
+}
+
+function isDispatchError(result: InboundMessageDispatchResult): boolean {
+  return (
+    result.status === "error" ||
+    result.status === "failed" ||
+    result.status === "denied" ||
+    result.status === "pending"
+  );
+}
+
+function publishAsyncDispatchFailure(
+  result: InboundMessageDispatchResult,
+  messageId: string,
+  input: RuntimeInput,
+): void {
+  Bus.publish(Operational.Warn, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    component: "inbound_message",
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.runId ? { runId: input.runId } : {}),
+    msg: `async inbound_message dispatch ${result.status ?? "failed"}: ${dispatchError(result) ?? messageId}`,
+  });
+}
+
 function resultFromDispatchDelivery(
   call: Tool.Call,
   messageId: string,
   result: InboundMessageDispatchResult,
 ): Tool.Result {
-  if (result.status === "error" || result.status === "failed") {
+  if (isDispatchError(result)) {
     return toolResult(
       call,
       {
         status: "error",
         messageId: dispatchMessageId(result, messageId),
-        ...(result.error ? { error: result.error } : {}),
+        ...(dispatchError(result) ? { error: dispatchError(result) } : {}),
         ...(result.timedOut ? { timedOut: true } : {}),
       },
       true,
@@ -227,13 +256,13 @@ function resultFromDispatchSchedule(
   messageId: string,
   result: InboundMessageDispatchResult,
 ): Tool.Result {
-  if (result.status === "error" || result.status === "failed") {
+  if (isDispatchError(result)) {
     return toolResult(
       call,
       {
         status: "error",
         messageId: dispatchMessageId(result, messageId),
-        ...(result.error ? { error: result.error } : {}),
+        ...(dispatchError(result) ? { error: dispatchError(result) } : {}),
       },
       true,
     );
@@ -387,7 +416,20 @@ export function createInboundMessageTool(router: InboundMessageRouter): NativeTo
       if (!parsed.wait) {
         try {
           const submitted = dispatchRuntime.submit(dispatchCommand, dispatchContext);
-          submitted.catch(() => undefined);
+          submitted
+            .then((result) => {
+              if (isDispatchError(result)) publishAsyncDispatchFailure(result, messageId, input);
+            })
+            .catch((error) => {
+              publishAsyncDispatchFailure(
+                {
+                  status: "failed",
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                messageId,
+                input,
+              );
+            });
         } catch (error) {
           return errorResult(
             call,

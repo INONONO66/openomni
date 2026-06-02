@@ -21,10 +21,15 @@ function targetRunId(command: Dispatch.Command): string | undefined {
 
 function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
   if (command.target.sessionId) return command.target.sessionId;
-  const session = Session.create({
-    title: `Dispatch worker ${command.action}`,
-    model: { providerID: model.provider, modelID: model.id },
-  });
+  const title = `Dispatch worker ${command.action}`;
+  const modelInfo = { providerID: model.provider, modelID: model.id };
+  const session = command.target.parentSessionId
+    ? Session.createChild({
+        parentSessionId: command.target.parentSessionId,
+        title,
+        model: modelInfo,
+      })
+    : Session.create({ title, model: modelInfo });
   return session.id;
 }
 

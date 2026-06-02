@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
+import { Bus, Session, Storage, WorkerRunStateStore } from "@openomni/session";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
 import type { DispatchToolRuntime } from "../../src/execution-runtime/tool/agent/tools/dispatch";
@@ -188,6 +188,34 @@ describe("inbound_message tool", () => {
     });
   });
 
+  test("wait:true maps dispatch denied results to legacy error shape", async () => {
+    const tool = createInboundMessageTool({
+      submit: async () => ({
+        status: "denied",
+        dispatchId: "dispatch-denied",
+        reason: "dispatch.worker.spawn.denied",
+      }),
+    });
+
+    const response = await tool.execute({
+      id: "call-denied-wait",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker" },
+        action: "spawn",
+        payload: "new work",
+        wait: true,
+      },
+    });
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toEqual({
+      status: "error",
+      messageId: "dispatch-denied",
+      error: "dispatch.worker.spawn.denied",
+    });
+  });
+
   test("maps schedule action through dispatch and preserves scheduled result shape", async () => {
     const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
     const tool = createInboundMessageTool({
@@ -260,6 +288,34 @@ describe("inbound_message tool", () => {
     });
   });
 
+  test("schedule action maps dispatch denied results to legacy error shape", async () => {
+    const tool = createInboundMessageTool({
+      submit: async () => ({
+        status: "denied",
+        dispatchId: "dispatch-schedule-denied",
+        reason: "dispatch.worker.schedule.denied",
+      }),
+    });
+
+    const response = await tool.execute({
+      id: "call-schedule-denied",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "resident", agentName: "dev" },
+        action: "schedule",
+        payload: "daily summary",
+        schedule: "0 9 * * *",
+      },
+    });
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toEqual({
+      status: "error",
+      messageId: "dispatch-schedule-denied",
+      error: "dispatch.worker.schedule.denied",
+    });
+  });
+
   test("wait:false returns immediately after sending through dispatch", async () => {
     const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
     const tool = createInboundMessageTool({
@@ -300,6 +356,33 @@ describe("inbound_message tool", () => {
       runId: "run-1",
       compatibility: { depth: 1, injectToHistory: false },
     });
+  });
+
+  test("wait:false emits warning evidence when async dispatch is denied", async () => {
+    const warnings: string[] = [];
+    Bus.observe((event, data) => {
+      if (event.name === "operational.warn") {
+        warnings.push(String((data as { msg?: unknown }).msg));
+      }
+    });
+    const tool = createInboundMessageTool({
+      submit: async () => ({
+        status: "denied",
+        dispatchId: "dispatch-async-denied",
+        reason: "dispatch.worker.spawn.denied",
+      }),
+    });
+
+    const response = await tool.execute({
+      id: "call-async-denied",
+      tool: "inbound_message",
+      input: { target: { kind: "worker" }, action: "spawn", payload: "new work" },
+    });
+    await Bun.sleep(0);
+
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
+    expect(warnings.at(-1)).toContain("dispatch.worker.spawn.denied");
   });
 
   test("wait:true returns delivered output from dispatch", async () => {
@@ -551,7 +634,7 @@ describe("inbound_message tool", () => {
       id: "call-provider",
       tool: "inbound_message",
       input: {
-        target: { kind: "resident", agentName: "main" },
+        target: { kind: "resident", agentName: "main", parentSessionId: "parent-session" },
         payload: "status",
         sessionId: "caller-session",
         agentName: "resident",
@@ -567,7 +650,7 @@ describe("inbound_message tool", () => {
     });
     expect(dispatches[0]?.[0]).toMatchObject({
       action: "resident.deliver",
-      target: { kind: "resident" },
+      target: { kind: "resident", name: "main", parentSessionId: "parent-session" },
       payload: "status",
     });
   });

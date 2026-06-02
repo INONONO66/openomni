@@ -14,11 +14,12 @@ export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
 function inboundDispatchAdapter(dispatchRuntime: DispatchToolRuntime): InboundMessageDispatch {
   return {
     async submit(command, context) {
-      const {
-        agentName: _agentName,
-        parentSessionId: _parentSessionId,
-        ...target
-      } = command.target;
+      const { agentName, parentSessionId, ...legacyTarget } = command.target;
+      const target = {
+        ...legacyTarget,
+        ...(agentName ? { name: agentName } : {}),
+        ...(parentSessionId ? { parentSessionId } : {}),
+      };
       const dispatchResult = await dispatchRuntime.submit(
         {
           action: command.action,

@@ -47,6 +47,10 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
         return deny("dispatch.worker.spawn.denied");
       }
 
+      if (actor.kind === "worker" && action.startsWith("schedule.")) {
+        return deny("dispatch.worker.schedule.denied");
+      }
+
       if (actor.kind === "worker" && action === "resident.deliver") {
         return allow("dispatch.worker.resident_deliver.allowed");
       }

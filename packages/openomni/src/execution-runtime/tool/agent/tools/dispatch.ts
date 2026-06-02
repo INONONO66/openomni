@@ -24,6 +24,7 @@ const inputSchema = {
         kind: { enum: ["worker", "resident", "schedule", "session", "surface", "system"] },
         id: { type: "string" },
         sessionId: { type: "string" },
+        parentSessionId: { type: "string" },
         runId: { type: "string" },
         name: { type: "string" },
         labels: { type: "array", items: { type: "string" } },

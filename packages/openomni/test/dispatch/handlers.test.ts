@@ -55,6 +55,42 @@ describe("built-in dispatch handlers", () => {
     expect(result).toMatchObject({ output: { sessionId: requests[0]?.sessionId } });
   });
 
+  test("worker.spawn preserves parent session lineage when provided", async () => {
+    const parent = Session.create({
+      title: "parent",
+      model: { providerID: "test", modelID: "test" },
+    });
+    let dispatchedSessionId = "";
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(sessionId, request) {
+            dispatchedSessionId = sessionId;
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "succeeded",
+              output: "done",
+            };
+          },
+        },
+      },
+    });
+
+    await registry.get("worker.spawn")?.(
+      command(
+        "worker.spawn",
+        { kind: "worker", name: "coder", parentSessionId: parent.id },
+        "build",
+      ),
+    );
+
+    const child = Session.get(dispatchedSessionId);
+    expect(child?.parentSessionId).toBe(parent.id);
+    expect(child?.spawnDepth).toBe((parent.spawnDepth ?? 0) + 1);
+  });
+
   test("worker send/resume/cancel call coordinator owner methods", async () => {
     const delivered: Array<{ sessionId: string; message: string; runId?: string }> = [];
     const cancelled: string[] = [];

@@ -105,6 +105,24 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
   });
 
+  test("default policy denies worker schedule creation", async () => {
+    let called = false;
+    const runtime = new DispatchRuntime();
+    runtime.register("schedule.create", () => {
+      called = true;
+      return { output: "scheduled" };
+    });
+
+    const result = await runtime.submit(
+      { action: "schedule.create", target: { kind: "schedule", name: "resident" } },
+      { sessionId: "session-1", runId: "run-1", agentName: "worker" },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.worker.schedule.denied");
+    expect(called).toBe(false);
+  });
+
   test("fails unknown action without routing", async () => {
     const result = await new DispatchRuntime({ includeDefaultPolicies: false }).submit(
       { action: "custom.missing", target: { kind: "system" } },

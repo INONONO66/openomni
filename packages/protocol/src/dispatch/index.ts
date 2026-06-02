@@ -21,6 +21,7 @@ export namespace Dispatch {
       kind: TargetKind,
       id: z.string().min(1).optional(),
       sessionId: z.string().min(1).optional(),
+      parentSessionId: z.string().min(1).optional(),
       runId: z.string().min(1).optional(),
       name: z.string().min(1).optional(),
       labels: z.array(z.string()).optional(),
