@@ -11,7 +11,7 @@ import {
 } from "./tools/inbound-message.js";
 import { createSubagentTool } from "./tools/subagent.js";
 
-export type AgentToolProviderOptions = SubagentToolOptions & {
+export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
   readonly ingressEngine?: InboundMessageIngress;
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
@@ -86,7 +86,7 @@ export class AgentToolProvider implements ToolProvider {
   private extraTools: NativeTool[] = [];
 
   constructor(options?: AgentToolProviderOptions) {
-    this.subagentOptions = options;
+    this.subagentOptions = options?.subagentRuntime ? (options as SubagentToolOptions) : undefined;
     const dispatchRuntime =
       options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
     this.register(createDispatchTool(dispatchRuntime));

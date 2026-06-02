@@ -3,10 +3,12 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, BusPersistence, WorkerRun } from "@openomni/session";
+import { initialize, Bus, BusPersistence, TraceContext, WorkerRun } from "@openomni/session";
 import {
   AgentToolProvider,
   IngressEngine,
+  IngressEventProjector,
+  IngressHandlers,
   ResidentRuntime,
   SystemToolProvider,
   resolveCategory,
@@ -103,7 +105,11 @@ export async function main(): Promise<void> {
   BusPersistence.start();
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
-  const agentProvider = new AgentToolProvider();
+  let agentProvider: AgentToolProvider | undefined;
+  const requireAgentProvider = (): AgentToolProvider => {
+    if (!agentProvider) throw new Error("agent tool provider is not configured");
+    return agentProvider;
+  };
   const mcpProvider = new McpToolProvider();
 
   const projectMcpServers = McpConfigLoader.discover(config.workspace?.root ?? process.cwd());
@@ -136,18 +142,6 @@ export async function main(): Promise<void> {
     : undefined;
   if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
   const customProvider = new CustomToolProvider();
-  IngressEngine.setAgentResolver({
-    resolve: async (agentName, event) =>
-      buildAgentDef(agentName, {
-        systemProvider,
-        agentProvider,
-        mcpProvider,
-        customProvider,
-        defaultModel: model ? { provider: model.providerID, id: model.id } : undefined,
-        providerOptions: config.model?.providerOptions,
-        workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
-      }),
-  });
   const toolDispatcher = buildToolDispatcher([mcpProvider]);
   const coordinator = createExecutionCoordinator({
     workerScript,
@@ -185,18 +179,20 @@ export async function main(): Promise<void> {
       }
 
       try {
-        const result = await IngressEngine.ingest({
+        const trace = TraceContext.create({ sessionId: mainSessionId });
+        const residentEvent = {
           id: crypto.randomUUID(),
-          surface: "worker-ask-resident",
+          surface: "dispatch",
           workspace: config.workspace?.root ?? process.cwd(),
-          mode: "direct",
+          mode: "internal" as const,
+          agentName: "resident",
           payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`,
           runtime: {
             durableSessionId: mainSessionId,
-            lifecycle: "active",
+            lifecycle: "active" as const,
             ...(signal ? { signal } : {}),
           },
-          target: { kind: "resident" },
+          target: { kind: "resident" as const, sessionId: mainSessionId },
           meta: {
             actor: {
               role: "worker",
@@ -205,18 +201,30 @@ export async function main(): Promise<void> {
               sessionId,
               runId,
             },
-            target: { kind: "resident" },
+            target: { kind: "resident" as const, sessionId: mainSessionId },
             agentName: "resident",
           },
           agent: buildResidentAgentDef("resident", {
             systemProvider,
-            agentProvider,
+            agentProvider: requireAgentProvider(),
             mcpProvider,
             customProvider,
             defaultModel: { provider: model.providerID, id: model.id },
             providerOptions: config.model?.providerOptions,
             workspaceRoot: config.workspace?.root ?? process.cwd(),
           }),
+        };
+        IngressEventProjector.project(
+          residentEvent,
+          mainSessionId,
+          { providerID: model.providerID, modelID: model.id },
+          trace,
+        );
+        const result = await IngressHandlers.handleResident({
+          sessionId: mainSessionId,
+          event: residentEvent,
+          residentRuntime,
+          traceContext: trace,
         });
         return { requestId, accepted: true, output: result.result.output };
       } finally {
@@ -230,11 +238,30 @@ export async function main(): Promise<void> {
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
   IngressEngine.setCoordinator(coordinator);
+  agentProvider = new AgentToolProvider({
+    dispatchOwners: {
+      coordinator,
+      residentRuntime,
+      ...(model ? { defaultModel: { provider: model.providerID, id: model.id } } : {}),
+    },
+  });
+  IngressEngine.setAgentResolver({
+    resolve: async (agentName, event) =>
+      buildAgentDef(agentName, {
+        systemProvider,
+        agentProvider: requireAgentProvider(),
+        mcpProvider,
+        customProvider,
+        defaultModel: model ? { provider: model.providerID, id: model.id } : undefined,
+        providerOptions: config.model?.providerOptions,
+        workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
+      }),
+  });
 
   const routingHandler = model
     ? createRoutingHandler(
         systemProvider,
-        agentProvider,
+        requireAgentProvider(),
         mcpProvider,
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },

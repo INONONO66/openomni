@@ -1,7 +1,6 @@
 import type { InboundMessage, Ingress, Tool } from "@openomni/protocol";
-import { CronJob, InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
+import { InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
 import { WorkerRunStateStore } from "@openomni/session";
-import { CronJobRegistry } from "../../../cron-job-registry.js";
 import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
@@ -257,59 +256,6 @@ function resultFromDispatchSchedule(
   return toolResult(call, { status: "scheduled", messageId: jobId, jobId });
 }
 
-function actorFromInput(input: RuntimeInput): Ingress.ActorMetadata {
-  return {
-    kind: "agent",
-    role: input.agentName,
-    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
-    ...(input.agentName ? { agentName: input.agentName } : {}),
-    ...(input.runId ? { runId: input.runId } : {}),
-  };
-}
-
-function eventFromInput(input: RuntimeInput, parsed: InboundMessage.Input): Ingress.InboundEvent {
-  const target = parsed.target as Ingress.Target;
-  return {
-    id: crypto.randomUUID(),
-    surface: "internal",
-    ...(input.workspaceRoot ? { workspace: input.workspaceRoot } : {}),
-    mode: "direct",
-    target,
-    payload: parsed.payload,
-    meta: {
-      actor: actorFromInput(input),
-      target,
-      ...(parsed.action ? { action: parsed.action } : {}),
-      depth: parsed.depth + 1,
-      ...(parsed.injectToHistory ? { injectToHistory: true } : {}),
-      ...(parsed.schedule ? { schedule: parsed.schedule } : {}),
-      ...(parsed.target.agentName ? { agentName: parsed.target.agentName } : {}),
-    },
-    agent: {
-      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-    },
-  };
-}
-
-function scheduleJobFromInput(input: RuntimeInput, parsed: InboundMessage.Input): CronJob.Info {
-  const agentName = parsed.target.agentName ?? input.agentName;
-  if (!agentName) {
-    throw new Error("target.agentName is required when action is schedule");
-  }
-
-  return CronJob.Info.parse({
-    id: crypto.randomUUID(),
-    agentName,
-    payload: parsed.payload,
-    schedule: parsed.schedule,
-    target: {
-      kind: parsed.target.kind,
-      ...(parsed.target.sessionId ? { sessionId: parsed.target.sessionId } : {}),
-    },
-    createdAt: Date.now(),
-  });
-}
-
 function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -410,7 +356,7 @@ function restoreRunRunning(input: RuntimeInput): void {
 }
 
 export function createInboundMessageTool(router: InboundMessageRouter): NativeTool {
-  const { ingressEngine, dispatchRuntime } = resolveRouter(router);
+  const { dispatchRuntime } = resolveRouter(router);
   return defineTool<RuntimeInput>({
     name: "inbound_message",
     description: "Submit an internal inbound message to a resident or worker agent.",
@@ -434,118 +380,50 @@ export function createInboundMessageTool(router: InboundMessageRouter): NativeTo
       const dispatchCommand = dispatchCommandFromInput(parsed, messageId);
       const dispatchContext = dispatchContextFromInput(input, parsed, messageId, context?.signal);
 
-      if (parsed.action === "schedule") {
-        if (dispatchRuntime) {
-          try {
-            const result = await dispatchRuntime.submit(dispatchCommand, dispatchContext);
-            return resultFromDispatchSchedule(call, messageId, result);
-          } catch (error) {
-            return errorResult(
-              call,
-              error instanceof Error ? error.message : String(error),
-              messageId,
-            );
-          }
-        }
-
-        try {
-          const jobId = CronJobRegistry.register(scheduleJobFromInput(input, parsed));
-          return toolResult(call, { status: "scheduled", messageId: jobId, jobId });
-        } catch (error) {
-          return errorResult(call, error instanceof Error ? error.message : String(error));
-        }
+      if (!dispatchRuntime) {
+        return errorResult(call, "inbound_message dispatch runtime is not configured", messageId);
       }
 
-      if (dispatchRuntime) {
-        if (!parsed.wait) {
-          try {
-            const submitted = dispatchRuntime.submit(dispatchCommand, dispatchContext);
-            submitted.catch(() => undefined);
-          } catch (error) {
-            return errorResult(
-              call,
-              error instanceof Error ? error.message : String(error),
-              messageId,
-            );
-          }
-          return toolResult(call, { status: "sent", messageId });
-        }
-
-        if (context?.signal?.aborted) {
-          return errorResult(call, "inbound_message aborted", messageId);
-        }
-
-        markRunWaiting(input);
+      if (parsed.action === "schedule") {
         try {
-          const dispatchResult = await withTimeout(
-            dispatchRuntime.submit(dispatchCommand, dispatchContext),
-            parsed.timeoutMs,
-            messageId,
-            context?.signal,
-          );
-          return resultFromDispatchDelivery(call, messageId, dispatchResult);
+          const result = await dispatchRuntime.submit(dispatchCommand, dispatchContext);
+          return resultFromDispatchSchedule(call, messageId, result);
         } catch (error) {
-          if (error instanceof TimeoutError) {
-            return toolResult(
-              call,
-              {
-                status: "error",
-                messageId: error.messageId,
-                error: error.message,
-                timedOut: true,
-              },
-              true,
-            );
-          }
-          if (error instanceof AbortWaitError) {
-            return errorResult(call, error.message, error.messageId);
-          }
           return errorResult(
             call,
             error instanceof Error ? error.message : String(error),
             messageId,
           );
-        } finally {
-          restoreRunRunning(input);
         }
       }
-
-      if (!ingressEngine)
-        return errorResult(call, "inbound_message dispatch runtime is not configured", messageId);
-
-      const event = eventFromInput(input, parsed);
 
       if (!parsed.wait) {
         try {
-          const ingest = ingressEngine.ingest(event, { wait: false });
-          ingest.catch(() => undefined);
+          const submitted = dispatchRuntime.submit(dispatchCommand, dispatchContext);
+          submitted.catch(() => undefined);
         } catch (error) {
           return errorResult(
             call,
             error instanceof Error ? error.message : String(error),
-            event.id,
+            messageId,
           );
         }
-        return toolResult(call, { status: "sent", messageId: event.id });
+        return toolResult(call, { status: "sent", messageId });
       }
 
       if (context?.signal?.aborted) {
-        return errorResult(call, "inbound_message aborted", event.id);
+        return errorResult(call, "inbound_message aborted", messageId);
       }
 
       markRunWaiting(input);
       try {
-        const ingressResult = await withTimeout(
-          ingressEngine.ingest(event, { signal: context?.signal, wait: true }),
+        const dispatchResult = await withTimeout(
+          dispatchRuntime.submit(dispatchCommand, dispatchContext),
           parsed.timeoutMs,
-          event.id,
+          messageId,
           context?.signal,
         );
-        return toolResult(call, {
-          status: "delivered",
-          messageId: event.id,
-          output: ingressResult.result.output,
-        });
+        return resultFromDispatchDelivery(call, messageId, dispatchResult);
       } catch (error) {
         if (error instanceof TimeoutError) {
           return toolResult(
@@ -562,7 +440,7 @@ export function createInboundMessageTool(router: InboundMessageRouter): NativeTo
         if (error instanceof AbortWaitError) {
           return errorResult(call, error.message, error.messageId);
         }
-        return errorResult(call, error instanceof Error ? error.message : String(error), event.id);
+        return errorResult(call, error instanceof Error ? error.message : String(error), messageId);
       } finally {
         restoreRunRunning(input);
       }

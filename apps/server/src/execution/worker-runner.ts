@@ -2,7 +2,9 @@ import { ChatAgent } from "@openomni/agent";
 import type { Auth } from "@openomni/llm";
 import {
   AgentToolProvider,
+  DispatchRuntime,
   type BackgroundManager,
+  type DispatchHandler,
   type InjectionQueue,
   SystemToolProvider,
   ToolProxyProvider,
@@ -11,7 +13,7 @@ import {
   buildWorkerChildRuntimeConfig,
   createWorkerSubagentRuntime,
 } from "@openomni/openomni";
-import { Execution, type Ingress, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Execution, Subagent, Tool, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { createContextMiddleware } from "../context/index";
 import type { WorkerRunState } from "./worker-run-state";
@@ -75,79 +77,66 @@ function abortableIpcCall<T>(
   });
 }
 
-function createWorkerInboundIngress(options: {
+function createWorkerDispatchRuntime(options: {
   readonly server: WorkerRunIpcServer;
   readonly ipcAuthToken: string;
   readonly workerId: string;
   readonly sessionId: string;
   readonly runId: string;
-}): {
-  ingest(
-    event: Ingress.InboundEvent,
-    context?: { readonly signal?: AbortSignal; readonly wait?: boolean },
-  ): Promise<Ingress.IngressResult>;
-} {
-  return {
-    async ingest(event, context) {
-      if (!context?.wait) {
-        throw new Error("worker inbound_message async delivery requires coordinator routing");
-      }
-      if (event.target?.kind !== "resident") {
-        throw new Error("worker inbound_message wait currently supports resident targets only");
-      }
+}): DispatchRuntime {
+  const runtime = new DispatchRuntime();
+  const handler: DispatchHandler = async (command, context) => {
+    if (!context?.wait) {
+      throw new Error("worker inbound_message async delivery requires coordinator routing");
+    }
+    if (command.target.kind !== "resident") {
+      throw new Error("worker inbound_message wait currently supports resident targets only");
+    }
 
-      const callId = crypto.randomUUID();
-      const payload =
-        typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
-      const cancelInboundWait = () => {
-        void options.server
-          .call(
-            "worker.inbound_wait_cancel",
-            { sessionId: options.sessionId, runId: options.runId, callId },
-            5_000,
-          )
-          .catch(() => undefined);
-      };
+    const callId = command.dispatchId;
+    const payload =
+      typeof command.payload === "string" ? command.payload : JSON.stringify(command.payload);
+    const sessionId = command.sessionId ?? context.sessionId ?? options.sessionId;
+    const runId = command.runId ?? context.runId ?? options.runId;
+    const cancelInboundWait = () => {
+      void options.server
+        .call("worker.inbound_wait_cancel", { sessionId, runId, callId }, 5_000)
+        .catch(() => undefined);
+    };
 
-      const raw = await abortableIpcCall(
-        () =>
-          options.server.call(
-            "worker.inbound_wait",
-            {
-              authToken: options.ipcAuthToken,
-              workerId: options.workerId,
-              sessionId: options.sessionId,
-              runId: options.runId,
-              callId,
-              payload,
-            },
-            WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
-          ),
-        context.signal,
-        cancelInboundWait,
+    const raw = await abortableIpcCall(
+      () =>
+        options.server.call(
+          "worker.inbound_wait",
+          {
+            authToken: options.ipcAuthToken,
+            workerId: options.workerId,
+            sessionId,
+            runId,
+            callId,
+            payload,
+          },
+          WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
+        ),
+      context.signal,
+      cancelInboundWait,
+    );
+
+    if (raw === null || typeof raw !== "object") {
+      throw new Error("invalid worker.inbound_wait response");
+    }
+    const result = raw as { accepted?: unknown; output?: unknown; error?: unknown };
+    if (result.accepted !== true) {
+      throw new Error(
+        typeof result.error === "string" ? result.error : "worker.inbound_wait rejected",
       );
+    }
 
-      if (raw === null || typeof raw !== "object") {
-        throw new Error("invalid worker.inbound_wait response");
-      }
-      const result = raw as { accepted?: unknown; output?: unknown; error?: unknown };
-      if (result.accepted !== true) {
-        throw new Error(
-          typeof result.error === "string" ? result.error : "worker.inbound_wait rejected",
-        );
-      }
-
-      return {
-        mode: "direct",
-        target: { kind: "resident" },
-        sessionId: options.sessionId,
-        result: {
-          output: typeof result.output === "string" ? result.output : "",
-          finishReason: "stop",
-        },
-      };
-    },
+    return { output: typeof result.output === "string" ? result.output : "" };
   };
+
+  runtime.register("resident.deliver", handler);
+  return runtime;
 }
 
 export interface WorkerRunIpcServer {
@@ -344,7 +333,7 @@ export namespace WorkerRunner {
 
         const agentProvider = new AgentToolProvider({
           subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
-          ingressEngine: createWorkerInboundIngress({
+          dispatchRuntime: createWorkerDispatchRuntime({
             server,
             ipcAuthToken,
             workerId: options.workerId,

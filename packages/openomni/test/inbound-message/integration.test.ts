@@ -2,7 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun
 import { IngressEvent, type Ingress } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
-import { createInboundMessageTool } from "../../src/execution-runtime/tool/agent/tools/inbound-message";
+import {
+  createInboundMessageTool,
+  type InboundMessageDispatch,
+} from "../../src/execution-runtime/tool/agent/tools/inbound-message";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -59,9 +62,7 @@ beforeEach(() => {
 });
 
 describe("inbound_message integration flows", () => {
-  it("sends resident worker spawns asynchronously through ingress", async () => {
-    installDispatchOnlyCoordinator();
-    const completed = collectBusEvents(IngressEvent.Completed);
+  it("sends resident worker spawns asynchronously through dispatch", async () => {
     const tool = inboundTool();
 
     const response = await tool.execute({
@@ -79,7 +80,6 @@ describe("inbound_message integration flows", () => {
     });
 
     await waitFor(() => dispatches.length === 1);
-    completed.unsubscribe();
 
     expect(response.isError).toBeUndefined();
     expect(JSON.parse(response.output)).toEqual({
@@ -87,7 +87,6 @@ describe("inbound_message integration flows", () => {
       messageId: expect.any(String),
     });
     expect(dispatches[0]).toMatchObject({ prompt: "research task" });
-    expect(completed.events.at(-1)).toMatchObject({ mode: "direct", target: "worker" });
   });
 
   it("delivers a worker question to the resident and returns the sync answer", async () => {
@@ -116,11 +115,7 @@ describe("inbound_message integration flows", () => {
       messageId: expect.any(String),
       output: "resident answer",
     });
-    expect(received.events.at(-1)).toMatchObject({
-      surface: "internal",
-      mode: "direct",
-      target: "resident",
-    });
+    expect(received.events).toHaveLength(0);
   });
 
   it("sends worker messages to an existing worker session", async () => {
@@ -154,10 +149,8 @@ describe("inbound_message integration flows", () => {
     expect(deliveries).toEqual([
       { sessionId: workerSession.id, prompt: "continue with this context", runId: undefined },
     ]);
-    expect(received.events.at(-1)).toMatchObject({
-      target: `worker-session:${workerSession.id}`,
-    });
-    expect(completed.events.at(-1)).toMatchObject({ target: "worker" });
+    expect(received.events).toHaveLength(0);
+    expect(completed.events).toHaveLength(0);
   });
 
   it("schedules a cron inbound message and fires it into resident execution", async () => {
@@ -247,7 +240,7 @@ describe("inbound_message integration flows", () => {
 
   it("times out wait:true calls when ingress never responds", async () => {
     const tool = createInboundMessageTool({
-      ingest: () => new Promise(() => undefined),
+      submit: () => new Promise(() => undefined),
     });
 
     const response = await tool.execute({
@@ -274,8 +267,6 @@ describe("inbound_message integration flows", () => {
   });
 
   it("handles multiple concurrent inbound messages independently", async () => {
-    installDispatchOnlyCoordinator();
-    const completed = collectBusEvents(IngressEvent.Completed);
     const tool = inboundTool();
 
     const responses = await Promise.all(
@@ -296,8 +287,6 @@ describe("inbound_message integration flows", () => {
         }),
       ),
     );
-    completed.unsubscribe();
-
     expect(responses.map((response) => response.isError)).toEqual([
       undefined,
       undefined,
@@ -313,12 +302,68 @@ describe("inbound_message integration flows", () => {
       "beta",
       "gamma",
     ]);
-    expect(completed.events).toHaveLength(3);
   });
 });
 
 function inboundTool() {
-  return createInboundMessageTool(IngressEngine);
+  return createInboundMessageTool({ submit: dispatchSubmit });
+}
+
+async function dispatchSubmit(
+  command: Parameters<InboundMessageDispatch["submit"]>[0],
+  context: Parameters<InboundMessageDispatch["submit"]>[1],
+): ReturnType<InboundMessageDispatch["submit"]> {
+  const dispatchId = crypto.randomUUID();
+  if (context.agentName === "worker" && command.action === "worker.spawn") {
+    return { status: "failed", dispatchId, error: "worker cannot spawn workers" };
+  }
+
+  if (command.action === "resident.deliver") {
+    return {
+      status: "completed",
+      dispatchId,
+      output: testState.responseQueue.shift() ?? "resident:ok",
+    };
+  }
+
+  if (command.action === "worker.send" || command.action === "worker.resume") {
+    if (!command.target.sessionId) {
+      return { status: "failed", dispatchId, error: "worker target sessionId is required" };
+    }
+    deliveries.push({
+      sessionId: command.target.sessionId,
+      prompt: command.payload,
+      runId: undefined,
+    });
+    return {
+      status: "completed",
+      dispatchId,
+      output: JSON.stringify({ delivered: true, sessionId: command.target.sessionId }),
+    };
+  }
+
+  if (command.action === "schedule.create") {
+    const jobId = CronJobRegistry.register({
+      id: crypto.randomUUID(),
+      agentName: command.target.agentName ?? context.agentName ?? "resident",
+      payload: command.payload,
+      schedule: context.compatibility.schedule ?? "",
+      target: {
+        kind: command.target.kind,
+        ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
+      },
+      createdAt: Date.now(),
+    });
+    return { status: "scheduled", dispatchId, jobId, messageId: jobId };
+  }
+
+  dispatches.push({
+    sessionId: command.target.sessionId ?? context.sessionId ?? crypto.randomUUID(),
+    runId: crypto.randomUUID(),
+    prompt: command.payload,
+    target: command.target as Ingress.Target,
+  });
+  return { status: "completed", dispatchId, output: `worker:${command.payload}` };
 }
 
 function installResidentRuntime(): void {
@@ -351,25 +396,6 @@ function installCoordinator(): void {
     async deliverMessage(sessionId, prompt, runId) {
       deliveries.push({ sessionId, prompt, runId });
       return { accepted: true };
-    },
-  });
-}
-
-function installDispatchOnlyCoordinator(): void {
-  IngressEngine.setCoordinator({
-    async dispatch(sessionId, request) {
-      dispatches.push({
-        sessionId,
-        runId: request.runId,
-        prompt: request.prompt,
-      });
-      return {
-        runId: request.runId,
-        sessionId,
-        status: "succeeded" as const,
-        output: `worker:${request.prompt}`,
-        finishReason: "stop" as const,
-      };
     },
   });
 }

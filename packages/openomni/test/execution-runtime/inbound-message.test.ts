@@ -64,12 +64,12 @@ describe("inbound_message tool", () => {
     clearCronJobs();
   });
 
-  test("increments depth across legitimate multi-hop calls", async () => {
-    const events: Ingress.InboundEvent[] = [];
+  test("increments depth across legitimate multi-hop dispatch calls", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
     const tool = createInboundMessageTool({
-      ingest: async (event) => {
-        events.push(event);
-        return result("accepted");
+      submit: async (...args) => {
+        dispatches.push(args);
+        return { status: "completed", output: "accepted" };
       },
     });
 
@@ -94,12 +94,13 @@ describe("inbound_message tool", () => {
         depth: 1,
       },
     });
+    await Bun.sleep(0);
 
     expect(first.isError).toBeUndefined();
     expect(second.isError).toBeUndefined();
-    expect(events).toHaveLength(2);
-    expect(events[0]?.meta?.depth).toBe(1);
-    expect(events[1]?.meta?.depth).toBe(2);
+    expect(dispatches).toHaveLength(2);
+    expect(dispatches[0]?.[1].compatibility.depth).toBe(1);
+    expect(dispatches[1]?.[1].compatibility.depth).toBe(2);
   });
 
   test("maps wait:false worker spawns through dispatch without calling ingress", async () => {
@@ -277,12 +278,21 @@ describe("inbound_message tool", () => {
     });
   });
 
-  test("wait:false returns immediately after sending through ingress", async () => {
-    const events: Ingress.InboundEvent[] = [];
+  test("wait:false returns immediately after sending through dispatch", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    let ingressCalled = false;
     const tool = createInboundMessageTool({
-      ingest: async (event) => {
-        events.push(event);
-        return result("accepted");
+      dispatchRuntime: {
+        submit: async (...args) => {
+          dispatches.push(args);
+          return { status: "completed", output: "accepted" };
+        },
+      },
+      ingressEngine: {
+        ingest: async () => {
+          ingressCalled = true;
+          return result("should not use ingress");
+        },
       },
     });
 
@@ -299,27 +309,34 @@ describe("inbound_message tool", () => {
         runId: "run-1",
       },
     });
+    await Bun.sleep(0);
 
     expect(response.isError).toBeUndefined();
-    expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: events[0]?.id });
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      mode: "direct",
-      payload: "continue",
+    expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
+    expect(ingressCalled).toBe(false);
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]?.[0]).toMatchObject({
+      action: "worker.send",
       target: { kind: "worker", sessionId: "worker-session" },
-      meta: {
-        action: "send",
-        depth: 1,
-        actor: { role: "resident", sessionId: "caller-session", agentName: "resident" },
-      },
+      payload: "continue",
+    });
+    expect(dispatches[0]?.[1]).toMatchObject({
+      sessionId: "caller-session",
+      agentName: "resident",
+      runId: "run-1",
+      compatibility: { depth: 1, injectToHistory: false },
     });
   });
 
-  test("wait:true returns delivered output from ingress", async () => {
+  test("wait:true returns delivered output from dispatch", async () => {
     createWorkerRun("run-sync");
-    const pendingIngress = deferred<Ingress.IngressResult>();
+    const pendingDispatch = deferred<{
+      status: string;
+      dispatchId: string;
+      output: string;
+    }>();
     const tool = createInboundMessageTool({
-      ingest: () => pendingIngress.promise,
+      submit: () => pendingDispatch.promise,
     });
 
     const responsePromise = tool.execute({
@@ -336,13 +353,13 @@ describe("inbound_message tool", () => {
     });
 
     expect(WorkerRunStateStore.get("caller-session", "run-sync")?.status).toBe("waiting_input");
-    pendingIngress.resolve(result("done"));
+    pendingDispatch.resolve({ status: "completed", dispatchId: "dispatch-sync", output: "done" });
     const response = await responsePromise;
 
     expect(response.isError).toBeUndefined();
     expect(JSON.parse(response.output)).toEqual({
       status: "delivered",
-      messageId: expect.any(String),
+      messageId: "dispatch-sync",
       output: "done",
     });
     expect(WorkerRunStateStore.get("caller-session", "run-sync")).toMatchObject({
@@ -351,12 +368,21 @@ describe("inbound_message tool", () => {
     });
   });
 
-  test("schedule action registers a cron job without calling ingress", async () => {
-    const events: Ingress.InboundEvent[] = [];
+  test("schedule action routes through dispatch without registering locally or calling ingress", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    let ingressCalled = false;
     const tool = createInboundMessageTool({
-      ingest: async (event) => {
-        events.push(event);
-        return result("should not run");
+      dispatchRuntime: {
+        submit: async (...args) => {
+          dispatches.push(args);
+          return { status: "scheduled", dispatchId: "dispatch-schedule", jobId: "job-1" };
+        },
+      },
+      ingressEngine: {
+        ingest: async () => {
+          ingressCalled = true;
+          return result("should not use ingress");
+        },
       },
     });
 
@@ -371,31 +397,28 @@ describe("inbound_message tool", () => {
       },
     });
 
-    const output = JSON.parse(response.output);
-    const jobs = CronJobRegistry.list();
-
     expect(response.isError).toBeUndefined();
-    expect(output.status).toBe("scheduled");
-    expect(typeof output.messageId).toBe("string");
-    expect(typeof output.jobId).toBe("string");
-    expect(output.jobId).toBe(output.messageId);
-    expect(events).toHaveLength(0);
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({
-      id: output.jobId,
-      agentName: "dev",
-      payload: "daily summary",
-      schedule: "0 9 * * *",
-      target: { kind: "resident" },
+    expect(JSON.parse(response.output)).toEqual({
+      status: "scheduled",
+      messageId: "job-1",
+      jobId: "job-1",
     });
-    expect(CronJobRegistry.remove(output.jobId)).toBe(true);
+    expect(ingressCalled).toBe(false);
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]?.[0]).toMatchObject({
+      action: "schedule.create",
+      payload: "daily summary",
+    });
+    expect(dispatches[0]?.[1]).toMatchObject({
+      compatibility: { legacyAction: "schedule", schedule: "0 9 * * *" },
+    });
     expect(CronJobRegistry.list()).toEqual([]);
   });
 
-  test("wait:true times out when ingress does not resolve", async () => {
+  test("wait:true times out when dispatch does not resolve", async () => {
     createWorkerRun("run-timeout");
     const tool = createInboundMessageTool({
-      ingest: () => new Promise(() => undefined),
+      submit: () => new Promise(() => undefined),
     });
 
     const response = await tool.execute({
@@ -422,11 +445,11 @@ describe("inbound_message tool", () => {
     expect(WorkerRunStateStore.get("caller-session", "run-timeout")?.status).toBe("running");
   });
 
-  test("wait:true abort signal cancels the wait", async () => {
+  test("wait:true abort signal cancels the dispatch wait", async () => {
     createWorkerRun("run-abort");
     const controller = new AbortController();
     const tool = createInboundMessageTool({
-      ingest: () => new Promise(() => undefined),
+      submit: () => new Promise(() => undefined),
     });
 
     const responsePromise = tool.execute(
@@ -459,33 +482,25 @@ describe("inbound_message tool", () => {
     expect(WorkerRunStateStore.get("caller-session", "run-abort")?.status).toBe("running");
   });
 
-  test("rejects calls at and beyond the depth limit before ingress", async () => {
+  test("rejects calls at and beyond the depth limit before dispatch", async () => {
     const calls: number[] = [];
     const tool = createInboundMessageTool({
-      ingest: async () => {
+      submit: async () => {
         calls.push(Date.now());
-        return result("should not happen");
+        return { status: "completed", output: "should not happen" };
       },
     });
 
     const atLimit = await tool.execute({
       id: "call-depth-10",
       tool: "inbound_message",
-      input: {
-        target: { kind: "worker" },
-        payload: "loop",
-        depth: 10,
-      },
+      input: { target: { kind: "worker" }, payload: "loop", depth: 10 },
     });
 
     const beyondLimit = await tool.execute({
       id: "call-depth",
       tool: "inbound_message",
-      input: {
-        target: { kind: "worker" },
-        payload: "loop",
-        depth: 11,
-      },
+      input: { target: { kind: "worker" }, payload: "loop", depth: 11 },
     });
 
     expect(atLimit.isError).toBe(true);
@@ -495,12 +510,12 @@ describe("inbound_message tool", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("allows depth just under the limit", async () => {
-    const events: Ingress.InboundEvent[] = [];
+  test("allows depth just under the limit through dispatch", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
     const tool = createInboundMessageTool({
-      ingest: async (event) => {
-        events.push(event);
-        return result("accepted");
+      submit: async (...args) => {
+        dispatches.push(args);
+        return { status: "completed", output: "accepted" };
       },
     });
 
@@ -513,17 +528,20 @@ describe("inbound_message tool", () => {
         depth: 9,
       },
     });
+    await Bun.sleep(0);
 
     expect(response.isError).toBeUndefined();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.meta?.depth).toBe(10);
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]?.[1].compatibility.depth).toBe(10);
   });
 
-  test("authority-denied ingress errors return error-shaped tool results", async () => {
+  test("authority-denied dispatch errors return error-shaped tool results", async () => {
     const tool = createInboundMessageTool({
-      ingest: async () => {
-        throw new Error("actor is not authorized to create top-level inbound work");
-      },
+      submit: async () => ({
+        status: "failed",
+        dispatchId: "dispatch-denied",
+        error: "actor is not authorized to create top-level inbound work",
+      }),
     });
 
     const response = await tool.execute({
@@ -541,7 +559,7 @@ describe("inbound_message tool", () => {
     expect(response.isError).toBe(true);
     expect(JSON.parse(response.output)).toEqual({
       status: "error",
-      messageId: expect.any(String),
+      messageId: "dispatch-denied",
       error: "actor is not authorized to create top-level inbound work",
     });
   });
