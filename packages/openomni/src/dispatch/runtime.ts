@@ -28,6 +28,8 @@ export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchH
   readonly policies?: readonly PolicyRegistration[];
   readonly includeDefaultPolicies?: boolean;
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
+  readonly sourceTool?: string;
+  readonly compatibility?: Record<string, unknown>;
 }
 
 export interface DispatchRuntimeOptions {
@@ -116,7 +118,10 @@ export class DispatchRuntime {
     return this.registry.register(action, handler);
   }
 
-  async submit(input: DispatchProtocol.Input, options: DispatchSubmitOptions = {}): Promise<DispatchProtocol.Result> {
+  async submit(
+    input: DispatchProtocol.Input,
+    options: DispatchSubmitOptions = {},
+  ): Promise<DispatchProtocol.Result> {
     const parsed = DispatchProtocol.Input.parse(input);
     const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
     const actor = deriveActorContext(options);
@@ -220,7 +225,17 @@ export class DispatchRuntime {
     Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
 
     try {
-      const raw = await handler(command, { signal: options.signal });
+      const raw = await handler(command, {
+        signal: options.signal,
+        ...(options.wait !== undefined ? { wait: options.wait } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        ...(options.runId ? { runId: options.runId } : {}),
+        ...(options.agentName ? { agentName: options.agentName } : {}),
+        ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
+        ...(options.sourceTool ? { sourceTool: options.sourceTool } : {}),
+        ...(options.compatibility ? { compatibility: options.compatibility } : {}),
+      });
       const output = normalizeHandlerOutput(raw);
       Bus.publish(DispatchProtocol.Events.Completed, {
         ...eventBase(command),

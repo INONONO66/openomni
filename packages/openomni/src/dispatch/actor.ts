@@ -48,7 +48,8 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
     ...(context.sessionId ? { sessionId: context.sessionId } : {}),
     ...(context.runId ? { runId: context.runId, workerRunId: context.runId } : {}),
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
-    trustTier: context.trustTier ?? (workerRun ? "assigned_worker" : kind === "unknown" ? "unknown" : kind),
+    trustTier:
+      context.trustTier ?? (workerRun ? "assigned_worker" : kind === "unknown" ? "unknown" : kind),
     labels: [...(context.labels ?? []), `actor.${kind}`],
     ...(kind === "unknown" ? { reason: "missing runtime actor context" } : {}),
   });

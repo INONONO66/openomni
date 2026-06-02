@@ -10,6 +10,7 @@ export {
   Tool,
   buildToolCatalog,
   buildWorkerChildRuntimeConfig,
+  createDispatchTool,
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,
@@ -29,4 +30,5 @@ export type {
   ToolProvider,
   ToolRiskTier,
   ToolSource,
+  DispatchToolRuntime,
 } from "./tool/index.js";

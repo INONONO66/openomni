@@ -110,6 +110,7 @@ export {
   buildToolCatalog,
   buildWorkerMiddleware,
   buildWorkerChildRuntimeConfig,
+  createDispatchTool,
   createToolExecutor,
   createWorkerSubagentRuntime,
   defineTool,
@@ -130,20 +131,27 @@ export type {
   ToolRiskTier,
   ToolSource,
   WorkerMiddlewareConfig,
+  DispatchToolRuntime,
 } from "./execution-runtime";
 
 // Dispatch runtime
 export {
   DispatchRuntime,
   DispatchRegistry,
+  createDefaultDispatchRuntime,
   createDefaultDispatchPolicy,
   deriveActorContext,
+  registerBuiltInDispatchHandlers,
 } from "./dispatch";
 export type {
+  BuiltInDispatchOptions,
+  DefaultDispatchRuntimeOptions,
   DispatchHandler,
   DispatchHandlerContext,
   DispatchHandlerResult,
+  DispatchOwners,
   DispatchRuntimeContext,
   DispatchRuntimeOptions,
+  DispatchSchedulerOwner,
   DispatchSubmitOptions,
 } from "./dispatch";

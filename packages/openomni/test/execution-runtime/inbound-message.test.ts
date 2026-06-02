@@ -3,6 +3,7 @@ import type { Ingress } from "@openomni/protocol";
 import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
+import type { DispatchToolRuntime } from "../../src/execution-runtime/tool/agent/tools/dispatch";
 import {
   createInboundMessageTool,
   type InboundMessageDispatch,
@@ -102,7 +103,7 @@ describe("inbound_message tool", () => {
   });
 
   test("maps wait:false worker spawns through dispatch without calling ingress", async () => {
-    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    const dispatches: Parameters<DispatchToolRuntime["submit"]>[] = [];
     let ingressCalled = false;
     const tool = createInboundMessageTool({
       dispatchRuntime: {
@@ -552,12 +553,12 @@ describe("inbound_message tool", () => {
   });
 
   test("uses caller context when the executor supplies implicit inputs", async () => {
-    const events: Ingress.InboundEvent[] = [];
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
     const provider = new AgentToolProvider({
-      ingressEngine: {
-        ingest: async (event) => {
-          events.push(event);
-          return result("ok");
+      dispatchRuntime: {
+        async submit(...args) {
+          dispatches.push(args);
+          return { dispatchId: "dispatch-provider", status: "completed", output: "ok" };
         },
       },
     });
@@ -575,10 +576,15 @@ describe("inbound_message tool", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    expect(events[0]?.meta?.actor).toMatchObject({
-      role: "resident",
+    expect(dispatches[0]?.[1]).toMatchObject({
       sessionId: "caller-session",
       agentName: "resident",
+      runId: "run-provider",
+    });
+    expect(dispatches[0]?.[0]).toMatchObject({
+      action: "resident.deliver",
+      target: { kind: "resident" },
+      payload: "status",
     });
   });
 });

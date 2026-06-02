@@ -2,6 +2,14 @@ import type { Dispatch } from "@openomni/protocol";
 
 export interface DispatchHandlerContext {
   readonly signal?: AbortSignal;
+  readonly wait?: boolean;
+  readonly timeoutMs?: number;
+  readonly sessionId?: string;
+  readonly runId?: string;
+  readonly agentName?: string;
+  readonly workspaceRoot?: string;
+  readonly sourceTool?: string;
+  readonly compatibility?: Record<string, unknown>;
 }
 
 export interface DispatchHandlerResult {
