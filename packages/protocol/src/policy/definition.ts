@@ -3,6 +3,7 @@ import { z } from "zod";
 export namespace PolicyDefinition {
   export const Timing = {
     INBOUND_RECEIVE: "inbound.receive",
+    DISPATCH_AUTHORIZE: "dispatch.authorize",
     RUN_START: "run.start",
     TURN_START: "turn.start",
     CONTEXT_PREPARE: "context.prepare",

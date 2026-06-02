@@ -18,6 +18,14 @@ export namespace PolicyPointRegistryModule {
       ["audit.annotate", "run.abort", "delegation.set_constraints"],
       ...preBoundary,
     ),
+    "dispatch.action.pre": contract(
+      "dispatch.action.pre",
+      "pre",
+      ["dispatch"],
+      ["actor", "dispatchId", "action", "target", "sessionId", "runId"],
+      ["audit.annotate", "run.abort"],
+      ...preBoundary,
+    ),
     "run.lifecycle.pre": contract(
       "run.lifecycle.pre",
       "pre",
@@ -210,6 +218,7 @@ export namespace PolicyPointRegistryModule {
 
   export const policyPointMigrationMapping = {
     [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
+    [Timing.DISPATCH_AUTHORIZE]: ["dispatch.action.pre"],
     [Timing.RUN_START]: ["run.lifecycle.pre"],
     [Timing.TURN_START]: ["run.turn.pre"],
     [Timing.CONTEXT_PREPARE]: ["prompt.context.pre"],

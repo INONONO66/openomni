@@ -7,6 +7,7 @@ describe("PolicyPoint migration mapping", () => {
 
     expect(Object.keys(mapping).sort()).toEqual(Object.values(Policy.Timing).sort());
     expect(mapping[Policy.Timing.INBOUND_RECEIVE]).toEqual(["session.inbound.pre"]);
+    expect(mapping[Policy.Timing.DISPATCH_AUTHORIZE]).toEqual(["dispatch.action.pre"]);
     expect(mapping[Policy.Timing.RUN_START]).toEqual(["run.lifecycle.pre"]);
     expect(mapping[Policy.Timing.TURN_START]).toEqual(["run.turn.pre"]);
     expect(mapping[Policy.Timing.CONTEXT_PREPARE]).toEqual(["prompt.context.pre"]);

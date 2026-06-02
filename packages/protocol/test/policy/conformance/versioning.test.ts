@@ -168,6 +168,21 @@ describe("PolicyPoint versioning conformance", () => {
     }
   });
 
+  test("locks the dispatch policy point golden fixture", () => {
+    const fixture = goldenPolicyPointFixtures.find(
+      (candidate) => candidate.contract.id === "dispatch.action.pre",
+    );
+
+    expect(fixture !== undefined).toBe(true);
+    if (fixture === undefined) throw new Error("dispatch fixture missing");
+
+    const contract = Policy.PolicyPoint.Contract.parse(fixture.contract);
+    expect(contract.inputSchema).toBe("policy.point.dispatch.action.pre.input.v1");
+    expect(contract.allowedEffects).toEqual(["audit.annotate", "run.abort"]);
+    expect(contract.defaultFailPolicy).toBe("fail-closed");
+    expect(contract.sideEffectBoundary).toBe(true);
+  });
+
   test("requires explicit migration errors for breaking point schema changes", () => {
     const fixture = firstDecisionFixture();
     const replay = safeReplay({

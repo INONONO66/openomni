@@ -17,6 +17,7 @@ export namespace PolicyPointContractModule {
 
   const policyPointIds = [
     "session.inbound.pre",
+    "dispatch.action.pre",
     "run.lifecycle.pre",
     "run.turn.pre",
     "prompt.context.pre",
@@ -52,7 +53,7 @@ export namespace PolicyPointContractModule {
   export const PolicyPointId = z
     .string()
     .regex(
-      /^(tool|prompt|delegation|session|credential|connection|run)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
+      /^(tool|prompt|delegation|session|credential|connection|run|dispatch)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
     );
   export const PolicyPointContract = z.object({
     id: PolicyPointId,

@@ -3,6 +3,7 @@ import { Policy } from "../../src/policy/index.js";
 
 const expectedPointIds = [
   "session.inbound.pre",
+  "dispatch.action.pre",
   "run.lifecycle.pre",
   "run.turn.pre",
   "prompt.context.pre",
@@ -27,6 +28,7 @@ const expectedPointIds = [
 describe("PolicyPoint registry", () => {
   test("accepts only canonical 3-tier point IDs", () => {
     expect(Policy.PolicyPoint.Id.parse("tool.native.pre")).toBe("tool.native.pre");
+    expect(Policy.PolicyPoint.Id.parse("dispatch.action.pre")).toBe("dispatch.action.pre");
     expect(Policy.PolicyPoint.Id.safeParse("tool.native.prepare").success).toBe(false);
     expect(Policy.PolicyPoint.Id.safeParse("tool.pre").success).toBe(false);
     expect(Policy.PolicyPoint.Id.safeParse("unknown.native.pre").success).toBe(false);
@@ -79,11 +81,12 @@ describe("PolicyPoint registry", () => {
     }
   });
 
-  test("maps all 14 legacy timings to registered 3-tier point IDs", () => {
+  test("maps all policy timings to registered 3-tier point IDs", () => {
     const aliases = Policy.PolicyPoint.MigrationMapping;
 
     expect(Object.keys(aliases).sort()).toEqual(Object.values(Policy.Timing).sort());
     expect(aliases[Policy.Timing.INBOUND_RECEIVE]).toEqual(["session.inbound.pre"]);
+    expect(aliases[Policy.Timing.DISPATCH_AUTHORIZE]).toEqual(["dispatch.action.pre"]);
     expect(aliases[Policy.Timing.INVOKE_PREPARE]).toEqual([
       "tool.native.pre",
       "tool.mcp.pre",
@@ -105,6 +108,14 @@ describe("PolicyPoint registry", () => {
   });
 
   test("pre-boundary contracts fail closed and post-boundary contracts fail open", () => {
+    expect(Policy.PolicyPoint.Registry["dispatch.action.pre"].defaultFailPolicy).toBe(
+      "fail-closed",
+    );
+    expect(Policy.PolicyPoint.Registry["dispatch.action.pre"].sideEffectBoundary).toBe(true);
+    expect(Policy.PolicyPoint.Registry["dispatch.action.pre"].allowedEffects).toEqual([
+      "audit.annotate",
+      "run.abort",
+    ]);
     expect(Policy.PolicyPoint.Registry["tool.native.pre"].defaultFailPolicy).toBe("fail-closed");
     expect(Policy.PolicyPoint.Registry["tool.native.pre"].sideEffectBoundary).toBe(true);
     expect(Policy.PolicyPoint.Registry["tool.native.post"].defaultFailPolicy).toBe("fail-open");
