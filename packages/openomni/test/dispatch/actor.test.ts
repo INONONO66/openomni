@@ -18,6 +18,11 @@ describe("deriveActorContext", () => {
     expect(actor.trustTier).toBe("resident");
   });
 
+  test("does not infer privileged actors from substrings", () => {
+    expect(deriveActorContext({ agentName: "resident-helper" }).kind).toBe("worker");
+    expect(deriveActorContext({ agentName: "task-scheduler-worker" }).kind).toBe("worker");
+  });
+
   test("marks missing runtime context as unknown", () => {
     const actor = deriveActorContext();
     expect(actor.kind).toBe("unknown");

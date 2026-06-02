@@ -36,6 +36,22 @@ function payloadText(command: Dispatch.Command): string {
   return extractText(command.payload);
 }
 
+function scheduleTarget(command: Dispatch.Command): CronJob.Target {
+  if (command.target.kind === "worker") {
+    return {
+      kind: "worker",
+      ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
+    };
+  }
+  if (command.target.kind === "resident" || command.target.kind === "schedule") {
+    return {
+      kind: "resident",
+      ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
+    };
+  }
+  throw new Error(`schedule.create cannot target ${command.target.kind}`);
+}
+
 export function createScheduleDispatchHandlers(
   options: ScheduleDispatchHandlerOptions = {},
 ): Record<"schedule.create" | "schedule.cancel", DispatchHandler> {
@@ -56,10 +72,7 @@ export function createScheduleDispatchHandlers(
         agentName,
         payload: payloadText(command),
         schedule,
-        target: {
-          kind: command.target.kind === "schedule" ? "resident" : command.target.kind,
-          ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
-        },
+        target: scheduleTarget(command),
         createdAt: Date.now(),
       });
       const jobId = scheduler.register(job);

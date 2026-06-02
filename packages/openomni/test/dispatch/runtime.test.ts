@@ -205,6 +205,39 @@ describe("DispatchRuntime", () => {
     expect(result.error).toContain("No dispatch handler registered");
   });
 
+  test("forwards input-level wait and timeout to handler context", async () => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let handlerContext: { wait?: boolean; timeoutMs?: number } | undefined;
+    runtime.register("resident.deliver", (_command, context) => {
+      handlerContext = { wait: context?.wait, timeoutMs: context?.timeoutMs };
+      return { output: "ok" };
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "resident.deliver",
+        target: { kind: "resident" },
+        wait: true,
+        timeoutMs: 1234,
+      },
+      {
+        actorKind: "resident",
+        actorId: "resident:main",
+        policies: [
+          {
+            name: "allow-dispatch",
+            timing: "dispatch.authorize",
+            priority: 0,
+            fn: () => PolicyDecision.allow({ policyId: "allow-dispatch" }),
+          },
+        ],
+      },
+    );
+
+    expect(result.status).toBe("completed");
+    expect(handlerContext).toEqual({ wait: true, timeoutMs: 1234 });
+  });
+
   test("core treats handler payload opaquely", async () => {
     const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
     runtime.register("custom.fake", (command) => ({ output: command.payload }));

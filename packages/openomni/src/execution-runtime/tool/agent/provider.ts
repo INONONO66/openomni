@@ -5,11 +5,39 @@ import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } fro
 import { createDispatchTool, type DispatchToolRuntime } from "./tools/dispatch.js";
 import { createInboundMessageTool, type InboundMessageDispatch } from "./tools/inbound-message.js";
 import { createSubagentTool } from "./tools/subagent.js";
+import { createSubagentRuntime } from "./tools/subagent-runtime.js";
 
 export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
 };
+
+function hasSubagentOptions(options: AgentToolProviderOptions | undefined): boolean {
+  if (!options) return false;
+  return (
+    "context" in options ||
+    "delegationContext" in options ||
+    "middleware" in options ||
+    "defaultModel" in options ||
+    "subagentRuntime" in options ||
+    "backgroundManager" in options
+  );
+}
+
+function resolveSubagentOptions(
+  options: AgentToolProviderOptions | undefined,
+): SubagentToolOptions | undefined {
+  if (!hasSubagentOptions(options)) return undefined;
+  const {
+    dispatchRuntime: _dispatchRuntime,
+    dispatchOwners: _dispatchOwners,
+    ...partial
+  } = options ?? {};
+  return {
+    ...partial,
+    subagentRuntime: options?.subagentRuntime ?? createSubagentRuntime(),
+  };
+}
 
 function inboundDispatchAdapter(dispatchRuntime: DispatchToolRuntime): InboundMessageDispatch {
   return {
@@ -81,7 +109,7 @@ export class AgentToolProvider implements ToolProvider {
   private extraTools: NativeTool[] = [];
 
   constructor(options?: AgentToolProviderOptions) {
-    this.subagentOptions = options?.subagentRuntime ? (options as SubagentToolOptions) : undefined;
+    this.subagentOptions = resolveSubagentOptions(options);
     const dispatchRuntime =
       options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
     this.register(createDispatchTool(dispatchRuntime));

@@ -15,9 +15,9 @@ export interface DispatchRuntimeContext {
 
 function actorKindFromAgent(agentName: string | undefined): Dispatch.ActorKind {
   if (!agentName) return "unknown";
-  const normalized = agentName.toLowerCase();
-  if (normalized === "resident" || normalized.includes("resident")) return "resident";
-  if (normalized === "system" || normalized.includes("scheduler")) return "system";
+  const normalized = agentName.trim().toLowerCase();
+  if (normalized === "resident") return "resident";
+  if (normalized === "system" || normalized === "scheduler") return "system";
   return "worker";
 }
 

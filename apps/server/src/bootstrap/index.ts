@@ -184,7 +184,9 @@ export async function main(): Promise<void> {
       try {
         const residentPayload = `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`;
         const residentHandler: DispatchHandler = async (command, context) => {
-          const trace = TraceContext.create({ sessionId: mainSessionId });
+          const trace = command.traceId
+            ? TraceContext.child({ traceId: command.traceId }, { sessionId: mainSessionId })
+            : TraceContext.create({ sessionId: mainSessionId });
           const residentEvent = {
             id: command.dispatchId,
             surface: "dispatch",

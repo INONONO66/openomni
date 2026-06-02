@@ -215,8 +215,12 @@ export class DispatchRuntime {
     try {
       const raw = await handler(command, {
         signal: options.signal,
-        ...(options.wait !== undefined ? { wait: options.wait } : {}),
-        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...((options.wait ?? command.wait) !== undefined
+          ? { wait: options.wait ?? command.wait }
+          : {}),
+        ...((options.timeoutMs ?? command.timeoutMs) !== undefined
+          ? { timeoutMs: options.timeoutMs ?? command.timeoutMs }
+          : {}),
         ...(options.sessionId ? { sessionId: options.sessionId } : {}),
         ...(options.runId ? { runId: options.runId } : {}),
         ...(options.agentName ? { agentName: options.agentName } : {}),

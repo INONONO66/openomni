@@ -360,7 +360,7 @@ describe("inbound_message tool", () => {
 
   test("wait:false emits warning evidence when async dispatch is denied", async () => {
     const warnings: string[] = [];
-    Bus.observe((event, data) => {
+    const unsubscribe = Bus.observe((event, data) => {
       if (event.name === "operational.warn") {
         warnings.push(String((data as { msg?: unknown }).msg));
       }
@@ -380,9 +380,16 @@ describe("inbound_message tool", () => {
     });
     await Bun.sleep(0);
 
-    expect(response.isError).toBeUndefined();
-    expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
-    expect(warnings.at(-1)).toContain("dispatch.worker.spawn.denied");
+    try {
+      expect(response.isError).toBeUndefined();
+      expect(JSON.parse(response.output)).toEqual({
+        status: "sent",
+        messageId: expect.any(String),
+      });
+      expect(warnings.at(-1)).toContain("dispatch.worker.spawn.denied");
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("wait:true returns delivered output from dispatch", async () => {
@@ -617,6 +624,26 @@ describe("inbound_message tool", () => {
     const provider = new AgentToolProvider();
 
     expect(provider.listTools().some((tool) => tool.spec.name === "inbound_message")).toBe(true);
+  });
+
+  test("preserves partial subagent options without an explicit runtime", async () => {
+    const provider = new AgentToolProvider({
+      delegationContext: {
+        depth: 1,
+        maxDepth: 1,
+        visitedAgents: new Set<string>(),
+        parentAbort: new AbortController().signal,
+      },
+    });
+
+    const response = await provider.execute({
+      id: "call-subagent-depth",
+      tool: "subagent",
+      input: { agentName: "helper", prompt: "check" },
+    });
+
+    expect(response.isError).toBe(true);
+    expect(response.output).toContain("max delegation depth (1) exceeded");
   });
 
   test("uses caller context when the executor supplies implicit inputs", async () => {

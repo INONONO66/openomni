@@ -137,14 +137,17 @@ describe("built-in dispatch handlers", () => {
   });
 
   test("schedule handlers call scheduler owner", async () => {
-    const registered: string[] = [];
+    const registered: Array<{ summary: string; target: string }> = [];
     const removed: string[] = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
       owners: {
         scheduler: {
           register(job) {
-            registered.push(`${job.agentName}:${job.schedule}:${job.payload}`);
+            registered.push({
+              summary: `${job.agentName}:${job.schedule}:${job.payload}`,
+              target: job.target.kind,
+            });
             return "job-1";
           },
           remove(jobId) {
@@ -166,12 +169,38 @@ describe("built-in dispatch handlers", () => {
       command("schedule.cancel", { kind: "schedule", id: "job-1" }),
     );
 
-    expect(registered).toEqual(["resident:0 9 * * *:report"]);
+    expect(registered).toEqual([{ summary: "resident:0 9 * * *:report", target: "resident" }]);
     expect(removed).toEqual(["job-1"]);
     expect(createResult).toEqual({
       output: { scheduled: true, jobId: "job-1", messageId: "job-1" },
     });
     expect(cancelResult).toEqual({ output: { cancelled: true, jobId: "job-1" } });
+  });
+
+  test("schedule.create rejects non-cron target kinds before registering", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        scheduler: {
+          register() {
+            throw new Error("should not register invalid target");
+          },
+          remove() {
+            return false;
+          },
+        },
+      },
+    });
+
+    expect(() =>
+      registry.get("schedule.create")?.(
+        command(
+          "schedule.create",
+          { kind: "system", name: "scheduler" },
+          { schedule: "0 9 * * *", payload: "report" },
+        ),
+      ),
+    ).toThrow("schedule.create cannot target system");
   });
 
   test("resident.deliver calls resident runtime owner", async () => {
