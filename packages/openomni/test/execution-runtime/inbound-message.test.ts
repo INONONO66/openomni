@@ -3,7 +3,10 @@ import type { Ingress } from "@openomni/protocol";
 import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
-import { createInboundMessageTool } from "../../src/execution-runtime/tool/agent/tools/inbound-message";
+import {
+  createInboundMessageTool,
+  type InboundMessageDispatch,
+} from "../../src/execution-runtime/tool/agent/tools/inbound-message";
 
 function result(output: string): Ingress.IngressResult {
   return {
@@ -96,6 +99,181 @@ describe("inbound_message tool", () => {
     expect(events).toHaveLength(2);
     expect(events[0]?.meta?.depth).toBe(1);
     expect(events[1]?.meta?.depth).toBe(2);
+  });
+
+  test("maps wait:false worker spawns through dispatch without calling ingress", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    let ingressCalled = false;
+    const tool = createInboundMessageTool({
+      dispatchRuntime: {
+        submit: async (...args) => {
+          dispatches.push(args);
+          return { status: "completed", output: "accepted" };
+        },
+      },
+      ingressEngine: {
+        ingest: async () => {
+          ingressCalled = true;
+          return result("should not use ingress");
+        },
+      },
+    });
+
+    const response = await tool.execute({
+      id: "call-dispatch-spawn",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker" },
+        action: "spawn",
+        payload: "research task",
+        wait: false,
+        depth: 2,
+        injectToHistory: true,
+        sessionId: "caller-session",
+        agentName: "resident",
+        runId: "run-dispatch-spawn",
+      },
+    });
+    await Bun.sleep(0);
+
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
+    expect(ingressCalled).toBe(false);
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]?.[0]).toMatchObject({
+      action: "worker.spawn",
+      target: { kind: "worker" },
+      payload: "research task",
+      wait: false,
+      timeoutMs: 30000,
+      correlation: { messageId: expect.any(String) },
+    });
+    expect(dispatches[0]?.[1]).toMatchObject({
+      sourceTool: "inbound_message",
+      sessionId: "caller-session",
+      runId: "run-dispatch-spawn",
+      agentName: "resident",
+      compatibility: {
+        messageId: expect.any(String),
+        legacyAction: "spawn",
+        depth: 3,
+        injectToHistory: true,
+      },
+    });
+  });
+
+  test("maps wait:true resident delivery through dispatch and preserves delivered output", async () => {
+    createWorkerRun("run-dispatch-wait");
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    const tool = createInboundMessageTool({
+      submit: async (...args) => {
+        dispatches.push(args);
+        return { status: "completed", dispatchId: "dispatch-1", output: "resident answer" };
+      },
+    });
+
+    const response = await tool.execute({
+      id: "call-dispatch-wait",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "resident" },
+        payload: "what next?",
+        wait: true,
+        timeoutMs: 1_000,
+        sessionId: "caller-session",
+        agentName: "worker",
+        runId: "run-dispatch-wait",
+      },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.output)).toEqual({
+      status: "delivered",
+      messageId: "dispatch-1",
+      output: "resident answer",
+    });
+    expect(dispatches[0]?.[0]).toMatchObject({ action: "resident.deliver", wait: true });
+    expect(dispatches[0]?.[1]).toMatchObject({
+      wait: true,
+      timeoutMs: 1000,
+      compatibility: { depth: 1, injectToHistory: false },
+    });
+    expect(WorkerRunStateStore.get("caller-session", "run-dispatch-wait")).toMatchObject({
+      status: "running",
+      resumeCount: 1,
+    });
+  });
+
+  test("maps schedule action through dispatch and preserves scheduled result shape", async () => {
+    const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
+    const tool = createInboundMessageTool({
+      submit: async (...args) => {
+        dispatches.push(args);
+        return { status: "scheduled", dispatchId: "dispatch-schedule", jobId: "job-1" };
+      },
+    });
+
+    const response = await tool.execute({
+      id: "call-dispatch-schedule",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "resident", agentName: "dev" },
+        action: "schedule",
+        payload: "daily summary",
+        schedule: "0 9 * * *",
+        sessionId: "caller-session",
+        agentName: "resident",
+      },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.output)).toEqual({
+      status: "scheduled",
+      messageId: "job-1",
+      jobId: "job-1",
+    });
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]?.[0]).toMatchObject({
+      action: "schedule.create",
+      payload: "daily summary",
+    });
+    expect(dispatches[0]?.[1]).toMatchObject({
+      compatibility: {
+        legacyAction: "schedule",
+        schedule: "0 9 * * *",
+        depth: 1,
+        injectToHistory: false,
+      },
+    });
+    expect(CronJobRegistry.list()).toEqual([]);
+  });
+
+  test("times out dispatch-backed wait:true calls with legacy error shape", async () => {
+    const tool = createInboundMessageTool({
+      submit: () => new Promise(() => undefined),
+    });
+
+    const response = await tool.execute({
+      id: "call-dispatch-timeout",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "resident" },
+        payload: "please answer",
+        wait: true,
+        timeoutMs: 1,
+        sessionId: "caller-session",
+        agentName: "worker",
+        runId: "run-dispatch-timeout",
+      },
+    });
+
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.output)).toEqual({
+      status: "error",
+      messageId: expect.any(String),
+      error: "inbound_message timed out after 1ms",
+      timedOut: true,
+    });
   });
 
   test("wait:false returns immediately after sending through ingress", async () => {
