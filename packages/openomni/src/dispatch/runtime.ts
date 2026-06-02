@@ -2,7 +2,6 @@ import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@ope
 import {
   Dispatch as DispatchProtocol,
   PolicyDecision as Decision,
-  type Policy,
   type RuntimeResource,
 } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";

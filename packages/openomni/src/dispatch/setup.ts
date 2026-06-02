@@ -1,5 +1,5 @@
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
-import { DispatchRegistry } from "./registry.js";
+import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";
 import { createResidentDispatchHandlers } from "./handlers/resident.js";

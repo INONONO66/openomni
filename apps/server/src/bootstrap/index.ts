@@ -107,10 +107,10 @@ export async function main(): Promise<void> {
   BusPersistence.start();
 
   const systemProvider = new SystemToolProvider(config.workspace?.root);
-  let agentProvider: AgentToolProvider | undefined;
+  const agentProviderRef: { current?: AgentToolProvider } = {};
   const requireAgentProvider = (): AgentToolProvider => {
-    if (!agentProvider) throw new Error("agent tool provider is not configured");
-    return agentProvider;
+    if (!agentProviderRef.current) throw new Error("agent tool provider is not configured");
+    return agentProviderRef.current;
   };
   const mcpProvider = new McpToolProvider();
 
@@ -282,7 +282,7 @@ export async function main(): Promise<void> {
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
   IngressEngine.setCoordinator(coordinator);
-  agentProvider = new AgentToolProvider({
+  agentProviderRef.current = new AgentToolProvider({
     dispatchOwners: {
       coordinator,
       residentRuntime,
