@@ -131,3 +131,19 @@ export type {
   ToolSource,
   WorkerMiddlewareConfig,
 } from "./execution-runtime";
+
+// Dispatch runtime
+export {
+  DispatchRuntime,
+  DispatchRegistry,
+  createDefaultDispatchPolicy,
+  deriveActorContext,
+} from "./dispatch";
+export type {
+  DispatchHandler,
+  DispatchHandlerContext,
+  DispatchHandlerResult,
+  DispatchRuntimeContext,
+  DispatchRuntimeOptions,
+  DispatchSubmitOptions,
+} from "./dispatch";
