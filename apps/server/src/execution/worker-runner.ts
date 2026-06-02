@@ -5,6 +5,7 @@ import {
   DispatchRuntime,
   type BackgroundManager,
   type DispatchHandler,
+  type DispatchToolRuntime,
   type InjectionQueue,
   SystemToolProvider,
   ToolProxyProvider,
@@ -83,7 +84,7 @@ function createWorkerDispatchRuntime(options: {
   readonly workerId: string;
   readonly sessionId: string;
   readonly runId: string;
-}): DispatchRuntime {
+}): DispatchToolRuntime {
   const runtime = new DispatchRuntime();
   const handler: DispatchHandler = async (command, context) => {
     if (!context?.wait) {
@@ -136,7 +137,19 @@ function createWorkerDispatchRuntime(options: {
   };
 
   runtime.register("resident.deliver", handler);
-  return runtime;
+  return {
+    submit(input, context = {}) {
+      return runtime.submit(input, {
+        ...context,
+        sessionId: context.sessionId ?? options.sessionId,
+        runId: context.runId ?? options.runId,
+        actorKind: context.actorKind ?? "worker",
+        actorId: context.actorId ?? `${options.sessionId}:${options.runId}`,
+        trustTier: context.trustTier ?? "assigned_worker",
+        labels: [...(context.labels ?? []), "worker-runner"],
+      });
+    },
+  };
 }
 
 export interface WorkerRunIpcServer {
