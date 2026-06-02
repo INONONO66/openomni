@@ -37,6 +37,7 @@ export type InboundWaitParams = {
   sessionId: string;
   callId?: string;
   runId?: string;
+  workspaceRoot?: string;
   payload: string;
   signal?: AbortSignal;
 };
@@ -247,6 +248,8 @@ export class WorkerSupervisor {
                   ? params.callId
                   : requestId;
               const payload = typeof params?.payload === "string" ? params.payload : "";
+              const workspaceRoot =
+                typeof params?.workspaceRoot === "string" ? params.workspaceRoot : undefined;
               if (!this.inboundWaitHandler || !sessionId || !payload) {
                 respond({
                   requestId: callId,
@@ -263,6 +266,7 @@ export class WorkerSupervisor {
               const active: ActiveRequest = {
                 ...(runId !== undefined && { runId }),
                 sessionId,
+                ...(workspaceRoot !== undefined && { workspaceRoot }),
                 controller,
                 respond,
                 completed: false,
@@ -274,6 +278,7 @@ export class WorkerSupervisor {
                 sessionId,
                 callId,
                 ...(runId !== undefined && { runId }),
+                ...(workspaceRoot !== undefined && { workspaceRoot }),
                 payload,
                 signal: controller.signal,
               })

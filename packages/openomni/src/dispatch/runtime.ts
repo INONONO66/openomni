@@ -38,16 +38,6 @@ export interface DispatchRuntimeOptions {
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 }
 
-function summarize(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value === "string") return value.slice(0, 200);
-  try {
-    return JSON.stringify(value).slice(0, 200);
-  } catch {
-    return String(value).slice(0, 200);
-  }
-}
-
 function eventBase(command: DispatchProtocol.Command): DispatchEventPayload {
   return {
     dispatchId: command.dispatchId,
@@ -138,7 +128,6 @@ export class DispatchRuntime {
 
     Bus.publish(DispatchProtocol.Events.Submitted, {
       ...eventBase(command),
-      ...(summarize(command.payload) ? { payloadSummary: summarize(command.payload) } : {}),
       ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
     });
 
@@ -240,7 +229,6 @@ export class DispatchRuntime {
         ...eventBase(command),
         handler: command.action,
         durationMs: Date.now() - start,
-        ...(summarize(output) ? { resultSummary: summarize(output) } : {}),
       });
       return DispatchProtocol.Result.parse({
         dispatchId: command.dispatchId,

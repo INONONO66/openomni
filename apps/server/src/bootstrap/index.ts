@@ -149,8 +149,9 @@ export async function main(): Promise<void> {
     workerScript,
     bootstrap,
     toolDispatcher,
-    askResident: async ({ workerId, sessionId, runId, payload, signal }) => {
+    askResident: async ({ workerId, sessionId, runId, payload, workspaceRoot, signal }) => {
       const requestId = crypto.randomUUID();
+      const resolvedWorkspace = workspaceRoot ?? config.workspace?.root ?? process.cwd();
       if (signal?.aborted) {
         return { requestId, accepted: false, error: "worker.inbound_wait aborted" };
       }
@@ -187,7 +188,7 @@ export async function main(): Promise<void> {
           const residentEvent = {
             id: command.dispatchId,
             surface: "dispatch",
-            workspace: config.workspace?.root ?? process.cwd(),
+            workspace: resolvedWorkspace,
             mode: "internal" as const,
             agentName: "resident",
             payload:
@@ -218,7 +219,7 @@ export async function main(): Promise<void> {
               customProvider,
               defaultModel: { provider: model.providerID, id: model.id },
               providerOptions: config.model?.providerOptions,
-              workspaceRoot: config.workspace?.root ?? process.cwd(),
+              workspaceRoot: resolvedWorkspace,
             }),
           };
           IngressEventProjector.project(
@@ -253,6 +254,7 @@ export async function main(): Promise<void> {
             actorId: `${sessionId}:${runId ?? workerId}`,
             agentName: "worker",
             trustTier: "assigned_worker",
+            workspaceRoot: resolvedWorkspace,
             ...(signal ? { signal } : {}),
           },
         );

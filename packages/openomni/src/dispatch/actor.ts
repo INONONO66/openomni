@@ -46,7 +46,8 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
     actorId,
     ...(context.agentName ? { agentName: context.agentName } : {}),
     ...(context.sessionId ? { sessionId: context.sessionId } : {}),
-    ...(context.runId ? { runId: context.runId, workerRunId: context.runId } : {}),
+    ...(context.runId ? { runId: context.runId } : {}),
+    ...(context.runId && kind === "worker" ? { workerRunId: context.runId } : {}),
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
     trustTier:
       context.trustTier ?? (workerRun ? "assigned_worker" : kind === "unknown" ? "unknown" : kind),

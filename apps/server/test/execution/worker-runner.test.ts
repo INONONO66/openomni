@@ -236,6 +236,7 @@ describe("WorkerRunner", () => {
       const options = createSpawnOptions(
         {
           ...createValidRequest(),
+          workspaceRoot: "/worker/repo",
           tools: [{ name: "inbound_message", inputSchema: {} }],
         },
         (result) => {
@@ -289,6 +290,7 @@ describe("WorkerRunner", () => {
       const options = createSpawnOptions(
         {
           ...createValidRequest(),
+          workspaceRoot: "/worker/repo",
           tools: [{ name: "inbound_message", inputSchema: {} }],
         },
         (result) => {
@@ -345,6 +347,7 @@ describe("WorkerRunner", () => {
           runId: "run-1",
           callId: expect.any(String),
           payload: "Need approval",
+          workspaceRoot: "/worker/repo",
         }),
         timeoutMs: 300_000,
       }),

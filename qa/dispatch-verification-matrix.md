@@ -1,6 +1,6 @@
 # Dispatch / Policy Verification Matrix
 
-Task 5 verification record for team goal `G001-add-protocol-dispatch-schemas-events`.
+Verification record for the dispatch schema and policy-gate implementation.
 
 ## Scope
 

@@ -13,6 +13,9 @@ describe("deriveActorContext", () => {
   test("derives resident actor from resident agent name", () => {
     const actor = deriveActorContext({ sessionId: "s1", runId: "r1", agentName: "resident" });
     expect(actor.kind).toBe("resident");
+    expect(actor.runId).toBe("r1");
+    expect(actor.workerRunId).toBeUndefined();
+    expect(actor.trustTier).toBe("resident");
   });
 
   test("marks missing runtime context as unknown", () => {

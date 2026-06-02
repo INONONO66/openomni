@@ -250,6 +250,7 @@ describe("Ipc.Methods param schemas", () => {
         runId: "run-1",
         callId: "call-1",
         payload: "Need approval",
+        workspaceRoot: "/workspace/openomni",
       }).success,
     ).toBe(true);
   });

@@ -1,9 +1,9 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-
-const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
-import { PolicyDecision, type Dispatch as DispatchProtocol } from "../../../protocol/src/index";
+import { PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
+
+const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
 
 function input(action = "resident.deliver"): DispatchProtocol.Input {
   return { action, target: { kind: "resident" }, payload: "hello" };
@@ -121,6 +121,67 @@ describe("DispatchRuntime", () => {
     expect(result.status).toBe("denied");
     expect(result.reason).toBe("dispatch.worker.schedule.denied");
     expect(called).toBe(false);
+  });
+
+  test("default policy denies unknown actors before custom action routing", async () => {
+    let called = false;
+    const runtime = new DispatchRuntime();
+    runtime.register("custom.echo", () => {
+      called = true;
+      return { output: "echo" };
+    });
+
+    const result = await runtime.submit(
+      { action: "custom.echo", target: { kind: "system" }, payload: "secret text" },
+      {},
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.actor.required");
+    expect(called).toBe(false);
+  });
+
+  test("rejects duplicate handler registrations", () => {
+    const runtime = new DispatchRuntime();
+    runtime.register("resident.deliver", () => ({ output: "first" }));
+
+    expect(() => runtime.register("resident.deliver", () => ({ output: "second" }))).toThrow(
+      "dispatch action already registered: resident.deliver",
+    );
+  });
+
+  test("audit events stay envelope-only without payload or result summaries", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    Bus.observe((event, data) => {
+      if (event.name.startsWith("dispatch.")) {
+        payloads.push(data as Record<string, unknown>);
+      }
+    });
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    runtime.register("resident.deliver", () => ({ output: "private output" }));
+
+    await runtime.submit(
+      {
+        action: "resident.deliver",
+        target: { kind: "resident" },
+        payload: "private input",
+      },
+      {
+        actorKind: "resident",
+        actorId: "resident:main",
+        policies: [
+          {
+            name: "allow-dispatch",
+            timing: "dispatch.authorize",
+            priority: 0,
+            fn: () => PolicyDecision.allow({ policyId: "allow-dispatch" }),
+          },
+        ],
+      },
+    );
+
+    expect(payloads.some((payload) => "payloadSummary" in payload)).toBe(false);
+    expect(payloads.some((payload) => "resultSummary" in payload)).toBe(false);
   });
 
   test("fails unknown action without routing", async () => {

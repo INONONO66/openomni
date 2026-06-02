@@ -3,6 +3,7 @@ import type { Dispatch, Execution, Ingress } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
+import { extractText } from "../../src/dispatch/handlers/shared";
 
 function command(
   action: string,
@@ -24,6 +25,11 @@ describe("built-in dispatch handlers", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  test("extractText returns empty string for nullish payloads", () => {
+    expect(extractText(null)).toBe("");
+    expect(extractText(undefined)).toBe("");
   });
 
   test("worker.spawn is a coordinator dispatch adapter", async () => {

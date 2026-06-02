@@ -1,12 +1,6 @@
 import { PolicyDecision, type Dispatch, type Policy } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
 
-const PROTECTED_PREFIXES = ["worker.", "resident.", "schedule."] as const;
-
-function isProtectedAction(action: string): boolean {
-  return PROTECTED_PREFIXES.some((prefix) => action.startsWith(prefix));
-}
-
 function deny(reason: string): Policy.PolicyDecision {
   return PolicyDecision.deny({
     policyId: "dispatch.default-authority",
@@ -38,9 +32,7 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
       const actor = input.actor;
 
       if (!actor || actor.kind === "unknown") {
-        return isProtectedAction(action)
-          ? deny("dispatch.actor.required")
-          : allow("dispatch.actor.unknown_unprotected");
+        return deny("dispatch.actor.required");
       }
 
       if (actor.kind === "worker" && action === "worker.spawn") {

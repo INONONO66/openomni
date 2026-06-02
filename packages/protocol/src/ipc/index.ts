@@ -88,6 +88,7 @@ const methods = {
       runId: z.string().optional(),
       callId: z.string().optional(),
       payload: z.string(),
+      workspaceRoot: z.string().optional(),
     }),
     result: z.object({
       requestId: z.string(),

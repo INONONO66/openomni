@@ -84,6 +84,7 @@ function createWorkerDispatchRuntime(options: {
   readonly workerId: string;
   readonly sessionId: string;
   readonly runId: string;
+  readonly workspaceRoot?: string;
 }): DispatchToolRuntime {
   const runtime = new DispatchRuntime();
   const handler: DispatchHandler = async (command, context) => {
@@ -97,8 +98,9 @@ function createWorkerDispatchRuntime(options: {
     const callId = command.dispatchId;
     const payload =
       typeof command.payload === "string" ? command.payload : JSON.stringify(command.payload);
-    const sessionId = command.sessionId ?? context.sessionId ?? options.sessionId;
-    const runId = command.runId ?? context.runId ?? options.runId;
+    const sessionId = context.sessionId ?? options.sessionId;
+    const runId = context.runId ?? options.runId;
+    const workspaceRoot = context.workspaceRoot ?? options.workspaceRoot;
     const cancelInboundWait = () => {
       void options.server
         .call("worker.inbound_wait_cancel", { sessionId, runId, callId }, 5_000)
@@ -116,6 +118,7 @@ function createWorkerDispatchRuntime(options: {
             runId,
             callId,
             payload,
+            ...(workspaceRoot ? { workspaceRoot } : {}),
           },
           WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
         ),
@@ -143,6 +146,7 @@ function createWorkerDispatchRuntime(options: {
         ...context,
         sessionId: context.sessionId ?? options.sessionId,
         runId: context.runId ?? options.runId,
+        workspaceRoot: context.workspaceRoot ?? options.workspaceRoot,
         actorKind: context.actorKind ?? "worker",
         actorId: context.actorId ?? `${options.sessionId}:${options.runId}`,
         trustTier: context.trustTier ?? "assigned_worker",
@@ -352,6 +356,7 @@ export namespace WorkerRunner {
             workerId: options.workerId,
             sessionId,
             runId,
+            ...(workspaceRoot ? { workspaceRoot } : {}),
           }),
           middleware: buildDelegationAdmissionMiddleware(request),
           delegationContext: {
@@ -367,7 +372,16 @@ export namespace WorkerRunner {
         const agentTools = agentProvider.listTools();
         const proxyTools = mcpProxyProvider.listTools();
         const availableTools = [...systemTools, ...agentTools, ...proxyTools];
-        const { tools, toolExecutor } = createExecutionToolContext(request, availableTools);
+        const { tools, toolExecutor } = createExecutionToolContext(
+          {
+            ...request,
+            toolConfig: {
+              ...(request.toolConfig ?? {}),
+              ...(workspaceRoot ? { workspaceRoot } : {}),
+            },
+          },
+          availableTools,
+        );
         const exposedTools = tools ?? [];
 
         toolsRef.tools = exposedTools;

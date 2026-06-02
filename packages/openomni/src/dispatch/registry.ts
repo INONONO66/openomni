@@ -26,6 +26,9 @@ export class DispatchRegistry {
 
   register(action: string, handler: DispatchHandler): () => void {
     if (!action) throw new Error("dispatch action is required");
+    if (this.handlers.has(action)) {
+      throw new Error(`dispatch action already registered: ${action}`);
+    }
     this.handlers.set(action, handler);
     return () => this.unregister(action);
   }

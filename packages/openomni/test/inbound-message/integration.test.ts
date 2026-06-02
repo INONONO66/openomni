@@ -55,7 +55,6 @@ beforeEach(() => {
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
   installResidentRuntime();
-  installCoordinator();
   IngressEngine.setAgentResolver({
     resolve: async () => ({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }),
   });
@@ -375,29 +374,6 @@ function installResidentRuntime(): void {
       },
     }),
   );
-}
-
-function installCoordinator(): void {
-  IngressEngine.setCoordinator({
-    async dispatch(sessionId, request) {
-      dispatches.push({
-        sessionId,
-        runId: request.runId,
-        prompt: request.prompt,
-      });
-      return {
-        runId: request.runId,
-        sessionId,
-        status: "succeeded" as const,
-        output: `worker:${request.prompt}`,
-        finishReason: "stop" as const,
-      };
-    },
-    async deliverMessage(sessionId, prompt, runId) {
-      deliveries.push({ sessionId, prompt, runId });
-      return { accepted: true };
-    },
-  });
 }
 
 function createWorkerSession(title: string): Session.Info {

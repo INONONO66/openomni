@@ -8,7 +8,8 @@ export function extractText(payload: unknown): string {
   ) {
     return (payload as { text: string }).text;
   }
-  return JSON.stringify(payload ?? "") ?? "";
+  if (payload === null || payload === undefined) return "";
+  return JSON.stringify(payload) ?? "";
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
