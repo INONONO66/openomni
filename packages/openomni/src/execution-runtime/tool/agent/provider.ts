@@ -1,18 +1,12 @@
 import type { SubagentToolOptions } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import { createDefaultDispatchRuntime, type DispatchOwners } from "../../../dispatch/index.js";
-import { IngressEngine } from "../../../ingress/engine.js";
 import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
 import { createDispatchTool, type DispatchToolRuntime } from "./tools/dispatch.js";
-import {
-  createInboundMessageTool,
-  type InboundMessageDispatch,
-  type InboundMessageIngress,
-} from "./tools/inbound-message.js";
+import { createInboundMessageTool, type InboundMessageDispatch } from "./tools/inbound-message.js";
 import { createSubagentTool } from "./tools/subagent.js";
 
 export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
-  readonly ingressEngine?: InboundMessageIngress;
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
 };
@@ -91,10 +85,7 @@ export class AgentToolProvider implements ToolProvider {
       options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
     this.register(createDispatchTool(dispatchRuntime));
     this.register(
-      createInboundMessageTool({
-        dispatchRuntime: inboundDispatchAdapter(dispatchRuntime),
-        ingressEngine: options?.ingressEngine ?? IngressEngine,
-      }),
+      createInboundMessageTool({ dispatchRuntime: inboundDispatchAdapter(dispatchRuntime) }),
     );
   }
 

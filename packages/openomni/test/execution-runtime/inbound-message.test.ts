@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Ingress } from "@openomni/protocol";
 import { Session, Storage, WorkerRunStateStore } from "@openomni/session";
 import { CronJobRegistry } from "../../src/execution-runtime/cron-job-registry";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
@@ -8,15 +7,6 @@ import {
   createInboundMessageTool,
   type InboundMessageDispatch,
 } from "../../src/execution-runtime/tool/agent/tools/inbound-message";
-
-function result(output: string): Ingress.IngressResult {
-  return {
-    mode: "direct",
-    target: { kind: "worker", sessionId: "worker-session" },
-    sessionId: "worker-session",
-    result: { output, finishReason: "stop" },
-  };
-}
 
 function createWorkerRun(runId: string): void {
   const now = Date.now();
@@ -105,18 +95,11 @@ describe("inbound_message tool", () => {
 
   test("maps wait:false worker spawns through dispatch without calling ingress", async () => {
     const dispatches: Parameters<DispatchToolRuntime["submit"]>[] = [];
-    let ingressCalled = false;
     const tool = createInboundMessageTool({
       dispatchRuntime: {
         submit: async (...args) => {
           dispatches.push(args);
           return { status: "completed", output: "accepted" };
-        },
-      },
-      ingressEngine: {
-        ingest: async () => {
-          ingressCalled = true;
-          return result("should not use ingress");
         },
       },
     });
@@ -140,7 +123,6 @@ describe("inbound_message tool", () => {
 
     expect(response.isError).toBeUndefined();
     expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
-    expect(ingressCalled).toBe(false);
     expect(dispatches).toHaveLength(1);
     expect(dispatches[0]?.[0]).toMatchObject({
       action: "worker.spawn",
@@ -280,18 +262,11 @@ describe("inbound_message tool", () => {
 
   test("wait:false returns immediately after sending through dispatch", async () => {
     const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
-    let ingressCalled = false;
     const tool = createInboundMessageTool({
       dispatchRuntime: {
         submit: async (...args) => {
           dispatches.push(args);
           return { status: "completed", output: "accepted" };
-        },
-      },
-      ingressEngine: {
-        ingest: async () => {
-          ingressCalled = true;
-          return result("should not use ingress");
         },
       },
     });
@@ -313,7 +288,6 @@ describe("inbound_message tool", () => {
 
     expect(response.isError).toBeUndefined();
     expect(JSON.parse(response.output)).toEqual({ status: "sent", messageId: expect.any(String) });
-    expect(ingressCalled).toBe(false);
     expect(dispatches).toHaveLength(1);
     expect(dispatches[0]?.[0]).toMatchObject({
       action: "worker.send",
@@ -370,18 +344,11 @@ describe("inbound_message tool", () => {
 
   test("schedule action routes through dispatch without registering locally or calling ingress", async () => {
     const dispatches: Parameters<InboundMessageDispatch["submit"]>[] = [];
-    let ingressCalled = false;
     const tool = createInboundMessageTool({
       dispatchRuntime: {
         submit: async (...args) => {
           dispatches.push(args);
           return { status: "scheduled", dispatchId: "dispatch-schedule", jobId: "job-1" };
-        },
-      },
-      ingressEngine: {
-        ingest: async () => {
-          ingressCalled = true;
-          return result("should not use ingress");
         },
       },
     });
@@ -403,7 +370,6 @@ describe("inbound_message tool", () => {
       messageId: "job-1",
       jobId: "job-1",
     });
-    expect(ingressCalled).toBe(false);
     expect(dispatches).toHaveLength(1);
     expect(dispatches[0]?.[0]).toMatchObject({
       action: "schedule.create",
@@ -565,7 +531,7 @@ describe("inbound_message tool", () => {
   });
 
   test("AgentToolProvider registers inbound_message for agent callers", () => {
-    const provider = new AgentToolProvider({ ingressEngine: { ingest: async () => result("ok") } });
+    const provider = new AgentToolProvider();
 
     expect(provider.listTools().some((tool) => tool.spec.name === "inbound_message")).toBe(true);
   });

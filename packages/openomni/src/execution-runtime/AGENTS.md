@@ -22,7 +22,7 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 
 ## inbound_message tool
 
-`createInboundMessageTool(ingressEngine)` returns the `inbound_message` tool. It is the single cross-sandbox IPC primitive for worker agents.
+`createInboundMessageTool(dispatchRuntime)` returns the `inbound_message` tool. It is the Dispatch-backed compatibility shim for worker/resident internal messages.
 
 Actions:
 

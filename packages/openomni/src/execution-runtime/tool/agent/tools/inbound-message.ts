@@ -1,4 +1,4 @@
-import type { InboundMessage, Ingress, Tool } from "@openomni/protocol";
+import type { InboundMessage, Tool } from "@openomni/protocol";
 import { InboundMessage as InboundMessageProtocol } from "@openomni/protocol";
 import { WorkerRunStateStore } from "@openomni/session";
 import { defineTool } from "../../define.js";
@@ -6,13 +6,6 @@ import type { NativeTool, ToolExecutionContext } from "../../types.js";
 
 const MAX_DEPTH = 10;
 const DEFAULT_TIMEOUT_MS = 30_000;
-
-type InboundMessageIngress = {
-  ingest(
-    event: Ingress.InboundEvent,
-    options?: { readonly signal?: AbortSignal; readonly wait?: boolean },
-  ): Promise<Ingress.IngressResult>;
-};
 
 type InboundMessageDispatchAction =
   | "resident.deliver"
@@ -68,12 +61,8 @@ type InboundMessageDispatch = {
 };
 
 type InboundMessageRouter =
-  | InboundMessageIngress
   | InboundMessageDispatch
-  | {
-      readonly ingressEngine?: InboundMessageIngress;
-      readonly dispatchRuntime?: InboundMessageDispatch;
-    };
+  | { readonly dispatchRuntime?: InboundMessageDispatch };
 
 type RuntimeInput = InboundMessage.Input & {
   readonly sessionId?: string;
@@ -142,12 +131,10 @@ function depthError(call: Tool.Call): Tool.Result {
 }
 
 function resolveRouter(router: InboundMessageRouter): {
-  readonly ingressEngine?: InboundMessageIngress;
   readonly dispatchRuntime?: InboundMessageDispatch;
 } {
-  if ("ingest" in router) return { ingressEngine: router };
   if ("submit" in router) return { dispatchRuntime: router };
-  return { ingressEngine: router.ingressEngine, dispatchRuntime: router.dispatchRuntime };
+  return { dispatchRuntime: router.dispatchRuntime };
 }
 
 function dispatchActionFromInput(parsed: InboundMessage.Input): InboundMessageDispatchAction {
@@ -448,4 +435,4 @@ export function createInboundMessageTool(router: InboundMessageRouter): NativeTo
   });
 }
 
-export type { InboundMessageDispatch, InboundMessageIngress, InboundMessageRouter };
+export type { InboundMessageDispatch, InboundMessageRouter };
