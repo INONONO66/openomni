@@ -51,7 +51,7 @@ function inboundDispatchAdapter(dispatchRuntime: DispatchToolRuntime): InboundMe
       const dispatchResult = await dispatchRuntime.submit(
         {
           action: command.action,
-          target: command.action === "schedule.create" ? { ...target, kind: "schedule" } : target,
+          target,
           payload: command.payload,
           wait: command.wait,
           timeoutMs: command.timeoutMs,

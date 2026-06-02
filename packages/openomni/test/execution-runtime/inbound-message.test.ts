@@ -626,6 +626,50 @@ describe("inbound_message tool", () => {
     expect(provider.listTools().some((tool) => tool.spec.name === "inbound_message")).toBe(true);
   });
 
+  test("AgentToolProvider preserves worker target for scheduled inbound messages", async () => {
+    const registered: Array<{ targetKind: string; sessionId?: string; agentName: string }> = [];
+    const provider = new AgentToolProvider({
+      dispatchOwners: {
+        scheduler: {
+          register(job) {
+            registered.push({
+              targetKind: job.target.kind,
+              ...(job.target.sessionId ? { sessionId: job.target.sessionId } : {}),
+              agentName: job.agentName,
+            });
+            return "job-worker";
+          },
+          remove() {
+            return false;
+          },
+        },
+      },
+    });
+
+    const response = await provider.execute({
+      id: "call-provider-schedule-worker",
+      tool: "inbound_message",
+      input: {
+        target: { kind: "worker", agentName: "coder", sessionId: "worker-session" },
+        action: "schedule",
+        payload: "daily worker check",
+        schedule: "0 9 * * *",
+        sessionId: "caller-session",
+        agentName: "resident",
+      },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.output)).toEqual({
+      status: "scheduled",
+      messageId: "job-worker",
+      jobId: "job-worker",
+    });
+    expect(registered).toEqual([
+      { targetKind: "worker", sessionId: "worker-session", agentName: "coder" },
+    ]);
+  });
+
   test("preserves partial subagent options without an explicit runtime", async () => {
     const provider = new AgentToolProvider({
       delegationContext: {
