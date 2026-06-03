@@ -230,14 +230,14 @@ describe("WorkerRunner", () => {
     expect(activeRuns.size).toBe(0);
   });
 
-  it("exposes inbound_message without polling tools for resident guidance", async () => {
+  it("exposes dispatch without polling tools for resident guidance", async () => {
     const responses: unknown[] = [];
     const responseReceived = new Promise<void>((resolve) => {
       const options = createSpawnOptions(
         {
           ...createValidRequest(),
           workspaceRoot: "/worker/repo",
-          tools: [{ name: "inbound_message", inputSchema: {} }],
+          tools: [{ name: "dispatch", inputSchema: {} }],
         },
         (result) => {
           responses.push(result);
@@ -255,10 +255,10 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               const toolNames = options.tools?.map((tool) => tool.name) ?? [];
-              expect(toolNames).toContain("inbound_message");
+              expect(toolNames).toContain("dispatch");
               expect(toolNames).not.toContain("check_inbox");
               expect(toolNames).not.toContain("ask_main");
-              expect(options.systemPrompt).toContain("inbound_message with wait: true");
+              expect(options.systemPrompt).toContain("dispatch with action resident.deliver");
               expect(options.systemPrompt).toContain(
                 "responses from other agents arrive automatically, no polling needed",
               );
@@ -277,7 +277,7 @@ describe("WorkerRunner", () => {
     expect(responses[0]).toMatchObject({ status: "succeeded" });
   });
 
-  it("routes inbound_message wait requests through worker.inbound_wait IPC", async () => {
+  it("routes dispatch wait requests through worker.inbound_wait IPC", async () => {
     const responses: unknown[] = [];
     const serverCalls: Array<{
       method: string;
@@ -291,7 +291,7 @@ describe("WorkerRunner", () => {
         {
           ...createValidRequest(),
           workspaceRoot: "/worker/repo",
-          tools: [{ name: "inbound_message", inputSchema: {} }],
+          tools: [{ name: "dispatch", inputSchema: {} }],
         },
         (result) => {
           responses.push(result);
@@ -315,8 +315,9 @@ describe("WorkerRunner", () => {
               if (!options.toolExecutor) throw new Error("tool executor missing");
               inboundResult = await options.toolExecutor({
                 id: "agent-inbound-call",
-                tool: "inbound_message",
+                tool: "dispatch",
                 input: {
+                  action: "resident.deliver",
                   target: { kind: "resident" },
                   payload: "Need approval",
                   wait: true,
@@ -334,8 +335,7 @@ describe("WorkerRunner", () => {
     await responseReceived;
 
     expect(JSON.parse(inboundResult?.output ?? "{}")).toMatchObject({
-      status: "delivered",
-      output: "approved",
+      status: "completed",
     });
     expect(serverCalls).toContainEqual(
       expect.objectContaining({

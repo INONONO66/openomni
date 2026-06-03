@@ -9,6 +9,7 @@ const DEFAULT_CATEGORY_MAP: Record<string, ToolSelection.Category> = {
   "grep.search": "filesystem",
   bash: "execution",
   subagent: "delegation",
+  dispatch: "delegation",
 };
 
 export interface CatalogEntry {
