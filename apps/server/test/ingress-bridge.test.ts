@@ -43,7 +43,7 @@ function makeMessage(): Adapter.InboundMessage {
 
 const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
-  agentProvider: makeProvider([makeTool("subagent"), makeTool("inbound_message")]),
+  agentProvider: makeProvider([makeTool("subagent"), makeTool("dispatch")]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
   customProvider: makeProvider([makeTool("weather_lookup")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -51,13 +51,13 @@ const deps = {
 };
 
 describe("ingress bridge tool surfaces", () => {
-  it("uses normal resident tool selection including inbound_message", () => {
+  it("uses normal resident tool selection including dispatch", () => {
     const event = buildInboundEvent(makeMessage(), "dev", deps);
 
     expect(event.target).toEqual({ kind: "resident" });
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
-      "inbound_message",
+      "dispatch",
       "read",
       "subagent",
       "weather_lookup",
@@ -70,7 +70,7 @@ describe("ingress bridge tool surfaces", () => {
 
     expect(workerAgent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
-      "inbound_message",
+      "dispatch",
       "read",
       "subagent",
     ]);

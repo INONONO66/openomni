@@ -14,7 +14,7 @@ Every inbound event flows through three stages:
 | --- | --- | --- | --- |
 | `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent` | Primary path |
 
-`inbound_message` IPC calls route through `IngressEngine` when they create or deliver internal work. The tool builds internal inbound events, and `IngressEngine.ingestInternal()` applies the same session resolution, projection, and direct-mode dispatch path without treating the call as an external surface message.
+Internal cross-session actions (worker spawn/send, resident delivery, schedule) now route through the Dispatch layer (`src/dispatch/`) instead of IngressEngine. `IngressEngine.ingestInternal()` remains for system-origin events (e.g., cron fires via `CronAdapter`).
 
 ## Session Bridge
 
