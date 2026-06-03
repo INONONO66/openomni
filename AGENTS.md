@@ -81,9 +81,9 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
-| `inbound_message` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/inbound-message.ts` | Cross-sandbox IPC syscall — spawn/send/cancel/resume/schedule to resident or worker agents |
+| `dispatch` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` | Cross-session orchestration — worker.spawn/send/resume/cancel, resident.deliver, schedule.create/cancel via Dispatch policy/audit gate |
 | Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
-| CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | In-memory cron job registry; populated by `inbound_message` schedule action |
+| CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | In-memory cron job registry; populated by `dispatch` schedule.create action |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
 | Product model | `docs/core-model.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Resident, Workers, System Governor, controlled inbound authority |

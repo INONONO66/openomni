@@ -89,10 +89,10 @@ function createWorkerDispatchRuntime(options: {
   const runtime = new DispatchRuntime();
   const handler: DispatchHandler = async (command, context) => {
     if (!context?.wait) {
-      throw new Error("worker inbound_message async delivery requires coordinator routing");
+      throw new Error("worker dispatch async delivery requires coordinator routing");
     }
     if (command.target.kind !== "resident") {
-      throw new Error("worker inbound_message wait currently supports resident targets only");
+      throw new Error("worker dispatch wait currently supports resident targets only");
     }
 
     const callId = command.dispatchId;
@@ -400,7 +400,7 @@ export namespace WorkerRunner {
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use inbound_message with wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
+            "Worker runtime tools: use dispatch with action resident.deliver and wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
           ]
             .filter(Boolean)
             .join("\n\n"),
