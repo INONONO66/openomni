@@ -1,51 +1,37 @@
-# Dispatch / Policy Verification Matrix
+# Communication Dispatch Verification Matrix
 
-Verification record for the dispatch schema and policy-gate implementation.
+Verification record for the communication/dispatch authority update.
 
-## Scope
+## Current scope
 
-Verified the dispatch-schema, canonical policy timing, inbound-message compatibility,
-worker IPC, resident routing, and subagent policy-admission surfaces that are most
-likely to be affected by dispatch protocol changes.
+- Dispatch is egress command authority only; owner/external inbound and cron fire stay on Ingress.
+- Public/model-callable `inbound_message` is removed with no compatibility alias.
+- Owner inbound is normalized to Resident target and Resident identity, even when channel metadata hints at a worker.
+- Workers ask Resident through awaited `resident.ask`; workers do not directly ask the owner.
+- `PendingAsk` and `WorkerGrant` are durable session state with SQLite migration coverage.
+- Worker egress other than `resident.ask` requires an active matching `WorkerGrant`; `worker.spawn` is denied by default.
 
 ## Commands and results
 
 | Check | Command | Result | Notes |
 | --- | --- | --- | --- |
-| Dependency bootstrap | `bun install` | PASS | Installed workspace dependencies after initial `turbo: command not found`; no lockfile changes. |
-| Full typecheck | `bun run check-types` | PASS | Turbo reported 10/10 successful tasks. |
-| Full tests | `bun run test` | PASS | Turbo reported 9/9 successful tasks. Agent conformance suite includes 10 documented skipped known-ungoverned policy paths. |
-| Repo lint | `bun run lint` | PASS | Guard lint and side-effect lint passed. Biome exited 0 with 12 pre-existing warnings in tests/runtime files. |
-| Protocol dispatch/policy targets | `bun test packages/protocol/test/policy.test.ts packages/protocol/test/policy/point-registry.test.ts packages/protocol/test/inbound-message/schema.test.ts packages/protocol/test/agent-execution.test.ts packages/protocol/test/ipc/schema.test.ts` | PASS | 100 pass / 0 fail. Covers canonical policy timings, point registry, inbound-message schemas, execution events, and worker IPC schema preservation. |
-| Runtime ingress/delegation targets | `bun test packages/openomni/test/subagent/subagent-spawn-policy.test.ts packages/openomni/test/subagent/descriptor.test.ts packages/openomni/test/resident/runtime.test.ts apps/server/test/ingress-bridge.test.ts apps/server/test/agent-routing.test.ts` | PASS | 31 pass / 0 fail. Covers resident routing, ingress bridge tool surfaces, policy-plan propagation, and subagent worker descriptors. |
+| Diff hygiene | `git diff --check` | PASS | No whitespace errors. |
+| Typecheck | `bun run check-types` | PASS | Turbo reported 10/10 successful tasks. |
+| Focused dispatch/communication tests | `bun test apps/server/test/execution/worker-runner.test.ts packages/openomni/test/dispatch/runtime.test.ts packages/openomni/test/dispatch/handlers.test.ts packages/session/test/storage/drizzle-db.test.ts packages/session/test/pending-ask/store.test.ts packages/session/test/worker-grant/store.test.ts packages/protocol/test/communication/schema.test.ts apps/server/test/ingress-bridge.test.ts` | PASS | Covers worker `resident.ask`, dispatch policy, handler target checks, migration, durable stores, and bridge normalization/correlation. |
+| Full tests | `bun test` | PASS | 2533 pass / 10 skip / 0 fail across 263 files. |
+| Public-surface grep | `rg -n "inbound_message|createInboundMessageTool|\\bInboundMessage\\b" ...` | PASS | No model/tool-facing `inbound_message` surface remains; raw `Adapter.InboundMessage` remains only for server channel ingress. |
 
-## Integration findings
+## Authority assertions
 
-- `packages/protocol/src/policy/definition.ts`, `policy/point-contract.ts`, and
-  `policy/point-registry.ts` are coupled and should be changed together whenever
-  canonical policy timing or point IDs change.
-- `packages/protocol/src/inbound-message/index.ts`, `src/execution/index.ts`,
-  and `src/ipc/index.ts` are the schema choke points for dispatch compatibility.
-- Runtime adapters most exposed to dispatch changes are:
-  - `packages/openomni/src/ingress/handlers.ts`
-  - `packages/openomni/src/ingress/middleware/ingress-authority.ts`
-  - `packages/openomni/src/execution-runtime/tool/agent/tools/inbound-message.ts`
-  - `apps/server/src/ingress/bridge.ts`
-  - `apps/server/src/execution/worker-runner.ts`
-- The full agent policy no-bypass conformance suite still documents skipped
-  known-ungoverned paths. These are existing roadmap gaps, not failures from the
-  current verification pass.
+- `apps/server/src/ingress/bridge.ts` maps owner inbound to Resident target and Resident agent metadata.
+- `packages/openomni/src/ingress/cron-adapter.ts` continues to fire via internal Ingress, not Dispatch.
+- `apps/server/src/execution/worker-runner.ts` exposes worker dispatch as awaited `resident.ask` only.
+- `packages/openomni/src/dispatch/policy.ts` fail-closes unknown worker actions, denies `worker.spawn`, and requires `WorkerGrant` for worker scope/external/schedule egress.
+- `packages/openomni/src/dispatch/policy.ts` passes manager grant context from `target.labels` (`actorGroup:*`, `risk:*`) into `WorkerGrant` evaluation.
+- `packages/session/src/worker-grant/index.ts` treats explicit empty scope lists as deny-all, requires manager constraint context, and durably expires past-expiry grants during evaluation.
+- `apps/server/src/ingress/bridge.ts` reads `PendingAskStore.findByCorrelation()` for correlated owner replies, scopes weak message/thread identifiers by endpoint/channel, marks conflicting hints ambiguous, and attaches matched ask metadata for Resident mediation.
 
-## Fix decisions
+## Watch items
 
-No integration fix was applied in this lane. The only initial failure was missing
-workspace dependencies in this worktree (`turbo: command not found`), resolved by
-`bun install`. Subsequent typecheck, test, lint, and focused dispatch/runtime
-checks passed.
-
-## Subagent findings integrated
-
-- Test probe confirmed the most relevant broad commands and highlighted missing
-  direct model-resolution regressions outside this dispatch-lane scope.
-- Change-slice probe identified the coupled protocol policy files, runtime
-  adapter hazards, and the exact focused commands used above.
+- External actor reply execution paths are still future integration work; when implemented, add an end-to-end test proving external replies enter as result data rather than instructions.
+- Broad worker egress from a worker process remains intentionally narrow today. If grant-authorized non-Resident egress is exposed to workers later, route it through the server authority rather than adding worker-local handlers.

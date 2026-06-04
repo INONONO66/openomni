@@ -57,7 +57,7 @@ describe("createSkillActivationMiddleware", () => {
       policyId: "skill.activation",
       verdict: "allow",
     });
-    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toBe("no active skills");
+    expect(ProtocolPolicyDecision.reason(decisions[0] ?? result)).toBe("no active skills");
   });
 
   it("makes same-layer execution conflicts observable while composing deterministically", async () => {
@@ -84,10 +84,9 @@ describe("createSkillActivationMiddleware", () => {
     );
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.policyId).toBe("skill.activation.conflict");
-    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toContain("conflict");
-    expect(ProtocolPolicyDecision.reason(decisions[0]!)).toContain(
-      "multiple execution skills (exec-a, exec-b)",
-    );
+    const reason = ProtocolPolicyDecision.reason(decisions[0] ?? result);
+    expect(reason).toContain("conflict");
+    expect(reason).toContain("multiple execution skills (exec-a, exec-b)");
   });
 });
 
