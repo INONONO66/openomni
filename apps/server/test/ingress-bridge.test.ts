@@ -1,8 +1,19 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Adapter, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
+import { PendingAskStore, Storage } from "@openomni/session";
 import { agentMetadata, getAgentDefinition, registerAgent } from "../src/agents";
 import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
+
+function createSessionFixture(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: id,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
+}
 
 function makeTool(name: string): NativeTool {
   return {
@@ -41,9 +52,27 @@ function makeMessage(): Adapter.InboundMessage {
   };
 }
 
+function makeWorkerHintedOwnerMessage(): Adapter.InboundMessage {
+  return {
+    ...makeMessage(),
+    id: "message-worker-hint",
+    text: "answer for that worker",
+    replyToId: "worker-run-1",
+    threadId: "worker-thread-1",
+    raw: {
+      target: { kind: "worker", sessionId: "worker-session-1", runId: "worker-run-1" },
+      correlationToken: "worker-correlation-token",
+    },
+  };
+}
+
 const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
-  agentProvider: makeProvider([makeTool("subagent"), makeTool("dispatch")]),
+  agentProvider: makeProvider([
+    makeTool("subagent"),
+    makeTool("dispatch"),
+    makeTool("inbound_message"),
+  ]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
   customProvider: makeProvider([makeTool("weather_lookup")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -51,17 +80,135 @@ const deps = {
 };
 
 describe("ingress bridge tool surfaces", () => {
-  it("uses normal resident tool selection including dispatch", () => {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+  });
+
+  afterEach(() => {
+    Storage.reset();
+  });
+
+  it("uses Resident identity and tool selection with dispatch and without inbound_message", () => {
     const event = buildInboundEvent(makeMessage(), "dev", deps);
 
     expect(event.target).toEqual({ kind: "resident" });
+    expect(event.meta?.agentName).toBe("resident");
+    expect(event.agent.systemPrompt).toContain("Resident");
     expect(event.agent.tools?.map((tool) => tool.name).sort()).toEqual([
       "bash",
       "dispatch",
+      "mcp_search",
       "read",
       "subagent",
       "weather_lookup",
     ]);
+  });
+
+  it("maps owner inbound messages to Resident even when correlation hints mention a worker", () => {
+    const event = buildInboundEvent(makeWorkerHintedOwnerMessage(), "dev", deps);
+
+    expect(event.target).toEqual({ kind: "resident" });
+    expect(event.meta?.target).toEqual({ kind: "resident" });
+    expect(event.meta?.replyToId).toBe("worker-run-1");
+    expect(event.meta?.threadId).toBe("worker-thread-1");
+    expect(event.meta?.raw).toMatchObject({
+      target: { kind: "worker", sessionId: "worker-session-1", runId: "worker-run-1" },
+    });
+  });
+
+  it("attaches correlated PendingAsk state to owner replies for Resident mediation", () => {
+    createSessionFixture("worker-session-1");
+    PendingAskStore.create({
+      id: "ask-1",
+      originSessionId: "worker-session-1",
+      originRunId: "worker-run-1",
+      originActorKind: "worker",
+      targetKind: "resident",
+      endpointId: "guild",
+      channelId: "dev",
+      correlation: { tokenHash: "worker-correlation-token" },
+    });
+
+    const event = buildInboundEvent(makeWorkerHintedOwnerMessage(), "dev", deps);
+
+    expect(event.target).toEqual({ kind: "resident" });
+    expect(event.meta?.pendingAsk).toMatchObject({
+      id: "ask-1",
+      originSessionId: "worker-session-1",
+      originRunId: "worker-run-1",
+      originActorKind: "worker",
+      targetKind: "resident",
+      status: "open",
+    });
+  });
+
+  it("marks conflicting PendingAsk reply hints as ambiguous instead of choosing the first match", () => {
+    createSessionFixture("worker-session-token");
+    createSessionFixture("worker-session-thread");
+    PendingAskStore.create({
+      id: "ask-token",
+      originSessionId: "worker-session-token",
+      originRunId: "run-token",
+      originActorKind: "worker",
+      targetKind: "resident",
+      correlation: { tokenHash: "worker-correlation-token" },
+    });
+    PendingAskStore.create({
+      id: "ask-thread",
+      originSessionId: "worker-session-thread",
+      originRunId: "run-thread",
+      originActorKind: "worker",
+      targetKind: "resident",
+      endpointId: "guild",
+      channelId: "dev",
+      correlation: { threadId: "worker-thread-1" },
+    });
+
+    const event = buildInboundEvent(makeWorkerHintedOwnerMessage(), "dev", deps);
+
+    expect(event.meta?.pendingAsk).toEqual({
+      ids: ["ask-token", "ask-thread"],
+      status: "ambiguous",
+      ambiguous: true,
+    });
+    expect(PendingAskStore.get("ask-token")?.status).toBe("ambiguous");
+    expect(PendingAskStore.get("ask-thread")?.status).toBe("ambiguous");
+  });
+
+  it("scopes weak PendingAsk reply hints by endpoint and channel", () => {
+    createSessionFixture("other-session");
+    createSessionFixture("current-session");
+    PendingAskStore.create({
+      id: "ask-other-channel",
+      originSessionId: "other-session",
+      originRunId: "other-run",
+      originActorKind: "worker",
+      targetKind: "resident",
+      endpointId: "guild",
+      channelId: "random",
+      correlation: { threadId: "worker-thread-1" },
+    });
+    PendingAskStore.create({
+      id: "ask-current-channel",
+      originSessionId: "current-session",
+      originRunId: "current-run",
+      originActorKind: "worker",
+      targetKind: "resident",
+      endpointId: "guild",
+      channelId: "dev",
+      correlation: { threadId: "worker-thread-1" },
+    });
+
+    const event = buildInboundEvent(makeWorkerHintedOwnerMessage(), "dev", deps);
+
+    expect(event.meta?.pendingAsk).toMatchObject({
+      id: "ask-current-channel",
+      originSessionId: "current-session",
+      originRunId: "current-run",
+      status: "open",
+    });
+    expect(PendingAskStore.get("ask-other-channel")?.status).toBe("open");
   });
 
   it("keeps full agent tool selection available for spawned workers", () => {

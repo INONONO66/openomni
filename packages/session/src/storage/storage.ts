@@ -63,6 +63,8 @@ export namespace Storage {
     };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
+    pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
+    workerGrant?: ProtocolStorage.WorkerGrantSubAdapter;
   }
 }
 

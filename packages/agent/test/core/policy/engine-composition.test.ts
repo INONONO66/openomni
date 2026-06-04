@@ -214,7 +214,7 @@ describe("scope filtering with 100 policies", () => {
     ];
 
     for (let i = 0; i < 100; i++) {
-      const agentType = agentTypes[i % agentTypes.length]!;
+      const agentType = agentTypes[i % agentTypes.length] ?? "unknown";
       const reg: PolicyRegistration = {
         name: `policy-${i}-${agentType}`,
         timing: "turn.start",
@@ -338,7 +338,7 @@ describe("scope filtering with 100 policies", () => {
     expect(executed.length).toBe(expectedCount);
     expect(
       executed.every((name) => {
-        const idx = Number.parseInt(name.split("-")[1]!);
+        const idx = Number.parseInt(name.split("-")[1] ?? "");
         return idx % 3 === 0;
       }),
     ).toBe(true);

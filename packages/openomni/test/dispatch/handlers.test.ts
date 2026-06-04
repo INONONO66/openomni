@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Dispatch, Execution, Ingress } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { PendingAskStore, Session, Storage } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
 import { extractText } from "../../src/dispatch/handlers/shared";
@@ -19,6 +19,17 @@ function command(
     traceId: "trace-1",
     submittedAt: Date.now(),
   };
+}
+
+function createSessionFixture(id: string): void {
+  const now = Date.now();
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: id,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  });
 }
 
 describe("built-in dispatch handlers", () => {
@@ -203,7 +214,8 @@ describe("built-in dispatch handlers", () => {
     ).toThrow("schedule.create cannot target system");
   });
 
-  test("resident.deliver calls resident runtime owner", async () => {
+  test("resident.ask calls resident runtime owner", async () => {
+    createSessionFixture("resident-session");
     const calls: Ingress.ResolvedInboundEvent[] = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
@@ -222,18 +234,42 @@ describe("built-in dispatch handlers", () => {
       },
     });
 
-    const output = await registry.get("resident.deliver")?.(
-      command("resident.deliver", { kind: "resident", sessionId: "resident-session" }, "question"),
+    const output = await registry.get("resident.ask")?.(
+      command("resident.ask", { kind: "resident", sessionId: "resident-session" }, "question"),
     );
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       surface: "dispatch",
+      agentName: "resident",
       payload: "question",
       target: { kind: "resident", sessionId: "resident-session" },
+    });
+    expect(PendingAskStore.get("dispatch-resident.ask")).toMatchObject({
+      status: "answered",
+      targetKind: "resident",
     });
     expect(output).toEqual({
       output: { output: "answer", finishReason: "stop", runId: "resident-run" },
     });
+  });
+
+  test("resident.ask rejects non-resident targets before resident runtime", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        residentRuntime: {
+          async run() {
+            throw new Error("should not run non-resident target");
+          },
+        },
+      },
+    });
+
+    await expect(
+      registry.get("resident.ask")?.(
+        command("resident.ask", { kind: "worker", sessionId: "worker-session" }, "question"),
+      ),
+    ).rejects.toThrow("resident.ask requires resident target");
   });
 });

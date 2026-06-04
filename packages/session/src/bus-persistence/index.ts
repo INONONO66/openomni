@@ -204,23 +204,51 @@ function defaultResolveSessionId(
   const root = toRecord(payload);
   if (!root) return undefined;
 
-  const direct = sessionIdFromRecord(root) ?? stringFromRecord(root, "id");
+  const direct =
+    sessionIdFromRecord(root) ??
+    stringFromRecord(root, "originSessionId") ??
+    sessionIdFromWorkerRun(root) ??
+    stringFromRecord(root, "id");
   if (direct !== undefined) return direct;
 
   const nestedPayload = toRecord(root.payload);
   const nested = nestedPayload
-    ? (sessionIdFromRecord(nestedPayload) ?? stringFromRecord(nestedPayload, "parentSessionId"))
+    ? (sessionIdFromRecord(nestedPayload) ??
+      stringFromRecord(nestedPayload, "originSessionId") ??
+      sessionIdFromWorkerRun(nestedPayload) ??
+      stringFromRecord(nestedPayload, "parentSessionId"))
     : undefined;
   if (nested !== undefined) return nested;
 
   const info = toRecord(root.info);
-  return info ? (sessionIdFromRecord(info) ?? stringFromRecord(info, "id")) : undefined;
+  return info
+    ? (sessionIdFromRecord(info) ??
+        stringFromRecord(info, "originSessionId") ??
+        sessionIdFromWorkerRun(info) ??
+        stringFromRecord(info, "id"))
+    : undefined;
 }
 
 function sessionIdFromRecord(record: Record<string, unknown> | undefined): string | undefined {
   // Bus payloads historically use both spellings: newer event envelopes prefer
   // sessionId, while message/snapshot payloads use sessionID.
   return stringFromRecord(record, "sessionId") ?? stringFromRecord(record, "sessionID");
+}
+
+function sessionIdFromWorkerRun(record: Record<string, unknown> | undefined): string | undefined {
+  const workerRunId = stringFromRecord(record, "workerRunId");
+  if (!workerRunId) return undefined;
+  const db = (Storage.getAdapter() as PersistableAdapter).db;
+  if (db === undefined) return undefined;
+  const row = db
+    .query(
+      `SELECT session_id
+       FROM worker_run_state
+       WHERE run_id = ?
+       LIMIT 1`,
+    )
+    .get(workerRunId) as { session_id: string } | null;
+  return row?.session_id;
 }
 
 function parsePayload(event: Bus.PublishedDescriptor, payload: unknown): unknown {

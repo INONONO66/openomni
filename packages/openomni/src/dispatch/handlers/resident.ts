@@ -1,4 +1,5 @@
 import type { Dispatch, Ingress, Model } from "@openomni/protocol";
+import { PendingAskStore } from "@openomni/session";
 import type { ResidentRuntime } from "../../resident/runtime.js";
 import type { DispatchHandler } from "../registry.js";
 import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
@@ -23,7 +24,7 @@ function eventFromCommand(
     id: command.dispatchId,
     surface: "dispatch",
     mode: "internal",
-    agentName: command.target.name ?? command.actor.agentName ?? "resident",
+    agentName: "resident",
     target: {
       kind: "resident",
       ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
@@ -46,25 +47,54 @@ function eventFromCommand(
   };
 }
 
+function originActorKind(actor: Dispatch.ActorContext): "resident" | "worker" | "system" {
+  if (actor.kind === "resident" || actor.kind === "worker") return actor.kind;
+  return "system";
+}
+
+function openPendingAsk(command: Dispatch.Command, fallbackSessionId: string): void {
+  PendingAskStore.create({
+    id: command.dispatchId,
+    originSessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
+    ...((command.actor.runId ?? command.runId)
+      ? { originRunId: command.actor.runId ?? command.runId }
+      : {}),
+    originActorKind: originActorKind(command.actor),
+    targetKind: "resident",
+    ...(command.target.id ? { targetActorId: command.target.id } : {}),
+    correlation: command.correlation ? { tokenHash: command.correlation } : {},
+  });
+}
+
 export function createResidentDispatchHandlers(
   options: ResidentDispatchHandlerOptions = {},
-): Record<"resident.deliver", DispatchHandler> {
+): Record<"resident.ask", DispatchHandler> {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   return {
-    async "resident.deliver"(command, context) {
+    async "resident.ask"(command, context) {
       const residentRuntime = requireResidentRuntime(options.residentRuntime);
+      if (command.target.kind !== "resident") {
+        throw new Error("resident.ask requires resident target");
+      }
       const sessionId = command.target.sessionId ?? command.sessionId ?? context?.sessionId;
       if (!sessionId)
-        throw new Error("resident.deliver requires target.sessionId or runtime sessionId");
-      const result = await residentRuntime.run({
-        sessionId,
-        event: eventFromCommand(command, model),
-        traceContext: command.traceId ? { traceId: command.traceId, sessionId } : undefined,
-        signal: context?.signal,
-      });
-      return {
-        output: { output: result.output, finishReason: result.finishReason, runId: result.runId },
-      };
+        throw new Error("resident.ask requires target.sessionId or runtime sessionId");
+      openPendingAsk(command, sessionId);
+      try {
+        const result = await residentRuntime.run({
+          sessionId,
+          event: eventFromCommand(command, model),
+          traceContext: command.traceId ? { traceId: command.traceId, sessionId } : undefined,
+          signal: context?.signal,
+        });
+        PendingAskStore.answer(command.dispatchId);
+        return {
+          output: { output: result.output, finishReason: result.finishReason, runId: result.runId },
+        };
+      } catch (error) {
+        PendingAskStore.expire(command.dispatchId);
+        throw error;
+      }
     },
   };
 }

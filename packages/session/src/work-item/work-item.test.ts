@@ -65,7 +65,7 @@ describe("WorkItemStore", () => {
     expect(started).toBeDefined();
     expect(withEvidence?.evidence).toHaveLength(1);
     expect(completed).toBeDefined();
-    expect(WorkItem.deriveStatus(completed!)).toBe("completed");
+    expect(completed ? WorkItem.deriveStatus(completed) : undefined).toBe("completed");
     expect(events).toEqual([
       "created",
       "status:pending->running",
@@ -91,8 +91,8 @@ describe("WorkItemStore", () => {
     const resumed = await WorkItemStore.resolveBlocker(item.hash, blocker?.id ?? "missing");
     await flushBus();
 
-    expect(WorkItem.deriveStatus(blocked!)).toBe("blocked");
-    expect(WorkItem.deriveStatus(resumed!)).toBe("running");
+    expect(blocked ? WorkItem.deriveStatus(blocked) : undefined).toBe("blocked");
+    expect(resumed ? WorkItem.deriveStatus(resumed) : undefined).toBe("running");
     expect(statuses).toEqual(["pending->running", "running->blocked", "blocked->running"]);
   });
 
@@ -178,7 +178,7 @@ describe("WorkItemStore", () => {
     expect(retried?.failureReason).toBeUndefined();
     expect(retried?.timestamps.failed).toBeUndefined();
     expect(retried?.timestamps.started).toBeNumber();
-    expect(WorkItem.deriveStatus(retried!)).toBe("running");
+    expect(retried ? WorkItem.deriveStatus(retried) : undefined).toBe("running");
   });
 
   test("degrades gracefully when work item storage is missing", async () => {

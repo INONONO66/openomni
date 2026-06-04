@@ -1,4 +1,4 @@
-# execution-runtime/
+# Execution Runtime Notes
 
 Tool system, workspace safety, and worker middleware for `@openomni/openomni`. This domain is used by server workers and subagent execution, but it must stay independent from high-level orchestration policy.
 
@@ -12,38 +12,40 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 | `cron-job-registry.ts` | `CronJobRegistry` — in-memory registry of scheduled jobs; populated by `dispatch` `schedule.create` action, read by `CronAdapter`. |
 | `filesystem/` | Path containment helpers for file tools. |
 | `tool/` | Tool definition, catalog, providers, executor, and built-in tools. |
-| `tool/agent/tools/dispatch.ts` | `createDispatchTool` — cross-session orchestration gate for worker/resident/schedule actions. |
+| `tool/agent/tools/dispatch.ts` | `createDispatchTool` — runtime-to-runtime/system egress gate. |
 
 ## Ownership
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
-- Agent delegation tools live under `tool/agent/`. The cross-session orchestration tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session child execution tool is `subagent` (`tool/agent/tools/subagent.ts`).
+- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session child execution tool is `subagent` (`tool/agent/tools/subagent.ts`).
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 ## dispatch tool
 
-`createDispatchTool(dispatchRuntime)` returns the `dispatch` tool. It submits cross-session actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`).
+`createDispatchTool(dispatchRuntime)` returns the `dispatch` tool. It submits egress actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`). Worker-runner uses a narrower dispatch surface that only allows awaited `resident.ask`.
 
 Built-in actions:
 
 | Action | Behavior |
 | --- | --- |
-| `worker.spawn` | Creates a new independent WorkerRun via coordinator. |
-| `worker.send` | Delivers a message to an existing Worker session. |
-| `worker.resume` | Resumes a waiting Worker. |
-| `worker.cancel` | Cancels a running Worker. |
-| `resident.deliver` | Delivers a message to the Resident session. |
-| `schedule.create` | Registers a cron job via `CronJobRegistry`; `CronAdapter` fires it on schedule. |
+| `worker.spawn` | Creates a new independent WorkerRun via coordinator when explicitly granted. |
+| `worker.send` | Delivers a message to an existing Worker session when explicitly granted. |
+| `worker.resume` | Resumes a waiting Worker when explicitly granted. |
+| `worker.cancel` | Cancels a running Worker when explicitly granted. |
+| `resident.ask` | Sends an awaited Worker question to the Resident. |
+| `schedule.create` | Registers a cron job via `CronJobRegistry`; `CronAdapter` fires it as internal ingress. |
 | `schedule.cancel` | Cancels a scheduled job. |
 
 Key parameters:
 
 - `action`: the dispatch action string.
-- `target.kind`: `"worker"`, `"resident"`, or `"schedule"`.
+- `target.kind`: `"worker"`, `"resident"`, `"schedule"`, or `"external_actor"`.
 - `wait`: if `true`, blocks until the target responds (up to `timeoutMs`).
 - Actor identity is runtime-derived from implicit inputs (`sessionId`, `runId`, `agentName`) — not model-specified.
 
 Plugin actions (e.g., `surface.send.*`, `external.invoke.*`) can be registered via `Dispatch.Registry.register()`.
+
+Do not reintroduce the removed legacy model-facing inbound tool or compatibility alias.
 
 ## Safety rules
 

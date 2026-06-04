@@ -255,13 +255,33 @@ describe("WorkerRunner", () => {
           createAgent: (options) => ({
             async run() {
               const toolNames = options.tools?.map((tool) => tool.name) ?? [];
+              const dispatchTool = options.tools?.find((tool) => tool.name === "dispatch");
               expect(toolNames).toContain("dispatch");
+              expect(dispatchTool?.inputSchema).toMatchObject({
+                properties: {
+                  action: { const: "resident.ask" },
+                  target: {
+                    properties: { kind: { const: "resident" } },
+                    additionalProperties: false,
+                  },
+                  wait: { const: true },
+                },
+                required: ["action", "target", "wait"],
+              });
+              expect(
+                (dispatchTool?.inputSchema as { properties?: Record<string, unknown> }).properties
+                  ?.target,
+              ).not.toHaveProperty("properties.sessionId");
+              expect(toolNames).not.toContain("inbound_message");
               expect(toolNames).not.toContain("check_inbox");
               expect(toolNames).not.toContain("ask_main");
-              expect(options.systemPrompt).toContain("dispatch with action resident.deliver");
+              expect(options.systemPrompt).toContain(
+                "dispatch action resident.ask with wait: true",
+              );
               expect(options.systemPrompt).toContain(
                 "responses from other agents arrive automatically, no polling needed",
               );
+              expect(options.systemPrompt).not.toContain("inbound_message");
               expect(options.systemPrompt).not.toContain("use ask_main");
               return successfulResult;
             },
@@ -277,7 +297,7 @@ describe("WorkerRunner", () => {
     expect(responses[0]).toMatchObject({ status: "succeeded" });
   });
 
-  it("routes dispatch wait requests through worker.inbound_wait IPC", async () => {
+  it("routes dispatch resident.ask wait requests through worker.inbound_wait IPC", async () => {
     const responses: unknown[] = [];
     const serverCalls: Array<{
       method: string;
@@ -317,7 +337,7 @@ describe("WorkerRunner", () => {
                 id: "agent-inbound-call",
                 tool: "dispatch",
                 input: {
-                  action: "resident.deliver",
+                  action: "resident.ask",
                   target: { kind: "resident" },
                   payload: "Need approval",
                   wait: true,
@@ -336,6 +356,7 @@ describe("WorkerRunner", () => {
 
     expect(JSON.parse(inboundResult?.output ?? "{}")).toMatchObject({
       status: "completed",
+      output: "approved",
     });
     expect(serverCalls).toContainEqual(
       expect.objectContaining({
@@ -352,6 +373,64 @@ describe("WorkerRunner", () => {
         timeoutMs: 300_000,
       }),
     );
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+  });
+
+  it("keeps worker-runner resident.ask scoped to Resident targets only", async () => {
+    const responses: unknown[] = [];
+    const serverCalls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    let dispatchResult: Tool.Result | undefined;
+
+    const responseReceived = new Promise<void>((resolve) => {
+      const options = createSpawnOptions(
+        {
+          ...createValidRequest(),
+          tools: [{ name: "dispatch", inputSchema: {} }],
+        },
+        (result) => {
+          responses.push(result);
+          resolve();
+        },
+        {
+          server: {
+            async call(method, params) {
+              serverCalls.push({ method, params });
+              throw new Error(`unexpected server call: ${method}`);
+            },
+            notify() {
+              // lifecycle notification
+            },
+          },
+          createAgent: (options) => ({
+            async run() {
+              if (!options.toolExecutor) throw new Error("tool executor missing");
+              dispatchResult = await options.toolExecutor({
+                id: "agent-dispatch-call",
+                tool: "dispatch",
+                input: {
+                  action: "resident.ask",
+                  target: { kind: "worker", sessionId: "owner-hint-worker-session" },
+                  payload: "try to route owner directly",
+                  wait: true,
+                },
+              });
+              return successfulResult;
+            },
+          }),
+        },
+      );
+
+      WorkerRunner.spawnRun(options);
+    });
+
+    await responseReceived;
+
+    expect(dispatchResult?.isError).toBe(true);
+    expect(JSON.parse(dispatchResult?.output ?? "{}")).toMatchObject({
+      status: "failed",
+      error: "worker dispatch resident.ask requires resident target",
+    });
+    expect(serverCalls).toHaveLength(0);
     expect(responses[0]).toMatchObject({ status: "succeeded" });
   });
 

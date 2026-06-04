@@ -57,7 +57,12 @@ describe("subagent resource descriptors", () => {
         title: "delegate work",
         prompt: "do work",
         model,
-        middleware: [captureDescriptorPolicy((ctx) => (captured = ctx))],
+        middleware: [
+          captureDescriptorPolicy((ctx) => {
+            captured = ctx;
+            return captured;
+          }),
+        ],
       });
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
@@ -84,7 +89,12 @@ describe("subagent resource descriptors", () => {
         title: "background work",
         prompt: "do background work",
         model,
-        middleware: [captureDescriptorPolicy((ctx) => (captured = ctx))],
+        middleware: [
+          captureDescriptorPolicy((ctx) => {
+            captured = ctx;
+            return captured;
+          }),
+        ],
       });
     } catch (error) {
       expect(error).toBeInstanceOf(Error);

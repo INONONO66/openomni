@@ -9,6 +9,7 @@ export namespace Dispatch {
   export const TargetKind = z.enum([
     "worker",
     "resident",
+    "external_actor",
     "schedule",
     "session",
     "surface",
@@ -149,4 +150,14 @@ export namespace Dispatch {
       }),
     );
   }
+
+  export const Actions = {
+    ResidentAsk: "resident.ask",
+    WorkerSpawn: "worker.spawn",
+    WorkerSend: "worker.send",
+    WorkerResume: "worker.resume",
+    WorkerCancel: "worker.cancel",
+    ScheduleCreate: "schedule.create",
+    ScheduleCancel: "schedule.cancel",
+  } as const;
 }
