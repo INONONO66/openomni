@@ -2,13 +2,18 @@ import type { SubagentToolOptions } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import { createDefaultDispatchRuntime, type DispatchOwners } from "../../../dispatch/index.js";
 import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
-import { createDispatchTool, type DispatchToolRuntime } from "./tools/dispatch.js";
+import {
+  createDispatchTool,
+  createWorkerResidentAskDispatchTool,
+  type DispatchToolRuntime,
+} from "./tools/dispatch.js";
 import { createSubagentTool } from "./tools/subagent.js";
 import { createSubagentRuntime } from "./tools/subagent-runtime.js";
 
 export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
+  readonly dispatchToolMode?: "default" | "worker-resident-ask";
 };
 
 function hasSubagentOptions(options: AgentToolProviderOptions | undefined): boolean {
@@ -30,6 +35,7 @@ function resolveSubagentOptions(
   const {
     dispatchRuntime: _dispatchRuntime,
     dispatchOwners: _dispatchOwners,
+    dispatchToolMode: _dispatchToolMode,
     ...partial
   } = options ?? {};
   return {
@@ -49,7 +55,11 @@ export class AgentToolProvider implements ToolProvider {
     this.subagentOptions = resolveSubagentOptions(options);
     const dispatchRuntime =
       options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
-    this.register(createDispatchTool(dispatchRuntime));
+    this.register(
+      options?.dispatchToolMode === "worker-resident-ask"
+        ? createWorkerResidentAskDispatchTool(dispatchRuntime)
+        : createDispatchTool(dispatchRuntime),
+    );
   }
 
   register(tool: NativeTool): void {

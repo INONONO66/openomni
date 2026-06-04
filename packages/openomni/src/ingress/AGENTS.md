@@ -14,7 +14,7 @@ Every inbound event flows through three stages:
 | --- | --- | --- | --- |
 | `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent` | Primary path |
 
-Internal cross-session actions (worker spawn/send, resident delivery, schedule) now route through the Dispatch layer (`src/dispatch/`) instead of IngressEngine. `IngressEngine.ingestInternal()` remains for system-origin events (e.g., cron fires via `CronAdapter`).
+External and internal incoming events route through Ingress. Runtime-to-runtime/system egress commands use Dispatch instead; cron fire remains `IngressEngine.ingestInternal()`.
 
 ## Session Bridge
 

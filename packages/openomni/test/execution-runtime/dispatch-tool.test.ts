@@ -30,6 +30,11 @@ describe("dispatch tool", () => {
     expect(properties.provider).toBeUndefined();
     expect(properties.tools).toBeUndefined();
     expect(properties.permissions).toBeUndefined();
+    expect(properties.owner).toBeUndefined();
+    expect(properties.ownerId).toBeUndefined();
+    expect(properties.dispatchOwners).toBeUndefined();
+    expect(properties.routeOwner).toBeUndefined();
+    expect(properties.resolveOwner).toBeUndefined();
   });
 
   test("executes through runtime with implicit context", async () => {
@@ -45,7 +50,7 @@ describe("dispatch tool", () => {
 
     const response = await tool.execute(
       call({
-        action: "resident.deliver",
+        action: "resident.ask",
         target: { kind: "resident" },
         payload: "hello",
         wait: true,
@@ -64,7 +69,7 @@ describe("dispatch tool", () => {
       output: "ok",
     });
     expect(capturedInput).toEqual({
-      action: "resident.deliver",
+      action: "resident.ask",
       target: { kind: "resident" },
       payload: "hello",
       wait: true,
@@ -90,7 +95,7 @@ describe("dispatch tool", () => {
 
     const response = await tool.execute(
       call({
-        action: "resident.deliver",
+        action: "resident.ask",
         target: { kind: "resident" },
         payload: "hello",
         actor: { kind: "system", actorId: "fake" },
@@ -100,5 +105,30 @@ describe("dispatch tool", () => {
     expect(response.isError).toBe(true);
     expect(response.output).toContain("Unrecognized key");
     expect(called).toBe(false);
+  });
+
+  test("rejects public owner-routing fields before runtime submission", async () => {
+    for (const field of ["owner", "ownerId", "dispatchOwners", "routeOwner", "resolveOwner"]) {
+      let called = false;
+      const tool = createDispatchTool({
+        async submit() {
+          called = true;
+          return { dispatchId: "dispatch-1", status: "completed" };
+        },
+      });
+
+      const response = await tool.execute(
+        call({
+          action: "resident.ask",
+          target: { kind: "resident" },
+          payload: "hello",
+          [field]: "fake",
+        }),
+      );
+
+      expect(response.isError).toBe(true);
+      expect(response.output).toContain("Unrecognized key");
+      expect(called).toBe(false);
+    }
   });
 });
