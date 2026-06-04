@@ -45,14 +45,11 @@ function buildAgentDefFromEntries(
   deps: BridgeDeps,
   selectedEntries: ReturnType<typeof selectToolEntries>,
 ): Ingress.AgentDef {
-  const modelFacingEntries = selectedEntries.filter(
-    (entry) => entry.tool.spec.name !== "inbound_message",
-  );
-  const specs = modelFacingEntries.map((entry) => ({
+  const specs = selectedEntries.map((entry) => ({
     ...entry.tool.spec,
     name: sanitizeToolName(entry.tool.spec.name),
   }));
-  const nativeTools = modelFacingEntries.map((entry) => entry.tool);
+  const nativeTools = selectedEntries.map((entry) => entry.tool);
 
   return {
     model: definition.model,
@@ -76,18 +73,9 @@ function buildAgentDefFromEntries(
   };
 }
 
-function fallbackDefinition(agentName: string, deps: BridgeDeps): AgentDefinition {
-  return {
-    name: agentName,
-    description: `Fallback agent definition for ${agentName}`,
-    model: deps.defaultModel ?? { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-    systemPrompt: "",
-    tools: { categories: ["filesystem", "execution", "delegation", "mcp", "custom"] },
-  };
-}
-
 export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const definition = getAgentDefinition(agentName) ?? fallbackDefinition(agentName, deps);
+  const definition = getAgentDefinition(agentName);
+  if (!definition) throw new Error(`Unknown agent definition: ${agentName}`);
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
@@ -112,8 +100,7 @@ function rawCorrelationToken(raw: unknown): string | undefined {
 function findPendingAskForMessage(message: Adapter.InboundMessage) {
   const token = rawCorrelationToken(message.raw);
   const descriptor = SurfaceKey.parse(message.surfaceKey);
-  const legacyChannelId = message.surfaceKey.split(":")[2];
-  const channelId = descriptor.id ?? legacyChannelId;
+  const channelId = descriptor.id;
   const scoped = {
     endpointId: descriptor.namespace || descriptor.surface,
     ...(channelId ? { channelId } : {}),

@@ -9,7 +9,6 @@ export interface DispatchHandlerContext {
   readonly agentName?: string;
   readonly workspaceRoot?: string;
   readonly sourceTool?: string;
-  readonly compatibility?: Record<string, unknown>;
 }
 
 export interface DispatchHandlerResult {

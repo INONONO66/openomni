@@ -28,7 +28,6 @@ export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchH
   readonly includeDefaultPolicies?: boolean;
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
   readonly sourceTool?: string;
-  readonly compatibility?: Record<string, unknown>;
 }
 
 export interface DispatchRuntimeOptions {
@@ -226,7 +225,6 @@ export class DispatchRuntime {
         ...(options.agentName ? { agentName: options.agentName } : {}),
         ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
         ...(options.sourceTool ? { sourceTool: options.sourceTool } : {}),
-        ...(options.compatibility ? { compatibility: options.compatibility } : {}),
       });
       const output = normalizeHandlerOutput(raw);
       Bus.publish(DispatchProtocol.Events.Completed, {
