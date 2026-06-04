@@ -22,7 +22,7 @@ const eventBase = {
   sessionId: "session-1",
   runId: "run-1",
   actor,
-  action: "resident.deliver",
+  action: "resident.ask",
   target,
   correlation: "corr-1",
   time: Date.now(),
@@ -31,7 +31,7 @@ const eventBase = {
 describe("Dispatch protocol schemas", () => {
   test("Input accepts the public dispatch envelope", () => {
     const parsed = Dispatch.Input.parse({
-      action: "resident.deliver",
+      action: "resident.ask",
       target,
       payload: { message: "hello" },
       wait: true,
@@ -40,7 +40,7 @@ describe("Dispatch protocol schemas", () => {
       idempotencyKey: "idem-1",
     });
 
-    expect(parsed.action).toBe("resident.deliver");
+    expect(parsed.action).toBe("resident.ask");
     expect(parsed.target.kind).toBe("resident");
     expect(parsed.target.parentSessionId).toBe("parent-session");
     expect(parsed.wait).toBe(true);
@@ -57,6 +57,11 @@ describe("Dispatch protocol schemas", () => {
       "budget",
       "tools",
       "permissions",
+      "owner",
+      "ownerId",
+      "dispatchOwners",
+      "routeOwner",
+      "resolveOwner",
     ]) {
       expect(
         Dispatch.Input.safeParse({
@@ -83,7 +88,7 @@ describe("Dispatch protocol schemas", () => {
 
   test("Command and Result carry canonical runtime metadata", () => {
     const command = Dispatch.Command.parse({
-      action: "resident.deliver",
+      action: "resident.ask",
       target,
       payload: { message: "hello" },
       dispatchId: "dispatch-1",
@@ -101,7 +106,7 @@ describe("Dispatch protocol schemas", () => {
       dispatchId: command.dispatchId,
       status: "completed",
       output: { delivered: true },
-      handler: "resident.deliver",
+      handler: "resident.ask",
       durationMs: 1,
     });
 
@@ -127,12 +132,12 @@ describe("Dispatch protocol schemas", () => {
       }).reason,
     ).toBe("not authorized");
     expect(
-      Dispatch.Events.Routed.schema.parse({ ...eventBase, handler: "resident.deliver" }).handler,
-    ).toBe("resident.deliver");
+      Dispatch.Events.Routed.schema.parse({ ...eventBase, handler: "resident.ask" }).handler,
+    ).toBe("resident.ask");
     expect(
       Dispatch.Events.Completed.schema.parse({
         ...eventBase,
-        handler: "resident.deliver",
+        handler: "resident.ask",
         durationMs: 2,
       }).durationMs,
     ).toBe(2);
@@ -152,10 +157,10 @@ describe("Dispatch protocol schemas", () => {
 
   test("RuntimeResource accepts dispatch descriptors for policy audit", () => {
     const descriptor = RuntimeResource.Descriptor.parse({
-      id: "dispatch:resident.deliver",
+      id: "dispatch:resident.ask",
       kind: "dispatch",
       labels: ["dispatch.resident"],
-      capabilities: ["resident.deliver"],
+      capabilities: ["resident.ask"],
       effects: ["message.deliver"],
       source: { type: "runtime", runtimeId: "dispatch-runtime" },
     });
