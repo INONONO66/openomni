@@ -21,7 +21,7 @@ import type { WorkerRunState } from "./worker-run-state";
 import { buildWorkerInputMessages, createExecutionToolContext } from "./worker-runtime";
 
 const WORKER_TOOL_CALL_IPC_TIMEOUT_MS = 5 * 60_000;
-const WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS = 5 * 60_000;
+const WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS = 5 * 60_000;
 
 function buildDelegationAdmissionMiddleware(
   request: Execution.Request,
@@ -89,10 +89,10 @@ function createWorkerDispatchRuntime(options: {
   const runtime = new DispatchRuntime();
   const handler: DispatchHandler = async (command, context) => {
     if (!context?.wait) {
-      throw new Error("worker dispatch async delivery requires coordinator routing");
+      throw new Error("worker dispatch resident.ask requires wait: true");
     }
     if (command.target.kind !== "resident") {
-      throw new Error("worker dispatch wait currently supports resident targets only");
+      throw new Error("worker dispatch resident.ask currently supports resident targets only");
     }
 
     const callId = command.dispatchId;
@@ -120,7 +120,7 @@ function createWorkerDispatchRuntime(options: {
             payload,
             ...(workspaceRoot ? { workspaceRoot } : {}),
           },
-          WORKER_INBOUND_WAIT_IPC_TIMEOUT_MS,
+          WORKER_RESIDENT_ASK_IPC_TIMEOUT_MS,
         ),
       context.signal,
       cancelInboundWait,
@@ -139,7 +139,7 @@ function createWorkerDispatchRuntime(options: {
     return { output: typeof result.output === "string" ? result.output : "" };
   };
 
-  runtime.register("resident.deliver", handler);
+  runtime.register("resident.ask", handler);
   return {
     submit(input, context = {}) {
       return runtime.submit(input, {
@@ -350,6 +350,7 @@ export namespace WorkerRunner {
 
         const agentProvider = new AgentToolProvider({
           subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
+          dispatchToolMode: "worker-resident-ask",
           dispatchRuntime: createWorkerDispatchRuntime({
             server,
             ipcAuthToken,
@@ -400,7 +401,7 @@ export namespace WorkerRunner {
           budget: request.budget,
           systemPrompt: [
             request.systemPrompt,
-            "Worker runtime tools: use dispatch with action resident.deliver and wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
+            "Worker runtime tools: use dispatch action resident.ask with wait: true to ask the Resident for guidance or approval; responses from other agents arrive automatically, no polling needed.",
           ]
             .filter(Boolean)
             .join("\n\n"),

@@ -3,7 +3,14 @@ import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { initialize, Bus, BusPersistence, TraceContext, WorkerRun } from "@openomni/session";
+import {
+  initialize,
+  Bus,
+  BusPersistence,
+  PendingAskStore,
+  TraceContext,
+  WorkerRun,
+} from "@openomni/session";
 import {
   AgentToolProvider,
   DispatchRuntime,
@@ -184,66 +191,80 @@ export async function main(): Promise<void> {
       try {
         const residentPayload = `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`;
         const residentHandler: DispatchHandler = async (command, context) => {
-          const trace = command.traceId
-            ? TraceContext.child({ traceId: command.traceId }, { sessionId: mainSessionId })
-            : TraceContext.create({ sessionId: mainSessionId });
-          const residentEvent = {
+          PendingAskStore.create({
             id: command.dispatchId,
-            surface: "dispatch",
-            workspace: resolvedWorkspace,
-            mode: "internal" as const,
-            agentName: "resident",
-            payload:
-              typeof command.payload === "string"
-                ? command.payload
-                : JSON.stringify(command.payload),
-            runtime: {
-              durableSessionId: mainSessionId,
-              lifecycle: "active" as const,
-              ...(context?.signal ? { signal: context.signal } : {}),
-            },
-            target: { kind: "resident" as const, sessionId: mainSessionId },
-            meta: {
-              actor: {
-                role: "worker",
-                trusted: true,
-                workerId,
-                sessionId,
-                runId,
+            originSessionId: sessionId,
+            ...(runId ? { originRunId: runId } : {}),
+            originActorKind: "worker",
+            targetKind: "resident",
+            correlation: command.correlation ? { tokenHash: command.correlation } : {},
+          });
+          try {
+            const trace = command.traceId
+              ? TraceContext.child({ traceId: command.traceId }, { sessionId: mainSessionId })
+              : TraceContext.create({ sessionId: mainSessionId });
+            const residentEvent = {
+              id: command.dispatchId,
+              surface: "dispatch",
+              workspace: resolvedWorkspace,
+              mode: "internal" as const,
+              agentName: "resident",
+              payload:
+                typeof command.payload === "string"
+                  ? command.payload
+                  : JSON.stringify(command.payload),
+              runtime: {
+                durableSessionId: mainSessionId,
+                lifecycle: "active" as const,
+                ...(context?.signal ? { signal: context.signal } : {}),
               },
               target: { kind: "resident" as const, sessionId: mainSessionId },
-              agentName: "resident",
-            },
-            agent: buildResidentAgentDef("resident", {
-              systemProvider,
-              agentProvider: requireAgentProvider(),
-              mcpProvider,
-              customProvider,
-              defaultModel: { provider: model.providerID, id: model.id },
-              providerOptions: config.model?.providerOptions,
-              workspaceRoot: resolvedWorkspace,
-            }),
-          };
-          IngressEventProjector.project(
-            residentEvent,
-            mainSessionId,
-            { providerID: model.providerID, modelID: model.id },
-            trace,
-          );
-          const result = await IngressHandlers.handleResident({
-            sessionId: mainSessionId,
-            event: residentEvent,
-            residentRuntime,
-            traceContext: trace,
-          });
-          return { output: result.result.output };
+              meta: {
+                actor: {
+                  role: "worker",
+                  trusted: true,
+                  workerId,
+                  sessionId,
+                  runId,
+                },
+                target: { kind: "resident" as const, sessionId: mainSessionId },
+                agentName: "resident",
+              },
+              agent: buildResidentAgentDef("resident", {
+                systemProvider,
+                agentProvider: requireAgentProvider(),
+                mcpProvider,
+                customProvider,
+                defaultModel: { provider: model.providerID, id: model.id },
+                providerOptions: config.model?.providerOptions,
+                workspaceRoot: resolvedWorkspace,
+              }),
+            };
+            IngressEventProjector.project(
+              residentEvent,
+              mainSessionId,
+              { providerID: model.providerID, modelID: model.id },
+              trace,
+            );
+            const result = await IngressHandlers.handleResident({
+              sessionId: mainSessionId,
+              event: residentEvent,
+              residentRuntime,
+              traceContext: trace,
+            });
+            PendingAskStore.answer(command.dispatchId);
+            return { output: result.result.output };
+          } catch (error) {
+            PendingAskStore.expire(command.dispatchId);
+            throw error;
+          }
         };
 
         const dispatchRuntime = new DispatchRuntime();
-        dispatchRuntime.register("resident.deliver", residentHandler);
+        dispatchRuntime.register("resident.ask", residentHandler);
         const dispatchResult = await dispatchRuntime.submit(
           {
-            action: "resident.deliver",
+            action: "resident.ask",
             target: { kind: "resident", sessionId: mainSessionId },
             payload: residentPayload,
             wait: true,
