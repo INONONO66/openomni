@@ -272,7 +272,6 @@ describe("WorkerRunner", () => {
                 (dispatchTool?.inputSchema as { properties?: Record<string, unknown> }).properties
                   ?.target,
               ).not.toHaveProperty("properties.sessionId");
-              expect(toolNames).not.toContain("inbound_message");
               expect(toolNames).not.toContain("check_inbox");
               expect(toolNames).not.toContain("ask_main");
               expect(options.systemPrompt).toContain(
@@ -281,7 +280,6 @@ describe("WorkerRunner", () => {
               expect(options.systemPrompt).toContain(
                 "responses from other agents arrive automatically, no polling needed",
               );
-              expect(options.systemPrompt).not.toContain("inbound_message");
               expect(options.systemPrompt).not.toContain("use ask_main");
               return successfulResult;
             },

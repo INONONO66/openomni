@@ -46,7 +46,7 @@ function makeProvider(tools: NativeTool[]): ToolProvider {
 function makeMessage(): Adapter.InboundMessage {
   return {
     id: "message-1",
-    surfaceKey: "discord:guild:dev",
+    surfaceKey: "discord:guild:channel:dev",
     text: "hello",
     sender: { id: "user-1", name: "User" },
   };
@@ -68,11 +68,7 @@ function makeWorkerHintedOwnerMessage(): Adapter.InboundMessage {
 
 const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
-  agentProvider: makeProvider([
-    makeTool("subagent"),
-    makeTool("dispatch"),
-    makeTool("inbound_message"),
-  ]),
+  agentProvider: makeProvider([makeTool("subagent"), makeTool("dispatch")]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
   customProvider: makeProvider([makeTool("weather_lookup")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -89,7 +85,7 @@ describe("ingress bridge tool surfaces", () => {
     Storage.reset();
   });
 
-  it("uses Resident identity and tool selection with dispatch and without inbound_message", () => {
+  it("uses Resident identity and dispatch tool selection", () => {
     const event = buildInboundEvent(makeMessage(), "dev", deps);
 
     expect(event.target).toEqual({ kind: "resident" });

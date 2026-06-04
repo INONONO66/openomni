@@ -12,22 +12,9 @@ function requireScheduler(scheduler: DispatchSchedulerOwner | undefined): Dispat
   return scheduler;
 }
 
-function compatibilitySchedule(
-  context: { compatibility?: Record<string, unknown> } | undefined,
-): string | undefined {
-  const schedule = context?.compatibility?.schedule;
-  return typeof schedule === "string" ? schedule : undefined;
-}
-
-function scheduleFromPayload(
-  command: Dispatch.Command,
-  context: { compatibility?: Record<string, unknown> } | undefined,
-): string | undefined {
+function scheduleFromPayload(command: Dispatch.Command): string | undefined {
   const payload = asRecord(command.payload);
-  return (
-    (typeof payload?.schedule === "string" ? payload.schedule : undefined) ??
-    compatibilitySchedule(context)
-  );
+  return typeof payload?.schedule === "string" ? payload.schedule : undefined;
 }
 
 function payloadText(command: Dispatch.Command): string {
@@ -56,9 +43,9 @@ export function createScheduleDispatchHandlers(
   options: ScheduleDispatchHandlerOptions = {},
 ): Record<"schedule.create" | "schedule.cancel", DispatchHandler> {
   return {
-    "schedule.create"(command, context) {
+    "schedule.create"(command) {
       const scheduler = requireScheduler(options.scheduler);
-      const schedule = scheduleFromPayload(command, context);
+      const schedule = scheduleFromPayload(command);
       if (!schedule) throw new Error("schedule.create requires payload.schedule");
       const payload = asRecord(command.payload);
       const agentName =
