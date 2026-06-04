@@ -4,11 +4,13 @@ import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteBackgroundTaskAdapter } from "./sqlite-background-task-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
+import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
 import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
+import { createSqliteWorkerGrantAdapter } from "./sqlite-worker-grant-adapter";
 import type { Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
@@ -22,6 +24,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly backgroundTask: NonNullable<Storage.Adapter["backgroundTask"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
+  readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
+  readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -40,6 +44,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.backgroundTask = createSqliteBackgroundTaskAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
+    this.pendingAsk = createSqlitePendingAskAdapter(this.db);
+    this.workerGrant = createSqliteWorkerGrantAdapter(this.db);
   }
 
   clear(): void {

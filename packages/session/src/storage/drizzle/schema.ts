@@ -106,6 +106,56 @@ export const workerRunStateTable = sqliteTable(
   (t) => [index("idx_worker_run_state_session_time").on(t.session_id, t.time_created)],
 );
 
+export const pendingAskTable = sqliteTable(
+  "pending_ask",
+  {
+    id: text("id").primaryKey(),
+    data: text("data").notNull(),
+    status: text("status").notNull(),
+    origin_session_id: text("origin_session_id").notNull(),
+    endpoint_id: text("endpoint_id"),
+    channel_id: text("channel_id"),
+    external_message_id: text("external_message_id"),
+    reply_to_message_id: text("reply_to_message_id"),
+    thread_id: text("thread_id"),
+    token_hash: text("token_hash"),
+    external_conversation_id: text("external_conversation_id"),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+  },
+  (t) => [
+    index("idx_pending_ask_status").on(t.status),
+    index("idx_pending_ask_origin").on(t.origin_session_id, t.time_created),
+    index("idx_pending_ask_correlation").on(
+      t.endpoint_id,
+      t.channel_id,
+      t.external_message_id,
+      t.reply_to_message_id,
+      t.thread_id,
+    ),
+    index("idx_pending_ask_token_hash").on(t.token_hash),
+    index("idx_pending_ask_external_conversation").on(t.external_conversation_id),
+  ],
+);
+
+export const workerGrantTable = sqliteTable(
+  "worker_grant",
+  {
+    id: text("id").primaryKey(),
+    worker_run_id: text("worker_run_id").notNull(),
+    data: text("data").notNull(),
+    status: text("status").notNull(),
+    version: integer("version").notNull(),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+    expires_at: integer("expires_at"),
+  },
+  (t) => [
+    index("idx_worker_grant_worker").on(t.worker_run_id),
+    index("idx_worker_grant_status").on(t.status),
+  ],
+);
+
 export const workItemTable = sqliteTable(
   "work_item",
   {

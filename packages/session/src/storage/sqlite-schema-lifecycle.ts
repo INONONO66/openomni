@@ -4,10 +4,15 @@ import { Migration } from "./migration-runner";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 
-const ORDERED_MIGRATIONS: Migration.Definition[] = [{ name: "0001_initial/migration.sql" }];
+const ORDERED_MIGRATIONS: Migration.Definition[] = [
+  { name: "0001_initial/migration.sql" },
+  { name: "0002_communication_state/migration.sql" },
+];
 
 const CLEAR_ORDER = [
   "event_chain",
+  "worker_grant",
+  "pending_ask",
   "worker_run_state",
   "bus_event",
   "background_task",

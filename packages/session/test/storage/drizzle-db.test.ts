@@ -49,4 +49,40 @@ describe("drizzle createDb migrations", () => {
       checkDb.close();
     }
   });
+
+  test("creates communication state tables from ordered migrations", () => {
+    dbPath = tempDbPath();
+
+    const { sqlite } = createDb(dbPath);
+    try {
+      sqlite
+        .query(
+          `INSERT INTO pending_ask (
+            id, data, status, origin_session_id, time_created, time_updated
+          ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run("ask-1", "{}", "open", "session-1", 1, 1);
+      sqlite
+        .query(
+          `INSERT INTO worker_grant (
+            id, worker_run_id, data, status, version, time_created, time_updated
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run("grant-1", "run-1", "{}", "active", 1, 1, 1);
+
+      expect(sqlite.query("SELECT id FROM pending_ask").get()).toEqual({ id: "ask-1" });
+      expect(sqlite.query("SELECT id FROM worker_grant").get()).toEqual({ id: "grant-1" });
+      const indexes = sqlite
+        .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pending_ask'")
+        .all() as Array<{ name: string }>;
+      expect(indexes.map((row) => row.name)).toEqual(
+        expect.arrayContaining([
+          "idx_pending_ask_token_hash",
+          "idx_pending_ask_external_conversation",
+        ]),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
 });

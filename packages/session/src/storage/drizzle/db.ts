@@ -9,7 +9,10 @@ export type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 const MIGRATION_DIR = join(import.meta.dir, "../../../migration");
 
 function applyMigrations(sqlite: Database): void {
-  Migration.applyOrdered(sqlite, MIGRATION_DIR, [{ name: "0001_initial/migration.sql" }]);
+  Migration.applyOrdered(sqlite, MIGRATION_DIR, [
+    { name: "0001_initial/migration.sql" },
+    { name: "0002_communication_state/migration.sql" },
+  ]);
 }
 
 export function createDb(dbPath: string): { db: DrizzleDb; sqlite: Database } {

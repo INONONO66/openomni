@@ -5,6 +5,7 @@ import { Bus, BusEvent } from "../../src/bus/index.js";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { BusQuery } from "../../src/bus-persistence/query.js";
 import { Session } from "../../src/session/index.js";
+import { WorkerRunStateStore } from "../../src/worker-run/state-store.js";
 import { Snapshot } from "../../src/snapshot/index.js";
 import { Storage } from "../../src/storage/storage.js";
 import "../../src/storage/initialize.js";
@@ -175,6 +176,56 @@ describe("BusPersistence", () => {
     expect(sessionEvents.map((event) => event.eventType).sort()).toEqual([
       "snapshot.restored",
       "snapshot.tracked",
+    ]);
+  });
+
+  test("resolves communication events by originSessionId and workerRunId", async () => {
+    const session = createSession();
+    WorkerRunStateStore.create(session.id, {
+      runId: "worker-run-1",
+      agentName: "worker",
+      status: "running",
+      title: "worker",
+      prompt: "work",
+    });
+    const pendingAskEvent = BusEvent.define(
+      "pending_ask.opened",
+      z.object({
+        id: z.string(),
+        originSessionId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+      }),
+    );
+    const workerGrantEvent = BusEvent.define(
+      "worker_grant.evaluated",
+      z.object({
+        id: z.string(),
+        workerRunId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+      }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(pendingAskEvent, {
+      id: "ask-1",
+      originSessionId: session.id,
+      traceId: "trace-ask",
+      time: 1,
+    });
+    Bus.publish(workerGrantEvent, {
+      id: "grant-1",
+      workerRunId: "worker-run-1",
+      traceId: "trace-grant",
+      time: 2,
+    });
+
+    const persisted = await waitForRows(2);
+    expect(persisted.map((row) => row.session_id)).toEqual([session.id, session.id]);
+    expect(persisted.map((row) => row.event_type)).toEqual([
+      "pending_ask.opened",
+      "worker_grant.evaluated",
     ]);
   });
 
