@@ -1,9 +1,18 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Operational, PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
-import { Bus, Storage, WorkerGrantStore } from "@openomni/session";
+import { Bus, Session, Storage, WorkerGrantStore, WorkerRun } from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
 const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
+
+async function createWorkerRunFixture(runId = "run-1", sessionTitle = `${runId}-session`) {
+  const session = Session.create({
+    title: sessionTitle,
+    model: { providerID: "test", modelID: "test" },
+  });
+  await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
+  return session;
+}
 
 function input(action = "resident.ask"): DispatchProtocol.Input {
   return { action, target: { kind: "resident" }, payload: "hello" };
@@ -115,6 +124,7 @@ describe("DispatchRuntime", () => {
     });
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-worker-spawn",
       workerRunId: "run-1",
@@ -176,6 +186,7 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-worker-send",
       workerRunId: "run-1",
@@ -329,6 +340,7 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-api-ask",
       workerRunId: "run-1",
@@ -360,6 +372,7 @@ describe("DispatchRuntime", () => {
     });
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-empty-endpoints",
       workerRunId: "run-1",
@@ -391,6 +404,7 @@ describe("DispatchRuntime", () => {
     });
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-manager-constrained",
       workerRunId: "run-1",
@@ -413,7 +427,7 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
   });
 
-  test("default policy passes target labels into manager-constrained worker grants", async () => {
+  test("default policy does not trust target labels for manager-constrained worker grants", async () => {
     let called = false;
     const runtime = new DispatchRuntime();
     runtime.register("external.ask", () => {
@@ -422,6 +436,7 @@ describe("DispatchRuntime", () => {
     });
 
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-manager-labels",
       workerRunId: "run-1",
@@ -443,15 +458,16 @@ describe("DispatchRuntime", () => {
       { sessionId: "session-1", runId: "run-1", agentName: "worker" },
     );
 
-    expect(result.status).toBe("completed");
-    expect(result.output).toBe("external answer");
-    expect(called).toBe(true);
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.worker.external.denied");
+    expect(called).toBe(false);
   });
 
   test("worker grants do not allow new external tasks unless explicitly enabled", async () => {
     const runtime = new DispatchRuntime();
     runtime.register("external.ask", () => ({ output: "should not route" }));
     Storage.initialize({ dbPath: ":memory:" });
+    await createWorkerRunFixture("run-1");
     WorkerGrantStore.create({
       id: "grant-external-followup",
       workerRunId: "run-1",

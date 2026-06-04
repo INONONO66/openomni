@@ -7,6 +7,7 @@ const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0001_initial/migration.sql" },
   { name: "0002_communication_state/migration.sql" },
+  { name: "0003_communication_state_constraints/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

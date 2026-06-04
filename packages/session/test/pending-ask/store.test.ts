@@ -12,12 +12,22 @@ afterEach(() => {
 });
 
 const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
+function createSessionFixture(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: id,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
+}
 
 describe("PendingAskStore", () => {
   test("creates, finds by correlation, and answers once", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
 
+    createSessionFixture("session-1");
     PendingAskStore.create({
       id: "ask-1",
       originSessionId: "session-1",
@@ -40,6 +50,7 @@ describe("PendingAskStore", () => {
   });
 
   test("keeps ambiguous non-terminal until cancelled or expired", () => {
+    createSessionFixture("session-1");
     PendingAskStore.create({
       id: "ask-2",
       originSessionId: "session-1",
@@ -55,12 +66,13 @@ describe("PendingAskStore", () => {
 
   test("open asks survive adapter recreation", () => {
     const adapter = Storage.getAdapter();
+    createSessionFixture("session-1");
     PendingAskStore.create({
       id: "ask-3",
       originSessionId: "session-1",
       originActorKind: "worker",
       targetKind: "resident",
-      correlation: {},
+      correlation: { tokenHash: "token-3" },
     });
 
     Storage.configure(adapter);

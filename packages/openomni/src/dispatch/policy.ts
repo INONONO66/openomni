@@ -2,8 +2,6 @@ import { PolicyDecision, type Dispatch, type Policy } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
 import { WorkerGrantStore } from "@openomni/session";
 
-type GrantRisk = WorkerGrantStore.Evaluation["risk"];
-
 function deny(reason: string): Policy.PolicyDecision {
   return PolicyDecision.deny({
     policyId: "dispatch.default-authority",
@@ -102,8 +100,6 @@ function evaluateWorkerGrant(
   createsExternalTask = false,
 ): { allowed: boolean; reason: string } {
   if (!actor.workerRunId) return { allowed: false, reason: "worker_grant.worker_run.required" };
-  const actorGroup = actorGroupFromLabels(target?.labels);
-  const risk = riskFromLabels(target?.labels);
   return WorkerGrantStore.evaluate({
     workerRunId: actor.workerRunId,
     action,
@@ -111,27 +107,5 @@ function evaluateWorkerGrant(
     actorId: target?.id ?? target?.name ?? actor.actorId,
     endpointId: target?.id ?? target?.name,
     createsExternalTask,
-    ...(actorGroup ? { actorGroup } : {}),
-    ...(risk ? { risk } : {}),
   });
-}
-
-function actorGroupFromLabels(labels: readonly string[] | undefined): string | undefined {
-  return labelValue(labels, "actorGroup");
-}
-
-function riskFromLabels(labels: readonly string[] | undefined): GrantRisk | undefined {
-  const value = labelValue(labels, "risk");
-  if (value === "low" || value === "medium" || value === "high") return value;
-  return undefined;
-}
-
-function labelValue(labels: readonly string[] | undefined, key: string): string | undefined {
-  const colonPrefix = `${key}:`;
-  const dotPrefix = `${key}.`;
-  for (const label of labels ?? []) {
-    if (label.startsWith(colonPrefix)) return label.slice(colonPrefix.length);
-    if (label.startsWith(dotPrefix)) return label.slice(dotPrefix.length);
-  }
-  return undefined;
 }

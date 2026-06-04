@@ -45,11 +45,13 @@ function insertOrReplace(
          id, worker_run_id, data, status, version, time_created, time_updated, expires_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
+         worker_run_id = excluded.worker_run_id,
          data = excluded.data,
          status = excluded.status,
          version = excluded.version,
          time_updated = excluded.time_updated,
-         expires_at = excluded.expires_at`
+         expires_at = excluded.expires_at
+       WHERE excluded.version > worker_grant.version`
     : `INSERT INTO worker_grant (
          id, worker_run_id, data, status, version, time_created, time_updated, expires_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;

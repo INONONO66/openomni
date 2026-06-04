@@ -21,6 +21,17 @@ function command(
   };
 }
 
+function createSessionFixture(id: string): void {
+  const now = Date.now();
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: id,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: now, updated: now },
+    spawnDepth: 0,
+  });
+}
+
 describe("built-in dispatch handlers", () => {
   beforeEach(() => {
     Storage.reset();
@@ -204,6 +215,7 @@ describe("built-in dispatch handlers", () => {
   });
 
   test("resident.ask calls resident runtime owner", async () => {
+    createSessionFixture("resident-session");
     const calls: Ingress.ResolvedInboundEvent[] = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {

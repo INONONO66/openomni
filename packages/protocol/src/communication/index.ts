@@ -25,13 +25,22 @@ export namespace Communication {
     export const Status = z.enum(["open", "answered", "expired", "cancelled", "ambiguous"]);
     export type Status = z.infer<typeof Status>;
 
+    export const TargetKind = z.enum([
+      "resident",
+      "worker",
+      "external_actor",
+      "scheduler",
+      "service",
+    ]);
+    export type TargetKind = z.infer<typeof TargetKind>;
+
     export const Record = z
       .object({
         id: z.string().min(1),
         originSessionId: z.string().min(1),
         originRunId: z.string().min(1).optional(),
         originActorKind: z.enum(["resident", "worker", "system"]),
-        targetKind: z.enum(["resident", "worker", "external_actor", "scheduler", "service"]),
+        targetKind: TargetKind,
         targetActorId: z.string().min(1).optional(),
         endpointId: z.string().min(1).optional(),
         channelId: z.string().min(1).optional(),
@@ -76,7 +85,10 @@ export namespace Communication {
         endpointId: z.string().min(1).optional(),
         channelId: z.string().min(1).optional(),
       })
-      .strict();
+      .strict()
+      .refine((query) => Object.values(query).some((value) => value !== undefined), {
+        message: "At least one correlation field is required",
+      });
     export type CorrelationQuery = z.infer<typeof CorrelationQuery>;
 
     const EventBase = z.object({
@@ -84,7 +96,7 @@ export namespace Communication {
       status: Status,
       originSessionId: z.string().min(1),
       originRunId: z.string().min(1).optional(),
-      targetKind: z.string().min(1),
+      targetKind: TargetKind,
       time: z.number(),
     });
 

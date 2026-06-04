@@ -112,7 +112,9 @@ export const pendingAskTable = sqliteTable(
     id: text("id").primaryKey(),
     data: text("data").notNull(),
     status: text("status").notNull(),
-    origin_session_id: text("origin_session_id").notNull(),
+    origin_session_id: text("origin_session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
     endpoint_id: text("endpoint_id"),
     channel_id: text("channel_id"),
     external_message_id: text("external_message_id"),
@@ -142,7 +144,9 @@ export const workerGrantTable = sqliteTable(
   "worker_grant",
   {
     id: text("id").primaryKey(),
-    worker_run_id: text("worker_run_id").notNull(),
+    worker_run_id: text("worker_run_id")
+      .notNull()
+      .references(() => workerRunStateTable.run_id, { onDelete: "cascade" }),
     data: text("data").notNull(),
     status: text("status").notNull(),
     version: integer("version").notNull(),

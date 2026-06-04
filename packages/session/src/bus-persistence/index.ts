@@ -245,7 +245,6 @@ function sessionIdFromWorkerRun(record: Record<string, unknown> | undefined): st
       `SELECT session_id
        FROM worker_run_state
        WHERE run_id = ?
-       ORDER BY time_updated DESC
        LIMIT 1`,
     )
     .get(workerRunId) as { session_id: string } | null;

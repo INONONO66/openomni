@@ -121,6 +121,7 @@ function findPendingAskForMessage(message: Adapter.InboundMessage) {
   type CorrelationQuery = Parameters<typeof PendingAskStore.findByCorrelation>[0];
   const queries: CorrelationQuery[] = [];
   if (token) queries.push({ tokenHash: token });
+  queries.push({ ...scoped, externalConversationId: message.surfaceKey });
   if (message.replyToId) queries.push({ ...scoped, replyToMessageId: message.replyToId });
   if (message.threadId) queries.push({ ...scoped, threadId: message.threadId });
   if (message.id) queries.push({ ...scoped, externalMessageId: message.id });

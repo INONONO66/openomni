@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS pending_ask (
   id TEXT PRIMARY KEY,
   data TEXT NOT NULL,
   status TEXT NOT NULL,
-  origin_session_id TEXT NOT NULL,
+  origin_session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
   endpoint_id TEXT,
   channel_id TEXT,
   external_message_id TEXT,
@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_ask_external_conversation
 
 CREATE TABLE IF NOT EXISTS worker_grant (
   id TEXT PRIMARY KEY,
-  worker_run_id TEXT NOT NULL,
+  worker_run_id TEXT NOT NULL REFERENCES worker_run_state(run_id) ON DELETE CASCADE,
   data TEXT NOT NULL,
   status TEXT NOT NULL,
   version INTEGER NOT NULL,

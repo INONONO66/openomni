@@ -5,6 +5,16 @@ import { PendingAskStore, Storage } from "@openomni/session";
 import { agentMetadata, getAgentDefinition, registerAgent } from "../src/agents";
 import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
 
+function createSessionFixture(id: string): void {
+  Storage.getAdapter().session.set(id, {
+    id,
+    title: id,
+    model: { providerID: "test", modelID: "test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
+}
+
 function makeTool(name: string): NativeTool {
   return {
     spec: { name, description: `${name} tool`, inputSchema: {} },
@@ -108,6 +118,7 @@ describe("ingress bridge tool surfaces", () => {
   });
 
   it("attaches correlated PendingAsk state to owner replies for Resident mediation", () => {
+    createSessionFixture("worker-session-1");
     PendingAskStore.create({
       id: "ask-1",
       originSessionId: "worker-session-1",
@@ -133,6 +144,8 @@ describe("ingress bridge tool surfaces", () => {
   });
 
   it("marks conflicting PendingAsk reply hints as ambiguous instead of choosing the first match", () => {
+    createSessionFixture("worker-session-token");
+    createSessionFixture("worker-session-thread");
     PendingAskStore.create({
       id: "ask-token",
       originSessionId: "worker-session-token",
@@ -164,6 +177,8 @@ describe("ingress bridge tool surfaces", () => {
   });
 
   it("scopes weak PendingAsk reply hints by endpoint and channel", () => {
+    createSessionFixture("other-session");
+    createSessionFixture("current-session");
     PendingAskStore.create({
       id: "ask-other-channel",
       originSessionId: "other-session",

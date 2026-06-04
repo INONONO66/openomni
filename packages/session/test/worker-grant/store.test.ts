@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Bus, Storage, WorkerGrantStore } from "../../src/index";
+import { Bus, Session, Storage, WorkerGrantStore, WorkerRun } from "../../src/index";
 
 beforeEach(() => {
   Bus.reset();
@@ -12,8 +12,17 @@ afterEach(() => {
   Bus.reset();
 });
 
+async function createWorkerRun(runId: string, sessionId = `${runId}-session`): Promise<void> {
+  const session = Session.create({
+    title: sessionId,
+    model: { providerID: "test", modelID: "test" },
+  });
+  await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
+}
+
 describe("WorkerGrantStore", () => {
-  test("evaluates active matching grants and denies revoked grants", () => {
+  test("evaluates active matching grants and denies revoked grants", async () => {
+    await createWorkerRun("run-1");
     WorkerGrantStore.create({
       id: "grant-1",
       workerRunId: "run-1",
@@ -40,7 +49,8 @@ describe("WorkerGrantStore", () => {
     ).toMatchObject({ allowed: false });
   });
 
-  test("requires explicit manager grant for new external tasks", () => {
+  test("requires explicit manager grant for new external tasks", async () => {
+    await createWorkerRun("run-2");
     WorkerGrantStore.create({
       id: "grant-2",
       workerRunId: "run-2",
@@ -78,9 +88,20 @@ describe("WorkerGrantStore", () => {
         risk: "medium",
       }),
     ).toMatchObject({ allowed: false, reason: "worker_grant.risk.denied" });
+
+    expect(
+      WorkerGrantStore.evaluate({
+        workerRunId: "run-2",
+        action: "external.ask",
+        createsExternalTask: true,
+        actorGroup: "design",
+        risk: "critical",
+      } as never),
+    ).toMatchObject({ allowed: false, reason: "worker_grant.evaluation.invalid" });
   });
 
-  test("treats explicit empty scope lists as deny-all", () => {
+  test("treats explicit empty scope lists as deny-all", async () => {
+    await createWorkerRun("run-empty");
     WorkerGrantStore.create({
       id: "grant-empty-endpoints",
       workerRunId: "run-empty",
@@ -99,7 +120,8 @@ describe("WorkerGrantStore", () => {
     ).toMatchObject({ allowed: false, reason: "worker_grant.endpoint.denied" });
   });
 
-  test("manager constraints fail closed when evaluation omits required context", () => {
+  test("manager constraints fail closed when evaluation omits required context", async () => {
+    await createWorkerRun("run-manager");
     WorkerGrantStore.create({
       id: "grant-manager-context",
       workerRunId: "run-manager",
@@ -119,7 +141,8 @@ describe("WorkerGrantStore", () => {
     ).toMatchObject({ allowed: false, reason: "worker_grant.actor_group.denied" });
   });
 
-  test("evaluation durably expires past-expiry active grants", async () => {
+  test("evaluation stays read-only for past-expiry active grants; cleanup emits expiration", async () => {
+    await createWorkerRun("run-expired");
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     WorkerGrantStore.create({
@@ -138,8 +161,35 @@ describe("WorkerGrantStore", () => {
       }),
     ).toMatchObject({ allowed: false, reason: "worker_grant.inactive" });
 
+    expect(WorkerGrantStore.get("grant-expired")?.status).toBe("active");
+
+    WorkerGrantStore.cleanupExpired("run-expired");
     expect(WorkerGrantStore.get("grant-expired")?.status).toBe("expired");
     await new Promise((resolve) => queueMicrotask(resolve));
     expect(events).toContain("worker_grant.expired");
+    expect(events.filter((event) => event === "worker_grant.updated")).toHaveLength(0);
+  });
+
+  test("stale direct adapter writes cannot reactivate a revoked grant", async () => {
+    await createWorkerRun("run-stale");
+    const created = WorkerGrantStore.create({
+      id: "grant-stale",
+      workerRunId: "run-stale",
+      allowedActions: ["worker.send"],
+    });
+    const staleConcurrentUpdate = {
+      ...created,
+      status: "active" as const,
+      version: created.version + 1,
+      updatedAt: Date.now() + 60_000,
+    };
+
+    WorkerGrantStore.revoke("grant-stale");
+    Storage.get().workerGrant?.set(staleConcurrentUpdate);
+
+    expect(WorkerGrantStore.get("grant-stale")).toMatchObject({
+      status: "revoked",
+      version: created.version + 1,
+    });
   });
 });

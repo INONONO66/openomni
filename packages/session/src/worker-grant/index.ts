@@ -73,7 +73,9 @@ function evaluateRecord(
     return { allowed: false, reason: "worker_grant.actor_group.denied" };
   }
   if (record.managerGrant?.riskCeiling !== undefined) {
-    if (!input.risk || riskRank[input.risk] > riskRank[record.managerGrant.riskCeiling]) {
+    const inputRank = input.risk ? riskRank[input.risk] : undefined;
+    const ceilingRank = riskRank[record.managerGrant.riskCeiling];
+    if (inputRank === undefined || inputRank > ceilingRank) {
       return { allowed: false, reason: "worker_grant.risk.denied" };
     }
   }
@@ -103,7 +105,11 @@ export namespace WorkerGrantStore {
     return requireAdapter().list(workerRunId);
   }
 
-  export function update(id: string, patch: Partial<Omit<Record, "id" | "workerRunId">>): Record {
+  function persistUpdate(
+    id: string,
+    patch: Partial<Omit<Record, "id" | "workerRunId">>,
+    event: "updated" | "revoked" | "expired",
+  ): Record {
     const adapter = requireAdapter();
     const current = adapter.get(id);
     if (!current) throw new Error(`WorkerGrant not found: ${id}`);
@@ -114,31 +120,47 @@ export namespace WorkerGrantStore {
       updatedAt: Date.now(),
     });
     adapter.set(updated);
-    Bus.publish(Communication.WorkerGrant.Events.Updated, eventBase(updated));
+    const descriptor =
+      event === "updated"
+        ? Communication.WorkerGrant.Events.Updated
+        : event === "revoked"
+          ? Communication.WorkerGrant.Events.Revoked
+          : Communication.WorkerGrant.Events.Expired;
+    Bus.publish(descriptor, eventBase(updated));
     return updated;
+  }
+
+  export function update(id: string, patch: Partial<Omit<Record, "id" | "workerRunId">>): Record {
+    return persistUpdate(id, patch, "updated");
   }
 
   export function revoke(id: string): Record {
-    const updated = update(id, { status: "revoked", revokedAt: Date.now() });
-    Bus.publish(Communication.WorkerGrant.Events.Revoked, eventBase(updated));
-    return updated;
+    return persistUpdate(id, { status: "revoked", revokedAt: Date.now() }, "revoked");
   }
 
   export function expire(id: string): Record {
-    const updated = update(id, { status: "expired" });
-    Bus.publish(Communication.WorkerGrant.Events.Expired, eventBase(updated));
-    return updated;
+    return persistUpdate(id, { status: "expired" }, "expired");
+  }
+
+  export function cleanupExpired(workerRunId?: string): Record[] {
+    return requireAdapter()
+      .list(workerRunId)
+      .filter((grant) => isPastExpiry(grant))
+      .map((grant) => expire(grant.id));
   }
 
   export function evaluate(input: Evaluation): EvaluationResult {
-    const parsed = Communication.WorkerGrant.Evaluation.parse(input);
+    const parsedInput = Communication.WorkerGrant.Evaluation.safeParse(input);
+    if (!parsedInput.success) {
+      return { allowed: false, reason: "worker_grant.evaluation.invalid" };
+    }
+    const parsed = parsedInput.data;
     const grants = requireAdapter().list(parsed.workerRunId);
     let firstDenial: EvaluationResult | undefined;
     for (const grant of grants) {
-      const current = isPastExpiry(grant) ? expire(grant.id) : grant;
-      const result = evaluateRecord(current, parsed);
+      const result = evaluateRecord(grant, parsed);
       Bus.publish(Communication.WorkerGrant.Events.Evaluated, {
-        ...eventBase(current),
+        ...eventBase(grant),
         allowed: result.allowed,
         reason: result.reason,
         action: parsed.action,

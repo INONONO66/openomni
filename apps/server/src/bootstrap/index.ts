@@ -8,6 +8,7 @@ import {
   Bus,
   BusPersistence,
   PendingAskStore,
+  SurfaceKey,
   TraceContext,
   WorkerRun,
 } from "@openomni/session";
@@ -191,13 +192,22 @@ export async function main(): Promise<void> {
       try {
         const residentPayload = `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`;
         const residentHandler: DispatchHandler = async (command, context) => {
+          const surfaceKeys = SurfaceKey.listBySession(mainSessionId);
+          const surfaceKey = surfaceKeys.length === 1 ? surfaceKeys[0] : undefined;
+          const surface = surfaceKey ? SurfaceKey.parse(surfaceKey) : undefined;
           PendingAskStore.create({
             id: command.dispatchId,
             originSessionId: sessionId,
             ...(runId ? { originRunId: runId } : {}),
             originActorKind: "worker",
             targetKind: "resident",
-            correlation: command.correlation ? { tokenHash: command.correlation } : {},
+            ...(surface ? { endpointId: surface.namespace || surface.surface } : {}),
+            ...(surface?.id ? { channelId: surface.id } : {}),
+            correlation: {
+              ...(command.correlation ? { tokenHash: command.correlation } : {}),
+              ...(surfaceKey ? { externalConversationId: surfaceKey } : {}),
+              ...(surface?.threadId ? { threadId: surface.threadId } : {}),
+            },
           });
           try {
             const trace = command.traceId
