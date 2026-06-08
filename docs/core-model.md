@@ -81,10 +81,97 @@ Raw session history is not memory. Durable behavioral memory needs to be scoped,
 
 ---
 
-## Terminology
+## How It Actually Works
 
-| Product Term | Description | Implementation Name |
-|---|---|---|
-| Resident | Always-on user-facing assistant | Main Persona, target agent |
-| Worker | Any delegated execution actor | Sub Persona, SubagentRuntime, WorkerRun |
-| System Governor | Structural improvement layer | Policy engine, Bus observers |
+Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch** — and diverges based on actor identity, channel kind, and PendingInteraction match.
+
+- **server channel adapter** (`apps/server/`) — channel-specific transport. Adds the SDK detail; outputs a channel-agnostic `InboundMessage`.
+- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Identifies the actor (`ActorResolver`) and resolves a default session candidate (`SessionResolver`). Hands off to dispatch.
+- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Evaluates blacklist, PendingInteraction match (which may override the session candidate), channel grant, `TrustTier`; computes `effectiveAuthority`; persists the inbound message into the final session (`EventProjector`); routes to the right handler (Resident, Worker, system); manages PendingInteraction lifecycle.
+
+The same three layers handle outbound: a Worker or the Resident calls `dispatch.submit(...)`, dispatch authorizes and routes to a server channel adapter (for human/A2A channels) or directly to an HTTP client (for `external_api`).
+
+See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#scenarios) for five end-to-end traces — Owner DM, Task Outreach, External reply (PI matched), Public channel unsolicited, External AI API call.
+
+**Invariant**: a new channel only touches `apps/server/`. Ingress and dispatch must remain unchanged when adding a channel; if they need a change, the boundary is broken.
+
+---
+
+## Vocabulary
+
+Seven categories. Each answers a different question — do not mix them.
+
+### Product subjects (user-facing)
+
+| Term | Description |
+|---|---|
+| **Owner** | The human operator. Has full authority. |
+| **Resident** | The single always-on user-facing assistant. Owns judgment, not execution. |
+| **Worker** | Any delegated execution actor — internal AI, external AI, external human. |
+| **System Governor** | Low-privilege observer that proposes Policy / Skill changes from execution evidence. |
+| **Actor** | Any external entity that interacts with the system. |
+
+### External identity (ingress concerns)
+
+| Term | Description |
+|---|---|
+| `ActorIdentity` | A canonical entity (one person, one external agent). |
+| `ActorEndpoint` | An identity's address on a specific channel: `(channel, externalId)`. |
+| `ActorRegistry` | Store mapping identities ↔ endpoints. |
+| `ActorResolver` | `(channel, externalId) → ActorIdentity?`. |
+| `ActorKind` | `human / ai_agent / service / resident / internal_worker / system`. |
+| `TrustTier` | `owner / co_owner / manager / collaborator / observer / assigned_worker`. |
+
+### Communication medium
+
+| Term | Description |
+|---|---|
+| `Channel` | Transport kind: `telegram / discord / slack / email / a2a / ...`. |
+| `Surface` | A specific instance of a channel (one bot, one workspace, one inbox). |
+| `SurfaceKey` | Routing key for a surface. |
+| `ChannelGrant` | Policy ceiling for a surface (`kind: trusted_channel | broadcast_channel | blocked_channel`, `defaultTier`, `inboundTreatment`). |
+| `Blacklist` | Absolute block list (actor / endpoint / channel / pattern). |
+
+### Message units
+
+| Term | Description |
+|---|---|
+| `InboundMessage` | Server normalizer output. Channel-agnostic shape. |
+| `InboundEvent` | Ingress-stamped event with resolved actor + default session candidate. |
+| `DispatchCommand` | Single dispatch invocation: `action / actor / target / payload / correlation`. |
+| `Envelope` | Wire-level external communication envelope. |
+| `Message` | Persisted session record (`UserMessage / AssistantMessage`). |
+
+### Session and execution
+
+| Term | Description |
+|---|---|
+| `Session` | Conversation or work scope. |
+| `SessionOwner` | Discriminated union: `actor | worker_run | system`. |
+| `SessionOrigin` | How the session was initiated. |
+| `SessionPurpose` | `user_conversation / worker_interaction / self_loop`. |
+| `WorkerRun` | Durable execution record of a delegated task. |
+| `executorKind` | `internal_chat_agent / external_api / a2a / human_channel`. |
+| `ChatAgent` | LLM-driven execution loop. |
+| `SubagentRuntime` | Session-locked spawn / send / resume / cancel / wait. |
+
+### Authority and lifecycle (dispatch concerns)
+
+| Term | Description |
+|---|---|
+| `PendingInteraction` | Durable registry entry for an outbound request awaiting an external response. Status: `open / resolved / follow_up / expired / cancelled`. |
+| `WorkerGrant` | A Worker's egress permission set (separate axis from ChannelGrant). |
+| `EffectiveAuthority` | 5-dimensional intersection: blacklist × channel × actor × session × PI. |
+
+### Module names
+
+| Term | Description |
+|---|---|
+| `Ingress` | Channel-agnostic entry: normalize → identify → resolve session candidate → hand off to dispatch. |
+| `Dispatch` | Cross-boundary gate: authorize → route → deliver → project → track lifecycle. |
+| `IngressEngine` / `DispatchRuntime` | Public entry points. |
+| `SessionResolver` | Ingress submodule producing the default session candidate from `SurfaceKey`. |
+| `EventProjector` | Dispatch-invoked utility that persists the inbound message into the final session after PI match resolution. |
+| `DispatchHandler` | Per-action handler inside dispatch. |
+
+See [ADR-009](design-decisions/009-external-actor-authority-model.md) for the authority model, routing precedence, and full scenario traces.
