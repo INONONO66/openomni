@@ -12,6 +12,8 @@ Design decisions that shaped OpenOmni. Each record captures **why** a decision w
 
 **Runtime capabilities (006–008)** — Built out multi-agent execution. ADR-006 shipped SubagentRuntime and BackgroundManager (team orchestration pieces were dropped). ADR-007 proposed the Policy Kernel v2 governance VM. ADR-008 proposed replacing the fixed worker pool with a lightweight in-process Resident and on-demand worker processes.
 
+**External actors (009)** — Extends the workforce model to external humans and AI agents. Defines the 3-axis actor taxonomy, dual allow-list access control (channel + actor), durable PendingInteraction registry for async response correlation, explicit session ownership, and `executorKind`-based WorkerRun dispatch. Includes five end-to-end scenarios and the canonical seven-category vocabulary map. Builds on ADR-005's controlled inbound authority principle.
+
 ## Records
 
 | ADR | Decision | Status |
@@ -24,6 +26,7 @@ Design decisions that shaped OpenOmni. Each record captures **why** a decision w
 | [006](./006-persistent-subagent-team-orchestration.md) | Persistent subagent sessions (partial ship) | Superseded |
 | [007](./007-policy-kernel-v2.md) | Policy Kernel v2 governance VM | Proposed |
 | [008](./008-lightweight-main-persona-on-demand-workers.md) | Lightweight Resident + on-demand workers | Proposed |
+| [009](./009-external-actor-authority-model.md) | External actor authority & communication model | Accepted |
 
 ## Adding a New ADR
 
