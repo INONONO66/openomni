@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780592631282,
+  "lastUpdate": 1780930068097,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -3347,6 +3347,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 521569,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b415bee0d92c7f0d4850abd4a3ab2b18a8158bd3",
+          "message": "docs: accept ADR-009 and align project vocabulary (#211)\n\n* docs: align ADR-005 terminology with resident/worker\n\nRename ADR-005 from \"Persona Workforce Runtime Direction\" to\n\"Workforce Runtime Direction\". Replace \"Main Persona / Sub Persona\"\nwith the canonical product terms used in docs/core-model.md and\nroot AGENTS.md.\n\nAdd forward-reference to ADR-009 for the external actor authority\nmodel, executorKind, SessionOwner / SessionOrigin / SessionPurpose,\nand the uniform Worker abstraction across internal AI, external AI,\nand external humans.\n\nKeep a header note documenting the original title and term mapping\nso historical references in older changelogs remain readable.\n\n* docs: accept ADR-009 with scenarios and vocab map\n\nPromote ADR-009 (External Actor Authority & Communication Model) from\nProposed to Accepted after the design contract review.\n\nAdd three new top-level sections:\n\n- Scenarios — five end-to-end traces (owner DM, task outreach,\n  PI-matched reply, public-channel unsolicited, external-api worker)\n  that ground every decision in the body.\n- Vocabulary Map — the canonical seven-category cheat sheet\n  (subjects, identity, medium, message units, session/execution,\n  authority/lifecycle, module names).\n- Decisions Resolved — five open design points settled during the\n  review: actor.message-vs-actor.reply branching, ChannelGrant.kind\n  enum, unregistered endpoint promotion, ambiguous PendingInteraction\n  status handling, System Governor representation.\n\nClarify ChannelGrant.kind as a three-value enum (trusted_channel /\nbroadcast_channel / blocked_channel) refined by inboundTreatment.\n\nUpdate the inbound authority order consequence to attribute the\nprecedence to DispatchRuntime and clarify that EventProjector is\ninvoked dispatch-side after the final session is resolved (so a\nPI match can override the ingress candidate without persisting to\nthe wrong session).\n\n* docs: align core-model and AGENTS with new vocabulary\n\n- docs/core-model.md: expand the vocabulary table from 5 rows to a\n  seven-category cheat sheet matching ADR-009 (subjects, identity,\n  medium, message units, session/execution, authority/lifecycle,\n  module names). Add a \"How It Actually Works\" section that\n  describes the three-layer message flow (server channel adapter →\n  ingress → dispatch) with the invariant that adding a new channel\n  must only touch apps/server/.\n\n- AGENTS.md: expand the Product Model section with Owner, Actor,\n  lifecycle, ChannelGrant, Blacklist rows and a three-layer\n  message-flow table. Add WHERE TO LOOK rows for the planned\n  actor / channel-grant / blacklist / pending-interaction domains.\n  Note PendingAsk → PendingInteraction as a successor (not a pure\n  rename: status enum, allowedActions, followUpWindow, and\n  workerRunId/sessionId strong-coupling all change). Update the\n  intro to cite both ADR-005 and ADR-009 as accepted decisions.",
+          "timestamp": "2026-06-08T14:47:17Z",
+          "tree_id": "33420b555a279406383f0ba2504cf0a4f825fcd8",
+          "url": "https://github.com/INONONO66/openomni/commit/b415bee0d92c7f0d4850abd4a3ab2b18a8158bd3"
+        },
+        "date": 1780930067693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 734.2752131228671,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 949.8390877745353,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1394.4478825319018,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 53.13130389508154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 663.8895225324011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 504.34788375789657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3254.663477185705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2675.7796805182575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10176.53892337408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6229.23869440598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2200,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19816,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8631,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11202,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 107259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 542155,
             "unit": "ns/op"
           }
         ]
