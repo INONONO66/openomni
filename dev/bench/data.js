@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781173595598,
+  "lastUpdate": 1781183257270,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -3719,6 +3719,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 538763,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75af8726e7bf520d61f71768be297e49a136c616",
+          "message": "docs: Agent OS qualification — definition, litmus tests, bets, kill criteria (#224)\n\n* docs: define the Agent OS category — five duties, five litmus tests\n\nFunctional definition with the metaphor stripped: multiplexing,\nprotection-by-mechanism, stable ABI, lifecycle, third-party programs —\ntranslated to agent-world resources (money, context, the principal's\nauthority, real-world time) plus the category's genuinely new duty:\ntruth, because agents can lie about their exit codes and CPUs cannot.\n\nIncludes the T1-T5 litmus tests that turn 'is it an Agent OS' into an\ninspection, a scored landscape (frameworks, durable schedulers, Claude\nCode, OpenClaw, Hermes, AIOS), and OpenOmni's own honest scorecard:\n0.5/5 today, ~4/5 on the designed path, with issue refs per test.\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n* docs: record standing criticisms, falsifiable bets, and kill criteria\n\nApplies 'evidence over self-report' to the project itself: nine\nstanding criticisms kept un-refuted (one-app kernel, convention-not-\nmechanism, await-world novelty, statistical anemia, RCA confabulation\nand policy ossification, injection surface, cheap control group,\nmetaphor cosplay, self-serving definition), three measurable bets with\npre-committed kill criteria (H1 reply correlation >=70%, H2 declining\nunplanned interventions, H3 Governor net-positive 3:1 without\nthroughput loss), checkpoint cadence (C1 = #213 merge, the dormant-\nengine pattern test), and the current verdict: design A, running\nsystem D+, deciding variable = our own wiring conversion rate.\n\nREADME: link both docs from Further Reading.\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.8 <noreply@anthropic.com>",
+          "timestamp": "2026-06-11T13:07:04Z",
+          "tree_id": "1849cffdb9fc1788ef3b14ec42c5eb03fafaa943",
+          "url": "https://github.com/INONONO66/openomni/commit/75af8726e7bf520d61f71768be297e49a136c616"
+        },
+        "date": 1781183256560,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 709.6342411897224,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 832.5659181921949,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1350.319272471549,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.390580652747985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 597.9670342155042,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 444.17671984930547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2737.22113647537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2488.406001940587,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9139.322701516889,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5885.2843691150265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2265,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20195,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7927,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14965,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102195,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512508,
             "unit": "ns/op"
           }
         ]
