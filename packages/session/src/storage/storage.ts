@@ -65,6 +65,7 @@ export namespace Storage {
     workerRunState?: WorkerRunStateStore.Adapter;
     pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
     workerGrant?: ProtocolStorage.WorkerGrantSubAdapter;
+    cronJob?: ProtocolStorage.CronJobSubAdapter;
   }
 }
 

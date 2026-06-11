@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteBackgroundTaskAdapter } from "./sqlite-background-task-adapter";
+import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
 import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
@@ -26,6 +27,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
+  readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -46,6 +48,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.workerGrant = createSqliteWorkerGrantAdapter(this.db);
+    this.cronJob = createSqliteCronJobAdapter(this.db);
   }
 
   clear(): void {

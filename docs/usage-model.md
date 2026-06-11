@@ -18,7 +18,7 @@ You never need to classify your own request — the Resident picks the lane. But
 | "Turn off the lights." / "Reply to B with this." | Dispatch action | No worker — the kernel executes, audits, done. Sensitive actions (first contact with a stranger, spending money) come back as a one-tap approval. |
 | "Research competitor pricing." / "Refactor this repo." | Delegated task | A ticket is created (title, completion criteria, executor). It runs in the background; you keep chatting. What returns is a **distilled report that passed an evidence check** — never a process log. |
 | "Ask these 3 sellers for price and condition." | Waiting-on-the-world task | Messages go out; the system **sleeps at zero cost**. Replies — even days later — wake exactly the right task. Partial responses are normal; deadlines close the rest. |
-| "Brief me on trends every morning at 9." | Scheduled task | Durable cron — the same machinery on a timer. Survives restarts. |
+| "Brief me on trends every morning at 9." | Scheduled task | Target: durable cron — the same machinery on a timer. Current component truth lives in `docs/implementation-status.md`. |
 | "Give this one to Claude Code." / "Worker A, change approach." | Direct targeting | Your authority, not a general one. The Resident observes via lineage. |
 
 ## When the system talks to you
