@@ -13,7 +13,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | `src/ingress/` | Inbound event resolution and mode dispatch | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/subagent/` | Session-backed subagent execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
-| `src/execution-runtime/` | Tool system, workspace, and worker middleware | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry` |
+| `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
 
@@ -56,7 +56,7 @@ Consumers should only use `@openomni/openomni` exports:
 - Ingress orchestration from `src/ingress/`
 
 - Subagent runtime + background manager from `src/subagent/`
-- Tool system, workspace lock, and worker middleware from `src/execution-runtime/`
+- Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain.
 
