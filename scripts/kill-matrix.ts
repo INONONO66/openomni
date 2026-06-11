@@ -54,14 +54,13 @@ async function scenarioA(): Promise<ScenarioResult> {
   }
 }
 
-// Verifies the public worker-pool API exposes crash handling without reaching into internals.
 async function scenarioB(): Promise<ScenarioResult> {
   const start = Date.now();
   try {
-    const { createWorkerPool } = await import("../packages/coordinator/src");
+    const { createWorkerManager } = await import("../packages/coordinator/src");
     const passed =
-      typeof createWorkerPool === "function" &&
-      (await runBunTest("packages/coordinator/test/worker-pool/crash.test.ts"));
+      typeof createWorkerManager === "function" &&
+      (await runBunTest("packages/coordinator/test/worker-manager/crash.test.ts"));
     return {
       id: "b",
       name: "worker crash during streaming",

@@ -36,7 +36,7 @@ src/
 │   ├── middleware.ts      # createContextMiddleware() — context.prepare middleware that appends context
 │   └── skills.ts         # SkillLoader — loads skill definitions from workspace
 ├── execution/
-│   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker pool wrapper
+│   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker manager wrapper
 │   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution
 │   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
@@ -70,7 +70,7 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` — pick a default model from stored credentials (if any).
-6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — spawn worker pool; `toolDispatcher` covers MCP tools.
+6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — create on-demand worker manager; `toolDispatcher` covers MCP tools.
 7. `IngressEngine.setCoordinator(coordinator)`.
 8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, defaultModel, workspaceRoot })`.
 9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
@@ -106,7 +106,7 @@ Errors bubble up as `Error: {message}` strings back to the channel so operators 
 
 ## TOOL SYSTEM
 
-Tool providers are assembled in `bootstrap/index.ts` and passed through to the routing handler and worker pool:
+Tool providers are assembled in `bootstrap/index.ts` and passed through to the routing handler and worker manager:
 
 | Provider | Source | Notes |
 | --- | --- | --- |

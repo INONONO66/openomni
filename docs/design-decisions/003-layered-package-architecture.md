@@ -19,7 +19,7 @@ protocol → session → llm → agent → openomni → coordinator → server
 - `llm`: `protocol`, `session`
 - `agent`: `protocol`, `llm`, and sanctioned `session` observability primitives — **no session state ownership** (session-backed orchestration and `BusTransport` live in `openomni`)
 - `openomni`: `protocol`, `session`, `llm`, `agent`
-- `coordinator`: all packages above — owns worker pool, IPC, recovery, credentials, tool-permission
+- `coordinator`: all packages above — owns on-demand worker lifecycle, IPC, recovery, credentials, tool-permission
 - `server`: any `@openomni/*`; hosts the runtime and external surfaces
 
 Reverse dependencies (e.g., `protocol` importing from `session`) are build failures. Cross-package imports go through `index.ts` barrel only — no deep imports like `@openomni/llm/src/auth/storage`.
