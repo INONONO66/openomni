@@ -14,6 +14,8 @@ import {
 } from "@openomni/session";
 import {
   AgentToolProvider,
+  CronAdapter,
+  CronJobRunner,
   DispatchRuntime,
   IngressEngine,
   IngressEventProjector,
@@ -424,6 +426,11 @@ export async function main(): Promise<void> {
   const traceId = crypto.randomUUID();
   const mode = "coordinator";
   await runRecovery(routingHandler, coordinator, traceId);
+  const cronRunner = CronJobRunner.start({
+    fire: async (job) => {
+      await CronAdapter.fire(job);
+    },
+  });
 
   Bus.publish(Operational.BootstrapCompleted, {
     traceId,
@@ -437,6 +444,7 @@ export async function main(): Promise<void> {
     server,
     mcpProvider,
     coordinator,
+    cronRunner,
     traceId,
   });
 }

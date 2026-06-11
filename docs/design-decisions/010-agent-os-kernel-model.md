@@ -98,7 +98,7 @@ One ledger, three consumers: worker promotion, model/app routing, and approval r
 
 The OS qualification test: **promises survive power loss.**
 
-- Target: scheduled jobs are persisted and a boot runner reloads due schedules from the durable `CronJobRegistry` store.
+- Implemented for cron: scheduled jobs are persisted and server boot starts a runner that reloads due schedules from the durable `CronJobRegistry` store.
 - Open PendingInteractions are restored at boot; a reply arriving after a restart wakes exactly the work that was waiting for it.
 - Interrupted runs are recovered (existing recovery module) and offered for resume.
 

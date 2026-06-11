@@ -80,7 +80,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Crash recovery (mark interrupted at boot) | ✅ | `packages/coordinator/src/recovery/` | |
 | Injection queue (async delivery at turn.finish) | ✅ | `packages/openomni/src/execution-runtime/injection-queue.ts` | |
 | Cron job registry persistence | ✅ | `packages/openomni/src/execution-runtime/cron-job-registry.ts`, `packages/session/src/storage/sqlite-cron-job-adapter.ts` | `schedule.create` jobs persist in SQLite and survive `Storage` reinitialize; `schedule.cancel` removes persisted jobs |
-| Cron firing loop / boot runner | 📋 | — | No process boot loop reloads persisted jobs and fires due schedules yet; `CronAdapter.fire(job)` exists but must be driven by a scheduler |
+| Cron firing loop / boot runner | ✅ | `packages/openomni/src/execution-runtime/cron-job-runner.ts`, `apps/server/src/bootstrap/index.ts` | Server boot starts `CronJobRunner`, which reloads stored jobs, initializes missing `nextFireAt`, fires due jobs through `CronAdapter.fire(job)`, emits `cron_job.fired`, and advances the next fire time. Cron grammar is numeric five-field UTC; downtime fires at most once per tick, not once per missed interval |
 | Boot-time PendingInteraction restoration | 📋 | — | Depends on PI existing |
 
 ## Structural guarantees (kernel surface, ADR-010 §1)

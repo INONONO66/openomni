@@ -104,6 +104,7 @@ export {
   ToolProxyProvider,
   SystemToolProvider,
   CronJobRegistry,
+  CronJobRunner,
   InjectionQueue,
   Tool,
   WorkspaceLock,

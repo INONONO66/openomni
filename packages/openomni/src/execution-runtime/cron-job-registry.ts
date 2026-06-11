@@ -22,6 +22,16 @@ export namespace CronJobRegistry {
     return job.id;
   }
 
+  export function save(job: CronJob.Info): void {
+    jobs.set(job.id, job);
+    adapter()?.set(job);
+  }
+
+  export function get(jobId: string): CronJob.Info | undefined {
+    const persisted = adapter();
+    return persisted ? persisted.get(jobId) : jobs.get(jobId);
+  }
+
   export function list(): CronJob.Info[] {
     const persisted = adapter()?.list();
     return persisted ?? [...jobs.values()];

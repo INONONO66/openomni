@@ -9,7 +9,8 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 | `middleware.ts` | Builds default worker middleware registrations. |
 | `workspace-lock.ts` | Serializes workspace-mutating tool execution. |
 | `injection-queue.ts` | `InjectionQueue` — async response buffer keyed by `runId`; drained at `turn.finish` by the injection-queue policy. |
-| `cron-job-registry.ts` | `CronJobRegistry` — storage-backed registry of scheduled jobs with a process-local fallback; populated by `dispatch` `schedule.create` action, read by `CronAdapter`. |
+| `cron-job-registry.ts` | `CronJobRegistry` — storage-backed registry of scheduled jobs with a process-local fallback; populated by `dispatch` `schedule.create` action. |
+| `cron-job-runner.ts` | `CronJobRunner` — boot/timer runner that polls `CronJobRegistry`, advances `nextFireAt`, emits fire events, and calls an injected fire implementation. |
 | `filesystem/` | Path containment helpers for file tools. |
 | `tool/` | Tool definition, catalog, providers, executor, and built-in tools. |
 | `tool/agent/tools/dispatch.ts` | `createDispatchTool` — runtime-to-runtime/system egress gate. |
