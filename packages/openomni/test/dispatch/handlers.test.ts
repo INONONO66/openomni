@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Dispatch, Execution, Ingress } from "@openomni/protocol";
-import { PendingAskStore, Session, Storage } from "@openomni/session";
+import { WorkItem, type Dispatch, type Execution, type Ingress } from "@openomni/protocol";
+import { PendingAskStore, Session, Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
 import { extractText } from "../../src/dispatch/handlers/shared";
@@ -69,7 +69,133 @@ describe("built-in dispatch handlers", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ mode: "direct", prompt: "build it", agentName: "coder" });
     expect(Session.get(requests[0]?.sessionId ?? "")).toBeDefined();
-    expect(result).toMatchObject({ output: { sessionId: requests[0]?.sessionId } });
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(workItems[0]).toMatchObject({
+      sourceMessageId: "dispatch-worker.spawn",
+      sourceChannel: "dispatch",
+      intent: "worker.spawn",
+      goal: "build it",
+      assigneeId: "coder",
+      sessionId: requests[0]?.sessionId,
+    });
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("running");
+    expect(result).toMatchObject({
+      output: { sessionId: requests[0]?.sessionId, workItemHash: workItems[0]?.hash },
+    });
+  });
+
+  test("worker.spawn marks the work item failed when coordinator dispatch throws", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            throw new Error("coordinator unavailable");
+          },
+        },
+      },
+    });
+
+    await expect(
+      registry.get("worker.spawn")?.(
+        command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+      ),
+    ).rejects.toThrow("coordinator unavailable");
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(workItems[0]?.failureReason).toBe("coordinator unavailable");
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("failed");
+  });
+
+  test("worker.spawn marks the work item failed when coordinator returns failed", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "failed",
+              error: "worker failed",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(workItems[0]?.failureReason).toBe("worker failed");
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("failed");
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "failed" } },
+    });
+  });
+
+  test("worker.spawn marks the work item failed when coordinator interrupts dispatch", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "interrupted",
+              error: "worker interrupted",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(workItems[0]?.failureReason).toBe("worker interrupted");
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("failed");
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "interrupted" } },
+    });
+  });
+
+  test("worker.spawn marks the work item cancelled when coordinator cancels dispatch", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "cancelled",
+              output: "cancelled by owner",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("cancelled");
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "cancelled" } },
+    });
   });
 
   test("worker.spawn preserves parent session lineage when provided", async () => {
