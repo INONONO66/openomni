@@ -1,6 +1,8 @@
 # ADR-008: Lightweight Resident with On-Demand Worker Processes
 
-**Status**: Proposed
+**Status**: Accepted (core implemented)
+
+> **Implementation note (2026-06-10)**: The core of this ADR has shipped — `OnDemandWorkerManager` (`packages/coordinator/src/worker-manager/`, on-demand spawn, idle shutdown, max-active cap) is what the server uses (`apps/server/src/execution/coordinator.ts`), and `ResidentRuntime` (`packages/openomni/src/resident/runtime.ts`) runs in-process, bypassing the coordinator for conversation. Remaining deltas: the legacy fixed pool (`packages/coordinator/src/worker-pool/`) is still exported pending removal, and the Resident currently carries a full execution toolset rather than the judgment-only profile this ADR assumed — that demotion is owned by [ADR-010](./010-agent-os-kernel-model.md). See [Implementation Status](../implementation-status.md).
 
 ## Context
 

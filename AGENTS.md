@@ -7,7 +7,7 @@ OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through 
 
 The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
 
-Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model) and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary).
+Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md) (proposed) frames the target as an Agent OS kernel. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 ## STRUCTURE
 
@@ -28,8 +28,8 @@ openomni/
 │   │       ├── registry/       # AgentRegistry
 │   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
 │   │       └── mcp/            # McpClient
-│   ├── openomni/        # Orchestration: DAG, Ingress, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
-│   └── coordinator/     # Multiprocess execution coordinator: worker pool, IPC transport, recovery, credentials, tool-permission
+│   ├── openomni/        # Orchestration: DAG, Ingress, Dispatch, ResidentRuntime, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
+│   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager (worker-pool/ is legacy), IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -75,12 +75,15 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
-| Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — identity resolve → session candidate resolve → dispatch.submit (projection happens dispatch-side after PI override) |
+| Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session candidate resolve → dispatch.submit. Actor arrives pre-stamped; identity resolve (`ActorResolver`) is planned per ADR-009 |
+| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator (ADR-008) |
+| Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Actor identity (planned) | `packages/protocol/src/actor/` + `packages/session/src/actor/` | `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` / `ActorResolver` per ADR-009 |
 | ChannelGrant / Blacklist (planned) | `packages/protocol/src/actor/channel-grant`, `.../blacklist` | Per-channel policy ceiling and absolute block list per ADR-009 |
 | PendingInteraction (planned successor) | `packages/protocol/src/communication/pending-interaction` | Successor to `PendingAsk`; not a pure rename — status enum (`open / resolved / follow_up / expired / cancelled`), `allowedActions`, `followUpWindow`, and `workerRunId / sessionId` strong-coupling all change. Lifecycle managed inside dispatch. |
 | Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
-| Coordinator (worker pool) | `packages/coordinator/src/worker-pool/` | Worker routing, supervision, session-tree affinity routing |
+| Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
+| Coordinator (legacy fixed pool) | `packages/coordinator/src/worker-pool/` | Legacy; still exported, unused by server, pending removal |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
@@ -135,9 +138,9 @@ Inbound (and outbound) messages traverse a strict three-layer chain — adding a
 
 | Layer | Path | Responsibility |
 | --- | --- | --- |
-| Server channel adapter | `apps/server/src/channel/` | Channel-specific transport; raw → `InboundMessage` (channel-agnostic shape). |
-| Ingress | `packages/openomni/src/ingress/` | Identify actor (`ActorResolver`), resolve default session candidate (`SessionResolver`). Hands off to dispatch. |
-| Dispatch | `packages/openomni/src/dispatch/` | Cross-boundary gate: blacklist → PendingInteraction match (may override session candidate) → channel grant → `TrustTier` → `effectiveAuthority`. Projects message into final session (`EventProjector`), routes to handler, manages PI lifecycle. |
+| Server channel adapter | `apps/server/src/channel/` | Channel-specific transport; raw → `InboundMessage` (channel-agnostic shape). Implemented. |
+| Ingress | `packages/openomni/src/ingress/` | Resolve default session candidate (`SessionResolver`), hand off to dispatch — implemented. Actor identification (`ActorResolver`) — planned per ADR-009. |
+| Dispatch | `packages/openomni/src/dispatch/` | Cross-boundary gate. Implemented: policy authorize (WorkerGrant) → handler routing. Planned per ADR-009: blacklist → PendingInteraction match (may override session candidate) → channel grant → `TrustTier` → `effectiveAuthority`, dispatch-side projection, PI lifecycle. See `docs/implementation-status.md`. |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 

@@ -52,7 +52,9 @@ Agent capability is no longer the bottleneck — reliability is. OpenOmni is bui
 
 ## Current Status
 
-The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, and the subagent runtime all function. The single-Resident operational model and the System Governor are early stage — the architectural foundations are in place, but the behavioral layer that makes them meaningful is still being built.
+The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, the on-demand worker runtime, and the in-process Resident all function. The single-Resident operational model and the System Governor are early stage — the architectural foundations (event journal, work ledger, verification-gate schemas) are in place, but the feedback loop that makes them meaningful is not wired yet: today nothing consumes the journal, and worker completion claims are not yet verified by code.
+
+Component-level truth lives in [Implementation Status](docs/implementation-status.md) — design docs describe targets; that file says what actually runs.
 
 ## Development
 

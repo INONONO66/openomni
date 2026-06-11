@@ -10,6 +10,8 @@ The Resident's job is judgment, not execution. When a request arrives, it picks 
 
 The Resident does not do meta-work. It doesn't rewrite its own rules, restructure its own skills, or adjust system policy. That's the System Governor's job. The Resident can propose changes, but it cannot enact them unilaterally.
 
+> **Implementation status**: the judgment-only Resident is the target, not the current runtime. Today the Resident is provisioned with a full execution toolset (`filesystem`, `execution` categories — see `apps/server/src/ingress/bridge.ts`). The demotion to a shell profile (read-only perception + dispatch) is owned by [ADR-010](design-decisions/010-agent-os-kernel-model.md); tracking in [Implementation Status](implementation-status.md).
+
 ## Workers
 
 Workers are everything that isn't the Resident. That includes internal AI agents, external tools like OpenCode or Claude Code, and humans acting in a defined role. The Resident treats them all the same way: as execution actors that can be called when needed and whose output must be evaluated before it reaches the user.
@@ -25,6 +27,8 @@ The System Governor is a separate, low-privilege layer that observes execution r
 This separation matters. The Resident improving itself through reflection is a reliability risk: it conflates judgment with self-modification, and it means the system's behavior can drift in ways that are hard to audit. The Governor keeps those concerns separate. Structural improvements are observable, attributable, and reviewable.
 
 The Governor can update routing preferences, skill definitions, and policy rules. It cannot rewrite core logic or safety constraints.
+
+Concretely it is a **postmortem engine** with two loops: an incident-driven fast loop (mistake → root-cause analysis over logs and the situation at the time → a structural fix so the same mistake cannot recur — never just an apology) and a periodic slow loop (ledger aggregation: routing hints, evaluation calibration, cost accounting). Its permission formula is *read-omniscient, write-minimal*: it may read everything including Worker transcripts, but its writes are proposals plus a narrow autonomous tier — tightening is autonomous, loosening requires Owner approval, and safety constraints are untouchable. See [ADR-010 §8](design-decisions/010-agent-os-kernel-model.md).
 
 ## Controlled Inbound Authority
 
@@ -44,6 +48,17 @@ The Resident picks the cheapest sufficient layer for each request:
 
 **Fork** — the Resident opens an isolated self-loop session for complex reasoning, planning, or multi-Worker coordination. This is not just a background task. It's a full work session where the Resident can restate the request, refine intent, summon Workers, review their outputs, and return a distilled result to the original session.
 
+Mechanically these map to three execution lanes ([ADR-010 §6](design-decisions/010-agent-os-kernel-model.md)), chosen by how much reasoning execution still requires:
+
+| Lane | Used for | Example |
+| --- | --- | --- |
+| Built-in | Judgment and read-only perception | Answer from context, peek at a file |
+| Dispatch action (syscall) | Atomic world mutations needing no further reasoning | Turn off a light, send one composed message, schedule a job |
+| Worker (always an isolated process; may use subagents internally) | Independent execution with its own profile and verifiable output | Research, refactoring, negotiation |
+| Subagent (in-process extension of its parent) | Context-inheriting consultation / parallel reasoning — no ticket, no gate | "Review this from a security angle" |
+
+Spawning a Worker for an atomic action is waste; doing multi-step work in the user session is pollution. Every world-mutating lane passes through dispatch — tools that act only inside an agent's own sandbox do not need to.
+
 The original user-facing session stays clean. Internal reasoning, failed attempts, experiments, and Worker transcripts belong in child or self-loop sessions. The user sees decisions and results, not process.
 
 ## Session Hygiene
@@ -51,6 +66,8 @@ The original user-facing session stays clean. Internal reasoning, failed attempt
 The user-facing session is a relationship and decision record, not a work log. Anything that isn't directly useful to the user — intermediate reasoning, Worker transcripts, failed attempts, planning iterations — goes in a child or self-loop session.
 
 This keeps the primary session readable over time. It also makes the system's behavior auditable: you can trace a result back through the session tree to the Worker that produced it and the reasoning that accepted it.
+
+The unit that crosses back from a Worker is the **completion report** — the deliverable plus a written account whose claims reference ledger evidence — never the Worker transcript. The Resident evaluates that report against the acceptance criteria set at delegation time; claims without evidence are treated as work not done ([ADR-010 §7](design-decisions/010-agent-os-kernel-model.md)).
 
 ## Worker Lifecycle
 
@@ -79,21 +96,25 @@ OpenOmni is designed to integrate with a long-term memory system (Anamnesis), bu
 
 Raw session history is not memory. Durable behavioral memory needs to be scoped, attributed, and reviewable. The Resident's personality, domain rules, tone, and routing preferences can evolve through the memory system. Core logic and safety policy cannot.
 
+Architecturally, memory is a **built-in layer plus a pluggable engine port** ([ADR-010 §9](design-decisions/010-agent-os-kernel-model.md)): bounded curated notes and FTS5 session search always work with zero engines configured, while external engines (Anamnesis first; Honcho/Mem0-class providers fit the same port) augment recall and user modeling. Recall is scope-filtered per executor — Workers see task-scoped memory only.
+
 ---
 
-## How It Actually Works
+## How It Works — Current and Target
 
-Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch** — and diverges based on actor identity, channel kind, and PendingInteraction match.
+Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch**. The layer chain and the dispatch chokepoint are implemented; most of the authority evaluation inside dispatch is accepted design (ADR-009) that has not landed yet. Per-component truth lives in [Implementation Status](implementation-status.md).
 
-- **server channel adapter** (`apps/server/`) — channel-specific transport. Adds the SDK detail; outputs a channel-agnostic `InboundMessage`.
-- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Identifies the actor (`ActorResolver`) and resolves a default session candidate (`SessionResolver`). Hands off to dispatch.
-- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Evaluates blacklist, PendingInteraction match (which may override the session candidate), channel grant, `TrustTier`; computes `effectiveAuthority`; persists the inbound message into the final session (`EventProjector`); routes to the right handler (Resident, Worker, system); manages PendingInteraction lifecycle.
+Status legend: ✅ implemented · 📋 designed (ADR-009), not implemented.
 
-The same three layers handle outbound: a Worker or the Resident calls `dispatch.submit(...)`, dispatch authorizes and routes to a server channel adapter (for human/A2A channels) or directly to an HTTP client (for `external_api`).
+- **server channel adapter** (`apps/server/`) ✅ — channel-specific transport. Adds the SDK detail; outputs a channel-agnostic `InboundMessage`.
+- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Resolves a default session candidate (`SessionResolver`) ✅ and hands off to dispatch ✅. Actor identification (`ActorResolver`) 📋 — today the actor arrives pre-stamped by the caller; ingress does not resolve identity.
+- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Policy authorization and handler routing ✅ (WorkerGrant is the one authority axis evaluated today). Blacklist 📋, PendingInteraction match with session override 📋, channel grant 📋, `TrustTier` 📋, `effectiveAuthority` 📋, PendingInteraction lifecycle 📋.
 
-See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#scenarios) for five end-to-end traces — Owner DM, Task Outreach, External reply (PI matched), Public channel unsolicited, External AI API call.
+Outbound follows the same shape: a Worker or the Resident calls `dispatch.submit(...)` ✅ for internal targets (resident, workers, schedule). External egress targets (`human_channel`, `a2a`, `external_api`) 📋.
 
-**Invariant**: a new channel only touches `apps/server/`. Ingress and dispatch must remain unchanged when adding a channel; if they need a change, the boundary is broken.
+See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#scenarios) for five end-to-end target traces — Owner DM, Task Outreach, External reply (PI matched), Public channel unsolicited, External AI API call. [ADR-010](design-decisions/010-agent-os-kernel-model.md) frames this pipeline as the kernel's syscall gate and PendingInteraction as its blocking-wait primitive.
+
+**Invariant** (enforced by convention today, kernel rule per ADR-010): a new channel only touches `apps/server/`. Ingress and dispatch must remain unchanged when adding a channel; if they need a change, the boundary is broken.
 
 ---
 
