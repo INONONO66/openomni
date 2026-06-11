@@ -2,6 +2,7 @@ export { buildWorkerMiddleware } from "./middleware.js";
 export type { WorkerMiddlewareConfig } from "./middleware.js";
 export { InjectionQueue } from "./injection-queue.js";
 export { CronJobRegistry } from "./cron-job-registry.js";
+export { CronJobRunner } from "./cron-job-runner.js";
 export { WorkspaceLock } from "./workspace-lock.js";
 export {
   AgentToolProvider,

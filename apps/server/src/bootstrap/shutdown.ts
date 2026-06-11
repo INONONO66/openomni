@@ -19,6 +19,7 @@ interface ShutdownDeps {
   server: { stop(force: boolean): void };
   mcpProvider: McpToolProvider;
   coordinator?: { shutdown(): Promise<void> };
+  cronRunner?: { stop(): void };
   traceId?: string;
 }
 
@@ -44,6 +45,7 @@ export function installShutdownHandlers(deps: ShutdownDeps): void {
     });
 
     try {
+      deps.cronRunner?.stop();
       await deps.coordinator?.shutdown();
 
       for (const channel of deps.channels) {

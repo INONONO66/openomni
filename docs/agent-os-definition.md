@@ -70,7 +70,7 @@ Honest as of 2026-06-12. Component truth: [implementation-status.md](implementat
 |---|---|---|
 | T1 third-party | ❌ zero installed apps | #216 — `AppConnector` definition as the public ABI; install = detect → register → consent → wire → smoke-verify |
 | T2 hostile program | ⚠️ partial — worker-spawn denial, budget hard-stop, tool-guard are mechanisms; but kernel/userland share one process and the Resident still holds direct MCP tools | #218, #221. Full T2 (process-isolation-grade) is honestly long-term; this is a single-Owner trust boundary by design |
-| T3 power loss | ⚠️ partial — cron job registry persists, but no boot runner fires due schedules yet | #215 + #217 |
+| T3 power loss | ⚠️ partial — durable cron jobs persist and boot starts a runner for due schedules; PendingInteraction restoration still does not exist | #215 + #217 |
 | T4 liar | ❌ false claims pass today | **#213 — the category's unoccupied duty, and this project's most original contribution** |
 | T5 multiplexing | ⚠️ token budgets only | #219, #221 |
 
