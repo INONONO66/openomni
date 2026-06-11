@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781183257270,
+  "lastUpdate": 1781186754444,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -3843,6 +3843,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512508,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b58a9f2334cea4fcc73ca1a540b4fd27bb43045a",
+          "message": "docs: adopt connector definitions as the public install ABI (#225)\n\nADR-010 §3 'Installation' subsection. Installing an app = installing\nits connector (a printer driver, not a printer; binaries stay with\nbrew/bun). The AppConnector definition is declarative Zod data —\ndetect/testedVersions, headless spawn, log parsing, question-bridge\nmaterialization, evidence kinds, required credentials/capabilities,\nrouting profile — so third parties integrate by writing one file,\nnever touching the kernel (the T1 third-party test, passed as an OS\nrather than as a framework).\n\nLifecycle: discover -> register -> consent (the app-store moment; the\nOwner's tap sets the permission ceiling, autonomy then grows only via\nledger evidence) -> wire -> smoke-verify ('installed' is itself an\nevidence-gated claim). Version drift outside testedVersions is an\nincident riding the ADR-012 pipeline. Scope guard: executor apps only;\nan app store before three working connectors is metaphor cosplay.\n\nimplementation-status: AppConnector schema + install lifecycle rows.\n\nRefs #216\n\nCo-authored-by: Claude Opus 4.8 <noreply@anthropic.com>",
+          "timestamp": "2026-06-11T14:05:26Z",
+          "tree_id": "25cb11401b6292b61205698f18bafbe433d17893",
+          "url": "https://github.com/INONONO66/openomni/commit/b58a9f2334cea4fcc73ca1a540b4fd27bb43045a"
+        },
+        "date": 1781186754109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 717.3728389215875,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 804.6651244005247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1401.20300414722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 46.98421612730486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 600.2696167882901,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451.29839834277317,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2816.2140302457965,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2494.902724414858,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9754.595981272796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5878.435516106692,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20208,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7821,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15284,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 820,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 104671,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 541928,
             "unit": "ns/op"
           }
         ]
