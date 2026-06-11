@@ -64,13 +64,13 @@ A note on trust direction, since it is the deepest split in the landscape: compa
 
 ## 6. OpenOmni scorecard
 
-Honest as of 2026-06-11. Component truth: [implementation-status.md](implementation-status.md).
+Honest as of 2026-06-12. Component truth: [implementation-status.md](implementation-status.md).
 
 | Test | Today | Path |
 |---|---|---|
 | T1 third-party | ❌ zero installed apps | #216 — `AppConnector` definition as the public ABI; install = detect → register → consent → wire → smoke-verify |
 | T2 hostile program | ⚠️ partial — worker-spawn denial, budget hard-stop, tool-guard are mechanisms; but kernel/userland share one process and the Resident still holds direct MCP tools | #218, #221. Full T2 (process-isolation-grade) is honestly long-term; this is a single-Owner trust boundary by design |
-| T3 power loss | ❌ cron is in-memory | #215 + #217 |
+| T3 power loss | ⚠️ partial — cron job registry persists, but no boot runner fires due schedules yet | #215 + #217 |
 | T4 liar | ❌ false claims pass today | **#213 — the category's unoccupied duty, and this project's most original contribution** |
 | T5 multiplexing | ⚠️ token budgets only | #219, #221 |
 

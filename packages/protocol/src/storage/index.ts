@@ -1,4 +1,5 @@
 import type { Communication } from "../communication/index.js";
+import type { CronJob } from "../cron/index.js";
 import type { WorkItem } from "../work-item/index.js";
 
 export namespace Storage {
@@ -32,6 +33,13 @@ export namespace Storage {
     get(id: string): Communication.WorkerGrant.Record | undefined;
     list(workerRunId?: string): Communication.WorkerGrant.Record[];
     set(record: Communication.WorkerGrant.Record): void;
+    remove(id: string): boolean;
+  }
+
+  export interface CronJobSubAdapter {
+    get(id: string): CronJob.Info | undefined;
+    set(job: CronJob.Info): void;
+    list(): CronJob.Info[];
     remove(id: string): boolean;
   }
 }

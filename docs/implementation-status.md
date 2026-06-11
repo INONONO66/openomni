@@ -2,7 +2,7 @@
 
 Single source of truth for the gap between accepted design and running code. Other docs (core-model, AGENTS.md, ADRs) link here instead of restating status inline.
 
-**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: **2026-06-11** (update this date when re-auditing).
+**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: **2026-06-12** (update this date when re-auditing).
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 
@@ -79,7 +79,8 @@ Single source of truth for the gap between accepted design and running code. Oth
 | SessionRouting helper | 🔌 | `packages/coordinator/src/worker-pool/session-routing.ts` | Dormant/test-covered session-tree affinity helper; not used by `worker-manager`, whose live routing uses its own `sessionAffinity` map |
 | Crash recovery (mark interrupted at boot) | ✅ | `packages/coordinator/src/recovery/` | |
 | Injection queue (async delivery at turn.finish) | ✅ | `packages/openomni/src/execution-runtime/injection-queue.ts` | |
-| Durable cron | 📋 | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | **In-memory only — scheduled jobs do not survive restart** |
+| Cron job registry persistence | ✅ | `packages/openomni/src/execution-runtime/cron-job-registry.ts`, `packages/session/src/storage/sqlite-cron-job-adapter.ts` | `schedule.create` jobs persist in SQLite and survive `Storage` reinitialize; `schedule.cancel` removes persisted jobs |
+| Cron firing loop / boot runner | 📋 | — | No process boot loop reloads persisted jobs and fires due schedules yet; `CronAdapter.fire(job)` exists but must be driven by a scheduler |
 | Boot-time PendingInteraction restoration | 📋 | — | Depends on PI existing |
 
 ## Structural guarantees (kernel surface, ADR-010 §1)

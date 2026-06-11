@@ -8,10 +8,12 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0001_initial/migration.sql" },
   { name: "0002_communication_state/migration.sql" },
   { name: "0003_communication_state_constraints/migration.sql" },
+  { name: "0004_cron_job/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
   "event_chain",
+  "cron_job",
   "worker_grant",
   "pending_ask",
   "worker_run_state",

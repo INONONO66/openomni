@@ -98,7 +98,7 @@ One ledger, three consumers: worker promotion, model/app routing, and approval r
 
 The OS qualification test: **promises survive power loss.**
 
-- Scheduled jobs are persisted (the in-memory `CronJobRegistry` is replaced by a durable store reloaded at boot).
+- Target: scheduled jobs are persisted and a boot runner reloads due schedules from the durable `CronJobRegistry` store.
 - Open PendingInteractions are restored at boot; a reply arriving after a restart wakes exactly the work that was waiting for it.
 - Interrupted runs are recovered (existing recovery module) and offered for resume.
 

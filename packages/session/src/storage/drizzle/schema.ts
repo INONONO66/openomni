@@ -180,3 +180,10 @@ export const workItemTable = sqliteTable(
     index("idx_work_item_parent").on(t.parent_hash),
   ],
 );
+
+export const cronJobTable = sqliteTable("cron_job", {
+  id: text("id").primaryKey(),
+  data: text("data").notNull(),
+  time_created: integer("time_created").notNull(),
+  time_updated: integer("time_updated").notNull(),
+});
