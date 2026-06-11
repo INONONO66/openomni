@@ -12,7 +12,7 @@ src/
 ├── recovery/             # Interrupted worker run recovery
 ├── tool-permission/      # Non-interactive permission policy + audit log (internal; not in barrel)
 ├── worker-manager/       # ⭐ LIVE: OnDemandWorkerManager — spawn on demand, slots, idle shutdown
-└── worker-pool/          # LEGACY facade (pool.ts wraps createWorkerManager) + supervisor + session routing
+└── worker-pool/          # Worker supervisor internals plus dormant SessionRouting helper
 ```
 
 ## DEPENDENCIES
@@ -24,9 +24,8 @@ Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@o
 | Module | Purpose |
 |--------|---------|
 | `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based dispatch, session affinity, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
-| `worker-pool/pool.ts` | Legacy facade — `createWorkerPool()` delegates to `createWorkerManager()` (`size` → `maxActiveWorkers` alias). Kept for compatibility; pending removal (see implementation-status) |
 | `worker-pool/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
-| `worker-pool/session-routing.ts` | Session-tree affinity routing |
+| `worker-pool/session-routing.ts` | Dormant/test-covered session-tree affinity helper; `worker-manager` currently uses its own `sessionAffinity` map |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 | `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
 | `credentials/store.ts` / `credentials/injector.ts` | Loads stored credentials, filters by provider prefix, injects provider-scoped credentials into workers |
@@ -49,11 +48,11 @@ dispatch(runId)
 
 `apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager()` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; callbacks `onToolCall`, `onInboundWait`, `onWorkerSnapshot`) and owns dispatch, cancellation, message delivery, stats, and recovery wiring.
 
-Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createWorkerPool` (legacy), `createIpcServer`, `recoverInterruptedRuns`, plus types. `credentials/` and `tool-permission/` are internal — not exported from the barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, `recoverInterruptedRuns`, plus types. `worker-pool/`, `credentials/`, and `tool-permission/` are internal — not exported from the root barrel.
 
 ## TESTS
 
-13 files: 3 inline (`src/ipc/framing.test.ts`, `src/ipc/ipc-bidirectional.test.ts`, `src/worker-pool/supervisor.test.ts`) + 10 under `test/` split by module (`worker-manager/`, `worker-pool/` incl. crash/affinity/dispatch/contract-alias, `credentials/`, `recovery/`, `tool-permission/`, `harness/smoke`).
+Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-pool/` supervisor contracts, dormant SessionRouting behavior, barrel contracts, credentials, recovery, tool-permission, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 
@@ -61,4 +60,4 @@ Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager`
 - Do NOT add empty catch blocks; coordinator needs explicit degradation behavior.
 - Do NOT add generic catch-all files like `utils.ts` or `helpers.ts`.
 - Do NOT put session-backed orchestration policy here; coordinator executes and recovers worker processes, while `@openomni/openomni` owns orchestration semantics.
-- Do NOT build new features on `worker-pool/pool.ts` — it is a compatibility facade; target `worker-manager` directly.
+- Do NOT add worker-pool compatibility facades; target `worker-manager` directly.

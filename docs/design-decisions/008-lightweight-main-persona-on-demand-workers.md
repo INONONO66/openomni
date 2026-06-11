@@ -2,7 +2,7 @@
 
 **Status**: Accepted (core implemented)
 
-> **Implementation note (2026-06-10)**: The core of this ADR has shipped — `OnDemandWorkerManager` (`packages/coordinator/src/worker-manager/`, on-demand spawn, idle shutdown, max-active cap) is what the server uses (`apps/server/src/execution/coordinator.ts`), and `ResidentRuntime` (`packages/openomni/src/resident/runtime.ts`) runs in-process, bypassing the coordinator for conversation. Remaining deltas: the legacy fixed pool (`packages/coordinator/src/worker-pool/`) is still exported pending removal, and the Resident currently carries a full execution toolset rather than the judgment-only profile this ADR assumed — that demotion is owned by [ADR-010](./010-agent-os-kernel-model.md). See [Implementation Status](../implementation-status.md).
+> **Implementation note (2026-06-11)**: The core of this ADR has shipped — `OnDemandWorkerManager` (`packages/coordinator/src/worker-manager/`, on-demand spawn, idle shutdown, max-active cap) is what the server uses (`apps/server/src/execution/coordinator.ts`), and `ResidentRuntime` (`packages/openomni/src/resident/runtime.ts`) runs in-process, bypassing the coordinator for conversation. Remaining delta: the Resident currently carries a full execution toolset rather than the judgment-only profile this ADR assumed — that demotion is owned by [ADR-010](./010-agent-os-kernel-model.md). See [Implementation Status](../implementation-status.md).
 
 ## Context
 
@@ -213,10 +213,10 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 - `packages/openomni/src/subagent/` — SubagentRuntime (in-process within worker)
 - All session/bus/WorkerRun infrastructure
 
-### Rewrite
-- `packages/coordinator/src/worker-pool/pool.ts` → `worker-manager/manager.ts`
-- `packages/coordinator/src/worker-pool/supervisor.ts` → `worker-manager/worker-handle.ts` (per-worker, not pooled)
-- `packages/coordinator/src/worker-pool/session-routing.ts` → remove (1:1 session:worker, no routing needed)
+### Rewritten / Current
+- legacy fixed worker-pool facade → `packages/coordinator/src/worker-manager/manager.ts`
+- `packages/coordinator/src/worker-pool/supervisor.ts` remains the shared worker process handle used by `worker-manager`
+- `packages/coordinator/src/worker-pool/session-routing.ts` is retained as a dormant/test-covered session-tree affinity helper; live `worker-manager` routing currently uses its own `sessionAffinity` map
 
 ### Add
 - `packages/openomni/src/resident/runtime.ts` — ResidentRuntime
@@ -225,9 +225,9 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 - IPC method: `worker.ask_main`, `worker.deliver_message`
 - Protocol: `SessionKind` enum (conversation, work, self-loop)
 
-### Remove
+### Removed / Superseded
 - Fixed pool initialization in server bootstrap
-- `SessionRouting` (affinity map no longer needed)
+- Public `createWorkerPool` compatibility facade
 - Assumption that all execution goes through coordinator dispatch
 
 ## Constraints

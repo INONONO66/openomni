@@ -82,7 +82,7 @@ function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Requ
 }
 
 describe("ExecutionCoordinator", () => {
-  test("waitUntilReady delegates to the worker pool", async () => {
+  test("waitUntilReady delegates to the worker manager", async () => {
     const waitUntilReady = mock(async () => undefined);
     mockWorkerManager.waitUntilReady = waitUntilReady;
 
@@ -114,14 +114,18 @@ describe("ExecutionCoordinator", () => {
 
     const shutdown = coordinator.shutdown();
 
-    await expect(
-      coordinator.dispatch(
+    try {
+      await coordinator.dispatch(
         "tree-2",
         makeRequest({ runId: "run-2", sessionId: "session-2", prompt: "blocked" }),
-      ),
-    ).rejects.toThrow("Execution coordinator is draining");
+      );
+      throw new Error("expected dispatch to reject");
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("Execution coordinator is draining");
+    }
 
-    await expect(firstRun).resolves.toMatchObject({
+    expect(await firstRun).toMatchObject({
       runId: "run-1",
       sessionId: "session-1",
       status: "succeeded",
@@ -148,16 +152,20 @@ describe("ExecutionCoordinator", () => {
 
     expect(coordinator.getStats().activeRuns).toBe(1);
 
-    await expect(
-      coordinator.dispatch(
+    try {
+      await coordinator.dispatch(
         "tree-2",
         makeRequest({ runId: "run-1", sessionId: "session-2", prompt: "duplicate" }),
-      ),
-    ).rejects.toThrow("run already active: run-1");
+      );
+      throw new Error("expected duplicate dispatch to reject");
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("run already active: run-1");
+    }
 
     expect(coordinator.getStats().activeRuns).toBe(1);
 
-    await expect(firstRun).resolves.toMatchObject({
+    expect(await firstRun).toMatchObject({
       runId: "run-1",
       sessionId: "session-1",
       status: "succeeded",

@@ -1,36 +1,36 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createWorkerPool, type WorkerPool } from "../../src/worker-pool";
+import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
 const socketDir = `/tmp/omo-dp-${process.pid}`;
 
-let pool: WorkerPool;
+let manager: WorkerManager;
 
 beforeAll(async () => {
   fs.mkdirSync(socketDir, { recursive: true });
-  pool = createWorkerPool({ size: 4, workerScript: WORKER_ENTRY, socketDir });
-  await pool.waitUntilReady(15_000);
+  manager = createWorkerManager({ maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir });
+  await manager.waitUntilReady(15_000);
 }, 20_000);
 
 afterAll(async () => {
-  await pool.shutdown();
+  await manager.shutdown();
 }, 10_000);
 
-describe("worker pool dispatch", () => {
-  test("legacy WorkerPool defaults to eight active workers", async () => {
+describe("worker manager dispatch", () => {
+  test("WorkerManager defaults to ten active workers", async () => {
     const defaultSocketDir = `${socketDir}-default`;
     fs.mkdirSync(defaultSocketDir, { recursive: true });
-    const defaultPool = createWorkerPool({
+    const defaultManager = createWorkerManager({
       workerScript: WORKER_ENTRY,
       socketDir: defaultSocketDir,
     });
     try {
-      expect(defaultPool.getStats().maxActiveWorkers).toBe(8);
+      expect(defaultManager.getStats().maxActiveWorkers).toBe(10);
     } finally {
-      await defaultPool.shutdown();
+      await defaultManager.shutdown();
     }
   });
 
@@ -42,7 +42,7 @@ describe("worker pool dispatch", () => {
 
     const results = await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        pool.dispatch(sessionId, runId, { delayMs: 30, prompt: "test" }),
+        manager.dispatch(sessionId, runId, { delayMs: 30, prompt: "test" }),
       ),
     );
 
@@ -60,14 +60,14 @@ describe("worker pool dispatch", () => {
 
     const seqStart = Date.now();
     for (const { sessionId, runId } of runs) {
-      await pool.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" });
+      await manager.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" });
     }
     const seqMs = Date.now() - seqStart;
 
     const parStart = Date.now();
     await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        pool.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" }),
+        manager.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" }),
       ),
     );
     const parMs = Date.now() - parStart;
@@ -76,7 +76,7 @@ describe("worker pool dispatch", () => {
   });
 
   test("getStats reflects on-demand worker limit", () => {
-    const stats = pool.getStats();
+    const stats = manager.getStats();
     expect(stats.maxActiveWorkers).toBe(4);
     expect(stats.workers).toBeLessThanOrEqual(4);
     expect(stats.ready).toBeLessThanOrEqual(stats.workers);
@@ -97,7 +97,7 @@ describe("worker pool dispatch", () => {
   });
 
   test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
-    const result = await pool.dispatch("session-budget-1", "run-budget-1", {
+    const result = await manager.dispatch("session-budget-1", "run-budget-1", {
       delayMs: 10,
       prompt: "test",
       budget: { maxWallTimeMs: 120_000 },
@@ -106,7 +106,7 @@ describe("worker pool dispatch", () => {
   });
 
   test("dispatch without budget defaults to timeout=330_000", async () => {
-    const result = await pool.dispatch("session-budget-2", "run-budget-2", {
+    const result = await manager.dispatch("session-budget-2", "run-budget-2", {
       delayMs: 10,
       prompt: "test",
     });
@@ -123,40 +123,40 @@ describe("worker pool dispatch", () => {
     process.env.DISCORD_BOT_TOKEN = "secret-token";
     const envSocketDir = `${socketDir}-env`;
     fs.mkdirSync(envSocketDir, { recursive: true });
-    const envPool = createWorkerPool({
-      size: 1,
+    const envManager = createWorkerManager({
+      maxActiveWorkers: 1,
       workerScript: WORKER_ENTRY,
       socketDir: envSocketDir,
     });
     try {
-      await envPool.waitUntilReady(15_000);
-      const result = await envPool.dispatch("session-env", "run-env", {
+      await envManager.waitUntilReady(15_000);
+      const result = await envManager.dispatch("session-env", "run-env", {
         prompt: "test",
         envName: "OPENOMNI_WORKER_ENV_FIXTURE",
       });
       expect((result as Record<string, unknown>).envValue).toBe("runtime-value");
-      const secretResult = await envPool.dispatch("session-env", "run-secret", {
+      const secretResult = await envManager.dispatch("session-env", "run-secret", {
         prompt: "test",
         envName: "DISCORD_BOT_TOKEN",
       });
       expect((secretResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authTokenResult = await envPool.dispatch("session-env", "run-auth-token", {
+      const authTokenResult = await envManager.dispatch("session-env", "run-auth-token", {
         prompt: "test",
         envName: "OPENOMNI_WORKER_IPC_TOKEN",
       });
       expect((authTokenResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authFileResult = await envPool.dispatch("session-env", "run-auth-file", {
+      const authFileResult = await envManager.dispatch("session-env", "run-auth-file", {
         prompt: "test",
         envName: "OPENOMNI_AUTH_FILE",
       });
       expect((authFileResult as Record<string, unknown>).envValue).toBeUndefined();
-      const homeResult = await envPool.dispatch("session-env", "run-home", {
+      const homeResult = await envManager.dispatch("session-env", "run-home", {
         prompt: "test",
         envName: "HOME",
       });
       expect((homeResult as Record<string, unknown>).envValue).toBeUndefined();
     } finally {
-      await envPool.shutdown();
+      await envManager.shutdown();
       delete process.env.OPENOMNI_WORKER_ENV_FIXTURE;
       if (previousAuthFile === undefined) {
         delete process.env.OPENOMNI_AUTH_FILE;
