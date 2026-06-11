@@ -1,0 +1,104 @@
+# Implementation Status
+
+Single source of truth for the gap between accepted design and running code. Other docs (core-model, AGENTS.md, ADRs) link here instead of restating status inline.
+
+**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: **2026-06-11** (update this date when re-auditing).
+
+> Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
+
+## Three-layer message flow (ADR-009)
+
+| Component | Status | Code | Notes |
+| --- | --- | --- | --- |
+| Server channel adapters (Discord/Telegram/GitHub/WS) | ✅ | `apps/server/src/channel/` | Raw → `InboundMessage` |
+| IngressEngine (session candidate resolve → project → dispatch) | ✅ | `packages/openomni/src/ingress/engine.ts` | |
+| `ActorResolver` / `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` | 📋 | `packages/protocol/src/actor/` (planned) | Zero code. Actor arrives pre-stamped as an untyped `{ role, id, kind }` blob; ingress does **not** resolve identity yet |
+| DispatchRuntime (policy authorize → handler routing) | ✅ | `packages/openomni/src/dispatch/runtime.ts` | Actions: `resident.ask`, `worker.spawn/send/resume/cancel`, `schedule.create/cancel` |
+| WorkerGrant evaluation | ✅ | `packages/openomni/src/dispatch/policy.ts` | The only authority axis currently evaluated |
+| Blacklist | 📋 | — | Checked nowhere |
+| ChannelGrant (+ inbound treatment ceiling) | 📋 | — | |
+| `TrustTier` enum + evaluation | 📋 | — | Loose string field on `Dispatch.ActorContext`; never evaluated. Ingress authority still string-matches roles |
+| `effectiveAuthority` (5-axis intersection) | 📋 | — | |
+| `PendingAsk` (transitional) | ✅ | `packages/protocol/src/communication/`, `packages/session/src/pending-ask/` | |
+| `PendingInteraction` (successor; correlation routing, follow-up window) | 📋 | — | Not a pure rename of PendingAsk (status enum, `allowedActions`, `workerRunId` coupling all change). No PI-match session override exists in dispatch |
+| `executorKind` on WorkerRun (`external_api` / `a2a` / `human_channel`) | 📋 | — | Internal ChatAgent execution only today |
+| `local_cli_agent` executor (CLI agents as installed apps) | 📋 | — | ADR-010 §3 — connector philosophy: observe the boundary, don't manage the inside |
+| App question bridge (permission/clarification prompt → `resident.ask`, suspend/resume) | 📋 | — | ADR-010 §3 |
+| Native app log ingestion (raw → artifact, key events → journal; liveness for stall detection) | 📋 | — | ADR-010 §3 — also the evidence + RCA + cost source for app work |
+| Outbound external actions (`external.ask`, `a2a.ask`, `api.ask`) | 📋 | — | Dispatch tool exposes generic `dispatch` + `resident.ask` only |
+| `device.*` world-control dispatch actions (driver in `apps/server/`, handler in registry) | 📋 | — | ADR-010 §6 — atomic world mutations as syscalls, no worker spawn |
+
+## Evidence loop (design-philosophy §1/§3, ADR-010 §4)
+
+| Component | Status | Code | Missing consumer |
+| --- | --- | --- | --- |
+| WorkItem schemas (`Info`, `Blocker`, `Evidence`, `VerificationGate`, `deriveStatus`) | ✅ | `packages/protocol/src/work-item/` | — |
+| `WorkItemStore` (full CRUD + lifecycle + evidence + gates) | 🔌 | `packages/session/src/work-item/` | **Zero production callers.** ADR-010 §7 designates it the task ledger — created on `worker.spawn`, completed via report gate |
+| WorkItem schema deltas (`originSessionId`/`workSessionId` split, `workerRunId`+`executorKind`, `completionReport`, `maxAttempts`, `outcome`) | 📋 | `packages/protocol/src/work-item/` | ADR-010 §7 |
+| Completion-report evidence gate (claims → evidence refs; unevidenced = not done) | 📋 | — | ADR-010 §7 — deterministic, runs before any LLM evaluation. Worker completion claims are accepted without any check today |
+| Read-back verification helpers (re-fetch URL, re-query API, citation-in-source matching) | 📋 | — | ADR-010 §7 |
+| Per-executor retry defaults + kernel-enforced exhaustion → Owner escalation | 📋 | — | ADR-010 §7 — internal 3 / app manifest / human reminder policy |
+| Owner adoption signal (`outcome`: adopted/corrected/redone/ignored) | 📋 | — | ADR-010 §7 — Governor's ground truth; also calibrates Resident evaluation leniency |
+| Task ledger view ("show open tasks" — the OS's `ps`) | 📋 | — | Ledger query via chat command first; web view later |
+| Bus persistence (hash-chained event journal) | ✅ | `packages/session/src/bus-persistence/` | — |
+| `BusQuery` (stats, errors, worker-run history, chain verify) | 🔌 | `packages/session/src/bus-persistence/query.ts` | **Zero production callers.** First consumer: Governor v0 |
+| Token/cost tracking (per call, per message) | ✅ | `packages/llm/src/token/` | Aggregation (per agent/task type, success-rate correlation) absent |
+| System Governor (postmortem engine: incident RCA + slow aggregation loop) | 📋 | — | Zero code. v0 scoped in ADR-010 §8: two lanes (immediate / daily batch), storm collapse, triage (defect vs preference→memory candidate) |
+| Incident fingerprint registry (cause × task type × failure mode; recurrence ladder) | 📋 | — | ADR-010 §8 — match-before-create dedup discipline |
+| Governor autonomy boundary + change journal (tighten autonomous / loosen approval / kernel floor) | 📋 | — | ADR-010 §8 — every applied change journaled with scope tag; rate limits |
+| Regression ratchet (canary window + counting-rule rollback → RCA on the change itself) | 📋 | — | ADR-010 §8 — no separate machinery; runs through the same RCA pipeline |
+| Fabricated-evidence handling (unresolvable claims → immediate RCA + executor reliability record) | 📋 | — | ADR-010 §8 |
+| Memory candidates (`MemoryCandidate` schema + emission from `work_item.completed` / Governor triage / Owner request) | 📋 | — | ADR-010 §9 — prerequisites (lineage, provenance, bus) exist; no candidate emission |
+| Built-in curated memory (frozen-snapshot system-prompt injection, bounded budgets, add/replace/remove tool) | 📋 | — | ADR-010 §9 — Hermes pattern; injection via `on_system_prompt` policy timing |
+| Session search tool (FTS5 over session store) | 📋 | — | ADR-010 §9 — episodic recall, zero engines required |
+| `Memory.Engine` port (ingest/recall/profile/feedback; transport-agnostic; mandatory scope filter) | 📋 | `packages/protocol/src/memory/` (planned) | ADR-010 §9 — Anamnesis is the first plugin, not a dependency |
+
+## Resident model (core-model, ADR-008, ADR-010)
+
+| Component | Status | Code | Notes |
+| --- | --- | --- | --- |
+| `ResidentRuntime` (in-process, bypasses coordinator for conversation) | ✅ | `packages/openomni/src/resident/runtime.ts`, `ingress/engine.ts` | |
+| Resident toolset = judgment-only (shell model) | 📋 | `apps/server/src/ingress/bridge.ts` | **Contradicts core-model today**: Resident currently gets `["filesystem", "execution", "delegation", "mcp", "custom"]` — full read/write/edit/bash. Demotion to read-only + dispatch is ADR-010 step 6 |
+| Peek budget (per-turn tool-call cap making delegation structural) | 📋 | — | ADR-010 §6 — reuses existing budget hard-stop; profile config only |
+| Mutating MCP/custom tools behind dispatch (read-only may stay direct) | 📋 | — | ADR-010 §6 effect-radius rule; direct attachment today is an unaudited side door |
+| Intent classification (direct vs delegate) | 📋 | — | Pure in-context LLM choice; no classifier, no routing data |
+| Fork / self-loop sessions | 🔌 | `packages/protocol/src/policy/resource.ts` | `"self-loop"` enum value exists; no code path creates one |
+| Distilled writeback (worker output summarized before user session) | 🚧 | `packages/openomni/src/ingress/session-bridge.ts` | Raw worker output written directly by default; `writeback.commit` policy hook exists but optional; hygiene comes from session separation only |
+| Cost-based model routing ("expensive thinks, cheap works") | 📋 | `apps/server/src/bootstrap/index.ts` | Single `resolveModel(config)` model for Resident and all workers |
+
+## Runtime substrate (ADR-008 — shipped)
+
+| Component | Status | Code | Notes |
+| --- | --- | --- | --- |
+| On-demand worker manager (spawn on demand, idle shutdown, max active) | ✅ | `packages/coordinator/src/worker-manager/manager.ts` | Used by `apps/server/src/execution/coordinator.ts` |
+| Subagent as bound extension (context-inheriting, ticketless, gate-exempt) | ✅ | `packages/openomni/src/subagent/` | `SubagentRuntime` + `BackgroundManager` — NOT a worker tier; workers are always isolated processes (ADR-010 §6) |
+| Extension-vs-independence routing (subagent vs worker choice in Resident flow) | 📋 | — | ADR-010 §6 — "needs my context, or its own footing?"; domain expertise = independence signal |
+| Legacy fixed worker pool | 🚧 | `packages/coordinator/src/worker-pool/` | Still exported, unused by server; pending removal |
+| Crash recovery (mark interrupted at boot) | ✅ | `packages/coordinator/src/recovery/` | |
+| Injection queue (async delivery at turn.finish) | ✅ | `packages/openomni/src/execution-runtime/injection-queue.ts` | |
+| Durable cron | 📋 | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | **In-memory only — scheduled jobs do not survive restart** |
+| Boot-time PendingInteraction restoration | 📋 | — | Depends on PI existing |
+
+## Structural guarantees (kernel surface, ADR-010 §1)
+
+Claims that are actually enforced in code today — docs may say "cannot" only about these:
+
+| Guarantee | Code |
+| --- | --- |
+| Workers cannot create top-level work (`worker.spawn/cancel/resume/schedule` denied) | `packages/openomni/src/ingress/middleware/ingress-authority.ts` |
+| Budget hard-stop ends execution at limits (turns, tool calls, wall time) | `packages/agent/src/core/execution/stream-policy-dispatch.ts` |
+| Tool permission is fail-closed | `packages/agent/src/core/policy/builtin/tool-guard.ts` |
+
+Everything else behavior-shaping (delegation judgment, session hygiene, evidence-over-self-report, tool restraint) is currently **prompt convention** (`packages/openomni/src/agents/resident/prompt/`), i.e. userland.
+
+## Known schema/doc debt
+
+| Item | Action |
+| --- | --- |
+| `AgentProfile.Definition.permissions` is defined but ignored at runtime (warning + `policyPlan` supersedes) | Remove the field or wire it; a schema field that lies violates ADR-002's intent |
+| `docs/vision.local.md` (v0.2) predates single-mode ingress and current package layout | Refresh or mark archived |
+| `docs/persona-runtime-roadmap.local.md` uses pre-ADR-009 vocabulary (Main/Sub Persona) | Re-vocabulary or fold into ADR-010 ordering |
+
+## Maintenance
+
+When a 📋/🔌 item ships, flip it here in the same PR. When adding a new engine, add its **consumer** as a row at the same time — unwired engines must be visible.
