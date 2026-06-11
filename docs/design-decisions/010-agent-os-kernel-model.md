@@ -70,6 +70,19 @@ The `AgentRegistry` grows an **application manifest** per app: capabilities, cos
 
 **Native log ingestion.** Apps keep their own transcripts (JSONL session logs, stream-json output). The connector tails them and (a) stores the raw log as a WorkItem artifact, (b) projects key events — tool calls, errors, token usage — into the journal as app-internal evidence. This single mechanism gives the §7 gate hard evidence for app claims ("tests ran" = the tool-call record exists), gives §8 RCA its autopsy material for app-executed work (the log is the transcript-equivalent), gives cost tracking real token numbers, and gives **stall detection a liveness signal** (no log activity for N minutes → nudge, or kill and mark interrupted). Raw logs never enter sessions — artifact plus journal projection only.
 
+**Installation — the connector definition is the public ABI.** OpenOmni is not a package manager: binaries are installed by the Owner's existing tooling (brew, bun). Installing an app means installing its **connector** — a printer driver, not a printer. The unit is a *declarative* `AppConnector` definition (Zod-validated data, not code): how to detect the binary and its version (`testedVersions` range), how to spawn headless, where its logs live and how to parse them, how its question bridge is materialized, what evidence it can emit, what credentials and capabilities it **requires**, and its initial routing profile. Because the definition is data conforming to a published schema, a third party can integrate their agent by writing one file and never touching the kernel — this is what passes the [T1 third-party test](../agent-os-definition.md) as an OS rather than as a framework.
+
+Install lifecycle: **discover → register → consent → wire → verify**.
+
+- *discover* — detect installed binaries and versions.
+- *consent* — the app-store moment: "Claude Code requests: git, network, `ANTHROPIC_API_KEY`. Allow?" The Owner's one tap sets the app's permission ceiling; from there autonomy grows only through ledger evidence (new apps start with conservative grants and a zero track record).
+- *wire* — materialize bridge hooks and credential mappings.
+- *verify* — a smoke test: run one trivial task, confirm exit status and log ingestion. "Installed" is itself an evidence-gated claim, not a self-report.
+
+**Version drift is an incident.** CLI agents update frequently and break flags and log formats. A version outside `testedVersions` triggers re-verification: smoke test passes → provisional allow + journal record; fails → app disabled + Owner alert. App upgrades thereby ride the §8 incident pipeline for free.
+
+The same lifecycle generalizes later to other package kinds — channel drivers, device drivers, memory engines (ADR-013 port) — but only executor apps are in scope now; building an app store before having three working connectors would be metaphor cosplay.
+
 ### 4. Evidence ledger with userland daemons
 
 The journal (`BusPersistence`) plus the work ledger (`WorkItemStore`: evidence, verification gates) form the **single feedback substrate**. The kernel only appends; improvement logic lives in userland daemons that read it:
