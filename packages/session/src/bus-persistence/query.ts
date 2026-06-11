@@ -38,6 +38,7 @@ interface WorkerRunRow {
   readonly status: string;
   readonly time_created: number;
   readonly time_updated: number;
+  readonly event_count: number;
 }
 
 export namespace BusQuery {
@@ -171,10 +172,13 @@ export namespace BusQuery {
   > {
     const rows = getDatabase()
       .query(
-        `SELECT run_id, status, time_created, time_updated
-         FROM worker_run_state
-         WHERE session_id = ?
-         ORDER BY time_created DESC`,
+        `SELECT wrs.run_id, wrs.status, wrs.time_created, wrs.time_updated,
+                COUNT(be.id) AS event_count
+         FROM worker_run_state wrs
+         LEFT JOIN bus_event be ON be.run_id = wrs.run_id
+         WHERE wrs.session_id = ?
+         GROUP BY wrs.run_id
+         ORDER BY wrs.time_created DESC`,
       )
       .all(sessionId) as WorkerRunRow[];
 
@@ -182,7 +186,7 @@ export namespace BusQuery {
       rows.map((row) => ({
         runId: row.run_id,
         status: row.status,
-        eventCount: 0,
+        eventCount: row.event_count,
         startTime: row.time_created,
         endTime: row.time_updated,
       })),

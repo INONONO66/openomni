@@ -316,6 +316,87 @@ describe("BusQuery", () => {
     ]);
   });
 
+  test("getWorkerRunHistory reports actual event count per run", async () => {
+    insertWorkerRun({
+      runId: "run-1",
+      sessionId: "sess-1",
+      status: "completed",
+      timeCreated: 100,
+      timeUpdated: 200,
+    });
+    insertWorkerRun({
+      runId: "run-2",
+      sessionId: "sess-1",
+      status: "running",
+      timeCreated: 300,
+      timeUpdated: 350,
+    });
+    insertWorkerRun({
+      runId: "run-3",
+      sessionId: "sess-2",
+      status: "completed",
+      timeCreated: 400,
+      timeUpdated: 450,
+    });
+
+    insertEvent({
+      sessionId: "sess-1",
+      runId: "run-1",
+      type: "agent.step.started",
+      category: "agent",
+      traceId: "t1",
+      timeCreated: 110,
+    });
+    insertEvent({
+      sessionId: "sess-1",
+      runId: "run-1",
+      type: "agent.tool.invoked",
+      category: "agent",
+      traceId: "t2",
+      timeCreated: 120,
+    });
+    insertEvent({
+      sessionId: "sess-1",
+      runId: "run-1",
+      type: "agent.step.completed",
+      category: "agent",
+      traceId: "t3",
+      timeCreated: 130,
+    });
+    insertEvent({
+      sessionId: "sess-1",
+      runId: "run-2",
+      type: "agent.step.started",
+      category: "agent",
+      traceId: "t4",
+      timeCreated: 310,
+    });
+    // run-3 belongs to sess-2 — must not count toward sess-1 results
+    insertEvent({
+      sessionId: "sess-2",
+      runId: "run-3",
+      type: "agent.step.started",
+      category: "agent",
+      traceId: "t5",
+      timeCreated: 410,
+    });
+    // session-scoped event with no run_id — must not leak into any run count
+    insertEvent({
+      sessionId: "sess-1",
+      type: "custom.note",
+      category: "custom",
+      traceId: "t6",
+      timeCreated: 500,
+    });
+
+    const runs = await BusQuery.getWorkerRunHistory("sess-1");
+
+    expect(runs).toEqual([
+      { runId: "run-2", status: "running", eventCount: 1, startTime: 300, endTime: 350 },
+      { runId: "run-1", status: "completed", eventCount: 3, startTime: 100, endTime: 200 },
+    ]);
+  });
+
   test("query functions return empty results for missing data", async () => {
     await expect(BusQuery.listBySession("sess-1")).resolves.toEqual([]);
     await expect(BusQuery.listByRun("missing-run")).resolves.toEqual([]);
