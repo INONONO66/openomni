@@ -47,4 +47,5 @@ yarn-error.log*
 .claude
 .opencode
 .omo
+.codegraph
 *.local.ts

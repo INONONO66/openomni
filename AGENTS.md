@@ -7,7 +7,7 @@ OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through 
 
 The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
 
-Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md) (proposed) frames the target as an Agent OS kernel. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md)–[013](docs/design-decisions/013-memory-engine-port.md) (proposed) frame the target as an Agent OS kernel (010) with a task ledger + evidence gate (011), an incident-driven Governor (012), and a pluggable memory port (013). **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 ## STRUCTURE
 
@@ -78,6 +78,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session candidate resolve → dispatch.submit. Actor arrives pre-stamped; identity resolve (`ActorResolver`) is planned per ADR-009 |
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator (ADR-008) |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
+| Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
 | Actor identity (planned) | `packages/protocol/src/actor/` + `packages/session/src/actor/` | `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` / `ActorResolver` per ADR-009 |
 | ChannelGrant / Blacklist (planned) | `packages/protocol/src/actor/channel-grant`, `.../blacklist` | Per-channel policy ceiling and absolute block list per ADR-009 |
 | PendingInteraction (planned successor) | `packages/protocol/src/communication/pending-interaction` | Successor to `PendingAsk`; not a pure rename — status enum (`open / resolved / follow_up / expired / cancelled`), `allowedActions`, `followUpWindow`, and `workerRunId / sessionId` strong-coupling all change. Lifecycle managed inside dispatch. |

@@ -70,7 +70,9 @@ bun run format
 
 - [Design Philosophy](docs/design-philosophy.md)
 - [Core Model](docs/core-model.md)
-- [Architecture Decision Records](docs/design-decisions/index.md)
+- [Usage Model](docs/usage-model.md) — what operating the system looks like from the Owner's seat
+- [Architecture Decision Records](docs/design-decisions/index.md) — ADR-010–013 define the target Agent OS model
+- [Implementation Status](docs/implementation-status.md) — what actually runs today
 
 ## License
 

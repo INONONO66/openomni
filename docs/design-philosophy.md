@@ -42,6 +42,8 @@ This has a direct cost implication. When structure enforces correctness, cheaper
 
 The same structure that constrains agents also enables them to extend the system. When a new capability is added through the protocol — a new tool, a new storage adapter, a new event type — agents can immediately discover and use it without code changes. The protocol is not just a wall; it is a door with a specific shape.
 
+This principle is concretized as the kernel/userland split in [ADR-010](design-decisions/010-agent-os-kernel-model.md): claims of "guaranteed" or "cannot" are reserved for code-enforced kernel items; everything prompt-shaped is explicitly userland convention.
+
 ### 3. Execution and Judgment Are Separate Concerns
 
 An agent that executes a task and then judges its own success is structurally biased. This is not a flaw in any particular model — it is a property of the setup. The agent that chose the approach, executed the steps, and invested the tokens has every incentive to report success.
