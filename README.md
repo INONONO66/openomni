@@ -71,6 +71,8 @@ bun run format
 - [Design Philosophy](docs/design-philosophy.md)
 - [Core Model](docs/core-model.md)
 - [Usage Model](docs/usage-model.md) — what operating the system looks like from the Owner's seat
+- [Agent OS Definition](docs/agent-os-definition.md) — the five duties and five litmus tests behind the "Agent OS" claim, landscape scored
+- [Bets and Kill Criteria](docs/bets-and-kill-criteria.md) — standing criticisms, falsifiable hypotheses, and the conditions under which claims get downgraded
 - [Architecture Decision Records](docs/design-decisions/index.md) — ADR-010–013 define the target Agent OS model
 - [Implementation Status](docs/implementation-status.md) — what actually runs today
 
