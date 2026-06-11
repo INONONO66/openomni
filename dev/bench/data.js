@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780930068097,
+  "lastUpdate": 1781162986733,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -3471,6 +3471,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 542155,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "862e00f6f0b02d5e3d7c93ea3c6b8144d331cad6",
+          "message": "docs: Agent OS model (ADR-010~013) + doc-code alignment (#212)\n\n* docs: add ADR-010 agent OS kernel model and implementation status ledger\n\nADR-010 (proposed) names the organizing architecture: kernel/userland\nsplit, PendingInteraction as the blocking-wait primitive, CLI agents as\ninstalled applications with a connector contract, three execution lanes\nwith the effect-radius rule, the WorkItem task ledger with completion\nreports and the evidence gate, the Governor as an incident-driven\npostmortem engine, a pluggable memory engine port (Hermes pattern), a\ndurable boot contract, and a social-budget axis.\n\nimplementation-status.md is the single source of truth for the gap\nbetween accepted design and running code (implemented / dormant /\npartial / planned), so design docs can describe targets without\noverclaiming.\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n* docs: align project docs with implementation reality and ADR-010\n\n- core-model: split 'How It Actually Works' into current vs target with\n  per-component status, add execution lanes table, completion-report\n  writeback unit, Governor two-loop summary, memory port summary, and an\n  honest note on the Resident's current full toolset\n- ADR-008: Proposed -> Accepted (OnDemandWorkerManager and\n  ResidentRuntime verified shipped; legacy pool removal pending)\n- ADR index: register ADR-010, update 007/008 statuses and evolution\n- AGENTS.md: remove unimplemented ActorResolver present-tense claims,\n  reflect worker-manager vs legacy pool, point to implementation-status\n  as the source of truth for what is wired\n- README: honest current status with implementation-status pointer\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n* docs: graduate ADR-010 sections into ADR-011/012/013\n\nADR-010 had grown into a decision-record/spec hybrid (the ADR-006\nfailure mode). Its three matured sections graduate into focused records:\n\n- ADR-011: task ledger, completion reports, and the evidence gate\n  (no evidence = not done; three-question verification; per-executor\n  retry with kernel-enforced exhaustion; read-back verification)\n- ADR-012: Governor as incident-driven postmortem engine (two loops,\n  incident lanes, storm collapse, cause taxonomy, tighten-autonomous/\n  loosen-approval, ratchet through the same RCA pipeline, fingerprints)\n- ADR-013: built-in memory plus pluggable Memory.Engine port (Hermes\n  pattern; kernel-side mandatory scope filter; candidate stream)\n\nADR-010 keeps the kernel model core and gains an end-to-end scenario\ntrace (marketplace inquiry) grounding all mechanisms. Cross-references\nin core-model and implementation-status updated; vocabulary gains the\ntask-and-improvement category.\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n* docs: add owner usage model and polish doc surface\n\n- docs/usage-model.md: the system from the Owner's seat — mental model,\n  lanes as felt behavior, the four inbound message kinds, task manager\n  view, correction-as-signal, autonomy arc, and the two promises\n- README: further reading now spans usage model, ADR-010-013, and\n  implementation status\n- design-philosophy: principle 2 points to its ADR-010 kernel/userland\n  concretization\n- AGENTS.md: ADR-010-013 framing + usage-model lookup row\n- .gitignore: exclude .codegraph (generated index)\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.8 <noreply@anthropic.com>",
+          "timestamp": "2026-06-11T16:29:20+09:00",
+          "tree_id": "b85c08847cd903594a0f999753db008f140dce5c",
+          "url": "https://github.com/INONONO66/openomni/commit/862e00f6f0b02d5e3d7c93ea3c6b8144d331cad6"
+        },
+        "date": 1781162986251,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 766.7829100724271,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 835.8018655033467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1609.9750615813493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 53.281753628604086,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 615.5286282331339,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 599.0205043727703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2689.3024337769557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2753.4603502394725,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8492.695711252609,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6301.997857322076,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19425,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16003,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 107201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 567341,
             "unit": "ns/op"
           }
         ]
