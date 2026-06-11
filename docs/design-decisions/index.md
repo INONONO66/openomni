@@ -14,7 +14,7 @@ Design decisions that shaped OpenOmni. Each record captures **why** a decision w
 
 **External actors (009)** — Extends the workforce model to external humans and AI agents. Defines the 3-axis actor taxonomy, dual allow-list access control (channel + actor), durable PendingInteraction registry for async response correlation, explicit session ownership, and `executorKind`-based WorkerRun dispatch. Includes five end-to-end scenarios and the canonical seven-category vocabulary map. Builds on ADR-005's controlled inbound authority principle.
 
-**Agent OS model (010)** — Names the organizing architecture the runtime has been converging on: a kernel/userland split (structural guarantees vs prompt conventions), PendingInteraction as the blocking-wait primitive for all external latency (humans, external AI, CI), CLI coding agents as installed applications (`local_cli_agent`, connector philosophy: observe the boundary, don't manage the inside), three execution lanes (built-in / dispatch action / worker) with the effect-radius rule for tools vs dispatch, the task ledger (WorkItem) with completion reports and the evidence gate ("no evidence = not done"), the Governor as an incident-driven postmortem engine (RCA, fingerprints, tighten-autonomous/loosen-approval, ratchet-through-the-same-pipeline), a pluggable memory engine port (Hermes pattern: built-in curation + external engines), a durable boot contract, and a social-budget axis for human outreach. Implementation truth lives in [Implementation Status](../implementation-status.md).
+**Agent OS model (010–013)** — ADR-010 names the organizing architecture the runtime has been converging on: a kernel/userland split (structural guarantees vs prompt conventions), PendingInteraction as the blocking-wait primitive for all external latency (humans, external AI, CI), CLI coding agents as installed applications with a connector contract, three execution lanes with the effect-radius rule, a durable boot contract, and a social-budget axis for human outreach. Three decisions graduated from it as they matured: ADR-011 (task ledger, completion reports, and the evidence gate — "no evidence = not done"), ADR-012 (the Governor as an incident-driven postmortem engine), and ADR-013 (built-in memory plus a pluggable engine port, Hermes pattern). Implementation truth lives in [Implementation Status](../implementation-status.md).
 
 ## Records
 
@@ -30,6 +30,9 @@ Design decisions that shaped OpenOmni. Each record captures **why** a decision w
 | [008](./008-lightweight-main-persona-on-demand-workers.md) | Lightweight Resident + on-demand workers | Accepted |
 | [009](./009-external-actor-authority-model.md) | External actor authority & communication model | Accepted |
 | [010](./010-agent-os-kernel-model.md) | Agent OS kernel model | Proposed |
+| [011](./011-task-ledger-evidence-gate.md) | Task ledger, completion reports, evidence gate | Proposed |
+| [012](./012-governor-postmortem-engine.md) | Governor as incident-driven postmortem engine | Proposed |
+| [013](./013-memory-engine-port.md) | Built-in memory + pluggable engine port | Proposed |
 
 ## Adding a New ADR
 

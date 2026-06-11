@@ -28,7 +28,7 @@ This separation matters. The Resident improving itself through reflection is a r
 
 The Governor can update routing preferences, skill definitions, and policy rules. It cannot rewrite core logic or safety constraints.
 
-Concretely it is a **postmortem engine** with two loops: an incident-driven fast loop (mistake → root-cause analysis over logs and the situation at the time → a structural fix so the same mistake cannot recur — never just an apology) and a periodic slow loop (ledger aggregation: routing hints, evaluation calibration, cost accounting). Its permission formula is *read-omniscient, write-minimal*: it may read everything including Worker transcripts, but its writes are proposals plus a narrow autonomous tier — tightening is autonomous, loosening requires Owner approval, and safety constraints are untouchable. See [ADR-010 §8](design-decisions/010-agent-os-kernel-model.md).
+Concretely it is a **postmortem engine** with two loops: an incident-driven fast loop (mistake → root-cause analysis over logs and the situation at the time → a structural fix so the same mistake cannot recur — never just an apology) and a periodic slow loop (ledger aggregation: routing hints, evaluation calibration, cost accounting). Its permission formula is *read-omniscient, write-minimal*: it may read everything including Worker transcripts, but its writes are proposals plus a narrow autonomous tier — tightening is autonomous, loosening requires Owner approval, and safety constraints are untouchable. See [ADR-012](design-decisions/012-governor-postmortem-engine.md).
 
 ## Controlled Inbound Authority
 
@@ -67,7 +67,7 @@ The user-facing session is a relationship and decision record, not a work log. A
 
 This keeps the primary session readable over time. It also makes the system's behavior auditable: you can trace a result back through the session tree to the Worker that produced it and the reasoning that accepted it.
 
-The unit that crosses back from a Worker is the **completion report** — the deliverable plus a written account whose claims reference ledger evidence — never the Worker transcript. The Resident evaluates that report against the acceptance criteria set at delegation time; claims without evidence are treated as work not done ([ADR-010 §7](design-decisions/010-agent-os-kernel-model.md)).
+The unit that crosses back from a Worker is the **completion report** — the deliverable plus a written account whose claims reference ledger evidence — never the Worker transcript. The Resident evaluates that report against the acceptance criteria set at delegation time; claims without evidence are treated as work not done ([ADR-011](design-decisions/011-task-ledger-evidence-gate.md)).
 
 ## Worker Lifecycle
 
@@ -96,7 +96,7 @@ OpenOmni is designed to integrate with a long-term memory system (Anamnesis), bu
 
 Raw session history is not memory. Durable behavioral memory needs to be scoped, attributed, and reviewable. The Resident's personality, domain rules, tone, and routing preferences can evolve through the memory system. Core logic and safety policy cannot.
 
-Architecturally, memory is a **built-in layer plus a pluggable engine port** ([ADR-010 §9](design-decisions/010-agent-os-kernel-model.md)): bounded curated notes and FTS5 session search always work with zero engines configured, while external engines (Anamnesis first; Honcho/Mem0-class providers fit the same port) augment recall and user modeling. Recall is scope-filtered per executor — Workers see task-scoped memory only.
+Architecturally, memory is a **built-in layer plus a pluggable engine port** ([ADR-013](design-decisions/013-memory-engine-port.md)): bounded curated notes and FTS5 session search always work with zero engines configured, while external engines (Anamnesis first; Honcho/Mem0-class providers fit the same port) augment recall and user modeling. Recall is scope-filtered per executor — Workers see task-scoped memory only.
 
 ---
 
@@ -120,7 +120,7 @@ See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#s
 
 ## Vocabulary
 
-Seven categories. Each answers a different question — do not mix them.
+Eight categories. Each answers a different question — do not mix them.
 
 ### Product subjects (user-facing)
 
@@ -195,4 +195,20 @@ Seven categories. Each answers a different question — do not mix them.
 | `EventProjector` | Dispatch-invoked utility that persists the inbound message into the final session after PI match resolution. |
 | `DispatchHandler` | Per-action handler inside dispatch. |
 
-See [ADR-009](design-decisions/009-external-actor-authority-model.md) for the authority model, routing precedence, and full scenario traces.
+### Task and improvement (ledger concerns)
+
+| Term | Description |
+|---|---|
+| `ExecutionLane` | Where a request executes: `built-in / dispatch action / worker` (+ `subagent` as a parent's in-process extension). Chosen by how much reasoning execution still requires. |
+| `Subagent` | Context-inheriting extension of its parent — no ticket, no gate, dies with the parent. Not a worker tier. |
+| `WorkItem` | Task ledger entry — the OS's process table row: criteria, attempts, sessions, executor, evidence, gate. |
+| `CompletionReport` | Mandatory deliverable companion: written claims, each referencing ledger evidence. The distillation unit and evaluation input. |
+| `outcome` | Owner's post-hoc usefulness signal: `adopted / corrected / redone / ignored`. |
+| `IncidentFingerprint` | Recurrence identity of a mistake: cause category × task type × failure mode. |
+| `MemoryCandidate` | Scoped, attributed, reviewable memory ingestion unit (`scope`, `category`, `provenance`, `confidence`). |
+| `Memory.Engine` | Pluggable memory port: `ingest / recall / profile / feedback`, kernel-side scope filter. |
+| `ApplicationManifest` | Per-CLI-app registry entry: capabilities, cost profile, evidence-backed track record. |
+| `Connector` | Server-side boundary for an installed app: spawn, question bridge, log ingestion — never manages the app's inside. |
+| `SocialBudget` | Outreach resource axis: per-contact frequency caps, cooldowns, disclosure policy. |
+
+See [ADR-009](design-decisions/009-external-actor-authority-model.md) for the authority model, routing precedence, and full scenario traces; [ADR-010](design-decisions/010-agent-os-kernel-model.md)–[013](design-decisions/013-memory-engine-port.md) for the Agent OS model, task ledger, Governor, and memory port.

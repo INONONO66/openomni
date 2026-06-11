@@ -33,25 +33,25 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Component | Status | Code | Missing consumer |
 | --- | --- | --- | --- |
 | WorkItem schemas (`Info`, `Blocker`, `Evidence`, `VerificationGate`, `deriveStatus`) | ✅ | `packages/protocol/src/work-item/` | — |
-| `WorkItemStore` (full CRUD + lifecycle + evidence + gates) | 🔌 | `packages/session/src/work-item/` | **Zero production callers.** ADR-010 §7 designates it the task ledger — created on `worker.spawn`, completed via report gate |
-| WorkItem schema deltas (`originSessionId`/`workSessionId` split, `workerRunId`+`executorKind`, `completionReport`, `maxAttempts`, `outcome`) | 📋 | `packages/protocol/src/work-item/` | ADR-010 §7 |
-| Completion-report evidence gate (claims → evidence refs; unevidenced = not done) | 📋 | — | ADR-010 §7 — deterministic, runs before any LLM evaluation. Worker completion claims are accepted without any check today |
-| Read-back verification helpers (re-fetch URL, re-query API, citation-in-source matching) | 📋 | — | ADR-010 §7 |
-| Per-executor retry defaults + kernel-enforced exhaustion → Owner escalation | 📋 | — | ADR-010 §7 — internal 3 / app manifest / human reminder policy |
-| Owner adoption signal (`outcome`: adopted/corrected/redone/ignored) | 📋 | — | ADR-010 §7 — Governor's ground truth; also calibrates Resident evaluation leniency |
+| `WorkItemStore` (full CRUD + lifecycle + evidence + gates) | 🔌 | `packages/session/src/work-item/` | **Zero production callers.** ADR-011 designates it the task ledger — created on `worker.spawn`, completed via report gate |
+| WorkItem schema deltas (`originSessionId`/`workSessionId` split, `workerRunId`+`executorKind`, `completionReport`, `maxAttempts`, `outcome`) | 📋 | `packages/protocol/src/work-item/` | ADR-011 |
+| Completion-report evidence gate (claims → evidence refs; unevidenced = not done) | 📋 | — | ADR-011 — deterministic, runs before any LLM evaluation. Worker completion claims are accepted without any check today |
+| Read-back verification helpers (re-fetch URL, re-query API, citation-in-source matching) | 📋 | — | ADR-011 |
+| Per-executor retry defaults + kernel-enforced exhaustion → Owner escalation | 📋 | — | ADR-011 — internal 3 / app manifest / human reminder policy |
+| Owner adoption signal (`outcome`: adopted/corrected/redone/ignored) | 📋 | — | ADR-011 — Governor's ground truth; also calibrates Resident evaluation leniency |
 | Task ledger view ("show open tasks" — the OS's `ps`) | 📋 | — | Ledger query via chat command first; web view later |
 | Bus persistence (hash-chained event journal) | ✅ | `packages/session/src/bus-persistence/` | — |
 | `BusQuery` (stats, errors, worker-run history, chain verify) | 🔌 | `packages/session/src/bus-persistence/query.ts` | **Zero production callers.** First consumer: Governor v0 |
 | Token/cost tracking (per call, per message) | ✅ | `packages/llm/src/token/` | Aggregation (per agent/task type, success-rate correlation) absent |
-| System Governor (postmortem engine: incident RCA + slow aggregation loop) | 📋 | — | Zero code. v0 scoped in ADR-010 §8: two lanes (immediate / daily batch), storm collapse, triage (defect vs preference→memory candidate) |
-| Incident fingerprint registry (cause × task type × failure mode; recurrence ladder) | 📋 | — | ADR-010 §8 — match-before-create dedup discipline |
-| Governor autonomy boundary + change journal (tighten autonomous / loosen approval / kernel floor) | 📋 | — | ADR-010 §8 — every applied change journaled with scope tag; rate limits |
-| Regression ratchet (canary window + counting-rule rollback → RCA on the change itself) | 📋 | — | ADR-010 §8 — no separate machinery; runs through the same RCA pipeline |
-| Fabricated-evidence handling (unresolvable claims → immediate RCA + executor reliability record) | 📋 | — | ADR-010 §8 |
-| Memory candidates (`MemoryCandidate` schema + emission from `work_item.completed` / Governor triage / Owner request) | 📋 | — | ADR-010 §9 — prerequisites (lineage, provenance, bus) exist; no candidate emission |
-| Built-in curated memory (frozen-snapshot system-prompt injection, bounded budgets, add/replace/remove tool) | 📋 | — | ADR-010 §9 — Hermes pattern; injection via `on_system_prompt` policy timing |
-| Session search tool (FTS5 over session store) | 📋 | — | ADR-010 §9 — episodic recall, zero engines required |
-| `Memory.Engine` port (ingest/recall/profile/feedback; transport-agnostic; mandatory scope filter) | 📋 | `packages/protocol/src/memory/` (planned) | ADR-010 §9 — Anamnesis is the first plugin, not a dependency |
+| System Governor (postmortem engine: incident RCA + slow aggregation loop) | 📋 | — | Zero code. v0 scoped in ADR-012: two lanes (immediate / daily batch), storm collapse, triage (defect vs preference→memory candidate) |
+| Incident fingerprint registry (cause × task type × failure mode; recurrence ladder) | 📋 | — | ADR-012 — match-before-create dedup discipline |
+| Governor autonomy boundary + change journal (tighten autonomous / loosen approval / kernel floor) | 📋 | — | ADR-012 — every applied change journaled with scope tag; rate limits |
+| Regression ratchet (canary window + counting-rule rollback → RCA on the change itself) | 📋 | — | ADR-012 — no separate machinery; runs through the same RCA pipeline |
+| Fabricated-evidence handling (unresolvable claims → immediate RCA + executor reliability record) | 📋 | — | ADR-012 |
+| Memory candidates (`MemoryCandidate` schema + emission from `work_item.completed` / Governor triage / Owner request) | 📋 | — | ADR-013 — prerequisites (lineage, provenance, bus) exist; no candidate emission |
+| Built-in curated memory (frozen-snapshot system-prompt injection, bounded budgets, add/replace/remove tool) | 📋 | — | ADR-013 — Hermes pattern; injection via `on_system_prompt` policy timing |
+| Session search tool (FTS5 over session store) | 📋 | — | ADR-013 — episodic recall, zero engines required |
+| `Memory.Engine` port (ingest/recall/profile/feedback; transport-agnostic; mandatory scope filter) | 📋 | `packages/protocol/src/memory/` (planned) | ADR-013 — Anamnesis is the first plugin, not a dependency |
 
 ## Resident model (core-model, ADR-008, ADR-010)
 

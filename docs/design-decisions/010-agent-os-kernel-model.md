@@ -127,134 +127,36 @@ Workers are **always isolated processes**, even for small jobs. Agent tasks are 
 
 **Peek budget.** The Resident's per-turn tool-call budget (the existing budget hard-stop, e.g. ~5 calls) makes the delegation rule structural rather than prompted: light perception is free, but a task that survives the peek budget without resolving is, by definition, beyond judgment scope — and the Resident's only remaining move is `dispatch`.
 
-### 7. The task ledger — completion reports and the evidence gate
+### 7. The task ledger — graduated to ADR-011
 
-Every Worker-lane task is tracked as a `WorkItem` — the existing (currently dormant) store becomes the system's **process table**. Dispatch actions do not get tickets: atomic operations are already audited by the dispatch log, and ticketing them would be the slop §6 exists to avoid. *Tickets are for work that requires reasoning.*
+Every Worker-lane task is a `WorkItem` (the dormant store becomes the process table); creation requires acceptance criteria; completion requires **deliverable + completion report** whose claims reference ledger evidence — *no evidence = work not done*, bounced by code before any LLM evaluation. Verification is three questions answered by three parties: did it happen (gate), is it good (Resident, transcript-isolated), was it useful (Owner's `outcome`, the Governor's ground truth). Retry limits are per-executor with kernel-enforced exhaustion. Full decision record: [ADR-011](./011-task-ledger-evidence-gate.md).
 
-**Creation contract.** A WorkItem cannot be created without at least one acceptance criterion (`acceptanceCriteria`, structurally enforced via schema `min(1)`). Defining "done" is part of delegating, not an afterthought — a short "done means" list (≤3 bullets) at delegation time; per-task-type templates accumulate later as Skills.
+### 8. The Governor — graduated to ADR-012
 
-**Completion contract.** Every completion claim must arrive as **deliverable + completion report**. The report is a written account whose claims each reference evidence records in the ledger:
+The Governor is a **postmortem engine**: an incident (failure, Owner correction, unplanned rescue, fabricated evidence) triggers a root-cause analysis over logs and the situation at the time, producing a structural fix so the same mistake cannot recur — never just an apology. Permission formula *read-omniscient, write-minimal*; autonomy boundary *tighten freely, loosen with approval* over a kernel-enforced floor; the regression ratchet runs through the same RCA pipeline (a bad fix is just another incident). Full decision record: [ADR-012](./012-governor-postmortem-engine.md).
 
-```
-completionReport {
-  summary
-  claims[]: { statement, evidenceIds[] }   // "tests pass" → test-run event id
-                                           // "3 sellers contacted" → 3 dispatch receipts
-  caveats, followUps
-}
-```
+### 9. Memory — graduated to ADR-013
 
-Verification then runs as three questions, answered by three different parties:
-
-| Question | Answered by | Cost | Mechanism |
-| --- | --- | --- | --- |
-| **Did it happen?** | Code (gate) | ~0 | Each claim's `evidenceIds` must resolve to real ledger records (dispatch receipts, diffs, test runs, read-back checks). A claim without evidence is void; a report whose core claims lack evidence is **treated as work not done** and bounced before any LLM evaluation. |
-| **Is it good?** | Resident | 1 LLM evaluation | Resident judges **report + deliverable + verified evidence only — never the worker transcript**. The report is simultaneously the isolation mechanism (independent judgment per design-philosophy §3) and the distillation unit (the only thing written back toward user-facing context). On failure the Resident names the issue and re-dispatches with it attached. |
-| **Was it useful?** | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth. This also calibrates the Resident's own evaluation: accepted work the Owner keeps correcting is a Resident-leniency signal. |
-
-**Retry policy.** Defaults live on the executor profile (internal workers: 3; CLI apps: per application manifest; humans: not retries but a reminder policy under the social budget), overridable per item (`maxAttempts`). Exhaustion is **kernel-enforced**, not Resident goodwill: the item gains a `waiting_input` blocker and escalates to the Owner ("attempted N times, still failing — change approach?"). This is the structural backstop against cost-burning retry loops.
-
-**Read-back verification.** The "did it happen" gate generalizes beyond code: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages (structurally blocking hallucinated citations); human work is evidenced by PI resolution records. *Actions leave traces in the world; the gate re-observes the world rather than trusting the claim.*
-
-**Observability.** The ledger doubles as the OS's `ps`: who instructed it (`originSessionId`), where it runs (`workSessionId`), who executes it (`workerRunId`, `executorKind`), attempts, deadlines, what it is blocked on. "Show open tasks" is a ledger query — the first Owner-facing task-manager surface, via chat command first, web view later.
-
-**Schema deltas** required on the existing `WorkItem.Info` (all else is already built — including derived status, blockers, dependencies with cycle detection, and bus events):
-
-| Delta | Purpose |
-| --- | --- |
-| `originSessionId` / `workSessionId` (split the single `sessionId`) | "Who instructed" vs "where it runs" |
-| `workerRunId` + `executorKind` | Join key to the evidence ledger and routing stats |
-| `completionReport` | The deliverable-plus-writing obligation, claims → evidence refs |
-| `maxAttempts` | Per-item retry override; defaults from executor profile |
-| `outcome` (`adopted / corrected / redone / ignored`) | The usefulness signal the Governor weighs highest |
-
-### 8. The Governor — incident-driven structural improvement
-
-The Governor is a **postmortem engine**, not a report generator. A mistake that ends in an apology changes nothing: the next session inherits the same trap and falls into it again. The Governor exists so that every mistake either changes the structure that allowed it, or is consciously accepted and recorded. (This is where P1 "harness first", "failures are first-class data", and P8 "unplanned rescue is a defect signal" converge into one mechanism.)
-
-**Permission formula: read-omniscient, write-minimal.** The Governor reads everything — including worker transcripts. The Resident's transcript isolation exists to prevent evaluation bias; the Governor's job is process autopsy, which requires the process. Its writes are confined to proposals plus the autonomous tier below. It never participates in conversations.
-
-**Two loops:**
-
-- **Fast loop (incident-driven)** — the core. An incident spawns a root-cause analysis (RCA): read the failed WorkItem, its report, the worker transcript, the journal timeline, and the policy/prompt state *at the time* — then classify the cause and prescribe a structural fix.
-- **Slow loop (periodic)** — aggregation over the ledger: routing hints per task type, Resident evaluation-leniency calibration (accepted work the Owner keeps correcting), cost accounting.
-
-**Incident lanes:**
-
-| Lane | Triggers | Why |
-| --- | --- | --- |
-| Immediate | Owner unplanned intervention (P8); `outcome = redone`; **fabricated evidence caught by the gate**; canary breach / rollback; 3rd recurrence of a fingerprint | Strongest signals, rare enough to afford instantly |
-| Daily batch | Worker run failures; `outcome = corrected` (after triage); PI expired unanswered; budget hard-stops; cost anomalies | Bulk signals; batching surfaces patterns single incidents hide |
-
-**Storm collapse.** More than N similar incidents per hour collapse into a single storm RCA. The cause taxonomy includes `environmental` (expired credentials, API outage): environmental causes route to an ops alert, never to a policy change — twenty workers failing on one dead API key is one infrastructure incident, not twenty behavioral ones.
-
-**Triage before RCA** (for soft signals like `corrected`): a single occurrence with no fingerprint match is recorded only. Preference-shaped corrections (tone, style) are routed to **memory candidates**, not policy fixes — taste is memory, defects are structure. Two or more occurrences, or any hard signal, get a full RCA.
-
-**Cause taxonomy → fix mapping:**
-
-| Root cause | Structural fix | Autonomy tier |
-| --- | --- | --- |
-| Missing know-how | Skill addition/update | approval |
-| Wrong worker/app/model for the task | Routing hint update | autonomous |
-| Ambiguous instruction | Delegation / acceptance-criteria template improvement | approval |
-| Gate didn't catch it | New verification check for that task type | approval (adds cost) |
-| Over-broad permission/tool surface | Permission tightening | autonomous |
-| Unrealistic budget/limits | Numeric adjustment | tighten: autonomous / loosen: approval |
-| Model limitation | Model-tier escalation proposal for the task type | approval |
-| Environmental | Ops alert to Owner | n/a |
-
-**Autonomy boundary — tighten freely, loosen with approval:**
-
-- **Autonomous**: routing hints; numeric *tightening* (lower retry caps, lower budgets, narrower tool sets); recording and alerting.
-- **Approval required**: numeric loosening; skill/prompt/template changes; new verification checks; anything expanding any actor's autonomy.
-- **Never (kernel-enforced floor)**: blacklist, social-budget ceilings, approval-tier definitions, safety constraints, kernel code, **its own write permissions**. Proposable, never self-applicable.
-- **Rate limits**: at most one active change per fingerprint; at most M autonomous changes per day; every applied change is journaled as an event with a scope tag.
-
-**The ratchet runs through the same pipeline.** Every applied change opens a canary window (the next N tasks of the affected type). Two consecutive same-type failures inside the window → automatic rollback + an immediate-lane RCA *on the change itself* — a bad fix is just another incident whose root cause is a recent change, visible because changes are journaled. No separate regression machinery. Rollback triggers are simple counting rules, not statistics: a personal system's samples are too small for significance, and a false rollback costs only a restore.
-
-**Recurrence ladder (fingerprints).** Each RCA matches-or-creates an incident fingerprint (cause category × task type × failure mode); matching against open fingerprints is mandatory before creating a new one (dedup discipline, as in an issue tracker).
-
-1. First occurrence → fix proposed/applied.
-2. Recurrence after the fix → **the fix failed**: reopen with the prior RCA as input, escalate priority.
-3. Third occurrence → Owner escalation: "structure is not catching this."
-
-**RCA is itself a §7 WorkItem.** Acceptance criteria: root cause identified with evidence references (journal event IDs); cause category assigned; fix proposed with a **falsifiable prevention check** ("fingerprint X recurrence = 0 over the next 4 weeks"); fingerprint matched-or-created. Completion report required. `outcome` tracked — the Owner's dismissal rate of Governor proposals is the Governor's own track record. There is no meta-Governor: if the dismissal rate climbs, fixing the Governor is the Owner's job (infinite regress stops here by design).
-
-**Fabricated evidence is a first-class offense.** A claim whose `evidenceIds` do not resolve — or that read-back contradicts — is not a quality miss but a false report: immediate-lane RCA, permanently recorded on that executor's reliability track record, directly feeding promotion/trust decisions.
-
-**Owner surface.** Proposals arrive as a weekly digest; immediate pings only for rollbacks, fabricated evidence, and third recurrences. Unreviewed proposals expire after N days (state preserved on the fingerprint). Governor spend is capped as a percentage of total system spend.
-
-### 9. Memory — built-in curation plus a pluggable engine port
-
-Memory follows the Hermes-Agent pattern ([NousResearch/Hermes-Agent](https://github.com/NousResearch/Hermes-Agent)): a small **built-in memory that always works**, plus a **pluggable external engine port** that augments — never replaces — it. Anamnesis is the first intended plugin, not a dependency; Honcho/Mem0-class providers fit the same port. In OS terms: built-in curated notes are pinned RAM pages, the session store is disk, and the external engine is indexed cold storage.
-
-**Built-in layer (engine-independent, ships first):**
-
-- **Two bounded curated stores**, injected into the Resident's system prompt as a **frozen snapshot** at session start: system notes (environment facts, conventions, lessons; ~800-token budget) and the Owner profile (identity, preferences, communication style; ~500-token budget). The memory tool has `add` / `replace` / `remove` and deliberately **no `read`** — content is always already in context. Mid-session writes persist to disk but render only from the next session, preserving the prefix cache (Hermes's frozen-snapshot pattern, adopted wholesale).
-- **Hard character budgets are the structural constraint** (§1 kernel-grade): memory cannot bloat context; growth forces curation — replace and remove are first-class, not afterthoughts.
-- **Session search** as a separate axis: FTS5 full-text over the existing session store, exposed as an on-demand tool (millisecond queries, zero token cost until used). Episodic recall without any engine and without curation effort.
-- Memory writes ride the autonomy tiers: log-and-report by default, an optional write-approval mode gates every write behind the Owner (Hermes `write_approval` ≈ our Tier 2).
-
-**The engine port (`Memory.Engine`, Zod-first, following the `Storage.Adapter` precedent):**
-
-```
-ingest(candidate)            // consume MemoryCandidates (async, non-blocking, fire-and-forget)
-recall(query, scope)         // retrieval for context assembly — scope filter is MANDATORY
-profile(actorId, question?)  // dialectic user/actor modeling ("what does the Owner prefer for X?")
-feedback(memoryId, outcome)  // recalled memory was useful / wrong — engines learn from §7 outcomes too
-```
-
-Transport-agnostic (in-process, HTTP, or MCP — Anamnesis is a separate project and will likely sit behind HTTP/MCP). Zero engines configured = built-in layer only, fully functional. Multiple engines may coexist (one for semantic search, one for user modeling), all fed from the same candidate stream.
-
-**Scope filtering is the OpenOmni-specific addition** Hermes does not need: recall results are filtered by executor scope. The Resident recalls across the Owner scope; a Worker recalls only within its task scope — this is how ADR-009 §9's "memory scoped to the relevant task" becomes enforceable. The scope filter lives on the port (kernel side), not in engine goodwill.
-
-**The candidate stream already exists by construction.** `MemoryCandidate { content, scope: owner|domain|project|persona|session, category: preference|rule|lesson|failure|decision|skill, provenance: { workItemHash?, sessionId, author }, confidence }` — emitted from three sources designed in earlier sections: §7 WorkItem completion (high-value outcomes), §8 Governor triage (preference-shaped corrections — "taste is memory, defects are structure"), and explicit Owner requests. Engines consume the stream; the built-in curated store is maintained by the Resident itself via the memory tool.
-
-**Wiring is existing hooks, not new plumbing**: frozen-snapshot injection at the `on_system_prompt` policy timing; periodic persistence nudges at `post_turn`/idle timings; candidate emission on `work_item.completed` bus events. The memory engine never blocks execution — ingest failures degrade to "candidate stays queued," recall failures degrade to "built-in snapshot only."
+Hermes-Agent pattern: a built-in layer that always works (two bounded curated stores injected as a frozen snapshot + FTS5 session search) plus a pluggable `Memory.Engine` port (`ingest / recall / profile / feedback`) with a **kernel-side mandatory scope filter** — Workers recall task scope only. Anamnesis is the first plugin, not a dependency. Full decision record: [ADR-013](./013-memory-engine-port.md).
 
 ### Resource model addendum: social budget
 
 Outbound contact with humans spends a resource token budgets do not measure: the Owner's reputation. Budgets gain a third axis alongside tokens and money — per-contact outreach frequency caps, cooldowns, a do-not-contact list, and a disclosure policy (agent-identified vs Owner-voiced, per channel). First contact with a stranger is approval-gated; replies within an existing thread are not. Where a platform forbids automation, egress degrades gracefully to **owner-mediated send** (the system drafts, the Owner taps send) — modeled as just another executor, not an exception.
+
+## Scenario — marketplace inquiry, end-to-end
+
+One trace through every mechanism. Owner: *"Ask the sellers of these 3 marketplace listings for price and condition; when replies come in, compare and recommend."*
+
+1. **Ingress** — Telegram driver normalizes raw → `InboundMessage`; ingress resolves actor and session candidate; dispatch (kernel gate) authorizes and projects into the Resident session.
+2. **Shell judgment** — not a direct answer, not an atomic action, needs reasoning → Worker lane (§6). A `WorkItem` is created; creation fails without acceptance criteria, so the Resident writes them: *3 sellers contacted / price + condition obtained / unresponsive marked after 2 days* (ADR-011).
+3. **Execution** — the worker sends 3 messages via `dispatch.submit("external.ask")`. The kernel checks the social budget: first contact with strangers → approval gate or owner-mediated send (addendum). Three dispatch receipts land in the journal.
+4. **`await world`** — 3 PendingInteractions registered; the worker process exits (resources → 0). A reboot would restore the open PIs (§5). Two days later seller A replies: PI correlation match precedes SurfaceKey routing — the reply wakes *that* WorkerRun, not a personal chat session (§2).
+5. **Partial completion** — seller C never replies; on expiry the "mark unresponsive" criterion is satisfied. Partial response is a normal mode.
+6. **Evidence gate** — the worker submits deliverable + completion report; claims reference receipts and PI resolutions. An evidence-less claim would void; fabricated evidence would be a first-class offense on the executor's record (ADR-011, ADR-012).
+7. **Evaluation** — the Resident judges report + deliverable + verified evidence (never the transcript) against the criteria, then delivers the distilled recommendation to the Owner.
+8. **Outcome and learning** — the Owner uses the recommendation (`outcome: adopted`) — ground truth in the ledger. A preference surfaces ("Owner prefers in-person pickup") → memory candidate → `Memory.Engine` ingest (ADR-013). Had the Owner redone the work, the Governor's immediate lane would run an RCA and fix the structure (ADR-012).
+
+Every boundary crossed dispatch; every action left a journal record; every wait survived process death; every claim needed evidence; every reaction fed the loop.
 
 ## Rationale
 
@@ -282,8 +184,8 @@ Outbound contact with humans spends a resource token budgets do not measure: the
 
 ### Implementation order (dependency-driven)
 
-1. Task ledger + completion-report gate wiring on the worker lane (§7 — WorkItemStore exists; schema deltas plus exit-path wiring).
-2. Governor v0 (§8): incident-triggered RCA pipeline + daily-batch lane + fingerprint registry, with the slow aggregation loop as a scheduled BusQuery consumer (first journal reader; closes the loop).
+1. Task ledger + completion-report gate wiring on the worker lane ([ADR-011](./011-task-ledger-evidence-gate.md) — WorkItemStore exists; schema deltas plus exit-path wiring).
+2. Governor v0 ([ADR-012](./012-governor-postmortem-engine.md)): incident-triggered RCA pipeline + daily-batch lane + fingerprint registry, with the slow aggregation loop as a scheduled BusQuery consumer (first journal reader; closes the loop).
 3. `PendingAsk` → `PendingInteraction` migration + correlation routing (requires ActorIdentity foundations from ADR-009).
 4. `local_cli_agent` executor + application manifest (first installed app: Claude Code, dogfooding OpenOmni's own development).
 5. Durable cron + boot contract.
@@ -298,8 +200,9 @@ Outbound contact with humans spends a resource token budgets do not measure: the
 - Implementing ADR-007's full policy VM. Dynamic policy loading is the eventual mechanism by which Governor proposals take effect, but Governor v0 ships with static policies plus Owner-applied diffs.
 - Rewriting runtime components in systems languages (Rust / Go / Elixir) now. Deferred, not rejected: candidates are the coordinator/kernel daemons (many concurrent waits, watchers, log tailers — BEAM-style supervision trees map naturally onto this architecture), the journal hot path, and worker-entry idle memory footprint. The kernel contracts (dispatch action schemas, IPC framing, Zod-defined protocol) are the language-agnostic boundary that makes incremental polyglot rewrites possible later — and the decision to rewrite should come from the cost/latency ledger (evidence), not instinct. For years the bottleneck will be LLM latency and token cost, not runtime performance.
 
-## Relationship to prior ADRs
+## Relationship to other ADRs
 
 - Builds on ADR-005 (workforce model) and ADR-009 (external actors, authority axes, PI schema).
 - Names and completes ADR-008's shipped runtime (disposable processes / durable sessions) as the preemption substrate.
 - Reframes ADR-007 (Policy Kernel v2) as the future "loadable policy module" mechanism rather than a competing governance design.
+- Spawned [ADR-011](./011-task-ledger-evidence-gate.md) (task ledger & evidence gate), [ADR-012](./012-governor-postmortem-engine.md) (Governor postmortem engine), and [ADR-013](./013-memory-engine-port.md) (memory engine port) — each graduated from a section of this record once its design matured.
