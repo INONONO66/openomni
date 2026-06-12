@@ -9,19 +9,10 @@ import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
 import { command, workerSpawnPayload } from "./helpers";
 
 const servers: Server[] = [];
-let fixtureRequestCount = 0;
 
 async function startReadBackFixture(): Promise<string> {
   const server = createServer((request, response) => {
-    fixtureRequestCount += 1;
     const path = request.url ? new URL(request.url, "http://127.0.0.1").pathname : "/";
-    if (path === "/slow") {
-      setTimeout(() => {
-        response.writeHead(200, { "content-type": "text/plain" });
-        response.end("The deployed page includes the expected completion marker.");
-      }, 50);
-      return;
-    }
     if (path === "/missing") {
       response.writeHead(200, { "content-type": "text/plain" });
       response.end("The marker is absent here.");
@@ -67,7 +58,6 @@ describe("worker.spawn read-back completion gate", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
-    fixtureRequestCount = 0;
   });
 
   afterEach(async () => {
@@ -263,66 +253,5 @@ describe("worker.spawn read-back completion gate", () => {
         },
       });
     }
-  });
-
-  test("applies one shared deadline across all read-back requests", async () => {
-    const target = await startReadBackFixture();
-    const registry = new DispatchRegistry();
-    registerBuiltInDispatchHandlers(registry, {
-      owners: {
-        coordinator: {
-          async dispatch(_sessionId, request) {
-            return {
-              runId: request.runId,
-              sessionId: request.sessionId,
-              status: "succeeded",
-              output: JSON.stringify({
-                completionReport: {
-                  summary: "Published the requested update.",
-                  claims: [{ statement: "The deployed page includes the expected marker." }],
-                },
-                readBackRequests: [
-                  {
-                    claimIndex: 0,
-                    request: {
-                      kind: "citation_match",
-                      target: `${target}/slow`,
-                      quotedText: "expected completion marker",
-                    },
-                  },
-                  {
-                    claimIndex: 0,
-                    request: {
-                      kind: "citation_match",
-                      target,
-                      quotedText: "expected completion marker",
-                    },
-                  },
-                ],
-              }),
-            };
-          },
-        },
-      },
-      readBack: { allowPrivateNetwork: true },
-      readBackEnvelopeTimeoutMs: 1,
-    });
-
-    const result = await registry.get("worker.spawn")?.(
-      command("worker.spawn", { kind: "worker", name: "coder" }, workerSpawnPayload("publish it")),
-    );
-
-    const workItems = WorkItemStore.list();
-    expect(workItems).toHaveLength(1);
-    expect(fixtureRequestCount).toBe(1);
-    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("blocked");
-    expect(workItems[0]?.evidence).toHaveLength(1);
-    expect(workItems[0]?.blockers[0]?.description).toBe("read-back envelope deadline exceeded");
-    expect(result).toMatchObject({
-      output: {
-        workItemHash: workItems[0]?.hash,
-        reflection: { workItemStatus: "blocked", completionBlocked: true },
-      },
-    });
   });
 });

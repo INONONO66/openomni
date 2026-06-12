@@ -89,6 +89,8 @@ type ParsedCompletionEnvelope =
 export interface WorkerCompletionOptions {
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
+  readonly readBackRecorder?: typeof ReadBackExecutor.record;
+  readonly now?: () => number;
 }
 
 export type CompletionReflection = {
@@ -168,11 +170,13 @@ async function prepareCompletionReport(
   }
 
   const evidenceIdsByClaim = new Map<number, string[]>();
-  const deadlineAt = Date.now() + resolveReadBackEnvelopeTimeoutMs(options);
+  const now = options.now ?? Date.now;
+  const recordReadBack = options.readBackRecorder ?? ReadBackExecutor.record;
+  const deadlineAt = now() + resolveReadBackEnvelopeTimeoutMs(options);
   for (const readBack of envelope.readBackRequests) {
-    const remainingMs = deadlineAt - Date.now();
+    const remainingMs = deadlineAt - now();
     if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
-    const updated = await ReadBackExecutor.record(
+    const updated = await recordReadBack(
       workItemHash,
       applySharedDeadline(readBack.request, remainingMs),
       options.readBack,
@@ -208,7 +212,7 @@ function resolveReadBackEnvelopeTimeoutMs(options: WorkerCompletionOptions): num
   if (configured === undefined || !Number.isFinite(configured) || configured <= 0) {
     return MAX_READ_BACK_TIMEOUT_MS;
   }
-  return Math.min(Math.floor(configured), MAX_READ_BACK_TIMEOUT_MS);
+  return Math.min(Math.ceil(configured), MAX_READ_BACK_TIMEOUT_MS);
 }
 
 function applySharedDeadline(request: ReadBackRequest, remainingMs: number): ReadBackRequest {
