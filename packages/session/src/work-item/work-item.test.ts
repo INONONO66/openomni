@@ -300,6 +300,76 @@ describe("WorkItemStore", () => {
     expect(stored?.completionReport).toBeUndefined();
   });
 
+  test("rejects completion reports that cite failed evidence", async () => {
+    configureSqlite();
+    const item = await createItem("failed-evidence");
+    await WorkItemStore.start(item.hash);
+    const updated = await WorkItemStore.addReadBackEvidence(item.hash, {
+      kind: "url_fetch",
+      target: "https://example.com/post",
+      passed: false,
+      observedAt: 2,
+      statusCode: 404,
+    });
+    const evidenceId = updated?.evidence.at(-1)?.id;
+    if (!evidenceId) throw new Error("expected evidence id");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.complete(item.hash, completionReport(evidenceId)),
+      "completion report references failed evidence",
+    );
+
+    const stored = WorkItemStore.get(item.hash);
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
+    expect(stored?.completionReport).toBeUndefined();
+  });
+
+  test("rejects inconsistent read-back evidence", async () => {
+    configureSqlite();
+    const item = await createItem("inconsistent-read-back");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.addEvidence(item.hash, {
+        kind: "verification",
+        description: "inconsistent read-back",
+        passed: true,
+        readBack: {
+          kind: "url_fetch",
+          target: "https://example.com/post",
+          passed: false,
+          observedAt: 2,
+          statusCode: 404,
+        },
+      }),
+      "readBack.passed must match evidence.passed",
+    );
+  });
+
+  test("adds read-back verification evidence", async () => {
+    configureSqlite();
+    const item = await createItem("read-back");
+
+    const updated = await WorkItemStore.addReadBackEvidence(item.hash, {
+      kind: "citation_match",
+      target: "https://example.com/source",
+      passed: true,
+      observedAt: 4,
+      quotedText: "source sentence",
+      matchedText: "source sentence",
+    });
+
+    expect(updated?.evidence).toHaveLength(1);
+    expect(updated?.evidence[0]).toMatchObject({
+      kind: "verification",
+      description: "citation_match read-back passed for https://example.com/source",
+      passed: true,
+      readBack: {
+        kind: "citation_match",
+        quotedText: "source sentence",
+      },
+    });
+  });
+
   test("returns unmet for missing work item in areDependenciesMet", () => {
     configureSqlite();
     expect(WorkItemStore.areDependenciesMet("wi_nonexistent0")).toEqual({

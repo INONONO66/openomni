@@ -29,14 +29,70 @@ export namespace WorkItem {
   });
   export type Blocker = z.infer<typeof Blocker>;
 
-  export const Evidence = z.object({
-    id: z.string(),
-    kind: z.enum(["test_result", "build_result", "review", "verification", "manual", "custom"]),
-    description: z.string(),
+  const ReadBackBase = z.object({
+    target: z.string().min(1),
     passed: z.boolean(),
-    detail: z.string().optional(),
-    createdAt: z.number(),
+    observedAt: z.number(),
+    statusCode: z.number().int().min(100).max(599).optional(),
+    matchedText: z.string().min(1).optional(),
   });
+
+  export const ReadBackCheck = z
+    .discriminatedUnion("kind", [
+      ReadBackBase.extend({
+        kind: z.literal("url_fetch"),
+        target: z.string().url(),
+        contentDigest: z.string().min(1).optional(),
+      }),
+      ReadBackBase.extend({
+        kind: z.literal("api_query"),
+        method: z.string().min(1).default("GET"),
+        responseDigest: z.string().min(1).optional(),
+      }),
+      ReadBackBase.extend({
+        kind: z.literal("citation_match"),
+        target: z.string().url(),
+        quotedText: z.string().min(1),
+      }),
+    ])
+    .superRefine((check, ctx) => {
+      if (!check.passed) return;
+      if (check.statusCode !== undefined && (check.statusCode < 200 || check.statusCode > 299)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "passed read-back HTTP status must be 2xx",
+          path: ["statusCode"],
+        });
+      }
+      if (check.kind === "citation_match" && check.matchedText === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "passed citation_match read-back requires matchedText",
+          path: ["matchedText"],
+        });
+      }
+    });
+  export type ReadBackCheck = z.infer<typeof ReadBackCheck>;
+
+  export const Evidence = z
+    .object({
+      id: z.string(),
+      kind: z.enum(["test_result", "build_result", "review", "verification", "manual", "custom"]),
+      description: z.string(),
+      passed: z.boolean(),
+      detail: z.string().optional(),
+      readBack: ReadBackCheck.optional(),
+      createdAt: z.number(),
+    })
+    .superRefine((evidence, ctx) => {
+      if (evidence.readBack && evidence.passed !== evidence.readBack.passed) {
+        ctx.addIssue({
+          code: "custom",
+          message: "readBack.passed must match evidence.passed",
+          path: ["readBack", "passed"],
+        });
+      }
+    });
   export type Evidence = z.infer<typeof Evidence>;
 
   export const ExecutorKind = z.enum([
