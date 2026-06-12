@@ -70,6 +70,14 @@ function resolvedFollowUpUntil(record: Communication.PendingInteraction.Record):
   return (record.resolvedAt ?? 0) + record.followUpWindow;
 }
 
+function isPastExpiry(record: Communication.PendingInteraction.Record, now: number): boolean {
+  if (record.status === "open") return now > record.expiresAt;
+  if (record.status === "resolved" || record.status === "follow_up") {
+    return record.resolvedAt === undefined || now > resolvedFollowUpUntil(record);
+  }
+  return false;
+}
+
 export namespace PendingInteractionStore {
   export type Record = Communication.PendingInteraction.Record;
   export type Create = Communication.PendingInteraction.Create;
@@ -148,6 +156,12 @@ export namespace PendingInteractionStore {
       Bus.publish(Communication.PendingInteraction.Events.Expired, eventBase(record));
     }
     return record;
+  }
+
+  export function cleanupExpired(now = Date.now()): Record[] {
+    return list(["open", "resolved", "follow_up"])
+      .filter((record) => isPastExpiry(record, now))
+      .map((record) => expire(record.id));
   }
 
   export function remove(id: string): boolean {
