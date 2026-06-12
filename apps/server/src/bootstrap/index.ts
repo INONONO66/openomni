@@ -197,6 +197,8 @@ export async function main(): Promise<void> {
           const surfaceKeys = SurfaceKey.listBySession(mainSessionId);
           const surfaceKey = surfaceKeys.length === 1 ? surfaceKeys[0] : undefined;
           const surface = surfaceKey ? SurfaceKey.parse(surfaceKey) : undefined;
+          const tokenHash =
+            typeof command.correlation === "string" ? command.correlation : undefined;
           PendingAskStore.create({
             id: command.dispatchId,
             originSessionId: sessionId,
@@ -206,7 +208,7 @@ export async function main(): Promise<void> {
             ...(surface ? { endpointId: surface.namespace || surface.surface } : {}),
             ...(surface?.id ? { channelId: surface.id } : {}),
             correlation: {
-              ...(command.correlation ? { tokenHash: command.correlation } : {}),
+              ...(tokenHash ? { tokenHash } : {}),
               ...(surfaceKey ? { externalConversationId: surfaceKey } : {}),
               ...(surface?.threadId ? { threadId: surface.threadId } : {}),
             },

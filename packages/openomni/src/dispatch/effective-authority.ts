@@ -162,6 +162,32 @@ export namespace EffectiveAuthority {
     );
   }
 
+  export function pendingInteraction(reason: string, interactionId: string): Result {
+    return evaluate(
+      [
+        ...baselineAxes(),
+        axis("personal_or_channel_default_grant", "allow", "dispatch.actor.assigned_worker"),
+        axis("session_ownership_grant", "not_required", "dispatch.session_ownership.not_required"),
+        axis("pending_interaction_scope", "allow", reason, [
+          `pending_interaction.${interactionId}`,
+        ]),
+      ],
+      reason,
+    );
+  }
+
+  export function pendingInteractionDenied(reason: string): Result {
+    return evaluate(
+      [
+        ...baselineAxes(),
+        axis("personal_or_channel_default_grant", "allow", "dispatch.actor.grant_candidate"),
+        axis("session_ownership_grant", "not_required", "dispatch.session_ownership.not_required"),
+        axis("pending_interaction_scope", "deny", reason),
+      ],
+      reason,
+    );
+  }
+
   function baselineAxes(): AxisDecision[] {
     return [
       axis("blacklist", "allow", "dispatch.blacklist.clear"),

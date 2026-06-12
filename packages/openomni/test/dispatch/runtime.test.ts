@@ -3,6 +3,7 @@ import { Operational, PolicyDecision, type Dispatch as DispatchProtocol } from "
 import {
   BlacklistStore,
   Bus,
+  PendingInteractionStore,
   Session,
   Storage,
   WorkerGrantStore,
@@ -249,6 +250,367 @@ describe("DispatchRuntime", () => {
     expect(result.status).toBe("completed");
     expect(authority?.factsUsed).toContain("effective_authority.session_ownership_grant.allow");
     expect(authority?.factsUsed).toContain("worker_grant.allowed");
+  });
+
+  test("routes actor.message through a matching PendingInteraction before authorization", async () => {
+    const decisions: PolicyDecision[] = [];
+    const runtime = new DispatchRuntime({
+      onPolicyDecision: (decision) => {
+        decisions.push(decision);
+      },
+    });
+    let routedCommand: DispatchProtocol.Command | undefined;
+    runtime.register("actor.reply", (command) => {
+      routedCommand = command;
+      return { output: { routed: true, sessionId: command.sessionId, runId: command.runId } };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-1",
+      workerRunId: "run-pi",
+      sessionId: session.id,
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-1" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "SN-A2334",
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          replyToMessageId: "message-out-1",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:seller-1",
+      },
+    );
+
+    const authority = decisions.find(
+      (decision) => decision.policyId === "dispatch.default-authority",
+    );
+    expect(result.status).toBe("completed");
+    expect(result.handler).toBe("actor.reply");
+    expect(routedCommand?.action).toBe("actor.reply");
+    expect(routedCommand?.target).toMatchObject({
+      kind: "worker",
+      runId: "run-pi",
+      sessionId: session.id,
+    });
+    expect(routedCommand?.actor.trustTier).toBe("assigned_worker");
+    expect(PendingInteractionStore.get("pi-dispatch-1")?.status).toBe("resolved");
+    expect(authority?.factsUsed).toContain("effective_authority.pending_interaction_scope.allow");
+    expect(authority?.factsUsed).toContain("pending_interaction.pi-dispatch-1");
+  });
+
+  test("denies unmatched actor.message from unknown actors", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.reply", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "hello",
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          replyToMessageId: "unknown-message",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:seller-1",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.actor.required");
+    expect(called).toBe(false);
+  });
+
+  test("denies unmatched actor.message even from otherwise trusted actors", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.message", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "hello",
+        correlation: {
+          endpointId: "telegram:seller-1",
+          channelId: "telegram:dm",
+          replyToMessageId: "unknown-message",
+        },
+      },
+      {
+        actorKind: "resident",
+        actorId: "resident:main",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.pending_interaction.required");
+    expect(called).toBe(false);
+  });
+
+  test("does not route actor.message when PendingInteraction disallows result reports", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.reply", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-disallowed");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-disallowed",
+      workerRunId: "run-pi-disallowed",
+      sessionId: session.id,
+      endpointId: "telegram:seller-2",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-2" },
+      allowedActions: ["ask_clarification"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "SN-A2334",
+        correlation: {
+          endpointId: "telegram:seller-2",
+          channelId: "telegram:dm",
+          replyToMessageId: "message-out-2",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:seller-2",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.actor.required");
+    expect(PendingInteractionStore.get("pi-dispatch-disallowed")?.status).toBe("open");
+    expect(called).toBe(false);
+  });
+
+  test("denies disallowed actor.message even from otherwise trusted actors", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.message", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-disallowed-trusted");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-disallowed-trusted",
+      workerRunId: "run-pi-disallowed-trusted",
+      sessionId: session.id,
+      endpointId: "telegram:seller-3",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-3" },
+      allowedActions: ["ask_clarification"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "SN-A2334",
+        correlation: {
+          endpointId: "telegram:seller-3",
+          channelId: "telegram:dm",
+          replyToMessageId: "message-out-3",
+        },
+      },
+      {
+        actorKind: "resident",
+        actorId: "resident:main",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.pending_interaction.required");
+    expect(PendingInteractionStore.get("pi-dispatch-disallowed-trusted")?.status).toBe("open");
+    expect(called).toBe(false);
+  });
+
+  test("blocks blacklisted PendingInteraction endpoint matches before handler execution", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.reply", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    BlacklistStore.put({
+      id: "bl-pi-endpoint",
+      kind: "endpoint",
+      value: "telegram:blocked-seller",
+      reason: "blocked pending interaction endpoint",
+      createdBy: "act_owner",
+    });
+    const session = await createWorkerRunFixture("run-pi-blacklisted-endpoint");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-blacklisted-endpoint",
+      workerRunId: "run-pi-blacklisted-endpoint",
+      sessionId: session.id,
+      endpointId: "telegram:blocked-seller",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-bl-endpoint" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:dm" },
+        payload: "SN-A2334",
+        correlation: {
+          endpointId: "telegram:blocked-seller",
+          channelId: "telegram:dm",
+          replyToMessageId: "message-out-bl-endpoint",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:blocked-seller",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("blocked pending interaction endpoint");
+    expect(PendingInteractionStore.get("pi-dispatch-blacklisted-endpoint")?.status).toBe("open");
+    expect(called).toBe(false);
+  });
+
+  test("blocks blacklisted PendingInteraction channel matches before handler execution", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.reply", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    BlacklistStore.put({
+      id: "bl-pi-channel",
+      kind: "channel",
+      value: "telegram:blocked-dm",
+      reason: "blocked pending interaction channel",
+      createdBy: "act_owner",
+    });
+    const session = await createWorkerRunFixture("run-pi-blacklisted-channel");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-blacklisted-channel",
+      workerRunId: "run-pi-blacklisted-channel",
+      sessionId: session.id,
+      endpointId: "telegram:seller-4",
+      channelId: "telegram:blocked-dm",
+      correlation: { replyToMessageId: "message-out-bl-channel" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.message",
+        target: { kind: "surface", id: "telegram:blocked-dm" },
+        payload: "SN-A2334",
+        correlation: {
+          endpointId: "telegram:seller-4",
+          channelId: "telegram:blocked-dm",
+          replyToMessageId: "message-out-bl-channel",
+        },
+      },
+      {
+        actorKind: "unknown",
+        actorId: "telegram:seller-4",
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("blocked pending interaction channel");
+    expect(PendingInteractionStore.get("pi-dispatch-blacklisted-channel")?.status).toBe("open");
+    expect(called).toBe(false);
+  });
+
+  test("denies forged direct actor.reply labels without a routed PendingInteraction match", async () => {
+    const runtime = new DispatchRuntime();
+    let called = false;
+    runtime.register("actor.reply", () => {
+      called = true;
+      return { output: "should not route" };
+    });
+
+    Storage.initialize({ dbPath: ":memory:" });
+    const session = await createWorkerRunFixture("run-pi-forged");
+    PendingInteractionStore.create({
+      id: "pi-dispatch-forged",
+      workerRunId: "run-pi-forged",
+      sessionId: session.id,
+      endpointId: "telegram:seller-forged",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "message-out-forged" },
+      allowedActions: ["report_result"],
+      expiresAt: Date.now() + 60_000,
+      followUpWindow: 60_000,
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "actor.reply",
+        target: { kind: "worker", runId: "run-pi-forged", sessionId: session.id },
+        payload: "SN-A2334",
+      },
+      {
+        actorKind: "worker",
+        actorId: "telegram:seller-forged",
+        sessionId: session.id,
+        runId: "run-pi-forged",
+        trustTier: "assigned_worker",
+        labels: ["pending_interaction.pi-dispatch-forged"],
+      },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.pending_interaction.match.required");
+    expect(PendingInteractionStore.get("pi-dispatch-forged")?.status).toBe("open");
+    expect(called).toBe(false);
   });
 
   test("default policy denies worker spawning independent work", async () => {

@@ -6,6 +6,10 @@ import {
 } from "@openomni/protocol";
 import { Bus, TraceContext } from "@openomni/session";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
+import {
+  markRoutedPendingInteraction,
+  routePendingInteraction,
+} from "./pending-interaction-routing.js";
 import { createDefaultDispatchPolicy } from "./policy.js";
 import { DispatchRegistry, type DispatchHandler, type DispatchHandlerContext } from "./registry.js";
 
@@ -19,7 +23,7 @@ type DispatchEventPayload = {
   readonly actor: DispatchProtocol.ActorContext;
   readonly action: string;
   readonly target: DispatchProtocol.Target;
-  readonly correlation?: string;
+  readonly correlation?: DispatchProtocol.Command["correlation"];
   readonly time: number;
 };
 
@@ -113,16 +117,18 @@ export class DispatchRuntime {
     const parsed = DispatchProtocol.Input.parse(input);
     const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
     const actor = deriveActorContext(options);
-    const command = DispatchProtocol.Command.parse({
-      ...parsed,
-      dispatchId: crypto.randomUUID(),
-      actor,
-      traceId: trace.traceId,
-      ...(options.sessionId ? { sessionId: options.sessionId } : {}),
-      ...(options.runId ? { runId: options.runId } : {}),
-      ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
-      submittedAt: Date.now(),
-    });
+    const command = routePendingInteraction(
+      DispatchProtocol.Command.parse({
+        ...parsed,
+        dispatchId: crypto.randomUUID(),
+        actor,
+        traceId: trace.traceId,
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        ...(options.runId ? { runId: options.runId } : {}),
+        ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
+        submittedAt: Date.now(),
+      }),
+    );
     const start = Date.now();
 
     Bus.publish(DispatchProtocol.Events.Submitted, {
@@ -160,6 +166,7 @@ export class DispatchRuntime {
         dispatchId: command.dispatchId,
         action: command.action,
         target: command.target,
+        correlation: command.correlation,
         sessionId: command.sessionId,
         runId: command.runId,
       },
@@ -209,6 +216,7 @@ export class DispatchRuntime {
       });
     }
 
+    markRoutedPendingInteraction(command);
     Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
 
     try {

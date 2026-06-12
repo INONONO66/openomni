@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Communication } from "../../src/index.js";
+import { Communication, Dispatch } from "../../src/index.js";
 
 describe("Communication protocol schemas", () => {
   test("Envelope accepts normalized adapter/delivery fields", () => {
@@ -57,6 +57,21 @@ describe("Communication protocol schemas", () => {
 
     expect(parsed.allowedActions).toEqual(["report_result", "ask_clarification"]);
     expect(parsed.correlation.replyToMessageId).toBe("m-1");
+  });
+
+  test("Dispatch actor.message accepts structured correlation hints", () => {
+    const parsed = Dispatch.Input.parse({
+      action: Dispatch.Actions.ActorMessage,
+      target: { kind: "surface", id: "telegram:dm" },
+      payload: "reply",
+      correlation: {
+        endpointId: "telegram:seller-1",
+        channelId: "telegram:dm",
+        replyToMessageId: "m-1",
+      },
+    });
+
+    expect(parsed.correlation).toMatchObject({ replyToMessageId: "m-1" });
   });
 
   test("WorkerGrant defaults external task creation to false", () => {
