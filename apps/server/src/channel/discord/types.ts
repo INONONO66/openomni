@@ -29,6 +29,11 @@ export interface DiscordMessage {
   author: DiscordUser;
   content: string;
   mentions?: DiscordUser[];
+  message_reference?: {
+    message_id?: string;
+    channel_id?: string;
+    guild_id?: string;
+  };
 }
 
 export interface GatewayPayload {

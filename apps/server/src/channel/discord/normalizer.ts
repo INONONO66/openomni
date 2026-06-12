@@ -41,6 +41,9 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
         id: message.author.id,
         name: message.author.username,
       },
+      ...(message.message_reference?.message_id
+        ? { replyToId: message.message_reference.message_id }
+        : {}),
       raw: message,
     };
   }

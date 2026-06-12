@@ -22,6 +22,7 @@ import {
   IngressHandlers,
   ResidentRuntime,
   SystemToolProvider,
+  createDefaultDispatchRuntime,
   resolveCategory,
   type DispatchHandler,
 } from "@openomni/openomni";
@@ -95,6 +96,7 @@ function createRoutingHandler(
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
+  dispatchRuntime?: Pick<DispatchRuntime, "submit">,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
@@ -103,6 +105,7 @@ function createRoutingHandler(
     customProvider,
     defaultModel,
     workspaceRoot,
+    dispatchRuntime,
   });
 }
 
@@ -328,6 +331,13 @@ export async function main(): Promise<void> {
       ...(model ? { defaultModel: { provider: model.providerID, id: model.id } } : {}),
     },
   });
+  const channelDispatchRuntime = createDefaultDispatchRuntime({
+    owners: {
+      coordinator,
+      residentRuntime,
+      ...(model ? { defaultModel: { provider: model.providerID, id: model.id } } : {}),
+    },
+  });
   IngressEngine.setAgentResolver({
     resolve: async (agentName, event) =>
       buildAgentDef(agentName, {
@@ -349,6 +359,7 @@ export async function main(): Promise<void> {
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
+        channelDispatchRuntime,
       )
     : undefined;
 

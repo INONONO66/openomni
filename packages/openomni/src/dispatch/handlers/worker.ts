@@ -140,7 +140,10 @@ async function createWorkItem(
 
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
-): Record<"worker.spawn" | "worker.send" | "worker.resume" | "worker.cancel", DispatchHandler> {
+): Record<
+  "worker.spawn" | "worker.send" | "worker.resume" | "worker.cancel" | "actor.reply",
+  DispatchHandler
+> {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   return {
     async "worker.spawn"(command) {
@@ -211,6 +214,22 @@ export function createWorkerDispatchHandlers(
       if (!runId) throw new Error("worker.cancel requires target.runId or target.id");
       const result = await coordinator.cancelRun(runId);
       return { output: { cancelled: true, runId, result } };
+    },
+
+    async "actor.reply"(command) {
+      const coordinator = requireCoordinator(options.coordinator);
+      if (!coordinator.deliverMessage) {
+        throw new Error("dispatch actor.reply requires coordinator.deliverMessage owner");
+      }
+      const sessionId = command.target.sessionId ?? command.sessionId;
+      if (!sessionId) throw new Error("actor.reply requires target.sessionId");
+      const runId = targetRunId(command);
+      const result = await coordinator.deliverMessage(
+        sessionId,
+        extractText(command.payload),
+        runId,
+      );
+      return { output: { delivered: true, sessionId, runId, result } };
     },
   };
 }

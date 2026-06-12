@@ -39,6 +39,9 @@ export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
         id: String(userId),
         name: message.from?.username ?? message.from?.first_name,
       },
+      ...(message.reply_to_message
+        ? { replyToId: String(message.reply_to_message.message_id) }
+        : {}),
       raw: message,
     };
   }
