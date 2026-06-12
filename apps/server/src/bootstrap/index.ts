@@ -393,6 +393,10 @@ export async function main(): Promise<void> {
     });
   }
 
+  const traceId = crypto.randomUUID();
+  const mode = "coordinator";
+  await runRecovery(routingHandler, coordinator, traceId);
+
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,
   });
@@ -438,9 +442,6 @@ export async function main(): Promise<void> {
     msg: `server websocket endpoint ready at ws://${config.server.host}:${server.port}/ws`,
   });
 
-  const traceId = crypto.randomUUID();
-  const mode = "coordinator";
-  await runRecovery(routingHandler, coordinator, traceId);
   const cronRunner = CronJobRunner.start({
     fire: async (job) => {
       await CronAdapter.fire(job);

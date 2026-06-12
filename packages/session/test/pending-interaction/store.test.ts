@@ -154,6 +154,36 @@ describe("PendingInteractionStore", () => {
     ).toHaveLength(0);
   });
 
+  test("cleanupExpired expires stale open, resolved, and follow-up records", async () => {
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+    const cleanupAt = Date.now() + 101;
+    const sessionId = await createWorkerRun("run-1");
+    createPendingInteraction("pi-expired-open-cleanup", sessionId, cleanupAt - 1);
+    createPendingInteraction("pi-active-open-cleanup", sessionId, cleanupAt + 1);
+    createPendingInteraction("pi-expired-resolved-cleanup", sessionId);
+    PendingInteractionStore.resolve("pi-expired-resolved-cleanup", { resolvedAt: cleanupAt - 101 });
+    createPendingInteraction("pi-expired-follow-up-cleanup", sessionId);
+    PendingInteractionStore.resolve("pi-expired-follow-up-cleanup", {
+      resolvedAt: cleanupAt - 101,
+    });
+    PendingInteractionStore.markFollowUp("pi-expired-follow-up-cleanup");
+
+    const expired = PendingInteractionStore.cleanupExpired(cleanupAt);
+    await flushBus();
+
+    expect(expired.map((record) => record.id).sort()).toEqual([
+      "pi-expired-follow-up-cleanup",
+      "pi-expired-open-cleanup",
+      "pi-expired-resolved-cleanup",
+    ]);
+    expect(PendingInteractionStore.get("pi-expired-follow-up-cleanup")?.status).toBe("expired");
+    expect(PendingInteractionStore.get("pi-expired-open-cleanup")?.status).toBe("expired");
+    expect(PendingInteractionStore.get("pi-expired-resolved-cleanup")?.status).toBe("expired");
+    expect(PendingInteractionStore.get("pi-active-open-cleanup")?.status).toBe("open");
+    expect(events.filter((event) => event === "pending_interaction.expired")).toHaveLength(3);
+  });
+
   test("terminal transitions are idempotent and stop correlation matches", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));

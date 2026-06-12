@@ -1,6 +1,6 @@
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Bus, PendingInteractionStore } from "@openomni/session";
 import { recoverInterruptedMessages, type RecoveryItem } from "../recovery";
 
 async function processRetryQueue(
@@ -23,12 +23,13 @@ async function processRetryQueue(
         sender: { id: "recovery", name: "recovery" },
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       Bus.publish(Operational.Error, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "server",
         msg: `recovery retry failed for ${item.messageId}`,
-        context: { err: String(err) },
+        context: { err: message },
       });
     }
   }
@@ -58,6 +59,15 @@ export async function runRecovery(
   try {
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
     sessionsRecovered = typeof recoveryResult === "number" ? recoveryResult : 0;
+    const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
+    if (expiredPendingInteractions.length > 0) {
+      Bus.publish(Operational.Info, {
+        traceId: id,
+        time: Date.now(),
+        component: "server",
+        msg: `recovery expired ${expiredPendingInteractions.length} pending interaction(s)`,
+      });
+    }
 
     const retryQueue = await recoverInterruptedMessages();
     if (handler && retryQueue.length > 0) {
