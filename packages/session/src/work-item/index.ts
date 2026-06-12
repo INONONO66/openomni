@@ -288,10 +288,27 @@ export namespace WorkItemStore {
       changedFields: ["evidence"],
       updated: {
         ...existing,
-        evidence: [...existing.evidence, { id: crypto.randomUUID(), ...evidence, createdAt: now }],
+        evidence: [
+          ...existing.evidence,
+          WorkItem.Evidence.parse({ id: crypto.randomUUID(), ...evidence, createdAt: now }),
+        ],
         timestamps: { ...existing.timestamps, updated: now },
       },
     }));
+  }
+
+  export async function addReadBackEvidence(
+    hash: string,
+    check: WorkItem.ReadBackCheck,
+  ): Promise<WorkItem.Info | undefined> {
+    const readBack = WorkItem.ReadBackCheck.parse(check);
+    return addEvidence(hash, {
+      kind: "verification",
+      description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
+      passed: readBack.passed,
+      detail: JSON.stringify(readBack),
+      readBack,
+    });
   }
 
   export async function setVerificationGate(

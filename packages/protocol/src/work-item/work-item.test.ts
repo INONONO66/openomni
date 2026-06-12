@@ -55,6 +55,23 @@ describe("WorkItem.Info", () => {
       maxAttempts: 2,
       outcome: "adopted",
       completionReport: validCompletionReport,
+      evidence: [
+        {
+          id: "ev_read_back",
+          kind: "verification",
+          description: "Fetched published URL and found expected text.",
+          passed: true,
+          createdAt: 2,
+          readBack: {
+            kind: "url_fetch",
+            target: "https://example.com/post",
+            passed: true,
+            observedAt: 2,
+            statusCode: 200,
+            matchedText: "published headline",
+          },
+        },
+      ],
     });
 
     expect(item.originSessionId).toBe("session_owner");
@@ -64,6 +81,43 @@ describe("WorkItem.Info", () => {
     expect(item.maxAttempts).toBe(2);
     expect(item.outcome).toBe("adopted");
     expect(item.completionReport?.claims[0]?.evidenceIds).toEqual(["ev_test_protocol"]);
+    expect(item.evidence[0]?.readBack?.kind).toBe("url_fetch");
+  });
+
+  test("parses read-back verification check variants", () => {
+    expect(
+      WorkItem.ReadBackCheck.parse({
+        kind: "url_fetch",
+        target: "https://example.com/post",
+        passed: true,
+        observedAt: 2,
+        statusCode: 200,
+        matchedText: "published headline",
+      }),
+    ).toMatchObject({ kind: "url_fetch", passed: true });
+
+    expect(
+      WorkItem.ReadBackCheck.parse({
+        kind: "api_query",
+        target: "calendar:event/123",
+        passed: true,
+        observedAt: 3,
+        method: "GET",
+        statusCode: 200,
+        responseDigest: "sha256:abc123",
+      }),
+    ).toMatchObject({ kind: "api_query", method: "GET" });
+
+    expect(
+      WorkItem.ReadBackCheck.parse({
+        kind: "citation_match",
+        target: "https://example.com/source",
+        passed: true,
+        observedAt: 4,
+        quotedText: "source sentence",
+        matchedText: "source sentence",
+      }),
+    ).toMatchObject({ kind: "citation_match", quotedText: "source sentence" });
   });
 
   test("rejects invalid data", () => {
@@ -103,6 +157,74 @@ describe("WorkItem.Info", () => {
       WorkItem.Info.parse({
         ...baseItem,
         maxAttempts: 0,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.ReadBackCheck.parse({
+        kind: "url_fetch",
+        target: "",
+        passed: true,
+        observedAt: 2,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.ReadBackCheck.parse({
+        kind: "citation_match",
+        target: "https://example.com/source",
+        passed: true,
+        observedAt: 4,
+        statusCode: 404,
+        quotedText: "source sentence",
+        matchedText: "source sentence",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.ReadBackCheck.parse({
+        kind: "citation_match",
+        target: "https://example.com/source",
+        passed: true,
+        observedAt: 4,
+        quotedText: "",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.ReadBackCheck.parse({
+        kind: "url_fetch",
+        target: "https://example.com/post",
+        passed: true,
+        observedAt: 2,
+        statusCode: 404,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.ReadBackCheck.parse({
+        kind: "citation_match",
+        target: "https://example.com/source",
+        passed: true,
+        observedAt: 4,
+        quotedText: "source sentence",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.Evidence.parse({
+        id: "ev_read_back",
+        kind: "verification",
+        description: "read-back result",
+        passed: true,
+        createdAt: 4,
+        readBack: {
+          kind: "url_fetch",
+          target: "https://example.com/post",
+          passed: false,
+          observedAt: 4,
+          statusCode: 404,
+        },
       }),
     ).toThrow();
   });
