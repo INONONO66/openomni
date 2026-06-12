@@ -7,7 +7,7 @@ import {
   type Policy,
   type Subagent,
 } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { ChannelGrantStore, Session, Storage } from "@openomni/session";
 import {
   BackgroundLimitsMiddleware as RootBackgroundLimitsMiddleware,
   BackgroundLimitsPolicy as RootBackgroundLimitsPolicy,
@@ -88,6 +88,17 @@ const stubCoordinator = {
 };
 
 describe("IngressAuthorityMiddleware integration", () => {
+  beforeEach(() => {
+    Storage.reset();
+    Storage.initialize({ dbPath: ":memory:" });
+    ChannelGrantStore.put({
+      id: "grant-test",
+      surface: "test",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
+  });
+
   test("allows user actor to create top-level inbound work", async () => {
     const event = makeInboundEvent({
       meta: { actor: { role: "user" } },
@@ -318,15 +329,16 @@ describe("IngressAuthorityMiddleware integration", () => {
     }
   });
 
-  test("registrations produce all five middleware steps", () => {
+  test("registrations produce all six middleware steps", () => {
     const state = { input: makeInboundEvent(), coordinator: stubCoordinator };
     const regs = IngressAuthorityMiddleware.registrations(state as never);
 
-    expect(regs).toHaveLength(5);
+    expect(regs).toHaveLength(6);
     const names = regs.map((r) => r.name);
     expect(names).toContain("ingress:coordinator-presence");
     expect(names).toContain("ingress:schema-validation");
     expect(names).toContain("ingress:blacklist");
+    expect(names).toContain("ingress:channel-grant");
     expect(names).toContain("ingress:authority");
     expect(names).toContain("ingress:mode-dispatch");
   });
@@ -787,6 +799,12 @@ describe("cross-middleware deny-wins", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
+    ChannelGrantStore.put({
+      id: "grant-test",
+      surface: "test",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
   });
 
   afterEach(() => {

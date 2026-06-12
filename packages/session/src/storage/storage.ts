@@ -68,6 +68,7 @@ export namespace Storage {
     cronJob?: ProtocolStorage.CronJobSubAdapter;
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
+    channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
   }
 }
 

@@ -5,7 +5,7 @@ import {
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
 } from "@openomni/protocol";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Bus, ChannelGrantStore, Session, Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -33,9 +33,21 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  installChannelGrants();
   installResidentRuntime();
   installCoordinator();
 });
+
+function installChannelGrants() {
+  for (const surface of ["slack", "tui", "internal"]) {
+    ChannelGrantStore.put({
+      id: `grant-${surface}`,
+      surface,
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
+  }
+}
 
 function installResidentRuntime() {
   IngressEngine.setResidentRuntime(
@@ -357,6 +369,7 @@ describe("IngressEngine", () => {
     const first = await IngressEngine.ingest(event);
     IngressEngine.reset();
     Storage.initialize({ dbPath: ":memory:" });
+    installChannelGrants();
     installResidentRuntime();
     installCoordinator();
 
@@ -490,6 +503,7 @@ describe("IngressEngine", () => {
       expect(capturedLabels).toEqual([
         { value: "surface.slack", source: "system" },
         { value: "target.resident", source: "system" },
+        { value: "inbound.full_access", source: "system" },
         { value: "actor.user", source: "system" },
       ]);
     });

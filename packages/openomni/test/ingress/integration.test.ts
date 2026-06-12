@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Ingress } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { ChannelGrantStore, Storage } from "@openomni/session";
 import { ZodError } from "zod";
 import {
   defaultRunFn,
@@ -29,6 +29,14 @@ beforeEach(() => {
   mockProviderFromModelsDevModel.mockClear();
   IngressEngine.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  for (const surface of ["slack", "tui"]) {
+    ChannelGrantStore.put({
+      id: `grant-${surface}`,
+      surface,
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
+  }
   IngressEngine.setResidentRuntime(
     ResidentRuntime.create({
       runAgent: async (_config, input) => {
