@@ -32,6 +32,18 @@ function createSessionFixture(id: string): void {
   });
 }
 
+async function expectRejectsWithMessage(operation: () => unknown, message: string): Promise<void> {
+  try {
+    await operation();
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error);
+    if (!(err instanceof Error)) return;
+    expect(err.message).toContain(message);
+    return;
+  }
+  throw new Error(`Expected operation to reject with ${message}`);
+}
+
 describe("built-in dispatch handlers", () => {
   beforeEach(() => {
     Storage.reset();
@@ -97,16 +109,44 @@ describe("built-in dispatch handlers", () => {
       },
     });
 
-    await expect(
-      registry.get("worker.spawn")?.(
-        command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
-      ),
-    ).rejects.toThrow("coordinator unavailable");
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("worker.spawn")?.(
+          command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+        ),
+      "coordinator unavailable",
+    );
 
     const workItems = WorkItemStore.list();
     expect(workItems).toHaveLength(1);
     expect(workItems[0]?.failureReason).toBe("coordinator unavailable");
     expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("failed");
+  });
+
+  test("worker.spawn preserves the coordinator error when recording dispatch failure throws", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            const workItemAdapter = Storage.getAdapter().workItem;
+            if (!workItemAdapter) throw new Error("missing work item adapter");
+            workItemAdapter.set = () => {
+              throw new Error("work item write failed");
+            };
+            throw new Error("coordinator unavailable");
+          },
+        },
+      },
+    });
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("worker.spawn")?.(
+          command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+        ),
+      "coordinator unavailable",
+    );
   });
 
   test("worker.spawn marks the work item failed when coordinator returns failed", async () => {
@@ -392,10 +432,12 @@ describe("built-in dispatch handlers", () => {
       },
     });
 
-    await expect(
-      registry.get("resident.ask")?.(
-        command("resident.ask", { kind: "worker", sessionId: "worker-session" }, "question"),
-      ),
-    ).rejects.toThrow("resident.ask requires resident target");
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("resident.ask")?.(
+          command("resident.ask", { kind: "worker", sessionId: "worker-session" }, "question"),
+        ),
+      "resident.ask requires resident target",
+    );
   });
 });

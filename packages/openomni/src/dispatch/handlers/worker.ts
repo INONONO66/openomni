@@ -81,6 +81,17 @@ async function reflectCoordinatorResult(
   }
 }
 
+async function markWorkItemFailedAfterDispatchThrow(
+  workItemHash: string,
+  err: unknown,
+): Promise<void> {
+  try {
+    await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+  } catch {
+    return;
+  }
+}
+
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
 ): Record<"worker.spawn" | "worker.send" | "worker.resume" | "worker.cancel", DispatchHandler> {
@@ -94,7 +105,7 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
-        await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+        await markWorkItemFailedAfterDispatchThrow(workItemHash, err);
         throw err;
       }
       await reflectCoordinatorResult(workItemHash, result);
