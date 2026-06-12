@@ -275,6 +275,17 @@ export namespace WorkItem {
       }),
     );
 
+    export const OutcomeRecorded = BusEvent.define(
+      "work_item.outcome_recorded",
+      BaseEvent.extend({
+        payload: z.object({
+          hash: z.string(),
+          outcome: Outcome,
+          sessionId: z.string().optional(),
+        }),
+      }),
+    );
+
     export const Removed = BusEvent.define(
       "work_item.removed",
       BaseEvent.extend({
