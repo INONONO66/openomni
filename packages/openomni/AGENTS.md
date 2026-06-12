@@ -7,6 +7,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/agents/` | Built-in agent definitions and model-specific prompt variants | `ResidentAgent` |
+| `src/app-connector/` | Built-in declarative connector definitions for installed local CLI apps | `BuiltInAppConnectors` |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/profile/` | Agent profile middleware (soul/user/memory from `~/.openomni/profiles/`) | `Profile` |
 | `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
@@ -18,6 +19,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 ## Architecture
 
 - `src/agents/` contains built-in agent definitions. `src/agents/resident/prompt/` holds the Resident system prompt with model-specific variants (Claude, GPT) and a shared builder. `ResidentAgent.getPrompt({ model })` selects the right variant by provider.
+- `src/app-connector/` contains declarative installed-app connector definitions. Runtime install, consent, process execution, and log ingestion stay out of the definitions.
 - `src/dag/` is structural only — it knows step topology, not runtime state.
 - `src/profile/` loads `SOUL.md`, `USER.md`, and `MEMORY.md` from the file system and injects them as `context.prepare` policy effects before agent execution.
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
@@ -34,6 +36,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 
 ```
 agents/             → @openomni/protocol (Model.Ref only)
+app-connector/      → @openomni/protocol (AppConnector.Definition only)
 dag/                → no internal deps
 profile/            → @openomni/session + @openomni/agent + @openomni/protocol
 resident/           → @openomni/session + @openomni/agent + @openomni/llm
@@ -50,6 +53,7 @@ subagent/           → execution-runtime/ (uses @openomni/agent + @openomni/ses
 Consumers should only use `@openomni/openomni` exports:
 
 - Resident agent prompts from `src/agents/`
+- Built-in installed-app connector definitions from `src/app-connector/`
 - DAG helpers from `src/dag/`
 - Profile middleware from `src/profile/`
 - Resident runtime from `src/resident/`
