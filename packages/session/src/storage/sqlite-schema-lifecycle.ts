@@ -13,6 +13,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0006_actor_registry/migration.sql" },
   { name: "0007_blacklist/migration.sql" },
   { name: "0008_channel_grant/migration.sql" },
+  { name: "0009_pending_interaction/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -22,6 +23,7 @@ const CLEAR_ORDER = [
   "actor_endpoint",
   "actor_identity",
   "cron_job",
+  "pending_interaction",
   "worker_grant",
   "pending_ask",
   "worker_run_state",

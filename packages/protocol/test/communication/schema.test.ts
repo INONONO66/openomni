@@ -39,6 +39,26 @@ describe("Communication protocol schemas", () => {
     expect(parsed.correlation.threadId).toBe("t-1");
   });
 
+  test("PendingInteraction captures worker-owned reply routing state", () => {
+    const parsed = Communication.PendingInteraction.Record.parse({
+      id: "pi-1",
+      workerRunId: "run-1",
+      sessionId: "session-1",
+      endpointId: "telegram:seller-1",
+      channelId: "telegram:dm",
+      correlation: { replyToMessageId: "m-1", tokenHash: "tok-1" },
+      allowedActions: ["report_result", "ask_clarification"],
+      status: "open",
+      createdAt: 1,
+      updatedAt: 1,
+      expiresAt: 100,
+      followUpWindow: 60,
+    });
+
+    expect(parsed.allowedActions).toEqual(["report_result", "ask_clarification"]);
+    expect(parsed.correlation.replyToMessageId).toBe("m-1");
+  });
+
   test("WorkerGrant defaults external task creation to false", () => {
     const parsed = Communication.WorkerGrant.Record.parse({
       id: "grant-1",

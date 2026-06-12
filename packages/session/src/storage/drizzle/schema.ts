@@ -141,6 +141,44 @@ export const pendingAskTable = sqliteTable(
   ],
 );
 
+export const pendingInteractionTable = sqliteTable(
+  "pending_interaction",
+  {
+    id: text("id").primaryKey(),
+    worker_run_id: text("worker_run_id")
+      .notNull()
+      .references(() => workerRunStateTable.run_id, { onDelete: "cascade" }),
+    session_id: text("session_id")
+      .notNull()
+      .references(() => sessionTable.id, { onDelete: "cascade" }),
+    data: text("data").notNull(),
+    status: text("status").notNull(),
+    endpoint_id: text("endpoint_id").notNull(),
+    channel_id: text("channel_id").notNull(),
+    reply_to_message_id: text("reply_to_message_id"),
+    thread_id: text("thread_id"),
+    token_hash: text("token_hash"),
+    external_conversation_id: text("external_conversation_id"),
+    expires_at: integer("expires_at").notNull(),
+    follow_up_until: integer("follow_up_until"),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+  },
+  (t) => [
+    index("idx_pending_interaction_status").on(t.status),
+    index("idx_pending_interaction_worker").on(t.worker_run_id, t.time_created),
+    index("idx_pending_interaction_session").on(t.session_id, t.time_created),
+    index("idx_pending_interaction_correlation").on(
+      t.endpoint_id,
+      t.channel_id,
+      t.reply_to_message_id,
+      t.thread_id,
+    ),
+    index("idx_pending_interaction_token_hash").on(t.token_hash),
+    index("idx_pending_interaction_external_conversation").on(t.external_conversation_id),
+  ],
+);
+
 export const workerGrantTable = sqliteTable(
   "worker_grant",
   {
