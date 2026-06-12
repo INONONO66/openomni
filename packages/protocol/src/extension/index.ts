@@ -5,6 +5,7 @@ import { Skill } from "../skill/index.js";
 import { McpConfig } from "../mcp/index.js";
 import { Policy } from "../policy/index.js";
 import { BusEvent } from "../bus/index.js";
+import { AppConnector } from "../app-connector/index.js";
 
 export namespace Extension {
   export const LifecycleState = z.enum([
@@ -33,6 +34,7 @@ export namespace Extension {
     mcpServers: z.array(McpConfig.ServerConfig).optional(),
     middlewares: z.array(Policy.Definition).optional(),
     surfaces: z.array(SurfaceBinding).optional(),
+    appConnectors: z.array(AppConnector.Definition).optional(),
   });
   export type Contributes = z.infer<typeof Contributes>;
 
