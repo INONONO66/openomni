@@ -10,7 +10,12 @@ const MAX_READ_BACK_BODY_BYTES = 1_000_000;
 const HttpMethod = z.enum(["GET", "HEAD"]);
 const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
 const TimeoutMs = z.number().int().positive().max(MAX_READ_BACK_TIMEOUT_MS).optional();
-const MaxBodyBytes = z.number().int().positive().max(MAX_READ_BACK_BODY_BYTES).optional();
+const MaxBodyBytes = z
+  .number()
+  .int()
+  .positive()
+  .max(MAX_READ_BACK_BODY_BYTES)
+  .default(MAX_READ_BACK_BODY_BYTES);
 const ReadBackRequest = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("url_fetch"),
@@ -181,6 +186,7 @@ async function prepareCompletionReport(
       applySharedDeadline(readBack.request, remainingMs),
       options.readBack,
     );
+    if (deadlineAt - now() <= 0) throw new Error("read-back envelope deadline exceeded");
     const evidenceId = updated?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("read-back evidence was not recorded");
     const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];

@@ -104,6 +104,7 @@ describe("worker completion read-back deadline", () => {
         async readBackRecorder(hash, request) {
           if (request.kind !== "citation_match") throw new Error("unexpected read-back kind");
           expect(request.timeoutMs).toBe(1);
+          expect(request.maxBodyBytes).toBe(1_000_000);
           return WorkItemStore.addReadBackEvidence(hash, {
             kind: "citation_match",
             target: request.target,
