@@ -1,4 +1,5 @@
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
+import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
 import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";
@@ -8,6 +9,8 @@ import { createWorkerDispatchHandlers } from "./handlers/worker.js";
 
 export interface BuiltInDispatchOptions {
   readonly owners?: DispatchOwners;
+  readonly readBack?: ReadBackExecutor.Options;
+  readonly readBackEnvelopeTimeoutMs?: number;
 }
 
 export function registerBuiltInDispatchHandlers(
@@ -24,6 +27,8 @@ export function registerBuiltInDispatchHandlers(
     ...createWorkerDispatchHandlers({
       coordinator: owners.coordinator,
       defaultModel: owners.defaultModel,
+      readBack: options.readBack,
+      readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
     }),
     ...createScheduleDispatchHandlers({ scheduler }),
   };
@@ -41,6 +46,10 @@ export function createDefaultDispatchRuntime(
   options: DefaultDispatchRuntimeOptions = {},
 ): DispatchRuntime {
   const runtime = new DispatchRuntime(options);
-  registerBuiltInDispatchHandlers(runtime.registry, { owners: options.owners });
+  registerBuiltInDispatchHandlers(runtime.registry, {
+    owners: options.owners,
+    readBack: options.readBack,
+    readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+  });
   return runtime;
 }
