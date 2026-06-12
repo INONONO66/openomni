@@ -67,17 +67,26 @@ export namespace Storage {
     workerGrant?: ProtocolStorage.WorkerGrantSubAdapter;
     cronJob?: ProtocolStorage.CronJobSubAdapter;
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
+    blacklist?: ProtocolStorage.BlacklistSubAdapter;
   }
 }
 
 export namespace Storage {
   let adapter: Adapter | null = null;
-  export let initializedDbPath: string | null = null;
+  let initializedDbPathValue: string | null = null;
   let warnedOnce = false;
 
   export function configure(newAdapter: Adapter): void {
     adapter = newAdapter;
-    initializedDbPath = "__configured__";
+    initializedDbPathValue = "__configured__";
+  }
+
+  export function getInitializedDbPath(): string | null {
+    return initializedDbPathValue;
+  }
+
+  export function setInitializedDbPath(dbPath: string | null): void {
+    initializedDbPathValue = dbPath;
   }
 
   export function get(): Adapter {
@@ -99,7 +108,7 @@ export namespace Storage {
 
   export function reset(): void {
     adapter = null;
-    initializedDbPath = null;
+    initializedDbPathValue = null;
     warnedOnce = false;
   }
 }

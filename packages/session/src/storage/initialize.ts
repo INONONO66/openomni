@@ -9,9 +9,10 @@ export interface InitializeOptions {
 
 export function initialize(options?: InitializeOptions): void {
   const dbPath = options?.dbPath ?? process.env.OPENOMNI_DB_PATH ?? ":memory:";
+  const initializedDbPath = Storage.getInitializedDbPath();
 
-  if (Storage.initializedDbPath !== null && Storage.initializedDbPath !== "__configured__") {
-    if (Storage.initializedDbPath === dbPath) return;
+  if (initializedDbPath !== null && initializedDbPath !== "__configured__") {
+    if (initializedDbPath === dbPath) return;
     throw new Error(
       "Storage already initialized with a different dbPath. Call Storage.reset() first.",
     );
@@ -21,7 +22,7 @@ export function initialize(options?: InitializeOptions): void {
     mkdirSync(dirname(dbPath), { recursive: true });
   }
   Storage.configure(new SqliteStorageAdapter(dbPath));
-  Storage.initializedDbPath = dbPath;
+  Storage.setInitializedDbPath(dbPath);
 }
 
 declare module "./storage" {

@@ -8,6 +8,7 @@ export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
 export { SurfaceKey } from "./surface-key";
 export { Artifact } from "./artifact/index";
 export { ActorRegistry } from "./actor/index.js";
+export { BlacklistStore } from "./blacklist/index.js";
 export * from "./worker-run/index.js";
 export { WorkerRunStateStore } from "./worker-run/state-store.js";
 export { TraceContext } from "./trace/index.js";

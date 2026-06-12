@@ -4,7 +4,7 @@ import { Bus, Storage } from "@openomni/session";
 const jobs = new Map<string, CronJob.Info>();
 
 function adapter() {
-  if (Storage.initializedDbPath === null) return undefined;
+  if (Storage.getInitializedDbPath() === null) return undefined;
   return Storage.get().cronJob;
 }
 

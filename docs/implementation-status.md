@@ -15,7 +15,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | `ActorResolver` / `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` | ✅ | `packages/protocol/src/actor/`, `packages/session/src/actor/`, `packages/openomni/src/ingress/actor-resolver.ts` | Canonical actor identity + endpoint schemas, SQLite-backed registry, and ingress resolution for registered `(channel, workspace, externalId)` endpoints are wired, where `channel` is the platform/surface identifier. Unregistered endpoints are sanitized back to legacy `id`/`role`; ChannelGrant and TrustTier evaluation remain pending below |
 | DispatchRuntime (policy authorize → handler routing) | ✅ | `packages/openomni/src/dispatch/runtime.ts` | Actions: `resident.ask`, `worker.spawn/send/resume/cancel`, `schedule.create/cancel` |
 | WorkerGrant evaluation | ✅ | `packages/openomni/src/dispatch/policy.ts` | The only authority axis currently evaluated |
-| Blacklist | 📋 | — | Checked nowhere |
+| Blacklist | ✅ | `packages/protocol/src/actor/`, `packages/session/src/blacklist/`, `packages/openomni/src/ingress/middleware/ingress-authority.ts`, `packages/openomni/src/dispatch/policy.ts` | Actor/endpoint/channel/pattern blacklist entries are schema-backed, persisted in SQLite, and checked as an absolute deny gate on both inbound ingress and dispatch authorization. PendingInteraction, ChannelGrant, and TrustTier evaluation remain pending below |
 | ChannelGrant (+ inbound treatment ceiling) | 📋 | — | |
 | `TrustTier` enum + evaluation | 📋 | — | Loose string field on `Dispatch.ActorContext`; never evaluated. Ingress authority still string-matches roles |
 | `effectiveAuthority` (5-axis intersection) | 📋 | — | |

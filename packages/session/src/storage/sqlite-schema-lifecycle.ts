@@ -11,10 +11,12 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0004_cron_job/migration.sql" },
   { name: "0005_worker_run_executor_kind/migration.sql" },
   { name: "0006_actor_registry/migration.sql" },
+  { name: "0007_blacklist/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
   "event_chain",
+  "blacklist",
   "actor_endpoint",
   "actor_identity",
   "cron_job",
