@@ -172,7 +172,7 @@ Eight categories. Each answers a different question — do not mix them.
 | `SessionOrigin` | How the session was initiated. |
 | `SessionPurpose` | `user_conversation / worker_interaction / self_loop`. |
 | `WorkerRun` | Durable execution record of a delegated task. |
-| `executorKind` | `internal_chat_agent / external_api / a2a / human_channel`. |
+| `executorKind` | `internal_chat_agent / local_cli_agent / external_api / a2a / human_channel`. |
 | `ChatAgent` | LLM-driven execution loop. |
 | `SubagentRuntime` | Session-locked spawn / send / resume / cancel / wait. |
 

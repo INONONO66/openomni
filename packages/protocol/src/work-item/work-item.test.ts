@@ -24,6 +24,18 @@ const baseItem = {
   changedFiles: [],
 };
 
+const validCompletionReport = {
+  summary: "Implemented the requested schema delta.",
+  claims: [
+    {
+      statement: "Focused protocol tests passed.",
+      evidenceIds: ["ev_test_protocol"],
+    },
+  ],
+  caveats: ["Runtime evidence gate remains pending."],
+  followUps: ["Wire completion-report verification gate."],
+};
+
 describe("WorkItem.Info", () => {
   test("parses valid data", () => {
     const item = WorkItem.Info.parse(baseItem);
@@ -33,6 +45,27 @@ describe("WorkItem.Info", () => {
     expect(item.relations.dependsOn).toEqual([]);
   });
 
+  test("parses ADR-011 ledger routing, completion report, retry, and outcome fields", () => {
+    const item = WorkItem.Info.parse({
+      ...baseItem,
+      originSessionId: "session_owner",
+      workSessionId: "session_worker",
+      workerRunId: "wr_1",
+      executorKind: "local_cli_agent",
+      maxAttempts: 2,
+      outcome: "adopted",
+      completionReport: validCompletionReport,
+    });
+
+    expect(item.originSessionId).toBe("session_owner");
+    expect(item.workSessionId).toBe("session_worker");
+    expect(item.workerRunId).toBe("wr_1");
+    expect(item.executorKind).toBe("local_cli_agent");
+    expect(item.maxAttempts).toBe(2);
+    expect(item.outcome).toBe("adopted");
+    expect(item.completionReport?.claims[0]?.evidenceIds).toEqual(["ev_test_protocol"]);
+  });
+
   test("rejects invalid data", () => {
     expect(() =>
       WorkItem.Info.parse({
@@ -40,6 +73,125 @@ describe("WorkItem.Info", () => {
         sourceMessageId: undefined,
       }),
     ).toThrow();
+  });
+
+  test("rejects invalid ADR-011 schema delta values", () => {
+    for (const field of ["originSessionId", "workSessionId", "workerRunId"] as const) {
+      expect(() =>
+        WorkItem.Info.parse({
+          ...baseItem,
+          [field]: "",
+        }),
+      ).toThrow();
+    }
+
+    expect(() =>
+      WorkItem.Info.parse({
+        ...baseItem,
+        executorKind: "spreadsheet_macro",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.Info.parse({
+        ...baseItem,
+        outcome: "self_reported_success",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.Info.parse({
+        ...baseItem,
+        maxAttempts: 0,
+      }),
+    ).toThrow();
+  });
+
+  test("rejects invalid completion report constraints", () => {
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        summary: "",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        claims: [],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        caveats: [""],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        followUps: [""],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        claims: [
+          {
+            statement: "",
+            evidenceIds: ["ev_test_protocol"],
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        claims: [
+          {
+            statement: "Tests passed.",
+            evidenceIds: [],
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      WorkItem.CompletionReport.parse({
+        ...validCompletionReport,
+        claims: [
+          {
+            statement: "Tests passed.",
+            evidenceIds: [""],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  test("parses all executorKind and outcome literals", () => {
+    const executorKinds = [
+      "internal_chat_agent",
+      "local_cli_agent",
+      "external_api",
+      "a2a",
+      "human_channel",
+    ] as const;
+    const outcomes = ["adopted", "corrected", "redone", "ignored"] as const;
+
+    for (const executorKind of executorKinds) {
+      expect(WorkItem.ExecutorKind.parse(executorKind)).toBe(executorKind);
+    }
+    for (const outcome of outcomes) {
+      expect(WorkItem.Outcome.parse(outcome)).toBe(outcome);
+    }
+
+    expect(() => WorkItem.ExecutorKind.parse("spreadsheet_macro")).toThrow();
+    expect(() => WorkItem.Outcome.parse("self_reported_success")).toThrow();
   });
 });
 
