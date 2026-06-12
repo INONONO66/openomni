@@ -51,8 +51,12 @@ export namespace Storage {
     removeIdentity(id: string): boolean;
     getEndpoint(id: string): Actor.Endpoint | undefined;
     setEndpoint(endpoint: Actor.Endpoint): void;
-    findEndpoint(channel: string, externalId: string): Actor.Endpoint | undefined;
-    listEndpoints(actorId?: string): Actor.Endpoint[];
+    findEndpoint(
+      channel: string,
+      externalId: string,
+      workspace: string | undefined,
+    ): Actor.Endpoint | undefined;
+    listEndpoints(actorId?: string, workspace?: string): Actor.Endpoint[];
     removeEndpoint(id: string): boolean;
   }
 }

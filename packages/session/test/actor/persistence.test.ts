@@ -33,11 +33,12 @@ describe("ActorRegistry SQLite persistence", () => {
       actorId: "act_owner",
       channel: "discord",
       externalId: "user-1",
+      workspace: "guild",
     });
 
     // When
     Storage.configure(new SqliteStorageAdapter(dbPath));
-    const resolved = ActorRegistry.resolveEndpoint("discord", "user-1");
+    const resolved = ActorRegistry.resolveEndpoint("discord", "user-1", "guild");
 
     // Then
     expect(resolved?.identity.id).toBe("act_owner");
@@ -114,6 +115,7 @@ describe("ActorRegistry SQLite persistence", () => {
       actorId: "act_owner",
       channel: "discord",
       externalId: "user-1",
+      workspace: "guild",
     });
 
     // When / Then
@@ -123,8 +125,50 @@ describe("ActorRegistry SQLite persistence", () => {
         actorId: "act_owner",
         channel: "discord",
         externalId: "user-1",
+        workspace: "guild",
       }),
-    ).toThrow("Actor endpoint already registered for discord:user-1");
+    ).toThrow("Actor endpoint already registered for discord:guild:user-1");
+  });
+
+  test("allows the same endpoint address in different workspaces", () => {
+    // Given
+    ActorRegistry.registerIdentity({
+      id: "act_owner",
+      kind: "human",
+      trustTier: "owner",
+      relationship: "owner",
+    });
+    ActorRegistry.registerIdentity({
+      id: "act_collaborator",
+      kind: "human",
+      trustTier: "collaborator",
+      relationship: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep_discord_user_1_guild_a",
+      actorId: "act_owner",
+      channel: "discord",
+      externalId: "user-1",
+      workspace: "guild-a",
+    });
+
+    // When
+    ActorRegistry.registerEndpoint({
+      id: "ep_discord_user_1_guild_b",
+      actorId: "act_collaborator",
+      channel: "discord",
+      externalId: "user-1",
+      workspace: "guild-b",
+    });
+
+    // Then
+    expect(ActorRegistry.resolveEndpoint("discord", "user-1", "guild-a")?.identity.id).toBe(
+      "act_owner",
+    );
+    expect(ActorRegistry.resolveEndpoint("discord", "user-1", "guild-b")?.identity.id).toBe(
+      "act_collaborator",
+    );
+    expect(ActorRegistry.resolveEndpoint("discord", "user-1", "guild-c")).toBeUndefined();
   });
 
   test("removing an identity removes its endpoints through SQLite cascade", () => {
@@ -140,6 +184,7 @@ describe("ActorRegistry SQLite persistence", () => {
       actorId: "act_owner",
       channel: "discord",
       externalId: "user-1",
+      workspace: "guild",
     });
 
     // When
@@ -147,6 +192,6 @@ describe("ActorRegistry SQLite persistence", () => {
 
     // Then
     expect(ActorRegistry.getEndpoint("ep_discord_user_1")).toBeUndefined();
-    expect(ActorRegistry.resolveEndpoint("discord", "user-1")).toBeUndefined();
+    expect(ActorRegistry.resolveEndpoint("discord", "user-1", "guild")).toBeUndefined();
   });
 });

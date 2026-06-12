@@ -74,7 +74,8 @@ export function captureActorPolicy(
     timing: "inbound.receive",
     priority: 0,
     fn: (ctx: PolicyContext) => {
-      onActor(IngressNamespace.ActorSchema.parse(ctx.toolInput?.actor));
+      const actor = ctx.toolInput?.actor;
+      onActor(actor === undefined ? undefined : IngressNamespace.ActorSchema.parse(actor));
       return ProtocolPolicyDecision.allow({
         policyId: "test.capture-actor",
         reasonCodes: ["captured"],

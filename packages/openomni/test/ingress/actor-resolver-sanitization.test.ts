@@ -73,7 +73,7 @@ describe("Ingress actor resolver sanitization", () => {
 
   it("does not resolve actor identity from legacy actor id when userId is absent", async () => {
     // Given
-    registerOwnerEndpoint();
+    registerOwnerEndpoint("guild");
     const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
     engine.registerIngressPolicy(
@@ -103,7 +103,7 @@ describe("Ingress actor resolver sanitization", () => {
 
   it("does not resolve same external id from a different surface", async () => {
     // Given
-    registerOwnerEndpoint();
+    registerOwnerEndpoint("guild");
     const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
     engine.registerIngressPolicy(

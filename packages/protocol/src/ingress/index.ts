@@ -156,7 +156,9 @@ export namespace Ingress {
     DirectEventSchema,
     InternalEventSchema,
   ]);
+  export const ExternalInboundEventSchema = DirectEventSchema;
   export type InboundEvent = DirectEvent | InternalEvent;
+  export type ExternalInboundEvent = DirectEvent;
   export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
   export type DirectResult = {

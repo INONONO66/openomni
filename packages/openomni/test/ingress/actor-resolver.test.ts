@@ -26,7 +26,7 @@ setupIngressActorResolverTest();
 describe("Ingress actor resolver", () => {
   it("adds canonical actor fields for registered endpoints before inbound policies", async () => {
     // Given
-    registerOwnerEndpoint();
+    registerOwnerEndpoint("guild");
     const engine = getIngressEngine();
     let capturedActor: Ingress.Actor | undefined;
     engine.registerIngressPolicy(
@@ -39,8 +39,8 @@ describe("Ingress actor resolver", () => {
     // When
     await engine.ingest(
       makeEvent("user-1", {
-        role: "user",
         id: "user-1",
+        role: "manager",
         type: "system",
         trusted: true,
         isTrustedManager: true,
@@ -64,7 +64,7 @@ describe("Ingress actor resolver", () => {
 
   it("projects the resolved actor after inbound policy evaluation", async () => {
     // Given
-    registerOwnerEndpoint();
+    registerOwnerEndpoint("guild");
     const engine = getIngressEngine();
     let projectedActor: Ingress.Actor | undefined;
     const unobserve = Bus.observe((event, data) => {

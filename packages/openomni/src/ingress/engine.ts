@@ -1,5 +1,6 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import {
+  Ingress as IngressNamespace,
   type Ingress,
   type Policy,
   IngressEvent,
@@ -81,12 +82,9 @@ export namespace IngressEngine {
     _ingressPolicies.push(reg);
   }
 
-  export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
-    if ((event as { mode: string }).mode === "internal") {
-      throw new Error("internal mode not allowed on external ingress path");
-    }
-
-    const resolvedActorEvent = resolveIngressActor(event);
+  export async function ingest(event: unknown): Promise<Ingress.IngressResult> {
+    const externalEvent = IngressNamespace.DirectEventSchema.parse(event);
+    const resolvedActorEvent = resolveIngressActor(externalEvent);
     const trace = TraceContext.create();
     const preRun = await IngressAuthorityMiddleware.runPreRun({
       event: resolvedActorEvent,
@@ -94,10 +92,6 @@ export namespace IngressEngine {
       traceContext: trace,
       onDecision: _middlewareDecisionObserver,
     });
-
-    if ((preRun.event as { mode: string }).mode !== "direct") {
-      throw new Error("internal mode not allowed on external ingress path");
-    }
 
     const inboundEvent = preRun.event as Ingress.ResolvedInboundEvent;
     return ingestResolved(inboundEvent, trace, preRun.coordinator);

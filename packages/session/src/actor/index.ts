@@ -46,10 +46,14 @@ export namespace ActorRegistry {
     if (!adapter.getIdentity(endpoint.actorId)) {
       throw new Error(`Actor identity not found: ${endpoint.actorId}`);
     }
-    const existingForAddress = adapter.findEndpoint(endpoint.channel, endpoint.externalId);
+    const existingForAddress = adapter.findEndpoint(
+      endpoint.channel,
+      endpoint.externalId,
+      endpoint.workspace,
+    );
     if (existingForAddress && existingForAddress.id !== endpoint.id) {
       throw new Error(
-        `Actor endpoint already registered for ${endpoint.channel}:${endpoint.externalId}`,
+        `Actor endpoint already registered for ${endpoint.channel}:${endpoint.workspace ?? ""}:${endpoint.externalId}`,
       );
     }
     adapter.setEndpoint(endpoint);
@@ -60,16 +64,17 @@ export namespace ActorRegistry {
     return requireAdapter().getEndpoint(id);
   }
 
-  export function listEndpoints(actorId?: string): Endpoint[] {
-    return requireAdapter().listEndpoints(actorId);
+  export function listEndpoints(actorId?: string, workspace?: string): Endpoint[] {
+    return requireAdapter().listEndpoints(actorId, workspace);
   }
 
   export function resolveEndpoint(
     channel: string,
     externalId: string,
+    workspace?: string,
   ): ResolvedEndpoint | undefined {
     const adapter = requireAdapter();
-    const endpoint = adapter.findEndpoint(channel, externalId);
+    const endpoint = adapter.findEndpoint(channel, externalId, workspace);
     if (!endpoint) return undefined;
     const identity = adapter.getIdentity(endpoint.actorId);
     if (!identity) return undefined;

@@ -5,6 +5,10 @@ import { z } from "zod";
 const DataRow = z.object({ data: z.string() });
 const DataRows = z.array(DataRow);
 
+function workspaceKey(workspace: string | undefined): string {
+  return workspace ?? "";
+}
+
 export function createSqliteActorRegistryAdapter(
   db: Database,
 ): ProtocolStorage.ActorRegistrySubAdapter {
@@ -56,12 +60,13 @@ export function createSqliteActorRegistryAdapter(
       const now = Date.now();
       db.query(
         `INSERT INTO actor_endpoint (
-           id, actor_id, data, channel, external_id, time_created, time_updated
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           id, actor_id, data, channel, workspace, external_id, time_created, time_updated
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            actor_id = excluded.actor_id,
            data = excluded.data,
            channel = excluded.channel,
+           workspace = excluded.workspace,
            external_id = excluded.external_id,
            time_updated = excluded.time_updated`,
       ).run(
@@ -69,30 +74,51 @@ export function createSqliteActorRegistryAdapter(
         endpoint.actorId,
         JSON.stringify(endpoint),
         endpoint.channel,
+        workspaceKey(endpoint.workspace),
         endpoint.externalId,
         endpoint.createdAt ?? now,
         endpoint.updatedAt ?? now,
       );
     },
-    findEndpoint(channel, externalId) {
+    findEndpoint(channel, externalId, workspace) {
       const row = DataRow.nullable().parse(
         db
-          .query("SELECT data FROM actor_endpoint WHERE channel = ? AND external_id = ?")
-          .get(channel, externalId),
+          .query(
+            `SELECT data FROM actor_endpoint
+             WHERE channel = ? AND workspace = ? AND external_id = ?`,
+          )
+          .get(channel, workspaceKey(workspace), externalId),
       );
       return row ? Actor.Endpoint.parse(JSON.parse(row.data)) : undefined;
     },
-    listEndpoints(actorId) {
+    listEndpoints(actorId, workspace) {
+      const workspaceFilter = workspaceKey(workspace);
       const rows = DataRows.parse(
-        actorId === undefined
+        actorId === undefined && workspace === undefined
           ? db.query("SELECT data FROM actor_endpoint ORDER BY time_created ASC, id ASC").all()
-          : db
-              .query(
-                `SELECT data FROM actor_endpoint
-                 WHERE actor_id = ?
-                 ORDER BY time_created ASC, id ASC`,
-              )
-              .all(actorId),
+          : actorId === undefined
+            ? db
+                .query(
+                  `SELECT data FROM actor_endpoint
+                   WHERE workspace = ?
+                   ORDER BY time_created ASC, id ASC`,
+                )
+                .all(workspaceFilter)
+            : workspace === undefined
+              ? db
+                  .query(
+                    `SELECT data FROM actor_endpoint
+                     WHERE actor_id = ?
+                     ORDER BY time_created ASC, id ASC`,
+                  )
+                  .all(actorId)
+              : db
+                  .query(
+                    `SELECT data FROM actor_endpoint
+                     WHERE actor_id = ? AND workspace = ?
+                     ORDER BY time_created ASC, id ASC`,
+                  )
+                  .all(actorId, workspaceFilter),
       );
       return rows.map((row) => Actor.Endpoint.parse(JSON.parse(row.data)));
     },

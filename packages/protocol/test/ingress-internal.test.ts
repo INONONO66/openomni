@@ -47,6 +47,18 @@ describe("InternalEventSchema", () => {
     expect(direct.mode).toBe("direct");
   });
 
+  test("external inbound schema rejects internal events", () => {
+    expectParseFailure(() =>
+      Ingress.ExternalInboundEventSchema.parse({
+        id: "t3",
+        surface: "cron",
+        mode: "internal",
+        agentName: "dev",
+        payload: "test",
+      }),
+    );
+  });
+
   test("trigger metadata parses correctly", () => {
     const result = Ingress.InternalEventSchema.parse({
       id: "test-3",

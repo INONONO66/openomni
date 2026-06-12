@@ -25,11 +25,8 @@ export function resolveIngressActor(event: Ingress.InboundEvent): Ingress.Inboun
     };
   }
 
-  const resolved = ActorRegistry.resolveEndpoint(event.surface, externalId);
-  if (
-    !resolved ||
-    (resolved.endpoint.workspace && resolved.endpoint.workspace !== event.workspace)
-  ) {
+  const resolved = ActorRegistry.resolveEndpoint(event.surface, externalId, event.workspace);
+  if (!resolved) {
     return {
       ...event,
       meta: {
@@ -44,7 +41,8 @@ export function resolveIngressActor(event: Ingress.InboundEvent): Ingress.Inboun
     meta: {
       ...event.meta,
       actor: {
-        ...legacyActorFields(event.meta?.actor),
+        id: resolved.endpoint.externalId,
+        role: "user",
         actorId: resolved.identity.id,
         kind: resolved.identity.kind,
         trustTier: resolved.identity.trustTier,

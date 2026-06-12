@@ -42,11 +42,12 @@ const mockAgentDef: Ingress.AgentDef = {
   model: { provider: "anthropic", id: "claude-3-5-sonnet" },
 };
 
-async function catchError(promise: Promise<unknown>): Promise<unknown> {
+async function catchError(promise: Promise<unknown>): Promise<Error | undefined> {
   try {
     await promise;
     return undefined;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
 }
@@ -64,7 +65,7 @@ describe("ingestInternal", () => {
     const error = await catchError(IngressEngine.ingestInternal(event));
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("agent resolver not configured");
+    expect(error?.message).toContain("agent resolver not configured");
   });
 
   it("resolves agent and dispatches via resident runtime", async () => {
@@ -94,13 +95,11 @@ describe("ingest() security", () => {
       mode: "internal",
       agentName: "dev",
       payload: "hack",
-    } as unknown as Ingress.InboundEvent;
+    };
 
     const error = await catchError(IngressEngine.ingest(event));
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain(
-      "internal mode not allowed on external ingress path",
-    );
+    expect(error?.message).toContain("invalid_literal");
   });
 });

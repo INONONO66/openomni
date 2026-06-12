@@ -212,12 +212,13 @@ export const actorEndpointTable = sqliteTable(
       .references(() => actorIdentityTable.id, { onDelete: "cascade" }),
     data: text("data").notNull(),
     channel: text("channel").notNull(),
+    workspace: text("workspace").notNull(),
     external_id: text("external_id").notNull(),
     time_created: integer("time_created").notNull(),
     time_updated: integer("time_updated").notNull(),
   },
   (t) => [
     index("idx_actor_endpoint_actor").on(t.actor_id),
-    uniqueIndex("idx_actor_endpoint_lookup").on(t.channel, t.external_id),
+    uniqueIndex("idx_actor_endpoint_lookup").on(t.channel, t.workspace, t.external_id),
   ],
 );
