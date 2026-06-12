@@ -53,6 +53,7 @@ function originActorKind(actor: Dispatch.ActorContext): "resident" | "worker" | 
 }
 
 function openPendingAsk(command: Dispatch.Command, fallbackSessionId: string): void {
+  const tokenHash = typeof command.correlation === "string" ? command.correlation : undefined;
   PendingAskStore.create({
     id: command.dispatchId,
     originSessionId: command.actor.sessionId ?? command.sessionId ?? fallbackSessionId,
@@ -62,7 +63,7 @@ function openPendingAsk(command: Dispatch.Command, fallbackSessionId: string): v
     originActorKind: originActorKind(command.actor),
     targetKind: "resident",
     ...(command.target.id ? { targetActorId: command.target.id } : {}),
-    correlation: command.correlation ? { tokenHash: command.correlation } : {},
+    correlation: tokenHash ? { tokenHash } : {},
   });
 }
 

@@ -31,6 +31,18 @@ export namespace Dispatch {
     .strict();
   export type Target = z.infer<typeof Target>;
 
+  export const Correlation = z
+    .object({
+      endpointId: z.string().min(1),
+      channelId: z.string().min(1),
+      replyToMessageId: z.string().min(1).optional(),
+      threadId: z.string().min(1).optional(),
+      tokenHash: z.string().min(1).optional(),
+      externalConversationId: z.string().min(1).optional(),
+    })
+    .strict();
+  export type Correlation = z.infer<typeof Correlation>;
+
   export const Input = z
     .object({
       action: z.string().min(1),
@@ -38,7 +50,7 @@ export namespace Dispatch {
       payload: z.unknown().optional(),
       wait: z.boolean().optional(),
       timeoutMs: z.number().int().min(0).optional(),
-      correlation: z.string().min(1).optional(),
+      correlation: z.union([z.string().min(1), Correlation]).optional(),
       idempotencyKey: z.string().min(1).optional(),
     })
     .strict();
@@ -93,7 +105,7 @@ export namespace Dispatch {
     actor: ActorContext,
     action: z.string().min(1),
     target: Target,
-    correlation: z.string().min(1).optional(),
+    correlation: z.union([z.string().min(1), Correlation]).optional(),
     time: z.number(),
   });
 
@@ -160,5 +172,7 @@ export namespace Dispatch {
     WorkerCancel: "worker.cancel",
     ScheduleCreate: "schedule.create",
     ScheduleCancel: "schedule.cancel",
+    ActorMessage: "actor.message",
+    ActorReply: "actor.reply",
   } as const;
 }

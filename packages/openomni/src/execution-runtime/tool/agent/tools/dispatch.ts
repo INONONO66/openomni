@@ -54,7 +54,24 @@ const defaultInputSchema = {
     },
     wait: { type: "boolean" },
     timeoutMs: { type: "number" },
-    correlation: { type: "string" },
+    correlation: {
+      oneOf: [
+        { type: "string" },
+        {
+          type: "object",
+          properties: {
+            endpointId: { type: "string" },
+            channelId: { type: "string" },
+            replyToMessageId: { type: "string" },
+            threadId: { type: "string" },
+            tokenHash: { type: "string" },
+            externalConversationId: { type: "string" },
+          },
+          required: ["endpointId", "channelId"],
+          additionalProperties: false,
+        },
+      ],
+    },
     idempotencyKey: { type: "string" },
   },
   required: ["action", "target"],

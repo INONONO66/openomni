@@ -1,6 +1,6 @@
-import { PolicyDecision, type Dispatch, type Policy } from "@openomni/protocol";
+import { Dispatch, PolicyDecision, type Policy } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
-import { BlacklistStore, WorkerGrantStore } from "@openomni/session";
+import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/session";
 import { EffectiveAuthority } from "./effective-authority.js";
 
 function deny(reason: string, factsUsed: readonly string[] = []): Policy.PolicyDecision {
@@ -37,15 +37,23 @@ function blacklistReason(kind: string, value: string, reason: string | undefined
 function blacklistMatchInput(
   actor: Dispatch.ActorContext | undefined,
   target: Dispatch.Target | undefined,
+  correlation: Dispatch.Command["correlation"] | undefined,
 ) {
+  const correlationHints = typeof correlation === "object" ? correlation : undefined;
   return {
     actorId: actor?.actorId,
-    endpointId: target?.kind === "external_actor" ? (target.id ?? target.name) : undefined,
-    channel: target?.kind === "surface" ? (target.id ?? target.name) : undefined,
+    endpointId:
+      correlationHints?.endpointId ??
+      (target?.kind === "external_actor" ? (target.id ?? target.name) : undefined),
+    channel:
+      correlationHints?.channelId ??
+      (target?.kind === "surface" ? (target.id ?? target.name) : undefined),
     candidates: [
       ...(target?.id ? [target.id] : []),
       ...(target?.name ? [target.name] : []),
       ...(target?.labels ?? []),
+      ...(correlationHints?.endpointId ? [correlationHints.endpointId] : []),
+      ...(correlationHints?.channelId ? [correlationHints.channelId] : []),
     ],
   };
 }
@@ -61,11 +69,14 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
         actor?: Dispatch.ActorContext;
         action?: unknown;
         target?: Dispatch.Target;
+        correlation?: Dispatch.Command["correlation"];
       };
       const action = typeof input.action === "string" ? input.action : "";
       const actor = input.actor;
       const target = input.target;
-      const blacklisted = BlacklistStore.match(blacklistMatchInput(actor, target));
+      const blacklisted = BlacklistStore.match(
+        blacklistMatchInput(actor, target, input.correlation),
+      );
       if (blacklisted) {
         return decide(
           EffectiveAuthority.blockedByBlacklist(
@@ -98,6 +109,29 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
         return decide(EffectiveAuthority.workerNotRequired("dispatch.worker.resident_ask.allowed"));
       }
 
+      if (action === Dispatch.Actions.ActorMessage) {
+        return decide(
+          EffectiveAuthority.pendingInteractionDenied("dispatch.pending_interaction.required"),
+        );
+      }
+
+      if (
+        actor.kind === "worker" &&
+        action === Dispatch.Actions.ActorReply &&
+        actor.trustTier === "assigned_worker"
+      ) {
+        const pendingInteraction = evaluatePendingInteractionScope(actor, target);
+        if (pendingInteraction.allowed) {
+          return decide(
+            EffectiveAuthority.pendingInteraction(
+              "dispatch.pending_interaction.allowed",
+              pendingInteraction.id,
+            ),
+          );
+        }
+        return decide(EffectiveAuthority.pendingInteractionDenied(pendingInteraction.reason));
+      }
+
       if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target);
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
@@ -119,6 +153,38 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
       return decide(EffectiveAuthority.nonWorker("dispatch.default.allowed"));
     },
   };
+}
+
+function evaluatePendingInteractionScope(
+  actor: Dispatch.ActorContext,
+  target: Dispatch.Target | undefined,
+): { allowed: true; id: string } | { allowed: false; reason: string } {
+  if (actor.reason !== "pending_interaction.match") {
+    return { allowed: false, reason: "dispatch.pending_interaction.match.required" };
+  }
+  const pendingInteractionId = actor.labels
+    ?.find((label) => label.startsWith("pending_interaction."))
+    ?.slice("pending_interaction.".length);
+  if (!pendingInteractionId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.required" };
+  }
+  const record = PendingInteractionStore.get(pendingInteractionId);
+  if (!record) {
+    return { allowed: false, reason: "dispatch.pending_interaction.not_found" };
+  }
+  if (!record.allowedActions.includes("report_result")) {
+    return { allowed: false, reason: "dispatch.pending_interaction.action.denied" };
+  }
+  if (target?.kind !== "worker") {
+    return { allowed: false, reason: "dispatch.pending_interaction.target.denied" };
+  }
+  if (record.workerRunId !== target.runId || record.workerRunId !== actor.workerRunId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.run_mismatch" };
+  }
+  if (record.sessionId !== target.sessionId || record.sessionId !== actor.sessionId) {
+    return { allowed: false, reason: "dispatch.pending_interaction.session_mismatch" };
+  }
+  return { allowed: true, id: record.id };
 }
 
 function isExternalCreate(action: string): boolean {
