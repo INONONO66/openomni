@@ -46,6 +46,36 @@ describe("Dispatch protocol schemas", () => {
     expect(parsed.wait).toBe(true);
   });
 
+  test("Target accepts executorKind for worker admission", () => {
+    const parsed = Dispatch.Target.parse({
+      kind: "worker",
+      name: "coder",
+      executorKind: "local_cli_agent",
+    });
+
+    expect(parsed.executorKind).toBe("local_cli_agent");
+  });
+
+  test("Target rejects unknown executorKind values", () => {
+    const parsed = Dispatch.Target.safeParse({
+      kind: "worker",
+      name: "coder",
+      executorKind: "spreadsheet_macro",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("Target rejects executorKind on non-worker targets", () => {
+    const parsed = Dispatch.Target.safeParse({
+      kind: "resident",
+      id: "resident-main",
+      executorKind: "local_cli_agent",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
   test("Input rejects actor and runtime-only fields", () => {
     for (const field of [
       "actor",

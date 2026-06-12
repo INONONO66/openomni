@@ -46,6 +46,19 @@ describe("dispatch tool", () => {
     expect(schema).toContain("acceptanceCriteria");
   });
 
+  test("public schema exposes worker executor kinds", () => {
+    const provider = new AgentToolProvider();
+    const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
+    const schema = JSON.stringify(tool?.spec.inputSchema);
+
+    expect(schema).toContain("executorKind");
+    expect(schema).toContain("internal_chat_agent");
+    expect(schema).toContain("local_cli_agent");
+    expect(schema).toContain("external_api");
+    expect(schema).toContain("a2a");
+    expect(schema).toContain("human_channel");
+  });
+
   test("executes through runtime with implicit context", async () => {
     let capturedInput: Dispatch.Input | undefined;
     let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];
@@ -91,6 +104,59 @@ describe("dispatch tool", () => {
       workspaceRoot: "/repo",
       sourceTool: "dispatch",
     });
+  });
+
+  test("passes worker executor kind through runtime submission", async () => {
+    let capturedInput: Dispatch.Input | undefined;
+    const tool = createDispatchTool({
+      async submit(input) {
+        capturedInput = input;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    const response = await tool.execute(
+      call({
+        action: "worker.spawn",
+        target: { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+        payload: {
+          text: "build with a local CLI agent",
+          acceptanceCriteria: ["ledger unsupported executor"],
+        },
+      }),
+    );
+
+    expect(response.isError).toBeUndefined();
+    expect(capturedInput).toEqual({
+      action: "worker.spawn",
+      target: { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+      payload: {
+        text: "build with a local CLI agent",
+        acceptanceCriteria: ["ledger unsupported executor"],
+      },
+    });
+  });
+
+  test("rejects executor kind on non-worker targets before runtime submission", async () => {
+    let called = false;
+    const tool = createDispatchTool({
+      async submit() {
+        called = true;
+        return { dispatchId: "dispatch-1", status: "completed", output: "ok" };
+      },
+    });
+
+    const response = await tool.execute(
+      call({
+        action: "resident.ask",
+        target: { kind: "resident", executorKind: "local_cli_agent" },
+        payload: "hello",
+      }),
+    );
+
+    expect(response.isError).toBe(true);
+    expect(response.output).toContain("executorKind is only supported for worker targets");
+    expect(called).toBe(false);
   });
 
   test("rejects public actor-like fields before runtime submission", async () => {

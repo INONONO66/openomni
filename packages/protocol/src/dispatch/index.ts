@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { BusEvent } from "../bus/index.js";
 import { Policy } from "../policy/index.js";
+import { WorkItem } from "../work-item/index.js";
 
 export namespace Dispatch {
   export const ActorKind = z.enum(["worker", "resident", "system", "user", "unknown"]);
@@ -27,8 +28,18 @@ export namespace Dispatch {
       runId: z.string().min(1).optional(),
       name: z.string().min(1).optional(),
       labels: z.array(z.string()).optional(),
+      executorKind: WorkItem.ExecutorKind.optional(),
     })
-    .strict();
+    .strict()
+    .superRefine((target, ctx) => {
+      if (target.executorKind !== undefined && target.kind !== "worker") {
+        ctx.addIssue({
+          code: "custom",
+          message: "executorKind is only supported for worker targets",
+          path: ["executorKind"],
+        });
+      }
+    });
   export type Target = z.infer<typeof Target>;
 
   export const Correlation = z
