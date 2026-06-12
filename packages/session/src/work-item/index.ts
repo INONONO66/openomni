@@ -2,6 +2,7 @@ import { Operational, type Storage as ProtocolStorage, WorkItem } from "@openomn
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { verifyCompletionReport } from "./completion-report.js";
+import { recordWorkItemOutcome } from "./outcome.js";
 import { retryWorkItem } from "./retry.js";
 import { defaultMaxAttempts } from "./retry-policy.js";
 
@@ -163,6 +164,7 @@ export namespace WorkItemStore {
       "evidence",
       "completionReport",
       "verificationGate",
+      "outcome",
     ] as const;
     for (const key of managedFields) {
       if (key in fields) {
@@ -333,6 +335,8 @@ export namespace WorkItemStore {
       },
     }));
   }
+
+  export const recordOutcome = recordWorkItemOutcome;
 
   export function areDependenciesMet(hash: string): DependencyReadiness {
     const workItem = Storage.get().workItem;

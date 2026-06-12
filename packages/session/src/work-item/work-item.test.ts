@@ -106,6 +106,66 @@ describe("WorkItemStore", () => {
     ]);
   });
 
+  test("records Owner outcome feedback for completed work items", async () => {
+    configureSqlite();
+    const events: string[] = [];
+    Bus.subscribe(WorkItem.Events.OutcomeRecorded, (event) =>
+      events.push(`${event.payload.hash}:${event.payload.outcome}`),
+    );
+    Bus.subscribe(WorkItem.Events.Updated, (event) =>
+      events.push(`updated:${event.payload.fields.join(",")}`),
+    );
+
+    const item = await createItem("owner-outcome");
+    const evidenceId = await addPassingEvidence(item.hash);
+    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+
+    const recorded = await WorkItemStore.recordOutcome(item.hash, "corrected");
+    await flushBus();
+
+    expect(recorded?.outcome).toBe("corrected");
+    expect(WorkItemStore.get(item.hash)?.outcome).toBe("corrected");
+    expect(events).toContain(`${item.hash}:corrected`);
+    expect(events).toContain("updated:outcome");
+  });
+
+  test("rejects Owner outcome feedback before completion", async () => {
+    configureSqlite();
+    const item = await createItem("premature-outcome");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.recordOutcome(item.hash, "adopted"),
+      "Cannot record outcome for a pending work item",
+    );
+  });
+
+  test("requires the outcome lifecycle helper instead of direct updates", async () => {
+    configureSqlite();
+    const item = await createItem("direct-outcome-update");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.update(item.hash, { outcome: "adopted" }),
+      'Use lifecycle helpers instead of update() for "outcome"',
+    );
+  });
+
+  test("records the latest Owner outcome when feedback changes", async () => {
+    configureSqlite();
+    const outcomes: WorkItem.Outcome[] = [];
+    Bus.subscribe(WorkItem.Events.OutcomeRecorded, (event) => outcomes.push(event.payload.outcome));
+
+    const item = await createItem("owner-outcome-update");
+    const evidenceId = await addPassingEvidence(item.hash);
+    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
+    await WorkItemStore.recordOutcome(item.hash, "adopted");
+    const updated = await WorkItemStore.recordOutcome(item.hash, "corrected");
+    await flushBus();
+
+    expect(updated?.outcome).toBe("corrected");
+    expect(WorkItemStore.get(item.hash)?.outcome).toBe("corrected");
+    expect(outcomes).toEqual(["adopted", "corrected"]);
+  });
+
   test("blocks and resumes when blockers are resolved", async () => {
     configureSqlite();
     const statuses: string[] = [];
