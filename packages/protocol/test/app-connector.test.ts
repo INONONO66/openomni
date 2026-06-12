@@ -152,6 +152,66 @@ describe("AppConnector protocol domain", () => {
       expect(result.success).toBe(false);
     });
 
+    it("rejects log kind field mismatches", () => {
+      // Given
+      const connector = validConnector();
+
+      // When
+      const textResult = AppConnector.Definition.safeParse({
+        ...connector,
+        logs: {
+          kind: "text",
+          path: "/tmp/app.log",
+          eventTimeField: "timestamp",
+        },
+      });
+      const jsonlResult = AppConnector.Definition.safeParse({
+        ...connector,
+        logs: {
+          kind: "jsonl",
+          path: "/tmp/app.log",
+          eventTimeField: "timestamp",
+        },
+      });
+
+      // Then
+      expect(textResult.success).toBe(false);
+      expect(jsonlResult.success).toBe(false);
+    });
+
+    it("rejects question bridge kind field mismatches", () => {
+      // Given
+      const connector = validConnector();
+
+      // When
+      const noneResult = AppConnector.Definition.safeParse({
+        ...connector,
+        questionBridge: {
+          kind: "none",
+          command: "should-not-run",
+        },
+      });
+      const stdioResult = AppConnector.Definition.safeParse({
+        ...connector,
+        questionBridge: {
+          kind: "stdio",
+          command: "should-not-run",
+        },
+      });
+      const hookResult = AppConnector.Definition.safeParse({
+        ...connector,
+        questionBridge: {
+          kind: "hook",
+          responseMode: "stdout",
+        },
+      });
+
+      // Then
+      expect(noneResult.success).toBe(false);
+      expect(stdioResult.success).toBe(false);
+      expect(hookResult.success).toBe(false);
+    });
+
     it("rejects unknown connector keys", () => {
       // Given
       const connector = validConnector();

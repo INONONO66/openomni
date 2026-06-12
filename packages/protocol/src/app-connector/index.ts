@@ -42,25 +42,59 @@ export namespace AppConnector {
     .strict();
   export type Spawn = z.infer<typeof Spawn>;
 
-  export const Logs = z
-    .object({
-      kind: z.enum(["jsonl", "stream_json", "text"]),
-      path: nonEmptyString,
-      eventTimeField: nonEmptyString.optional(),
-      messageField: nonEmptyString.optional(),
-    })
-    .strict();
+  const structuredLogsFields = {
+    path: nonEmptyString,
+    eventTimeField: nonEmptyString,
+    messageField: nonEmptyString,
+  };
+
+  export const Logs = z.discriminatedUnion("kind", [
+    z
+      .object({
+        kind: z.literal("jsonl"),
+        ...structuredLogsFields,
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("stream_json"),
+        ...structuredLogsFields,
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("text"),
+        path: nonEmptyString,
+      })
+      .strict(),
+  ]);
   export type Logs = z.infer<typeof Logs>;
 
-  export const QuestionBridge = z
-    .object({
-      kind: z.enum(["hook", "stdio", "none"]),
-      command: nonEmptyString.optional(),
-      args: commandArgs.optional(),
-      promptField: nonEmptyString.optional(),
-      responseMode: z.enum(["stdout", "file", "webhook"]).optional(),
-    })
-    .strict();
+  const bridgeResponseMode = z.enum(["stdout", "file", "webhook"]);
+
+  export const QuestionBridge = z.discriminatedUnion("kind", [
+    z
+      .object({
+        kind: z.literal("hook"),
+        command: nonEmptyString,
+        args: commandArgs.optional(),
+        promptField: nonEmptyString.optional(),
+        responseMode: bridgeResponseMode.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("stdio"),
+        promptField: nonEmptyString.optional(),
+        responseMode: bridgeResponseMode.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("none"),
+      })
+      .strict(),
+  ]);
   export type QuestionBridge = z.infer<typeof QuestionBridge>;
 
   export const CompletionReport = z
