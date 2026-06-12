@@ -12,7 +12,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | --- | --- | --- | --- |
 | Server channel adapters (Discord/Telegram/GitHub/WS) | ✅ | `apps/server/src/channel/` | Raw → `InboundMessage` |
 | IngressEngine (session candidate resolve → project → dispatch) | ✅ | `packages/openomni/src/ingress/engine.ts` | |
-| `ActorResolver` / `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` | 📋 | `packages/protocol/src/actor/` (planned) | Zero code. Actor arrives pre-stamped as an untyped `{ role, id, kind }` blob; ingress does **not** resolve identity yet |
+| `ActorResolver` / `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` | ✅ | `packages/protocol/src/actor/`, `packages/session/src/actor/`, `packages/openomni/src/ingress/actor-resolver.ts` | Canonical actor identity + endpoint schemas, SQLite-backed registry, and ingress resolution for registered `(channel, workspace, externalId)` endpoints are wired, where `channel` is the platform/surface identifier. Unregistered endpoints are sanitized back to legacy `id`/`role`; ChannelGrant and TrustTier evaluation remain pending below |
 | DispatchRuntime (policy authorize → handler routing) | ✅ | `packages/openomni/src/dispatch/runtime.ts` | Actions: `resident.ask`, `worker.spawn/send/resume/cancel`, `schedule.create/cancel` |
 | WorkerGrant evaluation | ✅ | `packages/openomni/src/dispatch/policy.ts` | The only authority axis currently evaluated |
 | Blacklist | 📋 | — | Checked nowhere |

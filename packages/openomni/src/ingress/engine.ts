@@ -1,5 +1,6 @@
 import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
 import {
+  Ingress as IngressNamespace,
   type Ingress,
   type Policy,
   IngressEvent,
@@ -9,6 +10,7 @@ import {
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { ResidentRuntime } from "../resident/runtime";
+import { resolveIngressActor } from "./actor-resolver";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
@@ -80,22 +82,16 @@ export namespace IngressEngine {
     _ingressPolicies.push(reg);
   }
 
-  export async function ingest(event: Ingress.InboundEvent): Promise<Ingress.IngressResult> {
-    if ((event as { mode: string }).mode === "internal") {
-      throw new Error("internal mode not allowed on external ingress path");
-    }
-
+  export async function ingest(event: unknown): Promise<Ingress.IngressResult> {
+    const externalEvent = IngressNamespace.DirectEventSchema.parse(event);
+    const resolvedActorEvent = resolveIngressActor(externalEvent);
     const trace = TraceContext.create();
     const preRun = await IngressAuthorityMiddleware.runPreRun({
-      event,
+      event: resolvedActorEvent,
       coordinator: _coordinator,
       traceContext: trace,
       onDecision: _middlewareDecisionObserver,
     });
-
-    if ((preRun.event as { mode: string }).mode !== "direct") {
-      throw new Error("internal mode not allowed on external ingress path");
-    }
 
     const inboundEvent = preRun.event as Ingress.ResolvedInboundEvent;
     return ingestResolved(inboundEvent, trace, preRun.coordinator);
@@ -164,6 +160,7 @@ export namespace IngressEngine {
         elapsedMs: 0,
         labels,
         toolInput: {
+          actor: inboundEvent.meta?.actor,
           surface: inboundEvent.surface,
           mode: inboundEvent.mode,
           target: target.kind,

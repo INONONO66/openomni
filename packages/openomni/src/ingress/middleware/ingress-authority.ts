@@ -241,7 +241,7 @@ function createSchemaValidation(state: PreRunState): PolicyRegistration {
     ...IngressAuthorityMiddleware.SchemaValidation,
     failPolicy: "fail-closed",
     fn: () => {
-      const parsed = Ingress.InboundEventSchema.safeParse(state.input);
+      const parsed = Ingress.DirectEventSchema.safeParse(state.input);
       if (!parsed.success) {
         state.schemaError = parsed.error;
         return abortDecision("ingress.schema", "invalid ingress event");

@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
 import {
-  Ingress as IngressNamespace,
   IngressEvent,
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
@@ -64,11 +63,12 @@ function installCoordinator() {
   });
 }
 
-async function catchError(promise: Promise<unknown>): Promise<unknown> {
+async function catchError(promise: Promise<unknown>): Promise<Error | undefined> {
   try {
     await promise;
     return undefined;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
 }
@@ -135,7 +135,7 @@ describe("IngressEngine", () => {
         id: "invalid-1",
         surface: "tui",
         payload: "hello",
-      } as unknown as Ingress.InboundEvent),
+      }),
     );
 
     expect(error).toBeDefined();
@@ -369,8 +369,8 @@ describe("IngressEngine", () => {
     expect(first.sessionId).not.toBe(second.sessionId);
   });
 
-  it("ingest() with unknown mode throws UNKNOWN_INGRESS_MODE error", async () => {
-    const event: Ingress.InboundEvent = {
+  it("ingest() with unknown mode fails external ingress schema validation", async () => {
+    const event = {
       id: "event-unknown-1",
       surface: "tui",
       workspace: "/repo",
@@ -380,31 +380,22 @@ describe("IngressEngine", () => {
       agent: {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       },
-    } as unknown as Ingress.InboundEvent;
-
-    const schema = IngressNamespace.InboundEventSchema as unknown as {
-      safeParse: (input: unknown) => unknown;
     };
-    const originalSafeParse = schema.safeParse;
-    schema.safeParse = () => ({ success: true, data: event });
 
+    let caughtError: Error | undefined;
     try {
-      let caughtError: unknown;
-      try {
-        await IngressEngine.ingest(event);
-      } catch (err) {
-        caughtError = err;
-      }
-
-      expect(caughtError).toBeInstanceOf(Error);
-      expect((caughtError as Error).message).toContain("unknown ingress mode");
-    } finally {
-      schema.safeParse = originalSafeParse;
+      await IngressEngine.ingest(event);
+    } catch (err) {
+      if (!(err instanceof Error)) throw err;
+      caughtError = err;
     }
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(caughtError?.message).toContain("invalid_literal");
   });
 
   describe("inbound.receive policy dispatch", () => {
-    function makeEvent(overrides?: Partial<Ingress.InboundEvent>): Ingress.InboundEvent {
+    function makeEvent(overrides?: Partial<Ingress.DirectEvent>): Ingress.DirectEvent {
       return {
         id: "event-policy-1",
         surface: "tui",
