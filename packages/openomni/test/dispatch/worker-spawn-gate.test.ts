@@ -54,6 +54,8 @@ describe("worker.spawn dispatch gate", () => {
       goal: "build it",
       assigneeId: "coder",
       sessionId: requests[0]?.sessionId,
+      executorKind: "internal_chat_agent",
+      maxAttempts: 3,
       acceptanceCriteria: ["The delegated worker returns evidence-backed completion"],
       constraints: ["stay inside the requested scope"],
     });

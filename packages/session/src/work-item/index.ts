@@ -2,6 +2,8 @@ import { Operational, type Storage as ProtocolStorage, WorkItem } from "@openomn
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
 import { verifyCompletionReport } from "./completion-report.js";
+import { retryWorkItem } from "./retry.js";
+import { defaultMaxAttempts } from "./retry-policy.js";
 
 type WorkItemAdapter = NonNullable<Storage.Adapter["workItem"]>;
 
@@ -10,21 +12,28 @@ type DependencyReadiness = {
   reason: "all_complete" | "pending" | "failed" | "blocked";
 };
 
+type CreateWorkItemInput = {
+  name: string;
+  sourceMessageId: string;
+  sourceChannel: string;
+  intent: string;
+  goal: string;
+  assigneeId?: string;
+  sessionId?: string;
+  context?: string;
+  constraints?: string[];
+  acceptanceCriteria?: string[];
+  parentHash?: string;
+  dependsOn?: string[];
+  originSessionId?: string;
+  workSessionId?: string;
+  workerRunId?: string;
+  executorKind?: WorkItem.ExecutorKind;
+  maxAttempts?: number;
+};
+
 export namespace WorkItemStore {
-  export async function create(input: {
-    name: string;
-    sourceMessageId: string;
-    sourceChannel: string;
-    intent: string;
-    goal: string;
-    assigneeId?: string;
-    sessionId?: string;
-    context?: string;
-    constraints?: string[];
-    acceptanceCriteria?: string[];
-    parentHash?: string;
-    dependsOn?: string[];
-  }): Promise<WorkItem.Info> {
+  export async function create(input: CreateWorkItemInput): Promise<WorkItem.Info> {
     const adapter = Storage.get();
     if (!adapter.workItem) {
       Bus.publish(Operational.Warn, {
@@ -349,28 +358,11 @@ export namespace WorkItemStore {
   }
 
   export async function retry(hash: string): Promise<WorkItem.Info | undefined> {
-    return mutate(hash, (existing, now) => {
-      if (WorkItem.deriveStatus(existing) !== "failed") {
-        throw new Error("retry() can only be called on failed work items");
-      }
-      return {
-        changedFields: ["attempt", "timestamps", "failureReason"],
-        updated: {
-          ...existing,
-          attempt: existing.attempt + 1,
-          failureReason: undefined,
-          timestamps: {
-            ...existing.timestamps,
-            failed: undefined,
-            started: now,
-            updated: now,
-          },
-        },
-      };
-    });
+    return retryWorkItem(hash, Storage.get().workItem, persistMutation);
   }
 
-  function buildWorkItem(input: Parameters<typeof create>[0], now: number): WorkItem.Info {
+  function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem.Info {
+    const maxAttempts = input.maxAttempts ?? defaultMaxAttempts(input.executorKind);
     return WorkItem.Info.parse({
       hash: WorkItem.generateHash(),
       name: input.name,
@@ -378,6 +370,11 @@ export namespace WorkItemStore {
       sourceChannel: input.sourceChannel,
       assigneeId: input.assigneeId,
       sessionId: input.sessionId,
+      originSessionId: input.originSessionId,
+      workSessionId: input.workSessionId,
+      workerRunId: input.workerRunId,
+      executorKind: input.executorKind,
+      maxAttempts,
       attempt: 1,
       timestamps: { created: now, updated: now },
       relations: {
