@@ -144,4 +144,42 @@ describe("built-in dispatch handlers", () => {
       "resident.ask requires resident target",
     );
   });
+
+  test("actor.reply delivers external replies to the owning worker run", async () => {
+    const deliveries: Array<{ sessionId: string; text: string; runId?: string }> = [];
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            throw new Error("actor.reply should not spawn workers");
+          },
+          async deliverMessage(sessionId, text, runId) {
+            deliveries.push({ sessionId, text, ...(runId ? { runId } : {}) });
+            return { status: "delivered" };
+          },
+        },
+      },
+    });
+
+    const output = await registry.get("actor.reply")?.(
+      command(
+        "actor.reply",
+        { kind: "worker", sessionId: "worker-session", runId: "worker-run" },
+        "external answer",
+      ),
+    );
+
+    expect(deliveries).toEqual([
+      { sessionId: "worker-session", text: "external answer", runId: "worker-run" },
+    ]);
+    expect(output).toEqual({
+      output: {
+        delivered: true,
+        sessionId: "worker-session",
+        runId: "worker-run",
+        result: { status: "delivered" },
+      },
+    });
+  });
 });

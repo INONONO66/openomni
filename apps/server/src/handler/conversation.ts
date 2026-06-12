@@ -3,8 +3,13 @@ import { IngressEngine } from "@openomni/openomni";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational, WorkItem } from "@openomni/protocol";
 import { Bus, hasRetryExhaustionBlocker, SurfaceKey, WorkItemStore } from "@openomni/session";
+import type { DispatchRuntime } from "@openomni/openomni";
 import { resolveRuntimeModel } from "../agents/model-resolution";
-import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
+import {
+  buildActorMessageCorrelation,
+  buildInboundEvent,
+  type BridgeDeps,
+} from "../ingress/bridge";
 import { resolveAgentName } from "../router";
 
 const OPEN_TASK_STATUSES = [
@@ -26,6 +31,14 @@ const MAX_OPEN_TASKS = 20;
 const MAX_DISPLAY_FIELD_CHARS = 80;
 const OPEN_TASKS_UNAUTHORIZED_MESSAGE =
   "Open task ledger requires authenticated local WebSocket access";
+const PI_FALLBACK_REASONS = new Set([
+  "dispatch.actor.required",
+  "dispatch.pending_interaction.required",
+]);
+
+interface MessageHandlerDeps extends BridgeDeps {
+  readonly dispatchRuntime?: Pick<DispatchRuntime, "submit">;
+}
 
 type OpenTask = {
   readonly item: WorkItem.Info;
@@ -117,12 +130,49 @@ function listOpenTasks(): string {
   ].join("\n");
 }
 
-async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps): Promise<string> {
+function responseText(result: unknown): string | null {
+  if (typeof result === "string") return result;
+  return null;
+}
+
+async function dispatchPendingInteractionReply(
+  message: Adapter.InboundMessage,
+  deps: MessageHandlerDeps,
+): Promise<string | null | undefined> {
+  if (!deps.dispatchRuntime) return undefined;
+
+  const result = await deps.dispatchRuntime.submit(
+    {
+      action: "actor.message",
+      target: { kind: "surface", id: message.surfaceKey },
+      payload: message.text,
+      correlation: buildActorMessageCorrelation(message),
+    },
+    {
+      actorKind: "unknown",
+      actorId: message.sender.id,
+      workspaceRoot: deps.workspaceRoot,
+    },
+  );
+
+  if (result.status === "completed") return responseText(result.output);
+  const reason = result.reason ?? result.error;
+  if (reason && PI_FALLBACK_REASONS.has(reason)) return undefined;
+  return `Error: ${reason ?? `dispatch ${result.status}`}`;
+}
+
+async function processMessage(
+  message: Adapter.InboundMessage,
+  deps: MessageHandlerDeps,
+): Promise<string | null> {
   try {
     if (normalizeCommand(message.text) === "show open tasks") {
       if (!canReadTaskLedger(message)) return OPEN_TASKS_UNAUTHORIZED_MESSAGE;
       return listOpenTasks();
     }
+    const pendingInteractionReply = await dispatchPendingInteractionReply(message, deps);
+    if (pendingInteractionReply !== undefined) return pendingInteractionReply;
+
     const agentName = resolveAgentName({ message, defaultAgent: "resident" });
     const event = buildInboundEvent(message, agentName, deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
@@ -140,7 +190,7 @@ async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps)
   }
 }
 
-export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
+export function createMessageHandler(deps: MessageHandlerDeps): Adapter.MessageHandler {
   const queues = new Map<string, Promise<void>>();
   return async (message) => {
     const key = message.surfaceKey;

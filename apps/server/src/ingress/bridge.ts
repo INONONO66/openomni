@@ -1,4 +1,4 @@
-import type { Adapter, Ingress } from "@openomni/protocol";
+import type { Adapter, Dispatch, Ingress } from "@openomni/protocol";
 import { PendingAskStore, SurfaceKey } from "@openomni/session";
 import type { NativeTool } from "@openomni/openomni";
 import {
@@ -144,6 +144,27 @@ function findPendingAskForMessage(message: Adapter.InboundMessage) {
     targetKind: ask.targetKind,
     status: matches.length > 1 ? "ambiguous" : ask.status,
     ambiguous: matches.length > 1,
+  };
+}
+
+function scopedCorrelation(message: Adapter.InboundMessage) {
+  const descriptor = SurfaceKey.parse(message.surfaceKey);
+  return {
+    endpointId: descriptor.namespace || descriptor.surface,
+    channelId: descriptor.id ?? message.surfaceKey,
+  };
+}
+
+export function buildActorMessageCorrelation(
+  message: Adapter.InboundMessage,
+): Dispatch.Correlation {
+  const token = rawCorrelationToken(message.raw);
+  return {
+    ...scopedCorrelation(message),
+    ...(message.replyToId ? { replyToMessageId: message.replyToId } : {}),
+    ...(message.threadId ? { threadId: message.threadId } : {}),
+    ...(token ? { tokenHash: token } : {}),
+    externalConversationId: message.surfaceKey,
   };
 }
 
