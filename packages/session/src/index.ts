@@ -7,6 +7,7 @@ export { Session } from "./session";
 export { Snapshot, InMemorySnapshotProvider } from "./snapshot";
 export { SurfaceKey } from "./surface-key";
 export { Artifact } from "./artifact/index";
+export { AppConnectorInstallationStore } from "./app-connector/index.js";
 export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";

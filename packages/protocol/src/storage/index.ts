@@ -1,4 +1,5 @@
 import type { Actor } from "../actor/index.js";
+import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
 import type { WorkItem } from "../work-item/index.js";
@@ -84,6 +85,13 @@ export namespace Storage {
     get(id: string): Actor.ChannelGrant | undefined;
     set(grant: Actor.ChannelGrant): void;
     list(): Actor.ChannelGrant[];
+    remove(id: string): boolean;
+  }
+
+  export interface AppConnectorInstallationSubAdapter {
+    get(id: string): AppConnector.Installation | undefined;
+    set(installation: AppConnector.Installation): void;
+    list(): AppConnector.Installation[];
     remove(id: string): boolean;
   }
 }

@@ -149,4 +149,37 @@ export namespace AppConnector {
     })
     .strict();
   export type Definition = z.infer<typeof Definition>;
+
+  export const InstallationStatus = z.enum([
+    "registered",
+    "pending_consent",
+    "enabled",
+    "disabled",
+    "verification_failed",
+  ]);
+  export type InstallationStatus = z.infer<typeof InstallationStatus>;
+
+  export const Installation = z
+    .object({
+      id: nonEmptyString,
+      connectorId: nonEmptyString,
+      connectorVersion: nonEmptyString,
+      definition: Definition,
+      detectedVersion: nonEmptyString.optional(),
+      testedVersions: nonEmptyString,
+      status: InstallationStatus,
+      registeredBy: nonEmptyString,
+      createdAt: positiveInteger,
+      updatedAt: positiveInteger,
+    })
+    .strict()
+    .refine((record) => record.definition.id === record.connectorId, {
+      message: "definition id must match connectorId",
+      path: ["definition", "id"],
+    })
+    .refine((record) => record.definition.version === record.connectorVersion, {
+      message: "definition version must match connectorVersion",
+      path: ["definition", "version"],
+    });
+  export type Installation = z.infer<typeof Installation>;
 }

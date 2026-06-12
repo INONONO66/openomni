@@ -26,6 +26,7 @@ src/
 ├── trace/                # TraceContext helpers
 ├── snapshot/             # Snapshot.Provider + InMemorySnapshotProvider; Snapshot.Diff
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
+├── app-connector/        # AppConnectorInstallationStore for durable installed-app registration records
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── work-item/            # WorkItemStore — universal work state engine (CRUD + lifecycle + Bus events + dependency tracking)
@@ -39,7 +40,7 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
-- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and optional `artifact`, `surfaceKey`, `backgroundTask`, `cronJob`, `workItem`, and `workerRunState`. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Unimplemented optional sub-objects gracefully degrade.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and optional `artifact`, `surfaceKey`, `backgroundTask`, `cronJob`, `workItem`, `workerRunState`, and `appConnectorInstallation`. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Unimplemented optional sub-objects gracefully degrade.
 - **Migration 0006**: Legacy task/todo tables remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; subagent-related events (`Subagent.Events.*`) flow through the shared `Bus` too.
 - **SurfaceKey routing**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence.

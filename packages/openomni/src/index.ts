@@ -30,9 +30,10 @@ export type {
   ResidentPromptVariant,
 } from "./agents";
 
-export { AppConnectorDiscovery, BuiltInAppConnectors } from "./app-connector";
+export { AppConnectorDiscovery, AppConnectorRegistry, BuiltInAppConnectors } from "./app-connector";
 export type {
   AppConnectorDiscoveryStatus,
+  AppConnectorRegistrationOptions,
   DetectCommandResult,
   DetectCommandRunner,
   DiscoveryCandidate,
