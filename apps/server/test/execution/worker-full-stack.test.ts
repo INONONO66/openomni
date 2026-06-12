@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { AgentRegistry } from "@openomni/agent";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
-import { Bus } from "@openomni/session";
+import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { Subagent } from "@openomni/protocol";
 import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
 
@@ -69,6 +69,13 @@ const noopCoordinator = {
 
 beforeEach(() => {
   IngressEngine.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  ChannelGrantStore.put({
+    id: "grant-test",
+    surface: "test",
+    kind: "trusted_channel",
+    createdBy: "act_owner",
+  });
   IngressEngine.setCoordinator(noopCoordinator);
   AgentRegistry.clear();
   capturedOnToolCall = undefined;
