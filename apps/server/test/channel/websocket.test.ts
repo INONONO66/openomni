@@ -1,3 +1,4 @@
+import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { ChannelAuthnDecision } from "../../src/channel/channel-authn";
@@ -45,6 +46,7 @@ describe("WebSocketHandler authentication", () => {
     expect(res).toBeUndefined();
     expect(upgrade.options?.headers).toEqual({ "Sec-WebSocket-Protocol": "auth" });
     expect((upgrade.options?.data as { surfaceKey: string }).surfaceKey).toStartWith("ws:");
+    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
     expect(decisions).toEqual([
       expect.objectContaining({
         name: "channel-authn:websocket-token",
@@ -66,7 +68,49 @@ describe("WebSocketHandler authentication", () => {
 
     expect(res).toBeUndefined();
     expect(upgrade.options?.headers).toBeUndefined();
+    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
     unsub();
+  });
+
+  it("marks websocket connections unauthenticated when token auth is not configured", () => {
+    const handler = new WebSocketHandler(async () => ({ text: "ok" }));
+    const upgrade = createUpgradeServer();
+    const req = new Request("http://localhost/ws");
+
+    const res = handler.handleUpgrade(req, upgrade.server);
+
+    expect(res).toBeUndefined();
+    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(false);
+  });
+
+  it("marks websocket connections unauthenticated when token auth is configured as empty", () => {
+    const handler = new WebSocketHandler(async () => ({ text: "ok" }), { token: "" });
+    const upgrade = createUpgradeServer();
+    const req = new Request("http://localhost/ws");
+
+    const res = handler.handleUpgrade(req, upgrade.server);
+
+    expect(res).toBeUndefined();
+    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(false);
+  });
+
+  it("passes websocket authentication state through inbound message raw metadata", async () => {
+    let message: Adapter.InboundMessage | undefined;
+    const handler = new WebSocketHandler(async (inbound) => {
+      message = inbound;
+      return { text: "ok" };
+    });
+    const sent: string[] = [];
+    const ws = {
+      data: { surfaceKey: "ws:test", authenticated: true },
+      send: (msg: string) => sent.push(msg),
+    };
+
+    handler.ws.message(ws, JSON.stringify({ text: "show open tasks" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(message?.raw).toEqual({ websocket: { authenticated: true } });
+    expect(sent).toEqual([JSON.stringify({ type: "response", text: "ok" })]);
   });
 
   it("rejects missing websocket auth", async () => {

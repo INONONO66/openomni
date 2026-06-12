@@ -41,7 +41,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Read-back verification helpers (re-fetch URL, re-query API, citation-in-source matching) | 📋 | — | ADR-011 |
 | Per-executor retry defaults + kernel-enforced exhaustion → Owner escalation | 📋 | — | ADR-011 — internal 3 / app manifest / human reminder policy |
 | Owner adoption signal (`outcome`: adopted/corrected/redone/ignored) | 📋 | — | ADR-011 — Governor's ground truth; also calibrates Resident evaluation leniency |
-| Task ledger view ("show open tasks" — the OS's `ps`) | 📋 | — | Ledger query via chat command first; web view later |
+| Task ledger view ("show open tasks" — the OS's `ps`) | ✅ | `apps/server/src/handler/conversation.ts` | Authenticated local WebSocket chat command returns a capped pending/running/blocked WorkItem diagnostic from `WorkItemStore`; unauthenticated WebSocket and external-channel actor-scoped visibility remain future work because current `WorkItem` / `InboundMessage` schemas have no owner, trust-tier, or channel-grant field; web view also remains future work |
 | Bus persistence (hash-chained event journal) | ✅ | `packages/session/src/bus-persistence/` | — |
 | `BusQuery` (stats, errors, worker-run history, chain verify) | ✅ | `packages/session/src/bus-persistence/query.ts`, `apps/server/src/server/routes.ts` | Wired consumer: token-protected `GET /observability/sessions/:sessionId/events` returns event stats, redacted error metadata, worker-run history, and hash-chain verification. Governor aggregation remains pending below |
 | Token/cost tracking (per call, per message) | ✅ | `packages/llm/src/token/` | Aggregation (per agent/task type, success-rate correlation) absent |
