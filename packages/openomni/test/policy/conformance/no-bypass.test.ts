@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision, type Ingress } from "@openomni/protocol";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Bus, ChannelGrantStore, Session, Storage } from "@openomni/session";
 import { IngressEngine } from "../../../src/ingress/engine";
 import { BackgroundManager } from "../../../src/subagent/background-manager";
 import { SubagentRuntime } from "../../../src/subagent/runtime";
@@ -77,10 +77,15 @@ async function catchError(promise: Promise<unknown>): Promise<unknown> {
 }
 
 beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
   Bus.reset();
   IngressEngine.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  ChannelGrantStore.put({
+    id: "grant-tui",
+    surface: "tui",
+    kind: "trusted_channel",
+    createdBy: "act_owner",
+  });
 });
 
 afterEach(() => {

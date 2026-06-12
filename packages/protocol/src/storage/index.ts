@@ -66,4 +66,11 @@ export namespace Storage {
     list(): Actor.BlacklistEntry[];
     remove(id: string): boolean;
   }
+
+  export interface ChannelGrantSubAdapter {
+    get(id: string): Actor.ChannelGrant | undefined;
+    set(grant: Actor.ChannelGrant): void;
+    list(): Actor.ChannelGrant[];
+    remove(id: string): boolean;
+  }
 }

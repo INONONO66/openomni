@@ -80,4 +80,28 @@ export namespace Actor {
     updatedAt: z.number().optional(),
   });
   export type BlacklistEntry = z.infer<typeof BlacklistEntry>;
+
+  export const ChannelGrantKind = z.enum([
+    "trusted_channel",
+    "broadcast_channel",
+    "blocked_channel",
+  ]);
+  export type ChannelGrantKind = z.infer<typeof ChannelGrantKind>;
+
+  export const InboundTreatment = z.enum(["full_access", "evidence_only", "drop"]);
+  export type InboundTreatment = z.infer<typeof InboundTreatment>;
+
+  export const ChannelGrant = z.object({
+    id: z.string().min(1),
+    surface: z.string().min(1),
+    workspace: z.string().min(1).optional(),
+    channel: z.string().min(1).optional(),
+    kind: ChannelGrantKind,
+    defaultTier: TrustTier.optional(),
+    inboundTreatment: InboundTreatment.optional(),
+    createdBy: z.string().min(1),
+    createdAt: z.number().optional(),
+    updatedAt: z.number().optional(),
+  });
+  export type ChannelGrant = z.infer<typeof ChannelGrant>;
 }

@@ -1,6 +1,6 @@
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
-import { Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
-import { BlacklistStore } from "@openomni/session";
+import { type Actor, Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
+import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 import { resolveTarget, targetKey } from "../target";
@@ -43,6 +43,14 @@ function abortDecision(policyId: string, reason: string): Policy.PolicyDecision 
 
 function blacklistReason(kind: string, value: string, reason: string | undefined): string {
   return reason ?? `blacklist.${kind}.${value}`;
+}
+
+function channelGrantReason(
+  grant: ChannelGrantStore.Grant | undefined,
+  treatment: string | undefined,
+): string {
+  if (!grant) return "channel_grant.missing";
+  return `channel_grant.${grant.kind}.${treatment ?? "unknown"}`;
 }
 
 function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
@@ -234,6 +242,62 @@ function createBlacklistCheck(state: PreRunState): PolicyRegistration {
   };
 }
 
+function createChannelGrantCheck(state: PreRunState): PolicyRegistration {
+  return {
+    ...IngressAuthorityMiddleware.ChannelGrantCheck,
+    failPolicy: "fail-closed",
+    fn: () => {
+      const event = requireParsedEvent(state);
+      const resolution = ChannelGrantStore.resolve({
+        surface: event.surface,
+        workspace: event.workspace,
+        channel: event.channel,
+      });
+
+      if (!resolution) {
+        return abortDecision("ingress.channel_grant", channelGrantReason(undefined, undefined));
+      }
+      if (resolution.inboundTreatment === "drop") {
+        return abortDecision(
+          "ingress.channel_grant",
+          channelGrantReason(resolution.grant, resolution.inboundTreatment),
+        );
+      }
+
+      state.parsedEvent = applyChannelGrantTreatment(
+        event,
+        resolution.grant,
+        resolution.inboundTreatment,
+      );
+
+      return PolicyDecision.allow({
+        policyId: "ingress.channel_grant",
+        reasonCodes: [channelGrantReason(resolution.grant, resolution.inboundTreatment)],
+        factsUsed: [
+          `channel_grant.${resolution.grant.kind}`,
+          `inbound.${resolution.inboundTreatment}`,
+        ],
+      });
+    },
+  };
+}
+
+function applyChannelGrantTreatment(
+  event: Ingress.InboundEvent,
+  grant: ChannelGrantStore.Grant,
+  inboundTreatment: Actor.InboundTreatment,
+): Ingress.InboundEvent {
+  return {
+    ...event,
+    meta: {
+      ...event.meta,
+      channelGrantId: grant.id,
+      channelGrantKind: grant.kind,
+      inboundTreatment,
+    },
+  };
+}
+
 function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {
   if (!state.parsedEvent) {
     throw new Error("ingress event must be schema-validated before authority middleware");
@@ -340,6 +404,13 @@ export namespace IngressAuthorityMiddleware {
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
+  export const ChannelGrantCheck = {
+    name: "ingress:channel-grant",
+    timing: "run.start",
+    priority: 7,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
+
   export const AuthorityCheck = {
     name: "ingress:authority",
     timing: "run.start",
@@ -372,6 +443,7 @@ export namespace IngressAuthorityMiddleware {
     return [
       createSchemaValidation(state),
       createBlacklistCheck(state),
+      createChannelGrantCheck(state),
       createCoordinatorPresence(state),
       createAuthorityCheck(state),
       createModeDispatch(state),

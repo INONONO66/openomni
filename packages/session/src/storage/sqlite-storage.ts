@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
+import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteBackgroundTaskAdapter } from "./sqlite-background-task-adapter";
 import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
@@ -32,6 +33,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
+  readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -55,6 +57,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.cronJob = createSqliteCronJobAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);
+    this.channelGrant = createSqliteChannelGrantAdapter(this.db);
   }
 
   clear(): void {

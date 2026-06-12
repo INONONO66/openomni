@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { IngressEngine } from "@openomni/openomni";
 import type { Execution, Ingress } from "@openomni/protocol";
+import { ChannelGrantStore, Storage } from "@openomni/session";
 
 type CoordinatorLike = {
   dispatch(sessionId: string, request: Execution.Request): Promise<Execution.Result>;
@@ -23,6 +24,13 @@ function makeDirectEvent(): Ingress.DirectEvent {
 
 beforeEach(() => {
   IngressEngine.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  ChannelGrantStore.put({
+    id: "grant-test",
+    surface: "test",
+    kind: "trusted_channel",
+    createdBy: "act_owner",
+  });
   IngressEngine.clearCoordinator();
 });
 
@@ -55,8 +63,8 @@ describe("coordinator dispatch path — direct mode", () => {
 });
 
 describe("no coordinator — error required", () => {
-  test("throws when coordinator is not set", async () => {
-    await expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
+  test("throws when coordinator is not set", () => {
+    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
       "coordinator is required",
     );
   });
@@ -72,10 +80,10 @@ describe("coordinator failure — error propagated", () => {
 
     IngressEngine.setCoordinator(failingCoordinator);
 
-    await expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow("worker unreachable");
+    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow("worker unreachable");
   });
 
-  test("throws when coordinator returns non-succeeded status", async () => {
+  test("throws when coordinator returns non-succeeded status", () => {
     const failingCoordinator: CoordinatorLike = {
       async dispatch(_sessionId: string, request: Execution.Request): Promise<Execution.Result> {
         return {
@@ -89,7 +97,7 @@ describe("coordinator failure — error propagated", () => {
 
     IngressEngine.setCoordinator(failingCoordinator);
 
-    await expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
+    return expect(IngressEngine.ingest(makeDirectEvent())).rejects.toThrow(
       "Coordinator dispatch failed",
     );
   });

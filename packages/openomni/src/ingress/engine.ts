@@ -145,6 +145,12 @@ export namespace IngressEngine {
         { value: `surface.${inboundEvent.surface}`, source: "system" },
         { value: `target.${target.kind}`, source: "system" },
       ];
+      if (typeof inboundEvent.meta?.inboundTreatment === "string") {
+        labels.push({
+          value: `inbound.${inboundEvent.meta.inboundTreatment}`,
+          source: "system",
+        });
+      }
       const actor = inboundEvent.meta?.actor;
       if (actor && typeof actor === "object" && !Array.isArray(actor)) {
         const role = String((actor as Record<string, unknown>).role ?? "");
@@ -164,6 +170,9 @@ export namespace IngressEngine {
           surface: inboundEvent.surface,
           mode: inboundEvent.mode,
           target: target.kind,
+          inboundTreatment: inboundEvent.meta?.inboundTreatment,
+          channelGrantId: inboundEvent.meta?.channelGrantId,
+          channelGrantKind: inboundEvent.meta?.channelGrantKind,
         },
         traceContext: trace,
       });

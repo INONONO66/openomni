@@ -5,7 +5,7 @@ import {
   PolicyDecision as ProtocolPolicyDecision,
   type Ingress,
 } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/session";
+import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -34,6 +34,30 @@ export function setupIngressActorResolverTest(): void {
     mockProviderFromModelsDevModel.mockClear();
     IngressEngine.reset();
     Storage.initialize({ dbPath: ":memory:" });
+    ChannelGrantStore.put({
+      id: "grant-discord-guild-dev",
+      surface: "discord",
+      workspace: "guild",
+      channel: "dev",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
+    ChannelGrantStore.put({
+      id: "grant-discord-guild-b-dev",
+      surface: "discord",
+      workspace: "guild-b",
+      channel: "dev",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
+    ChannelGrantStore.put({
+      id: "grant-telegram-guild-dev",
+      surface: "telegram",
+      workspace: "guild",
+      channel: "dev",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    });
     IngressEngine.setResidentRuntime(
       ResidentRuntime.create({
         runAgent: async (_config, input) => {

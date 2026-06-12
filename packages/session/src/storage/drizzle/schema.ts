@@ -239,3 +239,21 @@ export const blacklistTable = sqliteTable(
     index("idx_blacklist_expires").on(t.expires_at),
   ],
 );
+
+export const channelGrantTable = sqliteTable(
+  "channel_grant",
+  {
+    id: text("id").primaryKey(),
+    data: text("data").notNull(),
+    surface: text("surface").notNull(),
+    workspace: text("workspace").notNull().default(""),
+    channel: text("channel").notNull().default(""),
+    kind: text("kind").notNull(),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+  },
+  (t) => [
+    index("idx_channel_grant_lookup").on(t.surface, t.workspace, t.channel),
+    index("idx_channel_grant_kind").on(t.kind),
+  ],
+);

@@ -12,10 +12,12 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0005_worker_run_executor_kind/migration.sql" },
   { name: "0006_actor_registry/migration.sql" },
   { name: "0007_blacklist/migration.sql" },
+  { name: "0008_channel_grant/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
   "event_chain",
+  "channel_grant",
   "blacklist",
   "actor_endpoint",
   "actor_identity",
