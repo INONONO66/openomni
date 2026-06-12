@@ -1,4 +1,4 @@
-import type { Dispatch, Execution, Model } from "@openomni/protocol";
+import type { Dispatch, Execution, Model, WorkItem } from "@openomni/protocol";
 import { Session, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
@@ -9,6 +9,7 @@ import {
   reflectCoordinatorResult,
   type WorkerCompletionOptions,
 } from "./worker-completion.js";
+import { createWorkerSpawnWorkItem, failUnsupportedWorkerExecutor } from "./worker-work-item.js";
 import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
@@ -17,6 +18,7 @@ export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
 }
 
 const AcceptanceCriterion = z.string().trim().min(1);
+const INTERNAL_EXECUTOR_KIND = "internal_chat_agent" satisfies WorkItem.ExecutorKind;
 const WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE = "worker.spawn requires text or prompt";
 const WorkerSpawnPayload = z
   .object({
@@ -64,6 +66,10 @@ function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
 
 function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
   return target.id ?? target.name;
+}
+
+function resolveExecutorKind(target: Dispatch.Target): WorkItem.ExecutorKind {
+  return target.executorKind ?? INTERNAL_EXECUTOR_KIND;
 }
 
 function workerSpawnPayloadErrorMessage(error: z.ZodError<WorkerSpawnPayloadInput>): string {
@@ -116,28 +122,6 @@ function buildRequest(
   };
 }
 
-async function createWorkItem(
-  command: Dispatch.Command,
-  request: Execution.Request,
-  payload: ParsedWorkerSpawnPayload,
-): Promise<string> {
-  const workItem = await WorkItemStore.create({
-    name: `Dispatch worker ${request.agentName ?? "worker"}`,
-    sourceMessageId: command.dispatchId,
-    sourceChannel: "dispatch",
-    intent: command.action,
-    goal: request.prompt,
-    assigneeId: request.agentName,
-    sessionId: request.sessionId,
-    executorKind: "internal_chat_agent",
-    context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
-    constraints: payload.constraints,
-    acceptanceCriteria: payload.acceptanceCriteria,
-  });
-  await WorkItemStore.start(workItem.hash);
-  return workItem.hash;
-}
-
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
 ): Record<
@@ -147,10 +131,25 @@ export function createWorkerDispatchHandlers(
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   return {
     async "worker.spawn"(command) {
-      const coordinator = requireCoordinator(options.coordinator);
       const payload = parseWorkerSpawnPayload(command.payload);
+      const executorKind = resolveExecutorKind(command.target);
+      if (executorKind !== INTERNAL_EXECUTOR_KIND) {
+        const workItemHash = await createWorkerSpawnWorkItem(
+          command,
+          {
+            prompt: payload.prompt,
+            agentName: resolveWorkerAgentName(command.target),
+            sessionId: command.target.sessionId,
+          },
+          payload,
+          executorKind,
+        );
+        return failUnsupportedWorkerExecutor(workItemHash, executorKind);
+      }
+
+      const coordinator = requireCoordinator(options.coordinator);
       const request = buildRequest(command, model, payload);
-      const workItemHash = await createWorkItem(command, request, payload);
+      const workItemHash = await createWorkerSpawnWorkItem(command, request, payload, executorKind);
       let result: Execution.Result;
       try {
         result = await coordinator.dispatch(request.sessionId, request);
