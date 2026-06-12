@@ -121,6 +121,34 @@ describe("CronJobRunner", () => {
     ]);
   });
 
+  test("computes next fire times in UTC", async () => {
+    const job = {
+      ...dueJob("job-utc-noon"),
+      schedule: "0 12 * * *",
+      createdAt: Date.UTC(2026, 0, 1, 0, 0),
+      nextFireAt: undefined,
+    };
+    CronJobRegistry.register(job);
+
+    await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 1, 1, 0) });
+
+    expect(CronJobRegistry.get(job.id)?.nextFireAt).toBe(Date.UTC(2026, 0, 1, 12, 0));
+  });
+
+  test("requires day-of-month and day-of-week to both match", async () => {
+    const job = {
+      ...dueJob("job-friday-13"),
+      schedule: "0 0 13 * 5",
+      createdAt: Date.UTC(2026, 0, 1, 0, 0),
+      nextFireAt: undefined,
+    };
+    CronJobRegistry.register(job);
+
+    await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 2, 0, 0) });
+
+    expect(CronJobRegistry.get(job.id)?.nextFireAt).toBe(Date.UTC(2026, 1, 13, 0, 0));
+  });
+
   test("start runs a boot tick and can be stopped", async () => {
     CronJobRegistry.register(dueJob("job-boot"));
     const fired: string[] = [];
@@ -155,6 +183,72 @@ describe("CronJobRunner", () => {
     });
 
     expect(fired).toEqual(["job-good"]);
+  });
+
+  test("rejects second-precision schedules", async () => {
+    CronJobRegistry.register({
+      ...dueJob("job-six-field"),
+      schedule: "*/5 * * * * *",
+      nextFireAt: undefined,
+    });
+    CronJobRegistry.register(dueJob("job-good"));
+
+    const fired: string[] = [];
+    await CronJobRunner.tick({
+      nowMs: () => 1_710_000_060_000,
+      fire: async (job) => {
+        fired.push(job.id);
+      },
+    });
+
+    expect(fired).toEqual(["job-good"]);
+    expect(CronJobRegistry.get("job-six-field")?.nextFireAt).toBeUndefined();
+  });
+
+  test("rejects croner extension syntax that the legacy parser did not support", async () => {
+    const invalidSchedules = [
+      "@daily",
+      "0 0 * JAN *",
+      "0 0 * * MON",
+      "0 0 ? * *",
+      "0 0 L * *",
+      "0 0 * * 1#2",
+    ];
+    for (const [index, schedule] of invalidSchedules.entries()) {
+      CronJobRegistry.register({
+        ...dueJob(`job-extension-${index}`),
+        schedule,
+        nextFireAt: undefined,
+      });
+    }
+    CronJobRegistry.register(dueJob("job-good"));
+
+    const fired: string[] = [];
+    await CronJobRunner.tick({
+      nowMs: () => 1_710_000_060_000,
+      fire: async (job) => {
+        fired.push(job.id);
+      },
+    });
+
+    expect(fired).toEqual(["job-good"]);
+    for (const [index] of invalidSchedules.entries()) {
+      expect(CronJobRegistry.get(`job-extension-${index}`)?.nextFireAt).toBeUndefined();
+    }
+  });
+
+  test("preserves legacy step values that exceed the field size", async () => {
+    const job = {
+      ...dueJob("job-large-step"),
+      schedule: "*/100 * * * *",
+      createdAt: Date.UTC(2026, 0, 1, 12, 1),
+      nextFireAt: undefined,
+    };
+    CronJobRegistry.register(job);
+
+    await CronJobRunner.tick({ nowMs: () => Date.UTC(2026, 0, 1, 12, 2) });
+
+    expect(CronJobRegistry.get(job.id)?.nextFireAt).toBe(Date.UTC(2026, 0, 1, 13, 0));
   });
 
   test("does not reinsert jobs cancelled while firing", async () => {
