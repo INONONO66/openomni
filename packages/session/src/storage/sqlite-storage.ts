@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
+import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connector-installation-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
@@ -36,6 +37,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
   readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
+  readonly appConnectorInstallation: NonNullable<Storage.Adapter["appConnectorInstallation"]>;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -61,6 +63,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
+    this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
   }
 
   clear(): void {

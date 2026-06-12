@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createDb } from "../../src/storage/drizzle/db";
+import { appConnectorInstallationTable } from "../../src/storage/drizzle/schema";
 
 function tempDbPath(): string {
   return join(tmpdir(), `test-drizzle-db-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
@@ -13,9 +14,17 @@ function removeSqliteFiles(path: string): void {
   for (const suffix of ["", "-wal", "-shm"]) {
     try {
       unlinkSync(`${path}${suffix}`);
-    } catch (_err) {
-      void _err;
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
     }
+  }
+}
+
+function runStatements(db: Database, statements: readonly string[]): void {
+  for (const statement of statements) {
+    db.query(statement).run();
   }
 }
 
@@ -30,10 +39,10 @@ describe("drizzle createDb migrations", () => {
     dbPath = tempDbPath();
 
     const db = new Database(dbPath);
-    db.exec(`
-      CREATE TABLE _migrations (name TEXT PRIMARY KEY);
-      CREATE TABLE message (id TEXT PRIMARY KEY);
-    `);
+    runStatements(db, [
+      "CREATE TABLE _migrations (name TEXT PRIMARY KEY)",
+      "CREATE TABLE message (id TEXT PRIMARY KEY)",
+    ]);
     db.close();
 
     expect(() => createDb(dbPath)).toThrow();
@@ -102,16 +111,56 @@ describe("drizzle createDb migrations", () => {
     }
   });
 
+  test("creates typed app connector installation table from ordered migrations", async () => {
+    dbPath = tempDbPath();
+
+    const { db, sqlite } = createDb(dbPath);
+    try {
+      await db.insert(appConnectorInstallationTable).values({
+        id: "install:app.codex",
+        connector_id: "app.codex",
+        status: "registered",
+        data: "{}",
+        time_created: 1,
+        time_updated: 1,
+      });
+
+      const rows = await db.select().from(appConnectorInstallationTable);
+      expect(rows).toEqual([
+        {
+          id: "install:app.codex",
+          connector_id: "app.codex",
+          status: "registered",
+          data: "{}",
+          time_created: 1,
+          time_updated: 1,
+        },
+      ]);
+      const indexes = sqlite
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'app_connector_installation'",
+        )
+        .all() as Array<{ name: string }>;
+      expect(indexes.map((row) => row.name)).toEqual(
+        expect.arrayContaining([
+          "idx_app_connector_installation_connector",
+          "idx_app_connector_installation_status",
+        ]),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   test("upgrades old communication tables with FK constraints", () => {
     dbPath = tempDbPath();
 
     const { sqlite } = createDb(dbPath);
     try {
-      sqlite.exec(`
-        DROP TABLE worker_grant;
-        DROP TABLE pending_ask;
-
-        CREATE TABLE pending_ask (
+      runStatements(sqlite, [
+        "DROP TABLE worker_grant",
+        "DROP TABLE pending_ask",
+        `CREATE TABLE pending_ask (
           id TEXT PRIMARY KEY,
           data TEXT NOT NULL,
           status TEXT NOT NULL,
@@ -125,9 +174,8 @@ describe("drizzle createDb migrations", () => {
           external_conversation_id TEXT,
           time_created INTEGER NOT NULL,
           time_updated INTEGER NOT NULL
-        );
-
-        CREATE TABLE worker_grant (
+        )`,
+        `CREATE TABLE worker_grant (
           id TEXT PRIMARY KEY,
           worker_run_id TEXT NOT NULL,
           data TEXT NOT NULL,
@@ -136,11 +184,9 @@ describe("drizzle createDb migrations", () => {
           time_created INTEGER NOT NULL,
           time_updated INTEGER NOT NULL,
           expires_at INTEGER
-        );
-
-        DELETE FROM _migrations
-        WHERE name = '0003_communication_state_constraints/migration.sql';
-      `);
+        )`,
+        "DELETE FROM _migrations WHERE name = '0003_communication_state_constraints/migration.sql'",
+      ]);
       sqlite
         .query(
           `INSERT INTO session (id, data, time_created, time_updated)

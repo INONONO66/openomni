@@ -57,6 +57,85 @@ function validConnector(): Record<string, unknown> {
 }
 
 describe("AppConnector protocol domain", () => {
+  describe("AppConnector.Installation", () => {
+    it("parses a registered connector installation record", () => {
+      // Given
+      const installation = {
+        id: "install-app-codex",
+        connectorId: "app.claude-code",
+        connectorVersion: "1.0.0",
+        definition: validConnector(),
+        detectedVersion: "0.139.0",
+        testedVersions: ">=0.139.0 <0.140.0",
+        status: "registered",
+        registeredBy: "act_owner",
+        createdAt: 100,
+        updatedAt: 100,
+      };
+
+      // When
+      const result = AppConnector.Installation.safeParse(installation);
+
+      // Then
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.connectorId).toBe("app.claude-code");
+        expect(result.data.status).toBe("registered");
+        expect(result.data.definition.profile.executorKind).toBe("local_cli_agent");
+      }
+    });
+
+    it("rejects installation records whose embedded definition does not match the connector id", () => {
+      // Given
+      const installation = {
+        id: "install-app-codex",
+        connectorId: "app.codex",
+        connectorVersion: "1.0.0",
+        definition: { ...validConnector(), id: "app.other" },
+        testedVersions: ">=1.0.0 <2.0.0",
+        status: "registered",
+        registeredBy: "act_owner",
+        createdAt: 100,
+        updatedAt: 100,
+      };
+
+      // When
+      const result = AppConnector.Installation.safeParse(installation);
+
+      // Then
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const paths = result.error.issues.map((issue) => issue.path.join("."));
+        expect(paths.includes("definition.id")).toBe(true);
+      }
+    });
+
+    it("rejects installation records whose embedded definition does not match the connector version", () => {
+      // Given
+      const installation = {
+        id: "install-app-codex",
+        connectorId: "app.claude-code",
+        connectorVersion: "2.0.0",
+        definition: validConnector(),
+        testedVersions: ">=1.0.0 <2.0.0",
+        status: "registered",
+        registeredBy: "act_owner",
+        createdAt: 100,
+        updatedAt: 100,
+      };
+
+      // When
+      const result = AppConnector.Installation.safeParse(installation);
+
+      // Then
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const paths = result.error.issues.map((issue) => issue.path.join("."));
+        expect(paths.includes("definition.version")).toBe(true);
+      }
+    });
+  });
+
   describe("AppConnector.Definition", () => {
     it("parses a declarative installed app connector", () => {
       // Given

@@ -70,6 +70,7 @@ export namespace Storage {
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
     channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
+    appConnectorInstallation?: ProtocolStorage.AppConnectorInstallationSubAdapter;
   }
 }
 
