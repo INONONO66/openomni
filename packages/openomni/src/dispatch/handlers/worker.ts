@@ -73,20 +73,19 @@ async function reflectCoordinatorResult(
   result: Execution.Result,
 ): Promise<void> {
   if (result.status === "cancelled") {
-    await WorkItemStore.cancel(workItemHash);
+    await ignoreWorkItemReflectionFailure(() => WorkItemStore.cancel(workItemHash));
     return;
   }
   if (result.status === "failed" || result.status === "interrupted") {
-    await WorkItemStore.fail(workItemHash, result.error ?? result.status);
+    await ignoreWorkItemReflectionFailure(() =>
+      WorkItemStore.fail(workItemHash, result.error ?? result.status),
+    );
   }
 }
 
-async function markWorkItemFailedAfterDispatchThrow(
-  workItemHash: string,
-  err: unknown,
-): Promise<void> {
+async function ignoreWorkItemReflectionFailure(reflect: () => Promise<unknown>): Promise<void> {
   try {
-    await WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err));
+    await reflect();
   } catch {
     return;
   }
@@ -105,7 +104,9 @@ export function createWorkerDispatchHandlers(
       try {
         result = await coordinator.dispatch(request.sessionId, request);
       } catch (err) {
-        await markWorkItemFailedAfterDispatchThrow(workItemHash, err);
+        await ignoreWorkItemReflectionFailure(() =>
+          WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err)),
+        );
         throw err;
       }
       await reflectCoordinatorResult(workItemHash, result);

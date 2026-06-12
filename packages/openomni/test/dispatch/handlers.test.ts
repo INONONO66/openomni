@@ -238,6 +238,105 @@ describe("built-in dispatch handlers", () => {
     });
   });
 
+  test("worker.spawn preserves failed result when recording the failure throws", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            const workItemAdapter = Storage.getAdapter().workItem;
+            if (!workItemAdapter) throw new Error("missing work item adapter");
+            workItemAdapter.set = () => {
+              throw new Error("work item write failed");
+            };
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "failed",
+              error: "worker failed",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "failed" } },
+    });
+  });
+
+  test("worker.spawn preserves interrupted result when recording the failure throws", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            const workItemAdapter = Storage.getAdapter().workItem;
+            if (!workItemAdapter) throw new Error("missing work item adapter");
+            workItemAdapter.set = () => {
+              throw new Error("work item write failed");
+            };
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "interrupted",
+              error: "worker interrupted",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "interrupted" } },
+    });
+  });
+
+  test("worker.spawn preserves cancelled result when recording cancellation throws", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch(_sessionId, request) {
+            const workItemAdapter = Storage.getAdapter().workItem;
+            if (!workItemAdapter) throw new Error("missing work item adapter");
+            workItemAdapter.set = () => {
+              throw new Error("work item write failed");
+            };
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "cancelled",
+              output: "cancelled by owner",
+            };
+          },
+        },
+      },
+    });
+
+    const result = await registry.get("worker.spawn")?.(
+      command("worker.spawn", { kind: "worker", name: "coder" }, "build it"),
+    );
+
+    const workItems = WorkItemStore.list();
+    expect(workItems).toHaveLength(1);
+    expect(result).toMatchObject({
+      output: { workItemHash: workItems[0]?.hash, result: { status: "cancelled" } },
+    });
+  });
+
   test("worker.spawn preserves parent session lineage when provided", async () => {
     const parent = Session.create({
       title: "parent",
