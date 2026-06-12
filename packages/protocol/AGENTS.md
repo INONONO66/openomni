@@ -27,6 +27,7 @@ src/
 ├── ipc/                  # IPC request/response schemas and worker transport contracts
 ├── storage/              # Storage.WorkItemSubAdapter interface
 ├── work-item/            # WorkItem.Info, Blocker, Evidence, VerificationGate, Status, deriveStatus(), generateHash(), WorkItem.Events.*
+├── app-connector/        # Declarative installed-app connector ABI
 ├── tool-selection/       # ToolSelection schema for choosing tool categories and overrides
 ├── trace/                # TraceContext schema shared by observability helpers
 ├── worker-bootstrap/     # Worker bootstrap payload contracts
@@ -45,6 +46,7 @@ src/
 - **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/session`.
 - **WorkItem namespace**: `work-item/index.ts` defines `WorkItem.Info` (universal work state schema with derived status, blockers, evidence, verification gates), `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed via `BusEvent.define()`), `deriveStatus()` (pure status derivation from timestamps/blockers), and `generateHash()` (base36 12-char collision-safe IDs).
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
+- **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
 - **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/session`.
 
 ## FUTURE PRODUCT MODEL CONTRACTS

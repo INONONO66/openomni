@@ -23,7 +23,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | `PendingInteraction` (successor; correlation routing, follow-up window) | 📋 | — | Not a pure rename of PendingAsk (status enum, `allowedActions`, `workerRunId` coupling all change). No PI-match session override exists in dispatch |
 | `executorKind` on WorkerRun (`external_api` / `a2a` / `human_channel`) | 📋 | — | Internal ChatAgent execution only today |
 | `local_cli_agent` executor (CLI agents as installed apps) | 📋 | — | ADR-010 §3 — connector philosophy: observe the boundary, don't manage the inside |
-| `AppConnector` schema (declarative connector definition = public ABI) | 📋 | `packages/protocol/src/app-connector/` (planned) | ADR-010 §3 — detect/spawn/observe/bridge/evidence/requires/profile; third parties integrate by writing one file (T1) |
+| `AppConnector` schema (declarative connector definition = public ABI) | ✅ | `packages/protocol/src/app-connector/` | ADR-010 §3 schema shipped: detect/spawn/logs/question bridge/evidence/requires/profile; install lifecycle and runtime wiring remain pending below |
 | Install lifecycle (discover → register → consent → wire → smoke-verify; version-drift re-verification) | 📋 | — | ADR-010 §3 — consent sets the app's permission ceiling; "installed" is itself evidence-gated; drift rides the ADR-012 incident pipeline |
 | App question bridge (permission/clarification prompt → `resident.ask`, suspend/resume) | 📋 | — | ADR-010 §3 |
 | Native app log ingestion (raw → artifact, key events → journal; liveness for stall detection) | 📋 | — | ADR-010 §3 — also the evidence + RCA + cost source for app work |
