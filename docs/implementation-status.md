@@ -35,7 +35,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Component | Status | Code | Missing consumer |
 | --- | --- | --- | --- |
 | WorkItem schemas (`Info`, `Blocker`, `Evidence`, `VerificationGate`, `deriveStatus`) | ✅ | `packages/protocol/src/work-item/` | — |
-| `WorkItemStore` (full CRUD + lifecycle + evidence + gates) | 🔌 | `packages/session/src/work-item/` | **Zero production callers.** ADR-011 designates it the task ledger — created on `worker.spawn`, completed via report gate |
+| `WorkItemStore` (full CRUD + lifecycle + evidence + gates) | ✅ | `packages/session/src/work-item/`, `packages/openomni/src/dispatch/handlers/worker.ts` | Wired consumer: `worker.spawn` creates/starts a ledger item, returns `workItemHash`, and reflects failed/interrupted/cancelled coordinator results. Completion-report gate remains pending below |
 | WorkItem schema deltas (`originSessionId`/`workSessionId` split, `workerRunId`+`executorKind`, `completionReport`, `maxAttempts`, `outcome`) | 📋 | `packages/protocol/src/work-item/` | ADR-011 |
 | Completion-report evidence gate (claims → evidence refs; unevidenced = not done) | 📋 | — | ADR-011 — deterministic, runs before any LLM evaluation. Worker completion claims are accepted without any check today |
 | Read-back verification helpers (re-fetch URL, re-query API, citation-in-source matching) | 📋 | — | ADR-011 |

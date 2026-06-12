@@ -1,5 +1,5 @@
 import type { Dispatch, Execution, Model } from "@openomni/protocol";
-import { Session } from "@openomni/session";
+import { Session, WorkItemStore } from "@openomni/session";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
 import type { DispatchHandler } from "../registry.js";
 import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
@@ -50,6 +50,47 @@ function buildRequest(command: Dispatch.Command, model: Model.Ref): Execution.Re
   };
 }
 
+async function createWorkItem(
+  command: Dispatch.Command,
+  request: Execution.Request,
+): Promise<string> {
+  const workItem = await WorkItemStore.create({
+    name: `Dispatch worker ${request.agentName ?? "worker"}`,
+    sourceMessageId: command.dispatchId,
+    sourceChannel: "dispatch",
+    intent: command.action,
+    goal: request.prompt,
+    assigneeId: request.agentName,
+    sessionId: request.sessionId,
+    context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
+  });
+  await WorkItemStore.start(workItem.hash);
+  return workItem.hash;
+}
+
+async function reflectCoordinatorResult(
+  workItemHash: string,
+  result: Execution.Result,
+): Promise<void> {
+  if (result.status === "cancelled") {
+    await ignoreWorkItemReflectionFailure(() => WorkItemStore.cancel(workItemHash));
+    return;
+  }
+  if (result.status === "failed" || result.status === "interrupted") {
+    await ignoreWorkItemReflectionFailure(() =>
+      WorkItemStore.fail(workItemHash, result.error ?? result.status),
+    );
+  }
+}
+
+async function ignoreWorkItemReflectionFailure(reflect: () => Promise<unknown>): Promise<void> {
+  try {
+    await reflect();
+  } catch {
+    return;
+  }
+}
+
 export function createWorkerDispatchHandlers(
   options: WorkerDispatchHandlerOptions = {},
 ): Record<"worker.spawn" | "worker.send" | "worker.resume" | "worker.cancel", DispatchHandler> {
@@ -58,8 +99,20 @@ export function createWorkerDispatchHandlers(
     async "worker.spawn"(command) {
       const coordinator = requireCoordinator(options.coordinator);
       const request = buildRequest(command, model);
-      const result = await coordinator.dispatch(request.sessionId, request);
-      return { output: { sessionId: request.sessionId, runId: request.runId, result } };
+      const workItemHash = await createWorkItem(command, request);
+      let result: Execution.Result;
+      try {
+        result = await coordinator.dispatch(request.sessionId, request);
+      } catch (err) {
+        await ignoreWorkItemReflectionFailure(() =>
+          WorkItemStore.fail(workItemHash, err instanceof Error ? err.message : String(err)),
+        );
+        throw err;
+      }
+      await reflectCoordinatorResult(workItemHash, result);
+      return {
+        output: { sessionId: request.sessionId, runId: request.runId, workItemHash, result },
+      };
     },
 
     async "worker.send"(command) {
