@@ -380,7 +380,9 @@ export async function main(): Promise<void> {
     });
   }
 
-  const app = createRouter(githubWebhookHandler);
+  const app = createRouter(githubWebhookHandler, {
+    observabilityToken: config.server.wsToken,
+  });
   const server = Bun.serve({
     port: config.server.port,
     hostname: config.server.host,

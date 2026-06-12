@@ -43,7 +43,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Owner adoption signal (`outcome`: adopted/corrected/redone/ignored) | 📋 | — | ADR-011 — Governor's ground truth; also calibrates Resident evaluation leniency |
 | Task ledger view ("show open tasks" — the OS's `ps`) | 📋 | — | Ledger query via chat command first; web view later |
 | Bus persistence (hash-chained event journal) | ✅ | `packages/session/src/bus-persistence/` | — |
-| `BusQuery` (stats, errors, worker-run history, chain verify) | 🔌 | `packages/session/src/bus-persistence/query.ts` | **Zero production callers.** First consumer: Governor v0 |
+| `BusQuery` (stats, errors, worker-run history, chain verify) | ✅ | `packages/session/src/bus-persistence/query.ts`, `apps/server/src/server/routes.ts` | Wired consumer: token-protected `GET /observability/sessions/:sessionId/events` returns event stats, redacted error metadata, worker-run history, and hash-chain verification. Governor aggregation remains pending below |
 | Token/cost tracking (per call, per message) | ✅ | `packages/llm/src/token/` | Aggregation (per agent/task type, success-rate correlation) absent |
 | System Governor (postmortem engine: incident RCA + slow aggregation loop) | 📋 | — | Zero code. v0 scoped in ADR-012: two lanes (immediate / daily batch), storm collapse, triage (defect vs preference→memory candidate) |
 | Incident fingerprint registry (cause × task type × failure mode; recurrence ladder) | 📋 | — | ADR-012 — match-before-create dedup discipline |
