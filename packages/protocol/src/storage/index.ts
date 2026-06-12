@@ -1,3 +1,4 @@
+import type { Actor } from "../actor/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
 import type { WorkItem } from "../work-item/index.js";
@@ -41,5 +42,17 @@ export namespace Storage {
     set(job: CronJob.Info): void;
     list(): CronJob.Info[];
     remove(id: string): boolean;
+  }
+
+  export interface ActorRegistrySubAdapter {
+    getIdentity(id: string): Actor.Identity | undefined;
+    setIdentity(identity: Actor.Identity): void;
+    listIdentities(): Actor.Identity[];
+    removeIdentity(id: string): boolean;
+    getEndpoint(id: string): Actor.Endpoint | undefined;
+    setEndpoint(endpoint: Actor.Endpoint): void;
+    findEndpoint(channel: string, externalId: string): Actor.Endpoint | undefined;
+    listEndpoints(actorId?: string): Actor.Endpoint[];
+    removeEndpoint(id: string): boolean;
   }
 }

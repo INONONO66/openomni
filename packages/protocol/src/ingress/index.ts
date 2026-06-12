@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentProfile } from "../agent/index.js";
+import { Actor } from "../actor/index.js";
 import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
@@ -7,9 +8,14 @@ import { Tool } from "../tool/index.js";
 const ActorSchemaImpl = z
   .object({
     id: z.string().optional(),
+    actorId: z.string().optional(),
     role: z.string().optional(),
     kind: z.string().optional(),
     type: z.string().optional(),
+    trustTier: Actor.TrustTier.optional(),
+    relationship: Actor.Relationship.optional(),
+    endpointId: z.string().optional(),
+    endpoint: Actor.Endpoint.optional(),
     sessionId: z.string().optional(),
     workerId: z.string().optional(),
     trusted: z.boolean().optional(),

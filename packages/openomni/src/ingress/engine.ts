@@ -9,6 +9,7 @@ import {
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { ResidentRuntime } from "../resident/runtime";
+import { resolveIngressActor } from "./actor-resolver";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
@@ -85,9 +86,10 @@ export namespace IngressEngine {
       throw new Error("internal mode not allowed on external ingress path");
     }
 
+    const resolvedActorEvent = resolveIngressActor(event);
     const trace = TraceContext.create();
     const preRun = await IngressAuthorityMiddleware.runPreRun({
-      event,
+      event: resolvedActorEvent,
       coordinator: _coordinator,
       traceContext: trace,
       onDecision: _middlewareDecisionObserver,
@@ -164,6 +166,7 @@ export namespace IngressEngine {
         elapsedMs: 0,
         labels,
         toolInput: {
+          actor: inboundEvent.meta?.actor,
           surface: inboundEvent.surface,
           mode: inboundEvent.mode,
           target: target.kind,

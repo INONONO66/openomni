@@ -1,0 +1,82 @@
+import { Actor } from "@openomni/protocol";
+import { Storage } from "../storage/storage";
+
+function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
+  const adapter = Storage.get().actorRegistry;
+  if (!adapter) throw new Error("Storage adapter does not implement actorRegistry");
+  return adapter;
+}
+
+function withTimestamps<T extends Actor.Identity | Actor.Endpoint>(record: T, existing?: T): T {
+  const now = Date.now();
+  return {
+    ...record,
+    createdAt: record.createdAt ?? existing?.createdAt ?? now,
+    updatedAt: existing ? now : (record.updatedAt ?? now),
+  };
+}
+
+export namespace ActorRegistry {
+  export type Identity = Actor.Identity;
+  export type Endpoint = Actor.Endpoint;
+  export type ResolvedEndpoint = Actor.ResolvedEndpoint;
+
+  export function registerIdentity(input: Identity): Identity {
+    const adapter = requireAdapter();
+    const identity = Actor.Identity.parse(withTimestamps(input, adapter.getIdentity(input.id)));
+    adapter.setIdentity(identity);
+    return identity;
+  }
+
+  export function getIdentity(id: string): Identity | undefined {
+    return requireAdapter().getIdentity(id);
+  }
+
+  export function listIdentities(): Identity[] {
+    return requireAdapter().listIdentities();
+  }
+
+  export function removeIdentity(id: string): boolean {
+    return requireAdapter().removeIdentity(id);
+  }
+
+  export function registerEndpoint(input: Endpoint): Endpoint {
+    const adapter = requireAdapter();
+    const endpoint = Actor.Endpoint.parse(withTimestamps(input, adapter.getEndpoint(input.id)));
+    if (!adapter.getIdentity(endpoint.actorId)) {
+      throw new Error(`Actor identity not found: ${endpoint.actorId}`);
+    }
+    const existingForAddress = adapter.findEndpoint(endpoint.channel, endpoint.externalId);
+    if (existingForAddress && existingForAddress.id !== endpoint.id) {
+      throw new Error(
+        `Actor endpoint already registered for ${endpoint.channel}:${endpoint.externalId}`,
+      );
+    }
+    adapter.setEndpoint(endpoint);
+    return endpoint;
+  }
+
+  export function getEndpoint(id: string): Endpoint | undefined {
+    return requireAdapter().getEndpoint(id);
+  }
+
+  export function listEndpoints(actorId?: string): Endpoint[] {
+    return requireAdapter().listEndpoints(actorId);
+  }
+
+  export function resolveEndpoint(
+    channel: string,
+    externalId: string,
+  ): ResolvedEndpoint | undefined {
+    const adapter = requireAdapter();
+    const endpoint = adapter.findEndpoint(channel, externalId);
+    if (!endpoint) return undefined;
+    const identity = adapter.getIdentity(endpoint.actorId);
+    if (!identity) return undefined;
+    return { identity, endpoint };
+  }
+
+  export function removeEndpoint(id: string): boolean {
+    return requireAdapter().removeEndpoint(id);
+  }
+}
