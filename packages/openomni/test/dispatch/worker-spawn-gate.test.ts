@@ -168,6 +168,45 @@ describe("worker.spawn dispatch gate", () => {
     expect(WorkItemStore.list()).toEqual([]);
   });
 
+  test("worker.spawn reports invalid constraints before dispatch", async () => {
+    let dispatched = false;
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          async dispatch() {
+            dispatched = true;
+            return {
+              runId: "run-1",
+              sessionId: "session-1",
+              status: "succeeded",
+              output: "done",
+            };
+          },
+        },
+      },
+    });
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("worker.spawn")?.(
+          command(
+            "worker.spawn",
+            { kind: "worker", name: "coder" },
+            {
+              text: "build",
+              acceptanceCriteria: ["done"],
+              constraints: [""],
+            },
+          ),
+        ),
+      "worker.spawn constraints must be non-empty strings",
+    );
+
+    expect(dispatched).toBe(false);
+    expect(WorkItemStore.list()).toEqual([]);
+  });
+
   test("worker.spawn preserves parent session lineage when provided", async () => {
     const parent = Session.create({
       title: "parent",

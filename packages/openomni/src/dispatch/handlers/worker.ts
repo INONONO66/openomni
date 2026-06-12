@@ -12,6 +12,7 @@ export interface WorkerDispatchHandlerOptions {
 }
 
 const AcceptanceCriterion = z.string().trim().min(1);
+const WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE = "worker.spawn requires text or prompt";
 const WorkerSpawnPayload = z
   .object({
     text: z.string().trim().min(1).optional(),
@@ -21,14 +22,17 @@ const WorkerSpawnPayload = z
   })
   .strict()
   .refine((payload) => payload.text !== undefined || payload.prompt !== undefined, {
-    message: "worker.spawn requires text or prompt",
-  });
+    message: WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE,
+    path: ["text"],
+  })
+  .transform((payload) => ({
+    prompt: payload.text ?? payload.prompt ?? "",
+    acceptanceCriteria: payload.acceptanceCriteria,
+    ...(payload.constraints ? { constraints: payload.constraints } : {}),
+  }));
 
-type ParsedWorkerSpawnPayload = {
-  readonly prompt: string;
-  readonly acceptanceCriteria: string[];
-  readonly constraints?: string[];
-};
+type WorkerSpawnPayloadInput = z.input<typeof WorkerSpawnPayload>;
+type ParsedWorkerSpawnPayload = z.infer<typeof WorkerSpawnPayload>;
 
 function requireCoordinator(coordinator: CoordinatorLike | undefined): CoordinatorLike {
   if (!coordinator) throw new Error("dispatch worker handler requires coordinator owner");
@@ -57,6 +61,25 @@ function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
   return target.id ?? target.name;
 }
 
+function workerSpawnPayloadErrorMessage(error: z.ZodError<WorkerSpawnPayloadInput>): string {
+  if (error.issues.some((issue) => issue.code === "unrecognized_keys")) {
+    return "worker.spawn payload contains unsupported fields";
+  }
+
+  const fields = new Set(error.issues.flatMap((issue) => issue.path.map(String)));
+  if (fields.has("acceptanceCriteria")) {
+    return "worker.spawn requires at least one acceptance criterion";
+  }
+  if (fields.has("constraints")) {
+    return "worker.spawn constraints must be non-empty strings";
+  }
+  if (fields.has("text") || fields.has("prompt")) {
+    return WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE;
+  }
+
+  return "worker.spawn payload is invalid";
+}
+
 function parseWorkerSpawnPayload(payload: unknown): ParsedWorkerSpawnPayload {
   const parsed = WorkerSpawnPayload.safeParse(payload);
   if (!parsed.success) {
@@ -64,21 +87,10 @@ function parseWorkerSpawnPayload(payload: unknown): ParsedWorkerSpawnPayload {
     if (!payloadRecord || !("acceptanceCriteria" in payloadRecord)) {
       throw new Error("worker.spawn requires at least one acceptance criterion");
     }
-    const fields = parsed.error.issues.flatMap((issue) => issue.path);
-    if (fields.includes("acceptanceCriteria")) {
-      throw new Error("worker.spawn requires at least one acceptance criterion");
-    }
-    if (parsed.error.issues.some((issue) => issue.code === "unrecognized_keys")) {
-      throw new Error("worker.spawn payload contains unsupported fields");
-    }
-    throw new Error("worker.spawn requires text or prompt");
+    throw new Error(workerSpawnPayloadErrorMessage(parsed.error));
   }
 
-  return {
-    prompt: parsed.data.text ?? parsed.data.prompt ?? "",
-    acceptanceCriteria: parsed.data.acceptanceCriteria,
-    ...(parsed.data.constraints ? { constraints: parsed.data.constraints } : {}),
-  };
+  return parsed.data;
 }
 
 function buildRequest(
