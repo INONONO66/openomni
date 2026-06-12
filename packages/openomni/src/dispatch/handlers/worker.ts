@@ -134,6 +134,7 @@ async function createWorkItem(
     goal: request.prompt,
     assigneeId: request.agentName,
     sessionId: request.sessionId,
+    executorKind: "internal_chat_agent",
     context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
     constraints: payload.constraints,
     acceptanceCriteria: payload.acceptanceCriteria,

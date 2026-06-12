@@ -220,6 +220,135 @@ describe("WorkItemStore", () => {
     expect(retried ? WorkItem.deriveStatus(retried) : undefined).toBe("running");
   });
 
+  test("defaults internal worker items to three max attempts", async () => {
+    configureSqlite();
+
+    const item = await createItem("internal-worker-default", {
+      executorKind: "internal_chat_agent",
+    });
+
+    expect(item.maxAttempts).toBe(3);
+  });
+
+  test("keeps explicit maxAttempts overrides", async () => {
+    configureSqlite();
+
+    const item = await createItem("explicit-attempts", {
+      executorKind: "internal_chat_agent",
+      maxAttempts: 2,
+    });
+
+    expect(item.maxAttempts).toBe(2);
+  });
+
+  test("rejects retry after max attempts and adds an Owner escalation blocker", async () => {
+    configureSqlite();
+    const item = await createItem("retry-exhaustion", { maxAttempts: 1 });
+    await WorkItemStore.fail(item.hash, "permanent error");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.retry(item.hash),
+      "retry attempts exhausted for work item",
+    );
+
+    const exhausted = WorkItemStore.get(item.hash);
+    expect(exhausted?.attempt).toBe(1);
+    expect(exhausted ? WorkItem.deriveStatus(exhausted) : undefined).toBe("failed");
+    expect(exhausted?.blockers).toEqual([
+      expect.objectContaining({
+        kind: "waiting_input",
+        description: "retry attempts exhausted after 1 attempts; Owner escalation required",
+      }),
+    ]);
+  });
+
+  test("allows exactly three attempts for internal worker defaults before exhaustion", async () => {
+    configureSqlite();
+    const item = await createItem("internal-three-attempts", {
+      executorKind: "internal_chat_agent",
+    });
+
+    await WorkItemStore.fail(item.hash, "first failure");
+    const secondAttempt = await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "second failure");
+    const thirdAttempt = await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "third failure");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.retry(item.hash),
+      "retry attempts exhausted for work item",
+    );
+
+    const exhausted = WorkItemStore.get(item.hash);
+    expect(secondAttempt?.attempt).toBe(2);
+    expect(thirdAttempt?.attempt).toBe(3);
+    expect(exhausted?.attempt).toBe(3);
+    expect(exhausted?.maxAttempts).toBe(3);
+    expect(exhausted?.blockers).toEqual([
+      expect.objectContaining({
+        kind: "waiting_input",
+        description: "retry attempts exhausted after 3 attempts; Owner escalation required",
+      }),
+    ]);
+  });
+
+  test("does not duplicate retry exhaustion blockers", async () => {
+    configureSqlite();
+    const item = await createItem("retry-exhaustion-idempotent", { maxAttempts: 1 });
+    await WorkItemStore.fail(item.hash, "permanent error");
+
+    await expectRejectsWithMessage(
+      WorkItemStore.retry(item.hash),
+      "retry attempts exhausted for work item",
+    );
+    await expectRejectsWithMessage(
+      WorkItemStore.retry(item.hash),
+      "retry attempts exhausted for work item",
+    );
+
+    const exhausted = WorkItemStore.get(item.hash);
+    expect(exhausted?.blockers).toHaveLength(1);
+  });
+
+  test("keeps retry available for items without maxAttempts", async () => {
+    configureSqlite();
+    const item = await createItem("retry-without-max-attempts");
+
+    await WorkItemStore.fail(item.hash, "first failure");
+    const secondAttempt = await WorkItemStore.retry(item.hash);
+    await WorkItemStore.fail(item.hash, "second failure");
+    const thirdAttempt = await WorkItemStore.retry(item.hash);
+
+    expect(secondAttempt?.attempt).toBe(2);
+    expect(thirdAttempt?.attempt).toBe(3);
+    expect(thirdAttempt ? WorkItem.deriveStatus(thirdAttempt) : undefined).toBe("running");
+  });
+
+  test("retry degrades gracefully when work item storage is missing", async () => {
+    Storage.configure({
+      session: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+      message: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+      part: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+    });
+
+    await expect(WorkItemStore.retry("missing")).resolves.toBeUndefined();
+  });
+
   test("degrades gracefully when work item storage is missing", async () => {
     const warnings: unknown[] = [];
     Bus.subscribe(Operational.Warn, (event) => warnings.push(event));
