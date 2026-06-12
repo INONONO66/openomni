@@ -12,7 +12,7 @@ src/
 ├── recovery/             # Interrupted worker run recovery
 ├── tool-permission/      # Non-interactive permission policy + audit log (internal; not in barrel)
 ├── worker-manager/       # ⭐ LIVE: OnDemandWorkerManager — spawn on demand, slots, idle shutdown
-└── worker-pool/          # Worker supervisor internals plus dormant SessionRouting helper
+└── worker-pool/          # Worker supervisor internals plus SessionRouting helper
 ```
 
 ## DEPENDENCIES
@@ -25,7 +25,7 @@ Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@o
 |--------|---------|
 | `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based dispatch, session affinity, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
 | `worker-pool/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
-| `worker-pool/session-routing.ts` | Dormant/test-covered session-tree affinity helper; `worker-manager` currently uses its own `sessionAffinity` map |
+| `worker-pool/session-routing.ts` | Session affinity helper used by `worker-manager`; fixed worker-index `route/complete` behavior remains test-covered |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 | `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
 | `credentials/store.ts` / `credentials/injector.ts` | Loads stored credentials, filters by provider prefix, injects provider-scoped credentials into workers |
@@ -52,7 +52,7 @@ Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager`
 
 ## TESTS
 
-Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-pool/` supervisor contracts, dormant SessionRouting behavior, barrel contracts, credentials, recovery, tool-permission, and harness smoke coverage.
+Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-pool/` supervisor contracts, SessionRouting behavior, barrel contracts, credentials, recovery, tool-permission, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 
