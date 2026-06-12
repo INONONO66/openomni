@@ -9,6 +9,7 @@ import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
 import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
+import { createSqlitePendingInteractionAdapter } from "./sqlite-pending-interaction-adapter";
 import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
@@ -29,6 +30,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
+  readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
   readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
   readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
@@ -53,6 +55,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
+    this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
     this.workerGrant = createSqliteWorkerGrantAdapter(this.db);
     this.cronJob = createSqliteCronJobAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);

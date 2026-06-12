@@ -17,4 +17,5 @@ export * from "./storage/wal-maintenance.js";
 export { WorkItemStore } from "./work-item/index.js";
 export { hasRetryExhaustionBlocker } from "./work-item/retry-policy.js";
 export { PendingAskStore } from "./pending-ask/index.js";
+export { PendingInteractionStore } from "./pending-interaction/index.js";
 export { WorkerGrantStore } from "./worker-grant/index.js";

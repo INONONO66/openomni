@@ -29,6 +29,19 @@ export namespace Storage {
     remove(id: string): boolean;
   }
 
+  export interface PendingInteractionSubAdapter {
+    create(record: Communication.PendingInteraction.Record): void;
+    get(id: string): Communication.PendingInteraction.Record | undefined;
+    list(
+      status?: Communication.PendingInteraction.Status[],
+    ): Communication.PendingInteraction.Record[];
+    findByCorrelation(
+      query: Communication.PendingInteraction.CorrelationQuery,
+    ): Communication.PendingInteraction.Record[];
+    set(record: Communication.PendingInteraction.Record): void;
+    remove(id: string): boolean;
+  }
+
   export interface WorkerGrantSubAdapter {
     create(record: Communication.WorkerGrant.Record): void;
     get(id: string): Communication.WorkerGrant.Record | undefined;
