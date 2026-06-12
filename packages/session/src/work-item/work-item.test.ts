@@ -33,6 +33,42 @@ async function createItem(
   return WorkItemStore.create({ ...baseInput, ...extra, name });
 }
 
+async function expectRejectsWithMessage(
+  operation: Promise<unknown>,
+  message: string,
+): Promise<void> {
+  try {
+    await operation;
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error);
+    if (!(err instanceof Error)) return;
+    expect(err.message).toContain(message);
+    return;
+  }
+  throw new Error(`Expected operation to reject with ${message}`);
+}
+
+async function addPassingEvidence(hash: string): Promise<string> {
+  const updated = await WorkItemStore.addEvidence(hash, {
+    kind: "test_result",
+    description: "targeted lifecycle test passed",
+    passed: true,
+    detail: "bun test packages/session/src/work-item/",
+  });
+  const evidenceId = updated?.evidence.at(-1)?.id;
+  if (!evidenceId) throw new Error("expected evidence id");
+  return evidenceId;
+}
+
+function completionReport(evidenceId: string): WorkItem.CompletionReport {
+  return {
+    summary: "Completed with ledger evidence.",
+    claims: [{ statement: "The work happened.", evidenceIds: [evidenceId] }],
+    caveats: [],
+    followUps: [],
+  };
+}
+
 afterEach(() => {
   Bus.reset();
   Storage.reset();
@@ -53,13 +89,9 @@ describe("WorkItemStore", () => {
 
     const item = await createItem("lifecycle");
     const started = await WorkItemStore.start(item.hash);
-    const withEvidence = await WorkItemStore.addEvidence(item.hash, {
-      kind: "test_result",
-      description: "targeted lifecycle test passed",
-      passed: true,
-      detail: "bun test packages/session/src/work-item/",
-    });
-    const completed = await WorkItemStore.complete(item.hash);
+    const evidenceId = await addPassingEvidence(item.hash);
+    const withEvidence = WorkItemStore.get(item.hash);
+    const completed = await WorkItemStore.complete(item.hash, completionReport(evidenceId));
     await flushBus();
 
     expect(started).toBeDefined();
@@ -113,7 +145,8 @@ describe("WorkItemStore", () => {
     });
 
     await WorkItemStore.retry(dependency.hash);
-    await WorkItemStore.complete(dependency.hash);
+    const evidenceId = await addPassingEvidence(dependency.hash);
+    await WorkItemStore.complete(dependency.hash, completionReport(evidenceId));
 
     expect(WorkItemStore.areDependenciesMet(dependent.hash)).toEqual({
       met: true,
@@ -126,20 +159,23 @@ describe("WorkItemStore", () => {
     const first = await createItem("cycle-a");
     const second = await createItem("cycle-b", { dependsOn: [first.hash] });
 
-    await expect(
+    await expectRejectsWithMessage(
       WorkItemStore.update(first.hash, {
         relations: { ...first.relations, dependsOn: [second.hash] },
       }),
-    ).rejects.toThrow("Circular dependency detected");
+      "Circular dependency detected",
+    );
   });
 
   test("rejects completing a failed item", async () => {
     configureSqlite();
     const item = await createItem("fail-then-complete");
+    const evidenceId = await addPassingEvidence(item.hash);
 
     await WorkItemStore.fail(item.hash, "broken");
 
-    await expect(WorkItemStore.complete(item.hash)).rejects.toThrow(
+    await expectRejectsWithMessage(
+      WorkItemStore.complete(item.hash, completionReport(evidenceId)),
       "Cannot complete a failed work item",
     );
   });
@@ -148,9 +184,11 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("complete-then-fail");
 
-    await WorkItemStore.complete(item.hash);
+    const evidenceId = await addPassingEvidence(item.hash);
+    await WorkItemStore.complete(item.hash, completionReport(evidenceId));
 
-    await expect(WorkItemStore.fail(item.hash)).rejects.toThrow(
+    await expectRejectsWithMessage(
+      WorkItemStore.fail(item.hash),
       "Cannot fail a completed work item",
     );
   });
@@ -160,11 +198,12 @@ describe("WorkItemStore", () => {
     const parent = await createItem("actual-parent");
     const item = await createItem("parent-immutable", { parentHash: parent.hash });
 
-    await expect(
+    await expectRejectsWithMessage(
       WorkItemStore.update(item.hash, {
         relations: { ...item.relations, parentHash: "wi_000000000002" },
       }),
-    ).rejects.toThrow("Cannot change parentHash after creation");
+      "Cannot change parentHash after creation",
+    );
   });
 
   test("retries failed work items with a new attempt and running status", async () => {
@@ -231,15 +270,34 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("start-failed");
     await WorkItemStore.fail(item.hash, "broken");
-    await expect(WorkItemStore.start(item.hash)).rejects.toThrow("Cannot start a failed work item");
+    await expectRejectsWithMessage(
+      WorkItemStore.start(item.hash),
+      "Cannot start a failed work item",
+    );
   });
 
   test("rejects retrying a non-failed item", async () => {
     configureSqlite();
     const item = await createItem("retry-pending");
-    await expect(WorkItemStore.retry(item.hash)).rejects.toThrow(
+    await expectRejectsWithMessage(
+      WorkItemStore.retry(item.hash),
       "retry() can only be called on failed work items",
     );
+  });
+
+  test("rejects completion reports without resolvable evidence", async () => {
+    configureSqlite();
+    const item = await createItem("missing-evidence");
+    await WorkItemStore.start(item.hash);
+
+    await expectRejectsWithMessage(
+      WorkItemStore.complete(item.hash, completionReport("ev_missing")),
+      "completion report references missing evidence",
+    );
+
+    const stored = WorkItemStore.get(item.hash);
+    expect(stored ? WorkItem.deriveStatus(stored) : undefined).toBe("running");
+    expect(stored?.completionReport).toBeUndefined();
   });
 
   test("returns unmet for missing work item in areDependenciesMet", () => {
