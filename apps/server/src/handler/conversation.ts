@@ -2,25 +2,32 @@
 import { IngressEngine } from "@openomni/openomni";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational, WorkItem } from "@openomni/protocol";
-import { Bus, WorkItemStore } from "@openomni/session";
+import { Bus, SurfaceKey, WorkItemStore } from "@openomni/session";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
 
-const OPEN_TASK_STATUS_ORDER: Record<WorkItem.Status, number> = {
+const OPEN_TASK_STATUSES = [
+  "pending",
+  "running",
+  "blocked",
+] as const satisfies readonly WorkItem.Status[];
+type OpenTaskStatus = (typeof OPEN_TASK_STATUSES)[number];
+
+const OPEN_TASK_STATUS_SET: ReadonlySet<WorkItem.Status> = new Set(OPEN_TASK_STATUSES);
+const OPEN_TASK_STATUS_ORDER: Record<OpenTaskStatus, number> = {
   blocked: 0,
   pending: 1,
   running: 2,
-  completed: 3,
-  failed: 4,
-  cancelled: 5,
 };
 const MAX_OPEN_TASKS = 20;
 const MAX_DISPLAY_FIELD_CHARS = 80;
+const OPEN_TASKS_UNAUTHORIZED_MESSAGE =
+  "Open task ledger requires authenticated local WebSocket access";
 
 type OpenTask = {
   readonly item: WorkItem.Info;
-  readonly status: WorkItem.Status;
+  readonly status: OpenTaskStatus;
 };
 
 function toResponseText(result: Ingress.IngressResult): string {
@@ -29,6 +36,29 @@ function toResponseText(result: Ingress.IngressResult): string {
 
 function normalizeCommand(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function canReadTaskLedger(message: Adapter.InboundMessage): boolean {
+  const surface = SurfaceKey.parse(message.surfaceKey).surface;
+  if (surface !== "ws") return false;
+  if (!isWebSocketRaw(message.raw)) return false;
+  return message.raw.websocket.authenticated === true;
+}
+
+function isOpenTaskStatus(status: WorkItem.Status): status is OpenTaskStatus {
+  return OPEN_TASK_STATUS_SET.has(status);
+}
+
+function isWebSocketRaw(raw: unknown): raw is { websocket: { authenticated: boolean } } {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    "websocket" in raw &&
+    typeof raw.websocket === "object" &&
+    raw.websocket !== null &&
+    "authenticated" in raw.websocket &&
+    typeof raw.websocket.authenticated === "boolean"
+  );
 }
 
 function formatOpenTask(task: OpenTask): string {
@@ -54,8 +84,11 @@ function compareStable(a: string, b: string): number {
 }
 
 function listOpenTasks(): string {
-  const tasks = WorkItemStore.list({ status: ["pending", "running", "blocked"] })
-    .map((item) => ({ item, status: WorkItem.deriveStatus(item) }))
+  const tasks = WorkItemStore.list({ status: [...OPEN_TASK_STATUSES] })
+    .flatMap((item): OpenTask[] => {
+      const status = WorkItem.deriveStatus(item);
+      return isOpenTaskStatus(status) ? [{ item, status }] : [];
+    })
     .sort((a, b) => {
       const statusDelta = OPEN_TASK_STATUS_ORDER[a.status] - OPEN_TASK_STATUS_ORDER[b.status];
       if (statusDelta !== 0) return statusDelta;
@@ -75,7 +108,10 @@ function listOpenTasks(): string {
 
 async function processMessage(message: Adapter.InboundMessage, deps: BridgeDeps): Promise<string> {
   try {
-    if (normalizeCommand(message.text) === "show open tasks") return listOpenTasks();
+    if (normalizeCommand(message.text) === "show open tasks") {
+      if (!canReadTaskLedger(message)) return OPEN_TASKS_UNAUTHORIZED_MESSAGE;
+      return listOpenTasks();
+    }
     const agentName = resolveAgentName({ message, defaultAgent: "resident" });
     const event = buildInboundEvent(message, agentName, deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);

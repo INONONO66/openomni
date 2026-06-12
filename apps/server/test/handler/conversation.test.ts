@@ -34,12 +34,13 @@ function makeProvider(tools: readonly NativeTool[]): ToolProvider {
   };
 }
 
-function makeMessage(text: string): Adapter.InboundMessage {
+function makeMessage(text: string, surfaceKey = "ws:local-test"): Adapter.InboundMessage {
   return {
     id: "message-1",
-    surfaceKey: "discord:guild:channel:dev",
+    surfaceKey,
     text,
     sender: { id: "owner-1", name: "Owner" },
+    raw: { websocket: { authenticated: true } },
   };
 }
 
@@ -116,6 +117,46 @@ describe("conversation task ledger command", () => {
 
     // Then
     expect(response).toEqual({ text: "Open tasks: none" });
+    expect(ingest).toHaveBeenCalledTimes(0);
+  });
+
+  it("rejects the open task command on external surfaces", async () => {
+    // Given
+    const ingest = mock(async (): Promise<Ingress.IngressResult> => {
+      throw new Error("ingress should not run for unauthorized task ledger command");
+    });
+    IngressEngine.ingest = ingest;
+    const handler = createMessageHandler(deps);
+
+    // When
+    const response = await handler(makeMessage("show open tasks", "discord:guild:channel:dev"));
+
+    // Then
+    expect(response).toEqual({
+      text: "Open task ledger requires authenticated local WebSocket access",
+    });
+    expect(ingest).toHaveBeenCalledTimes(0);
+  });
+
+  it("rejects the open task command on unauthenticated WebSocket messages", async () => {
+    // Given
+    const ingest = mock(async (): Promise<Ingress.IngressResult> => {
+      throw new Error("ingress should not run for unauthenticated task ledger command");
+    });
+    IngressEngine.ingest = ingest;
+    const handler = createMessageHandler(deps);
+    const message = makeMessage("show open tasks");
+
+    // When
+    const response = await handler({
+      ...message,
+      raw: { websocket: { authenticated: false } },
+    });
+
+    // Then
+    expect(response).toEqual({
+      text: "Open task ledger requires authenticated local WebSocket access",
+    });
     expect(ingest).toHaveBeenCalledTimes(0);
   });
 

@@ -10,6 +10,7 @@ export interface WebSocketConfig {
 
 interface WsConnectionData {
   surfaceKey: string;
+  authenticated: boolean;
 }
 
 interface WebSocketUpgradeOptions {
@@ -38,7 +39,10 @@ export class WebSocketHandler {
         void self.handleMessage(ws, raw);
       },
       open(ws: { data: WsConnectionData }) {
-        ws.data = { surfaceKey: `ws:${crypto.randomUUID()}` };
+        ws.data = {
+          surfaceKey: ws.data.surfaceKey,
+          authenticated: ws.data.authenticated,
+        };
         Bus.publish(Operational.Info, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
@@ -71,9 +75,11 @@ export class WebSocketHandler {
         : {}),
     });
     if (auth.response) return auth.response;
+    const hasConfiguredToken = this.config.token !== undefined && this.config.token.length > 0;
+    const authenticated = hasConfiguredToken && auth.verdict.verdict === "allow";
 
     const ok = server.upgrade(req, {
-      data: { surfaceKey: `ws:${crypto.randomUUID()}` } satisfies WsConnectionData,
+      data: { surfaceKey: `ws:${crypto.randomUUID()}`, authenticated } satisfies WsConnectionData,
       ...(auth.headers !== undefined ? { headers: auth.headers } : {}),
     });
     if (ok) return undefined;
@@ -99,6 +105,7 @@ export class WebSocketHandler {
         surfaceKey,
         text: parsed.text,
         sender: { id: "ws", name: "WebSocket" },
+        raw: { websocket: { authenticated: ws.data.authenticated } },
       });
 
       ws.send(JSON.stringify({ type: "response", text: result?.text ?? "" }));
