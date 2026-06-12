@@ -26,6 +26,22 @@ function createInput(overrides: Partial<WorkItemInput> = {}): WorkItemInput {
   };
 }
 
+async function addEvidenceBackedReport(hash: string): Promise<WorkItem.CompletionReport> {
+  const updated = await WorkItemStore.addEvidence(hash, {
+    kind: "verification",
+    description: "integration evidence recorded",
+    passed: true,
+  });
+  const evidenceId = updated?.evidence.at(-1)?.id;
+  if (!evidenceId) throw new Error("expected evidence id");
+  return {
+    summary: "Completed with integration evidence.",
+    claims: [{ statement: "Integration path completed.", evidenceIds: [evidenceId] }],
+    caveats: [],
+    followUps: [],
+  };
+}
+
 function resolveSessionId(_event: Bus.PublishedDescriptor, payload: unknown): string | undefined {
   if (payload && typeof payload === "object" && "sessionId" in payload) {
     return (payload as { sessionId?: string }).sessionId;
@@ -70,7 +86,10 @@ describe("WorkItem integration", () => {
     stop = BusPersistence.start({ resolveSessionId });
 
     const item = await WorkItemStore.create(createInput({ sessionId }));
-    const completed = await WorkItemStore.complete(item.hash);
+    const completed = await WorkItemStore.complete(
+      item.hash,
+      await addEvidenceBackedReport(item.hash),
+    );
 
     await flushBusPersistence();
     unsubscribeCreated();
@@ -121,7 +140,7 @@ describe("WorkItem integration", () => {
       reason: "pending",
     });
 
-    await WorkItemStore.complete(child1.hash);
+    await WorkItemStore.complete(child1.hash, await addEvidenceBackedReport(child1.hash));
 
     expect(WorkItemStore.areDependenciesMet(child2.hash)).toEqual({
       met: true,

@@ -11,7 +11,7 @@ describe("worker.spawn dispatch gate", () => {
     Storage.initialize({ dbPath: ":memory:" });
   });
 
-  test("worker.spawn creates a running WorkItem with acceptance criteria", async () => {
+  test("worker.spawn creates a WorkItem with acceptance criteria before completion gating", async () => {
     const requests: Execution.Request[] = [];
     const registry = new DispatchRegistry();
     registerBuiltInDispatchHandlers(registry, {
@@ -57,7 +57,7 @@ describe("worker.spawn dispatch gate", () => {
       acceptanceCriteria: ["The delegated worker returns evidence-backed completion"],
       constraints: ["stay inside the requested scope"],
     });
-    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("running");
+    expect(workItems[0] ? WorkItem.deriveStatus(workItems[0]) : undefined).toBe("blocked");
     expect(result).toMatchObject({
       output: { sessionId: requests[0]?.sessionId, workItemHash: workItems[0]?.hash },
     });

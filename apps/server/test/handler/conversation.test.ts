@@ -58,6 +58,22 @@ async function createWorkItem(
   });
 }
 
+async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
+  const updated = await WorkItemStore.addEvidence(hash, {
+    kind: "verification",
+    description: "conversation ledger fixture evidence",
+    passed: true,
+  });
+  const evidenceId = updated?.evidence.at(-1)?.id;
+  if (!evidenceId) throw new Error("expected evidence id");
+  return WorkItemStore.complete(hash, {
+    summary: "Completed with fixture evidence.",
+    claims: [{ statement: "The item is complete.", evidenceIds: [evidenceId] }],
+    caveats: [],
+    followUps: [],
+  });
+}
+
 const deps: BridgeDeps = {
   systemProvider: makeProvider([makeTool("read")]),
   agentProvider: makeProvider([makeTool("dispatch")]),
@@ -199,7 +215,7 @@ describe("conversation task ledger command", () => {
       intent: "verify",
       goal: "verify complete items are hidden",
     });
-    const completedResult = await WorkItemStore.complete(completed.hash);
+    const completedResult = await completeWorkItem(completed.hash);
     const failed = await createWorkItem("Failed thing", {
       intent: "verify",
       goal: "verify failed items are hidden",

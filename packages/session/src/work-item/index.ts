@@ -1,6 +1,7 @@
 import { Operational, type Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { Storage } from "../storage/storage.js";
+import { verifyCompletionReport } from "./completion-report.js";
 
 type WorkItemAdapter = NonNullable<Storage.Adapter["workItem"]>;
 
@@ -151,6 +152,7 @@ export namespace WorkItemStore {
       "attempt",
       "blockers",
       "evidence",
+      "completionReport",
       "verificationGate",
     ] as const;
     for (const key of managedFields) {
@@ -197,12 +199,16 @@ export namespace WorkItemStore {
     }));
   }
 
-  export async function complete(hash: string): Promise<WorkItem.Info | undefined> {
+  export async function complete(
+    hash: string,
+    completionReport: WorkItem.CompletionReport,
+  ): Promise<WorkItem.Info | undefined> {
     return mutate(hash, (existing, now) => ({
-      changedFields: ["timestamps"],
+      changedFields: ["timestamps", "completionReport"],
       target: "completed",
       updated: {
         ...existing,
+        completionReport: verifyCompletionReport(existing, completionReport),
         timestamps: { ...existing.timestamps, completed: now, updated: now },
       },
       afterPublish: (updated) => {
