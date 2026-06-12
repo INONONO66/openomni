@@ -34,6 +34,8 @@ const ReadBackRequest = z.discriminatedUnion("kind", [
   }),
 ]);
 
+type ReadBackRequest = z.infer<typeof ReadBackRequest>;
+
 const CompletionReportDraft = z
   .object({
     summary: z.string().min(1),
@@ -86,6 +88,7 @@ type ParsedCompletionEnvelope =
 
 export interface WorkerCompletionOptions {
   readonly readBack?: ReadBackExecutor.Options;
+  readonly readBackEnvelopeTimeoutMs?: number;
 }
 
 export type CompletionReflection = {
@@ -165,8 +168,15 @@ async function prepareCompletionReport(
   }
 
   const evidenceIdsByClaim = new Map<number, string[]>();
+  const deadlineAt = Date.now() + resolveReadBackEnvelopeTimeoutMs(options);
   for (const readBack of envelope.readBackRequests) {
-    const updated = await ReadBackExecutor.record(workItemHash, readBack.request, options.readBack);
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) throw new Error("read-back envelope deadline exceeded");
+    const updated = await ReadBackExecutor.record(
+      workItemHash,
+      applySharedDeadline(readBack.request, remainingMs),
+      options.readBack,
+    );
     const evidenceId = updated?.evidence.at(-1)?.id;
     if (!evidenceId) throw new Error("read-back evidence was not recorded");
     const existing = evidenceIdsByClaim.get(readBack.claimIndex) ?? [];
@@ -191,6 +201,29 @@ function attachReadBackEvidence(
       evidenceIds: [...claim.evidenceIds, ...readBackEvidenceIds],
     };
   });
+}
+
+function resolveReadBackEnvelopeTimeoutMs(options: WorkerCompletionOptions): number {
+  const configured = options.readBackEnvelopeTimeoutMs;
+  if (configured === undefined || !Number.isFinite(configured) || configured <= 0) {
+    return MAX_READ_BACK_TIMEOUT_MS;
+  }
+  return Math.min(Math.floor(configured), MAX_READ_BACK_TIMEOUT_MS);
+}
+
+function applySharedDeadline(request: ReadBackRequest, remainingMs: number): ReadBackRequest {
+  const timeoutMs = Math.max(
+    1,
+    Math.min(request.timeoutMs ?? MAX_READ_BACK_TIMEOUT_MS, Math.floor(remainingMs)),
+  );
+  switch (request.kind) {
+    case "url_fetch":
+      return { ...request, timeoutMs };
+    case "api_query":
+      return { ...request, timeoutMs };
+    case "citation_match":
+      return { ...request, timeoutMs };
+  }
 }
 
 async function blockCompletion(

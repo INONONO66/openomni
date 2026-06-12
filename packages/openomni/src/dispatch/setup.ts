@@ -10,6 +10,7 @@ import { createWorkerDispatchHandlers } from "./handlers/worker.js";
 export interface BuiltInDispatchOptions {
   readonly owners?: DispatchOwners;
   readonly readBack?: ReadBackExecutor.Options;
+  readonly readBackEnvelopeTimeoutMs?: number;
 }
 
 export function registerBuiltInDispatchHandlers(
@@ -27,6 +28,7 @@ export function registerBuiltInDispatchHandlers(
       coordinator: owners.coordinator,
       defaultModel: owners.defaultModel,
       readBack: options.readBack,
+      readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
     }),
     ...createScheduleDispatchHandlers({ scheduler }),
   };
@@ -47,6 +49,7 @@ export function createDefaultDispatchRuntime(
   registerBuiltInDispatchHandlers(runtime.registry, {
     owners: options.owners,
     readBack: options.readBack,
+    readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
   });
   return runtime;
 }

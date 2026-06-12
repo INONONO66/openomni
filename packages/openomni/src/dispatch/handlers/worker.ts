@@ -159,6 +159,7 @@ export function createWorkerDispatchHandlers(
       }
       const reflection = await reflectCoordinatorResult(workItemHash, result, {
         readBack: options.readBack,
+        readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
       });
       return {
         output: {
