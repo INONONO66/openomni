@@ -2,7 +2,7 @@
 import { IngressEngine } from "@openomni/openomni";
 import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational, WorkItem } from "@openomni/protocol";
-import { Bus, SurfaceKey, WorkItemStore } from "@openomni/session";
+import { Bus, hasRetryExhaustionBlocker, SurfaceKey, WorkItemStore } from "@openomni/session";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 import { resolveAgentName } from "../router";
@@ -11,14 +11,16 @@ const OPEN_TASK_STATUSES = [
   "pending",
   "running",
   "blocked",
+  "failed",
 ] as const satisfies readonly WorkItem.Status[];
 type OpenTaskStatus = (typeof OPEN_TASK_STATUSES)[number];
 
 const OPEN_TASK_STATUS_SET: ReadonlySet<WorkItem.Status> = new Set(OPEN_TASK_STATUSES);
 const OPEN_TASK_STATUS_ORDER: Record<OpenTaskStatus, number> = {
-  blocked: 0,
-  pending: 1,
-  running: 2,
+  failed: 0,
+  blocked: 1,
+  pending: 2,
+  running: 3,
 };
 const MAX_OPEN_TASKS = 20;
 const MAX_DISPLAY_FIELD_CHARS = 80;
@@ -49,6 +51,10 @@ function isOpenTaskStatus(status: WorkItem.Status): status is OpenTaskStatus {
   return OPEN_TASK_STATUS_SET.has(status);
 }
 
+function isLedgerVisibleTask(item: WorkItem.Info, status: OpenTaskStatus): boolean {
+  return status !== "failed" || hasRetryExhaustionBlocker(item);
+}
+
 function isWebSocketRaw(raw: unknown): raw is { websocket: { authenticated: boolean } } {
   return (
     typeof raw === "object" &&
@@ -65,7 +71,10 @@ function formatOpenTask(task: OpenTask): string {
   const { item, status } = task;
   const activeBlockers = item.blockers.filter((blocker) => blocker.resolvedAt === undefined).length;
   const details = [`hash: ${item.hash}`];
-  if (status === "blocked") details.push(`blockers: ${activeBlockers}`);
+  if (status === "blocked" || status === "failed") details.push(`blockers: ${activeBlockers}`);
+  if (status === "failed" && item.maxAttempts !== undefined) {
+    details.push(`attempts: ${item.attempt}/${item.maxAttempts}`);
+  }
   if (item.assigneeId) details.push(`assignee: ${formatDisplayField(item.assigneeId)}`);
   if (item.sessionId) details.push(`session: ${formatDisplayField(item.sessionId)}`);
   return `- [${status}] ${formatDisplayField(item.name)} (${details.join(", ")})`;
@@ -87,7 +96,9 @@ function listOpenTasks(): string {
   const tasks = WorkItemStore.list({ status: [...OPEN_TASK_STATUSES] })
     .flatMap((item): OpenTask[] => {
       const status = WorkItem.deriveStatus(item);
-      return isOpenTaskStatus(status) ? [{ item, status }] : [];
+      return isOpenTaskStatus(status) && isLedgerVisibleTask(item, status)
+        ? [{ item, status }]
+        : [];
     })
     .sort((a, b) => {
       const statusDelta = OPEN_TASK_STATUS_ORDER[a.status] - OPEN_TASK_STATUS_ORDER[b.status];
