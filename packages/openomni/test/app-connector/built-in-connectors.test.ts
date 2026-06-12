@@ -85,6 +85,20 @@ describe("BuiltInAppConnectors", () => {
     }
   });
 
+  test("keeps built-in tested version ranges inside discovery grammar", () => {
+    // Given / When / Then
+    for (const connector of BuiltInAppConnectors.list()) {
+      const constraints = connector.detect.testedVersions
+        .split(" ")
+        .filter((constraint) => constraint.length > 0);
+
+      expect(constraints.length).toBeGreaterThan(0);
+      for (const constraint of constraints) {
+        expect(constraint).toMatch(/^(>=|<)\d+\.\d+\.\d+$/);
+      }
+    }
+  });
+
   test("returns defensive copies of built-in connector data", () => {
     // Given
     const connectors = BuiltInAppConnectors.list();
