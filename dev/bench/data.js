@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781202363746,
+  "lastUpdate": 1781228596724,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -4587,6 +4587,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 541411,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b0c8c1246e9235d4bd4fa01b2038437027ade92",
+          "message": "feat(openomni): create work items for worker spawns\n\n## Summary\n- Wire worker.spawn to create and start WorkItem ledger entries.\n- Return workItemHash from spawn output for durable work correlation.\n- Preserve coordinator thrown errors and terminal results when ledger reflection writes fail.\n- Mark WorkItemStore as wired in implementation-status while keeping completion-report gates pending.\n\n## Validation\n- LSP diagnostics clean on changed TS files\n- bunx biome check --write packages/openomni/src/dispatch/handlers/worker.ts packages/openomni/test/dispatch/handlers.test.ts docs/implementation-status.md\n- bun test packages/openomni/test/dispatch/handlers.test.ts\n- bun run check-types\n- bun run build && bun test && bun run test\n- Manual runtime QA: worker.spawn persisted a WorkItem and returned matching workItemHash\n- OMO verifier PASS\n- Claude Fable 5 PASS\n- GitHub Actions PASS\n- CodeRabbit/Cubic review feedback addressed",
+          "timestamp": "2026-06-12T10:42:44+09:00",
+          "tree_id": "4efb5bf98a2f2bd1b4920d33fc3db959027a7d72",
+          "url": "https://github.com/INONONO66/openomni/commit/7b0c8c1246e9235d4bd4fa01b2038437027ade92"
+        },
+        "date": 1781228596076,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 722.715886013222,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 827.5361094331554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1384.2378810109271,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.15638987755509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 630.0280400914345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445.78299884984017,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2868.858683802966,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2514.494342469248,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10092.114441416845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5945.6599678936345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2973,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 21747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 734,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1686,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 547096,
             "unit": "ns/op"
           }
         ]
