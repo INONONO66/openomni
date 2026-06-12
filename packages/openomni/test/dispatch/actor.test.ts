@@ -15,7 +15,7 @@ describe("deriveActorContext", () => {
     expect(actor.kind).toBe("resident");
     expect(actor.runId).toBe("r1");
     expect(actor.workerRunId).toBeUndefined();
-    expect(actor.trustTier).toBe("resident");
+    expect(actor.trustTier).toBeUndefined();
   });
 
   test("does not infer privileged actors from substrings", () => {
@@ -30,8 +30,13 @@ describe("deriveActorContext", () => {
   });
 
   test("explicit trusted system context can be supplied by runtime", () => {
-    const actor = deriveActorContext({ actorKind: "system", actorId: "system:scheduler" });
+    const actor = deriveActorContext({
+      actorKind: "system",
+      actorId: "system:scheduler",
+      trustTier: "manager",
+    });
     expect(actor.kind).toBe("system");
     expect(actor.actorId).toBe("system:scheduler");
+    expect(actor.trustTier).toBe("manager");
   });
 });

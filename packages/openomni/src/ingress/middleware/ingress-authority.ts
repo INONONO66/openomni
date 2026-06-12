@@ -1,5 +1,5 @@
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
-import { type Actor, Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
+import { Actor, Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
@@ -11,6 +11,9 @@ type ActorRecord = Record<string, unknown>;
 
 const workerControlActions = ["spawn", "send", "cancel", "resume", "schedule"] as const;
 type WorkerControlAction = (typeof workerControlActions)[number];
+
+const topLevelTrustTiers = new Set<Actor.TrustTier>(["owner", "co_owner", "manager"]);
+const evidenceOnlyTrustTiers = new Set<Actor.TrustTier>(["collaborator", "observer"]);
 
 const actionLabels: Record<WorkerControlAction, `action.${WorkerControlAction}`> = {
   spawn: "action.spawn",
@@ -70,6 +73,11 @@ function actorRole(actor: ActorRecord | undefined): string {
   return String(actor?.role ?? actor?.kind ?? actor?.type ?? "").toLowerCase();
 }
 
+function actorTrustTier(actor: ActorRecord | undefined): Actor.TrustTier | undefined {
+  const parsed = Actor.TrustTier.safeParse(actor?.trustTier);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function normalizeControlAction(value: unknown): WorkerControlAction | undefined {
   if (typeof value !== "string") return undefined;
   const action = value.toLowerCase();
@@ -98,6 +106,9 @@ function targetRequiresCoordinator(target: Ingress.Target): boolean {
 }
 
 function isTrustedManager(actor: ActorRecord): boolean {
+  const trustTier = actorTrustTier(actor);
+  if (trustTier) return topLevelTrustTiers.has(trustTier);
+
   return actor.trusted === true || actor.isTrustedManager === true;
 }
 
@@ -107,8 +118,19 @@ function isAuthorizedTopLevelActor(event: Ingress.InboundEvent): boolean {
 
   const target = resolveTarget(event);
   const role = actorRole(actor);
-  if (role === "user") return true;
+
+  const trustTier = actorTrustTier(actor);
+  if (trustTier) {
+    if (topLevelTrustTiers.has(trustTier)) return true;
+    return (
+      target.kind === "resident" &&
+      event.meta?.inboundTreatment === "evidence_only" &&
+      evidenceOnlyTrustTiers.has(trustTier)
+    );
+  }
+
   if (role === "resident") return true;
+  if (role === "user") return true;
   if (role === "manager") return isTrustedManager(actor);
   if (role === "worker" && target.kind === "resident") return isTrustedManager(actor);
 
@@ -119,6 +141,8 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
   const target = resolveTarget(event);
   const actor = getActor(event);
   const role = actorRole(actor);
+  const trustTier = actorTrustTier(actor);
+  const permissionActor = trustTier ?? role;
   const eventAction = getEventAction(event);
   const action = target.kind === "worker" ? "ingress.worker.deliver" : "ingress.top_level.create";
   const resource = `ingress.${event.surface}.${targetKey(target)}`;
@@ -126,6 +150,7 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
     `surface.${event.surface}`,
     `target.${target.kind}`,
     ...(role ? [`actor.${role}`] : []),
+    ...(trustTier ? [`trust.${trustTier}`] : []),
     ...(eventAction ? [actionLabels[eventAction]] : []),
   ];
   const decision = PolicyDecision.fromEvaluation(
@@ -205,7 +230,7 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
         resourceLabels,
         actor,
         input: {
-          actionPermission: eventAction ? `${role}.${eventAction}` : "",
+          actionPermission: eventAction ? `${permissionActor}.${eventAction}` : "",
           authorized: String(isAuthorizedTopLevelActor(event)),
         },
         metadata: { action: eventAction, mode: event.mode, surface: event.surface, target },
@@ -287,10 +312,17 @@ function applyChannelGrantTreatment(
   grant: ChannelGrantStore.Grant,
   inboundTreatment: Actor.InboundTreatment,
 ): Ingress.InboundEvent {
+  const actor = getActor(event);
+  const actorWithChannelDefault =
+    actor && !actorTrustTier(actor) && grant.defaultTier
+      ? { ...actor, trustTier: grant.defaultTier }
+      : actor;
+
   return {
     ...event,
     meta: {
       ...event.meta,
+      ...(actorWithChannelDefault ? { actor: actorWithChannelDefault } : {}),
       channelGrantId: grant.id,
       channelGrantKind: grant.kind,
       inboundTreatment,
@@ -426,7 +458,7 @@ export namespace IngressAuthorityMiddleware {
   } as const satisfies Policy.Definition;
 
   export interface PreRunContext {
-    readonly event: Ingress.InboundEvent;
+    readonly event: unknown;
     readonly coordinator?: CoordinatorLike;
     readonly traceContext?: TraceContext.Type;
     readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;

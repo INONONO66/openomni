@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Actor } from "../actor/index.js";
 import { BusEvent } from "../bus/index.js";
 import { Policy } from "../policy/index.js";
 
@@ -54,7 +55,7 @@ export namespace Dispatch {
       workspaceRoot: z.string().min(1).optional(),
       permissions: z.array(z.string()).optional(),
       labels: z.array(z.string()).optional(),
-      trustTier: z.string().min(1).optional(),
+      trustTier: Actor.TrustTier.optional(),
       reason: z.string().min(1).optional(),
     })
     .strict();
