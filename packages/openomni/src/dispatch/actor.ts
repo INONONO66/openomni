@@ -1,4 +1,4 @@
-import { Dispatch } from "@openomni/protocol";
+import { type Actor, Dispatch } from "@openomni/protocol";
 import { WorkerRunStateStore } from "@openomni/session";
 
 export interface DispatchRuntimeContext {
@@ -9,7 +9,7 @@ export interface DispatchRuntimeContext {
   readonly traceId?: string;
   readonly actorKind?: Dispatch.ActorKind;
   readonly actorId?: string;
-  readonly trustTier?: string;
+  readonly trustTier?: Actor.TrustTier;
   readonly labels?: readonly string[];
 }
 
@@ -30,9 +30,18 @@ function lookupWorkerRun(sessionId: string | undefined, runId: string | undefine
   }
 }
 
+function deriveTrustTier(
+  context: DispatchRuntimeContext,
+  hasWorkerRun: boolean,
+): Actor.TrustTier | undefined {
+  if (context.trustTier) return context.trustTier;
+  return hasWorkerRun ? "assigned_worker" : undefined;
+}
+
 export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispatch.ActorContext {
   const workerRun = lookupWorkerRun(context.sessionId, context.runId);
   const kind = context.actorKind ?? (workerRun ? "worker" : actorKindFromAgent(context.agentName));
+  const trustTier = deriveTrustTier(context, Boolean(workerRun));
   const actorId =
     context.actorId ??
     (context.sessionId && context.runId
@@ -49,8 +58,7 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
     ...(context.runId ? { runId: context.runId } : {}),
     ...(context.runId && kind === "worker" ? { workerRunId: context.runId } : {}),
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
-    trustTier:
-      context.trustTier ?? (workerRun ? "assigned_worker" : kind === "unknown" ? "unknown" : kind),
+    ...(trustTier ? { trustTier } : {}),
     labels: [...(context.labels ?? []), `actor.${kind}`],
     ...(kind === "unknown" ? { reason: "missing runtime actor context" } : {}),
   });

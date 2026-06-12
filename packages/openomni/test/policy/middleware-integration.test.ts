@@ -5,6 +5,7 @@ import {
   type Ingress,
   type Model,
   type Policy,
+  type RuntimeResource,
   type Subagent,
 } from "@openomni/protocol";
 import { ChannelGrantStore, Session, Storage } from "@openomni/session";
@@ -20,9 +21,14 @@ import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 
 const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-function baseCtx(
-  overrides?: Partial<Omit<PolicyContext, "timing">>,
-): Omit<PolicyContext, "timing"> {
+type PreDispatchContext = Omit<PolicyContext, "timing"> & {
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+};
+
+type WorkerControlTestAction = "cancel" | "resume" | "schedule";
+type RestrictedTrustTier = "observer" | "collaborator" | "assigned_worker";
+
+function baseCtx(overrides?: Partial<PreDispatchContext>): PreDispatchContext {
   return {
     steps: [],
     usage: emptyUsage,
@@ -179,7 +185,7 @@ describe("IngressAuthorityMiddleware integration", () => {
 
   test.each(["cancel", "resume", "schedule"] as const)(
     "denies worker actor action %s",
-    async (action) => {
+    async (action: WorkerControlTestAction) => {
       const event = makeInboundEvent({
         meta: { actor: { role: "worker" }, action },
       });
@@ -195,7 +201,7 @@ describe("IngressAuthorityMiddleware integration", () => {
 
   test.each(["cancel", "resume", "schedule"] as const)(
     "allows resident actor action %s",
-    async (action) => {
+    async (action: WorkerControlTestAction) => {
       const event = makeInboundEvent({
         meta: { actor: { role: "resident" }, action },
       });
@@ -219,7 +225,9 @@ describe("IngressAuthorityMiddleware integration", () => {
       IngressAuthorityMiddleware.runPreRun({
         event,
         coordinator: stubCoordinator,
-        onDecision: (decision) => decisions.push(decision),
+        onDecision: (decision) => {
+          decisions.push(decision);
+        },
       }),
     ).rejects.toThrow("worker cannot spawn workers");
 
@@ -265,6 +273,91 @@ describe("IngressAuthorityMiddleware integration", () => {
     expect(result.event.id).toBe("evt-1");
   });
 
+  test("allows canonical manager trust tier without legacy trusted flag", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const event = makeInboundEvent({
+      meta: { actor: { actorId: "act_manager", trustTier: "manager" } },
+    });
+
+    const result = await IngressAuthorityMiddleware.runPreRun({
+      event,
+      coordinator: stubCoordinator,
+      onDecision: (decision) => {
+        decisions.push(decision);
+      },
+    });
+
+    expect(result.event.id).toBe("evt-1");
+    expect(decisions.some((decision) => decision.factsUsed?.includes("trust.manager"))).toBe(true);
+  });
+
+  test("canonical observer trust tier overrides legacy user role", async () => {
+    const decisions: Policy.PolicyDecision[] = [];
+    const event = makeInboundEvent({
+      meta: { actor: { role: "user", actorId: "act_observer", trustTier: "observer" } },
+    });
+
+    await expect(
+      IngressAuthorityMiddleware.runPreRun({
+        event,
+        coordinator: stubCoordinator,
+        onDecision: (decision) => {
+          decisions.push(decision);
+        },
+      }),
+    ).rejects.toThrow("actor is not authorized to create top-level inbound work");
+
+    expect(decisions.some((decision) => decision.factsUsed?.includes("trust.observer"))).toBe(true);
+  });
+
+  test.each(["observer", "collaborator", "assigned_worker"] as const)(
+    "canonical %s trust tier overrides privileged legacy resident role",
+    async (trustTier: RestrictedTrustTier) => {
+      const event = makeInboundEvent({
+        target: { kind: "worker" },
+        meta: {
+          actor: {
+            role: "resident",
+            actorId: `act_${trustTier}`,
+            trustTier,
+            trusted: true,
+            isTrustedManager: true,
+          },
+          action: "spawn",
+        },
+      });
+
+      await expect(
+        IngressAuthorityMiddleware.runPreRun({
+          event,
+          coordinator: stubCoordinator,
+        }),
+      ).rejects.toThrow("actor is not authorized to create top-level inbound work");
+    },
+  );
+
+  test("uses channel default trust tier for unregistered actors", async () => {
+    ChannelGrantStore.put({
+      id: "grant-public-observer",
+      surface: "test",
+      channel: "public",
+      kind: "trusted_channel",
+      defaultTier: "observer",
+      createdBy: "act_owner",
+    });
+    const event = makeInboundEvent({
+      channel: "public",
+      meta: { actor: { role: "user", id: "external-user-1" } },
+    });
+
+    await expect(
+      IngressAuthorityMiddleware.runPreRun({
+        event,
+        coordinator: stubCoordinator,
+      }),
+    ).rejects.toThrow("actor is not authorized to create top-level inbound work");
+  });
+
   test("allows explicit resident target when coordinator is missing", async () => {
     const event = makeInboundEvent({
       target: { kind: "resident" },
@@ -286,7 +379,7 @@ describe("IngressAuthorityMiddleware integration", () => {
   });
 
   test("aborts on invalid schema", async () => {
-    const badEvent = { not: "valid" } as unknown as Ingress.InboundEvent;
+    const badEvent = { not: "valid" };
 
     await expect(
       IngressAuthorityMiddleware.runPreRun({
@@ -520,7 +613,9 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxDepth: 5,
       maxDescendants: 5,
       maxQueueSize: 20,
-      onDecision: (decision) => decisions.push(decision),
+      onDecision: (decision) => {
+        decisions.push(decision);
+      },
     });
 
     expect(result.verdict.verdict).toBe("allow");
