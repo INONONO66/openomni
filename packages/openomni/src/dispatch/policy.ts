@@ -1,11 +1,13 @@
 import { PolicyDecision, type Dispatch, type Policy } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
 import { BlacklistStore, WorkerGrantStore } from "@openomni/session";
+import { EffectiveAuthority } from "./effective-authority.js";
 
-function deny(reason: string): Policy.PolicyDecision {
+function deny(reason: string, factsUsed: readonly string[] = []): Policy.PolicyDecision {
   return PolicyDecision.deny({
     policyId: "dispatch.default-authority",
     reasonCodes: [reason],
+    factsUsed: [...factsUsed],
     effects: [
       { type: "run.abort", reason },
       { type: "audit.annotate", annotation: reason, severity: "error" },
@@ -13,12 +15,19 @@ function deny(reason: string): Policy.PolicyDecision {
   });
 }
 
-function allow(reason: string): Policy.PolicyDecision {
+function allow(reason: string, factsUsed: readonly string[] = []): Policy.PolicyDecision {
   return PolicyDecision.allow({
     policyId: "dispatch.default-authority",
     reasonCodes: [reason],
+    factsUsed: [...factsUsed],
     effects: [{ type: "audit.annotate", annotation: reason, severity: "info" }],
   });
+}
+
+function decide(result: EffectiveAuthority.Result): Policy.PolicyDecision {
+  return result.allowed
+    ? allow(result.reason, result.factsUsed)
+    : deny(result.reason, result.factsUsed);
 }
 
 function blacklistReason(kind: string, value: string, reason: string | undefined): string {
@@ -58,49 +67,56 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
       const target = input.target;
       const blacklisted = BlacklistStore.match(blacklistMatchInput(actor, target));
       if (blacklisted) {
-        return deny(blacklistReason(blacklisted.kind, blacklisted.value, blacklisted.reason));
+        return decide(
+          EffectiveAuthority.blockedByBlacklist(
+            blacklistReason(blacklisted.kind, blacklisted.value, blacklisted.reason),
+            blacklisted.kind,
+          ),
+        );
       }
 
       if (!actor || actor.kind === "unknown") {
-        return deny("dispatch.actor.required");
+        return decide(EffectiveAuthority.missingActor());
       }
 
       if (actor.kind === "worker" && action === "worker.spawn") {
         const granted = evaluateWorkerGrant(actor, action, target);
-        return granted.allowed ? allow(granted.reason) : deny("dispatch.worker.spawn.denied");
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.spawn.denied"));
       }
 
       if (actor.kind === "worker" && action.startsWith("schedule.")) {
         const granted = evaluateWorkerGrant(actor, action, target);
-        return granted.allowed ? allow(granted.reason) : deny("dispatch.worker.schedule.denied");
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.schedule.denied"));
       }
 
       if (actor.kind === "worker" && action === "resident.ask") {
         if (target?.kind !== "resident") {
-          return deny("dispatch.worker.resident_ask.target.denied");
+          return decide(
+            EffectiveAuthority.workerDenied("dispatch.worker.resident_ask.target.denied"),
+          );
         }
-        return allow("dispatch.worker.resident_ask.allowed");
+        return decide(EffectiveAuthority.workerNotRequired("dispatch.worker.resident_ask.allowed"));
       }
 
       if (actor.kind === "worker" && isWorkerScopedEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target);
-        return granted.allowed ? allow(granted.reason) : deny("dispatch.worker.scope.denied");
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.scope.denied"));
       }
 
       if (actor.kind === "worker" && isExternalEgress(action)) {
         const granted = evaluateWorkerGrant(actor, action, target, isExternalCreate(action));
-        return granted.allowed ? allow(granted.reason) : deny("dispatch.worker.external.denied");
+        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
 
       if (actor.kind === "system" && action.startsWith("schedule.")) {
-        return allow("dispatch.system.schedule.allowed");
+        return decide(EffectiveAuthority.nonWorker("dispatch.system.schedule.allowed"));
       }
 
       if (actor.kind === "worker") {
-        return deny("dispatch.worker.action.denied");
+        return decide(EffectiveAuthority.workerDenied("dispatch.worker.action.denied"));
       }
 
-      return allow("dispatch.default.allowed");
+      return decide(EffectiveAuthority.nonWorker("dispatch.default.allowed"));
     },
   };
 }
