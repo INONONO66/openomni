@@ -48,6 +48,7 @@ describe("WorkerRun", () => {
     expect(run?.title).toBe("worker task");
     expect(run?.prompt).toBe("do the thing");
     expect(run?.assignedStepId).toBe("step-1");
+    expect(run?.executorKind).toBe("internal_chat_agent");
     expect(run?.status).toBe("queued");
     expect(run?.resumeCount).toBe(0);
     expect(run?.startedAt).toBeGreaterThan(0);
@@ -61,7 +62,41 @@ describe("WorkerRun", () => {
       title: "worker task",
       prompt: "do the thing",
       assignedStepId: "step-1",
+      executorKind: "internal_chat_agent",
     });
+  });
+
+  test("create and get round-trip executor kind", async () => {
+    await WorkerRun.create("sess-1", {
+      runId: "run-external",
+      title: "external task",
+      prompt: "call the external worker",
+      executorKind: "external_api",
+    });
+
+    const run = await WorkerRun.get("sess-1", "run-external");
+    const stored = WorkerRunStateStore.get("sess-1", "run-external");
+
+    expect(run?.executorKind).toBe("external_api");
+    expect(stored?.executorKind).toBe("external_api");
+  });
+
+  test("status updates preserve executor kind", async () => {
+    await WorkerRun.create("sess-1", {
+      runId: "run-external",
+      title: "external task",
+      prompt: "call the external worker",
+      executorKind: "external_api",
+    });
+
+    await WorkerRun.updateStatus("sess-1", "run-external", "starting");
+    await WorkerRun.updateStatus("sess-1", "run-external", "running");
+
+    const run = await WorkerRun.get("sess-1", "run-external");
+    const stored = WorkerRunStateStore.get("sess-1", "run-external");
+
+    expect(run?.executorKind).toBe("external_api");
+    expect(stored?.executorKind).toBe("external_api");
   });
 
   test("listBySession returns all runs", async () => {
@@ -192,8 +227,6 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "running", { lastMessageId: "msg-1" });
     await WorkerRun.updateStatus("sess-1", "run-1", "succeeded", { endedAt: 1234 });
 
-    const adapter = Storage.getAdapter();
-    const rows = adapter.eventLog?.replay("sess-1") ?? [];
-    expect(rows).toHaveLength(0);
+    expect(Object.hasOwn(Storage.getAdapter(), "eventLog")).toBe(false);
   });
 });

@@ -42,6 +42,7 @@ describe("Subagent schemas", () => {
         assignedStepId: "step-1",
         title: "Implement feature",
         prompt: "Do the work",
+        executorKind: "external_api",
         status: "running",
         startedAt: 1,
         endedAt: 2,
@@ -55,11 +56,33 @@ describe("Subagent schemas", () => {
       assignedStepId: "step-1",
       title: "Implement feature",
       prompt: "Do the work",
+      executorKind: "external_api",
       status: "running",
       startedAt: 1,
       endedAt: 2,
       lastMessageId: "msg-1",
       resumeCount: 2,
+    });
+  });
+
+  test("WorkerRun accepts legacy data without executor kind", () => {
+    expect(
+      Subagent.WorkerRun.parse({
+        runId: "run-1",
+        sessionId: "session-1",
+        title: "Implement feature",
+        prompt: "Do the work",
+        status: "running",
+        startedAt: 1,
+      }),
+    ).toEqual({
+      runId: "run-1",
+      sessionId: "session-1",
+      title: "Implement feature",
+      prompt: "Do the work",
+      status: "running",
+      startedAt: 1,
+      resumeCount: 0,
     });
   });
 

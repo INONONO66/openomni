@@ -1,4 +1,4 @@
-import { Subagent } from "@openomni/protocol";
+import { Subagent, type WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { WorkerRunStateStore } from "./state-store.js";
 
@@ -13,6 +13,7 @@ export interface WorkerRunRecord {
   title: string;
   prompt: string;
   assignedStepId?: string;
+  executorKind?: WorkItem.ExecutorKind;
   status: WorkerRunStatus;
   startedAt: number;
   endedAt?: number;
@@ -89,6 +90,7 @@ function toWorkerRunRecord(record: WorkerRunStateStore.Record): WorkerRunRecord 
     title: record.title,
     prompt: record.prompt,
     assignedStepId: record.assignedStepId,
+    executorKind: record.executorKind,
     status: record.status,
     startedAt: record.timeCreated,
     endedAt:
@@ -110,6 +112,7 @@ export namespace WorkerRun {
       assignedStepId?: string;
       agentName?: string;
       parentSessionId?: string;
+      executorKind?: WorkItem.ExecutorKind;
     },
   ): Promise<void> {
     runExtras.delete(extraKey(sessionId, run.runId));
@@ -118,6 +121,7 @@ export namespace WorkerRun {
       parentSessionId: run.parentSessionId,
       agentName: run.agentName ?? "worker",
       status: "queued",
+      executorKind: run.executorKind ?? "internal_chat_agent",
       title: run.title,
       prompt: run.prompt,
       assignedStepId: run.assignedStepId,

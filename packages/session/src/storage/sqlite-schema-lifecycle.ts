@@ -9,6 +9,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0002_communication_state/migration.sql" },
   { name: "0003_communication_state_constraints/migration.sql" },
   { name: "0004_cron_job/migration.sql" },
+  { name: "0005_worker_run_executor_kind/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

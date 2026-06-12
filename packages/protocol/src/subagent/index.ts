@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { WorkerRunContract } from "./worker-run.js";
 
 const BaseEvent = z.object({
   traceId: z.string(),
@@ -34,32 +35,11 @@ export namespace Subagent {
   });
   export type ChildSessionMeta = z.infer<typeof ChildSessionMeta>;
 
-  export const WorkerRunStatus = z.enum([
-    "queued",
-    "starting",
-    "running",
-    "waiting_input",
-    "succeeded",
-    "failed",
-    "cancelled",
-    "interrupted",
-  ]);
-  export type WorkerRunStatus = z.infer<typeof WorkerRunStatus>;
+  export const WorkerRunStatus = WorkerRunContract.Status;
+  export type WorkerRunStatus = WorkerRunContract.Status;
 
-  export const WorkerRun = z.object({
-    runId: z.string(),
-    sessionId: z.string(),
-    parentRunId: z.string().optional(),
-    assignedStepId: z.string().optional(),
-    title: z.string(),
-    prompt: z.string(),
-    status: WorkerRunStatus,
-    startedAt: z.number(),
-    endedAt: z.number().optional(),
-    lastMessageId: z.string().optional(),
-    resumeCount: z.number().int().min(0).default(0),
-  });
-  export type WorkerRun = z.infer<typeof WorkerRun>;
+  export const WorkerRun = WorkerRunContract.Info;
+  export type WorkerRun = WorkerRunContract.Info;
 
   export const SpawnConfig = z.object({
     parentSessionId: z.string().optional(),
