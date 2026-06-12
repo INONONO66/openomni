@@ -38,6 +38,7 @@ type ParsedReadBackRequest = z.infer<typeof ReadBackRequest>;
 type HttpResult = {
   statusCode: number | undefined;
   body: string;
+  bodyDigest: string | undefined;
   complete: boolean;
 };
 
@@ -164,13 +165,13 @@ async function loadUrl(
       headers: { accept: "*/*" },
     });
     if (method === "HEAD") {
-      return { statusCode: response.status, body: "", complete: true };
+      return { statusCode: response.status, body: "", bodyDigest: undefined, complete: true };
     }
     const body = await readBody(response, maxBodyBytes, deadlineAt);
     return { statusCode: response.status, ...body };
   } catch (error) {
     if (error instanceof DisallowedNetworkTargetError) throw error;
-    return { statusCode: undefined, body: "", complete: false };
+    return { statusCode: undefined, body: "", bodyDigest: undefined, complete: false };
   }
 }
 
@@ -178,9 +179,9 @@ async function readBody(
   response: Response,
   maxBodyBytes: number,
   deadlineAt: number,
-): Promise<Pick<HttpResult, "body" | "complete">> {
+): Promise<Pick<HttpResult, "body" | "bodyDigest" | "complete">> {
   const reader = response.body?.getReader();
-  if (!reader) return { body: "", complete: true };
+  if (!reader) return { body: "", bodyDigest: digestBytes(new Uint8Array()), complete: true };
 
   const chunks: Uint8Array[] = [];
   let bytes = 0;
@@ -189,25 +190,26 @@ async function readBody(
       const remainingMs = deadlineAt - Date.now();
       if (remainingMs <= 0) {
         await reader.cancel();
-        return { body: "", complete: false };
+        return { body: "", bodyDigest: undefined, complete: false };
       }
       const result = await readWithDeadline(() => reader.read(), remainingMs);
       if (result === "timeout") {
         await reader.cancel();
-        return { body: "", complete: false };
+        return { body: "", bodyDigest: undefined, complete: false };
       }
       if (result.done) break;
       bytes += result.value.byteLength;
       if (bytes > maxBodyBytes) {
         await reader.cancel();
-        return { body: "", complete: false };
+        return { body: "", bodyDigest: undefined, complete: false };
       }
       chunks.push(result.value);
     }
   } catch {
-    return { body: "", complete: false };
+    return { body: "", bodyDigest: undefined, complete: false };
   }
-  return { body: decode(chunks, bytes), complete: true };
+  const bodyBytes = collectBytes(chunks, bytes);
+  return { body: decode(bodyBytes), bodyDigest: digestBytes(bodyBytes), complete: true };
 }
 
 async function readWithDeadline<T>(
@@ -227,23 +229,27 @@ async function readWithDeadline<T>(
   }
 }
 
-function decode(chunks: Uint8Array[], bytes: number): string {
+function collectBytes(chunks: Uint8Array[], bytes: number): Uint8Array {
   const body = new Uint8Array(bytes);
   let offset = 0;
   for (const chunk of chunks) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return body;
+}
+
+function decode(body: Uint8Array): string {
   return new TextDecoder().decode(body);
 }
 
-function digest(body: string): string {
+function digestBytes(body: Uint8Array): string {
   return `sha256:${createHash("sha256").update(body).digest("hex")}`;
 }
 
 function digestObservedBody(result: HttpResult): string | undefined {
   if (result.statusCode === undefined || !result.complete) return undefined;
-  return digest(result.body);
+  return result.bodyDigest;
 }
 
 function isCompleteSuccess(result: HttpResult): boolean {

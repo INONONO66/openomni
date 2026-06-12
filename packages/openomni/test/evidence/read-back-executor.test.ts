@@ -1,5 +1,6 @@
 /// <reference types="bun" />
 
+import { createHash } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Storage, WorkItemStore } from "@openomni/session";
@@ -21,6 +22,11 @@ async function startFixtureServer(): Promise<string> {
     if (path === "/api/status") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ ok: true, method: request.method }));
+      return;
+    }
+    if (path === "/binary") {
+      response.writeHead(200, { "content-type": "application/octet-stream" });
+      response.end(Buffer.from([0xff, 0xfe, 0xfd, 0x00, 0x61]));
       return;
     }
     if (path === "/slow") {
@@ -214,6 +220,22 @@ describe("ReadBackExecutor", () => {
     });
     if (check.kind !== "url_fetch") throw new Error("expected url_fetch check");
     expect(check.contentDigest).toBeUndefined();
+  });
+
+  test("digests the raw response bytes instead of decoded text", async () => {
+    const origin = await startFixtureServer();
+    const bytes = Buffer.from([0xff, 0xfe, 0xfd, 0x00, 0x61]);
+
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/binary`,
+      },
+      LOCAL_READ_BACK,
+    );
+
+    if (check.kind !== "url_fetch") throw new Error("expected url_fetch check");
+    expect(check.contentDigest).toBe(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
   });
 
   test("re-queries an HTTP API endpoint and records a response digest", async () => {
