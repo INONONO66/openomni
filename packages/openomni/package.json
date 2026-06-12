@@ -18,6 +18,7 @@
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
     "croner": "^10.0.1",
+    "ky": "^1.14.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

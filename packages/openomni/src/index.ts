@@ -135,6 +135,8 @@ export type {
   DispatchToolRuntime,
 } from "./execution-runtime";
 
+export { ReadBackExecutor } from "./evidence";
+
 // Dispatch runtime
 export {
   DispatchRuntime,
