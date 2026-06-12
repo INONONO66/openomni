@@ -37,6 +37,15 @@ describe("dispatch tool", () => {
     expect(properties.resolveOwner).toBeUndefined();
   });
 
+  test("public schema documents worker spawn acceptance criteria payload", () => {
+    const provider = new AgentToolProvider();
+    const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
+    const schema = JSON.stringify(tool?.spec.inputSchema);
+
+    expect(schema).toContain("worker.spawn requires");
+    expect(schema).toContain("acceptanceCriteria");
+  });
+
   test("executes through runtime with implicit context", async () => {
     let capturedInput: Dispatch.Input | undefined;
     let capturedOptions: Parameters<DispatchToolRuntime["submit"]>[1];

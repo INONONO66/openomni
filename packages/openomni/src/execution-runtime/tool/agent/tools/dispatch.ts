@@ -48,7 +48,10 @@ const defaultInputSchema = {
       required: ["kind"],
       additionalProperties: false,
     },
-    payload: {},
+    payload: {
+      description:
+        "Action payload. worker.spawn requires an object with text or prompt plus acceptanceCriteria: string[].",
+    },
     wait: { type: "boolean" },
     timeoutMs: { type: "number" },
     correlation: { type: "string" },
