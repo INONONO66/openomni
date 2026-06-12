@@ -1,16 +1,11 @@
 import { CronJob, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { Cron } from "croner";
 import { CronJobRegistry } from "./cron-job-registry.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
-const MAX_SEARCH_MINUTES = 5 * 366 * 24 * 60;
 
 type FireJob = (job: CronJob.Info) => Promise<void>;
-
-interface FieldSpec {
-  readonly max: number;
-  readonly values: ReadonlySet<number>;
-}
 
 function parseInteger(value: string, field: string): number {
   if (!/^\d+$/.test(value)) throw new Error(`Invalid cron ${field} value: ${value}`);
@@ -51,7 +46,7 @@ function addRange(
   for (let value = start; value <= end; value += resolvedStep) values.add(value);
 }
 
-function parseField(source: string, field: string, min: number, max: number): FieldSpec {
+function normalizeField(source: string, field: string, min: number, max: number): string {
   const values = new Set<number>();
   for (const part of source.split(",")) {
     if (!part) throw new Error(`Invalid cron ${field} field: ${source}`);
@@ -61,51 +56,30 @@ function parseField(source: string, field: string, min: number, max: number): Fi
     if (!range) throw new Error(`Invalid cron ${field} field: ${source}`);
     addRange(values, field, min, max, range, stepRaw ? parseInteger(stepRaw, field) : undefined);
   }
-  return { max, values };
+  return [...values].sort((left, right) => left - right).join(",");
 }
 
-function matches(spec: FieldSpec, value: number): boolean {
-  const normalized = spec.max === 7 && value === 0 ? 7 : value;
-  return spec.values.has(value) || spec.values.has(normalized);
-}
-
-type ScheduleSpec = readonly [FieldSpec, FieldSpec, FieldSpec, FieldSpec, FieldSpec];
-
-function parseSchedule(schedule: string): ScheduleSpec {
+function normalizeSchedule(schedule: string): string {
   const fields = schedule.trim().split(/\s+/);
   if (fields.length !== 5) throw new Error(`Unsupported cron schedule: ${schedule}`);
   return [
-    parseField(fields[0] ?? "", "minute", 0, 59),
-    parseField(fields[1] ?? "", "hour", 0, 23),
-    parseField(fields[2] ?? "", "day-of-month", 1, 31),
-    parseField(fields[3] ?? "", "month", 1, 12),
-    parseField(fields[4] ?? "", "day-of-week", 0, 7),
-  ];
-}
-
-function minuteAfter(timeMs: number): number {
-  const date = new Date(timeMs);
-  date.setUTCSeconds(0, 0);
-  return date.getTime() <= timeMs ? date.getTime() + 60_000 : date.getTime();
+    normalizeField(fields[0] ?? "", "minute", 0, 59),
+    normalizeField(fields[1] ?? "", "hour", 0, 23),
+    normalizeField(fields[2] ?? "", "day-of-month", 1, 31),
+    normalizeField(fields[3] ?? "", "month", 1, 12),
+    normalizeField(fields[4] ?? "", "day-of-week", 0, 7),
+  ].join(" ");
 }
 
 function computeNextFireAt(schedule: string, afterMs: number): number {
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parseSchedule(schedule);
-  let candidate = minuteAfter(afterMs);
-  for (let index = 0; index < MAX_SEARCH_MINUTES; index += 1) {
-    const date = new Date(candidate);
-    if (
-      matches(minute, date.getUTCMinutes()) &&
-      matches(hour, date.getUTCHours()) &&
-      matches(dayOfMonth, date.getUTCDate()) &&
-      matches(month, date.getUTCMonth() + 1) &&
-      matches(dayOfWeek, date.getUTCDay())
-    ) {
-      return candidate;
-    }
-    candidate += 60_000;
-  }
-  throw new Error(`Unable to find next cron fire time for schedule: ${schedule}`);
+  const nextRun = new Cron(normalizeSchedule(schedule), {
+    paused: true,
+    timezone: "UTC",
+    domAndDow: true,
+    mode: "5-part",
+  }).nextRun(new Date(afterMs));
+  if (!nextRun) throw new Error(`Unable to find next cron fire time for schedule: ${schedule}`);
+  return nextRun.getTime();
 }
 
 function dueAt(job: CronJob.Info): number {
