@@ -12,5 +12,6 @@ export { WorkerRunStateStore } from "./worker-run/state-store.js";
 export { TraceContext } from "./trace/index.js";
 export * from "./storage/wal-maintenance.js";
 export { WorkItemStore } from "./work-item/index.js";
+export { hasRetryExhaustionBlocker } from "./work-item/retry-policy.js";
 export { PendingAskStore } from "./pending-ask/index.js";
 export { WorkerGrantStore } from "./worker-grant/index.js";
