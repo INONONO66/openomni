@@ -30,6 +30,8 @@ export type {
   ResidentPromptVariant,
 } from "./agents";
 
+export { BuiltInAppConnectors } from "./app-connector";
+
 // Skill loader and activation
 export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
 export type {
