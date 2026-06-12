@@ -3,11 +3,12 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Storage, WorkItemStore } from "@openomni/session";
-import { ReadBackExecutor } from "../../src/evidence";
+import { ReadBackExecutor } from "../../src/index";
 
 const servers: Server[] = [];
 const hangingResponses: ServerResponse[] = [];
 const slowTimers: ReturnType<typeof setInterval>[] = [];
+const LOCAL_READ_BACK = { allowPrivateNetwork: true } satisfies ReadBackExecutor.Options;
 
 async function startFixtureServer(): Promise<string> {
   const server = createServer((request, response) => {
@@ -109,10 +110,13 @@ describe("ReadBackExecutor", () => {
   test("re-fetches a URL and records status plus content digest", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "url_fetch",
-      target: `${origin}/document`,
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/document`,
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "url_fetch",
@@ -127,10 +131,13 @@ describe("ReadBackExecutor", () => {
   test("marks a URL fetch as failed when the source returns a non-success status", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "url_fetch",
-      target: `${origin}/missing`,
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/missing`,
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "url_fetch",
@@ -146,11 +153,14 @@ describe("ReadBackExecutor", () => {
     const origin = await startFixtureServer();
     await Promise.all(servers.splice(0).map(closeServer));
 
-    const check = await ReadBackExecutor.execute({
-      kind: "url_fetch",
-      target: `${origin}/document`,
-      timeoutMs: 100,
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/document`,
+        timeoutMs: 100,
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "url_fetch",
@@ -165,11 +175,14 @@ describe("ReadBackExecutor", () => {
   test("uses timeoutMs as a wall-clock deadline", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "url_fetch",
-      target: `${origin}/slow`,
-      timeoutMs: 20,
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/slow`,
+        timeoutMs: 20,
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "url_fetch",
@@ -184,11 +197,14 @@ describe("ReadBackExecutor", () => {
   test("fails oversized read-back bodies without digesting partial content", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "url_fetch",
-      target: `${origin}/large`,
-      maxBodyBytes: 32,
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "url_fetch",
+        target: `${origin}/large`,
+        maxBodyBytes: 32,
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "url_fetch",
@@ -203,11 +219,14 @@ describe("ReadBackExecutor", () => {
   test("re-queries an HTTP API endpoint and records a response digest", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "api_query",
-      target: `${origin}/api/status`,
-      method: "GET",
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "api_query",
+        target: `${origin}/api/status`,
+        method: "GET",
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "api_query",
@@ -230,7 +249,7 @@ describe("ReadBackExecutor", () => {
       }),
     );
 
-    await expectRejects(ReadBackExecutor.execute(input));
+    await expectRejects(ReadBackExecutor.execute(input, LOCAL_READ_BACK));
   });
 
   test("rejects non-HTTP read-back targets", async () => {
@@ -242,14 +261,26 @@ describe("ReadBackExecutor", () => {
     );
   });
 
+  test("rejects private network read-back targets by default", async () => {
+    await expectRejects(
+      ReadBackExecutor.execute({
+        kind: "url_fetch",
+        target: "http://127.0.0.1/document",
+      }),
+    );
+  });
+
   test("matches quoted citation text against the fetched source", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "citation_match",
-      target: `${origin}/document`,
-      quotedText: "quoted passage",
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "citation_match",
+        target: `${origin}/document`,
+        quotedText: "quoted passage",
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "citation_match",
@@ -264,11 +295,14 @@ describe("ReadBackExecutor", () => {
   test("fails citation checks when the quote is absent", async () => {
     const origin = await startFixtureServer();
 
-    const check = await ReadBackExecutor.execute({
-      kind: "citation_match",
-      target: `${origin}/document`,
-      quotedText: "not in the source",
-    });
+    const check = await ReadBackExecutor.execute(
+      {
+        kind: "citation_match",
+        target: `${origin}/document`,
+        quotedText: "not in the source",
+      },
+      LOCAL_READ_BACK,
+    );
 
     expect(check).toMatchObject({
       kind: "citation_match",
@@ -285,10 +319,14 @@ describe("ReadBackExecutor", () => {
     const origin = await startFixtureServer();
     const item = await createWorkItem();
 
-    const updated = await ReadBackExecutor.record(item.hash, {
-      kind: "url_fetch",
-      target: `${origin}/document`,
-    });
+    const updated = await ReadBackExecutor.record(
+      item.hash,
+      {
+        kind: "url_fetch",
+        target: `${origin}/document`,
+      },
+      LOCAL_READ_BACK,
+    );
 
     const evidence = updated?.evidence.at(-1);
     expect(evidence).toMatchObject({
