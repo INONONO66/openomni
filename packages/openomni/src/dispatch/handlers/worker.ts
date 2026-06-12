@@ -1,14 +1,38 @@
 import type { Dispatch, Execution, Model } from "@openomni/protocol";
 import { Session, WorkItemStore } from "@openomni/session";
+import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
 import type { DispatchHandler } from "../registry.js";
 import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
-import { asRecord, extractText } from "./shared.js";
+import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions {
   readonly coordinator?: CoordinatorLike;
   readonly defaultModel?: Model.Ref;
 }
+
+const AcceptanceCriterion = z.string().trim().min(1);
+const WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE = "worker.spawn requires text or prompt";
+const WorkerSpawnPayload = z
+  .object({
+    text: z.string().trim().min(1).optional(),
+    prompt: z.string().trim().min(1).optional(),
+    acceptanceCriteria: z.array(AcceptanceCriterion).min(1),
+    constraints: z.array(z.string().trim().min(1)).optional(),
+  })
+  .strict()
+  .refine((payload) => payload.text !== undefined || payload.prompt !== undefined, {
+    message: WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE,
+    path: ["text"],
+  })
+  .transform((payload) => ({
+    prompt: payload.text ?? payload.prompt ?? "",
+    acceptanceCriteria: payload.acceptanceCriteria,
+    ...(payload.constraints ? { constraints: payload.constraints } : {}),
+  }));
+
+type WorkerSpawnPayloadInput = z.input<typeof WorkerSpawnPayload>;
+type ParsedWorkerSpawnPayload = z.infer<typeof WorkerSpawnPayload>;
 
 function requireCoordinator(coordinator: CoordinatorLike | undefined): CoordinatorLike {
   if (!coordinator) throw new Error("dispatch worker handler requires coordinator owner");
@@ -33,18 +57,55 @@ function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
   return session.id;
 }
 
-function buildRequest(command: Dispatch.Command, model: Model.Ref): Execution.Request {
-  const payload = asRecord(command.payload);
+function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
+  return target.id ?? target.name;
+}
+
+function workerSpawnPayloadErrorMessage(error: z.ZodError<WorkerSpawnPayloadInput>): string {
+  if (error.issues.some((issue) => issue.code === "unrecognized_keys")) {
+    return "worker.spawn payload contains unsupported fields";
+  }
+
+  const fields = new Set(error.issues.flatMap((issue) => issue.path.map(String)));
+  if (fields.has("acceptanceCriteria")) {
+    return "worker.spawn requires at least one acceptance criterion";
+  }
+  if (fields.has("constraints")) {
+    return "worker.spawn constraints must be non-empty strings";
+  }
+  if (fields.has("text") || fields.has("prompt")) {
+    return WORKER_SPAWN_TEXT_OR_PROMPT_MESSAGE;
+  }
+
+  return "worker.spawn payload is invalid";
+}
+
+function parseWorkerSpawnPayload(payload: unknown): ParsedWorkerSpawnPayload {
+  const parsed = WorkerSpawnPayload.safeParse(payload);
+  if (!parsed.success) {
+    const payloadRecord = payload && typeof payload === "object" ? payload : undefined;
+    if (!payloadRecord || !("acceptanceCriteria" in payloadRecord)) {
+      throw new Error("worker.spawn requires at least one acceptance criterion");
+    }
+    throw new Error(workerSpawnPayloadErrorMessage(parsed.error));
+  }
+
+  return parsed.data;
+}
+
+function buildRequest(
+  command: Dispatch.Command,
+  model: Model.Ref,
+  payload: ParsedWorkerSpawnPayload,
+): Execution.Request {
   const sessionId = resolveSessionId(command, model);
   return {
     runId: crypto.randomUUID(),
     sessionId,
     mode: "direct",
-    prompt: extractText(command.payload),
+    prompt: payload.prompt,
     model,
-    agentName:
-      (typeof payload?.agentName === "string" ? payload.agentName : undefined) ??
-      command.target.name,
+    agentName: resolveWorkerAgentName(command.target),
     workspaceRoot: command.workspaceRoot,
     traceId: command.traceId,
   };
@@ -53,6 +114,7 @@ function buildRequest(command: Dispatch.Command, model: Model.Ref): Execution.Re
 async function createWorkItem(
   command: Dispatch.Command,
   request: Execution.Request,
+  payload: ParsedWorkerSpawnPayload,
 ): Promise<string> {
   const workItem = await WorkItemStore.create({
     name: `Dispatch worker ${request.agentName ?? "worker"}`,
@@ -63,6 +125,8 @@ async function createWorkItem(
     assigneeId: request.agentName,
     sessionId: request.sessionId,
     context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
+    constraints: payload.constraints,
+    acceptanceCriteria: payload.acceptanceCriteria,
   });
   await WorkItemStore.start(workItem.hash);
   return workItem.hash;
@@ -98,8 +162,9 @@ export function createWorkerDispatchHandlers(
   return {
     async "worker.spawn"(command) {
       const coordinator = requireCoordinator(options.coordinator);
-      const request = buildRequest(command, model);
-      const workItemHash = await createWorkItem(command, request);
+      const payload = parseWorkerSpawnPayload(command.payload);
+      const request = buildRequest(command, model, payload);
+      const workItemHash = await createWorkItem(command, request, payload);
       let result: Execution.Result;
       try {
         result = await coordinator.dispatch(request.sessionId, request);

@@ -130,6 +130,7 @@ describe("DispatchRuntime", () => {
       workerRunId: "run-1",
       allowedActions: ["worker.spawn"],
       allowedSessionIds: ["parent-session"],
+      canCreateExternalTasks: false,
     });
 
     const result = await runtime.submit(
@@ -192,6 +193,7 @@ describe("DispatchRuntime", () => {
       workerRunId: "run-1",
       allowedActions: ["worker.send"],
       allowedSessionIds: ["child-session"],
+      canCreateExternalTasks: false,
     });
 
     const allowed = await runtime.submit(
