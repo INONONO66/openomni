@@ -1,4 +1,4 @@
-import { Subagent } from "@openomni/protocol";
+import { Subagent, type WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 import { Storage } from "../storage/storage";
 
@@ -37,6 +37,7 @@ export namespace WorkerRunStateStore {
     readonly parentSessionId?: string;
     readonly agentName: string;
     readonly status: Status;
+    readonly executorKind?: WorkItem.ExecutorKind;
     readonly title: string;
     readonly prompt: string;
     readonly resumeCount: number;

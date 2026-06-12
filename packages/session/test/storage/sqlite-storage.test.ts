@@ -1,11 +1,12 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { unlinkSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../../src/session/info";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import type { Storage } from "../../src/storage/storage";
 
 type TextPart = Extract<Message.Part, { type: "text" }>;
 
@@ -44,6 +45,45 @@ function makeTextPart(
     text: `Part ${partID} content`,
     time: timeStart === undefined ? undefined : { start: timeStart },
   };
+}
+
+function findMessagesByStatus(
+  adapter: SqliteStorageAdapter,
+  status: string,
+): Array<{ id: string; sessionId: string }> {
+  const findByStatus = adapter.message.findByStatus;
+  if (findByStatus === undefined) {
+    throw new Error("SQLite message adapter must support status lookup");
+  }
+  return findByStatus(status);
+}
+
+function listMessagePage(
+  adapter: SqliteStorageAdapter,
+  sessionID: string,
+  options: { limit: number; before?: string },
+): Storage.MessagePage {
+  const listPage = adapter.message.listPage;
+  if (listPage === undefined) {
+    throw new Error("SQLite message adapter must support cursor pagination");
+  }
+  return listPage(sessionID, options);
+}
+
+function listPartsByMessageIDs(
+  adapter: SqliteStorageAdapter,
+  messageIDs: string[],
+): Message.Part[] {
+  const listByMessageIDs = adapter.part.listByMessageIDs;
+  if (listByMessageIDs === undefined) {
+    throw new Error("SQLite part adapter must support batch message part lookup");
+  }
+  return listByMessageIDs(messageIDs);
+}
+
+function applyMigrationFixture(db: Database, name: string): void {
+  const migrationPath = join(import.meta.dir, "../../migration", name);
+  db.exec(readFileSync(migrationPath, "utf8"));
 }
 
 function makeToolPart(
@@ -221,6 +261,7 @@ describe("SqliteStorageAdapter", () => {
         "error",
         "time_created",
         "time_updated",
+        "executor_kind",
       ]);
     });
 
@@ -241,6 +282,58 @@ describe("SqliteStorageAdapter", () => {
         expect.arrayContaining(["idx_event_chain_session", "idx_event_chain_hash"]),
       );
       expect(indexNames(db, "worker_run_state")).toContain("idx_worker_run_state_session_time");
+    });
+
+    test("0005 migration backfills legacy worker run executor kind", () => {
+      adapter.close();
+      removeSqliteFiles(dbPath);
+
+      const legacyDb = new Database(dbPath);
+      applyMigrationFixture(legacyDb, "0001_initial/migration.sql");
+      applyMigrationFixture(legacyDb, "0002_communication_state/migration.sql");
+      applyMigrationFixture(legacyDb, "0003_communication_state_constraints/migration.sql");
+      applyMigrationFixture(legacyDb, "0004_cron_job/migration.sql");
+      legacyDb
+        .query(
+          `INSERT INTO session (id, data, time_created, time_updated)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run("legacy-session", JSON.stringify(makeSession("legacy-session", 1)), 1, 1);
+      legacyDb
+        .query(
+          `INSERT INTO worker_run_state (
+             run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+             resume_count, assigned_step_id, error, time_created, time_updated
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          "legacy-run",
+          "legacy-session",
+          null,
+          "worker",
+          "queued",
+          "Legacy run",
+          "do it",
+          0,
+          null,
+          null,
+          1,
+          1,
+        );
+      expect(tableColumns(legacyDb, "worker_run_state")).not.toContain("executor_kind");
+      legacyDb.close();
+
+      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
+      const upgradedDb = storageDb(upgradedAdapter);
+
+      expect(tableColumns(upgradedDb, "worker_run_state")).toContain("executor_kind");
+      expect(
+        upgradedDb
+          .query("SELECT executor_kind FROM worker_run_state WHERE run_id = ?")
+          .get("legacy-run"),
+      ).toEqual({ executor_kind: "internal_chat_agent" });
+
+      upgradedAdapter.close();
     });
 
     test("migrations are idempotent — second adapter open does not throw", () => {
@@ -439,7 +532,7 @@ describe("SqliteStorageAdapter", () => {
 
       expect(adapter.message.get("s1", "m1")).toEqual(message);
 
-      const found = adapter.message.findByStatus?.("processing");
+      const found = findMessagesByStatus(adapter, "processing");
       expect(found).toHaveLength(1);
       expect(found[0]).toEqual({ id: "m1", sessionId: "s1" });
     });
@@ -449,13 +542,13 @@ describe("SqliteStorageAdapter", () => {
       adapter.message.setStatus?.("m1", "processing");
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
 
-      const found = adapter.message.findByStatus?.("processing");
+      const found = findMessagesByStatus(adapter, "processing");
       expect(found.map((r) => r.id)).toContain("m1");
     });
 
     test("findByStatus: returns empty when none match", () => {
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
-      expect(adapter.message.findByStatus?.("nonexistent")).toEqual([]);
+      expect(findMessagesByStatus(adapter, "nonexistent")).toEqual([]);
     });
   });
 
@@ -468,7 +561,7 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("returns first page without cursor", () => {
-      const page = adapter.message.listPage?.("s1", { limit: 3 });
+      const page = listMessagePage(adapter, "s1", { limit: 3 });
       expect(page.items).toHaveLength(3);
       expect(page.more).toBe(true);
       expect(page.nextCursor).not.toBeNull();
@@ -476,18 +569,18 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("returns all items when limit exceeds count", () => {
-      const page = adapter.message.listPage?.("s1", { limit: 20 });
+      const page = listMessagePage(adapter, "s1", { limit: 20 });
       expect(page.items).toHaveLength(10);
       expect(page.more).toBe(false);
       expect(page.nextCursor).toBeNull();
     });
 
     test("cursor-based pagination returns next page", () => {
-      const first = adapter.message.listPage?.("s1", { limit: 3 });
+      const first = listMessagePage(adapter, "s1", { limit: 3 });
       expect(first.nextCursor).not.toBeNull();
 
       const cursor = first.nextCursor ?? "";
-      const second = adapter.message.listPage?.("s1", {
+      const second = listMessagePage(adapter, "s1", {
         limit: 3,
         before: cursor,
       });
@@ -500,7 +593,7 @@ describe("SqliteStorageAdapter", () => {
       let cursor: string | null = null;
 
       do {
-        const page = adapter.message.listPage?.("s1", {
+        const page = listMessagePage(adapter, "s1", {
           limit: 3,
           before: cursor ?? undefined,
         });
@@ -515,7 +608,7 @@ describe("SqliteStorageAdapter", () => {
 
     test("empty session returns empty page", () => {
       adapter.session.set("s2", makeSession("s2"));
-      const page = adapter.message.listPage?.("s2", { limit: 5 });
+      const page = listMessagePage(adapter, "s2", { limit: 5 });
       expect(page.items).toEqual([]);
       expect(page.more).toBe(false);
       expect(page.nextCursor).toBeNull();
@@ -584,7 +677,7 @@ describe("SqliteStorageAdapter", () => {
     });
 
     test("listByMessageIDs: returns empty for empty input", () => {
-      expect(adapter.part.listByMessageIDs?.([])).toEqual([]);
+      expect(listPartsByMessageIDs(adapter, [])).toEqual([]);
     });
 
     test("listByMessageIDs: batch-loads parts across multiple messages", () => {
@@ -592,7 +685,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p2", 200));
       adapter.part.set("m2", makeTextPart("s1", "m2", "p3", 50));
 
-      const parts = adapter.part.listByMessageIDs?.(["m1", "m2"]);
+      const parts = listPartsByMessageIDs(adapter, ["m1", "m2"]);
       expect(parts).toHaveLength(3);
       const ids = parts.map((p) => p.id);
       expect(ids).toContain("p1");
@@ -605,7 +698,7 @@ describe("SqliteStorageAdapter", () => {
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 100));
       adapter.part.set("m3", makeTextPart("s1", "m3", "p9", 100));
 
-      const parts = adapter.part.listByMessageIDs?.(["m1"]);
+      const parts = listPartsByMessageIDs(adapter, ["m1"]);
       expect(parts.map((p) => p.id)).toEqual(["p1"]);
     });
   });

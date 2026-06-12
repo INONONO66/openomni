@@ -95,6 +95,7 @@ export const workerRunStateTable = sqliteTable(
     parent_session_id: text("parent_session_id"),
     agent_name: text("agent_name").notNull(),
     status: text("status").notNull(),
+    executor_kind: text("executor_kind"),
     title: text("title").notNull(),
     prompt: text("prompt").notNull(),
     resume_count: integer("resume_count").notNull().default(0),

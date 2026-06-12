@@ -14,6 +14,7 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
            parent_session_id,
            agent_name,
            status,
+           executor_kind,
            title,
            prompt,
            resume_count,
@@ -21,13 +22,14 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
            error,
            time_created,
            time_updated
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         record.runId,
         sessionId,
         record.parentSessionId ?? null,
         record.agentName,
         record.status,
+        record.executorKind ?? null,
         record.title,
         record.prompt,
         record.resumeCount ?? 0,
@@ -98,7 +100,7 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
     get: (sessionId: string, runId: string): WorkerRunStateStore.Record | undefined => {
       const row = db
         .query(
-          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, executor_kind, title, prompt,
                   resume_count, assigned_step_id, error, time_created, time_updated
            FROM worker_run_state
            WHERE session_id = ? AND run_id = ?`,
@@ -110,7 +112,7 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
     listBySession: (sessionId: string): WorkerRunStateStore.Record[] => {
       const rows = db
         .query(
-          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, executor_kind, title, prompt,
                   resume_count, assigned_step_id, error, time_created, time_updated
            FROM worker_run_state
            WHERE session_id = ?
@@ -123,7 +125,7 @@ export function createSqliteWorkerRunStateAdapter(db: Database): WorkerRunStateS
     listByStatus: (status: WorkerRunStateStore.Status): WorkerRunStateStore.Record[] => {
       const rows = db
         .query(
-          `SELECT run_id, session_id, parent_session_id, agent_name, status, title, prompt,
+          `SELECT run_id, session_id, parent_session_id, agent_name, status, executor_kind, title, prompt,
                   resume_count, assigned_step_id, error, time_created, time_updated
            FROM worker_run_state
            WHERE status = ?
@@ -141,6 +143,7 @@ type WorkerRunStateRow = {
   parent_session_id: string | null;
   agent_name: string;
   status: WorkerRunStateStore.Status;
+  executor_kind: WorkerRunStateStore.Record["executorKind"] | null;
   title: string;
   prompt: string;
   resume_count: number;
@@ -157,6 +160,7 @@ function toWorkerRunStateRecord(row: WorkerRunStateRow): WorkerRunStateStore.Rec
     parentSessionId: row.parent_session_id ?? undefined,
     agentName: row.agent_name,
     status: row.status,
+    executorKind: row.executor_kind ?? undefined,
     title: row.title,
     prompt: row.prompt,
     resumeCount: row.resume_count,

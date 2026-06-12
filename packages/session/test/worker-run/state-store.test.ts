@@ -61,6 +61,17 @@ describe("WorkerRunStateStore", () => {
     expect(run?.timeUpdated).toBe(run?.timeCreated);
   });
 
+  test("persists executor kind for worker run state", () => {
+    WorkerRunStateStore.create(
+      "sess-1",
+      makeRun({ executorKind: "external_api", runId: "run-external" }),
+    );
+
+    const run = WorkerRunStateStore.get("sess-1", "run-external");
+
+    expect(run?.executorKind).toBe("external_api");
+  });
+
   test("listBySession returns session-scoped runs in creation order", () => {
     WorkerRunStateStore.create("sess-1", makeRun({ runId: "run-1", title: "one" }));
     WorkerRunStateStore.create("sess-1", makeRun({ runId: "run-2", title: "two" }));
