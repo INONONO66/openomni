@@ -222,3 +222,20 @@ export const actorEndpointTable = sqliteTable(
     uniqueIndex("idx_actor_endpoint_lookup").on(t.channel, t.workspace, t.external_id),
   ],
 );
+
+export const blacklistTable = sqliteTable(
+  "blacklist",
+  {
+    id: text("id").primaryKey(),
+    data: text("data").notNull(),
+    kind: text("kind").notNull(),
+    value: text("value").notNull(),
+    expires_at: integer("expires_at"),
+    time_created: integer("time_created").notNull(),
+    time_updated: integer("time_updated").notNull(),
+  },
+  (t) => [
+    index("idx_blacklist_kind_value").on(t.kind, t.value),
+    index("idx_blacklist_expires").on(t.expires_at),
+  ],
+);

@@ -1,5 +1,6 @@
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import { Policy, PolicyDecision, Ingress, type TraceContext } from "@openomni/protocol";
+import { BlacklistStore } from "@openomni/session";
 import type { ZodError } from "zod";
 import type { CoordinatorLike } from "../coordinator-like";
 import { resolveTarget, targetKey } from "../target";
@@ -38,6 +39,10 @@ function abortDecision(policyId: string, reason: string): Policy.PolicyDecision 
     reasonCodes: [reason],
     effects: [{ type: "run.abort", reason }],
   });
+}
+
+function blacklistReason(kind: string, value: string, reason: string | undefined): string {
+  return reason ?? `blacklist.${kind}.${value}`;
 }
 
 function getActor(event: Ingress.InboundEvent): ActorRecord | undefined {
@@ -203,6 +208,32 @@ function evaluateIngressAuthority(event: Ingress.InboundEvent): Policy.PolicyDec
   return { ...decision, factsUsed: resourceLabels };
 }
 
+function createBlacklistCheck(state: PreRunState): PolicyRegistration {
+  return {
+    ...IngressAuthorityMiddleware.BlacklistCheck,
+    failPolicy: "fail-closed",
+    fn: () => {
+      const event = requireParsedEvent(state);
+      const actor = getActor(event);
+      const entry = BlacklistStore.match({
+        actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
+        endpointId: typeof actor?.endpointId === "string" ? actor.endpointId : undefined,
+        channel: event.surface,
+        candidates: [
+          event.surface,
+          ...(event.channel ? [event.channel] : []),
+          `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
+        ],
+      });
+      if (!entry) return allowDecision("ingress.blacklist", "blacklist.clear");
+      return abortDecision(
+        "ingress.blacklist",
+        blacklistReason(entry.kind, entry.value, entry.reason),
+      );
+    },
+  };
+}
+
 function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {
   if (!state.parsedEvent) {
     throw new Error("ingress event must be schema-validated before authority middleware");
@@ -302,6 +333,13 @@ export namespace IngressAuthorityMiddleware {
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
+  export const BlacklistCheck = {
+    name: "ingress:blacklist",
+    timing: "run.start",
+    priority: 5,
+    failPolicy: "fail-closed",
+  } as const satisfies Policy.Definition;
+
   export const AuthorityCheck = {
     name: "ingress:authority",
     timing: "run.start",
@@ -333,6 +371,7 @@ export namespace IngressAuthorityMiddleware {
   export function registrations(state: PreRunState): PolicyRegistration[] {
     return [
       createSchemaValidation(state),
+      createBlacklistCheck(state),
       createCoordinatorPresence(state),
       createAuthorityCheck(state),
       createModeDispatch(state),

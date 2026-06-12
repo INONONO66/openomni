@@ -1,6 +1,6 @@
 import { PolicyDecision, type Dispatch, type Policy } from "@openomni/protocol";
 import type { PolicyRegistration } from "@openomni/agent";
-import { WorkerGrantStore } from "@openomni/session";
+import { BlacklistStore, WorkerGrantStore } from "@openomni/session";
 
 function deny(reason: string): Policy.PolicyDecision {
   return PolicyDecision.deny({
@@ -21,6 +21,26 @@ function allow(reason: string): Policy.PolicyDecision {
   });
 }
 
+function blacklistReason(kind: string, value: string, reason: string | undefined): string {
+  return reason ?? `dispatch.blacklist.${kind}.${value}`;
+}
+
+function blacklistMatchInput(
+  actor: Dispatch.ActorContext | undefined,
+  target: Dispatch.Target | undefined,
+) {
+  return {
+    actorId: actor?.actorId,
+    endpointId: target?.kind === "external_actor" ? (target.id ?? target.name) : undefined,
+    channel: target?.kind === "surface" ? (target.id ?? target.name) : undefined,
+    candidates: [
+      ...(target?.id ? [target.id] : []),
+      ...(target?.name ? [target.name] : []),
+      ...(target?.labels ?? []),
+    ],
+  };
+}
+
 export function createDefaultDispatchPolicy(): PolicyRegistration {
   return {
     name: "dispatch.default-authority",
@@ -36,6 +56,10 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
       const action = typeof input.action === "string" ? input.action : "";
       const actor = input.actor;
       const target = input.target;
+      const blacklisted = BlacklistStore.match(blacklistMatchInput(actor, target));
+      if (blacklisted) {
+        return deny(blacklistReason(blacklisted.kind, blacklisted.value, blacklisted.reason));
+      }
 
       if (!actor || actor.kind === "unknown") {
         return deny("dispatch.actor.required");

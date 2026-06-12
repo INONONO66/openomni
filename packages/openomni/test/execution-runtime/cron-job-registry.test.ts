@@ -53,7 +53,7 @@ describe("CronJobRegistry persistence", () => {
 
     CronJobRegistry.register(job);
 
-    expect(Storage.initializedDbPath).toBeNull();
+    expect(Storage.getInitializedDbPath()).toBeNull();
     expect(CronJobRegistry.list()).toEqual([job]);
     expect(CronJobRegistry.remove(job.id)).toBe(true);
     expect(CronJobRegistry.list()).toEqual([]);

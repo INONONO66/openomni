@@ -65,4 +65,19 @@ export namespace Actor {
     endpoint: Endpoint,
   });
   export type ResolvedEndpoint = z.infer<typeof ResolvedEndpoint>;
+
+  export const BlacklistKind = z.enum(["actor", "endpoint", "channel", "pattern"]);
+  export type BlacklistKind = z.infer<typeof BlacklistKind>;
+
+  export const BlacklistEntry = z.object({
+    id: z.string().min(1),
+    kind: BlacklistKind,
+    value: z.string().min(1),
+    reason: z.string().min(1).optional(),
+    expiresAt: z.number().optional(),
+    createdBy: z.string().min(1),
+    createdAt: z.number().optional(),
+    updatedAt: z.number().optional(),
+  });
+  export type BlacklistEntry = z.infer<typeof BlacklistEntry>;
 }

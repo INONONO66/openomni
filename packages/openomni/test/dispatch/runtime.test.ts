@@ -1,6 +1,13 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Operational, PolicyDecision, type Dispatch as DispatchProtocol } from "@openomni/protocol";
-import { Bus, Session, Storage, WorkerGrantStore, WorkerRun } from "@openomni/session";
+import {
+  BlacklistStore,
+  Bus,
+  Session,
+  Storage,
+  WorkerGrantStore,
+  WorkerRun,
+} from "@openomni/session";
 import { DispatchRuntime } from "../../src/dispatch/runtime";
 
 const flushBus = () => new Promise((resolve) => queueMicrotask(resolve));
@@ -94,6 +101,36 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
     expect(events).toContain("dispatch.denied");
     expect(events).not.toContain("dispatch.routed");
+  });
+
+  test("default policy blocks blacklisted external targets before routing", async () => {
+    Storage.initialize({ dbPath: ":memory:" });
+    BlacklistStore.put({
+      id: "bl-endpoint",
+      kind: "endpoint",
+      value: "ep_blocked",
+      reason: "blocked endpoint",
+      createdBy: "act_owner",
+    });
+    let called = false;
+    const runtime = new DispatchRuntime();
+    runtime.register("external.ask", () => {
+      called = true;
+      return { output: "sent" };
+    });
+
+    const result = await runtime.submit(
+      {
+        action: "external.ask",
+        target: { kind: "external_actor", id: "ep_blocked" },
+        payload: "hello",
+      },
+      { agentName: "resident", actorKind: "resident", actorId: "act_resident" },
+    );
+
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("blocked endpoint");
+    expect(called).toBe(false);
   });
 
   test("default policy denies worker spawning independent work", async () => {
