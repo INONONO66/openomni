@@ -1,7 +1,11 @@
-import { describe, test, expect } from "bun:test";
-import { SessionRouting } from "../../src/worker-pool";
+import { afterEach, describe, test, expect } from "bun:test";
+import { SessionRouting } from "../../src/worker-pool/session-routing";
 
 describe("session routing affinity", () => {
+  afterEach(() => {
+    SessionRouting.clear();
+  });
+
   test("same sessionId always routes to same worker", () => {
     const workerCount = 4;
     const id = "stable-session-xyz";

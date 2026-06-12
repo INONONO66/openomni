@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import { Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { createSessionRouting, type SessionRouter } from "../worker-pool/session-routing";
 import {
   WorkerSupervisor,
   type InboundWaitParams,
@@ -82,7 +83,7 @@ export class OnDemandWorkerManager implements WorkerManager {
   private readonly slotWaitTimeoutMs: number;
   private readonly maxQueuedDispatches: number;
   private readonly slots = new Map<number, WorkerSlot>();
-  private readonly sessionAffinity = new Map<string, number>();
+  private readonly sessionRouting: SessionRouter = createSessionRouting();
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly waiters: SlotWaiter[] = [];
   private nextWorkerId = 0;
@@ -245,7 +246,7 @@ export class OnDemandWorkerManager implements WorkerManager {
       }),
     );
     this.slots.clear();
-    this.sessionAffinity.clear();
+    this.sessionRouting.clear();
     this.activeRuns.clear();
     for (const waiter of this.waiters.splice(0)) {
       waiter.reject(new Error("worker manager is shutting down"));
@@ -272,7 +273,7 @@ export class OnDemandWorkerManager implements WorkerManager {
   }
 
   private async tryAcquireSlot(sessionId: string): Promise<WorkerSlot | undefined> {
-    const affinityId = this.sessionAffinity.get(sessionId);
+    const affinityId = this.sessionRouting.get(sessionId);
     const affinitySlot = affinityId === undefined ? undefined : this.slots.get(affinityId);
     if (affinitySlot !== undefined && affinitySlot.ownerSessionId === sessionId) {
       if (affinitySlot.load > 0 || affinitySlot.reserved) return undefined;
@@ -282,7 +283,7 @@ export class OnDemandWorkerManager implements WorkerManager {
 
     if (this.slots.size < this.maxActiveWorkers) {
       const slot = this.createSlot(sessionId);
-      this.sessionAffinity.set(sessionId, slot.id);
+      this.sessionRouting.assign(sessionId, slot.id);
       return slot;
     }
 
@@ -328,14 +329,12 @@ export class OnDemandWorkerManager implements WorkerManager {
   private async reassignSlot(slot: WorkerSlot, sessionId: string): Promise<WorkerSlot> {
     slot.reserved = true;
     this.clearIdleTimer(slot);
-    for (const [existingSessionId, slotId] of this.sessionAffinity.entries()) {
-      if (slotId === slot.id) this.sessionAffinity.delete(existingSessionId);
-    }
+    this.sessionRouting.forgetWorker(slot.id);
     const supervisor = slot.supervisor;
     slot.supervisor = null;
     await supervisor?.stop();
     slot.ownerSessionId = sessionId;
-    this.sessionAffinity.set(sessionId, slot.id);
+    this.sessionRouting.assign(sessionId, slot.id);
     return slot;
   }
 
@@ -416,9 +415,7 @@ export class OnDemandWorkerManager implements WorkerManager {
   private forgetSlot(slot: WorkerSlot): void {
     this.clearIdleTimer(slot);
     this.slots.delete(slot.id);
-    for (const [sessionId, slotId] of this.sessionAffinity.entries()) {
-      if (slotId === slot.id) this.sessionAffinity.delete(sessionId);
-    }
+    this.sessionRouting.forgetWorker(slot.id);
   }
 
   private clearIdleTimer(slot: WorkerSlot): void {

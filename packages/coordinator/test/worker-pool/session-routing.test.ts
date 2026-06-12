@@ -1,8 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
-import { SessionRouting } from "../../src/worker-pool";
+import { createSessionRouting, SessionRouting } from "../../src/worker-pool/session-routing";
 
 describe("SessionRouting", () => {
+  afterEach(() => {
+    SessionRouting.clear();
+  });
+
   test("same session always routes to same worker", () => {
     const id = "ses_same_affinity";
     const first = SessionRouting.route(id, 4);
@@ -86,5 +90,48 @@ describe("SessionRouting", () => {
     for (const blocker of blockers) {
       SessionRouting.complete(blocker);
     }
+  });
+
+  test("createSessionRouting() returns isolated affinity state for production consumers", () => {
+    const first = createSessionRouting();
+    const second = createSessionRouting();
+
+    first.assign("session-a", 7);
+    expect(first.get("session-a")).toBe(7);
+    expect(second.get("session-a")).toBeUndefined();
+
+    first.assign("session-b", 7);
+    first.forgetWorker(7);
+
+    expect(first.get("session-a")).toBeUndefined();
+    expect(first.get("session-b")).toBeUndefined();
+  });
+
+  test("assign() preserves outstanding route references when moving affinity", () => {
+    const routing = createSessionRouting();
+
+    const first = routing.route("session-move", 2);
+    routing.route("session-move", 2);
+    const next = first === 0 ? 1 : 0;
+
+    routing.assign("session-move", next);
+    expect(routing.get("session-move")).toBe(next);
+
+    routing.complete("session-move");
+    expect(routing.get("session-move")).toBe(next);
+
+    routing.complete("session-move");
+    expect(routing.get("session-move")).toBeUndefined();
+  });
+
+  test("assign() is idempotent for the same session and worker", () => {
+    const routing = createSessionRouting();
+
+    routing.assign("session-stable", 1);
+    routing.assign("session-stable", 1);
+    expect(routing.get("session-stable")).toBe(1);
+
+    routing.complete("session-stable");
+    expect(routing.get("session-stable")).toBeUndefined();
   });
 });

@@ -216,7 +216,7 @@ Each worker can have different tool sets, system prompts, and workspace contexts
 ### Rewritten / Current
 - legacy fixed worker-pool facade → `packages/coordinator/src/worker-manager/manager.ts`
 - `packages/coordinator/src/worker-pool/supervisor.ts` remains the shared worker process handle used by `worker-manager`
-- `packages/coordinator/src/worker-pool/session-routing.ts` is retained as a dormant/test-covered session-tree affinity helper; live `worker-manager` routing currently uses its own `sessionAffinity` map
+- `packages/coordinator/src/worker-pool/session-routing.ts` provides the session-to-worker affinity helper used by `worker-manager`
 
 ### Add
 - `packages/openomni/src/resident/runtime.ts` — ResidentRuntime

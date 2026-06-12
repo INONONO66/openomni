@@ -1,4 +1,4 @@
-export { SessionRouting } from "./session-routing";
+export { createSessionRouting, SessionRouting, type SessionRouter } from "./session-routing";
 export {
   WorkerSupervisor,
   type ToolCallCancelParams,

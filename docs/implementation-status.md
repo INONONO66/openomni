@@ -76,7 +76,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Subagent as bound extension (context-inheriting, ticketless, gate-exempt) | ✅ | `packages/openomni/src/subagent/` | `SubagentRuntime` + `BackgroundManager` — NOT a worker tier; workers are always isolated processes (ADR-010 §6) |
 | Extension-vs-independence routing (subagent vs worker choice in Resident flow) | 📋 | — | ADR-010 §6 — "needs my context, or its own footing?"; domain expertise = independence signal |
 | Worker supervisor internals | ✅ | `packages/coordinator/src/worker-pool/supervisor.ts` | Shared process supervisor used by `worker-manager`; legacy `createWorkerPool` facade removed |
-| SessionRouting helper | 🔌 | `packages/coordinator/src/worker-pool/session-routing.ts` | Dormant/test-covered session-tree affinity helper; not used by `worker-manager`, whose live routing uses its own `sessionAffinity` map |
+| SessionRouting helper | ✅ | `packages/coordinator/src/worker-pool/session-routing.ts`, `packages/coordinator/src/worker-manager/manager.ts` | `worker-manager` uses a `SessionRouter` instance for live session-to-slot affinity; singleton `SessionRouting.route/complete` remains test-covered for fixed worker-index routing |
 | Crash recovery (mark interrupted at boot) | ✅ | `packages/coordinator/src/recovery/` | |
 | Injection queue (async delivery at turn.finish) | ✅ | `packages/openomni/src/execution-runtime/injection-queue.ts` | |
 | Cron job registry persistence | ✅ | `packages/openomni/src/execution-runtime/cron-job-registry.ts`, `packages/session/src/storage/sqlite-cron-job-adapter.ts` | `schedule.create` jobs persist in SQLite and survive `Storage` reinitialize; `schedule.cancel` removes persisted jobs |
