@@ -26,6 +26,15 @@ const requestSchema = z.object({
   traceId: z.string().optional(),
 });
 
+const localCliLogEventSchema = z.object({
+  kind: z.literal("local_cli_log_event"),
+  artifactId: z.string(),
+  message: z.string(),
+  timestamp: z.string().optional(),
+  sequence: z.number().int().nonnegative(),
+  data: z.record(z.string(), z.unknown()),
+});
+
 const resultSchema = z.object({
   runId: z.string(),
   sessionId: z.string(),
@@ -44,6 +53,7 @@ const resultSchema = z.object({
       }),
     )
     .optional(),
+  logEvents: z.array(localCliLogEventSchema).optional(),
 });
 
 export namespace Execution {
