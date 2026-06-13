@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";
-export type { McpServerConfig } from "./config/mcp-server-config";
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".openomni", "config.json");
 
@@ -136,9 +135,4 @@ export function loadConfig(configPath = DEFAULT_CONFIG_PATH): ServerConfig {
   _config = resolve(loadRaw(configPath), configPath);
   _configPath = configPath;
   return _config;
-}
-
-export function resetConfig(): void {
-  _config = null;
-  _configPath = null;
 }
