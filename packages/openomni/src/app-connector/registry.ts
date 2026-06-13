@@ -6,6 +6,13 @@ export interface AppConnectorRegistrationOptions {
   readonly registeredBy: string;
 }
 
+export interface AppConnectorConsentOptions {
+  readonly grantedBy: string;
+  readonly credentials?: string[];
+  readonly capabilities?: string[];
+  readonly permissions?: AppConnector.Consent["permissions"];
+}
+
 export namespace AppConnectorRegistry {
   export function register(
     candidate: DiscoveryCandidate,
@@ -37,6 +44,17 @@ export namespace AppConnectorRegistry {
 
   export function remove(id: string): boolean {
     return AppConnectorInstallationStore.remove(id);
+  }
+
+  export function requestConsent(id: string): AppConnector.Installation {
+    return AppConnectorInstallationStore.requestConsent(id);
+  }
+
+  export function grantConsent(
+    id: string,
+    options: AppConnectorConsentOptions,
+  ): AppConnector.Installation {
+    return AppConnectorInstallationStore.grantConsent(id, options);
   }
 }
 

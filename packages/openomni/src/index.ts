@@ -32,6 +32,7 @@ export type {
 
 export { AppConnectorDiscovery, AppConnectorRegistry, BuiltInAppConnectors } from "./app-connector";
 export type {
+  AppConnectorConsentOptions,
   AppConnectorDiscoveryStatus,
   AppConnectorRegistrationOptions,
   DetectCommandResult,
