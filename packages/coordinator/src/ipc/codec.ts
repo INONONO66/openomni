@@ -16,7 +16,3 @@ export function decodeMessage(raw: unknown): IpcMessage {
 
   throw new IpcProtocolError(`Unknown message type: ${JSON.stringify(raw)}`);
 }
-
-export function encodeMessage(msg: IpcMessage): string {
-  return JSON.stringify(msg);
-}
