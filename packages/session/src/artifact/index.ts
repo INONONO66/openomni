@@ -30,8 +30,4 @@ export namespace Artifact {
     if (!row) return [];
     return [JSON.parse(row.meta) as ArtifactSchema.Meta];
   }
-
-  export function _reset(): void {
-    // no-op: callers use Storage.reset() for test isolation
-  }
 }

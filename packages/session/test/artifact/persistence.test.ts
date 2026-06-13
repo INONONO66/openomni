@@ -28,6 +28,7 @@ function ensureSession(adapter: SqliteStorageAdapter, id: string): void {
     title: `Session ${id}`,
     model: { providerID: "test", modelID: "test-model" },
     time: { created: Date.now(), updated: Date.now() },
+    spawnDepth: 0,
   });
 }
 
@@ -43,12 +44,10 @@ describe("Artifact persistence (SQLite)", () => {
     adapter = new SqliteStorageAdapter(dbPath);
     Storage.initialize({ dbPath: ":memory:" });
     Storage.configure(adapter);
-    Artifact._reset();
     ensureSession(adapter, "sess-1");
   });
 
   afterEach(() => {
-    Artifact._reset();
     Storage.reset();
     try {
       adapter.close();
@@ -62,7 +61,6 @@ describe("Artifact persistence (SQLite)", () => {
     const meta = makeMeta();
     await Artifact.store("sess-1", meta, "hello world");
     adapter.close();
-    Artifact._reset();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
@@ -79,7 +77,6 @@ describe("Artifact persistence (SQLite)", () => {
     await Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
     await Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");
     adapter.close();
-    Artifact._reset();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
@@ -95,7 +92,6 @@ describe("Artifact persistence (SQLite)", () => {
     await Artifact.store("sess-1", makeMeta({ version: 1 }), "v1");
     await Artifact.store("sess-1", makeMeta({ version: 2, title: "updated.txt" }), "v2");
     adapter.close();
-    Artifact._reset();
 
     const adapter2 = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter2);
