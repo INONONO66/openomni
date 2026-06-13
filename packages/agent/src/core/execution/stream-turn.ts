@@ -200,7 +200,7 @@ export async function buildTurn(
   };
 }
 
-export function createTrackingSink(
+function createTrackingSink(
   state: StreamRunState,
   sink: Sink | undefined,
   turnUsage: TokenUsage,
