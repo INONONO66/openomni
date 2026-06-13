@@ -343,6 +343,73 @@ describe("AppConnector protocol domain", () => {
     });
   });
 
+  describe("AppConnector.Events", () => {
+    it("defines verification failed incidents for smoke verification drift", () => {
+      // Given
+      const payload = {
+        traceId: "trace-app-connector-verification",
+        time: 100,
+        installationId: "install:app.codex",
+        connectorId: "app.codex",
+        connectorVersion: "1.0.0",
+        reason: "unsupported_version",
+        testedVersions: ">=0.139.0 <0.140.0",
+        detectedVersion: "9.0.0",
+        diagnostic: "unsupported installed version",
+      };
+
+      // When
+      const result = AppConnector.Events.VerificationFailed.schema.safeParse(payload);
+
+      // Then
+      expect(AppConnector.Events.VerificationFailed.name).toBe("app_connector.verification.failed");
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reason).toBe("unsupported_version");
+        expect(result.data.detectedVersion).toBe("9.0.0");
+      }
+    });
+
+    it("rejects unknown smoke verification failure reasons", () => {
+      // Given
+      const payload = {
+        traceId: "trace-app-connector-verification",
+        time: 100,
+        installationId: "install:app.codex",
+        connectorId: "app.codex",
+        connectorVersion: "1.0.0",
+        reason: "permission_denied",
+        testedVersions: ">=0.139.0 <0.140.0",
+      };
+
+      // When
+      const result = AppConnector.Events.VerificationFailed.schema.safeParse(payload);
+
+      // Then
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects oversized smoke verification diagnostics", () => {
+      // Given
+      const payload = {
+        traceId: "trace-app-connector-verification",
+        time: 100,
+        installationId: "install:app.codex",
+        connectorId: "app.codex",
+        connectorVersion: "1.0.0",
+        reason: "detect_failed",
+        testedVersions: ">=0.139.0 <0.140.0",
+        diagnostic: "x".repeat(513),
+      };
+
+      // When
+      const result = AppConnector.Events.VerificationFailed.schema.safeParse(payload);
+
+      // Then
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe("Extension.Manifest", () => {
     it("parses contributed app connectors", () => {
       // Given
