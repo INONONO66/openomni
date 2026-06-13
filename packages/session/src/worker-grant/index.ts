@@ -1,6 +1,7 @@
 import { Communication } from "@openomni/protocol";
 import { Bus } from "../bus";
 import { Storage } from "../storage/storage";
+import { withCreateTimestamps } from "../storage/timestamped-store";
 
 const riskRank = { low: 1, medium: 2, high: 3 } as const;
 
@@ -21,15 +22,14 @@ function eventBase(record: Communication.WorkerGrant.Record) {
 }
 
 function createRecord(input: Communication.WorkerGrant.Create): Communication.WorkerGrant.Record {
-  const now = Date.now();
-  return Communication.WorkerGrant.Record.parse({
-    ...input,
-    status: input.status ?? "active",
-    version: input.version ?? 1,
-    canCreateExternalTasks: input.canCreateExternalTasks ?? false,
-    createdAt: input.createdAt ?? now,
-    updatedAt: input.updatedAt ?? input.createdAt ?? now,
-  });
+  return Communication.WorkerGrant.Record.parse(
+    withCreateTimestamps({
+      ...input,
+      status: input.status ?? "active",
+      version: input.version ?? 1,
+      canCreateExternalTasks: input.canCreateExternalTasks ?? false,
+    }),
+  );
 }
 
 function matchesList(list: readonly string[] | undefined, value: string | undefined): boolean {
