@@ -21,6 +21,19 @@ export interface OutboundDispatchOwner {
   dispatch(input: OutboundDispatchOwnerInput): Promise<unknown> | unknown;
 }
 
+export interface DeviceDispatchOwnerInput {
+  readonly command: Dispatch.Command;
+  readonly deviceId: string;
+  readonly payload: unknown;
+  readonly signal?: AbortSignal;
+  readonly wait?: boolean;
+  readonly timeoutMs?: number;
+}
+
+export interface DeviceDispatchOwner {
+  dispatch(input: DeviceDispatchOwnerInput): Promise<unknown> | unknown;
+}
+
 export interface LocalCliAgentRuntimeOwner {
   dispatch(input: {
     readonly command: Dispatch.Command;
@@ -31,6 +44,7 @@ export interface LocalCliAgentRuntimeOwner {
 
 export interface DispatchOwners {
   readonly coordinator?: CoordinatorLike;
+  readonly device?: DeviceDispatchOwner;
   readonly localCliAgentRuntime?: LocalCliAgentRuntimeOwner;
   readonly outbound?: OutboundDispatchOwner;
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;

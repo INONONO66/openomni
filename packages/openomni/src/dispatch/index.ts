@@ -12,6 +12,8 @@ export {
   type DispatchSubmitOptions,
 } from "./runtime.js";
 export type {
+  DeviceDispatchOwner,
+  DeviceDispatchOwnerInput,
   DispatchOwners,
   DispatchSchedulerOwner,
   OutboundDispatchOwner,
@@ -23,6 +25,10 @@ export {
   type BuiltInDispatchOptions,
   type DefaultDispatchRuntimeOptions,
 } from "./setup.js";
+export {
+  createDeviceDispatchHandlers,
+  type DeviceDispatchHandlerOptions,
+} from "./handlers/device.js";
 export {
   createResidentDispatchHandlers,
   type ResidentDispatchHandlerOptions,

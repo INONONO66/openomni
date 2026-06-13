@@ -3,6 +3,7 @@ import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
 import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";
+import { createDeviceDispatchHandlers } from "./handlers/device.js";
 import { createOutboundDispatchHandlers } from "./handlers/outbound.js";
 import { createResidentDispatchHandlers } from "./handlers/resident.js";
 import { createScheduleDispatchHandlers } from "./handlers/schedule.js";
@@ -33,6 +34,7 @@ export function registerBuiltInDispatchHandlers(
       readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
     }),
     ...createOutboundDispatchHandlers({ outbound: owners.outbound }),
+    ...createDeviceDispatchHandlers({ device: owners.device }),
     ...createScheduleDispatchHandlers({ scheduler }),
   };
   for (const [action, handler] of Object.entries(handlers)) {

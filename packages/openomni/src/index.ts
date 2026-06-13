@@ -161,6 +161,7 @@ export {
   DispatchRegistry,
   createDefaultDispatchRuntime,
   createDefaultDispatchPolicy,
+  createDeviceDispatchHandlers,
   createOutboundDispatchHandlers,
   createResidentDispatchHandlers,
   deriveActorContext,
@@ -169,6 +170,9 @@ export {
 export type {
   BuiltInDispatchOptions,
   DefaultDispatchRuntimeOptions,
+  DeviceDispatchHandlerOptions,
+  DeviceDispatchOwner,
+  DeviceDispatchOwnerInput,
   DispatchHandler,
   DispatchHandlerContext,
   DispatchHandlerResult,
