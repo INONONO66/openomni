@@ -6,8 +6,10 @@ export { CronJobRunner } from "./cron-job-runner.js";
 export { WorkspaceLock } from "./workspace-lock.js";
 export { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
 export type {
+  LocalCliCredentialMap,
   LocalCliAgentRuntime,
   LocalCliAgentRuntimeDispatchInput,
+  LocalCliAgentRuntimeOptions,
 } from "./local-cli-agent-runtime.js";
 export {
   AgentToolProvider,
