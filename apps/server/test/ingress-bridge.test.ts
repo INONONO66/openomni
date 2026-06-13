@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Adapter, Tool } from "@openomni/protocol";
 import type { NativeTool, ToolProvider } from "@openomni/openomni";
 import { PendingAskStore, Storage } from "@openomni/session";
-import { agentMetadata, getAgentDefinition, registerAgent } from "../src/agents";
+import { registerAgent } from "../src/agents";
+import { agentMetadata, getAgentDefinition } from "../src/agents/registry";
 import { buildAgentDef, buildInboundEvent } from "../src/ingress/bridge";
 
 function createSessionFixture(id: string): void {
