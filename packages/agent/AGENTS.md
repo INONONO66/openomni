@@ -8,7 +8,6 @@
 src/
 ├── index.ts                    # Public API
 ├── core/
-│   ├── index.ts                # Core re-exports (ChatAgent, types, Memory)
 │   ├── chat-agent.ts           # ChatAgent.create() — wraps streamAgent + provides run() / stream()
 │   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink, legacy types
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
@@ -44,7 +43,6 @@ src/
     │   └── background-cancel.ts# BackgroundCancelTool — cancel a running background task
     └── mcp/
         ├── client.ts           # McpClient — connect / disconnect / listTools / callTool (stdio / sse / http)
-        └── types.ts            # McpServerConfig + tool conversion types
 ```
 
 ## PUBLIC API
