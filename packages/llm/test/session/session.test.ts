@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Session, Storage } from "@openomni/session";
-import type { Message } from "../../src/session/message";
+import type { Message } from "@openomni/protocol";
 
 describe("Session", () => {
   beforeEach(() => {

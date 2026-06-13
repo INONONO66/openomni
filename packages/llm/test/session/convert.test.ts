@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "../../src/session/message";
+import type { Message } from "@openomni/protocol";
 import { toModelMessages } from "../../src/session/convert";
 import type { Provider } from "../../src/provider";
 
