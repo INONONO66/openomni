@@ -175,7 +175,7 @@ export async function* handleError(
   agentBase: StreamAgentBase,
   error: unknown,
   attempt: number,
-  retryPolicy: Parameters<typeof Retry.shouldAgentRetry>[0],
+  retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
   const onErrorDecision = await engine.dispatch(
@@ -195,7 +195,7 @@ export async function* handleError(
   }
 
   const lastError = normalizedError.message;
-  const retryReason = Retry.classifyAgentRetryReason(lastError);
+  const retryReason = Retry.classifyRetryReason(lastError);
   const retryEffect = effectOf(onErrorDecision, "run.retry_after");
   const effectiveRetryPolicy =
     retryEffect?.maxRetries === undefined
@@ -205,15 +205,15 @@ export async function* handleError(
           maxAttempts: Math.min(retryPolicy.maxAttempts, retryEffect.maxRetries),
         };
 
-  if (Retry.shouldAgentRetry(effectiveRetryPolicy, retryReason, attempt)) {
-    const backoffMs = retryEffect?.delayMs ?? Retry.calculateAgentBackoffMs(retryPolicy, attempt);
+  if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
+    const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
     emitErrorRetry(state, config, agentBase, {
       attempt,
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,
     });
     yield createStreamErrorEvent(normalizedError, true);
-    await Retry.agentSleep(backoffMs, config.signal);
+    await Retry.sleep(backoffMs, config.signal);
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 

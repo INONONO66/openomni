@@ -21,7 +21,7 @@ export async function* streamAgent(
   config: ChatAgentConfig,
   sink?: Sink,
 ): AsyncGenerator<AgentEvent> {
-  const retryPolicy = Retry.DEFAULT_AGENT_RETRY_POLICY;
+  const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let lastError = "";
 
