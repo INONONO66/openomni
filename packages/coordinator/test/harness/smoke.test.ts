@@ -1,10 +1,5 @@
-import { describe, test, afterAll } from "bun:test";
+import { describe, test } from "bun:test";
 import { assertCleanExit, assertNoOrphanProcesses } from "./assertions";
-import { cleanupAll } from "./spawn";
-
-afterAll(async () => {
-  await cleanupAll();
-});
 
 describe("harness", () => {
   test("spawn and exit cleanly", async () => {
