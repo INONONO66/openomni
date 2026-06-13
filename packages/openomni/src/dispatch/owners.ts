@@ -7,6 +7,20 @@ export interface DispatchSchedulerOwner {
   remove(jobId: string): boolean;
 }
 
+export interface OutboundDispatchOwnerInput {
+  readonly command: Dispatch.Command;
+  readonly endpointId: string;
+  readonly payload: unknown;
+  readonly correlation?: Dispatch.Command["correlation"];
+  readonly signal?: AbortSignal;
+  readonly wait?: boolean;
+  readonly timeoutMs?: number;
+}
+
+export interface OutboundDispatchOwner {
+  dispatch(input: OutboundDispatchOwnerInput): Promise<unknown> | unknown;
+}
+
 export interface LocalCliAgentRuntimeOwner {
   dispatch(input: {
     readonly command: Dispatch.Command;
@@ -18,6 +32,7 @@ export interface LocalCliAgentRuntimeOwner {
 export interface DispatchOwners {
   readonly coordinator?: CoordinatorLike;
   readonly localCliAgentRuntime?: LocalCliAgentRuntimeOwner;
+  readonly outbound?: OutboundDispatchOwner;
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly scheduler?: DispatchSchedulerOwner;
   readonly defaultModel?: Model.Ref;

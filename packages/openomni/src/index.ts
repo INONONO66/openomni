@@ -161,6 +161,7 @@ export {
   DispatchRegistry,
   createDefaultDispatchRuntime,
   createDefaultDispatchPolicy,
+  createOutboundDispatchHandlers,
   createResidentDispatchHandlers,
   deriveActorContext,
   registerBuiltInDispatchHandlers,
@@ -176,4 +177,7 @@ export type {
   DispatchRuntimeOptions,
   DispatchSchedulerOwner,
   DispatchSubmitOptions,
+  OutboundDispatchHandlerOptions,
+  OutboundDispatchOwner,
+  OutboundDispatchOwnerInput,
 } from "./dispatch";

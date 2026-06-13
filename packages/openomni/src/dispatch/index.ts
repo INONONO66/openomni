@@ -11,7 +11,12 @@ export {
   type DispatchRuntimeOptions,
   type DispatchSubmitOptions,
 } from "./runtime.js";
-export type { DispatchOwners, DispatchSchedulerOwner } from "./owners.js";
+export type {
+  DispatchOwners,
+  DispatchSchedulerOwner,
+  OutboundDispatchOwner,
+  OutboundDispatchOwnerInput,
+} from "./owners.js";
 export {
   createDefaultDispatchRuntime,
   registerBuiltInDispatchHandlers,
@@ -26,6 +31,10 @@ export {
   createScheduleDispatchHandlers,
   type ScheduleDispatchHandlerOptions,
 } from "./handlers/schedule.js";
+export {
+  createOutboundDispatchHandlers,
+  type OutboundDispatchHandlerOptions,
+} from "./handlers/outbound.js";
 export {
   createWorkerDispatchHandlers,
   type WorkerDispatchHandlerOptions,
