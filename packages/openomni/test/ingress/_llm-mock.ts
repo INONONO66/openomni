@@ -19,7 +19,7 @@ export function resetTestState(): void {
   testState.runFn = null;
 }
 
-export function createAssistantMessage(text: string, sessionID: string): Message.WithParts {
+function createAssistantMessage(text: string, sessionID: string): Message.WithParts {
   const id = crypto.randomUUID();
   const now = Date.now();
 
