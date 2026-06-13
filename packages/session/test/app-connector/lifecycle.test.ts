@@ -121,6 +121,36 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     expect(AppConnectorInstallationStore.get(consented.id)).toEqual(disabled);
   });
 
+  test("rejects storage adapters without app connector installation support", () => {
+    // Given
+    const adapterWithoutAppConnector = {
+      session: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+      message: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+      part: {
+        get: () => undefined,
+        set: () => undefined,
+        list: () => [],
+        remove: () => false,
+      },
+    } satisfies Storage.Adapter;
+    Storage.configure(adapterWithoutAppConnector);
+
+    // When / Then
+    expect(() => AppConnectorInstallationStore.list()).toThrow(
+      "Storage adapter does not implement app connector installations",
+    );
+  });
+
   test("marks a consented installation enabled when smoke verification succeeds", async () => {
     // Given
     const consented = consentInstallation("install-1");

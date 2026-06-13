@@ -1,5 +1,6 @@
 import { AppConnector } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
+import { requireSubAdapter } from "../storage/timestamped-store";
 import { assertConsentMatchesRequirements } from "./consent-validation";
 
 type InstallationInput = Omit<AppConnector.Installation, "createdAt" | "updatedAt"> &
@@ -10,11 +11,10 @@ type SmokeVerifiedInput = Pick<AppConnector.Installation, "detectedVersion">;
 type SmokeVerificationFailedInput = Partial<Pick<AppConnector.Installation, "detectedVersion">>;
 
 function requireAdapter(): NonNullable<Storage.Adapter["appConnectorInstallation"]> {
-  const adapter = Storage.get().appConnectorInstallation;
-  if (!adapter) {
-    throw new Error("Storage adapter does not implement app connector installations");
-  }
-  return adapter;
+  return requireSubAdapter(
+    Storage.get().appConnectorInstallation,
+    "Storage adapter does not implement app connector installations",
+  );
 }
 
 function withTimestamps(
