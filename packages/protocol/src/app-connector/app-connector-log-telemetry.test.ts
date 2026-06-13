@@ -2,6 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { AppConnector } from "./index.js";
 
 describe("AppConnector log telemetry fields", () => {
+  test("spawn can declare a liveness stall timeout", () => {
+    const spawn = AppConnector.Spawn.parse({
+      command: "agent",
+      timeoutMs: 60_000,
+      stallTimeoutMs: 5_000,
+    });
+
+    expect(spawn.stallTimeoutMs).toBe(5_000);
+  });
+
+  test("spawn rejects non-positive liveness stall timeouts", () => {
+    expect(() =>
+      AppConnector.Spawn.parse({
+        command: "agent",
+        stallTimeoutMs: 0,
+      }),
+    ).toThrow();
+  });
+
   test("structured logs can declare token usage and tool call fields", () => {
     const logs = AppConnector.Logs.parse({
       kind: "jsonl",

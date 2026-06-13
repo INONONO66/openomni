@@ -784,6 +784,71 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("timed out");
   });
 
+  test("returns interrupted when the local CLI stalls without output", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-stall");
+    const scriptPath = join(workspaceRoot, "fake-stall.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log('before stall');",
+        "await new Promise((resolve) => setTimeout(resolve, 1_000));",
+        "console.log('after stall');",
+      ].join("\n"),
+    );
+    const definition = fakeConnector("bun", [scriptPath], {
+      timeoutMs: 1_000,
+      stallTimeoutMs: 150,
+    });
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "interrupted",
+      finishReason: "stall_timeout",
+      output: "before stall",
+    });
+    expect(result.error).toContain("stalled");
+    expect(result.error).toContain("150ms");
+  });
+
+  test("resets the local CLI stall timer on stdout and stderr activity", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-stall-reset");
+    const scriptPath = join(workspaceRoot, "fake-stall-reset.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log('stdout one');",
+        "await new Promise((resolve) => setTimeout(resolve, 50));",
+        "console.error('stderr two');",
+        "await new Promise((resolve) => setTimeout(resolve, 50));",
+        "console.log('stdout three');",
+      ].join("\n"),
+    );
+    const definition = fakeConnector("bun", [scriptPath], {
+      timeoutMs: 1_000,
+      stallTimeoutMs: 200,
+    });
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "succeeded",
+      finishReason: "exit_code:0",
+      output: "stdout one\nstdout three",
+      error: "stderr two",
+    });
+  });
+
   test("redacts consented credentials from timed-out process output", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-timeout-credential");
