@@ -29,19 +29,8 @@ export {
   createDeviceDispatchHandlers,
   type DeviceDispatchHandlerOptions,
 } from "./handlers/device.js";
-export {
-  createResidentDispatchHandlers,
-  type ResidentDispatchHandlerOptions,
-} from "./handlers/resident.js";
-export {
-  createScheduleDispatchHandlers,
-  type ScheduleDispatchHandlerOptions,
-} from "./handlers/schedule.js";
+export { createResidentDispatchHandlers } from "./handlers/resident.js";
 export {
   createOutboundDispatchHandlers,
   type OutboundDispatchHandlerOptions,
 } from "./handlers/outbound.js";
-export {
-  createWorkerDispatchHandlers,
-  type WorkerDispatchHandlerOptions,
-} from "./handlers/worker.js";
