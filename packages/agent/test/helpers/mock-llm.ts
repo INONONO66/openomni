@@ -1,24 +1,17 @@
-import type { Run, Sink, Tool } from "@openomni/protocol";
+import type { Run, Sink } from "@openomni/protocol";
 import type { ChatAgentConfig } from "../../src/core/types";
 
-export type MockLlmInput = {
+type MockLlmInput = {
   readonly messages?: readonly unknown[];
   readonly maxSteps?: number;
-  readonly signal?: AbortSignal;
-  readonly toolExecutor?: (
-    call: Tool.Call,
-    context?: Tool.ExecutionContext,
-  ) => Promise<Tool.Result>;
+  readonly signal?: ChatAgentConfig["signal"];
+  readonly toolExecutor?: ChatAgentConfig["toolExecutor"];
 };
 
 export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;
 
 export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
-}
-
-export function createAbortedOutcome(): Run.Outcome {
-  return { type: "aborted" };
 }
 
 export function createErrorOutcome(message: string): Run.Outcome {
