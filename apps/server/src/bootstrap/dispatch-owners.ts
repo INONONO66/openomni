@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  DispatchRuntime,
   createLocalCliAgentRuntime,
   createResidentDispatchHandlers,
   type DispatchOwners,
@@ -18,6 +19,7 @@ export interface ServerDispatchOwnersConfig {
 
 const residentAskHandlerOutput = z
   .object({
+    status: z.literal("completed"),
     output: z
       .object({
         output: z.string(),
@@ -35,27 +37,23 @@ function createQuestionBridgeHandler(
     residentRuntime: config.residentRuntime,
     defaultModel: { provider: config.model.providerID, id: config.model.id },
   });
+  const dispatchRuntime = new DispatchRuntime();
+  dispatchRuntime.register("resident.ask", handlers["resident.ask"]);
+
   return async (request) => {
-    const result = await handlers["resident.ask"](
+    const result = await dispatchRuntime.submit(
       {
-        dispatchId: crypto.randomUUID(),
         action: "resident.ask",
         target: { kind: "resident", sessionId: request.residentSessionId },
         payload: `Local CLI worker run ${request.runId} asks Resident:\n\n${request.prompt}`,
         wait: true,
-        actor: {
-          kind: "worker",
-          actorId: `${request.sessionId}:${request.runId}`,
-          sessionId: request.sessionId,
-          runId: request.runId,
-        },
-        sessionId: request.sessionId,
-        runId: request.runId,
-        submittedAt: Date.now(),
       },
       {
         sessionId: request.sessionId,
         runId: request.runId,
+        actorKind: "worker",
+        actorId: `${request.sessionId}:${request.runId}`,
+        trustTier: "assigned_worker",
         signal: request.signal,
       },
     );

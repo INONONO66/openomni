@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
+import {
+  Dispatch as DispatchProtocol,
+  type AppConnector,
+  type Dispatch,
+  type Execution,
+} from "@openomni/protocol";
 import type { DispatchOwners } from "@openomni/openomni";
-import { PendingAskStore, Session, Storage } from "@openomni/session";
+import { Bus, PendingAskStore, Session, Storage } from "@openomni/session";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
 const tempRoots: string[] = [];
 
 beforeEach(() => {
+  Bus.reset();
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
   Session.storage.set("ses_fake", {
@@ -129,9 +135,28 @@ function coordinator(): NonNullable<DispatchOwners["coordinator"]> {
   };
 }
 
-function residentRuntime(): NonNullable<DispatchOwners["residentRuntime"]> {
+interface ResidentRuntimeCall {
+  readonly sessionId: string;
+  readonly payload: unknown;
+  readonly actorRole: unknown;
+  readonly actorSessionId: unknown;
+  readonly actorRunId: unknown;
+}
+
+function residentRuntime(
+  calls: ResidentRuntimeCall[] = [],
+): NonNullable<DispatchOwners["residentRuntime"]> {
   return {
-    async run() {
+    async run(ctx) {
+      const actor = ctx.event.meta?.actor;
+      if (actor === undefined) throw new Error("expected resident event actor metadata");
+      calls.push({
+        sessionId: ctx.sessionId,
+        payload: ctx.event.payload,
+        actorRole: actor.role,
+        actorSessionId: actor.sessionId,
+        actorRunId: actor.runId,
+      });
       return {
         output: "resident result",
         finishReason: "stop",
@@ -216,6 +241,11 @@ describe("createServerDispatchOwners", () => {
   });
 
   test("routes local CLI question bridge requests through resident.ask", async () => {
+    const eventNames: string[] = [];
+    const unsubscribe = Bus.observe((event) => {
+      if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
+    });
+    const residentCalls: ResidentRuntimeCall[] = [];
     const workspaceRoot = tempDir("server-dispatch-owner-question-bridge");
     const scriptPath = join(workspaceRoot, "fake-question-cli.ts");
     writeFileSync(
@@ -243,7 +273,7 @@ describe("createServerDispatchOwners", () => {
     } satisfies AppConnector.Definition;
     const owners = createServerDispatchOwners({
       coordinator: coordinator(),
-      residentRuntime: residentRuntime(),
+      residentRuntime: residentRuntime(residentCalls),
       model: { providerID: "anthropic", id: "claude-test" },
     });
     const runtime = owners.localCliAgentRuntime;
@@ -251,24 +281,49 @@ describe("createServerDispatchOwners", () => {
       expect.unreachable("server dispatch owners must include a local CLI runtime");
     }
 
-    const result = await runtime.dispatch({
-      command: {
-        ...command(),
-        target: {
-          kind: "worker",
-          id: "app.fake-cli",
-          executorKind: "local_cli_agent",
-          parentSessionId: "ses_resident",
+    try {
+      const result = await runtime.dispatch({
+        command: {
+          ...command(),
+          target: {
+            kind: "worker",
+            id: "app.fake-cli",
+            executorKind: "local_cli_agent",
+            parentSessionId: "ses_resident",
+          },
         },
-      },
-      executionRequest: request(workspaceRoot),
-      installation: installation(definition),
-    });
+        executionRequest: request(workspaceRoot),
+        installation: installation(definition),
+      });
+      await Promise.resolve();
 
-    expect(result).toMatchObject({
-      status: "succeeded",
-      output: "resident result",
-    });
-    expect(PendingAskStore.list(["answered"])).toHaveLength(1);
+      expect(result).toMatchObject({
+        status: "succeeded",
+        output: "resident result",
+      });
+      expect(residentCalls).toEqual([
+        {
+          sessionId: "ses_resident",
+          payload: "Local CLI worker run run_fake asks Resident:\n\nMay I edit the file?",
+          actorRole: "worker",
+          actorSessionId: "ses_fake",
+          actorRunId: "run_fake",
+        },
+      ]);
+      expect(eventNames).toContain(DispatchProtocol.Events.Submitted.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Authorized.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Routed.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Completed.name);
+      const asks = PendingAskStore.list(["answered"]);
+      expect(asks).toHaveLength(1);
+      expect(asks[0]).toMatchObject({
+        originSessionId: "ses_fake",
+        originRunId: "run_fake",
+        originActorKind: "worker",
+        targetKind: "resident",
+      });
+    } finally {
+      unsubscribe();
+    }
   });
 });
