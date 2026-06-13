@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import type { AgentStep } from "../src/core/types";
+import type { AgentEvent, AgentStep } from "../src/core/types";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -176,6 +176,7 @@ describe("ChatAgent", () => {
     try {
       await agent.run({ messages: [{ role: "user", content: "Hello" }] });
     } catch (error) {
+      if (!(error instanceof Error)) throw error;
       abortError = error;
     }
 
@@ -236,6 +237,7 @@ describe("ChatAgent", () => {
         messages: [{ role: "user", content: "Hello" }],
       });
     } catch (error) {
+      if (!(error instanceof Error)) throw error;
       retryError = error;
     }
 
@@ -326,11 +328,12 @@ it("handles toolExecutor errors by setting isError: true", async () => {
     if (input.toolExecutor) {
       try {
         await input.toolExecutor(call);
-      } catch (e) {
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
         const result = {
           id: crypto.randomUUID(),
           toolCallId: call.id,
-          output: (e as Error).message,
+          output: error.message,
           isError: true,
         };
         sink.onToolCall(call);
@@ -375,4 +378,38 @@ it("throws when tools are configured without toolExecutor", async () => {
       messages: [{ role: "user", content: "Use a tool" }],
     }),
   ).rejects.toThrow("toolExecutor is required when tools are provided");
+});
+
+it("does not retry missing toolExecutor configuration errors", async () => {
+  const agent = ChatAgent.create({
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
+    tools: [
+      {
+        name: "stub_tool",
+        description: "stub",
+        inputSchema: { type: "object", properties: {}, required: [] },
+        safe: true,
+      },
+    ],
+  });
+
+  const events: AgentEvent[] = [];
+  let configurationError: unknown;
+  try {
+    for await (const event of agent.stream({
+      messages: [{ role: "user", content: "Use a tool" }],
+    })) {
+      events.push(event);
+    }
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    configurationError = error;
+  }
+
+  expect(configurationError).toBeInstanceOf(Error);
+  expect((configurationError as Error).message).toContain(
+    "toolExecutor is required when tools are provided",
+  );
+  expect(events.filter((event) => event.type === "error" && event.willRetry)).toHaveLength(0);
 });

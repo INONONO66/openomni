@@ -65,6 +65,49 @@ describe("AppConnectorRegistry", () => {
     expect(AppConnectorRegistry.list()).toEqual([installation]);
   });
 
+  test("requests and grants owner consent for a registered installation", async () => {
+    // Given
+    const connector = BuiltInAppConnectors.get("app.codex");
+    if (connector === undefined) {
+      throw new Error("expected built-in Codex connector");
+    }
+    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+      connectors: [connector],
+      runDetectCommand: async () => ({
+        exitCode: 0,
+        stdout: "codex-cli 0.139.0",
+        stderr: "",
+      }),
+    });
+    const candidate = candidates[0];
+    if (candidate === undefined) {
+      throw new Error("expected discovery candidate");
+    }
+    const installation = AppConnectorRegistry.register(candidate, {
+      registeredBy: "act_owner",
+    });
+
+    // When
+    const pending = AppConnectorRegistry.requestConsent(installation.id);
+    const consented = AppConnectorRegistry.grantConsent(installation.id, {
+      grantedBy: "act_owner",
+      capabilities: ["git"],
+      permissions: [{ action: "tool.call", allowlist: ["bash", "edit", "grep", "read"] }],
+    });
+    adapter.close();
+    adapter = new SqliteStorageAdapter(dbPath);
+    Storage.configure(adapter);
+
+    // Then
+    expect(pending.status).toBe("pending_consent");
+    expect(consented.status).toBe("consented");
+    expect(consented.consent).toMatchObject({
+      grantedBy: "act_owner",
+      capabilities: ["git"],
+    });
+    expect(AppConnectorRegistry.get(installation.id)).toEqual(consented);
+  });
+
   test("rejects unavailable discovery candidates at registration", async () => {
     // Given
     const connector = BuiltInAppConnectors.get("app.codex");

@@ -32,6 +32,7 @@ export async function* streamAgent(
     runId: trace.runId,
   };
   emitRunStarted(trace, config.model.id);
+  assertToolExecutor(config);
 
   while (attempt <= retryPolicy.maxAttempts) {
     const state = createStreamRunState(input);
@@ -41,7 +42,6 @@ export async function* streamAgent(
         config.model,
       );
       const configuredToolChoice = resolveToolChoice(config);
-      assertToolExecutor(config);
 
       const preRunEvent = await dispatchPreRun(state, engine, config);
       if (preRunEvent) {
@@ -119,6 +119,7 @@ export async function* streamAgent(
         throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
       }
     } catch (error) {
+      if (!(error instanceof Error)) throw error;
       const decision = yield* handleError(
         state,
         engine,

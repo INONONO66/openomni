@@ -153,11 +153,23 @@ export namespace AppConnector {
   export const InstallationStatus = z.enum([
     "registered",
     "pending_consent",
+    "consented",
     "enabled",
     "disabled",
     "verification_failed",
   ]);
   export type InstallationStatus = z.infer<typeof InstallationStatus>;
+
+  export const Consent = z
+    .object({
+      grantedBy: nonEmptyString,
+      grantedAt: positiveInteger,
+      credentials: z.array(nonEmptyString).optional(),
+      capabilities: z.array(nonEmptyString).optional(),
+      permissions: z.array(Policy.Permission).optional(),
+    })
+    .strict();
+  export type Consent = z.infer<typeof Consent>;
 
   export const Installation = z
     .object({
@@ -169,6 +181,7 @@ export namespace AppConnector {
       testedVersions: nonEmptyString,
       status: InstallationStatus,
       registeredBy: nonEmptyString,
+      consent: Consent.optional(),
       createdAt: positiveInteger,
       updatedAt: positiveInteger,
     })

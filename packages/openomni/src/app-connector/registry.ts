@@ -1,10 +1,21 @@
-import type { AppConnector } from "@openomni/protocol";
+import { type AppConnector, Policy } from "@openomni/protocol";
 import { AppConnectorInstallationStore } from "@openomni/session";
+import { z } from "zod";
 import type { DiscoveryCandidate } from "./discovery.js";
 
 export interface AppConnectorRegistrationOptions {
   readonly registeredBy: string;
 }
+
+export const AppConnectorConsentOptions = z
+  .object({
+    grantedBy: z.string().min(1),
+    credentials: z.array(z.string().min(1)).optional(),
+    capabilities: z.array(z.string().min(1)).optional(),
+    permissions: z.array(Policy.Permission).optional(),
+  })
+  .strict();
+export type AppConnectorConsentOptions = z.infer<typeof AppConnectorConsentOptions>;
 
 export namespace AppConnectorRegistry {
   export function register(
@@ -37,6 +48,20 @@ export namespace AppConnectorRegistry {
 
   export function remove(id: string): boolean {
     return AppConnectorInstallationStore.remove(id);
+  }
+
+  export function requestConsent(id: string): AppConnector.Installation {
+    return AppConnectorInstallationStore.requestConsent(id);
+  }
+
+  export function grantConsent(
+    id: string,
+    options: AppConnectorConsentOptions,
+  ): AppConnector.Installation {
+    return AppConnectorInstallationStore.grantConsent(
+      id,
+      AppConnectorConsentOptions.parse(options),
+    );
   }
 }
 

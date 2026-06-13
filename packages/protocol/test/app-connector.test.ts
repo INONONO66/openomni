@@ -3,6 +3,10 @@ import { AppConnector, Extension } from "../src/index.js";
 
 const it = test;
 
+function issuePaths(error: { issues: Array<{ path: PropertyKey[] }> }): string[] {
+  return error.issues.map((issue) => issue.path.map((segment) => String(segment)).join("."));
+}
+
 function validConnector(): Record<string, unknown> {
   return {
     id: "app.claude-code",
@@ -69,6 +73,13 @@ describe("AppConnector protocol domain", () => {
         testedVersions: ">=0.139.0 <0.140.0",
         status: "registered",
         registeredBy: "act_owner",
+        consent: {
+          grantedBy: "act_owner",
+          grantedAt: 200,
+          credentials: ["ANTHROPIC_API_KEY"],
+          capabilities: ["git"],
+          permissions: [{ action: "tool.call", allowlist: ["bash"] }],
+        },
         createdAt: 100,
         updatedAt: 100,
       };
@@ -81,6 +92,7 @@ describe("AppConnector protocol domain", () => {
       if (result.success) {
         expect(result.data.connectorId).toBe("app.claude-code");
         expect(result.data.status).toBe("registered");
+        expect(result.data.consent?.credentials).toEqual(["ANTHROPIC_API_KEY"]);
         expect(result.data.definition.profile.executorKind).toBe("local_cli_agent");
       }
     });
@@ -105,7 +117,7 @@ describe("AppConnector protocol domain", () => {
       // Then
       expect(result.success).toBe(false);
       if (!result.success) {
-        const paths = result.error.issues.map((issue) => issue.path.join("."));
+        const paths = issuePaths(result.error);
         expect(paths.includes("definition.id")).toBe(true);
       }
     });
@@ -130,7 +142,7 @@ describe("AppConnector protocol domain", () => {
       // Then
       expect(result.success).toBe(false);
       if (!result.success) {
-        const paths = result.error.issues.map((issue) => issue.path.join("."));
+        const paths = issuePaths(result.error);
         expect(paths.includes("definition.version")).toBe(true);
       }
     });
