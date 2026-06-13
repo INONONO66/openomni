@@ -57,6 +57,9 @@ const resultSchema = z.object({
 });
 
 export namespace Execution {
+  export const LogEvent = localCliLogEventSchema;
+  export type LogEvent = z.infer<typeof LogEvent>;
+
   export const Request = requestSchema;
   export type Request = z.infer<typeof requestSchema>;
 
