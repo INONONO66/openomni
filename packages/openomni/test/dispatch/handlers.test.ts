@@ -182,4 +182,68 @@ describe("built-in dispatch handlers", () => {
       },
     });
   });
+
+  test("outbound handlers call the outbound owner", async () => {
+    const calls: Array<{ action: string; endpointId?: string; timeoutMs?: number }> = [];
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        outbound: {
+          async dispatch(input) {
+            calls.push({
+              action: input.command.action,
+              endpointId: input.endpointId,
+              timeoutMs: input.timeoutMs,
+            });
+            return { receiptId: `${input.command.action}:receipt` };
+          },
+        },
+      },
+    });
+
+    const output = await registry.get("external.ask")?.(
+      command("external.ask", { kind: "external_actor", id: "human:advisor" }, "question"),
+      { timeoutMs: 250 },
+    );
+
+    expect(calls).toEqual([
+      { action: "external.ask", endpointId: "human:advisor", timeoutMs: 250 },
+    ]);
+    expect(output).toEqual({
+      output: { receiptId: "external.ask:receipt" },
+    });
+    expect(registry.has("a2a.ask")).toBe(true);
+    expect(registry.has("api.ask")).toBe(true);
+  });
+
+  test("outbound handlers fail closed without an outbound owner", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("api.ask")?.(
+          command("api.ask", { kind: "external_actor", id: "api:research" }, { query: "lookup" }),
+        ),
+      "dispatch outbound handler requires outbound owner",
+    );
+  });
+
+  test("outbound handlers reject non-external targets before owner dispatch", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        outbound: {
+          async dispatch() {
+            throw new Error("should not dispatch non-external target");
+          },
+        },
+      },
+    });
+
+    await expectRejectsWithMessage(
+      () => registry.get("a2a.ask")?.(command("a2a.ask", { kind: "resident" }, "hello")),
+      "a2a.ask requires external_actor target",
+    );
+  });
 });

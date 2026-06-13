@@ -185,5 +185,8 @@ export namespace Dispatch {
     ScheduleCancel: "schedule.cancel",
     ActorMessage: "actor.message",
     ActorReply: "actor.reply",
+    ExternalAsk: "external.ask",
+    A2aAsk: "a2a.ask",
+    ApiAsk: "api.ask",
   } as const;
 }
