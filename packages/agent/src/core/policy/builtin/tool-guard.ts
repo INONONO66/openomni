@@ -1,7 +1,7 @@
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentEventEmitter } from "../../types";
-import type { PolicyFactory, PolicyRegistration } from "../types";
+import type { PolicyRegistration } from "../types";
 import { summarizeInput } from "../../execution/shared";
 
 const TOOL_CALL_ACTION = "tool.call";
@@ -74,8 +74,3 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
     },
   };
 }
-
-export const toolPermissionFactory: PolicyFactory = {
-  id: "policy:tool-permission",
-  create: (config) => createToolPermissionPolicy(config as ToolPermissionPolicyConfig),
-};
