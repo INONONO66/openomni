@@ -249,6 +249,75 @@ describe("AppConnector protocol domain", () => {
       expect(result.success).toBe(false);
     });
 
+    it("accepts templated completion read-back request builders", () => {
+      // Given
+      const connector = validConnector();
+
+      // When
+      const result = AppConnector.Definition.safeParse({
+        ...connector,
+        evidence: {
+          emits: ["exit_code"],
+          completionReport: {
+            finalMessage: "stdout",
+            readBackRequests: [
+              {
+                claimIndex: 0,
+                request: {
+                  kind: "citation_match",
+                  target: "{{output.url}}",
+                  quotedText: "{{output.marker}}",
+                },
+              },
+              {
+                claimIndex: 1,
+                request: {
+                  kind: "api_query",
+                  target: "{{output.apiUrl}}",
+                  method: "HEAD",
+                },
+              },
+            ],
+          },
+        },
+      });
+
+      // Then
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.evidence.completionReport?.readBackRequests?.length).toBe(2);
+      }
+    });
+
+    it("rejects unsupported completion read-back builder methods", () => {
+      // Given
+      const connector = validConnector();
+
+      // When
+      const result = AppConnector.Definition.safeParse({
+        ...connector,
+        evidence: {
+          emits: ["exit_code"],
+          completionReport: {
+            finalMessage: "stdout",
+            readBackRequests: [
+              {
+                claimIndex: 0,
+                request: {
+                  kind: "api_query",
+                  target: "{{output.apiUrl}}",
+                  method: "POST",
+                },
+              },
+            ],
+          },
+        },
+      });
+
+      // Then
+      expect(result.success).toBe(false);
+    });
+
     it("rejects invalid runtime limits", () => {
       // Given
       const connector = validConnector();

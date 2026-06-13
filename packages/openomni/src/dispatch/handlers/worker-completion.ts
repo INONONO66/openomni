@@ -7,37 +7,22 @@ const MAX_READ_BACK_REQUESTS = 5;
 const MAX_READ_BACK_TIMEOUT_MS = 10_000;
 const MAX_READ_BACK_BODY_BYTES = 1_000_000;
 
-const HttpMethod = z.enum(["GET", "HEAD"]);
-const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
-const TimeoutMs = z.number().int().positive().max(MAX_READ_BACK_TIMEOUT_MS).optional();
-const MaxBodyBytes = z
-  .number()
-  .int()
-  .positive()
-  .max(MAX_READ_BACK_BODY_BYTES)
-  .default(MAX_READ_BACK_BODY_BYTES);
-const ReadBackRequest = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("url_fetch"),
-    target: HttpUrl,
-    timeoutMs: TimeoutMs,
-    maxBodyBytes: MaxBodyBytes,
-  }),
-  z.object({
-    kind: z.literal("api_query"),
-    target: HttpUrl,
-    method: HttpMethod.default("GET"),
-    timeoutMs: TimeoutMs,
-    maxBodyBytes: MaxBodyBytes,
-  }),
-  z.object({
-    kind: z.literal("citation_match"),
-    target: HttpUrl,
-    quotedText: z.string().min(1),
-    timeoutMs: TimeoutMs,
-    maxBodyBytes: MaxBodyBytes,
-  }),
-]);
+const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
+  if (request.timeoutMs !== undefined && request.timeoutMs > MAX_READ_BACK_TIMEOUT_MS) {
+    ctx.addIssue({
+      code: "custom",
+      message: `read-back timeoutMs must be at most ${MAX_READ_BACK_TIMEOUT_MS}`,
+      path: ["timeoutMs"],
+    });
+  }
+  if (request.maxBodyBytes > MAX_READ_BACK_BODY_BYTES) {
+    ctx.addIssue({
+      code: "custom",
+      message: `read-back maxBodyBytes must be at most ${MAX_READ_BACK_BODY_BYTES}`,
+      path: ["maxBodyBytes"],
+    });
+  }
+});
 
 type ReadBackRequest = z.infer<typeof ReadBackRequest>;
 
@@ -260,9 +245,4 @@ function completionReflection(
     completionBlocked,
     ...(completionBlocker ? { completionBlocker } : {}),
   };
-}
-
-function isHttpUrl(target: string): boolean {
-  const protocol = new URL(target).protocol;
-  return protocol === "http:" || protocol === "https:";
 }

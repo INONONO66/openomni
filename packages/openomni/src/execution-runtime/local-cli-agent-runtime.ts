@@ -10,6 +10,7 @@ import {
   type LocalCliAgentProcessOutcome,
 } from "./local-cli-agent-process.js";
 import type { LocalCliQuestionBridgeHandler } from "./local-cli-question-bridge.js";
+import { applyLocalCliReadBackBuilders } from "./local-cli-read-back-builder.js";
 
 export type { LocalCliCredentialMap } from "./local-cli-agent-env.js";
 export type { LocalCliQuestionBridgeHandler } from "./local-cli-question-bridge.js";
@@ -131,13 +132,30 @@ export function createLocalCliAgentRuntime(
         stderr: outcome.stderr,
       });
       const output = buildOutput(input.installation, outcome, logIngestion);
+      const builtOutput =
+        outcome.status === "succeeded"
+          ? applyLocalCliReadBackBuilders({
+              connector: input.installation.definition,
+              output,
+              values,
+            })
+          : { ok: true as const, output };
+      if (!builtOutput.ok) {
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "failed",
+          finishReason: "read_back_request_builder_failed",
+          error: builtOutput.error,
+        };
+      }
       const error = buildError(outcome);
       return {
         runId: request.runId,
         sessionId: request.sessionId,
         status: outcome.status,
         finishReason: buildFinishReason(outcome),
-        ...(output === undefined ? {} : { output }),
+        ...(builtOutput.output === undefined ? {} : { output: builtOutput.output }),
         ...(error === undefined ? {} : { error }),
         ...(logIngestion.usage === undefined ? {} : { usage: logIngestion.usage }),
         ...(logIngestion.artifacts.length === 0 ? {} : { artifacts: logIngestion.artifacts }),

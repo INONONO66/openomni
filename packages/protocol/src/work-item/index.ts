@@ -10,6 +10,9 @@ const BaseEvent = z.object({
 });
 
 export namespace WorkItem {
+  const HttpMethod = z.enum(["GET", "HEAD"]);
+  const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
+
   export const Status = z.enum([
     "pending",
     "running",
@@ -36,6 +39,35 @@ export namespace WorkItem {
     statusCode: z.number().int().min(100).max(599).optional(),
     matchedText: z.string().min(1).optional(),
   });
+
+  const ReadBackRequestBase = z.object({
+    timeoutMs: z.number().int().positive().optional(),
+    maxBodyBytes: z.number().int().positive().default(1_000_000),
+  });
+
+  export const ReadBackRequest = z.discriminatedUnion("kind", [
+    ReadBackRequestBase.extend({
+      kind: z.literal("url_fetch"),
+      target: HttpUrl,
+    }),
+    ReadBackRequestBase.extend({
+      kind: z.literal("api_query"),
+      target: HttpUrl,
+      method: HttpMethod.default("GET"),
+    }),
+    ReadBackRequestBase.extend({
+      kind: z.literal("citation_match"),
+      target: HttpUrl,
+      quotedText: z.string().min(1),
+    }),
+  ]);
+  export type ReadBackRequest = z.infer<typeof ReadBackRequest>;
+
+  export const ReadBackRequestEnvelope = z.object({
+    claimIndex: z.number().int().nonnegative(),
+    request: ReadBackRequest,
+  });
+  export type ReadBackRequestEnvelope = z.infer<typeof ReadBackRequestEnvelope>;
 
   export const ReadBackCheck = z
     .discriminatedUnion("kind", [
@@ -296,4 +328,9 @@ export namespace WorkItem {
       }),
     );
   }
+}
+
+function isHttpUrl(target: string): boolean {
+  const protocol = new URL(target).protocol;
+  return protocol === "http:" || protocol === "https:";
 }
