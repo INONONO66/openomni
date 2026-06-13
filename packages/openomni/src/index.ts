@@ -146,8 +146,10 @@ export type {
   ToolSource,
   WorkerMiddlewareConfig,
   DispatchToolRuntime,
+  LocalCliCredentialMap,
   LocalCliAgentRuntime,
   LocalCliAgentRuntimeDispatchInput,
+  LocalCliAgentRuntimeOptions,
 } from "./execution-runtime";
 
 export { ReadBackExecutor } from "./evidence";

@@ -20,7 +20,11 @@ function tempDir(name: string): string {
   return path;
 }
 
-function fakeConnector(command: string, args: readonly string[]): AppConnector.Definition {
+function fakeConnector(
+  command: string,
+  args: readonly string[],
+  requiresOverrides: Partial<AppConnector.Requires> = {},
+): AppConnector.Definition {
   return {
     id: "app.fake-cli",
     name: "Fake CLI",
@@ -41,7 +45,9 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
       emits: ["exit_code"],
       completionReport: { finalMessage: "stdout" },
     },
-    requires: {},
+    requires: {
+      ...requiresOverrides,
+    },
     profile: {
       executorKind: "local_cli_agent",
       taskTypes: ["code.change"],
@@ -49,7 +55,10 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
   };
 }
 
-function installation(definition: AppConnector.Definition): AppConnector.Installation {
+function installation(
+  definition: AppConnector.Definition,
+  consentOverrides: Partial<AppConnector.Consent> = {},
+): AppConnector.Installation {
   return {
     id: "install:fake-cli",
     connectorId: definition.id,
@@ -58,7 +67,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
     registeredBy: "act_owner",
-    consent: { grantedBy: "act_owner", grantedAt: 1 },
+    consent: { grantedBy: "act_owner", grantedAt: 1, ...consentOverrides },
     createdAt: 1,
     updatedAt: 1,
   };
@@ -148,5 +157,40 @@ describe("createServerDispatchOwners", () => {
     expect(result.status).toBe("succeeded");
     expect(result.output).toContain(`"cwd":"${workspaceRoot}"`);
     expect(result.output).toContain('"prompt":"ship it"');
+  });
+
+  test("passes only consented server credentials to the default local CLI owner", async () => {
+    const workspaceRoot = tempDir("server-dispatch-owner-credentials");
+    const scriptPath = join(workspaceRoot, "fake-credential-cli.ts");
+    writeFileSync(
+      scriptPath,
+      "console.log(JSON.stringify({allowed:process.env.FAKE_API_KEY === 'server-secret',echo:process.env.FAKE_API_KEY,ungranted:process.env.UNGRANTED_API_KEY ?? null}));",
+    );
+
+    const owners = createServerDispatchOwners({
+      coordinator: coordinator(),
+      residentRuntime: residentRuntime(),
+      credentials: {
+        FAKE_API_KEY: "server-secret",
+        UNGRANTED_API_KEY: "must-not-leak",
+      },
+    });
+    const runtime = owners.localCliAgentRuntime;
+    if (runtime === undefined) {
+      expect.unreachable("server dispatch owners must include a local CLI runtime");
+    }
+
+    const definition = fakeConnector("bun", [scriptPath], { credentials: ["FAKE_API_KEY"] });
+    const result = await runtime.dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(result.output).toContain('"allowed":true');
+    expect(result.output).toContain('"echo":"[REDACTED]"');
+    expect(result.output).not.toContain("server-secret");
+    expect(result.output).toContain('"ungranted":null');
   });
 });

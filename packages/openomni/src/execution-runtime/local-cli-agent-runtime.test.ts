@@ -49,6 +49,7 @@ function fakeConnector(
   command: string,
   args: readonly string[],
   spawnOverrides: Partial<AppConnector.Spawn> = {},
+  requiresOverrides: Partial<AppConnector.Requires> = {},
 ): AppConnector.Definition {
   return {
     id: "app.fake-cli",
@@ -71,7 +72,9 @@ function fakeConnector(
       emits: ["exit_code"],
       completionReport: { finalMessage: "stdout" },
     },
-    requires: {},
+    requires: {
+      ...requiresOverrides,
+    },
     profile: {
       executorKind: "local_cli_agent",
       taskTypes: ["code.change"],
@@ -79,7 +82,10 @@ function fakeConnector(
   };
 }
 
-function installation(definition: AppConnector.Definition): AppConnector.Installation {
+function installation(
+  definition: AppConnector.Definition,
+  consentOverrides: Partial<AppConnector.Consent> = {},
+): AppConnector.Installation {
   return {
     id: "install:fake-cli",
     connectorId: definition.id,
@@ -88,7 +94,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
     registeredBy: "act_owner",
-    consent: { grantedBy: "act_owner", grantedAt: 1 },
+    consent: { grantedBy: "act_owner", grantedAt: 1, ...consentOverrides },
     createdAt: 1,
     updatedAt: 1,
   };
@@ -119,8 +125,9 @@ function request(workspaceRoot: string): Execution.Request {
 function dispatchRuntime(
   definition: AppConnector.Definition,
   workspaceRoot: string,
+  options: Parameters<typeof createLocalCliAgentRuntime>[0] = {},
 ): Promise<Execution.Result> {
-  return createLocalCliAgentRuntime().dispatch({
+  return createLocalCliAgentRuntime(options).dispatch({
     command: command(),
     executionRequest: request(workspaceRoot),
     installation: installation(definition),
@@ -231,6 +238,125 @@ describe("createLocalCliAgentRuntime", () => {
     }
   });
 
+  test("materializes only consented connector credentials into the child env", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-credential-env");
+    const scriptPath = join(workspaceRoot, "fake-credential-env.ts");
+    writeFileSync(
+      scriptPath,
+      "console.log(JSON.stringify({allowed:process.env.FAKE_API_KEY === 'secret-value',echo:process.env.FAKE_API_KEY,ungranted:process.env.UNGRANTED_API_KEY ?? null}));",
+    );
+    const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: {
+        FAKE_API_KEY: "secret-value",
+        UNGRANTED_API_KEY: "must-not-leak",
+      },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(result.output).toContain('"allowed":true');
+    expect(result.output).toContain('"echo":"[REDACTED]"');
+    expect(result.output).not.toContain("secret-value");
+    expect(result.output).toContain('"ungranted":null');
+  });
+
+  test("redacts consented credentials from stderr and failed results", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-credential-redaction");
+    const scriptPath = join(workspaceRoot, "fake-credential-stderr.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log('stdout ' + process.env.FAKE_API_KEY);",
+        "console.error('stderr ' + process.env.FAKE_API_KEY);",
+        "process.exit(7);",
+      ].join("\n"),
+    );
+    const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      status: "failed",
+      finishReason: "exit_code:7",
+      output: "stdout [REDACTED]",
+      error: "stderr [REDACTED]\nlocal CLI process exited with code 7",
+    });
+    expect(result.output).not.toContain("secret-value");
+    expect(result.error).not.toContain("secret-value");
+  });
+
+  test("fails before spawning when a required consented credential is unavailable", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-missing-credential");
+    const scriptPath = join(workspaceRoot, "fake-should-not-run.ts");
+    writeFileSync(scriptPath, "console.log('should not run');");
+    const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
+
+    // When
+    const result = await createLocalCliAgentRuntime().dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "failed",
+      finishReason: "credential_unavailable",
+      error: "local CLI credential unavailable: FAKE_API_KEY",
+    });
+    expect(result.output).toBeUndefined();
+  });
+
+  test("fails before spawning when a required credential was not consented", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-unconsented-credential");
+    const scriptPath = join(workspaceRoot, "fake-unconsented.ts");
+    writeFileSync(scriptPath, "console.log('should not run');");
+    const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "failed",
+      finishReason: "credential_unavailable",
+      error: "local CLI credential not consented: FAKE_API_KEY",
+    });
+    expect(result.output).toBeUndefined();
+  });
+
   test("returns failed when the local CLI exits non-zero", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-nonzero");
@@ -279,6 +405,47 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("timed out");
   });
 
+  test("redacts consented credentials from timed-out process output", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-timeout-credential");
+    const scriptPath = join(workspaceRoot, "fake-timeout-secret.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log('stdout ' + process.env.FAKE_API_KEY);",
+        "console.error('stderr ' + process.env.FAKE_API_KEY);",
+        "setTimeout(() => {}, 1_000);",
+      ].join("\n"),
+    );
+    const definition = fakeConnector(
+      "bun",
+      [scriptPath],
+      { timeoutMs: 100 },
+      { credentials: ["FAKE_API_KEY"] },
+    );
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "interrupted",
+      finishReason: "timeout",
+      output: "stdout [REDACTED]",
+      error: "stderr [REDACTED]",
+    });
+    expect(result.output).not.toContain("secret-value");
+    expect(result.error).not.toContain("secret-value");
+  });
+
   test("returns failed when the local CLI command cannot be spawned", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-missing");
@@ -295,6 +462,37 @@ describe("createLocalCliAgentRuntime", () => {
       finishReason: "spawn_error",
     });
     expect(result.error).toContain("Executable not found");
+  });
+
+  test("redacts consented credentials from spawn errors when credentials were materialized", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-missing-credential-spawn");
+    const definition = fakeConnector(
+      "secret-value-openomni-missing-local-cli-command",
+      [],
+      {},
+      { credentials: ["FAKE_API_KEY"] },
+    );
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "failed",
+      finishReason: "spawn_error",
+    });
+    expect(result.error).toContain("Executable not found");
+    expect(result.error).toContain("[REDACTED]-openomni-missing-local-cli-command");
+    expect(result.error).not.toContain("secret-value");
   });
 
   test("plugs into worker.spawn local_cli_agent dispatch with the existing evidence gate", async () => {

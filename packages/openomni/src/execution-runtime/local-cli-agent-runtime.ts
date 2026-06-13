@@ -7,6 +7,12 @@ export interface LocalCliAgentRuntimeDispatchInput {
   readonly installation: AppConnector.Installation;
 }
 
+export type LocalCliCredentialMap = Readonly<Record<string, string>>;
+
+export interface LocalCliAgentRuntimeOptions {
+  readonly credentials?: LocalCliCredentialMap;
+}
+
 export interface LocalCliAgentRuntime {
   dispatch(input: LocalCliAgentRuntimeDispatchInput): Promise<Execution.Result>;
 }
@@ -26,7 +32,19 @@ interface SpawnOutcome {
   readonly error?: string;
 }
 
+interface CredentialEnvSuccess {
+  readonly ok: true;
+  readonly env: Record<string, string>;
+  readonly redactions: readonly string[];
+}
+
+interface CredentialEnvFailure {
+  readonly ok: false;
+  readonly error: string;
+}
+
 const DEFAULT_TIMEOUT_MS = 600_000;
+const REDACTED_CREDENTIAL = "[REDACTED]";
 const templatePattern = /\{\{(prompt|worktree|runId|sessionId)\}\}/g;
 const inheritedEnvKeys = ["PATH", "SYSTEMROOT", "SystemRoot", "WINDIR"] as const;
 
@@ -56,17 +74,26 @@ function renderArgs(spawn: AppConnector.Spawn, values: TemplateValues): readonly
   return (spawn.args ?? []).map((arg) => renderTemplate(arg, values));
 }
 
-function renderEnv(spawn: AppConnector.Spawn, values: TemplateValues): Record<string, string> {
+function renderEnv(
+  spawn: AppConnector.Spawn,
+  values: TemplateValues,
+  credentialEnv: Record<string, string>,
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of inheritedEnvKeys) {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }
-  if (spawn.env === undefined) return env;
-  for (const key of Object.keys(spawn.env)) {
-    const value = spawn.env[key];
-    if (value === undefined) continue;
-    env[key] = renderTemplate(value, values);
+  if (spawn.env !== undefined) {
+    for (const key of Object.keys(spawn.env)) {
+      const value = spawn.env[key];
+      if (value === undefined) continue;
+      env[key] = renderTemplate(value, values);
+    }
+  }
+  for (const key of Object.keys(credentialEnv)) {
+    const value = credentialEnv[key];
+    if (value !== undefined) env[key] = value;
   }
   return env;
 }
@@ -122,7 +149,61 @@ function buildFinishReason(outcome: SpawnOutcome): string {
   return "spawn_error";
 }
 
-async function runSpawn(spawn: AppConnector.Spawn, values: TemplateValues): Promise<SpawnOutcome> {
+function redactCredentialValues(value: string, redactions: readonly string[]): string {
+  let redacted = value;
+  for (const secret of [...redactions].sort((a, b) => b.length - a.length)) {
+    redacted = redacted.split(secret).join(REDACTED_CREDENTIAL);
+  }
+  return redacted;
+}
+
+function redactOutcome(outcome: SpawnOutcome, redactions: readonly string[]): SpawnOutcome {
+  if (redactions.length === 0) return outcome;
+  return {
+    ...outcome,
+    stdout: redactCredentialValues(outcome.stdout, redactions),
+    stderr: redactCredentialValues(outcome.stderr, redactions),
+    ...(outcome.error === undefined
+      ? {}
+      : { error: redactCredentialValues(outcome.error, redactions) }),
+  };
+}
+
+function resolveCredentialEnv(
+  installation: AppConnector.Installation,
+  credentials: LocalCliCredentialMap,
+): CredentialEnvSuccess | CredentialEnvFailure {
+  const requiredCredentials = installation.definition.requires.credentials ?? [];
+  const consentedCredentials = new Set(installation.consent?.credentials ?? []);
+  const env: Record<string, string> = {};
+  const redactions: string[] = [];
+
+  for (const credentialName of requiredCredentials) {
+    if (!consentedCredentials.has(credentialName)) {
+      return {
+        ok: false,
+        error: `local CLI credential not consented: ${credentialName}`,
+      };
+    }
+    const value = credentials[credentialName];
+    if (value === undefined || value.length === 0) {
+      return {
+        ok: false,
+        error: `local CLI credential unavailable: ${credentialName}`,
+      };
+    }
+    env[credentialName] = value;
+    redactions.push(value);
+  }
+
+  return { ok: true, env, redactions };
+}
+
+async function runSpawn(
+  spawn: AppConnector.Spawn,
+  values: TemplateValues,
+  credentialEnv: Record<string, string>,
+): Promise<SpawnOutcome> {
   let timedOut = false;
   const timeoutMs = spawn.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -130,7 +211,7 @@ async function runSpawn(spawn: AppConnector.Spawn, values: TemplateValues): Prom
     const proc = Bun.spawn([renderTemplate(spawn.command, values), ...renderArgs(spawn, values)], {
       cwd: renderCwd(spawn, values),
       detached: true,
-      env: renderEnv(spawn, values),
+      env: renderEnv(spawn, values, credentialEnv),
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -175,16 +256,32 @@ async function runSpawn(spawn: AppConnector.Spawn, values: TemplateValues): Prom
   }
 }
 
-export function createLocalCliAgentRuntime(): LocalCliAgentRuntime {
+export function createLocalCliAgentRuntime(
+  options: LocalCliAgentRuntimeOptions = {},
+): LocalCliAgentRuntime {
   return {
     async dispatch(input): Promise<Execution.Result> {
       const request = input.executionRequest;
-      const outcome = await runSpawn(input.installation.definition.spawn, {
+      const values = {
         prompt: request.prompt,
         worktree: request.workspaceRoot,
         runId: request.runId,
         sessionId: request.sessionId,
-      });
+      };
+      const credentialEnv = resolveCredentialEnv(input.installation, options.credentials ?? {});
+      if (!credentialEnv.ok) {
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "failed",
+          finishReason: "credential_unavailable",
+          error: credentialEnv.error,
+        };
+      }
+      const outcome = redactOutcome(
+        await runSpawn(input.installation.definition.spawn, values, credentialEnv.env),
+        credentialEnv.redactions,
+      );
       const output = buildOutput(input.installation, outcome);
       const error = buildError(outcome);
       return {
