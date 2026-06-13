@@ -6,7 +6,6 @@ import {
   buildWorkerInputMessages,
   createExecutionToolContext,
   resolveWorkerDbPath,
-  selectRequestedTools,
 } from "../../src/execution/worker-runtime";
 
 const model = { providerID: "test", modelID: "fixture" };
@@ -72,12 +71,19 @@ describe("worker-runtime", () => {
   it("selects requested tools by sanitized protocol names", () => {
     const availableTools = new SystemToolProvider("/workspace/openomni").listTools();
 
-    const selected = selectRequestedTools(availableTools, [
-      { name: "bash", inputSchema: { type: "object" } },
-      { name: "grep_search", inputSchema: { type: "object" } },
-    ]);
+    const context = createExecutionToolContext(
+      {
+        tools: [
+          { name: "bash", inputSchema: { type: "object" } },
+          { name: "grep_search", inputSchema: { type: "object" } },
+        ],
+        toolConfig: { workspaceRoot: "/workspace/openomni" },
+      },
+      availableTools,
+    );
 
-    expect(selected.map((tool) => tool.spec.name)).toEqual(["bash", "grep.search"]);
+    expect(context.tools?.map((tool) => tool.name)).toEqual(["bash", "grep_search"]);
+    expect(context.toolExecutor).toBeDefined();
   });
 
   it("rebuilds a tool executor and leaves request permissions to agent policy", async () => {
