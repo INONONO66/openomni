@@ -3,4 +3,3 @@ export { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-polic
 export { BackgroundLimitsMiddleware } from "./middleware/background-limits.js";
 export { SubagentConsultation } from "./consultation.js";
 export { BackgroundManager } from "./background-manager.js";
-export { BackgroundStore } from "./background-store.js";

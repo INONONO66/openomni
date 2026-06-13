@@ -9,7 +9,7 @@ Session-backed subagent execution runtime for the openomni orchestration layer.
 | `runtime.ts` | `SubagentRuntime` — orchestration shell for spawn / send / resume / cancel / wait backed by `WorkerRun` records | yes |
 | `consultation.ts` | `SubagentConsultation` — one-shot synchronous subagent calls (request/response pattern) | yes |
 | `background-manager.ts` | `BackgroundManager` — fire-and-forget wrapper with concurrency and depth limits | yes |
-| `background-store.ts` | `BackgroundStore` — in-memory registry of active background runs | yes |
+| `background-store.ts` | `BackgroundStore` — in-memory registry of active background runs | no |
 | `shared.ts` | `RuntimeModel`, `RuntimeMessage` types and message factory helpers (parameterized agent field) | no |
 | `message-builder.ts` | Message construction and serialization for subagent communication | no |
 | `run-lifecycle.ts` | Abort, timeout, and finalize functions for `WorkerRun` lifecycle | no |
@@ -19,9 +19,9 @@ Session-backed subagent execution runtime for the openomni orchestration layer.
 
 ## Module Split Rationale
 
-`runtime.ts` was refactored from ~1094 LOC into focused modules. The split follows single-responsibility: each internal module owns one concern (types, message construction, lifecycle, transcript, mailbox delivery). Only the four public classes are re-exported from `index.ts`; the rest are internal implementation details.
+`runtime.ts` was refactored from ~1094 LOC into focused modules. The split follows single-responsibility: each internal module owns one concern (types, message construction, lifecycle, transcript, mailbox delivery). Only runtime-facing classes and middleware are re-exported from `index.ts`; the rest are internal implementation details.
 
-Internal modules (`shared.ts`, `message-builder.ts`, `run-lifecycle.ts`, `transcript.ts`, `session-mailbox.ts`, `abort-registry.ts`) are not exported from the barrel. Import them only from within this domain.
+Internal modules (`background-store.ts`, `shared.ts`, `message-builder.ts`, `run-lifecycle.ts`, `transcript.ts`, `session-mailbox.ts`, `abort-registry.ts`) are not exported from the barrel. Import them only from within this domain.
 
 ## Dependencies
 
