@@ -2,7 +2,7 @@
 
 Hono server that hosts the orchestration layer and exposes it through external channels (Discord / Telegram / GitHub / WebSocket). This is where inbound messages actually run: bootstrap → channel adapter → routing handler → `IngressEngine.ingest()` → response back to the channel.
 
-Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. The `execution/worker-entry.ts` and `bootstrap/local-runner.ts` import `ChatAgent` from `@openomni/agent` directly; `context/middleware.ts` and `agents/` also import agent types directly.
+Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `execution/worker-entry.ts`, `context/middleware.ts`, and `agents/` import agent runtime APIs or types directly.
 
 ## STRUCTURE
 
@@ -15,7 +15,6 @@ src/
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, model, channels, server, recovery, shutdown
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
-│   ├── local-runner.ts   # Disabled stub; OpenOmni requires coordinator execution
 │   ├── providers.ts      # resolveModel() — picks a default LLM model from stored credentials
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
