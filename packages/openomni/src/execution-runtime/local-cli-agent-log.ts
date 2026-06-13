@@ -8,6 +8,10 @@ import {
   redactLocalCliCredentialValues,
   renderLocalCliTemplate,
 } from "./local-cli-agent-env.js";
+import {
+  aggregateLocalCliLogUsage,
+  buildLocalCliLogEvent,
+} from "./local-cli-agent-log-telemetry.js";
 
 type ExecutionArtifact = NonNullable<Execution.Result["artifacts"]>[number];
 type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
@@ -15,6 +19,7 @@ type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
 export interface LocalCliLogIngestion {
   readonly artifacts: ExecutionArtifact[];
   readonly logEvents: ExecutionLogEvent[];
+  readonly usage?: Execution.Result["usage"];
   readonly finalMessage?: string;
 }
 
@@ -47,6 +52,7 @@ export async function ingestLocalCliLogs(
   };
   await Artifact.store(input.sessionId, meta, content);
 
+  const logEvents = extractLogEvents(logs, content, meta.id);
   return {
     artifacts: [
       {
@@ -56,7 +62,8 @@ export async function ingestLocalCliLogs(
         mimeType: meta.mimeType,
       },
     ],
-    logEvents: extractLogEvents(logs, content, meta.id),
+    logEvents,
+    usage: aggregateLocalCliLogUsage(logs, logEvents),
     finalMessage: extractFinalLogMessage(logs, content),
   };
 }
@@ -164,16 +171,18 @@ function extractLogEvents(
     const message = data[logs.messageField];
     if (typeof message !== "string" || message.length === 0) continue;
     const timestampValue = data[logs.eventTimeField];
-    events.push({
-      kind: "local_cli_log_event",
-      artifactId,
-      message,
-      ...(typeof timestampValue === "string" || typeof timestampValue === "number"
-        ? { timestamp: String(timestampValue) }
-        : {}),
-      sequence: events.length,
-      data,
-    });
+    events.push(
+      buildLocalCliLogEvent(logs, data, {
+        kind: "local_cli_log_event",
+        artifactId,
+        message,
+        ...(typeof timestampValue === "string" || typeof timestampValue === "number"
+          ? { timestamp: String(timestampValue) }
+          : {}),
+        sequence: events.length,
+        data,
+      }),
+    );
   }
   return events;
 }

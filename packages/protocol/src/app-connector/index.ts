@@ -47,6 +47,9 @@ export namespace AppConnector {
     path: nonEmptyString,
     eventTimeField: nonEmptyString,
     messageField: nonEmptyString,
+    tokenUsageField: nonEmptyString.optional(),
+    tokenUsageMode: z.enum(["cumulative", "delta"]).optional(),
+    toolCallField: nonEmptyString.optional(),
   };
 
   export const Logs = z.discriminatedUnion("kind", [

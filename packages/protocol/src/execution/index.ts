@@ -33,6 +33,16 @@ const localCliLogEventSchema = z.object({
   timestamp: z.string().optional(),
   sequence: z.number().int().nonnegative(),
   data: z.record(z.string(), z.unknown()),
+  usage: Token.ExecutionUsage.optional(),
+  toolCall: z
+    .object({
+      id: z.string().min(1).optional(),
+      tool: z.string().min(1),
+      status: z.enum(["pending", "running", "completed", "failed", "error"]).optional(),
+      input: z.record(z.string(), z.unknown()).optional(),
+      output: z.unknown().optional(),
+    })
+    .optional(),
 });
 
 const resultSchema = z.object({
