@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { Operational } from "@openomni/protocol";
+import { Operational, type McpServerConfig } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { resetConfig, loadConfig, type McpServerConfig } from "../src/config";
+import { loadConfig } from "../src/config";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -22,13 +22,11 @@ describe("config", () => {
       GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
       WS_AUTH_TOKEN: process.env.WS_AUTH_TOKEN,
     };
-    resetConfig();
     Bus.reset();
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
-    resetConfig();
     Bus.reset();
     Object.entries(originalEnv).forEach(([key, value]) => {
       if (value === undefined) {

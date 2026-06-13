@@ -2,10 +2,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { Operational } from "@openomni/protocol";
+import { Operational, type McpServerConfig } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { McpConfigLoader } from "../../src/context/mcp-config";
-import type { McpServerConfig } from "../../src/config";
 
 let tempRoot: string;
 
@@ -166,9 +165,7 @@ describe("McpConfigLoader.merge", () => {
     const result = McpConfigLoader.merge(globalServers, conflictProject);
 
     const overridden = result.find((s) => s.name === "global-a");
-    expect(overridden?.transport).toBe("sse");
-    expect(overridden?.url).toBe("http://override");
-    expect(overridden?.command).toBeUndefined();
+    expect(overridden).toEqual({ name: "global-a", transport: "sse", url: "http://override" });
   });
 
   it("project overrides preserve protocol MCP fields", () => {
