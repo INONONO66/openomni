@@ -10,9 +10,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/agent": "workspace:*",
-    "@openomni/llm": "workspace:*",
-    "@openomni/openomni": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*"
   },

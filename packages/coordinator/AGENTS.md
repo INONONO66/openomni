@@ -17,7 +17,7 @@ src/
 
 ## DEPENDENCIES
 
-Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/agent`, and `@openomni/openomni` because the coordinator reconstructs real execution in worker processes.
+Depends on `@openomni/protocol` and `@openomni/session`. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
 
 ## MODULES
 
