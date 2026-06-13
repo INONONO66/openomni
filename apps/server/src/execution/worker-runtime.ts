@@ -34,7 +34,7 @@ export function buildWorkerInputMessages(sessionId: string, prompt: string): Wor
   return [...messages, { role: "user", content: prompt }];
 }
 
-export function selectRequestedTools(
+function selectRequestedTools(
   availableTools: NativeTool[],
   requestedTools: Execution.Request["tools"],
 ): NativeTool[] {
