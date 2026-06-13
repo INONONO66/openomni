@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, afterEach, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { findUp, _resetFindUpCache } from "../../src/context/find-up";
+import { findUp } from "../../src/context/find-up";
 
 let tempRoot: string;
 let level0: string;
@@ -74,8 +74,6 @@ describe("findUp", () => {
 });
 
 describe("findUp caching", () => {
-  afterEach(() => _resetFindUpCache());
-
   it("returns cached result even after file is deleted", () => {
     const dir = join(tempRoot, "cache-test");
     mkdirSync(dir, { recursive: true });
@@ -89,22 +87,6 @@ describe("findUp caching", () => {
 
     const second = findUp("cached.txt", dir);
     expect(second).toBe(filePath);
-  });
-
-  it("returns fresh result after cache reset", () => {
-    const dir = join(tempRoot, "cache-reset");
-    mkdirSync(dir, { recursive: true });
-    const filePath = join(dir, "resetme.txt");
-    writeFileSync(filePath, "exists");
-
-    const first = findUp("resetme.txt", dir);
-    expect(first).toBe(filePath);
-
-    unlinkSync(filePath);
-    _resetFindUpCache();
-
-    const second = findUp("resetme.txt", dir);
-    expect(second).toBeUndefined();
   });
 
   it("caches undefined for missing files", () => {

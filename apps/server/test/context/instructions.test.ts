@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { InstructionLoader } from "../../src/context/instructions";
-import { _resetFindUpCache } from "../../src/context/find-up";
 
 let tempRoot: string;
 
@@ -180,7 +179,6 @@ describe("InstructionLoader.load", () => {
 describe("InstructionLoader caching", () => {
   afterEach(() => {
     InstructionLoader._resetCache();
-    _resetFindUpCache();
   });
 
   it("discover returns cached result on repeated calls", () => {
@@ -192,24 +190,24 @@ describe("InstructionLoader caching", () => {
     expect(second).toBe(first);
   });
 
-  it("discover returns stale result after file deletion until cache reset", () => {
+  it("discover returns stale global result after file deletion until cache reset", () => {
     const ws = makeWorkspace("cache-stale-discover");
-    const agentsPath = join(ws, "AGENTS.md");
+    const globalDir = makeWorkspace("cache-stale-global-config");
+    const agentsPath = join(globalDir, "AGENTS.md");
     writeFileSync(agentsPath, "# Will be deleted");
 
-    const first = InstructionLoader.discover(ws, ws);
-    expect(first.some((f) => f.label === "Project")).toBe(true);
+    const first = InstructionLoader.discover(ws, globalDir);
+    expect(first.some((f) => f.label === "Global")).toBe(true);
 
     unlinkSync(agentsPath);
 
-    const cached = InstructionLoader.discover(ws, ws);
-    expect(cached.some((f) => f.label === "Project")).toBe(true);
+    const cached = InstructionLoader.discover(ws, globalDir);
+    expect(cached.some((f) => f.label === "Global")).toBe(true);
 
     InstructionLoader._resetCache();
-    _resetFindUpCache();
 
-    const fresh = InstructionLoader.discover(ws, ws);
-    expect(fresh.some((f) => f.label === "Project")).toBe(false);
+    const fresh = InstructionLoader.discover(ws, globalDir);
+    expect(fresh.some((f) => f.label === "Global")).toBe(false);
   });
 
   it("load returns cached result on repeated calls with same files", () => {
