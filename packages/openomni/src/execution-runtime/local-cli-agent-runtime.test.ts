@@ -238,6 +238,187 @@ describe("createLocalCliAgentRuntime", () => {
     }
   });
 
+  test("materializes hook question bridge metadata into the child env", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-question-hook");
+    const scriptPath = join(workspaceRoot, "fake-question-hook.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({",
+        "  kind: process.env.OPENOMNI_QUESTION_BRIDGE_KIND,",
+        "  command: process.env.OPENOMNI_QUESTION_BRIDGE_COMMAND,",
+        "  args: JSON.parse(process.env.OPENOMNI_QUESTION_BRIDGE_ARGS_JSON ?? '[]'),",
+        "  promptField: process.env.OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD,",
+        "  responseMode: process.env.OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE,",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {
+        env: { OPENOMNI_QUESTION_BRIDGE_KIND: "connector-should-not-override" },
+      }),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        args: ["--run", "{{runId}}", "--session", "{{sessionId}}", "--worktree", "{{worktree}}"],
+        promptField: "prompt",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(result.output).toContain('"kind":"hook"');
+    expect(result.output).toContain('"command":"openomni-question-hook"');
+    expect(result.output).toContain(`"--run","run_fake"`);
+    expect(result.output).toContain(`"--session","ses_fake"`);
+    expect(result.output).toContain(`"--worktree","${workspaceRoot}"`);
+    expect(result.output).toContain('"promptField":"prompt"');
+    expect(result.output).toContain('"responseMode":"stdout"');
+    expect(result.output).not.toContain("connector-should-not-override");
+  });
+
+  test("materializes disabled question bridge metadata for connectors without a bridge", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-question-none");
+    const scriptPath = join(workspaceRoot, "fake-question-none.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({",
+        "  kind: process.env.OPENOMNI_QUESTION_BRIDGE_KIND,",
+        "  command: process.env.OPENOMNI_QUESTION_BRIDGE_COMMAND ?? null,",
+        "  args: process.env.OPENOMNI_QUESTION_BRIDGE_ARGS_JSON ?? null,",
+        "  promptField: process.env.OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD ?? null,",
+        "  responseMode: process.env.OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE ?? null,",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = fakeConnector("bun", [scriptPath], {
+      env: {
+        OPENOMNI_QUESTION_BRIDGE_KIND: "connector-kind",
+        OPENOMNI_QUESTION_BRIDGE_COMMAND: "connector-command",
+        OPENOMNI_QUESTION_BRIDGE_ARGS_JSON: '["connector-arg"]',
+        OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD: "connector-prompt",
+        OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE: "connector-response",
+      },
+    });
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(result.output).toContain('"kind":"none"');
+    expect(result.output).toContain('"command":null');
+    expect(result.output).toContain('"args":null');
+    expect(result.output).toContain('"promptField":null');
+    expect(result.output).toContain('"responseMode":null');
+    expect(result.output).not.toContain("connector-");
+  });
+
+  test("does not let connector env fill omitted hook question bridge fields", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-question-hook-reserved");
+    const scriptPath = join(workspaceRoot, "fake-question-hook-reserved.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({",
+        "  kind: process.env.OPENOMNI_QUESTION_BRIDGE_KIND,",
+        "  command: process.env.OPENOMNI_QUESTION_BRIDGE_COMMAND,",
+        "  args: JSON.parse(process.env.OPENOMNI_QUESTION_BRIDGE_ARGS_JSON ?? '[]'),",
+        "  promptField: process.env.OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD ?? null,",
+        "  responseMode: process.env.OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE ?? null,",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {
+        env: {
+          OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD: "connector-prompt",
+          OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE: "connector-response",
+        },
+      }),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(result.output).toContain('"kind":"hook"');
+    expect(result.output).toContain('"command":"openomni-question-hook"');
+    expect(result.output).toContain('"args":[]');
+    expect(result.output).toContain('"promptField":null');
+    expect(result.output).toContain('"responseMode":null');
+    expect(result.output).not.toContain("connector-");
+  });
+
+  test("does not let consented credentials override question bridge metadata", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-question-credential");
+    const scriptPath = join(workspaceRoot, "fake-question-credential.ts");
+    writeFileSync(
+      scriptPath,
+      "console.log(JSON.stringify({kind:process.env.OPENOMNI_QUESTION_BRIDGE_KIND, allowed:process.env.FAKE_API_KEY === 'secret-value'}));",
+    );
+    const definition = {
+      ...fakeConnector(
+        "bun",
+        [scriptPath],
+        {},
+        {
+          credentials: ["OPENOMNI_QUESTION_BRIDGE_KIND", "FAKE_API_KEY"],
+        },
+      ),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: {
+        OPENOMNI_QUESTION_BRIDGE_KIND: "credential-kind",
+        FAKE_API_KEY: "secret-value",
+      },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, {
+        credentials: ["OPENOMNI_QUESTION_BRIDGE_KIND", "FAKE_API_KEY"],
+      }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(result.output).toContain('"kind":"hook"');
+    expect(result.output).toContain('"allowed":true');
+    expect(result.output).not.toContain("credential-kind");
+  });
+
   test("materializes only consented connector credentials into the child env", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-credential-env");
