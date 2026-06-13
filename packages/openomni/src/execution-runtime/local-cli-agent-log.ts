@@ -10,9 +10,11 @@ import {
 } from "./local-cli-agent-env.js";
 
 type ExecutionArtifact = NonNullable<Execution.Result["artifacts"]>[number];
+type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
 
 export interface LocalCliLogIngestion {
   readonly artifacts: ExecutionArtifact[];
+  readonly logEvents: ExecutionLogEvent[];
   readonly finalMessage?: string;
 }
 
@@ -30,10 +32,10 @@ export async function ingestLocalCliLogs(
   input: LocalCliLogIngestionInput,
 ): Promise<LocalCliLogIngestion> {
   const logs = input.connector.logs;
-  if (logs === undefined) return { artifacts: [] };
+  if (logs === undefined) return { artifacts: [], logEvents: [] };
 
   const rawContent = await readLogContent(logs.path, input);
-  if (rawContent === undefined) return { artifacts: [] };
+  if (rawContent === undefined) return { artifacts: [], logEvents: [] };
   const content = redactLocalCliCredentialValues(rawContent, input.redactions);
   const meta = {
     id: `art_${crypto.randomUUID()}`,
@@ -54,6 +56,7 @@ export async function ingestLocalCliLogs(
         mimeType: meta.mimeType,
       },
     ],
+    logEvents: extractLogEvents(logs, content, meta.id),
     finalMessage: extractFinalLogMessage(logs, content),
   };
 }
@@ -141,7 +144,48 @@ function extractStructuredMessage(line: string, messageField: string): string | 
     if (typeof value !== "object" || value === null) return undefined;
     const message = (value as Record<string, unknown>)[messageField];
     return typeof message === "string" && message.length > 0 ? message : undefined;
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    return undefined;
+  }
+}
+
+function extractLogEvents(
+  logs: AppConnector.Logs,
+  content: string,
+  artifactId: string,
+): ExecutionLogEvent[] {
+  if (logs.kind === "text") return [];
+
+  const events: ExecutionLogEvent[] = [];
+  for (const line of content.trim().split(/\r?\n/)) {
+    const data = parseStructuredLogLine(line);
+    if (data === undefined) continue;
+    const message = data[logs.messageField];
+    if (typeof message !== "string" || message.length === 0) continue;
+    const timestampValue = data[logs.eventTimeField];
+    events.push({
+      kind: "local_cli_log_event",
+      artifactId,
+      message,
+      ...(typeof timestampValue === "string" || typeof timestampValue === "number"
+        ? { timestamp: String(timestampValue) }
+        : {}),
+      sequence: events.length,
+      data,
+    });
+  }
+  return events;
+}
+
+function parseStructuredLogLine(line: string): Record<string, unknown> | undefined {
+  if (line.trim().length === 0) return undefined;
+  try {
+    const value: unknown = JSON.parse(line);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    return value as Record<string, unknown>;
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
     return undefined;
   }
 }
