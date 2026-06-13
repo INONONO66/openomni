@@ -10,13 +10,13 @@ export interface LocalCliTemplateValues {
 
 export type LocalCliCredentialMap = Readonly<Record<string, string>>;
 
-export interface LocalCliCredentialEnvSuccess {
+interface LocalCliCredentialEnvSuccess {
   readonly ok: true;
   readonly env: Record<string, string>;
   readonly redactions: readonly string[];
 }
 
-export interface LocalCliCredentialEnvFailure {
+interface LocalCliCredentialEnvFailure {
   readonly ok: false;
   readonly error: string;
 }

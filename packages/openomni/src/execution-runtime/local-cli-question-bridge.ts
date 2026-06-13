@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export interface LocalCliQuestionBridgeRequest {
+interface LocalCliQuestionBridgeRequest {
   readonly runId: string;
   readonly sessionId: string;
   readonly residentSessionId: string;
