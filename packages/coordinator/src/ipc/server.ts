@@ -9,7 +9,7 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-export type RequestHandler = (
+type RequestHandler = (
   method: string,
   params: Record<string, unknown> | undefined,
   respond: (result: unknown) => void,
@@ -17,7 +17,7 @@ export type RequestHandler = (
   connectionId: string,
 ) => void;
 
-export interface IpcServer {
+interface IpcServer {
   readonly socketPath: string;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
