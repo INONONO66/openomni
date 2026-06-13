@@ -1,10 +1,4 @@
-export {
-  IngressEngine,
-  ingestInternal,
-  setAgentResolver,
-  clearAgentResolver,
-  type AgentResolver,
-} from "./engine.js";
+export { IngressEngine } from "./engine.js";
 export { IngressSessionResolver } from "./session-resolver.js";
 export { IngressEventProjector } from "./event-projector.js";
 export { SessionBridge } from "./session-bridge.js";
