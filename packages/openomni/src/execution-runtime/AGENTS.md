@@ -44,7 +44,7 @@ Key parameters:
 - `wait`: if `true`, blocks until the target responds (up to `timeoutMs`).
 - Actor identity is runtime-derived from implicit inputs (`sessionId`, `runId`, `agentName`) — not model-specified.
 
-Plugin actions (e.g., `surface.send.*`, `external.invoke.*`) can be registered via `Dispatch.Registry.register()`.
+Plugin actions (e.g., `surface.send.*`, `external.invoke.*`) can be registered via `DispatchRegistry.register()`.
 
 Do not reintroduce the removed legacy model-facing inbound tool or compatibility alias.
 
