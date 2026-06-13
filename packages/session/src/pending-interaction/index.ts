@@ -1,6 +1,7 @@
 import { Communication } from "@openomni/protocol";
 import { Bus } from "../bus";
 import { Storage } from "../storage/storage";
+import { withCreateTimestamps } from "../storage/timestamped-store";
 
 function requireAdapter() {
   const adapter = Storage.get().pendingInteraction;
@@ -23,13 +24,12 @@ function eventBase(record: Communication.PendingInteraction.Record) {
 function nowRecord(
   input: Communication.PendingInteraction.Create,
 ): Communication.PendingInteraction.Record {
-  const now = Date.now();
-  return Communication.PendingInteraction.Record.parse({
-    ...input,
-    status: input.status ?? "open",
-    createdAt: input.createdAt ?? now,
-    updatedAt: input.updatedAt ?? input.createdAt ?? now,
-  });
+  return Communication.PendingInteraction.Record.parse(
+    withCreateTimestamps({
+      ...input,
+      status: input.status ?? "open",
+    }),
+  );
 }
 
 function updateStatus(
