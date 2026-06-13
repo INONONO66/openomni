@@ -6,8 +6,6 @@ import type { NativeTool, ToolExecutionContext } from "../types.js";
 import { BASH_PROMPT } from "./bash-prompt.js";
 import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./bash-classify.js";
 
-export { isReadOnlyCommand, isDestructiveCommand };
-
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
 
