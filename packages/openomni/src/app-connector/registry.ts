@@ -50,6 +50,14 @@ export namespace AppConnectorRegistry {
     return AppConnectorInstallationStore.remove(id);
   }
 
+  export function disable(id: string): AppConnector.Installation {
+    return AppConnectorInstallationStore.disable(id);
+  }
+
+  export function uninstall(id: string): boolean {
+    return AppConnectorInstallationStore.uninstall(id);
+  }
+
   export function requestConsent(id: string): AppConnector.Installation {
     return AppConnectorInstallationStore.requestConsent(id);
   }
