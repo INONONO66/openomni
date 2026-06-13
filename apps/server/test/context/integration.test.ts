@@ -5,42 +5,14 @@ import { join } from "node:path";
 const serverSrc = join(import.meta.dir, "../../src");
 
 describe("context barrel export", () => {
-  it("exports createContextMiddleware", async () => {
+  it("exports only production-facing context entrypoints", async () => {
     const mod = await import("../../src/context/index");
+
+    expect(Object.keys(mod).sort()).toEqual(["McpConfigLoader", "createContextMiddleware"]);
     expect(typeof mod.createContextMiddleware).toBe("function");
-  });
-
-  it("exports ContextAssembler", async () => {
-    const mod = await import("../../src/context/index");
-    expect(typeof mod.ContextAssembler).toBe("object");
-    expect(typeof mod.ContextAssembler.assemble).toBe("function");
-  });
-
-  it("exports McpConfigLoader", async () => {
-    const mod = await import("../../src/context/index");
     expect(typeof mod.McpConfigLoader).toBe("object");
     expect(typeof mod.McpConfigLoader.discover).toBe("function");
     expect(typeof mod.McpConfigLoader.merge).toBe("function");
-  });
-
-  it("exports findUp", async () => {
-    const mod = await import("../../src/context/index");
-    expect(typeof mod.findUp).toBe("function");
-  });
-
-  it("exports _resetFindUpCache", async () => {
-    const mod = await import("../../src/context/index");
-    expect(typeof mod._resetFindUpCache).toBe("function");
-  });
-
-  it("exports InstructionLoader", async () => {
-    const mod = await import("../../src/context/index");
-    expect(typeof mod.InstructionLoader).toBe("object");
-  });
-
-  it("exports SkillLoader", async () => {
-    const mod = await import("../../src/context/index");
-    expect(typeof mod.SkillLoader).toBe("object");
   });
 });
 
@@ -61,8 +33,9 @@ describe("worker-entry wiring", () => {
 describe("bootstrap/index.ts MCP config merging", () => {
   const bootstrapSrc = readFileSync(join(serverSrc, "bootstrap/index.ts"), "utf-8");
 
-  it("imports McpConfigLoader", () => {
+  it("imports McpConfigLoader from context/index", () => {
     expect(bootstrapSrc).toContain("McpConfigLoader");
+    expect(bootstrapSrc).toContain("../context/index");
   });
 
   it("calls McpConfigLoader.discover", () => {
