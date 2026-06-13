@@ -11,9 +11,8 @@ src/
 ├── error.ts          # Re-exports NamedError classes from protocol
 ├── session/
 │   ├── processor.ts  # Processor.create() — drives streaming LLM call + tool turns
-│   ├── message.ts    # Message namespace helpers
+│   ├── index.ts      # Re-exports protocol Message/Tool plus session helpers
 │   ├── convert.ts    # toModelMessages() — Message.WithParts[] → AI SDK messages
-│   ├── tool.ts       # Tool namespace helpers (execution within session context)
 │   └── retry.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
 ├── auth/
 │   ├── storage.ts    # Auth namespace: get / set / remove / all (credential storage)
