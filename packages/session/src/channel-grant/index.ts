@@ -1,5 +1,6 @@
 import { Actor } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
+import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
 export interface ChannelGrantMatchInput {
   readonly surface: string;
@@ -17,18 +18,7 @@ function adapter(): Storage.Adapter["channelGrant"] {
 }
 
 function requireAdapter(): NonNullable<Storage.Adapter["channelGrant"]> {
-  const current = adapter();
-  if (!current) throw new Error("Storage adapter does not implement channel grants");
-  return current;
-}
-
-function withTimestamps(grant: Actor.ChannelGrant, existing?: Actor.ChannelGrant) {
-  const now = Date.now();
-  return {
-    ...grant,
-    createdAt: grant.createdAt ?? existing?.createdAt ?? now,
-    updatedAt: existing ? now : (grant.updatedAt ?? now),
-  };
+  return requireSubAdapter(adapter(), "Storage adapter does not implement channel grants");
 }
 
 function defaultTreatment(kind: Actor.ChannelGrantKind): Actor.InboundTreatment {
@@ -53,7 +43,7 @@ export namespace ChannelGrantStore {
 
   export function put(input: Grant): Grant {
     const store = requireAdapter();
-    const grant = Actor.ChannelGrant.parse(withTimestamps(input, store.get(input.id)));
+    const grant = Actor.ChannelGrant.parse(withStoreTimestamps(input, store.get(input.id)));
     store.set(grant);
     return grant;
   }
