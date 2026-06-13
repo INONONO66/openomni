@@ -79,7 +79,7 @@ function findConcreteSibling(
 // guess: if the requested ID is not in the catalog and has no concrete
 // sibling, surface the miss to the caller so a stale catalog does not silently
 // downgrade a newly-released model.
-export function resolveCatalogModel(
+function resolveCatalogModel(
   preferredID: string,
   models: CatalogModel[],
 ): CatalogModel | undefined {

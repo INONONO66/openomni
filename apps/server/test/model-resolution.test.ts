@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Auth, Provider } from "@openomni/llm";
-import {
-  resolveCatalogModel,
-  resolveDefaultProviderModel,
-  resolveRuntimeModel,
-} from "../src/agents/model-resolution";
+import { resolveDefaultProviderModel, resolveRuntimeModel } from "../src/agents/model-resolution";
 
 function makeModel(
   id: string,
@@ -32,60 +28,54 @@ afterEach(() => {
   Provider.listModels = originalListModels;
 });
 
-describe("resolveCatalogModel", () => {
-  it("maps exact latest aliases to concrete dated model IDs", () => {
-    const models = [
-      makeModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (latest)", "2025-09-29"),
-      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
-    ];
-
-    expect(resolveCatalogModel("claude-sonnet-4-5", models)?.id).toBe("claude-sonnet-4-5-20250929");
-  });
-
-  it("resolves version aliases by concrete prefix match when the alias entry is absent", () => {
-    const models = [
-      makeModel("claude-opus-4-5-20251101", "Claude Opus 4.5", "2025-11-01", "claude-opus"),
-    ];
-
-    expect(resolveCatalogModel("claude-opus-4-5", models)?.id).toBe("claude-opus-4-5-20251101");
-  });
-
-  it("returns undefined when the requested model has no exact or prefix match", () => {
-    const models = [
-      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
-      makeModel("claude-sonnet-4-20250514", "Claude Sonnet 4", "2025-05-22"),
-    ];
-
-    expect(resolveCatalogModel("claude-sonnet-4-6", models)).toBeUndefined();
-  });
-});
-
 describe("resolveRuntimeModel", () => {
-  it("resolves runtime agent models through the provider catalog", async () => {
+  it("maps exact latest aliases to concrete dated model IDs", async () => {
     Auth.get = async () => ({ type: "api", key: "test-key" });
     Provider.listModels = async () => [
       makeModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (latest)", "2025-09-29"),
       makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
     ];
 
-    await expect(
-      resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-5" }),
-    ).resolves.toEqual({
+    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-5" });
+    expect(resolved).toEqual({
       provider: "anthropic",
       id: "claude-sonnet-4-5-20250929",
     });
+  });
+
+  it("resolves version aliases by concrete prefix match when the alias entry is absent", async () => {
+    Auth.get = async () => ({ type: "api", key: "test-key" });
+    Provider.listModels = async () => [
+      makeModel("claude-opus-4-5-20251101", "Claude Opus 4.5", "2025-11-01", "claude-opus"),
+    ];
+
+    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-opus-4-5" });
+    expect(resolved).toEqual({
+      provider: "anthropic",
+      id: "claude-opus-4-5-20251101",
+    });
+  });
+
+  it("passes the requested model through when the requested model has no exact or prefix match", async () => {
+    Auth.get = async () => ({ type: "api", key: "test-key" });
+    Provider.listModels = async () => [
+      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
+      makeModel("claude-sonnet-4-20250514", "Claude Sonnet 4", "2025-05-22"),
+    ];
+
+    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
   });
 
   it("falls back to the server default model for the same provider when lookup misses", async () => {
     Auth.get = async () => ({ type: "api", key: "test-key" });
     Provider.listModels = async () => [];
 
-    await expect(
-      resolveRuntimeModel(
-        { provider: "anthropic", id: "claude-sonnet-4-6" },
-        { provider: "anthropic", id: "claude-opus-4-20250514" },
-      ),
-    ).resolves.toEqual({
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-sonnet-4-6" },
+      { provider: "anthropic", id: "claude-opus-4-20250514" },
+    );
+    expect(resolved).toEqual({
       provider: "anthropic",
       id: "claude-opus-4-20250514",
     });
@@ -95,9 +85,8 @@ describe("resolveRuntimeModel", () => {
     Auth.get = async () => ({ type: "api", key: "test-key" });
     Provider.listModels = async () => [];
 
-    await expect(
-      resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" }),
-    ).resolves.toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
   });
 
   it("warns with the underlying catalog error and falls back to the default model when listModels throws", async () => {
@@ -106,12 +95,11 @@ describe("resolveRuntimeModel", () => {
       throw new Error("network down");
     };
 
-    await expect(
-      resolveRuntimeModel(
-        { provider: "anthropic", id: "claude-sonnet-4-6" },
-        { provider: "anthropic", id: "claude-opus-4-20250514" },
-      ),
-    ).resolves.toEqual({
+    const resolved = await resolveRuntimeModel(
+      { provider: "anthropic", id: "claude-sonnet-4-6" },
+      { provider: "anthropic", id: "claude-opus-4-20250514" },
+    );
+    expect(resolved).toEqual({
       provider: "anthropic",
       id: "claude-opus-4-20250514",
     });
@@ -128,7 +116,8 @@ describe("resolveDefaultProviderModel", () => {
       makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
     ];
 
-    await expect(resolveDefaultProviderModel()).resolves.toMatchObject({
+    const resolved = await resolveDefaultProviderModel();
+    expect(resolved).toMatchObject({
       providerID: "anthropic",
       id: "claude-sonnet-4-5-20250929",
     });
