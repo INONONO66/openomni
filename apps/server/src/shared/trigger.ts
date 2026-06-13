@@ -37,7 +37,7 @@ function evaluateRule(rule: Adapter.TriggerRule, ctx: Adapter.TriggerContext): b
   }
 }
 
-export function stripTriggerPrefix(text: string, rules: Adapter.TriggerRule[]): string {
+function stripTriggerPrefix(text: string, rules: Adapter.TriggerRule[]): string {
   const prefix = rules.find(
     (r): r is Extract<Adapter.TriggerRule, { type: "prefix" }> => r.type === "prefix",
   );
