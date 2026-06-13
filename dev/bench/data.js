@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781383507457,
+  "lastUpdate": 1781383961925,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -14011,6 +14011,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 435169,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d47490d0f85fa74c9796106483e2474f42e47b79",
+          "message": "refactor(openomni): keep background store internal",
+          "timestamp": "2026-06-14T05:52:11+09:00",
+          "tree_id": "507c6abb9de1f7914887e8a7148de8a1c11fa9f4",
+          "url": "https://github.com/INONONO66/openomni/commit/d47490d0f85fa74c9796106483e2474f42e47b79"
+        },
+        "date": 1781383960942,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "compaction/20-messages",
+            "value": 703.9657803777228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 854.7552246716893,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1327.538086767401,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47.55327178353318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 661.2514266443326,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 443.99344222991084,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2851.0106910704058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2521.470600100701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8985.655674364836,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5869.144433358881,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2276,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2373,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7894,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1566,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10774,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 101840,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515650,
             "unit": "ns/op"
           }
         ]
