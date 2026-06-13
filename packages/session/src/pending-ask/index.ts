@@ -1,12 +1,13 @@
 import { Communication } from "@openomni/protocol";
 import { Bus } from "../bus";
 import { Storage } from "../storage/storage";
-import { withCreateTimestamps } from "../storage/timestamped-store";
+import { requireSubAdapter, withCreateTimestamps } from "../storage/timestamped-store";
 
 function requireAdapter() {
-  const adapter = Storage.get().pendingAsk;
-  if (!adapter) throw new Error("Storage adapter does not implement pendingAsk");
-  return adapter;
+  return requireSubAdapter(
+    Storage.get().pendingAsk,
+    "Storage adapter does not implement pendingAsk",
+  );
 }
 
 function eventBase(record: Communication.PendingAsk.Record) {

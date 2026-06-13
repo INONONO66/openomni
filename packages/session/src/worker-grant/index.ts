@@ -1,14 +1,15 @@
 import { Communication } from "@openomni/protocol";
 import { Bus } from "../bus";
 import { Storage } from "../storage/storage";
-import { withCreateTimestamps } from "../storage/timestamped-store";
+import { requireSubAdapter, withCreateTimestamps } from "../storage/timestamped-store";
 
 const riskRank = { low: 1, medium: 2, high: 3 } as const;
 
 function requireAdapter() {
-  const adapter = Storage.get().workerGrant;
-  if (!adapter) throw new Error("Storage adapter does not implement workerGrant");
-  return adapter;
+  return requireSubAdapter(
+    Storage.get().workerGrant,
+    "Storage adapter does not implement workerGrant",
+  );
 }
 
 function eventBase(record: Communication.WorkerGrant.Record) {
