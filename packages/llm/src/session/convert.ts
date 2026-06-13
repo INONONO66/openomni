@@ -42,19 +42,15 @@ type ToolMessage = {
 
 export type SDKMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage;
 
-export function buildSystemBlock(content: string): SystemMessage {
-  return { role: "system", content };
-}
-
-export function buildUserBlock(content: string): UserMessage {
+function buildUserBlock(content: string): UserMessage {
   return { role: "user", content };
 }
 
-export function buildAssistantTextBlock(content: string): AssistantTextBlock {
+function buildAssistantTextBlock(content: string): AssistantTextBlock {
   return { type: "text", text: content };
 }
 
-export function buildToolCallBlock(call: {
+function buildToolCallBlock(call: {
   id: string;
   tool: string;
   input: Record<string, unknown>;
@@ -67,11 +63,11 @@ export function buildToolCallBlock(call: {
   };
 }
 
-export function buildAssistantBlock(content: AssistantMessage["content"]): AssistantMessage {
+function buildAssistantBlock(content: AssistantMessage["content"]): AssistantMessage {
   return { role: "assistant", content };
 }
 
-export function buildToolResultBlock(result: {
+function buildToolResultBlock(result: {
   id: string;
   tool: string;
   output: string;
@@ -84,7 +80,7 @@ export function buildToolResultBlock(result: {
   };
 }
 
-export function buildToolBlock(content: ToolResultBlock[]): ToolMessage {
+function buildToolBlock(content: ToolResultBlock[]): ToolMessage {
   return { role: "tool", content };
 }
 
