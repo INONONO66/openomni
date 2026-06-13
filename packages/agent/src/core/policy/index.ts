@@ -8,5 +8,5 @@ export type {
   PolicyEngineInstance,
 } from "./engine";
 export { PolicyRegistry, defaultRegistry } from "./registry";
-export type { PolicyFactory, PolicyRegistryInstance, RuntimeContext } from "./registry";
+export type { PolicyFactory, PolicyRegistryInstance } from "./registry";
 export * from "./builtin";
