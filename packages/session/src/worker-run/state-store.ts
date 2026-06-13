@@ -1,6 +1,7 @@
 import { Subagent, type WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 import { Storage } from "../storage/storage";
+import { requireSubAdapter } from "../storage/timestamped-store";
 
 const transitions: Record<Subagent.WorkerRunStatus, readonly Subagent.WorkerRunStatus[]> = {
   queued: ["starting"],
@@ -21,11 +22,10 @@ function isValidTransition(
 }
 
 function requireAdapter(): WorkerRunStateStore.Adapter {
-  const adapter = Storage.get().workerRunState;
-  if (!adapter) {
-    throw new Error("Storage adapter does not implement workerRunState");
-  }
-  return adapter;
+  return requireSubAdapter(
+    Storage.get().workerRunState,
+    "Storage adapter does not implement workerRunState",
+  );
 }
 
 export namespace WorkerRunStateStore {
@@ -79,10 +79,11 @@ export namespace WorkerRunStateStore {
   }
 
   export function create(sessionId: string, record: CreateRecord): void {
-    if (requireAdapter().get(sessionId, record.runId)) {
+    const adapter = requireAdapter();
+    if (adapter.get(sessionId, record.runId)) {
       throw new Error(`Worker run ${record.runId} already exists in session ${sessionId}`);
     }
-    requireAdapter().create(sessionId, record);
+    adapter.create(sessionId, record);
   }
 
   export function updateStatus(
