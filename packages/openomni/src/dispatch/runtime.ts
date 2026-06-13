@@ -265,8 +265,3 @@ export class DispatchRuntime {
     }
   }
 }
-
-export const Dispatch = {
-  Runtime: DispatchRuntime,
-  Registry: DispatchRegistry,
-} as const;
