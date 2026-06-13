@@ -30,6 +30,7 @@ const claudeCodeConnector: AppConnector.Definition = {
     promptArgument: "{{prompt}}",
     cwd: "{{worktree}}",
     timeoutMs: 600_000,
+    stallTimeoutMs: defaultStallTimeoutMs,
   },
   logs: {
     kind: "jsonl",
