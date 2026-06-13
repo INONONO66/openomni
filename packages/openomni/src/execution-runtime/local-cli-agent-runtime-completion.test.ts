@@ -28,6 +28,24 @@ const CompletedLocalCliDispatchOutput = z
   })
   .passthrough();
 
+const FailedLocalCliDispatchOutput = z
+  .object({
+    output: z
+      .object({
+        result: z.object({
+          status: z.literal("failed"),
+          finishReason: z.literal("read_back_request_builder_failed"),
+          error: z.string(),
+        }),
+        reflection: z.object({
+          workItemStatus: z.literal("failed"),
+          completionBlocked: z.literal(false),
+        }),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
@@ -159,5 +177,139 @@ describe("createLocalCliAgentRuntime completion stream", () => {
       completionBlocked: false,
     });
     expect(WorkItemStore.list()[0]?.completionReport?.claims[0]?.evidenceIds).toHaveLength(1);
+  });
+
+  test("adds connector-declared read-back requests to local CLI completion envelopes", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-completion-readback-builder");
+    const scriptPath = join(workspaceRoot, "fake-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({",
+        "  completionReport: {",
+        "    summary: 'Published the requested page.',",
+        "    claims: [{ statement: 'The published page contains the expected marker.' }],",
+        "  },",
+        "  url: 'https://example.com/result',",
+        "  marker: 'expected marker',",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath, "{{prompt}}"]),
+      evidence: {
+        emits: ["exit_code"],
+        completionReport: {
+          finalMessage: "stdout",
+          readBackRequests: [
+            {
+              claimIndex: 0,
+              request: {
+                kind: "citation_match",
+                target: "{{output.url}}",
+                quotedText: "{{output.marker}}",
+              },
+            },
+          ],
+        },
+      },
+    } satisfies AppConnector.Definition;
+    const stored = AppConnectorInstallationStore.set(installation(definition));
+    const recordedReadBacks: unknown[] = [];
+    const handlers = createWorkerDispatchHandlers({
+      localCliAgentRuntime: createLocalCliAgentRuntime(),
+      readBackRecorder: (workItemHash, readBack) => {
+        recordedReadBacks.push(readBack);
+        return WorkItemStore.addReadBackEvidence(workItemHash, {
+          kind: "citation_match",
+          target: readBack.target,
+          quotedText: readBack.kind === "citation_match" ? readBack.quotedText : "expected marker",
+          matchedText: "expected marker",
+          statusCode: 200,
+          passed: true,
+          observedAt: 1,
+        });
+      },
+    });
+
+    // When
+    const result = CompletedLocalCliDispatchOutput.parse(
+      await handlers["worker.spawn"]({
+        ...command(),
+        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        workspaceRoot,
+      }),
+    );
+
+    // Then
+    expect(recordedReadBacks).toEqual([
+      {
+        kind: "citation_match",
+        target: "https://example.com/result",
+        quotedText: "expected marker",
+        timeoutMs: 10_000,
+        maxBodyBytes: 1_000_000,
+      },
+    ]);
+    expect(result.output.reflection).toMatchObject({
+      workItemStatus: "completed",
+      completionBlocked: false,
+    });
+    expect(WorkItemStore.list()[0]?.completionReport?.claims[0]?.evidenceIds).toHaveLength(1);
+  });
+
+  test("fails closed when connector read-back builders contain unsupported templates", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-completion-readback-builder-invalid");
+    const scriptPath = join(workspaceRoot, "fake-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({",
+        "  completionReport: {",
+        "    summary: 'Published the requested page.',",
+        "    claims: [{ statement: 'The published page contains the expected marker.' }],",
+        "  },",
+        "  url: 'https://example.com/result',",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath, "{{prompt}}"]),
+      evidence: {
+        emits: ["exit_code"],
+        completionReport: {
+          finalMessage: "stdout",
+          readBackRequests: [
+            {
+              claimIndex: 0,
+              request: {
+                kind: "citation_match",
+                target: "{{output.url}}",
+                quotedText: "{{unknown.marker}}",
+              },
+            },
+          ],
+        },
+      },
+    } satisfies AppConnector.Definition;
+    const stored = AppConnectorInstallationStore.set(installation(definition));
+    const handlers = createWorkerDispatchHandlers({
+      localCliAgentRuntime: createLocalCliAgentRuntime(),
+    });
+
+    // When
+    const result = FailedLocalCliDispatchOutput.parse(
+      await handlers["worker.spawn"]({
+        ...command(),
+        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        workspaceRoot,
+      }),
+    );
+
+    // Then
+    expect(result.output.result.error).toContain("unsupported template token");
+    expect(WorkItemStore.list()[0]?.completionReport).toBeUndefined();
   });
 });

@@ -106,6 +106,44 @@ export namespace AppConnector {
     .object({
       finalMessage: z.enum(["stdout", "stderr", "log", "artifact"]),
       artifactGlobs: z.array(nonEmptyString).optional(),
+      readBackRequests: z
+        .array(
+          z
+            .object({
+              claimIndex: z.number().int().nonnegative(),
+              request: z.discriminatedUnion("kind", [
+                z
+                  .object({
+                    kind: z.literal("url_fetch"),
+                    target: nonEmptyString,
+                    timeoutMs: positiveInteger.optional(),
+                    maxBodyBytes: positiveInteger.optional(),
+                  })
+                  .strict(),
+                z
+                  .object({
+                    kind: z.literal("api_query"),
+                    target: nonEmptyString,
+                    method: z.enum(["GET", "HEAD"]).optional(),
+                    timeoutMs: positiveInteger.optional(),
+                    maxBodyBytes: positiveInteger.optional(),
+                  })
+                  .strict(),
+                z
+                  .object({
+                    kind: z.literal("citation_match"),
+                    target: nonEmptyString,
+                    quotedText: nonEmptyString,
+                    timeoutMs: positiveInteger.optional(),
+                    maxBodyBytes: positiveInteger.optional(),
+                  })
+                  .strict(),
+              ]),
+            })
+            .strict(),
+        )
+        .max(5)
+        .optional(),
     })
     .strict();
   export type CompletionReport = z.infer<typeof CompletionReport>;
