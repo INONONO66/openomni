@@ -37,20 +37,3 @@ export interface PolicyRegistration {
   fn: PolicyFn;
   propagate?: boolean;
 }
-
-export type PolicyRuntimeContext = Record<string, unknown>;
-
-export interface PolicyFactory {
-  readonly id: string;
-  create(config: unknown, runtime: PolicyRuntimeContext): PolicyRegistration;
-}
-
-export interface PolicyRegistry {
-  register(
-    id: string,
-    factory: (config: unknown, runtime: Record<string, unknown>) => PolicyRegistration,
-  ): void;
-  resolve(plan: unknown, runtime: Record<string, unknown>): PolicyRegistration[];
-  has(id: string): boolean;
-  list(): string[];
-}
