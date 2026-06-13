@@ -34,7 +34,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  Artifact._reset();
   Storage.reset();
 });
 
