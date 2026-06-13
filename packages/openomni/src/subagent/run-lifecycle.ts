@@ -17,7 +17,7 @@ export function buildAbortSignal(controller: AbortController, signal?: AbortSign
   );
 }
 
-export async function shouldSkipFailureUpdate(sessionId: string, runId: string): Promise<boolean> {
+async function shouldSkipFailureUpdate(sessionId: string, runId: string): Promise<boolean> {
   const run = await WorkerRun.get(sessionId, runId);
   if (run?.status === "cancelled" || run?.status === "interrupted") return true;
   // Cancel in progress: controller aborted but entry kept for completion tracking
@@ -34,7 +34,7 @@ export function isTerminalStatus(status: string): boolean {
   );
 }
 
-export function resolveMetaStatus(runStatus: string | undefined): string {
+function resolveMetaStatus(runStatus: string | undefined): string {
   switch (runStatus) {
     case "succeeded":
       return "idle";
@@ -47,7 +47,7 @@ export function resolveMetaStatus(runStatus: string | undefined): string {
   }
 }
 
-export async function finalizeRun(sessionId: string, runId: string): Promise<void> {
+async function finalizeRun(sessionId: string, runId: string): Promise<void> {
   const run = await WorkerRun.get(sessionId, runId);
   if (run && !isTerminalStatus(run.status) && !(await shouldSkipFailureUpdate(sessionId, runId))) {
     await WorkerRun.updateStatus(sessionId, runId, "failed", {
@@ -66,7 +66,7 @@ export async function finalizeRun(sessionId: string, runId: string): Promise<voi
   }
 }
 
-export async function waitForAbortEntryRemoval(sessionId: string, runId: string): Promise<void> {
+async function waitForAbortEntryRemoval(sessionId: string, runId: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
     if (getAbortEntry(sessionId, runId) === undefined) return;
     await Promise.resolve();
@@ -178,7 +178,7 @@ export function setupRunTimeouts(
   return timers;
 }
 
-export function clearRunTimeouts(timers: TimeoutTimers): void {
+function clearRunTimeouts(timers: TimeoutTimers): void {
   if (timers.soft) clearTimeout(timers.soft);
   if (timers.hard) clearTimeout(timers.hard);
 }

@@ -3,7 +3,7 @@ import type { Message, Tool } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { type RuntimeMessage, addTextPart } from "./shared";
 
-export function createCompletedToolState(call: Tool.Call, output: string): Tool.StateCompleted {
+function createCompletedToolState(call: Tool.Call, output: string): Tool.StateCompleted {
   const now = Date.now();
   return {
     status: "completed",
@@ -18,7 +18,7 @@ export function createCompletedToolState(call: Tool.Call, output: string): Tool.
   };
 }
 
-export function createErrorToolState(call: Tool.Call, error: string): Tool.StateError {
+function createErrorToolState(call: Tool.Call, error: string): Tool.StateError {
   const now = Date.now();
   return {
     status: "error",
@@ -31,7 +31,7 @@ export function createErrorToolState(call: Tool.Call, error: string): Tool.State
   };
 }
 
-export function addToolParts(
+function addToolParts(
   sessionId: string,
   messageId: string,
   steps: { toolCalls?: Tool.Call[]; toolResults?: Tool.Result[] }[],
@@ -64,7 +64,7 @@ export function addToolParts(
   }
 }
 
-export function serializeToolPart(part: Message.ToolPart, repair?: boolean): string {
+function serializeToolPart(part: Message.ToolPart, repair?: boolean): string {
   const input = JSON.stringify(part.state.input);
 
   switch (part.state.status) {
@@ -90,7 +90,7 @@ export function addAssistantResultParts(
   addToolParts(sessionId, messageId, result.steps);
 }
 
-export function toRuntimeMessage(
+function toRuntimeMessage(
   message: Message.WithParts,
   repair?: boolean,
 ): RuntimeMessage | undefined {
