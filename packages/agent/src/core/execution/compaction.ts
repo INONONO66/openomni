@@ -10,7 +10,7 @@ export interface CompactionOptions {
   onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
 }
 
-export interface CompactionResult {
+interface CompactionResult {
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
