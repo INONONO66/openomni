@@ -1,18 +1,12 @@
 import type { Communication, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
-
-type PendingInteractionRow = {
-  id: string;
-  data: string;
-  status: Communication.PendingInteraction.Status;
-  endpoint_id: string;
-  channel_id: string;
-  reply_to_message_id: string | null;
-  thread_id: string | null;
-  token_hash: string | null;
-  external_conversation_id: string | null;
-  time_created: number;
-};
+import {
+  addOptionalStringEqualityCondition,
+  listSqliteJsonDataByStatus,
+  parseSqliteJsonDataRow,
+  parseSqliteJsonDataRows,
+  type SqliteJsonDataRow,
+} from "./sqlite-json-data";
 
 export function createSqlitePendingInteractionAdapter(
   db: Database,
@@ -22,41 +16,43 @@ export function createSqlitePendingInteractionAdapter(
       insertOrReplace(db, record, false);
     },
     get(id) {
-      const row = db.query("SELECT data FROM pending_interaction WHERE id = ?").get(id) as {
-        data: string;
-      } | null;
-      return row ? (JSON.parse(row.data) as Communication.PendingInteraction.Record) : undefined;
+      const row = db
+        .query("SELECT data FROM pending_interaction WHERE id = ?")
+        .get(id) as SqliteJsonDataRow | null;
+      return parseSqliteJsonDataRow<Communication.PendingInteraction.Record>(row);
     },
     list(status) {
-      const rows =
-        status && status.length > 0
-          ? (db
-              .query(
-                `SELECT data FROM pending_interaction
-                 WHERE status IN (${status.map(() => "?").join(", ")})
-                 ORDER BY time_created ASC`,
-              )
-              .all(...status) as Array<{ data: string }>)
-          : (db
-              .query("SELECT data FROM pending_interaction ORDER BY time_created ASC")
-              .all() as Array<{ data: string }>);
-      return rows.map((row) => JSON.parse(row.data) as Communication.PendingInteraction.Record);
+      return listSqliteJsonDataByStatus<Communication.PendingInteraction.Record>(
+        db,
+        "pending_interaction",
+        status,
+      );
     },
     findByCorrelation(query) {
       const conditions = ["endpoint_id = ?", "channel_id = ?"];
       const params = [query.endpointId, query.channelId];
-      add(conditions, params, "reply_to_message_id", query.replyToMessageId);
-      add(conditions, params, "thread_id", query.threadId);
-      add(conditions, params, "token_hash", query.tokenHash);
-      add(conditions, params, "external_conversation_id", query.externalConversationId);
+      addOptionalStringEqualityCondition(
+        conditions,
+        params,
+        "reply_to_message_id",
+        query.replyToMessageId,
+      );
+      addOptionalStringEqualityCondition(conditions, params, "thread_id", query.threadId);
+      addOptionalStringEqualityCondition(conditions, params, "token_hash", query.tokenHash);
+      addOptionalStringEqualityCondition(
+        conditions,
+        params,
+        "external_conversation_id",
+        query.externalConversationId,
+      );
       const rows = db
         .query(
           `SELECT data FROM pending_interaction
            WHERE status IN ('open', 'resolved', 'follow_up') AND ${conditions.join(" AND ")}
            ORDER BY time_created ASC`,
         )
-        .all(...params) as Array<{ data: string }>;
-      return rows.map((row) => JSON.parse(row.data) as Communication.PendingInteraction.Record);
+        .all(...params) as SqliteJsonDataRow[];
+      return parseSqliteJsonDataRows<Communication.PendingInteraction.Record>(rows);
     },
     set(record) {
       insertOrReplace(db, record, true);
@@ -117,15 +113,4 @@ function insertOrReplace(
 function followUpUntil(record: Communication.PendingInteraction.Record): number | null {
   if (!record.resolvedAt) return null;
   return record.resolvedAt + record.followUpWindow;
-}
-
-function add(
-  conditions: string[],
-  params: string[],
-  column: keyof PendingInteractionRow,
-  value?: string,
-) {
-  if (!value) return;
-  conditions.push(`${column} = ?`);
-  params.push(value);
 }

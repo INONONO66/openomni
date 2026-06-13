@@ -1,20 +1,12 @@
 import type { Communication, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { Database } from "bun:sqlite";
-
-type PendingAskRow = {
-  id: string;
-  data: string;
-  status: Communication.PendingAsk.Status;
-  origin_session_id: string;
-  endpoint_id: string | null;
-  channel_id: string | null;
-  external_message_id: string | null;
-  reply_to_message_id: string | null;
-  thread_id: string | null;
-  token_hash: string | null;
-  external_conversation_id: string | null;
-  time_created: number;
-};
+import {
+  addOptionalStringEqualityCondition,
+  listSqliteJsonDataByStatus,
+  parseSqliteJsonDataRow,
+  parseSqliteJsonDataRows,
+  type SqliteJsonDataRow,
+} from "./sqlite-json-data";
 
 export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.PendingAskSubAdapter {
   return {
@@ -22,36 +14,39 @@ export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.Pen
       insertOrReplace(db, record, false);
     },
     get(id) {
-      const row = db.query("SELECT data FROM pending_ask WHERE id = ?").get(id) as {
-        data: string;
-      } | null;
-      return row ? (JSON.parse(row.data) as Communication.PendingAsk.Record) : undefined;
+      const row = db
+        .query("SELECT data FROM pending_ask WHERE id = ?")
+        .get(id) as SqliteJsonDataRow | null;
+      return parseSqliteJsonDataRow<Communication.PendingAsk.Record>(row);
     },
     list(status) {
-      const rows =
-        status && status.length > 0
-          ? (db
-              .query(
-                `SELECT data FROM pending_ask
-                 WHERE status IN (${status.map(() => "?").join(", ")})
-                 ORDER BY time_created ASC`,
-              )
-              .all(...status) as Array<{ data: string }>)
-          : (db.query("SELECT data FROM pending_ask ORDER BY time_created ASC").all() as Array<{
-              data: string;
-            }>);
-      return rows.map((row) => JSON.parse(row.data) as Communication.PendingAsk.Record);
+      return listSqliteJsonDataByStatus<Communication.PendingAsk.Record>(db, "pending_ask", status);
     },
     findByCorrelation(query) {
       const conditions: string[] = [];
       const params: string[] = [];
-      add(conditions, params, "endpoint_id", query.endpointId);
-      add(conditions, params, "channel_id", query.channelId);
-      add(conditions, params, "external_message_id", query.externalMessageId);
-      add(conditions, params, "reply_to_message_id", query.replyToMessageId);
-      add(conditions, params, "thread_id", query.threadId);
-      add(conditions, params, "token_hash", query.tokenHash);
-      add(conditions, params, "external_conversation_id", query.externalConversationId);
+      addOptionalStringEqualityCondition(conditions, params, "endpoint_id", query.endpointId);
+      addOptionalStringEqualityCondition(conditions, params, "channel_id", query.channelId);
+      addOptionalStringEqualityCondition(
+        conditions,
+        params,
+        "external_message_id",
+        query.externalMessageId,
+      );
+      addOptionalStringEqualityCondition(
+        conditions,
+        params,
+        "reply_to_message_id",
+        query.replyToMessageId,
+      );
+      addOptionalStringEqualityCondition(conditions, params, "thread_id", query.threadId);
+      addOptionalStringEqualityCondition(conditions, params, "token_hash", query.tokenHash);
+      addOptionalStringEqualityCondition(
+        conditions,
+        params,
+        "external_conversation_id",
+        query.externalConversationId,
+      );
       if (conditions.length === 0) return [];
       const rows = db
         .query(
@@ -59,8 +54,8 @@ export function createSqlitePendingAskAdapter(db: Database): ProtocolStorage.Pen
            WHERE status IN ('open', 'ambiguous') AND ${conditions.join(" AND ")}
            ORDER BY time_created ASC`,
         )
-        .all(...params) as Array<{ data: string }>;
-      return rows.map((row) => JSON.parse(row.data) as Communication.PendingAsk.Record);
+        .all(...params) as SqliteJsonDataRow[];
+      return parseSqliteJsonDataRows<Communication.PendingAsk.Record>(rows);
     },
     set(record) {
       insertOrReplace(db, record, true);
@@ -113,10 +108,4 @@ function insertOrReplace(
     record.createdAt,
     record.updatedAt,
   );
-}
-
-function add(conditions: string[], params: string[], column: keyof PendingAskRow, value?: string) {
-  if (!value) return;
-  conditions.push(`${column} = ?`);
-  params.push(value);
 }
