@@ -188,5 +188,6 @@ export namespace Dispatch {
     ExternalAsk: "external.ask",
     A2aAsk: "a2a.ask",
     ApiAsk: "api.ask",
+    DeviceCommand: "device.command",
   } as const;
 }

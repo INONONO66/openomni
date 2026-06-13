@@ -246,4 +246,69 @@ describe("built-in dispatch handlers", () => {
       "a2a.ask requires external_actor target",
     );
   });
+
+  test("device.command handler calls the device owner", async () => {
+    const calls: Array<{ action: string; deviceId: string; timeoutMs?: number }> = [];
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        device: {
+          async dispatch(input) {
+            calls.push({
+              action: input.command.action,
+              deviceId: input.deviceId,
+              timeoutMs: input.timeoutMs,
+            });
+            return { receiptId: `${input.deviceId}:accepted` };
+          },
+        },
+      },
+    });
+
+    const output = await registry.get("device.command")?.(
+      command("device.command", { kind: "system", id: "light.kitchen" }, { state: "off" }),
+      { timeoutMs: 250 },
+    );
+
+    expect(calls).toEqual([
+      { action: "device.command", deviceId: "light.kitchen", timeoutMs: 250 },
+    ]);
+    expect(output).toEqual({
+      output: { receiptId: "light.kitchen:accepted" },
+    });
+  });
+
+  test("device.command fails closed without a device owner", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry);
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("device.command")?.(
+          command("device.command", { kind: "system", id: "light.kitchen" }, { state: "off" }),
+        ),
+      "dispatch device handler requires device owner",
+    );
+  });
+
+  test("device.command rejects non-system targets before owner dispatch", async () => {
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        device: {
+          async dispatch() {
+            throw new Error("should not dispatch non-device target");
+          },
+        },
+      },
+    });
+
+    await expectRejectsWithMessage(
+      () =>
+        registry.get("device.command")?.(
+          command("device.command", { kind: "external_actor", id: "light.kitchen" }, "off"),
+        ),
+      "device.command requires system target",
+    );
+  });
 });
