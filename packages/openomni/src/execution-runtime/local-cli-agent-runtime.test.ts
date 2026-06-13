@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
-import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
+import {
+  AppConnectorInstallationStore,
+  Artifact,
+  Session,
+  Storage,
+  WorkItemStore,
+} from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../dispatch/handlers/worker";
+import { encodeWorkspaceForClaudeProjects } from "./local-cli-agent-log.js";
 import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
 
 const tempRoots: string[] = [];
@@ -30,6 +37,13 @@ const LocalCliDispatchOutput = z
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
+  Session.storage.set("ses_fake", {
+    id: "ses_fake",
+    title: "Fake CLI session",
+    model: { providerID: "anthropic", modelID: "claude-test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
 });
 
 afterEach(() => {
@@ -417,6 +431,177 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.output).toContain('"kind":"hook"');
     expect(result.output).toContain('"allowed":true');
     expect(result.output).not.toContain("credential-kind");
+  });
+
+  test("stores configured text logs as redacted artifacts and can use them as final output", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-log-artifact");
+    const scriptPath = join(workspaceRoot, "fake-log-artifact.ts");
+    const logPath = join(workspaceRoot, "agent.log");
+    writeFileSync(
+      scriptPath,
+      [
+        "await Bun.write(Bun.argv.at(-1) ?? 'agent.log', 'final log message with secret-value');",
+        "console.log('stdout should not be final');",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector(
+        "bun",
+        [scriptPath, "{{worktree}}/agent.log"],
+        {},
+        { credentials: ["FAKE_API_KEY"] },
+      ),
+      logs: {
+        kind: "text",
+        path: "{{worktree}}/agent.log",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+      output: "final log message with [REDACTED]",
+    });
+    expect(result.output).not.toContain("secret-value");
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.artifacts?.[0]).toMatchObject({
+      kind: "local_cli_log",
+      title: "Fake CLI run_fake log",
+      mimeType: "text/plain",
+    });
+    const artifactId = result.artifacts?.[0]?.artifactId;
+    if (artifactId === undefined) throw new Error("expected log artifact id");
+    const artifact = await Artifact.get(artifactId);
+    expect(artifact?.meta.sessionId).toBe("ses_fake");
+    expect(artifact?.content).toBe("final log message with [REDACTED]");
+    expect(artifact?.content).not.toContain("secret-value");
+    expect(logPath).toContain(workspaceRoot);
+  });
+
+  test("stores stdout-backed structured logs for built-in stream connectors", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-log-stdout");
+    const scriptPath = join(workspaceRoot, "fake-stdout-log.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "console.log(JSON.stringify({time:1,message:'first event'}));",
+        "console.log(JSON.stringify({time:2,message:'final stdout log with secret-value'}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] }),
+      logs: {
+        kind: "stream_json",
+        path: "stdout",
+        eventTimeField: "time",
+        messageField: "message",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await createLocalCliAgentRuntime({
+      credentials: { FAKE_API_KEY: "secret-value" },
+    }).dispatch({
+      command: command(),
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+    });
+
+    // Then
+    expect(result.output).toBe("final stdout log with [REDACTED]");
+    expect(result.artifacts).toHaveLength(1);
+    const artifactId = result.artifacts?.[0]?.artifactId;
+    if (artifactId === undefined) throw new Error("expected stdout log artifact id");
+    const artifact = await Artifact.get(artifactId);
+    expect(artifact?.meta.mimeType).toBe("application/x-ndjson");
+    expect(artifact?.content).toContain("final stdout log with [REDACTED]");
+    expect(artifact?.content).not.toContain("secret-value");
+  });
+
+  test("stores newest home-expanded workspace glob log for Claude-style connectors", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-log-glob-worktree");
+    const homeRoot = tempDir("local-cli-runtime-log-glob-home");
+    const projectDir = join(
+      homeRoot,
+      ".claude",
+      "projects",
+      encodeWorkspaceForClaudeProjects(workspaceRoot),
+    );
+    mkdirSync(projectDir, { recursive: true });
+    const olderLogPath = join(projectDir, "older.jsonl");
+    const newerLogPath = join(projectDir, "newer.jsonl");
+    writeFileSync(olderLogPath, JSON.stringify({ timestamp: 1, message: "older log" }));
+    writeFileSync(
+      newerLogPath,
+      JSON.stringify({ timestamp: 2, message: "newest log with secret-value" }),
+    );
+    utimesSync(olderLogPath, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
+    utimesSync(newerLogPath, new Date(1_700_000_010_000), new Date(1_700_000_010_000));
+    const scriptPath = join(workspaceRoot, "fake-glob-log.ts");
+    writeFileSync(scriptPath, "console.log('stdout should not be final');");
+    const previousHome = process.env.HOME;
+    process.env.HOME = homeRoot;
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] }),
+      logs: {
+        kind: "jsonl",
+        path: "~/.claude/projects/{{workspaceHash}}/*.jsonl",
+        eventTimeField: "timestamp",
+        messageField: "message",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    try {
+      // When
+      const result = await createLocalCliAgentRuntime({
+        credentials: { FAKE_API_KEY: "secret-value" },
+      }).dispatch({
+        command: command(),
+        executionRequest: request(workspaceRoot),
+        installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
+      });
+
+      // Then
+      expect(result.output).toBe("newest log with [REDACTED]");
+      expect(result.artifacts).toHaveLength(1);
+      const artifactId = result.artifacts?.[0]?.artifactId;
+      if (artifactId === undefined) throw new Error("expected glob log artifact id");
+      const artifact = await Artifact.get(artifactId);
+      expect(artifact?.content).toContain("newest log with [REDACTED]");
+      expect(artifact?.content).not.toContain("older log");
+      expect(artifact?.content).not.toContain("secret-value");
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+    }
   });
 
   test("materializes only consented connector credentials into the child env", async () => {

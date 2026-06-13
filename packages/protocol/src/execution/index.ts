@@ -34,6 +34,16 @@ const resultSchema = z.object({
   finishReason: z.string().optional(),
   usage: Token.ExecutionUsage.optional(),
   error: z.string().optional(),
+  artifacts: z
+    .array(
+      z.object({
+        kind: z.literal("local_cli_log"),
+        artifactId: z.string(),
+        title: z.string(),
+        mimeType: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export namespace Execution {

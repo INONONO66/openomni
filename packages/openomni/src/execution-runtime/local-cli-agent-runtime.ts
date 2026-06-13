@@ -9,6 +9,7 @@ import {
   renderLocalCliTemplate,
   resolveLocalCliCredentialEnv,
 } from "./local-cli-agent-env.js";
+import { ingestLocalCliLogs, type LocalCliLogIngestion } from "./local-cli-agent-log.js";
 
 export type { LocalCliCredentialMap } from "./local-cli-agent-env.js";
 
@@ -54,9 +55,11 @@ function trimOutput(value: string): string | undefined {
 function buildOutput(
   installation: AppConnector.Installation,
   outcome: SpawnOutcome,
+  logIngestion: LocalCliLogIngestion,
 ): string | undefined {
   const finalMessage = installation.definition.evidence.completionReport?.finalMessage ?? "stdout";
   if (finalMessage === "stderr") return trimOutput(outcome.stderr);
+  if (finalMessage === "log") return trimOutput(logIngestion.finalMessage ?? "");
   return trimOutput(outcome.stdout);
 }
 
@@ -188,7 +191,16 @@ export function createLocalCliAgentRuntime(
         ),
         credentialEnv.redactions,
       );
-      const output = buildOutput(input.installation, outcome);
+      const logIngestion = await ingestLocalCliLogs({
+        connector: input.installation.definition,
+        runId: request.runId,
+        sessionId: request.sessionId,
+        values,
+        redactions: credentialEnv.redactions,
+        stdout: outcome.stdout,
+        stderr: outcome.stderr,
+      });
+      const output = buildOutput(input.installation, outcome, logIngestion);
       const error = buildError(outcome);
       return {
         runId: request.runId,
@@ -197,6 +209,7 @@ export function createLocalCliAgentRuntime(
         finishReason: buildFinishReason(outcome),
         ...(output === undefined ? {} : { output }),
         ...(error === undefined ? {} : { error }),
+        ...(logIngestion.artifacts.length === 0 ? {} : { artifacts: logIngestion.artifacts }),
       };
     },
   };

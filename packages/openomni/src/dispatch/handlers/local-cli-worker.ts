@@ -142,6 +142,7 @@ export async function handleLocalCliWorkerSpawn(
     );
     throw err;
   }
+  await recordLocalCliArtifacts(workItemHash, result);
   const reflection = await reflectCoordinatorResult(workItemHash, result, {
     readBack: options.readBack,
     readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
@@ -159,4 +160,20 @@ export async function handleLocalCliWorkerSpawn(
       reflection,
     },
   };
+}
+
+async function recordLocalCliArtifacts(
+  workItemHash: string,
+  result: Execution.Result,
+): Promise<void> {
+  for (const artifact of result.artifacts ?? []) {
+    await ignoreWorkItemReflectionFailure(() =>
+      WorkItemStore.addEvidence(workItemHash, {
+        kind: "custom",
+        description: "local CLI log artifact recorded",
+        passed: true,
+        detail: JSON.stringify(artifact),
+      }),
+    );
+  }
 }
