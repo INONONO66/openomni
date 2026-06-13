@@ -10,17 +10,11 @@ export const DEFAULT_RETRY_POLICY: Run.RetryPolicy = {
   retryOn: ["timeout", "tool_error", "transient_error"],
 };
 
-export type AgentRetryReason = RetryReason;
-
-export const DEFAULT_AGENT_RETRY_POLICY = DEFAULT_RETRY_POLICY;
-
 export function calculateBackoffMs(policy: Run.RetryPolicy, attempt: number): number {
   const rawDelay =
     policy.backoffMs.initial * policy.backoffMs.multiplier ** Math.max(0, attempt - 1);
   return Math.min(rawDelay, policy.backoffMs.max);
 }
-
-export const calculateAgentBackoffMs = calculateBackoffMs;
 
 export function classifyRetryReason(errorMessage: string): RetryReason {
   const normalized = errorMessage.toLowerCase();
@@ -67,8 +61,6 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
   });
   return "transient_error";
 }
-
-export const classifyAgentRetryReason = classifyRetryReason;
 
 export function shouldRetry(
   policy: Run.RetryPolicy,
@@ -140,8 +132,6 @@ export function shouldRetry(
   return willRetry;
 }
 
-export const shouldAgentRetry = shouldRetry;
-
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(new Error("aborted"));
@@ -165,5 +155,3 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
-
-export const agentSleep = sleep;
