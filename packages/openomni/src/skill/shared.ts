@@ -3,9 +3,9 @@ import { join } from "node:path";
 import type { Skill } from "@openomni/protocol";
 
 export const SKILL_FILE_NAME = "SKILL.md";
-export const REGISTRY_FILE_NAME = "installed_skills.json";
+const REGISTRY_FILE_NAME = "installed_skills.json";
 
-export interface ErrorWithCode {
+interface ErrorWithCode {
   readonly code?: unknown;
 }
 
@@ -39,7 +39,7 @@ export function resolveGlobalSkillsRoot(options: SkillLoaderOptions): string {
   return options.globalSkillsRoot ?? join(resolveHomeRoot(options.homeRoot), ".openomni", "skills");
 }
 
-export function resolveHomeRoot(homeRoot: string | undefined): string {
+function resolveHomeRoot(homeRoot: string | undefined): string {
   return homeRoot ?? homedir();
 }
 
