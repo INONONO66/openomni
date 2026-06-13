@@ -88,6 +88,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
     registeredBy: "act_owner",
+    consent: { grantedBy: "act_owner", grantedAt: 1 },
     createdAt: 1,
     updatedAt: 1,
   };
@@ -157,13 +158,13 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.output).toContain(`"cwd":"${workspaceRoot}"`);
   });
 
-  test("preserves parent env while rendering connector env placeholders", async () => {
+  test("renders connector env placeholders without inheriting parent secrets", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-env");
     const scriptPath = join(workspaceRoot, "fake-env.ts");
     writeFileSync(
       scriptPath,
-      "console.log(JSON.stringify({prompt:process.env.OPENOMNI_PROMPT,runId:process.env.OPENOMNI_RUN_ID,sessionId:process.env.OPENOMNI_SESSION_ID,worktree:process.env.OPENOMNI_WORKTREE}));",
+      "console.log(JSON.stringify({prompt:process.env.OPENOMNI_PROMPT,runId:process.env.OPENOMNI_RUN_ID,sessionId:process.env.OPENOMNI_SESSION_ID,worktree:process.env.OPENOMNI_WORKTREE,secret:process.env.OPENOMNI_TEST_SECRET ?? null}));",
     );
     const definition = fakeConnector("bun", [scriptPath], {
       env: {
@@ -173,19 +174,61 @@ describe("createLocalCliAgentRuntime", () => {
         OPENOMNI_WORKTREE: "{{worktree}}",
       },
     });
+    const previousSecret = process.env.OPENOMNI_TEST_SECRET;
+    process.env.OPENOMNI_TEST_SECRET = "secret-value";
 
-    // When
-    const result = await dispatchRuntime(definition, workspaceRoot);
+    try {
+      // When
+      const result = await dispatchRuntime(definition, workspaceRoot);
 
-    // Then
-    expect(result).toMatchObject({
-      status: "succeeded",
-      finishReason: "exit_code:0",
-    });
-    expect(result.output).toContain('"prompt":"ship it"');
-    expect(result.output).toContain('"runId":"run_fake"');
-    expect(result.output).toContain('"sessionId":"ses_fake"');
-    expect(result.output).toContain(`"worktree":"${workspaceRoot}"`);
+      // Then
+      expect(result).toMatchObject({
+        status: "succeeded",
+        finishReason: "exit_code:0",
+      });
+      expect(result.output).toContain('"prompt":"ship it"');
+      expect(result.output).toContain('"runId":"run_fake"');
+      expect(result.output).toContain('"sessionId":"ses_fake"');
+      expect(result.output).toContain(`"worktree":"${workspaceRoot}"`);
+      expect(result.output).toContain('"secret":null');
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.OPENOMNI_TEST_SECRET;
+      } else {
+        process.env.OPENOMNI_TEST_SECRET = previousSecret;
+      }
+    }
+  });
+
+  test("does not inherit parent env when connector env is omitted", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-empty-env");
+    const scriptPath = join(workspaceRoot, "fake-empty-env.ts");
+    writeFileSync(
+      scriptPath,
+      "console.log(JSON.stringify({secret:process.env.OPENOMNI_TEST_SECRET ?? null}));",
+    );
+    const definition = fakeConnector("bun", [scriptPath]);
+    const previousSecret = process.env.OPENOMNI_TEST_SECRET;
+    process.env.OPENOMNI_TEST_SECRET = "secret-value";
+
+    try {
+      // When
+      const result = await dispatchRuntime(definition, workspaceRoot);
+
+      // Then
+      expect(result).toMatchObject({
+        status: "succeeded",
+        finishReason: "exit_code:0",
+      });
+      expect(result.output).toContain('"secret":null');
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.OPENOMNI_TEST_SECRET;
+      } else {
+        process.env.OPENOMNI_TEST_SECRET = previousSecret;
+      }
+    }
   });
 
   test("returns failed when the local CLI exits non-zero", async () => {

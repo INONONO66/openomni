@@ -76,6 +76,7 @@ function resolveEnabledLocalCliInstallation(
   return AppConnectorInstallationStore.list().find(
     (installation) =>
       installation.status === "enabled" &&
+      installation.consent !== undefined &&
       installation.definition.profile.executorKind === LOCAL_CLI_EXECUTOR_KIND &&
       matchesLocalCliTarget(installation, target),
   );

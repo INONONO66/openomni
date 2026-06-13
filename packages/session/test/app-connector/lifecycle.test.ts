@@ -175,6 +175,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
       AppConnectorInstallationStore.set({
         ...installation(record.id),
         status: record.status,
+        ...(record.status === "enabled"
+          ? { consent: { grantedBy: "act_owner", grantedAt: 1 } }
+          : {}),
       });
       expect(AppConnectorInstallationStore.disable(record.id).status).toBe("disabled");
     }

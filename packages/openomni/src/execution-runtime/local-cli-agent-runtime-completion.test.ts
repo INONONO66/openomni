@@ -84,6 +84,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
     registeredBy: "act_owner",
+    consent: { grantedBy: "act_owner", grantedAt: 1 },
     createdAt: 1,
     updatedAt: 1,
   };

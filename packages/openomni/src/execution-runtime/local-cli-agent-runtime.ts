@@ -28,6 +28,7 @@ interface SpawnOutcome {
 
 const DEFAULT_TIMEOUT_MS = 600_000;
 const templatePattern = /\{\{(prompt|worktree|runId|sessionId)\}\}/g;
+const inheritedEnvKeys = ["PATH", "SYSTEMROOT", "SystemRoot", "WINDIR"] as const;
 
 function valueForTemplateKey(key: string, values: TemplateValues): string {
   switch (key) {
@@ -55,16 +56,13 @@ function renderArgs(spawn: AppConnector.Spawn, values: TemplateValues): readonly
   return (spawn.args ?? []).map((arg) => renderTemplate(arg, values));
 }
 
-function renderEnv(
-  spawn: AppConnector.Spawn,
-  values: TemplateValues,
-): Record<string, string> | undefined {
-  if (spawn.env === undefined) return undefined;
+function renderEnv(spawn: AppConnector.Spawn, values: TemplateValues): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const key of Object.keys(process.env)) {
+  for (const key of inheritedEnvKeys) {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }
+  if (spawn.env === undefined) return env;
   for (const key of Object.keys(spawn.env)) {
     const value = spawn.env[key];
     if (value === undefined) continue;
