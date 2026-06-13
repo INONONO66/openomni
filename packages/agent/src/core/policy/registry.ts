@@ -9,7 +9,7 @@ import {
 } from "./builtin";
 import type { PolicyRegistration } from "./types";
 
-export interface RuntimeContext {
+interface RuntimeContext {
   readonly workspaceRoot?: string;
   readonly sessionId?: string;
   readonly runId?: string;
