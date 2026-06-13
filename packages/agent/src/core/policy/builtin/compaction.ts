@@ -1,9 +1,8 @@
 import { PolicyDecision } from "@openomni/protocol";
-import { InMemoryCompactor } from "../../execution/compaction";
-import type { PolicyFactory, PolicyRegistration } from "../types";
-import type { ChatAgentConfig } from "../../types";
+import { InMemoryCompactor, type CompactionOptions } from "../../execution/compaction";
+import type { PolicyRegistration } from "../types";
 
-type CompactionConfig = NonNullable<ChatAgentConfig["compaction"]>;
+type CompactionConfig = CompactionOptions;
 
 export function createCompactionPolicy(config: CompactionConfig): PolicyRegistration {
   return {
@@ -43,8 +42,3 @@ export function createCompactionPolicy(config: CompactionConfig): PolicyRegistra
     },
   };
 }
-
-export const compactionFactory: PolicyFactory = {
-  id: "policy:compaction",
-  create: (config) => createCompactionPolicy(config as CompactionConfig),
-};

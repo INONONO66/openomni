@@ -1,6 +1,6 @@
 import { PolicyDecision } from "@openomni/protocol";
 import { checkBudget, describeBudgetRemaining, effectiveBudgetThresholds } from "../../budget";
-import type { PolicyFactory, PolicyRegistration } from "../types";
+import type { PolicyRegistration } from "../types";
 
 export function createBudgetReassurancePolicy(): PolicyRegistration {
   let issued = false;
@@ -37,11 +37,6 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
   };
 }
 
-export const budgetReassuranceFactory: PolicyFactory = {
-  id: "policy:budget-reassurance",
-  create: () => createBudgetReassurancePolicy(),
-};
-
 export function createBudgetWarningPolicy(): PolicyRegistration {
   let issued = false;
   return {
@@ -76,8 +71,3 @@ export function createBudgetWarningPolicy(): PolicyRegistration {
     },
   };
 }
-
-export const budgetWarningFactory: PolicyFactory = {
-  id: "policy:budget-warning",
-  create: () => createBudgetWarningPolicy(),
-};
