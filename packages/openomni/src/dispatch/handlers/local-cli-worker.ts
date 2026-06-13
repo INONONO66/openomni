@@ -144,6 +144,8 @@ export async function handleLocalCliWorkerSpawn(
   }
   await recordLocalCliArtifacts(workItemHash, result);
   await recordLocalCliLogEvents(workItemHash, result);
+  await recordLocalCliTokenUsage(workItemHash, result);
+  await recordLocalCliToolCalls(workItemHash, result);
   const reflection = await reflectCoordinatorResult(workItemHash, result, {
     readBack: options.readBack,
     readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
@@ -190,6 +192,39 @@ async function recordLocalCliLogEvents(
         description: "local CLI log event recorded",
         passed: true,
         detail: JSON.stringify(event),
+      }),
+    );
+  }
+}
+
+async function recordLocalCliTokenUsage(
+  workItemHash: string,
+  result: Execution.Result,
+): Promise<void> {
+  if (result.usage === undefined) return;
+  await ignoreWorkItemReflectionFailure(() =>
+    WorkItemStore.addEvidence(workItemHash, {
+      kind: "custom",
+      description: "local CLI token usage recorded",
+      passed: true,
+      detail: JSON.stringify(result.usage),
+    }),
+  );
+}
+
+async function recordLocalCliToolCalls(
+  workItemHash: string,
+  result: Execution.Result,
+): Promise<void> {
+  for (const event of result.logEvents ?? []) {
+    const toolCall = event.toolCall;
+    if (toolCall === undefined) continue;
+    await ignoreWorkItemReflectionFailure(() =>
+      WorkItemStore.addEvidence(workItemHash, {
+        kind: "custom",
+        description: "local CLI tool call recorded",
+        passed: toolCall.status !== "failed" && toolCall.status !== "error",
+        detail: JSON.stringify(toolCall),
       }),
     );
   }

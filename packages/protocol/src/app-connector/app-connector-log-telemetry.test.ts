@@ -1,0 +1,36 @@
+import { describe, expect, test } from "bun:test";
+import { AppConnector } from "./index.js";
+
+describe("AppConnector log telemetry fields", () => {
+  test("structured logs can declare token usage and tool call fields", () => {
+    const logs = AppConnector.Logs.parse({
+      kind: "jsonl",
+      path: "stdout",
+      eventTimeField: "timestamp",
+      messageField: "message",
+      tokenUsageField: "usage",
+      tokenUsageMode: "delta",
+      toolCallField: "tool_call",
+    });
+
+    expect(logs).toEqual({
+      kind: "jsonl",
+      path: "stdout",
+      eventTimeField: "timestamp",
+      messageField: "message",
+      tokenUsageField: "usage",
+      tokenUsageMode: "delta",
+      toolCallField: "tool_call",
+    });
+  });
+
+  test("text logs reject structured telemetry fields", () => {
+    expect(() =>
+      AppConnector.Logs.parse({
+        kind: "text",
+        path: "agent.log",
+        tokenUsageField: "usage",
+      }),
+    ).toThrow();
+  });
+});

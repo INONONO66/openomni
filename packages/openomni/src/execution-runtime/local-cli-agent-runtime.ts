@@ -254,6 +254,7 @@ export function createLocalCliAgentRuntime(
         finishReason: buildFinishReason(outcome),
         ...(output === undefined ? {} : { output }),
         ...(error === undefined ? {} : { error }),
+        ...(logIngestion.usage === undefined ? {} : { usage: logIngestion.usage }),
         ...(logIngestion.artifacts.length === 0 ? {} : { artifacts: logIngestion.artifacts }),
         ...(logIngestion.logEvents.length === 0 ? {} : { logEvents: logIngestion.logEvents }),
       };
