@@ -73,6 +73,7 @@ export function renderLocalCliEnv(
   questionBridge: AppConnector.QuestionBridge | undefined,
   values: LocalCliTemplateValues,
   credentialEnv: Record<string, string>,
+  questionBridgeRuntimeEnv: Record<string, string> = {},
 ): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of inheritedEnvKeys) {
@@ -88,6 +89,9 @@ export function renderLocalCliEnv(
     }
   }
   for (const [key, value] of Object.entries(renderQuestionBridgeEnv(questionBridge, values))) {
+    env[key] = value;
+  }
+  for (const [key, value] of Object.entries(questionBridgeRuntimeEnv)) {
     env[key] = value;
   }
   for (const key of Object.keys(credentialEnv)) {

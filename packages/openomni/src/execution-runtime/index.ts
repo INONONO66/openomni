@@ -10,6 +10,7 @@ export type {
   LocalCliAgentRuntime,
   LocalCliAgentRuntimeDispatchInput,
   LocalCliAgentRuntimeOptions,
+  LocalCliQuestionBridgeHandler,
 } from "./local-cli-agent-runtime.js";
 export {
   AgentToolProvider,

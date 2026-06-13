@@ -1,11 +1,38 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
+import {
+  Dispatch as DispatchProtocol,
+  type AppConnector,
+  type Dispatch,
+  type Execution,
+} from "@openomni/protocol";
 import type { DispatchOwners } from "@openomni/openomni";
+import { Bus, PendingAskStore, Session, Storage } from "@openomni/session";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
 const tempRoots: string[] = [];
+
+beforeEach(() => {
+  Bus.reset();
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  Session.storage.set("ses_fake", {
+    id: "ses_fake",
+    title: "Fake CLI session",
+    model: { providerID: "anthropic", modelID: "claude-test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 1,
+    parentSessionId: "ses_resident",
+  });
+  Session.storage.set("ses_resident", {
+    id: "ses_resident",
+    title: "Resident session",
+    model: { providerID: "anthropic", modelID: "claude-test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
+});
 
 afterEach(() => {
   for (const tempRoot of tempRoots.splice(0)) {
@@ -108,15 +135,42 @@ function coordinator(): NonNullable<DispatchOwners["coordinator"]> {
   };
 }
 
-function residentRuntime(): NonNullable<DispatchOwners["residentRuntime"]> {
+interface ResidentRuntimeCall {
+  readonly sessionId: string;
+  readonly payload: unknown;
+  readonly actorRole: unknown;
+  readonly actorSessionId: unknown;
+  readonly actorRunId: unknown;
+}
+
+function residentRuntime(
+  calls: ResidentRuntimeCall[] = [],
+): NonNullable<DispatchOwners["residentRuntime"]> {
   return {
-    async run() {
+    async run(ctx) {
+      const actor = ctx.event.meta?.actor;
+      if (actor === undefined) throw new Error("expected resident event actor metadata");
+      calls.push({
+        sessionId: ctx.sessionId,
+        payload: ctx.event.payload,
+        actorRole: actor.role,
+        actorSessionId: actor.sessionId,
+        actorRunId: actor.runId,
+      });
       return {
         output: "resident result",
         finishReason: "stop",
         runId: "run_resident",
         activationId: "activation_resident",
       };
+    },
+  };
+}
+
+function failingResidentRuntime(): NonNullable<DispatchOwners["residentRuntime"]> {
+  return {
+    async run() {
+      throw new Error("resident unavailable");
     },
   };
 }
@@ -192,5 +246,149 @@ describe("createServerDispatchOwners", () => {
     expect(result.output).toContain('"echo":"[REDACTED]"');
     expect(result.output).not.toContain("server-secret");
     expect(result.output).toContain('"ungranted":null');
+  });
+
+  test("routes local CLI question bridge requests through resident.ask", async () => {
+    const eventNames: string[] = [];
+    const unsubscribe = Bus.observe((event) => {
+      if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
+    });
+    const residentCalls: ResidentRuntimeCall[] = [];
+    const workspaceRoot = tempDir("server-dispatch-owner-question-bridge");
+    const scriptPath = join(workspaceRoot, "fake-question-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "const url = process.env.OPENOMNI_QUESTION_BRIDGE_URL;",
+        "const token = process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN;",
+        "if (!url || !token) throw new Error('missing question bridge transport');",
+        "const response = await fetch(url, {",
+        "  method: 'POST',",
+        "  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+        "  body: JSON.stringify({ prompt: 'May I edit the file?' }),",
+        "});",
+        "if (!response.ok) throw new Error(await response.text());",
+        "console.log(await response.text());",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath]),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+    const owners = createServerDispatchOwners({
+      coordinator: coordinator(),
+      residentRuntime: residentRuntime(residentCalls),
+      model: { providerID: "anthropic", id: "claude-test" },
+    });
+    const runtime = owners.localCliAgentRuntime;
+    if (runtime === undefined) {
+      expect.unreachable("server dispatch owners must include a local CLI runtime");
+    }
+
+    try {
+      const result = await runtime.dispatch({
+        command: {
+          ...command(),
+          target: {
+            kind: "worker",
+            id: "app.fake-cli",
+            executorKind: "local_cli_agent",
+            parentSessionId: "ses_resident",
+          },
+        },
+        executionRequest: request(workspaceRoot),
+        installation: installation(definition),
+      });
+      await Promise.resolve();
+
+      expect(result).toMatchObject({
+        status: "succeeded",
+        output: "resident result",
+      });
+      expect(residentCalls).toEqual([
+        {
+          sessionId: "ses_resident",
+          payload: "Local CLI worker run run_fake asks Resident:\n\nMay I edit the file?",
+          actorRole: "worker",
+          actorSessionId: "ses_fake",
+          actorRunId: "run_fake",
+        },
+      ]);
+      expect(eventNames).toContain(DispatchProtocol.Events.Submitted.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Authorized.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Routed.name);
+      expect(eventNames).toContain(DispatchProtocol.Events.Completed.name);
+      const asks = PendingAskStore.list(["answered"]);
+      expect(asks).toHaveLength(1);
+      expect(asks[0]).toMatchObject({
+        originSessionId: "ses_fake",
+        originRunId: "run_fake",
+        originActorKind: "worker",
+        targetKind: "resident",
+      });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("includes resident.ask result validation details when the question bridge response is invalid", async () => {
+    const workspaceRoot = tempDir("server-dispatch-owner-question-invalid");
+    const scriptPath = join(workspaceRoot, "fake-question-invalid-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "const url = process.env.OPENOMNI_QUESTION_BRIDGE_URL;",
+        "const token = process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN;",
+        "if (!url || !token) throw new Error('missing question bridge transport');",
+        "const response = await fetch(url, {",
+        "  method: 'POST',",
+        "  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+        "  body: JSON.stringify({ prompt: 'Need resident?' }),",
+        "});",
+        "if (response.ok) throw new Error('expected invalid bridge response');",
+        "throw new Error(await response.text());",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath]),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+    const owners = createServerDispatchOwners({
+      coordinator: coordinator(),
+      residentRuntime: failingResidentRuntime(),
+      model: { providerID: "anthropic", id: "claude-test" },
+    });
+    const runtime = owners.localCliAgentRuntime;
+    if (runtime === undefined) {
+      expect.unreachable("server dispatch owners must include a local CLI runtime");
+    }
+
+    const result = await runtime.dispatch({
+      command: {
+        ...command(),
+        target: {
+          kind: "worker",
+          id: "app.fake-cli",
+          executorKind: "local_cli_agent",
+          parentSessionId: "ses_resident",
+        },
+      },
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition),
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("resident.ask returned an invalid question response:");
+    expect(result.error).toContain("invalid_literal");
+    expect(result.error).toContain("completed");
+    expect(result.error).toContain("Required");
   });
 });

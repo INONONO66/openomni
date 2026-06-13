@@ -150,6 +150,7 @@ export type {
   LocalCliAgentRuntime,
   LocalCliAgentRuntimeDispatchInput,
   LocalCliAgentRuntimeOptions,
+  LocalCliQuestionBridgeHandler,
 } from "./execution-runtime";
 
 export { ReadBackExecutor } from "./evidence";
@@ -160,6 +161,7 @@ export {
   DispatchRegistry,
   createDefaultDispatchRuntime,
   createDefaultDispatchPolicy,
+  createResidentDispatchHandlers,
   deriveActorContext,
   registerBuiltInDispatchHandlers,
 } from "./dispatch";
