@@ -14,6 +14,7 @@ export interface ResidentProfileOptions {
 export interface ResidentProfile {
   readonly factory: AgentFactory;
   readonly metadata: AgentPromptMetadata;
+  readonly reload: () => Promise<void>;
   readonly close: () => void;
 }
 
@@ -38,9 +39,9 @@ export async function createResidentProfile(
   let reload: Promise<void> | undefined;
   const watchers: FSWatcher[] = [];
 
-  const scheduleReload = () => {
+  const reloadNow = () => {
     if (reload) {
-      return;
+      return reload;
     }
     reload = loadSnapshot(profileDir)
       .then((next) => {
@@ -50,6 +51,11 @@ export async function createResidentProfile(
       .finally(() => {
         reload = undefined;
       });
+    return reload;
+  };
+
+  const scheduleReload = () => {
+    void reloadNow();
   };
 
   try {
@@ -75,6 +81,7 @@ export async function createResidentProfile(
       tools: { categories: ["custom"] },
       budget: { maxTurns: snapshot.config.maxTurns ?? 20 },
     }),
+    reload: reloadNow,
     close: () => {
       for (const watcher of watchers) watcher.close();
     },

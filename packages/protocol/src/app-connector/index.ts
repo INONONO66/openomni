@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BusEvent } from "../bus/index.js";
 import { Policy } from "../policy/index.js";
 
 export namespace AppConnector {
@@ -199,4 +200,30 @@ export namespace AppConnector {
       path: ["consent"],
     });
   export type Installation = z.infer<typeof Installation>;
+
+  export const VerificationFailureReason = z.enum([
+    "missing_candidate",
+    "detect_failed",
+    "unsupported_version",
+  ]);
+  export type VerificationFailureReason = z.infer<typeof VerificationFailureReason>;
+
+  const VerificationEventBase = z.object({
+    traceId: nonEmptyString,
+    time: positiveInteger,
+    installationId: nonEmptyString,
+    connectorId: nonEmptyString,
+    connectorVersion: nonEmptyString,
+    reason: VerificationFailureReason,
+    testedVersions: nonEmptyString,
+    detectedVersion: nonEmptyString.optional(),
+    diagnostic: nonEmptyString.max(512).optional(),
+  });
+
+  export namespace Events {
+    export const VerificationFailed = BusEvent.define(
+      "app_connector.verification.failed",
+      VerificationEventBase,
+    );
+  }
 }

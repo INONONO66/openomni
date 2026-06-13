@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AppConnector } from "@openomni/protocol";
-import { AppConnectorInstallationStore, SqliteStorageAdapter, Storage } from "@openomni/session";
+import {
+  AppConnectorInstallationStore,
+  Bus,
+  SqliteStorageAdapter,
+  Storage,
+} from "@openomni/session";
 import {
   AppConnectorDiscovery,
   AppConnectorRegistry,
@@ -54,6 +59,21 @@ async function expectSmokeVerifyRejects(id: string, message: string): Promise<vo
   throw new Error(`Expected smoke verification to reject for ${id}`);
 }
 
+async function captureVerificationEvents(run: () => Promise<void>): Promise<unknown[]> {
+  const events: unknown[] = [];
+  const unsubscribe = Bus.observe((descriptor, payload) => {
+    if (descriptor.name === "app_connector.verification.failed") events.push(payload);
+  });
+
+  try {
+    await run();
+    await Bun.sleep(0);
+    return events;
+  } finally {
+    unsubscribe();
+  }
+}
+
 describe("AppConnectorRegistry smoke verification", () => {
   let tmpDir: string;
   let dbPath: string;
@@ -68,6 +88,7 @@ describe("AppConnectorRegistry smoke verification", () => {
 
   afterEach(async () => {
     adapter.close();
+    Bus.reset();
     Storage.reset();
     await rm(tmpDir, { recursive: true });
   });
@@ -113,6 +134,109 @@ describe("AppConnectorRegistry smoke verification", () => {
     expect(failed.detectedVersion).toBe("9.0.0");
     expect(failed.consent).toEqual(consented.consent);
     expect(AppConnectorRegistry.get(consented.id)).toEqual(failed);
+  });
+
+  test("publishes a version drift incident when smoke verification detects an unsupported version", async () => {
+    // Given
+    const consented = await registerConsentedCodexInstallation();
+
+    // When
+    const events = await captureVerificationEvents(async () => {
+      await AppConnectorRegistry.smokeVerify(consented.id, {
+        runDetectCommand: async () => ({
+          exitCode: 0,
+          stdout: "codex-cli 9.0.0",
+          stderr: "",
+        }),
+      });
+    });
+
+    // Then
+    expect(events).toEqual([
+      expect.objectContaining({
+        installationId: consented.id,
+        connectorId: consented.connectorId,
+        reason: "unsupported_version",
+        detectedVersion: "9.0.0",
+        testedVersions: consented.testedVersions,
+      }),
+    ]);
+  });
+
+  test("publishes a detection failure incident when smoke verification cannot read a version", async () => {
+    // Given
+    const consented = await registerConsentedCodexInstallation();
+
+    // When
+    const events = await captureVerificationEvents(async () => {
+      await AppConnectorRegistry.smokeVerify(consented.id, {
+        runDetectCommand: async () => ({
+          exitCode: 1,
+          stdout: "",
+          stderr: "detect failed",
+        }),
+      });
+    });
+
+    // Then
+    expect(events).toEqual([
+      expect.objectContaining({
+        installationId: consented.id,
+        connectorId: consented.connectorId,
+        reason: "detect_failed",
+        diagnostic: "detect failed",
+      }),
+    ]);
+  });
+
+  test("publishes a missing candidate incident when smoke verification cannot spawn detect", async () => {
+    // Given
+    const consented = await registerConsentedCodexInstallation();
+
+    // When
+    const events = await captureVerificationEvents(async () => {
+      await AppConnectorRegistry.smokeVerify(consented.id, {
+        runDetectCommand: async () => ({
+          exitCode: 127,
+          stdout: "",
+          stderr: "command not found",
+        }),
+      });
+    });
+
+    // Then
+    expect(events).toEqual([
+      expect.objectContaining({
+        installationId: consented.id,
+        connectorId: consented.connectorId,
+        reason: "missing_candidate",
+        diagnostic: "command not found",
+      }),
+    ]);
+  });
+
+  test("redacts and bounds detection failure diagnostics before publishing incidents", async () => {
+    // Given
+    const consented = await registerConsentedCodexInstallation();
+    const secret = "OPENAI_API_KEY=sk-secret-value";
+    const repeated = "x".repeat(700);
+
+    // When
+    const events = await captureVerificationEvents(async () => {
+      await AppConnectorRegistry.smokeVerify(consented.id, {
+        runDetectCommand: async () => ({
+          exitCode: 1,
+          stdout: "",
+          stderr: `${secret}\n${repeated}`,
+        }),
+      });
+    });
+
+    // Then
+    const event = events[0] as { readonly diagnostic?: string } | undefined;
+    expect(event?.diagnostic).toContain("OPENAI_API_KEY=[REDACTED]");
+    expect(event?.diagnostic).not.toContain("sk-secret-value");
+    expect(event?.diagnostic?.length).toBeLessThanOrEqual(512);
   });
 
   test("rejects smoke verification for missing, disabled, and non-consented installations", async () => {

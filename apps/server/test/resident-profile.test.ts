@@ -67,7 +67,8 @@ describe("resident profile", () => {
     const profile = await createResidentProfile({ profileDir, model });
     await Bun.write(path.join(profileDir, "SOUL.md"), "Updated soul.");
 
-    await waitFor(() => profile.factory().systemPrompt.includes("## Soul\nUpdated soul."));
+    await profile.reload();
+    expect(profile.factory().systemPrompt).toContain("## Soul\nUpdated soul.");
     profile.close();
   });
 
@@ -78,21 +79,13 @@ describe("resident profile", () => {
 
     const profile = await createResidentProfile({ profileDir, model });
     await Bun.write(path.join(profileDir, "config.yaml"), "invalid config line\n");
-    await Bun.sleep(200);
+    await profile.reload();
 
     expect(profile.factory().systemPrompt).toContain("Name: Initial");
 
     await Bun.write(path.join(profileDir, "config.yaml"), "name: Updated\n");
-    await waitFor(() => profile.factory().systemPrompt.includes("Name: Updated"));
+    await profile.reload();
+    expect(profile.factory().systemPrompt).toContain("Name: Updated");
     profile.close();
   });
 });
-
-async function waitFor(predicate: () => boolean): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 5_000) {
-    if (predicate()) return;
-    await Bun.sleep(25);
-  }
-  throw new Error("timed out waiting for resident profile reload");
-}

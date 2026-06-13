@@ -1,8 +1,12 @@
-import { type AppConnector, Policy } from "@openomni/protocol";
-import { AppConnectorInstallationStore } from "@openomni/session";
+import { AppConnector, Policy } from "@openomni/protocol";
+import { AppConnectorInstallationStore, Bus } from "@openomni/session";
 import { z } from "zod";
 import { AppConnectorDiscovery } from "./discovery.js";
 import type { DetectCommandRunner, DiscoveryCandidate } from "./discovery.js";
+
+const MAX_VERIFICATION_DIAGNOSTIC_LENGTH = 512;
+const sensitiveDiagnosticPattern =
+  /\b([A-Z][A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Z0-9_]*)=([^\s]+)/gi;
 
 export interface AppConnectorRegistrationOptions {
   readonly registeredBy: string;
@@ -97,11 +101,14 @@ export namespace AppConnectorRegistry {
     });
     const candidate = candidates[0];
     if (candidate === undefined) {
-      return AppConnectorInstallationStore.markSmokeVerificationFailed(id);
+      return markSmokeVerificationFailed(installation, "detect_failed", {
+        diagnostic: "discovery returned no candidate",
+      });
     }
     if (candidate.status !== "available" || candidate.version === undefined) {
-      return AppConnectorInstallationStore.markSmokeVerificationFailed(id, {
+      return markSmokeVerificationFailed(installation, verificationFailureReason(candidate), {
         ...(candidate.version !== undefined ? { detectedVersion: candidate.version } : {}),
+        ...(candidate.diagnostic !== undefined ? { diagnostic: candidate.diagnostic } : {}),
       });
     }
 
@@ -113,4 +120,45 @@ export namespace AppConnectorRegistry {
 
 function installationId(connectorId: string): string {
   return `install:${connectorId}`;
+}
+
+function verificationFailureReason(
+  candidate: DiscoveryCandidate,
+): AppConnector.VerificationFailureReason {
+  if (candidate.status === "missing") return "missing_candidate";
+  return candidate.status === "available" ? "detect_failed" : candidate.status;
+}
+
+function markSmokeVerificationFailed(
+  installation: AppConnector.Installation,
+  reason: AppConnector.VerificationFailureReason,
+  details: { readonly detectedVersion?: string; readonly diagnostic?: string } = {},
+): AppConnector.Installation {
+  const failed = AppConnectorInstallationStore.markSmokeVerificationFailed(installation.id, {
+    ...(details.detectedVersion !== undefined ? { detectedVersion: details.detectedVersion } : {}),
+  });
+  Bus.publish(AppConnector.Events.VerificationFailed, {
+    traceId: crypto.randomUUID(),
+    time: Date.now(),
+    installationId: installation.id,
+    connectorId: installation.connectorId,
+    connectorVersion: installation.connectorVersion,
+    reason,
+    testedVersions: installation.testedVersions,
+    ...(details.detectedVersion !== undefined ? { detectedVersion: details.detectedVersion } : {}),
+    ...(details.diagnostic !== undefined
+      ? { diagnostic: sanitizeVerificationDiagnostic(details.diagnostic) }
+      : {}),
+  });
+  return failed;
+}
+
+function sanitizeVerificationDiagnostic(diagnostic: string): string {
+  const sanitized = diagnostic
+    .replace(sensitiveDiagnosticPattern, "$1=[REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (sanitized.length === 0) return "detect command failed";
+  if (sanitized.length <= MAX_VERIFICATION_DIAGNOSTIC_LENGTH) return sanitized;
+  return sanitized.slice(0, MAX_VERIFICATION_DIAGNOSTIC_LENGTH - 1).trimEnd();
 }
