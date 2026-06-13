@@ -8,7 +8,8 @@ import { createToolExecutor, WorkspaceLock, type NativeTool } from "@openomni/op
 import type { RuntimeResource, Tool } from "@openomni/protocol";
 import { Mcp, PolicyDecision } from "@openomni/protocol";
 import { Bus, Session, Storage } from "@openomni/session";
-import { McpPrefixGuardMiddleware, McpToolProvider } from "../../../src/tool/mcp";
+import { McpPrefixGuardMiddleware } from "../../../src/tool/mcp/mcp-prefix-guard";
+import { McpToolProvider } from "../../../src/tool/mcp";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
@@ -194,12 +195,18 @@ describe("McpToolProvider", () => {
     const controller = new AbortController();
     controller.abort(new Error("already cancelled"));
 
-    await expect(
-      provider.execute(
+    try {
+      await provider.execute(
         { id: "call-pre-abort", tool: "search.query", input: {} },
         { signal: controller.signal },
-      ),
-    ).rejects.toThrow("MCP tool execution aborted");
+      );
+      throw new Error("expected provider.execute to reject");
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+      expect(error.message).toContain("MCP tool execution aborted");
+    }
     expect(client.callTool).not.toHaveBeenCalled();
   });
 
