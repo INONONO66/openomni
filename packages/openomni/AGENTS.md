@@ -1,6 +1,6 @@
 # packages/openomni
 
-Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/llm` to add DAG utilities, inbound event handling, and a session-backed subagent runtime. This package is the future home for Resident orchestration seams: controlled inbound authority, self-loop session creation, Worker delegation, and distilled writeback.
+Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/protocol` to add DAG utilities, inbound event handling, and a session-backed subagent runtime. This package is the future home for Resident orchestration seams: controlled inbound authority, self-loop session creation, Worker delegation, and distilled writeback.
 
 ## Module Map
 
@@ -39,7 +39,7 @@ agents/             → @openomni/protocol (Model.Ref only)
 app-connector/      → @openomni/protocol (AppConnector.Definition only)
 dag/                → no internal deps
 profile/            → @openomni/session + @openomni/agent + @openomni/protocol
-resident/           → @openomni/session + @openomni/agent + @openomni/llm
+resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 runtime/            → @openomni/session + @openomni/agent (worker middleware, no bus transport)
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
 ingress/            → no sibling deps

@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@openomni/agent": "workspace:*",
-    "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
     "croner": "^10.0.1",
