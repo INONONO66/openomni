@@ -6,7 +6,7 @@ export type McpServerConfig = McpConfig.ServerConfig;
 
 const MAX_ZOD_ISSUES_PER_ENTRY = 3;
 
-export const McpServerConfigParseOptionsSchema = z.object({
+const McpServerConfigParseOptionsSchema = z.object({
   source: z.enum(["server-config", "project-config"]),
   configPath: z.string().optional(),
 });
