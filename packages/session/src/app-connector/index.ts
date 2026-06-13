@@ -6,6 +6,8 @@ type InstallationInput = Omit<AppConnector.Installation, "createdAt" | "updatedA
   Partial<Pick<AppConnector.Installation, "createdAt">>;
 type ConsentInput = Omit<AppConnector.Consent, "grantedAt"> &
   Partial<Pick<AppConnector.Consent, "grantedAt">>;
+type SmokeVerifiedInput = Pick<AppConnector.Installation, "detectedVersion">;
+type SmokeVerificationFailedInput = Partial<Pick<AppConnector.Installation, "detectedVersion">>;
 
 function requireAdapter(): NonNullable<Storage.Adapter["appConnectorInstallation"]> {
   const adapter = Storage.get().appConnectorInstallation;
@@ -82,6 +84,38 @@ export namespace AppConnectorInstallationStore {
       ...installation,
       status: "consented",
       consent: consentRecord(input),
+    });
+  }
+
+  export function markSmokeVerified(
+    id: string,
+    input: SmokeVerifiedInput,
+  ): AppConnector.Installation {
+    const installation = requireInstallation(id);
+    if (installation.status !== "consented") {
+      throw new Error(`Cannot smoke verify ${installation.status} installation: ${id}`);
+    }
+
+    return set({
+      ...installation,
+      status: "enabled",
+      detectedVersion: input.detectedVersion,
+    });
+  }
+
+  export function markSmokeVerificationFailed(
+    id: string,
+    input: SmokeVerificationFailedInput = {},
+  ): AppConnector.Installation {
+    const installation = requireInstallation(id);
+    if (installation.status !== "consented") {
+      throw new Error(`Cannot smoke verify ${installation.status} installation: ${id}`);
+    }
+
+    return set({
+      ...installation,
+      status: "verification_failed",
+      ...(input.detectedVersion !== undefined ? { detectedVersion: input.detectedVersion } : {}),
     });
   }
 

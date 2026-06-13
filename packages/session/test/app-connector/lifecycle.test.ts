@@ -121,6 +121,44 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     expect(AppConnectorInstallationStore.get(consented.id)).toEqual(disabled);
   });
 
+  test("marks a consented installation enabled when smoke verification succeeds", async () => {
+    // Given
+    const consented = consentInstallation("install-1");
+    await Bun.sleep(2);
+
+    // When
+    const enabled = AppConnectorInstallationStore.markSmokeVerified(consented.id, {
+      detectedVersion: "0.139.1",
+    });
+
+    // Then
+    expect(enabled.status).toBe("enabled");
+    expect(enabled.detectedVersion).toBe("0.139.1");
+    expect(enabled.consent).toEqual(consented.consent);
+    expect(enabled.createdAt).toBe(consented.createdAt);
+    expect(enabled.updatedAt).toBeGreaterThanOrEqual(consented.updatedAt);
+    expect(AppConnectorInstallationStore.get(consented.id)).toEqual(enabled);
+  });
+
+  test("marks a consented installation verification_failed when smoke verification fails", async () => {
+    // Given
+    const consented = consentInstallation("install-1");
+    await Bun.sleep(2);
+
+    // When
+    const failed = AppConnectorInstallationStore.markSmokeVerificationFailed(consented.id, {
+      detectedVersion: "9.0.0",
+    });
+
+    // Then
+    expect(failed.status).toBe("verification_failed");
+    expect(failed.detectedVersion).toBe("9.0.0");
+    expect(failed.consent).toEqual(consented.consent);
+    expect(failed.createdAt).toBe(consented.createdAt);
+    expect(failed.updatedAt).toBeGreaterThanOrEqual(consented.updatedAt);
+    expect(AppConnectorInstallationStore.get(consented.id)).toEqual(failed);
+  });
+
   test("disables every pre-wire installation status", () => {
     const cases = [
       { id: "install-registered", status: "registered" },

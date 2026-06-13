@@ -8,4 +8,8 @@ export type {
   DiscoveryCandidate,
   DiscoveryOptions,
 } from "./discovery.js";
-export type { AppConnectorConsentOptions, AppConnectorRegistrationOptions } from "./registry.js";
+export type {
+  AppConnectorConsentOptions,
+  AppConnectorRegistrationOptions,
+  AppConnectorSmokeVerifyOptions,
+} from "./registry.js";

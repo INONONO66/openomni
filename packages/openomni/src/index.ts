@@ -35,6 +35,7 @@ export type {
   AppConnectorConsentOptions,
   AppConnectorDiscoveryStatus,
   AppConnectorRegistrationOptions,
+  AppConnectorSmokeVerifyOptions,
   DetectCommandResult,
   DetectCommandRunner,
   DiscoveryCandidate,
