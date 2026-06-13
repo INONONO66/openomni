@@ -123,6 +123,7 @@ export {
   buildToolCatalog,
   buildWorkerMiddleware,
   buildWorkerChildRuntimeConfig,
+  createLocalCliAgentRuntime,
   createDispatchTool,
   createToolExecutor,
   createWorkerSubagentRuntime,
@@ -145,6 +146,8 @@ export type {
   ToolSource,
   WorkerMiddlewareConfig,
   DispatchToolRuntime,
+  LocalCliAgentRuntime,
+  LocalCliAgentRuntimeDispatchInput,
 } from "./execution-runtime";
 
 export { ReadBackExecutor } from "./evidence";

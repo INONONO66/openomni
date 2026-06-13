@@ -141,6 +141,8 @@ export function createWorkerDispatchHandlers(
           runtime: options.localCliAgentRuntime,
           readBack: options.readBack,
           readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+          readBackRecorder: options.readBackRecorder,
+          now: options.now,
         });
       }
       if (executorKind !== INTERNAL_EXECUTOR_KIND) {

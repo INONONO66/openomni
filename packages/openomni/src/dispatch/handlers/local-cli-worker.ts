@@ -144,6 +144,8 @@ export async function handleLocalCliWorkerSpawn(
   const reflection = await reflectCoordinatorResult(workItemHash, result, {
     readBack: options.readBack,
     readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+    readBackRecorder: options.readBackRecorder,
+    now: options.now,
   });
   return {
     output: {
