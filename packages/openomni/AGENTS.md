@@ -7,7 +7,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/agents/` | Built-in agent definitions and model-specific prompt variants | `ResidentAgent` |
-| `src/app-connector/` | Built-in declarative connector definitions, local detect-command discovery, installation registration, and Owner consent transitions for CLI apps | `BuiltInAppConnectors`, `AppConnectorDiscovery`, `AppConnectorRegistry` |
+| `src/app-connector/` | Built-in declarative connector definitions, local detect-command discovery, installation registration, Owner consent transitions, and disable/uninstall lifecycle controls for CLI apps | `BuiltInAppConnectors`, `AppConnectorDiscovery`, `AppConnectorRegistry` |
 | `src/dag/` | Pure dependency-graph utilities | `DAG` |
 | `src/profile/` | Agent profile middleware (soul/user/memory from `~/.openomni/profiles/`) | `Profile` |
 | `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
@@ -19,7 +19,7 @@ Orchestration layer for `@openomni/openomni`. Builds on `@openomni/agent`, `@ope
 ## Architecture
 
 - `src/agents/` contains built-in agent definitions. `src/agents/resident/prompt/` holds the Resident system prompt with model-specific variants (Claude, GPT) and a shared builder. `ResidentAgent.getPrompt({ model })` selects the right variant by provider.
-- `src/app-connector/` contains declarative installed-app connector definitions, detect-command discovery, durable registration of available candidates, and Owner consent state transitions. Hook/credential wiring, process execution, and log ingestion stay out of this module.
+- `src/app-connector/` contains declarative installed-app connector definitions, detect-command discovery, durable registration of available candidates, Owner consent state transitions, and disable/uninstall lifecycle controls. Hook/credential wiring, process execution, and log ingestion stay out of this module.
 - `src/dag/` is structural only — it knows step topology, not runtime state.
 - `src/profile/` loads `SOUL.md`, `USER.md`, and `MEMORY.md` from the file system and injects them as `context.prepare` policy effects before agent execution.
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
