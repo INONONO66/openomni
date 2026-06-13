@@ -339,6 +339,37 @@ describe("SqliteStorageAdapter appConnectorInstallation", () => {
     ).toThrow("omits connector requirement");
   });
 
+  test("store rejects connector permission requirements with duplicate actions", () => {
+    const record = installation("install-1", 100);
+    const registered = AppConnectorInstallationStore.set({
+      ...record,
+      definition: {
+        ...record.definition,
+        requires: {
+          ...record.definition.requires,
+          permissions: [
+            { action: "tool.call", allowlist: ["git.*"] },
+            { action: "tool.call", allowLabels: ["capability:read"] },
+          ],
+        },
+      },
+    });
+    AppConnectorInstallationStore.requestConsent(registered.id);
+
+    expect(() =>
+      AppConnectorInstallationStore.grantConsent(registered.id, {
+        grantedBy: "act_owner",
+        permissions: [
+          {
+            action: "tool.call",
+            allowlist: ["git.*"],
+            allowLabels: ["capability:read"],
+          },
+        ],
+      }),
+    ).toThrow("duplicate connector requirement");
+  });
+
   test("store rejects consent input rules that duplicate one requested rule and omit another", () => {
     const firstRule = {
       toolPattern: "bash",

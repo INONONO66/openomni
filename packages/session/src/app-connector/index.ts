@@ -61,6 +61,7 @@ function assertRequestedPermissions(
     throw new Error("AppConnector consent permissions omit connector requirements");
   }
   if (granted === undefined) return;
+  assertUniqueRequiredPermissionActions(requiredPermissions);
   const requestedByAction = new Map(
     requiredPermissions.map((permission) => [permission.action, permission] as const),
   );
@@ -80,6 +81,20 @@ function assertRequestedPermissions(
       );
     }
     assertPermissionSubset(permission, requestedPermission);
+  }
+}
+
+function assertUniqueRequiredPermissionActions(
+  permissions: ReadonlyArray<RequiredPermission>,
+): void {
+  const seen = new Set<string>();
+  for (const permission of permissions) {
+    if (seen.has(permission.action)) {
+      throw new Error(
+        `AppConnector consent permissions duplicate connector requirement: ${permission.action}`,
+      );
+    }
+    seen.add(permission.action);
   }
 }
 
