@@ -32,7 +32,10 @@ function codexConnector(): AppConnector.Definition {
   return connector;
 }
 
-function seedCodexInstallation(status: AppConnector.InstallationStatus): AppConnector.Installation {
+function seedCodexInstallation(
+  status: AppConnector.InstallationStatus,
+  withConsent = status === "enabled",
+): AppConnector.Installation {
   const connector = codexConnector();
   return AppConnectorInstallationStore.set({
     id: `install:codex:${status}`,
@@ -43,6 +46,7 @@ function seedCodexInstallation(status: AppConnector.InstallationStatus): AppConn
     testedVersions: connector.detect.testedVersions,
     status,
     registeredBy: "act_owner",
+    ...(withConsent ? { consent: { grantedBy: "act_owner", grantedAt: 1 } } : {}),
   });
 }
 
@@ -181,6 +185,13 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
       executorKind: "local_cli_agent",
       failureReason: missingEnabledLocalCliInstallationError,
     });
+  });
+
+  test("rejects an enabled matching installation without consent before dispatch", () => {
+    expect(() => seedCodexInstallation("enabled", false)).toThrow(
+      "enabled installation requires owner consent",
+    );
+    expect(WorkItemStore.list()).toHaveLength(0);
   });
 
   for (const status of [

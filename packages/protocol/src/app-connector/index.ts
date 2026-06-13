@@ -193,6 +193,10 @@ export namespace AppConnector {
     .refine((record) => record.definition.version === record.connectorVersion, {
       message: "definition version must match connectorVersion",
       path: ["definition", "version"],
+    })
+    .refine((record) => record.status !== "enabled" || record.consent !== undefined, {
+      message: "enabled installation requires owner consent",
+      path: ["consent"],
     });
   export type Installation = z.infer<typeof Installation>;
 }

@@ -36,6 +36,7 @@ import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
 import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
+import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
@@ -324,19 +325,12 @@ export async function main(): Promise<void> {
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
   IngressEngine.setCoordinator(coordinator);
+  const dispatchOwners = createServerDispatchOwners({ coordinator, residentRuntime, model });
   agentProviderRef.current = new AgentToolProvider({
-    dispatchOwners: {
-      coordinator,
-      residentRuntime,
-      ...(model ? { defaultModel: { provider: model.providerID, id: model.id } } : {}),
-    },
+    dispatchOwners,
   });
   const channelDispatchRuntime = createDefaultDispatchRuntime({
-    owners: {
-      coordinator,
-      residentRuntime,
-      ...(model ? { defaultModel: { provider: model.providerID, id: model.id } } : {}),
-    },
+    owners: dispatchOwners,
   });
   IngressEngine.setAgentResolver({
     resolve: async (agentName, event) =>

@@ -146,6 +146,31 @@ describe("AppConnector protocol domain", () => {
         expect(paths.includes("definition.version")).toBe(true);
       }
     });
+
+    it("rejects enabled installation records without owner consent", () => {
+      // Given
+      const installation = {
+        id: "install-app-codex",
+        connectorId: "app.claude-code",
+        connectorVersion: "1.0.0",
+        definition: validConnector(),
+        testedVersions: ">=1.0.0 <2.0.0",
+        status: "enabled",
+        registeredBy: "act_owner",
+        createdAt: 100,
+        updatedAt: 100,
+      };
+
+      // When
+      const result = AppConnector.Installation.safeParse(installation);
+
+      // Then
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const paths = issuePaths(result.error);
+        expect(paths.includes("consent")).toBe(true);
+      }
+    });
   });
 
   describe("AppConnector.Definition", () => {
