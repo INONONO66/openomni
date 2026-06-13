@@ -7,7 +7,7 @@ export interface BackgroundOutputToolOptions {
   };
 }
 
-export interface BackgroundOutputToolSpec {
+interface BackgroundOutputToolSpec {
   spec: Tool.Spec;
   execute: (args: unknown) => Promise<Tool.Result>;
 }

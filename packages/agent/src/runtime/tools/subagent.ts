@@ -57,7 +57,7 @@ export interface SubagentToolExecutionContext {
   readonly signal?: AbortSignal;
 }
 
-export interface SubagentToolSpec {
+interface SubagentToolSpec {
   spec: Tool.Spec;
   execute: (args: unknown, context?: SubagentToolExecutionContext) => Promise<Tool.Result>;
 }
