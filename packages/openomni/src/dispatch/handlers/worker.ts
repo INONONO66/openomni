@@ -2,8 +2,10 @@ import type { Dispatch, Execution, Model, WorkItem } from "@openomni/protocol";
 import { Session, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
+import type { LocalCliAgentRuntimeOwner } from "../owners.js";
 import type { DispatchHandler } from "../registry.js";
 import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
+import { handleLocalCliWorkerSpawn, LOCAL_CLI_EXECUTOR_KIND } from "./local-cli-worker.js";
 import {
   ignoreWorkItemReflectionFailure,
   reflectCoordinatorResult,
@@ -14,6 +16,7 @@ import { extractText } from "./shared.js";
 
 export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
   readonly coordinator?: CoordinatorLike;
+  readonly localCliAgentRuntime?: LocalCliAgentRuntimeOwner;
   readonly defaultModel?: Model.Ref;
 }
 
@@ -133,6 +136,13 @@ export function createWorkerDispatchHandlers(
     async "worker.spawn"(command) {
       const payload = parseWorkerSpawnPayload(command.payload);
       const executorKind = resolveExecutorKind(command.target);
+      if (executorKind === LOCAL_CLI_EXECUTOR_KIND) {
+        return handleLocalCliWorkerSpawn(command, model, payload, {
+          runtime: options.localCliAgentRuntime,
+          readBack: options.readBack,
+          readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+        });
+      }
       if (executorKind !== INTERNAL_EXECUTOR_KIND) {
         const workItemHash = await createWorkerSpawnWorkItem(
           command,

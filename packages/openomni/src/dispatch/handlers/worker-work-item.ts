@@ -41,6 +41,14 @@ export async function failUnsupportedWorkerExecutor(
   executorKind: WorkItem.ExecutorKind,
 ): Promise<never> {
   const reason = `worker.spawn executor ${executorKind} is not wired`;
+  return failWorkerSpawnExecutor(workItemHash, executorKind, reason);
+}
+
+export async function failWorkerSpawnExecutor(
+  workItemHash: string,
+  executorKind: WorkItem.ExecutorKind,
+  reason: string,
+): Promise<never> {
   await ignoreWorkItemReflectionFailure(() =>
     WorkItemStore.addEvidence(workItemHash, {
       kind: "custom",

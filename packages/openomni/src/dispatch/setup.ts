@@ -26,6 +26,7 @@ export function registerBuiltInDispatchHandlers(
     }),
     ...createWorkerDispatchHandlers({
       coordinator: owners.coordinator,
+      localCliAgentRuntime: owners.localCliAgentRuntime,
       defaultModel: owners.defaultModel,
       readBack: options.readBack,
       readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,

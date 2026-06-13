@@ -7,12 +7,7 @@ import { DispatchRuntime } from "../../src/dispatch/runtime";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
 import { command, expectRejectsWithMessage, workerSpawnPayload } from "./helpers";
 
-const unsupportedExecutorKinds = [
-  "local_cli_agent",
-  "external_api",
-  "a2a",
-  "human_channel",
-] as const;
+const unsupportedExecutorKinds = ["external_api", "a2a", "human_channel"] as const;
 
 function registerWorkerSpawnHandler(
   dispatch: (sessionId: string, request: Execution.Request) => Promise<Execution.Result>,
@@ -131,17 +126,17 @@ describe("worker.spawn executor kind admission", () => {
         registry.get("worker.spawn")?.({
           ...command(
             "worker.spawn",
-            { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+            { kind: "worker", name: "api-coder", executorKind: "external_api" },
             workerSpawnPayload("build"),
           ),
           sessionId: "origin-session",
         }),
-      "worker.spawn executor local_cli_agent is not wired",
+      "worker.spawn executor external_api is not wired",
     );
 
     expect(Session.list()).toEqual([]);
     const workItem = WorkItemStore.list()[0];
-    expect(workItem).toMatchObject({ executorKind: "local_cli_agent" });
+    expect(workItem).toMatchObject({ executorKind: "external_api" });
     expect(workItem?.sessionId).toBeUndefined();
     expect(workItem?.context).toBe("originSessionId=origin-session");
   });
@@ -154,17 +149,17 @@ describe("worker.spawn executor kind admission", () => {
         registry.get("worker.spawn")?.(
           command(
             "worker.spawn",
-            { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+            { kind: "worker", name: "api-coder", executorKind: "external_api" },
             workerSpawnPayload("build"),
           ),
         ),
-      "worker.spawn executor local_cli_agent is not wired",
+      "worker.spawn executor external_api is not wired",
     );
 
     const workItem = WorkItemStore.list()[0];
     expect(workItem).toMatchObject({
-      executorKind: "local_cli_agent",
-      failureReason: "worker.spawn executor local_cli_agent is not wired",
+      executorKind: "external_api",
+      failureReason: "worker.spawn executor external_api is not wired",
     });
   });
 
@@ -175,7 +170,7 @@ describe("worker.spawn executor kind admission", () => {
     const result = await runtime.submit(
       {
         action: "worker.spawn",
-        target: { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+        target: { kind: "worker", name: "api-coder", executorKind: "external_api" },
         payload: workerSpawnPayload("build"),
       },
       {
@@ -191,11 +186,11 @@ describe("worker.spawn executor kind admission", () => {
     );
 
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("worker.spawn executor local_cli_agent is not wired");
+    expect(result.error).toContain("worker.spawn executor external_api is not wired");
     expect(WorkItemStore.list()[0]).toMatchObject({
-      executorKind: "local_cli_agent",
-      assigneeId: "cli-coder",
-      failureReason: "worker.spawn executor local_cli_agent is not wired",
+      executorKind: "external_api",
+      assigneeId: "api-coder",
+      failureReason: "worker.spawn executor external_api is not wired",
     });
   });
 });
