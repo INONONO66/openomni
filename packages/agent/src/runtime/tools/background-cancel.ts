@@ -6,7 +6,7 @@ export interface BackgroundCancelToolOptions {
   };
 }
 
-export interface BackgroundCancelToolSpec {
+interface BackgroundCancelToolSpec {
   spec: Tool.Spec;
   execute: (args: unknown) => Promise<Tool.Result>;
 }
