@@ -23,7 +23,6 @@ export interface LocalCliQuestionBridgeServerOptions {
   readonly sessionId: string;
   readonly residentSessionId: string;
   readonly handler?: LocalCliQuestionBridgeHandler;
-  readonly signal?: AbortSignal;
 }
 
 const bridgeRequestSchema = z
@@ -55,7 +54,12 @@ function methodNotAllowedResponse(): Response {
 }
 
 async function parsePrompt(request: Request): Promise<string | Response> {
-  const body: unknown = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return textResponse("question bridge request requires prompt", 400);
+  }
   const parsed = bridgeRequestSchema.safeParse(body);
   if (!parsed.success) return textResponse("question bridge request requires prompt", 400);
   return parsed.data.prompt;
@@ -82,7 +86,7 @@ export function startLocalCliQuestionBridgeServer(
           sessionId: options.sessionId,
           residentSessionId: options.residentSessionId,
           prompt,
-          signal: options.signal,
+          signal: request.signal,
         });
         return textResponse(answer);
       } catch (error) {

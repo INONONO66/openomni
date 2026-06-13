@@ -167,6 +167,14 @@ function residentRuntime(
   };
 }
 
+function failingResidentRuntime(): NonNullable<DispatchOwners["residentRuntime"]> {
+  return {
+    async run() {
+      throw new Error("resident unavailable");
+    },
+  };
+}
+
 describe("createServerDispatchOwners", () => {
   test("injects a default local CLI owner that can dispatch an enabled connector", async () => {
     const workspaceRoot = tempDir("server-dispatch-owners");
@@ -325,5 +333,62 @@ describe("createServerDispatchOwners", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  test("includes resident.ask result validation details when the question bridge response is invalid", async () => {
+    const workspaceRoot = tempDir("server-dispatch-owner-question-invalid");
+    const scriptPath = join(workspaceRoot, "fake-question-invalid-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "const url = process.env.OPENOMNI_QUESTION_BRIDGE_URL;",
+        "const token = process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN;",
+        "if (!url || !token) throw new Error('missing question bridge transport');",
+        "const response = await fetch(url, {",
+        "  method: 'POST',",
+        "  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+        "  body: JSON.stringify({ prompt: 'Need resident?' }),",
+        "});",
+        "if (response.ok) throw new Error('expected invalid bridge response');",
+        "throw new Error(await response.text());",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath]),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+    const owners = createServerDispatchOwners({
+      coordinator: coordinator(),
+      residentRuntime: failingResidentRuntime(),
+      model: { providerID: "anthropic", id: "claude-test" },
+    });
+    const runtime = owners.localCliAgentRuntime;
+    if (runtime === undefined) {
+      expect.unreachable("server dispatch owners must include a local CLI runtime");
+    }
+
+    const result = await runtime.dispatch({
+      command: {
+        ...command(),
+        target: {
+          kind: "worker",
+          id: "app.fake-cli",
+          executorKind: "local_cli_agent",
+          parentSessionId: "ses_resident",
+        },
+      },
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition),
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("resident.ask returned an invalid question response:");
+    expect(result.error).toContain("invalid_literal");
+    expect(result.error).toContain("completed");
+    expect(result.error).toContain("Required");
   });
 });

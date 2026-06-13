@@ -110,6 +110,14 @@ function questionBridgeEnabled(questionBridge: AppConnector.QuestionBridge | und
   return questionBridge !== undefined && questionBridge.kind !== "none";
 }
 
+function effectiveQuestionBridge(
+  questionBridge: AppConnector.QuestionBridge | undefined,
+  bridgeStarted: boolean,
+): AppConnector.QuestionBridge | undefined {
+  if (!questionBridgeEnabled(questionBridge)) return questionBridge;
+  return bridgeStarted ? questionBridge : { kind: "none" };
+}
+
 async function runSpawn(
   spawn: AppConnector.Spawn,
   questionBridge: AppConnector.QuestionBridge | undefined,
@@ -128,6 +136,7 @@ async function runSpawn(
         handler: questionBridgeHandler,
       })
     : undefined;
+  const renderedQuestionBridge = effectiveQuestionBridge(questionBridge, bridge !== undefined);
 
   try {
     const proc = Bun.spawn(
@@ -135,7 +144,7 @@ async function runSpawn(
       {
         cwd: renderLocalCliCwd(spawn, values),
         detached: true,
-        env: renderLocalCliEnv(spawn, questionBridge, values, credentialEnv, bridge?.env),
+        env: renderLocalCliEnv(spawn, renderedQuestionBridge, values, credentialEnv, bridge?.env),
         stdout: "pipe",
         stderr: "pipe",
       },

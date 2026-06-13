@@ -58,7 +58,11 @@ function createQuestionBridgeHandler(
       },
     );
     const parsed = residentAskHandlerOutput.safeParse(result);
-    if (!parsed.success) throw new Error("resident.ask returned an invalid question response");
+    if (!parsed.success) {
+      throw new Error(
+        `resident.ask returned an invalid question response: ${parsed.error.message}`,
+      );
+    }
     return parsed.data.output.output;
   };
 }

@@ -166,7 +166,9 @@ describe("createLocalCliAgentRuntime", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
 
     // When
-    const result = await dispatchRuntime(definition, workspaceRoot);
+    const result = await dispatchRuntime(definition, workspaceRoot, {
+      questionBridge: async () => "unused",
+    });
 
     // Then
     expect(result).toMatchObject({
@@ -282,7 +284,9 @@ describe("createLocalCliAgentRuntime", () => {
     } satisfies AppConnector.Definition;
 
     // When
-    const result = await dispatchRuntime(definition, workspaceRoot);
+    const result = await dispatchRuntime(definition, workspaceRoot, {
+      questionBridge: async () => "unused",
+    });
 
     // Then
     expect(result).toMatchObject({
@@ -328,7 +332,9 @@ describe("createLocalCliAgentRuntime", () => {
     });
 
     // When
-    const result = await dispatchRuntime(definition, workspaceRoot);
+    const result = await dispatchRuntime(definition, workspaceRoot, {
+      questionBridge: async () => "unused",
+    });
 
     // Then
     expect(result).toMatchObject({
@@ -375,7 +381,9 @@ describe("createLocalCliAgentRuntime", () => {
     } satisfies AppConnector.Definition;
 
     // When
-    const result = await dispatchRuntime(definition, workspaceRoot);
+    const result = await dispatchRuntime(definition, workspaceRoot, {
+      questionBridge: async () => "unused",
+    });
 
     // Then
     expect(result).toMatchObject({
@@ -419,6 +427,7 @@ describe("createLocalCliAgentRuntime", () => {
         OPENOMNI_QUESTION_BRIDGE_KIND: "credential-kind",
         FAKE_API_KEY: "secret-value",
       },
+      questionBridge: async () => "unused",
     }).dispatch({
       command: command(),
       executionRequest: request(workspaceRoot),
