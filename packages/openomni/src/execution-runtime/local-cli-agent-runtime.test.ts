@@ -299,6 +299,77 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.output).not.toContain("connector-should-not-override");
   });
 
+  test("answers hook question bridge requests through the runtime handler", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-question-handler");
+    const scriptPath = join(workspaceRoot, "fake-question-handler.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "const url = process.env.OPENOMNI_QUESTION_BRIDGE_URL;",
+        "const token = process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN;",
+        "if (!url || !token) throw new Error('missing question bridge transport');",
+        "const response = await fetch(url, {",
+        "  method: 'POST',",
+        "  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+        "  body: JSON.stringify({ prompt: 'Approve filesystem write?' }),",
+        "});",
+        "if (!response.ok) throw new Error(await response.text());",
+        "console.log(JSON.stringify({",
+        "  answer: await response.text(),",
+        "  runId: process.env.OPENOMNI_QUESTION_BRIDGE_RUN_ID,",
+        "  sessionId: process.env.OPENOMNI_QUESTION_BRIDGE_SESSION_ID,",
+        "  residentSessionId: process.env.OPENOMNI_QUESTION_BRIDGE_RESIDENT_SESSION_ID,",
+        "}));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath]),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+    const requests: Array<{
+      readonly runId: string;
+      readonly sessionId: string;
+      readonly residentSessionId: string;
+      readonly prompt: string;
+    }> = [];
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot, {
+      questionBridge: async (request) => {
+        requests.push({
+          runId: request.runId,
+          sessionId: request.sessionId,
+          residentSessionId: request.residentSessionId,
+          prompt: request.prompt,
+        });
+        return "approved by resident";
+      },
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+    });
+    expect(requests).toEqual([
+      {
+        runId: "run_fake",
+        sessionId: "ses_fake",
+        residentSessionId: "ses_fake",
+        prompt: "Approve filesystem write?",
+      },
+    ]);
+    expect(result.output).toContain('"answer":"approved by resident"');
+    expect(result.output).toContain('"runId":"run_fake"');
+    expect(result.output).toContain('"sessionId":"ses_fake"');
+    expect(result.output).toContain('"residentSessionId":"ses_fake"');
+  });
+
   test("materializes disabled question bridge metadata for connectors without a bridge", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-question-none");
@@ -312,6 +383,8 @@ describe("createLocalCliAgentRuntime", () => {
         "  args: process.env.OPENOMNI_QUESTION_BRIDGE_ARGS_JSON ?? null,",
         "  promptField: process.env.OPENOMNI_QUESTION_BRIDGE_PROMPT_FIELD ?? null,",
         "  responseMode: process.env.OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE ?? null,",
+        "  url: process.env.OPENOMNI_QUESTION_BRIDGE_URL ?? null,",
+        "  token: process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN ?? null,",
         "}));",
       ].join("\n"),
     );
@@ -338,6 +411,8 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.output).toContain('"args":null');
     expect(result.output).toContain('"promptField":null');
     expect(result.output).toContain('"responseMode":null');
+    expect(result.output).toContain('"url":null');
+    expect(result.output).toContain('"token":null');
     expect(result.output).not.toContain("connector-");
   });
 

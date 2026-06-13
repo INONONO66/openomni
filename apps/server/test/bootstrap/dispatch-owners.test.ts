@@ -1,11 +1,32 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import type { DispatchOwners } from "@openomni/openomni";
+import { PendingAskStore, Session, Storage } from "@openomni/session";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
 const tempRoots: string[] = [];
+
+beforeEach(() => {
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  Session.storage.set("ses_fake", {
+    id: "ses_fake",
+    title: "Fake CLI session",
+    model: { providerID: "anthropic", modelID: "claude-test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 1,
+    parentSessionId: "ses_resident",
+  });
+  Session.storage.set("ses_resident", {
+    id: "ses_resident",
+    title: "Resident session",
+    model: { providerID: "anthropic", modelID: "claude-test" },
+    time: { created: 1, updated: 1 },
+    spawnDepth: 0,
+  });
+});
 
 afterEach(() => {
   for (const tempRoot of tempRoots.splice(0)) {
@@ -192,5 +213,62 @@ describe("createServerDispatchOwners", () => {
     expect(result.output).toContain('"echo":"[REDACTED]"');
     expect(result.output).not.toContain("server-secret");
     expect(result.output).toContain('"ungranted":null');
+  });
+
+  test("routes local CLI question bridge requests through resident.ask", async () => {
+    const workspaceRoot = tempDir("server-dispatch-owner-question-bridge");
+    const scriptPath = join(workspaceRoot, "fake-question-cli.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "const url = process.env.OPENOMNI_QUESTION_BRIDGE_URL;",
+        "const token = process.env.OPENOMNI_QUESTION_BRIDGE_TOKEN;",
+        "if (!url || !token) throw new Error('missing question bridge transport');",
+        "const response = await fetch(url, {",
+        "  method: 'POST',",
+        "  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+        "  body: JSON.stringify({ prompt: 'May I edit the file?' }),",
+        "});",
+        "if (!response.ok) throw new Error(await response.text());",
+        "console.log(await response.text());",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath]),
+      questionBridge: {
+        kind: "hook",
+        command: "openomni-question-hook",
+        responseMode: "stdout",
+      },
+    } satisfies AppConnector.Definition;
+    const owners = createServerDispatchOwners({
+      coordinator: coordinator(),
+      residentRuntime: residentRuntime(),
+      model: { providerID: "anthropic", id: "claude-test" },
+    });
+    const runtime = owners.localCliAgentRuntime;
+    if (runtime === undefined) {
+      expect.unreachable("server dispatch owners must include a local CLI runtime");
+    }
+
+    const result = await runtime.dispatch({
+      command: {
+        ...command(),
+        target: {
+          kind: "worker",
+          id: "app.fake-cli",
+          executorKind: "local_cli_agent",
+          parentSessionId: "ses_resident",
+        },
+      },
+      executionRequest: request(workspaceRoot),
+      installation: installation(definition),
+    });
+
+    expect(result).toMatchObject({
+      status: "succeeded",
+      output: "resident result",
+    });
+    expect(PendingAskStore.list(["answered"])).toHaveLength(1);
   });
 });

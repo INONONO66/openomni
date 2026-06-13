@@ -10,8 +10,13 @@ import {
   resolveLocalCliCredentialEnv,
 } from "./local-cli-agent-env.js";
 import { ingestLocalCliLogs, type LocalCliLogIngestion } from "./local-cli-agent-log.js";
+import {
+  startLocalCliQuestionBridgeServer,
+  type LocalCliQuestionBridgeHandler,
+} from "./local-cli-question-bridge.js";
 
 export type { LocalCliCredentialMap } from "./local-cli-agent-env.js";
+export type { LocalCliQuestionBridgeHandler } from "./local-cli-question-bridge.js";
 
 export interface LocalCliAgentRuntimeDispatchInput {
   readonly command: Dispatch.Command;
@@ -21,6 +26,7 @@ export interface LocalCliAgentRuntimeDispatchInput {
 
 export interface LocalCliAgentRuntimeOptions {
   readonly credentials?: LocalCliCredentialMap;
+  readonly questionBridge?: LocalCliQuestionBridgeHandler;
 }
 
 export interface LocalCliAgentRuntime {
@@ -96,14 +102,32 @@ function redactOutcome(outcome: SpawnOutcome, redactions: readonly string[]): Sp
   };
 }
 
+function resolveResidentSessionId(command: Dispatch.Command, request: Execution.Request): string {
+  return command.target.parentSessionId ?? command.actor.sessionId ?? request.sessionId;
+}
+
+function questionBridgeEnabled(questionBridge: AppConnector.QuestionBridge | undefined): boolean {
+  return questionBridge !== undefined && questionBridge.kind !== "none";
+}
+
 async function runSpawn(
   spawn: AppConnector.Spawn,
   questionBridge: AppConnector.QuestionBridge | undefined,
   values: LocalCliTemplateValues,
   credentialEnv: Record<string, string>,
-): Promise<SpawnOutcome> {
+  questionBridgeHandler: LocalCliQuestionBridgeHandler | undefined,
+  residentSessionId: string,
+): Promise<{ readonly outcome: SpawnOutcome; readonly redactions: readonly string[] }> {
   let timedOut = false;
   const timeoutMs = spawn.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const bridge = questionBridgeEnabled(questionBridge)
+    ? startLocalCliQuestionBridgeServer({
+        runId: values.runId,
+        sessionId: values.sessionId,
+        residentSessionId,
+        handler: questionBridgeHandler,
+      })
+    : undefined;
 
   try {
     const proc = Bun.spawn(
@@ -111,7 +135,7 @@ async function runSpawn(
       {
         cwd: renderLocalCliCwd(spawn, values),
         detached: true,
-        env: renderLocalCliEnv(spawn, questionBridge, values, credentialEnv),
+        env: renderLocalCliEnv(spawn, questionBridge, values, credentialEnv, bridge?.env),
         stdout: "pipe",
         stderr: "pipe",
       },
@@ -130,16 +154,22 @@ async function runSpawn(
       ]);
       if (timedOut) {
         return {
-          status: "interrupted",
-          stdout,
-          stderr: stderr || `local CLI process timed out after ${timeoutMs}ms`,
+          outcome: {
+            status: "interrupted",
+            stdout,
+            stderr: stderr || `local CLI process timed out after ${timeoutMs}ms`,
+          },
+          redactions: bridge?.redactions ?? [],
         };
       }
       return {
-        status: exitCode === 0 ? "succeeded" : "failed",
-        stdout,
-        stderr,
-        exitCode,
+        outcome: {
+          status: exitCode === 0 ? "succeeded" : "failed",
+          stdout,
+          stderr,
+          exitCode,
+        },
+        redactions: bridge?.redactions ?? [],
       };
     } finally {
       clearTimeout(timer);
@@ -147,13 +177,18 @@ async function runSpawn(
   } catch (error) {
     if (error instanceof Error) {
       return {
-        status: "failed",
-        stdout: "",
-        stderr: "",
-        error: error.message,
+        outcome: {
+          status: "failed",
+          stdout: "",
+          stderr: "",
+          error: error.message,
+        },
+        redactions: bridge?.redactions ?? [],
       };
     }
     throw error;
+  } finally {
+    bridge?.close();
   }
 }
 
@@ -182,21 +217,22 @@ export function createLocalCliAgentRuntime(
           error: credentialEnv.error,
         };
       }
-      const outcome = redactOutcome(
-        await runSpawn(
-          input.installation.definition.spawn,
-          input.installation.definition.questionBridge,
-          values,
-          credentialEnv.env,
-        ),
-        credentialEnv.redactions,
+      const spawned = await runSpawn(
+        input.installation.definition.spawn,
+        input.installation.definition.questionBridge,
+        values,
+        credentialEnv.env,
+        options.questionBridge,
+        resolveResidentSessionId(input.command, request),
       );
+      const redactions = [...credentialEnv.redactions, ...spawned.redactions];
+      const outcome = redactOutcome(spawned.outcome, redactions);
       const logIngestion = await ingestLocalCliLogs({
         connector: input.installation.definition,
         runId: request.runId,
         sessionId: request.sessionId,
         values,
-        redactions: credentialEnv.redactions,
+        redactions,
         stdout: outcome.stdout,
         stderr: outcome.stderr,
       });
