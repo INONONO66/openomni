@@ -1,17 +1,17 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 import type { AppConnector, Execution } from "@openomni/protocol";
 import { Artifact } from "@openomni/session";
 import {
   type LocalCliTemplateValues,
   redactLocalCliCredentialValues,
-  renderLocalCliTemplate,
 } from "./local-cli-agent-env.js";
+import { newestLocalCliGlobMatch, resolveLocalCliLogPath } from "./local-cli-agent-log-path.js";
 import {
   aggregateLocalCliLogUsage,
   buildLocalCliLogEvent,
 } from "./local-cli-agent-log-telemetry.js";
+
+export { encodeWorkspaceForClaudeProjects } from "./local-cli-agent-log-path.js";
 
 type ExecutionArtifact = NonNullable<Execution.Result["artifacts"]>[number];
 type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
@@ -75,50 +75,13 @@ async function readLogContent(
   if (pathTemplate === "stdout") return input.stdout;
   if (pathTemplate === "stderr") return input.stderr;
 
-  const path = resolveLogPath(pathTemplate, input.values);
+  const path = resolveLocalCliLogPath(pathTemplate, input.values);
   if (path.includes("*")) {
-    const match = newestGlobMatch(path);
+    const match = newestLocalCliGlobMatch(path);
     return match === undefined ? undefined : Bun.file(match).text();
   }
   if (!existsSync(path)) return undefined;
   return Bun.file(path).text();
-}
-
-function resolveLogPath(pathTemplate: string, values: LocalCliTemplateValues): string {
-  const workspaceKey =
-    values.worktree === undefined ? "" : encodeWorkspaceForClaudeProjects(values.worktree);
-  const withWorkspace = pathTemplate.split("{{workspaceHash}}").join(workspaceKey);
-  const rendered = renderLocalCliTemplate(withWorkspace, values);
-  if (rendered === "~") return homeDir();
-  if (rendered.startsWith("~/")) return join(homeDir(), rendered.slice(2));
-  return rendered;
-}
-
-function homeDir(): string {
-  return process.env.HOME ?? homedir();
-}
-
-function newestGlobMatch(path: string): string | undefined {
-  const dir = dirname(path);
-  const filePattern = basename(path);
-  if (!existsSync(dir)) return undefined;
-  const regex = new RegExp(`^${escapeRegExp(filePattern).split("\\*").join(".*")}$`);
-  return readdirSync(dir)
-    .filter((entry) => regex.test(entry))
-    .map((entry) => join(dir, entry))
-    .sort((left, right) => {
-      const timeDelta = statSync(right).mtimeMs - statSync(left).mtimeMs;
-      return timeDelta === 0 ? left.localeCompare(right) : timeDelta;
-    })
-    .at(0);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export function encodeWorkspaceForClaudeProjects(workspace: string): string {
-  return workspace.split("/").join("-").split("\\").join("-");
 }
 
 function mimeTypeForLog(logs: AppConnector.Logs): string {

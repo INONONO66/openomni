@@ -112,6 +112,7 @@ export function createLocalCliAgentRuntime(
       }
       const spawned = await runLocalCliAgentProcess(
         input.installation.definition.spawn,
+        input.installation.definition.logs,
         input.installation.definition.questionBridge,
         values,
         credentialEnv.env,

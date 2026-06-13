@@ -6,6 +6,7 @@ import {
   renderLocalCliEnv,
   renderLocalCliTemplate,
 } from "./local-cli-agent-env.js";
+import { readLocalCliLogSnapshot, type LocalCliLogSnapshot } from "./local-cli-agent-log-path.js";
 import {
   startLocalCliQuestionBridgeServer,
   type LocalCliQuestionBridgeHandler,
@@ -26,6 +27,8 @@ export interface LocalCliAgentProcessResult {
 }
 
 const DEFAULT_TIMEOUT_MS = 600_000;
+const MIN_LOG_POLL_MS = 25;
+const MAX_LOG_POLL_MS = 1_000;
 
 function terminateProcess(proc: { readonly pid: number; kill(): void }): void {
   try {
@@ -78,8 +81,33 @@ function effectiveQuestionBridge(
   return bridgeStarted ? questionBridge : { kind: "none" };
 }
 
+function logPollIntervalMs(stallTimeoutMs: number): number {
+  return Math.max(MIN_LOG_POLL_MS, Math.min(MAX_LOG_POLL_MS, Math.floor(stallTimeoutMs / 4)));
+}
+
+function sameSnapshot(
+  left: LocalCliLogSnapshot | undefined,
+  right: LocalCliLogSnapshot | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return left.path === right.path && left.mtimeMs === right.mtimeMs && left.size === right.size;
+}
+
+function safeReadLogSnapshot(
+  pathTemplate: string,
+  values: LocalCliTemplateValues,
+): LocalCliLogSnapshot | undefined {
+  try {
+    return readLocalCliLogSnapshot(pathTemplate, values);
+  } catch (error) {
+    if (error instanceof Error) return undefined;
+    throw error;
+  }
+}
+
 export async function runLocalCliAgentProcess(
   spawn: AppConnector.Spawn,
+  logs: AppConnector.Logs | undefined,
   questionBridge: AppConnector.QuestionBridge | undefined,
   values: LocalCliTemplateValues,
   credentialEnv: Record<string, string>,
@@ -116,13 +144,33 @@ export async function runLocalCliAgentProcess(
     };
     const timeoutTimer = setTimeout(() => interrupt("timeout"), timeoutMs);
     let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    let logPollTimer: ReturnType<typeof setInterval> | undefined;
     const resetStallTimer = () => {
       if (spawn.stallTimeoutMs === undefined) return;
       if (stallTimer !== undefined) clearTimeout(stallTimer);
       stallTimer = setTimeout(() => interrupt("stall_timeout"), spawn.stallTimeoutMs);
     };
+    const startLogActivityPolling = () => {
+      if (
+        spawn.stallTimeoutMs === undefined ||
+        logs === undefined ||
+        logs.path === "stdout" ||
+        logs.path === "stderr"
+      ) {
+        return;
+      }
+      let previous = safeReadLogSnapshot(logs.path, values);
+      logPollTimer = setInterval(() => {
+        const next = safeReadLogSnapshot(logs.path, values);
+        if (!sameSnapshot(previous, next)) {
+          previous = next;
+          resetStallTimer();
+        }
+      }, logPollIntervalMs(spawn.stallTimeoutMs));
+    };
 
     resetStallTimer();
+    startLogActivityPolling();
     try {
       const [stdout, stderr, exitCode] = await Promise.all([
         readStream(proc.stdout, resetStallTimer),
@@ -154,6 +202,7 @@ export async function runLocalCliAgentProcess(
     } finally {
       clearTimeout(timeoutTimer);
       if (stallTimer !== undefined) clearTimeout(stallTimer);
+      if (logPollTimer !== undefined) clearInterval(logPollTimer);
     }
   } catch (error) {
     if (error instanceof Error) {

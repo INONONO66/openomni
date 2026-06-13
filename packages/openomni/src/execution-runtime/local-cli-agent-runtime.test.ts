@@ -816,6 +816,155 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("150ms");
   });
 
+  test("uses file log activity to keep a silent local CLI alive", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-file-log-liveness");
+    const logPath = join(workspaceRoot, "agent.jsonl");
+    const scriptPath = join(workspaceRoot, "fake-file-log-liveness.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "import { appendFileSync } from 'node:fs';",
+        `const logPath = ${JSON.stringify(logPath)};`,
+        "for (const message of ['one', 'two', 'three']) {",
+        "  appendFileSync(logPath, JSON.stringify({timestamp: Date.now(), message}) + '\\n');",
+        "  await new Promise((resolve) => setTimeout(resolve, 50));",
+        "}",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {
+        timeoutMs: 1_000,
+        stallTimeoutMs: 140,
+      }),
+      logs: {
+        kind: "jsonl",
+        path: logPath,
+        eventTimeField: "timestamp",
+        messageField: "message",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      status: "succeeded",
+      finishReason: "exit_code:0",
+      output: "three",
+    });
+  });
+
+  test("uses glob log activity to keep a silent local CLI alive", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-glob-log-liveness-worktree");
+    const homeRoot = tempDir("local-cli-runtime-glob-log-liveness-home");
+    const projectDir = join(
+      homeRoot,
+      ".claude",
+      "projects",
+      encodeWorkspaceForClaudeProjects(workspaceRoot),
+    );
+    mkdirSync(projectDir, { recursive: true });
+    const logPath = join(projectDir, "session.jsonl");
+    const scriptPath = join(workspaceRoot, "fake-glob-log-liveness.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "import { appendFileSync } from 'node:fs';",
+        `const logPath = ${JSON.stringify(logPath)};`,
+        "for (const message of ['one', 'two', 'three']) {",
+        "  appendFileSync(logPath, JSON.stringify({timestamp: Date.now(), message}) + '\\n');",
+        "  await new Promise((resolve) => setTimeout(resolve, 50));",
+        "}",
+      ].join("\n"),
+    );
+    const previousHome = process.env.HOME;
+    process.env.HOME = homeRoot;
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {
+        timeoutMs: 1_000,
+        stallTimeoutMs: 140,
+      }),
+      logs: {
+        kind: "jsonl",
+        path: "~/.claude/projects/{{workspaceHash}}/*.jsonl",
+        eventTimeField: "timestamp",
+        messageField: "message",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    try {
+      // When
+      const result = await dispatchRuntime(definition, workspaceRoot);
+
+      // Then
+      expect(result).toMatchObject({
+        status: "succeeded",
+        finishReason: "exit_code:0",
+        output: "three",
+      });
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+    }
+  });
+
+  test("returns interrupted when file log activity stalls", async () => {
+    // Given
+    const workspaceRoot = tempDir("local-cli-runtime-file-log-stall");
+    const logPath = join(workspaceRoot, "agent.jsonl");
+    const scriptPath = join(workspaceRoot, "fake-file-log-stall.ts");
+    writeFileSync(
+      scriptPath,
+      [
+        "import { appendFileSync } from 'node:fs';",
+        `const logPath = ${JSON.stringify(logPath)};`,
+        "appendFileSync(logPath, JSON.stringify({timestamp: Date.now(), message: 'before stall'}) + '\\n');",
+        "await new Promise((resolve) => setTimeout(resolve, 1_000));",
+      ].join("\n"),
+    );
+    const definition = {
+      ...fakeConnector("bun", [scriptPath], {
+        timeoutMs: 1_000,
+        stallTimeoutMs: 150,
+      }),
+      logs: {
+        kind: "jsonl",
+        path: logPath,
+        eventTimeField: "timestamp",
+        messageField: "message",
+      },
+      evidence: {
+        emits: ["exit_code", "artifact", "log_event"],
+        completionReport: { finalMessage: "log" },
+      },
+    } satisfies AppConnector.Definition;
+
+    // When
+    const result = await dispatchRuntime(definition, workspaceRoot);
+
+    // Then
+    expect(result).toMatchObject({
+      status: "interrupted",
+      finishReason: "stall_timeout",
+      output: "before stall",
+    });
+    expect(result.error).toContain("stalled");
+  });
+
   test("resets the local CLI stall timer on stdout and stderr activity", async () => {
     // Given
     const workspaceRoot = tempDir("local-cli-runtime-stall-reset");
