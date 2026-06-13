@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SkillLoader, type SkillMeta } from "../../src/context/skills";
-import { _resetFindUpCache } from "../../src/context/find-up";
 
 let tempRoot: string;
 let emptyGlobalDir: string;
@@ -210,7 +209,6 @@ describe("SkillLoader.format", () => {
 describe("SkillLoader caching", () => {
   afterEach(() => {
     SkillLoader._resetCache();
-    _resetFindUpCache();
   });
 
   it("discover returns cached result on repeated calls", () => {
@@ -238,7 +236,6 @@ describe("SkillLoader caching", () => {
     expect(cached).toHaveLength(1);
 
     SkillLoader._resetCache();
-    _resetFindUpCache();
 
     const fresh = SkillLoader.discover(ws, emptyGlobalDir);
     expect(fresh).toHaveLength(2);

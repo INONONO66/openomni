@@ -37,7 +37,3 @@ export function findUp(filename: string, startDir: string): string | undefined {
   cache.set(key, undefined);
   return undefined;
 }
-
-export function _resetFindUpCache(): void {
-  cache.clear();
-}
