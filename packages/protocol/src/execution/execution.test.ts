@@ -64,6 +64,14 @@ describe("Execution", () => {
       status: "succeeded",
       output: "The answer is 4.",
       finishReason: "stop",
+      artifacts: [
+        {
+          kind: "local_cli_log",
+          artifactId: "art-log-1",
+          title: "Fake CLI log",
+          mimeType: "text/plain",
+        },
+      ],
       usage: {
         inputTokens: 50,
         outputTokens: 25,
@@ -80,6 +88,7 @@ describe("Execution", () => {
     const json = JSON.stringify(parsed);
     const reparsed = Execution.Result.parse(JSON.parse(json));
     expect(reparsed).toEqual(result);
+    expect(reparsed.artifacts?.[0]?.kind).toBe("local_cli_log");
     expect(reparsed.usage?.totalTokens).toBe(75);
     expect(reparsed.usage?.reasoningTokens).toBe(5);
   });

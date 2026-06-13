@@ -100,6 +100,48 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
     });
   });
 
+  test("records local CLI log artifacts as WorkItem evidence", async () => {
+    seedCodexInstallation("enabled");
+    const handlers = createWorkerDispatchHandlers({
+      localCliAgentRuntime: {
+        dispatch: async (request) => ({
+          runId: request.executionRequest.runId,
+          sessionId: request.executionRequest.sessionId,
+          status: "succeeded",
+          output: "done",
+          artifacts: [
+            {
+              kind: "local_cli_log",
+              artifactId: "art_cli_log",
+              title: "Codex CLI log",
+              mimeType: "text/plain",
+            },
+          ],
+        }),
+      },
+    });
+
+    const result = LocalCliWorkerSpawnOutput.parse(
+      await handlers["worker.spawn"](
+        command(
+          "worker.spawn",
+          { kind: "worker", id: "app.codex", executorKind: "local_cli_agent" },
+          workerSpawnPayload("build with codex"),
+        ),
+      ),
+    );
+
+    const workItem = WorkItemStore.get(result.output.workItemHash);
+    expect(workItem?.evidence).toMatchObject([
+      {
+        kind: "custom",
+        passed: true,
+        description: "local CLI log artifact recorded",
+      },
+    ]);
+    expect(workItem?.evidence[0]?.detail).toContain("art_cli_log");
+  });
+
   test("fails closed when an enabled matching installation exists but no runtime owner is registered", async () => {
     seedCodexInstallation("enabled");
     const handlers = createWorkerDispatchHandlers();
