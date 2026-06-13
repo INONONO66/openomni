@@ -39,6 +39,7 @@ export namespace AppConnector {
       cwd: nonEmptyString.optional(),
       env: z.record(nonEmptyString, nonEmptyString).optional(),
       timeoutMs: positiveInteger.optional(),
+      stallTimeoutMs: positiveInteger.optional(),
     })
     .strict();
   export type Spawn = z.infer<typeof Spawn>;

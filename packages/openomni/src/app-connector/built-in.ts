@@ -11,6 +11,7 @@ const evidenceEmits = [
 
 const codeTaskTypes = ["code.change", "code.review"] satisfies string[];
 const defaultCapabilities = ["git", "network", "filesystem.write"] satisfies string[];
+const defaultStallTimeoutMs = 300_000;
 
 const claudeCodeConnector: AppConnector.Definition = {
   id: "app.claude-code",
@@ -79,6 +80,7 @@ const codexConnector: AppConnector.Definition = {
     promptArgument: "{{prompt}}",
     cwd: "{{worktree}}",
     timeoutMs: 600_000,
+    stallTimeoutMs: defaultStallTimeoutMs,
   },
   logs: {
     kind: "jsonl",
@@ -126,6 +128,7 @@ const opencodeConnector: AppConnector.Definition = {
     promptArgument: "{{prompt}}",
     cwd: "{{worktree}}",
     timeoutMs: 600_000,
+    stallTimeoutMs: defaultStallTimeoutMs,
   },
   logs: {
     kind: "stream_json",
