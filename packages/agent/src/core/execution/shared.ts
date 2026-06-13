@@ -26,27 +26,6 @@ export async function resolveProviderModel(model: {
   throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
-export function getLastUserMessageText(messages: Message.WithParts[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (message?.info.role === "user") {
-      return message.parts
-        .filter((part): part is Message.TextPart => part.type === "text")
-        .map((part) => part.text)
-        .join("");
-    }
-  }
-  return null;
-}
-
-export function prependContextMessage(
-  messages: Message.WithParts[],
-  contextText: string,
-  source: string,
-): Message.WithParts[] {
-  return [createUserMessage(contextText, source), ...messages];
-}
-
 export function toMessagesWithParts(
   messages: ChatAgentInput["messages"],
   source: string,
