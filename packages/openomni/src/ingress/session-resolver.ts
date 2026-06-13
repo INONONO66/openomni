@@ -15,7 +15,7 @@ interface ResolvableEvent {
   meta?: Ingress.Meta;
 }
 
-export interface ModelConfig {
+interface ModelConfig {
   providerID: string;
   modelID: string;
 }
