@@ -138,11 +138,6 @@ export function loadConfig(configPath = DEFAULT_CONFIG_PATH): ServerConfig {
   return _config;
 }
 
-export function getConfig(): ServerConfig {
-  if (!_config) throw new Error("Config not loaded. Call loadConfig() first.");
-  return _config;
-}
-
 export function resetConfig(): void {
   _config = null;
   _configPath = null;
