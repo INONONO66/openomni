@@ -1,5 +1,6 @@
 import { Actor } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
+import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
 export interface BlacklistMatchInput {
   readonly actorId?: string;
@@ -13,18 +14,7 @@ function adapter(): Storage.Adapter["blacklist"] {
 }
 
 function requireAdapter(): NonNullable<Storage.Adapter["blacklist"]> {
-  const current = adapter();
-  if (!current) throw new Error("Storage adapter does not implement blacklist");
-  return current;
-}
-
-function withTimestamps(entry: Actor.BlacklistEntry, existing?: Actor.BlacklistEntry) {
-  const now = Date.now();
-  return {
-    ...entry,
-    createdAt: entry.createdAt ?? existing?.createdAt ?? now,
-    updatedAt: existing ? now : (entry.updatedAt ?? now),
-  };
+  return requireSubAdapter(adapter(), "Storage adapter does not implement blacklist");
 }
 
 function isActive(entry: Actor.BlacklistEntry, now: number): boolean {
@@ -63,7 +53,7 @@ export namespace BlacklistStore {
 
   export function put(input: Entry): Entry {
     const store = requireAdapter();
-    const entry = Actor.BlacklistEntry.parse(withTimestamps(input, store.get(input.id)));
+    const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id)));
     store.set(entry);
     return entry;
   }
