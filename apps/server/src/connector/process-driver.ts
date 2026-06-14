@@ -1,33 +1,30 @@
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import {
-  type LocalCliCredentialMap,
-  redactLocalCliCredentialValues,
-  resolveLocalCliCredentialEnv,
-} from "./local-cli-agent-env.js";
-import { ingestLocalCliLogs, type LocalCliLogIngestion } from "./local-cli-agent-log.js";
-import {
-  runLocalCliAgentProcess,
-  type LocalCliAgentProcessOutcome,
-} from "./local-cli-agent-process.js";
-import type { LocalCliQuestionBridgeHandler } from "./local-cli-question-bridge.js";
-import { applyLocalCliReadBackBuilders } from "./local-cli-read-back-builder.js";
+  type ConnectorEndpointCredentialMap,
+  redactConnectorCredentialValues,
+  resolveConnectorCredentialEnv,
+} from "./env.js";
+import { ingestConnectorLogs, type ConnectorLogIngestion } from "../../src/connector/log.js";
+import { runConnectorProcess, type ConnectorProcessOutcome } from "./process.js";
+import type { ConnectorQuestionBridgeHandler } from "../../src/connector/question-bridge.js";
+import { applyConnectorReadBackBuilders } from "./read-back-builder.js";
 
-export type { LocalCliCredentialMap } from "./local-cli-agent-env.js";
-export type { LocalCliQuestionBridgeHandler } from "./local-cli-question-bridge.js";
+export type { ConnectorEndpointCredentialMap } from "./env.js";
+export type { ConnectorQuestionBridgeHandler } from "../../src/connector/question-bridge.js";
 
-export interface LocalCliAgentRuntimeDispatchInput {
+export interface ConnectorEndpointProcessDriverInput {
   readonly command: Dispatch.Command;
   readonly executionRequest: Execution.Request;
   readonly installation: AppConnector.Installation;
 }
 
-export interface LocalCliAgentRuntimeOptions {
-  readonly credentials?: LocalCliCredentialMap;
-  readonly questionBridge?: LocalCliQuestionBridgeHandler;
+export interface ConnectorEndpointProcessDriverOptions {
+  readonly credentials?: ConnectorEndpointCredentialMap;
+  readonly questionBridge?: ConnectorQuestionBridgeHandler;
 }
 
-export interface LocalCliAgentRuntime {
-  dispatch(input: LocalCliAgentRuntimeDispatchInput): Promise<Execution.Result>;
+export interface ConnectorEndpointProcessDriver {
+  dispatch(input: ConnectorEndpointProcessDriverInput): Promise<Execution.Result>;
 }
 
 function trimOutput(value: string): string | undefined {
@@ -37,8 +34,8 @@ function trimOutput(value: string): string | undefined {
 
 function buildOutput(
   installation: AppConnector.Installation,
-  outcome: LocalCliAgentProcessOutcome,
-  logIngestion: LocalCliLogIngestion,
+  outcome: ConnectorProcessOutcome,
+  logIngestion: ConnectorLogIngestion,
 ): string | undefined {
   const finalMessage = installation.definition.evidence.completionReport?.finalMessage ?? "stdout";
   if (finalMessage === "stderr") return trimOutput(outcome.stderr);
@@ -46,39 +43,39 @@ function buildOutput(
   return trimOutput(outcome.stdout);
 }
 
-function buildError(outcome: LocalCliAgentProcessOutcome): string | undefined {
+function buildError(outcome: ConnectorProcessOutcome): string | undefined {
   if (outcome.error !== undefined) return outcome.error;
   const stderr = outcome.stderr.trim();
   if (outcome.status === "interrupted") {
-    return stderr || "local CLI process timed out";
+    return stderr || "connector process timed out";
   }
   if (outcome.status === "failed") {
     const exit = outcome.exitCode === undefined ? "unknown" : String(outcome.exitCode);
     return stderr
-      ? `${stderr}\nlocal CLI process exited with code ${exit}`
-      : `local CLI process exited with code ${exit}`;
+      ? `${stderr}\nconnector process exited with code ${exit}`
+      : `connector process exited with code ${exit}`;
   }
   return stderr.length === 0 ? undefined : stderr;
 }
 
-function buildFinishReason(outcome: LocalCliAgentProcessOutcome): string {
+function buildFinishReason(outcome: ConnectorProcessOutcome): string {
   if (outcome.exitCode !== undefined) return `exit_code:${outcome.exitCode}`;
   if (outcome.status === "interrupted") return outcome.interruptionReason ?? "timeout";
   return "spawn_error";
 }
 
 function redactOutcome(
-  outcome: LocalCliAgentProcessOutcome,
+  outcome: ConnectorProcessOutcome,
   redactions: readonly string[],
-): LocalCliAgentProcessOutcome {
+): ConnectorProcessOutcome {
   if (redactions.length === 0) return outcome;
   return {
     ...outcome,
-    stdout: redactLocalCliCredentialValues(outcome.stdout, redactions),
-    stderr: redactLocalCliCredentialValues(outcome.stderr, redactions),
+    stdout: redactConnectorCredentialValues(outcome.stdout, redactions),
+    stderr: redactConnectorCredentialValues(outcome.stderr, redactions),
     ...(outcome.error === undefined
       ? {}
-      : { error: redactLocalCliCredentialValues(outcome.error, redactions) }),
+      : { error: redactConnectorCredentialValues(outcome.error, redactions) }),
   };
 }
 
@@ -86,19 +83,29 @@ function resolveResidentSessionId(command: Dispatch.Command, request: Execution.
   return command.target.parentSessionId ?? command.actor.sessionId ?? request.sessionId;
 }
 
-export function createLocalCliAgentRuntime(
-  options: LocalCliAgentRuntimeOptions = {},
-): LocalCliAgentRuntime {
+export function createConnectorEndpointProcessDriver(
+  options: ConnectorEndpointProcessDriverOptions = {},
+): ConnectorEndpointProcessDriver {
   return {
     async dispatch(input): Promise<Execution.Result> {
       const request = input.executionRequest;
+      const worktree = request.workspaceRoot;
+      if (worktree === undefined || worktree.length === 0) {
+        return {
+          runId: request.runId,
+          sessionId: request.sessionId,
+          status: "failed",
+          finishReason: "worktree_unavailable",
+          error: "connector endpoint process driver requires workspaceRoot worktree",
+        };
+      }
       const values = {
         prompt: request.prompt,
-        worktree: request.workspaceRoot,
+        worktree,
         runId: request.runId,
         sessionId: request.sessionId,
       };
-      const credentialEnv = resolveLocalCliCredentialEnv(
+      const credentialEnv = resolveConnectorCredentialEnv(
         input.installation,
         options.credentials ?? {},
       );
@@ -111,7 +118,7 @@ export function createLocalCliAgentRuntime(
           error: credentialEnv.error,
         };
       }
-      const spawned = await runLocalCliAgentProcess(
+      const spawned = await runConnectorProcess(
         input.installation.definition.spawn,
         input.installation.definition.logs,
         input.installation.definition.questionBridge,
@@ -122,7 +129,7 @@ export function createLocalCliAgentRuntime(
       );
       const redactions = [...credentialEnv.redactions, ...spawned.redactions];
       const outcome = redactOutcome(spawned.outcome, redactions);
-      const logIngestion = await ingestLocalCliLogs({
+      const logIngestion = await ingestConnectorLogs({
         connector: input.installation.definition,
         runId: request.runId,
         sessionId: request.sessionId,
@@ -134,7 +141,7 @@ export function createLocalCliAgentRuntime(
       const output = buildOutput(input.installation, outcome, logIngestion);
       const builtOutput =
         outcome.status === "succeeded"
-          ? applyLocalCliReadBackBuilders({
+          ? applyConnectorReadBackBuilders({
               connector: input.installation.definition,
               output,
               values,

@@ -46,17 +46,14 @@ describe("dispatch tool", () => {
     expect(schema).toContain("acceptanceCriteria");
   });
 
-  test("public schema exposes worker executor kinds", () => {
+  test("public schema exposes connector endpoint selectors", () => {
     const provider = new AgentToolProvider();
     const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
     const schema = JSON.stringify(tool?.spec.inputSchema);
 
-    expect(schema).toContain("executorKind");
-    expect(schema).toContain("internal_chat_agent");
-    expect(schema).toContain("local_cli_agent");
-    expect(schema).toContain("external_api");
-    expect(schema).toContain("a2a");
-    expect(schema).toContain("human_channel");
+    expect(schema).toContain("endpointId");
+    expect(schema).toContain("connectorInstallationId");
+    expect(schema).not.toContain("executorKind");
   });
 
   test("executes through runtime with implicit context", async () => {
@@ -106,7 +103,7 @@ describe("dispatch tool", () => {
     });
   });
 
-  test("passes worker executor kind through runtime submission", async () => {
+  test("passes worker endpoint selectors through runtime submission", async () => {
     let capturedInput: Dispatch.Input | undefined;
     const tool = createDispatchTool({
       async submit(input) {
@@ -118,10 +115,15 @@ describe("dispatch tool", () => {
     const response = await tool.execute(
       call({
         action: "worker.spawn",
-        target: { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+        target: {
+          kind: "worker",
+          name: "cli-coder",
+          endpointId: "endpoint:install:codex",
+          connectorInstallationId: "install:codex",
+        },
         payload: {
-          text: "build with a local CLI agent",
-          acceptanceCriteria: ["ledger unsupported executor"],
+          text: "build with a connector endpoint",
+          acceptanceCriteria: ["ledger connector endpoint dispatch"],
         },
       }),
     );
@@ -129,15 +131,20 @@ describe("dispatch tool", () => {
     expect(response.isError).toBeUndefined();
     expect(capturedInput).toEqual({
       action: "worker.spawn",
-      target: { kind: "worker", name: "cli-coder", executorKind: "local_cli_agent" },
+      target: {
+        kind: "worker",
+        name: "cli-coder",
+        endpointId: "endpoint:install:codex",
+        connectorInstallationId: "install:codex",
+      },
       payload: {
-        text: "build with a local CLI agent",
-        acceptanceCriteria: ["ledger unsupported executor"],
+        text: "build with a connector endpoint",
+        acceptanceCriteria: ["ledger connector endpoint dispatch"],
       },
     });
   });
 
-  test("rejects executor kind on non-worker targets before runtime submission", async () => {
+  test("rejects stale executorKind selector before runtime submission", async () => {
     let called = false;
     const tool = createDispatchTool({
       async submit() {
@@ -149,13 +156,13 @@ describe("dispatch tool", () => {
     const response = await tool.execute(
       call({
         action: "resident.ask",
-        target: { kind: "resident", executorKind: "local_cli_agent" },
+        target: { kind: "resident", executorKind: "connector_endpoint" },
         payload: "hello",
       }),
     );
 
     expect(response.isError).toBe(true);
-    expect(response.output).toContain("executorKind is only supported for worker targets");
+    expect(response.output).toContain("Unrecognized key");
     expect(called).toBe(false);
   });
 

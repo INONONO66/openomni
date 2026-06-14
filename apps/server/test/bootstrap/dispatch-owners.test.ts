@@ -56,7 +56,7 @@ function fakeConnector(
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent from server bootstrap owners",
+    description: "Runs a fake connector endpoint from server bootstrap owners",
     detect: {
       command,
       testedVersions: ">=1.0.0 <2.0.0",
@@ -75,8 +75,15 @@ function fakeConnector(
     requires: {
       ...requiresOverrides,
     },
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: ["permission"], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
     },
   };
@@ -90,6 +97,7 @@ function installation(
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -102,9 +110,9 @@ function installation(
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -176,7 +184,7 @@ function failingResidentRuntime(): NonNullable<DispatchOwners["residentRuntime"]
 }
 
 describe("createServerDispatchOwners", () => {
-  test("injects a default local CLI owner that can dispatch an enabled connector", async () => {
+  test("injects a default connector endpoint driver that can dispatch an enabled connector", async () => {
     const workspaceRoot = tempDir("server-dispatch-owners");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(
@@ -197,9 +205,9 @@ describe("createServerDispatchOwners", () => {
     });
 
     expect(owners.defaultModel).toEqual({ provider: "anthropic", id: "claude-test" });
-    const runtime = owners.localCliAgentRuntime;
+    const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {
-      expect.unreachable("server dispatch owners must include a local CLI runtime");
+      expect.unreachable("server dispatch owners must include a connector endpoint driver");
     }
 
     const result = await runtime.dispatch({
@@ -213,7 +221,7 @@ describe("createServerDispatchOwners", () => {
     expect(result.output).toContain('"prompt":"ship it"');
   });
 
-  test("passes only consented server credentials to the default local CLI owner", async () => {
+  test("passes only consented server credentials to the default connector endpoint driver", async () => {
     const workspaceRoot = tempDir("server-dispatch-owner-credentials");
     const scriptPath = join(workspaceRoot, "fake-credential-cli.ts");
     writeFileSync(
@@ -229,9 +237,9 @@ describe("createServerDispatchOwners", () => {
         UNGRANTED_API_KEY: "must-not-leak",
       },
     });
-    const runtime = owners.localCliAgentRuntime;
+    const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {
-      expect.unreachable("server dispatch owners must include a local CLI runtime");
+      expect.unreachable("server dispatch owners must include a connector endpoint driver");
     }
 
     const definition = fakeConnector("bun", [scriptPath], { credentials: ["FAKE_API_KEY"] });
@@ -248,7 +256,7 @@ describe("createServerDispatchOwners", () => {
     expect(result.output).toContain('"ungranted":null');
   });
 
-  test("routes local CLI question bridge requests through resident.ask", async () => {
+  test("routes connector question bridge requests through resident.ask", async () => {
     const eventNames: string[] = [];
     const unsubscribe = Bus.observe((event) => {
       if (event.name.startsWith("dispatch.")) eventNames.push(event.name);
@@ -284,9 +292,9 @@ describe("createServerDispatchOwners", () => {
       residentRuntime: residentRuntime(residentCalls),
       model: { providerID: "anthropic", id: "claude-test" },
     });
-    const runtime = owners.localCliAgentRuntime;
+    const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {
-      expect.unreachable("server dispatch owners must include a local CLI runtime");
+      expect.unreachable("server dispatch owners must include a connector endpoint driver");
     }
 
     try {
@@ -296,7 +304,7 @@ describe("createServerDispatchOwners", () => {
           target: {
             kind: "worker",
             id: "app.fake-cli",
-            executorKind: "local_cli_agent",
+            endpointId: "endpoint:install:fake-cli",
             parentSessionId: "ses_resident",
           },
         },
@@ -312,7 +320,7 @@ describe("createServerDispatchOwners", () => {
       expect(residentCalls).toEqual([
         {
           sessionId: "ses_resident",
-          payload: "Local CLI worker run run_fake asks Resident:\n\nMay I edit the file?",
+          payload: "Connector worker run run_fake asks Resident:\n\nMay I edit the file?",
           actorRole: "worker",
           actorSessionId: "ses_fake",
           actorRunId: "run_fake",
@@ -366,9 +374,9 @@ describe("createServerDispatchOwners", () => {
       residentRuntime: failingResidentRuntime(),
       model: { providerID: "anthropic", id: "claude-test" },
     });
-    const runtime = owners.localCliAgentRuntime;
+    const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {
-      expect.unreachable("server dispatch owners must include a local CLI runtime");
+      expect.unreachable("server dispatch owners must include a connector endpoint driver");
     }
 
     const result = await runtime.dispatch({
@@ -377,7 +385,7 @@ describe("createServerDispatchOwners", () => {
         target: {
           kind: "worker",
           id: "app.fake-cli",
-          executorKind: "local_cli_agent",
+          endpointId: "endpoint:install:fake-cli",
           parentSessionId: "ses_resident",
         },
       },

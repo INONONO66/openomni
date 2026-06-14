@@ -66,7 +66,7 @@ describe("Execution", () => {
       finishReason: "stop",
       artifacts: [
         {
-          kind: "local_cli_log",
+          kind: "connector_log",
           artifactId: "art-log-1",
           title: "Fake CLI log",
           mimeType: "text/plain",
@@ -74,7 +74,7 @@ describe("Execution", () => {
       ],
       logEvents: [
         {
-          kind: "local_cli_log_event",
+          kind: "connector_log_event",
           artifactId: "art-log-1",
           message: "completed",
           timestamp: "1700000000000",

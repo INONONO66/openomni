@@ -21,6 +21,15 @@ export namespace AppConnector {
   export const InitialAutonomy = z.enum(["approval_required", "supervised", "autonomous"]);
   export type InitialAutonomy = z.infer<typeof InitialAutonomy>;
 
+  export const DriverInstallScope = z.enum(["user", "workspace", "repository"]);
+  export type DriverInstallScope = z.infer<typeof DriverInstallScope>;
+
+  export const SubmitMode = z.enum(["spawn", "hook", "plugin", "api"]);
+  export type SubmitMode = z.infer<typeof SubmitMode>;
+
+  export const SubmitAck = z.enum(["submitted", "accepted", "running"]);
+  export type SubmitAck = z.infer<typeof SubmitAck>;
+
   export const Detect = z
     .object({
       command: nonEmptyString,
@@ -165,9 +174,31 @@ export namespace AppConnector {
     .strict();
   export type Requires = z.infer<typeof Requires>;
 
+  export const Driver = z
+    .object({
+      provider: nonEmptyString,
+      install: z
+        .object({
+          scopes: z.array(DriverInstallScope).min(1),
+          hooks: z.array(nonEmptyString).optional(),
+          plugins: z.array(nonEmptyString).optional(),
+        })
+        .strict(),
+      submit: z
+        .object({
+          mode: SubmitMode,
+          ack: SubmitAck,
+        })
+        .strict(),
+      observedEvents: z.array(nonEmptyString).default([]),
+      emits: z.array(EvidenceEmitter).default([]),
+    })
+    .strict();
+  export type Driver = z.infer<typeof Driver>;
+
   export const Profile = z
     .object({
-      executorKind: z.literal("local_cli_agent"),
+      kind: z.literal("connector_endpoint"),
       taskTypes: z.array(nonEmptyString).min(1),
       defaultTimeoutMs: positiveInteger.optional(),
       defaultMaxAttempts: positiveInteger.optional(),
@@ -186,6 +217,7 @@ export namespace AppConnector {
       spawn: Spawn,
       logs: Logs.optional(),
       questionBridge: QuestionBridge.optional(),
+      driver: Driver,
       evidence: Evidence,
       requires: Requires,
       profile: Profile,
@@ -214,16 +246,28 @@ export namespace AppConnector {
     .strict();
   export type Consent = z.infer<typeof Consent>;
 
+  export const WorkspaceIdentity = z
+    .object({
+      repoPath: nonEmptyString,
+      worktreePath: nonEmptyString,
+      repoPathHash: nonEmptyString,
+      worktreePathHash: nonEmptyString,
+    })
+    .strict();
+  export type WorkspaceIdentity = z.infer<typeof WorkspaceIdentity>;
+
   export const Installation = z
     .object({
       id: nonEmptyString,
       connectorId: nonEmptyString,
       connectorVersion: nonEmptyString,
+      endpointId: nonEmptyString,
       definition: Definition,
       detectedVersion: nonEmptyString.optional(),
       testedVersions: nonEmptyString,
       status: InstallationStatus,
       registeredBy: nonEmptyString,
+      workspace: WorkspaceIdentity.optional(),
       consent: Consent.optional(),
       createdAt: positiveInteger,
       updatedAt: positiveInteger,

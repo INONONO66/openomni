@@ -129,7 +129,7 @@ export namespace WorkItem {
 
   export const ExecutorKind = z.enum([
     "internal_chat_agent",
-    "local_cli_agent",
+    "connector_endpoint",
     "external_api",
     "a2a",
     "human_channel",

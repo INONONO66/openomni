@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
-import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
+import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
 
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function tempDir(name: string): string {
-  const path = join(import.meta.dir, "..", "..", "test", ".tmp", name, crypto.randomUUID());
+  const path = join(import.meta.dir, "..", ".tmp", name, crypto.randomUUID());
   mkdirSync(path, { recursive: true });
   tempRoots.push(path);
   return path;
@@ -41,7 +41,7 @@ function fakeConnector(
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent",
+    description: "Runs a fake connector endpoint",
     detect: {
       command,
       testedVersions: ">=1.0.0 <2.0.0",
@@ -58,8 +58,15 @@ function fakeConnector(
       completionReport: { finalMessage: "stdout" },
     },
     requires: {},
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: ["permission"], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
     },
   };
@@ -70,6 +77,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -82,9 +90,9 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -105,18 +113,18 @@ function request(workspaceRoot: string): Execution.Request {
 function dispatchRuntime(
   definition: AppConnector.Definition,
   workspaceRoot: string,
-  options: Parameters<typeof createLocalCliAgentRuntime>[0] = {},
+  options: Parameters<typeof createConnectorEndpointProcessDriver>[0] = {},
 ): Promise<Execution.Result> {
-  return createLocalCliAgentRuntime(options).dispatch({
+  return createConnectorEndpointProcessDriver(options).dispatch({
     command: command(),
     executionRequest: request(workspaceRoot),
     installation: installation(definition),
   });
 }
 
-describe("local CLI question bridge", () => {
+describe("connector process question bridge", () => {
   test("answers hook question bridge requests through the runtime handler", async () => {
-    const workspaceRoot = tempDir("local-cli-question-hook");
+    const workspaceRoot = tempDir("connector-question-hook");
     const scriptPath = join(workspaceRoot, "fake-question-hook.ts");
     writeFileSync(
       scriptPath,
@@ -148,7 +156,7 @@ describe("local CLI question bridge", () => {
   });
 
   test("answers stdio question bridge requests through the runtime handler", async () => {
-    const workspaceRoot = tempDir("local-cli-question-stdio");
+    const workspaceRoot = tempDir("connector-question-stdio");
     const scriptPath = join(workspaceRoot, "fake-question-stdio.ts");
     writeFileSync(
       scriptPath,
@@ -179,7 +187,7 @@ describe("local CLI question bridge", () => {
   });
 
   test("rejects unauthorized question bridge requests without invoking the handler", async () => {
-    const workspaceRoot = tempDir("local-cli-question-unauthorized");
+    const workspaceRoot = tempDir("connector-question-unauthorized");
     const scriptPath = join(workspaceRoot, "fake-question-unauthorized.ts");
     writeFileSync(
       scriptPath,
@@ -211,8 +219,8 @@ describe("local CLI question bridge", () => {
     expect(handlerCalls).toBe(0);
   });
 
-  test("redacts question bridge bearer tokens from local CLI output", async () => {
-    const workspaceRoot = tempDir("local-cli-question-redaction");
+  test("redacts question bridge bearer tokens from connector process output", async () => {
+    const workspaceRoot = tempDir("connector-question-redaction");
     const scriptPath = join(workspaceRoot, "fake-question-redaction.ts");
     writeFileSync(
       scriptPath,

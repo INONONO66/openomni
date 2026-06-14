@@ -118,7 +118,6 @@ export {
   buildToolCatalog,
   buildWorkerMiddleware,
   buildWorkerChildRuntimeConfig,
-  createLocalCliAgentRuntime,
   createDispatchTool,
   createToolExecutor,
   createWorkerSubagentRuntime,
@@ -141,11 +140,6 @@ export type {
   ToolSource,
   WorkerMiddlewareConfig,
   DispatchToolRuntime,
-  LocalCliCredentialMap,
-  LocalCliAgentRuntime,
-  LocalCliAgentRuntimeDispatchInput,
-  LocalCliAgentRuntimeOptions,
-  LocalCliQuestionBridgeHandler,
 } from "./execution-runtime";
 
 export { ReadBackExecutor } from "./evidence";
@@ -164,6 +158,7 @@ export {
 } from "./dispatch";
 export type {
   BuiltInDispatchOptions,
+  ConnectorEndpointDriverOwner,
   DefaultDispatchRuntimeOptions,
   DeviceDispatchHandlerOptions,
   DeviceDispatchOwner,

@@ -3,7 +3,7 @@ import { AppConnector } from "@openomni/protocol";
 import { BuiltInAppConnectors } from "../../src/index.js";
 
 describe("BuiltInAppConnectors", () => {
-  test("lists the first-party local CLI app connector definitions", () => {
+  test("lists the first-party connector endpoint definitions", () => {
     // Given
     const connectors = BuiltInAppConnectors.list();
 
@@ -24,8 +24,9 @@ describe("BuiltInAppConnectors", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.profile.executorKind).toBe("local_cli_agent");
+        expect(result.data.profile.kind).toBe("connector_endpoint");
         expect(result.data.profile.initialAutonomy).toBe("approval_required");
+        expect(result.data.driver.submit).toEqual({ mode: "spawn", ack: "accepted" });
         expect(result.data.detect.testedVersions.length).toBeGreaterThan(0);
         expect(result.data.evidence.emits).toContain("exit_code");
         expect(result.data.evidence.emits).toContain("log_event");
@@ -34,7 +35,7 @@ describe("BuiltInAppConnectors", () => {
     }
   });
 
-  test("declares verified headless spawn entrypoints for installed CLI agents", () => {
+  test("declares verified headless spawn entrypoints for installed connector endpoints", () => {
     // Given
     const claude = BuiltInAppConnectors.get("app.claude-code");
     const codex = BuiltInAppConnectors.get("app.codex");

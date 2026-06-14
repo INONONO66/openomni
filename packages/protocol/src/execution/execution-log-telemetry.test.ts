@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { Execution } from "./index.js";
 
 describe("Execution log telemetry", () => {
-  test("local CLI log events can carry normalized usage and tool calls", () => {
+  test("connector process log events can carry normalized usage and tool calls", () => {
     const event = Execution.LogEvent.parse({
-      kind: "local_cli_log_event",
+      kind: "connector_log_event",
       artifactId: "art-log",
       message: "tool completed",
       sequence: 0,

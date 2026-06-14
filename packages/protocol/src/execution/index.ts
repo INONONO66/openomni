@@ -26,8 +26,8 @@ const requestSchema = z.object({
   traceId: z.string().optional(),
 });
 
-const localCliLogEventSchema = z.object({
-  kind: z.literal("local_cli_log_event"),
+const connectorLogEventSchema = z.object({
+  kind: z.literal("connector_log_event"),
   artifactId: z.string(),
   message: z.string(),
   timestamp: z.string().optional(),
@@ -56,18 +56,18 @@ const resultSchema = z.object({
   artifacts: z
     .array(
       z.object({
-        kind: z.literal("local_cli_log"),
+        kind: z.literal("connector_log"),
         artifactId: z.string(),
         title: z.string(),
         mimeType: z.string(),
       }),
     )
     .optional(),
-  logEvents: z.array(localCliLogEventSchema).optional(),
+  logEvents: z.array(connectorLogEventSchema).optional(),
 });
 
 export namespace Execution {
-  export const LogEvent = localCliLogEventSchema;
+  export const LogEvent = connectorLogEventSchema;
   export type LogEvent = z.infer<typeof LogEvent>;
 
   export const Request = requestSchema;

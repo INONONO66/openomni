@@ -40,6 +40,7 @@ export namespace AppConnectorRegistry {
       id: installationId(candidate.id),
       connectorId: candidate.connector.id,
       connectorVersion: candidate.connector.version,
+      endpointId: endpointId(candidate.id),
       definition: candidate.connector,
       ...(candidate.version !== undefined ? { detectedVersion: candidate.version } : {}),
       testedVersions: candidate.testedVersions,
@@ -116,6 +117,10 @@ export namespace AppConnectorRegistry {
 
 function installationId(connectorId: string): string {
   return `install:${connectorId}`;
+}
+
+function endpointId(connectorId: string): string {
+  return `endpoint:${installationId(connectorId)}`;
 }
 
 function verificationFailureReason(

@@ -6,6 +6,7 @@ export type WorkerWorkItemRequest = {
   readonly prompt: string;
   readonly agentName?: string;
   readonly sessionId?: string;
+  readonly runId?: string;
 };
 
 export type WorkerSpawnLedgerPayload = {
@@ -27,6 +28,9 @@ export async function createWorkerSpawnWorkItem(
     goal: request.prompt,
     assigneeId: request.agentName,
     sessionId: request.sessionId,
+    originSessionId: command.sessionId,
+    workSessionId: request.sessionId,
+    workerRunId: request.runId,
     executorKind,
     context: command.sessionId ? `originSessionId=${command.sessionId}` : undefined,
     constraints: payload.constraints,

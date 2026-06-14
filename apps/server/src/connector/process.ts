@@ -1,18 +1,18 @@
 import type { AppConnector } from "@openomni/protocol";
 import {
-  type LocalCliTemplateValues,
-  renderLocalCliArgs,
-  renderLocalCliCwd,
-  renderLocalCliEnv,
-  renderLocalCliTemplate,
-} from "./local-cli-agent-env.js";
-import { readLocalCliLogSnapshot, type LocalCliLogSnapshot } from "./local-cli-agent-log-path.js";
+  type ConnectorTemplateValues,
+  renderConnectorArgs,
+  renderConnectorCwd,
+  renderConnectorEnv,
+  renderConnectorTemplate,
+} from "./env.js";
+import { readConnectorLogSnapshot, type ConnectorLogSnapshot } from "./log-path.js";
 import {
-  startLocalCliQuestionBridgeServer,
-  type LocalCliQuestionBridgeHandler,
-} from "./local-cli-question-bridge.js";
+  startConnectorQuestionBridgeServer,
+  type ConnectorQuestionBridgeHandler,
+} from "./question-bridge.js";
 
-export interface LocalCliAgentProcessOutcome {
+export interface ConnectorProcessOutcome {
   readonly status: "succeeded" | "failed" | "interrupted";
   readonly stdout: string;
   readonly stderr: string;
@@ -21,8 +21,8 @@ export interface LocalCliAgentProcessOutcome {
   readonly interruptionReason?: "timeout" | "stall_timeout";
 }
 
-export interface LocalCliAgentProcessResult {
-  readonly outcome: LocalCliAgentProcessOutcome;
+export interface ConnectorProcessResult {
+  readonly outcome: ConnectorProcessOutcome;
   readonly redactions: readonly string[];
 }
 
@@ -42,9 +42,9 @@ function terminateProcess(proc: { readonly pid: number; kill(): void }): void {
 
 function interruptionMessage(reason: "timeout" | "stall_timeout", timeoutMs: number): string {
   if (reason === "stall_timeout") {
-    return `local CLI process stalled after ${timeoutMs}ms without output`;
+    return `connector process stalled after ${timeoutMs}ms without output`;
   }
-  return `local CLI process timed out after ${timeoutMs}ms`;
+  return `connector process timed out after ${timeoutMs}ms`;
 }
 
 async function readStream(
@@ -86,8 +86,8 @@ function logPollIntervalMs(stallTimeoutMs: number): number {
 }
 
 function sameSnapshot(
-  left: LocalCliLogSnapshot | undefined,
-  right: LocalCliLogSnapshot | undefined,
+  left: ConnectorLogSnapshot | undefined,
+  right: ConnectorLogSnapshot | undefined,
 ): boolean {
   if (left === undefined || right === undefined) return left === right;
   return left.path === right.path && left.mtimeMs === right.mtimeMs && left.size === right.size;
@@ -95,28 +95,28 @@ function sameSnapshot(
 
 function safeReadLogSnapshot(
   pathTemplate: string,
-  values: LocalCliTemplateValues,
-): LocalCliLogSnapshot | undefined {
+  values: ConnectorTemplateValues,
+): ConnectorLogSnapshot | undefined {
   try {
-    return readLocalCliLogSnapshot(pathTemplate, values);
+    return readConnectorLogSnapshot(pathTemplate, values);
   } catch (error) {
     if (error instanceof Error) return undefined;
     throw error;
   }
 }
 
-export async function runLocalCliAgentProcess(
+export async function runConnectorProcess(
   spawn: AppConnector.Spawn,
   logs: AppConnector.Logs | undefined,
   questionBridge: AppConnector.QuestionBridge | undefined,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
   credentialEnv: Record<string, string>,
-  questionBridgeHandler: LocalCliQuestionBridgeHandler | undefined,
+  questionBridgeHandler: ConnectorQuestionBridgeHandler | undefined,
   residentSessionId: string,
-): Promise<LocalCliAgentProcessResult> {
+): Promise<ConnectorProcessResult> {
   const timeoutMs = spawn.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const bridge = questionBridgeEnabled(questionBridge)
-    ? startLocalCliQuestionBridgeServer({
+    ? startConnectorQuestionBridgeServer({
         runId: values.runId,
         sessionId: values.sessionId,
         residentSessionId,
@@ -127,11 +127,11 @@ export async function runLocalCliAgentProcess(
 
   try {
     const proc = Bun.spawn(
-      [renderLocalCliTemplate(spawn.command, values), ...renderLocalCliArgs(spawn, values)],
+      [renderConnectorTemplate(spawn.command, values), ...renderConnectorArgs(spawn, values)],
       {
-        cwd: renderLocalCliCwd(spawn, values),
+        cwd: renderConnectorCwd(spawn, values),
         detached: true,
-        env: renderLocalCliEnv(spawn, renderedQuestionBridge, values, credentialEnv, bridge?.env),
+        env: renderConnectorEnv(spawn, renderedQuestionBridge, values, credentialEnv, bridge?.env),
         stdout: "pipe",
         stderr: "pipe",
       },

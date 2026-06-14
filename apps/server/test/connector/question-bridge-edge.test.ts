@@ -3,8 +3,8 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
-import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
-import { startLocalCliQuestionBridgeServer } from "./local-cli-question-bridge.js";
+import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
+import { startConnectorQuestionBridgeServer } from "../../src/connector/question-bridge.js";
 
 const tempRoots: string[] = [];
 
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 function tempDir(name: string): string {
-  const path = join(import.meta.dir, "..", "..", "test", ".tmp", name, crypto.randomUUID());
+  const path = join(import.meta.dir, "..", ".tmp", name, crypto.randomUUID());
   mkdirSync(path, { recursive: true });
   tempRoots.push(path);
   return path;
@@ -38,13 +38,20 @@ function fakeDefinition(command: string, args: readonly string[]): AppConnector.
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent",
+    description: "Runs a fake connector endpoint",
     detect: { command, testedVersions: ">=1.0.0 <2.0.0" },
     spawn: { command, args: [...args], cwd: "{{worktree}}", timeoutMs: 1_000 },
     questionBridge: { kind: "hook", command: "openomni-question-hook" },
     evidence: { emits: ["exit_code"], completionReport: { finalMessage: "stdout" } },
     requires: {},
-    profile: { executorKind: "local_cli_agent", taskTypes: ["code.change"] },
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: ["permission"], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
+    profile: { kind: "connector_endpoint", taskTypes: ["code.change"] },
   };
 }
 
@@ -53,6 +60,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -65,9 +73,9 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -95,10 +103,10 @@ function bridgeTransport(env: Record<string, string>): {
   return { url, token };
 }
 
-describe("local CLI question bridge edges", () => {
+describe("connector process question bridge edges", () => {
   test("returns 400 for malformed JSON without invoking the handler", async () => {
     let handlerCalls = 0;
-    const bridge = startLocalCliQuestionBridgeServer({
+    const bridge = startConnectorQuestionBridgeServer({
       runId: "run_fake",
       sessionId: "ses_fake",
       residentSessionId: "ses_resident",
@@ -125,7 +133,7 @@ describe("local CLI question bridge edges", () => {
 
   test("passes the HTTP request abort signal to the handler", async () => {
     let handlerSignal: AbortSignal | undefined;
-    const bridge = startLocalCliQuestionBridgeServer({
+    const bridge = startConnectorQuestionBridgeServer({
       runId: "run_fake",
       sessionId: "ses_fake",
       residentSessionId: "ses_resident",
@@ -153,7 +161,7 @@ describe("local CLI question bridge edges", () => {
   });
 
   test("does not advertise hook metadata when no bridge handler is configured", async () => {
-    const workspaceRoot = tempDir("local-cli-question-no-handler");
+    const workspaceRoot = tempDir("connector-question-no-handler");
     const scriptPath = join(workspaceRoot, "fake-question-no-handler.ts");
     writeFileSync(
       scriptPath,
@@ -168,7 +176,7 @@ describe("local CLI question bridge edges", () => {
     );
     const definition = fakeDefinition("bun", [scriptPath]);
 
-    const result = await createLocalCliAgentRuntime().dispatch({
+    const result = await createConnectorEndpointProcessDriver().dispatch({
       command: command(),
       executionRequest: request(workspaceRoot),
       installation: installation(definition),

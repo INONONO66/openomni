@@ -7,9 +7,11 @@ import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker
 import { command, workerSpawnPayload } from "./helpers";
 
 type WorkerDispatchHandlerOptions = NonNullable<Parameters<typeof createWorkerDispatchHandlers>[0]>;
-type LocalCliRuntimeOwner = NonNullable<WorkerDispatchHandlerOptions["localCliAgentRuntime"]>;
+type ConnectorEndpointDriverOwner = NonNullable<
+  WorkerDispatchHandlerOptions["connectorEndpointDriver"]
+>;
 
-const LocalCliTelemetryOutput = z
+const ConnectorTelemetryOutput = z
   .object({
     output: z.object({
       workItemHash: z.string(),
@@ -38,16 +40,20 @@ function seedCodexInstallation(): void {
   });
 }
 
-function localCliWorkerCommand() {
+function connectorEndpointWorkerCommand() {
   return command(
     "worker.spawn",
-    { kind: "worker", id: "app.codex", executorKind: "local_cli_agent" },
+    {
+      kind: "worker",
+      id: "app.codex",
+      endpointId: "endpoint:install:codex:telemetry",
+    },
     workerSpawnPayload("build with codex"),
   );
 }
 
-function createLocalCliHandlers(dispatch: LocalCliRuntimeOwner["dispatch"]) {
-  return createWorkerDispatchHandlers({ localCliAgentRuntime: { dispatch } });
+function createConnectorEndpointHandlers(dispatch: ConnectorEndpointDriverOwner["dispatch"]) {
+  return createWorkerDispatchHandlers({ connectorEndpointDriver: { dispatch } });
 }
 
 function resultWithTelemetry(request: Execution.Request): Execution.Result {
@@ -59,7 +65,7 @@ function resultWithTelemetry(request: Execution.Request): Execution.Result {
     usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
     logEvents: [
       {
-        kind: "local_cli_log_event",
+        kind: "connector_log_event",
         artifactId: "art_cli_log",
         message: "tool completed",
         sequence: 0,
@@ -76,28 +82,28 @@ function resultWithTelemetry(request: Execution.Request): Execution.Result {
   };
 }
 
-describe("worker.spawn local_cli_agent telemetry evidence", () => {
+describe("worker.spawn connector endpoint telemetry evidence", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
   });
 
-  test("records local CLI token usage and tool calls as WorkItem evidence", async () => {
+  test("records connector token usage and tool calls as WorkItem evidence", async () => {
     seedCodexInstallation();
-    const handlers = createLocalCliHandlers(async (request) =>
+    const handlers = createConnectorEndpointHandlers(async (request) =>
       resultWithTelemetry(request.executionRequest),
     );
 
-    const output = LocalCliTelemetryOutput.parse(
-      await handlers["worker.spawn"](localCliWorkerCommand()),
+    const output = ConnectorTelemetryOutput.parse(
+      await handlers["worker.spawn"](connectorEndpointWorkerCommand()),
     );
     const workItem = WorkItemStore.get(output.output.workItemHash);
 
     expect(workItem?.evidence.map((evidence) => evidence.description)).toContain(
-      "local CLI token usage recorded",
+      "connector token usage recorded",
     );
     expect(workItem?.evidence.map((evidence) => evidence.description)).toContain(
-      "local CLI tool call recorded",
+      "connector tool call recorded",
     );
     expect(workItem?.evidence.map((evidence) => evidence.detail).join("\n")).toContain("call-1");
   });

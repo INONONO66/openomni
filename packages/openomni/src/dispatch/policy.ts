@@ -117,10 +117,10 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
 
       if (
         actor.kind === "worker" &&
-        action === Dispatch.Actions.ActorReply &&
+        (action === Dispatch.Actions.ActorReply || action === Dispatch.Actions.WorkerComplete) &&
         actor.trustTier === "assigned_worker"
       ) {
-        const pendingInteraction = evaluatePendingInteractionScope(actor, target);
+        const pendingInteraction = evaluatePendingInteractionScope(actor, action, target);
         if (pendingInteraction.allowed) {
           return decide(
             EffectiveAuthority.pendingInteraction(
@@ -157,6 +157,7 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
 
 function evaluatePendingInteractionScope(
   actor: Dispatch.ActorContext,
+  action: string,
   target: Dispatch.Target | undefined,
 ): { allowed: true; id: string } | { allowed: false; reason: string } {
   if (actor.reason !== "pending_interaction.match") {
@@ -172,7 +173,9 @@ function evaluatePendingInteractionScope(
   if (!record) {
     return { allowed: false, reason: "dispatch.pending_interaction.not_found" };
   }
-  if (!record.allowedActions.includes("report_result")) {
+  const requiredAction =
+    action === Dispatch.Actions.WorkerComplete ? "report_result" : "attach_artifact";
+  if (!record.allowedActions.includes(requiredAction)) {
     return { allowed: false, reason: "dispatch.pending_interaction.action.denied" };
   }
   if (target?.kind !== "worker") {

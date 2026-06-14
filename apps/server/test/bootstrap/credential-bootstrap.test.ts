@@ -32,7 +32,7 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent from assembled server bootstrap credentials",
+    description: "Runs a fake connector endpoint from assembled server bootstrap credentials",
     detect: {
       command,
       testedVersions: ">=1.0.0 <2.0.0",
@@ -48,11 +48,18 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
       emits: ["exit_code"],
       completionReport: { finalMessage: "stdout" },
     },
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     requires: {
       credentials: ["ANTHROPIC_API_KEY"],
     },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
     },
   };
@@ -63,6 +70,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -79,9 +87,9 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -99,8 +107,8 @@ function request(workspaceRoot: string): Execution.Request {
   };
 }
 
-describe("server bootstrap local CLI credentials", () => {
-  test("passes Auth.all credentials through bootstrap into the default local CLI runtime with redacted output", async () => {
+describe("server bootstrap connector endpoint credentials", () => {
+  test("passes Auth.all credentials through bootstrap into the default connector driver with redacted output", async () => {
     const workspaceRoot = tempDir("server-bootstrap-credential-runtime");
     const scriptPath = join(workspaceRoot, "fake-bootstrap-credential.ts");
     writeFileSync(
@@ -136,9 +144,9 @@ describe("server bootstrap local CLI credentials", () => {
       },
       credentials: bootstrap.credentials,
     });
-    const runtime = owners.localCliAgentRuntime;
+    const runtime = owners.connectorEndpointDriver;
     if (runtime === undefined) {
-      expect.unreachable("server dispatch owners must include a local CLI runtime");
+      expect.unreachable("server dispatch owners must include a connector endpoint driver");
     }
 
     const result = await runtime.dispatch({
