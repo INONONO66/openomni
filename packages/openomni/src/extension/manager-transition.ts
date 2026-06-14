@@ -14,14 +14,14 @@ import type { RuntimeBindingController, RuntimeBindingExtension } from "./runtim
 interface TransitionConfig {
   readonly action: Extract<
     ExtensionAction,
-    "extension.approve" | "extension.install" | "extension.enable" | "extension.disable"
+    "extension.approve" | "extension.install" | "extension.enable"
   >;
   readonly eventName: LifecycleEventName;
   readonly nextState: Extension.LifecycleState;
   readonly allowedStates: readonly Extension.LifecycleState[];
   readonly approvalReason: string;
   readonly binding?: RuntimeBindingController;
-  readonly bindingAction?: "enable" | "disable";
+  readonly bindingAction?: "enable";
 }
 
 export async function transition(
@@ -56,7 +56,7 @@ export async function transition(
 
   if (config.binding && config.bindingAction) {
     try {
-      await runBinding(config.binding, config.bindingAction, current);
+      await runBinding(config.binding, current);
     } catch (error) {
       await appendLifecycleEvent(operation, "extension.failed", {
         extensionId,
@@ -77,7 +77,6 @@ export async function transition(
 
 async function runBinding(
   binding: RuntimeBindingController,
-  action: "enable" | "disable",
   entry: ExtensionManagerEntry,
 ): Promise<void> {
   const extension: RuntimeBindingExtension = {
@@ -86,10 +85,5 @@ async function runBinding(
     ...(entry.manifest?.components !== undefined ? { contributes: entry.manifest.components } : {}),
   };
 
-  if (action === "enable") {
-    await binding.enable(extension);
-    return;
-  }
-
-  await binding.disable(extension);
+  await binding.enable(extension);
 }

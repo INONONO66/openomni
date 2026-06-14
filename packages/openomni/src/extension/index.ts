@@ -2,17 +2,11 @@ export { ExtensionManager } from "./manager";
 export { RuntimeBinding } from "./runtime-binding";
 export type {
   ExtensionAuditContext,
-  ExtensionAuditEntry,
-  ExtensionAuditOptions,
   ExtensionBindingOperationOptions,
-  ExtensionLifecycleAuditEntry,
-  ExtensionListOptions,
   ExtensionManagerEntry,
   ExtensionManifestSummary,
-  ExtensionOperationAuditEntry,
   ExtensionOperationOptions,
   ExtensionRequestInstallOptions,
-  ExtensionRollbackOptions,
   ExtensionValidationFailure,
   ExtensionValidationResult,
   ExtensionValidationSuccess,
