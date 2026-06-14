@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AppConnector } from "@openomni/protocol";
-import { ServerConnectorDiscovery } from "../../src/connector/index.js";
+import { ServerConnectorDiscovery } from "../../src/connector/discovery.js";
 
 describe("ServerConnectorDiscovery", () => {
   test("discovers installed server connector candidates from detect commands", async () => {
