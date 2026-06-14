@@ -123,6 +123,19 @@ describe("Processor", () => {
   });
 
   describe("Processor.create(input)", () => {
+    test("does not expose removed helper type namespace members", async () => {
+      const processorSource = await Bun.file(
+        new URL("../../src/session/processor.ts", import.meta.url),
+      ).text();
+
+      expect(Object.hasOwn(Processor, "ProcessResult")).toBe(false);
+      expect(Object.hasOwn(Processor, "ToolResult")).toBe(false);
+      expect(Object.hasOwn(Processor, "ProcessorInfo")).toBe(false);
+      expect(processorSource).not.toMatch(/\bexport\s+type\s+ProcessResult\b/);
+      expect(processorSource).not.toMatch(/\bexport\s+interface\s+ToolResult\b/);
+      expect(processorSource).not.toMatch(/\bexport\s+interface\s+ProcessorInfo\b/);
+    });
+
     test("creates a processor with required input", () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
