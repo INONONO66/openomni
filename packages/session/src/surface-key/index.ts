@@ -20,17 +20,17 @@
 
 import { Storage } from "../storage/storage";
 
-export namespace SurfaceKey {
-  /**
-   * Recognized channel/peer kinds for explicit key encoding.
-   * - dm: Direct message (1:1 peer conversation)
-   * - group: Group/multi-party channel
-   * - channel: Generic named channel (backward compat)
-   * - thread: Thread within a channel/group
-   * - chat: Generic chat (e.g., telegram)
-   */
-  export type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
+type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
 
+interface ParsedKey {
+  readonly surface: string;
+  readonly namespace: string;
+  readonly kind: ChannelKind | undefined;
+  readonly id: string | undefined;
+  readonly threadId: string | undefined;
+}
+
+export namespace SurfaceKey {
   export interface ChannelDescriptor {
     /** Surface type (e.g., "slack", "telegram", "tui") */
     surface: string;
@@ -82,14 +82,6 @@ export namespace SurfaceKey {
       parts.push("thread", descriptor.threadId);
     }
     return create(parts);
-  }
-
-  export interface ParsedKey {
-    surface: string;
-    namespace: string;
-    kind: ChannelKind | undefined;
-    id: string | undefined;
-    threadId: string | undefined;
   }
 
   export function parse(key: string): ParsedKey {
