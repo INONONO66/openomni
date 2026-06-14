@@ -8,6 +8,8 @@ import type { WorkerRunState } from "../../src/execution/worker-run-state";
 import { WorkerRunner } from "../../src/execution/worker-runner";
 
 type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
+type SpawnRunOptions = Parameters<typeof WorkerRunner.spawnRun>[0];
+type WorkerRunnerEnvironment = Omit<SpawnRunOptions, "params" | "respond">;
 
 const successfulResult: AgentResult = {
   text: "done",
@@ -19,8 +21,8 @@ const successfulResult: AgentResult = {
 function createSpawnOptions(
   params: Record<string, unknown> | undefined,
   respond: (result: unknown) => void,
-  overrides: Partial<WorkerRunner.Environment> = {},
-): WorkerRunner.SpawnRunOptions {
+  overrides: Partial<WorkerRunnerEnvironment> = {},
+): SpawnRunOptions {
   const activeRuns = overrides.activeRuns ?? new Map();
   return {
     params,
