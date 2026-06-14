@@ -3,6 +3,20 @@ import { Retry } from "../../src/session/retry";
 import { APIError, RetryError } from "../../src/error";
 
 describe("Retry", () => {
+  test("does not expose removed agent-level retry namespace members", async () => {
+    const retrySource = await Bun.file(
+      new URL("../../src/session/retry.ts", import.meta.url),
+    ).text();
+
+    expect(Object.hasOwn(Retry, "DEFAULT_AGENT_RETRY_POLICY")).toBe(false);
+    expect(Object.hasOwn(Retry, "calculateAgentBackoffMs")).toBe(false);
+    expect(Object.hasOwn(Retry, "classifyAgentRetryReason")).toBe(false);
+    expect(Object.hasOwn(Retry, "shouldAgentRetry")).toBe(false);
+    expect(Object.hasOwn(Retry, "agentSleep")).toBe(false);
+    expect(retrySource).not.toMatch(/\bexport\s+type\s+AgentRetryReason\b/);
+    expect(retrySource).not.toMatch(/\bexport\s+interface\s+WithRetryOptions\b/);
+  });
+
   describe("Constants", () => {
     test("RETRY_INITIAL_DELAY is 2000ms", () => {
       expect(Retry.RETRY_INITIAL_DELAY).toBe(2000);
