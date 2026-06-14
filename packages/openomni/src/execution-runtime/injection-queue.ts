@@ -2,7 +2,7 @@ import { Bus, BusEvent } from "@openomni/session";
 import { z } from "zod";
 
 export namespace InjectionQueue {
-  export const Events = {
+  const Events = {
     ResponseQueued: BusEvent.define(
       "injection_queue.response.queued",
       z.object({
