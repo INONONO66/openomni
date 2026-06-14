@@ -2,13 +2,13 @@ import { Actor } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
-export interface ChannelGrantMatchInput {
+interface ChannelGrantMatchInput {
   readonly surface: string;
   readonly workspace?: string;
   readonly channel?: string;
 }
 
-export interface ChannelGrantResolution {
+interface ChannelGrantResolution {
   readonly grant: Actor.ChannelGrant;
   readonly inboundTreatment: Actor.InboundTreatment;
 }
