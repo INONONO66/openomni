@@ -91,27 +91,11 @@ export function resolveEntry(
     .find((entry) => allowedStates.includes(entry.state));
 }
 
-export function resolveRollbackTarget(
-  state: ReconstructedState,
-  extensionId: string,
-  fromVersion: string,
-  requestedTarget: string | undefined,
-): string | undefined {
-  const installed = state.installedVersions.get(extensionId) ?? [];
-  if (requestedTarget !== undefined) {
-    return installed.includes(requestedTarget) && requestedTarget !== fromVersion
-      ? requestedTarget
-      : undefined;
-  }
-
-  return [...installed].reverse().find((version) => version !== fromVersion);
-}
-
 export function stateKey(extensionId: string, version: string): string {
   return `${extensionId}@${version}`;
 }
 
-export function sortEntries(entries: readonly ExtensionManagerEntry[]): ExtensionManagerEntry[] {
+function sortEntries(entries: readonly ExtensionManagerEntry[]): ExtensionManagerEntry[] {
   return [...entries].sort((a, b) => {
     const idComparison = a.id.localeCompare(b.id);
     if (idComparison !== 0) return idComparison;

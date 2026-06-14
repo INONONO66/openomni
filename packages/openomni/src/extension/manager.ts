@@ -7,24 +7,13 @@ import {
   parseExtensionManifest,
 } from "./manager-manifest";
 import type { ExtensionValidationResult } from "./manager-manifest";
-import {
-  appendLifecycleEvent,
-  reconstructState,
-  resolveEntry,
-  resolveRollbackTarget,
-  sortEntries,
-  stateKey,
-} from "./manager-state";
+import { appendLifecycleEvent, reconstructState, stateKey } from "./manager-state";
 import { transition } from "./manager-transition";
 import type {
-  ExtensionAuditEntry,
-  ExtensionAuditOptions,
   ExtensionBindingOperationOptions,
-  ExtensionListOptions,
   ExtensionManagerEntry,
   ExtensionOperationOptions,
   ExtensionRequestInstallOptions,
-  ExtensionRollbackOptions,
   ExtensionVersionOperationOptions,
 } from "./manager-types";
 
@@ -155,112 +144,5 @@ export namespace ExtensionManager {
       binding: options.binding,
       bindingAction: "enable",
     });
-  }
-
-  export async function disable(
-    extensionId: string,
-    options: ExtensionBindingOperationOptions,
-  ): Promise<ExtensionManagerEntry> {
-    return transition(extensionId, options, {
-      action: "extension.disable",
-      eventName: "extension.disabled",
-      nextState: "disabled",
-      allowedStates: ["enabled"],
-      approvalReason: "extension disable accepted",
-      binding: options.binding,
-      bindingAction: "disable",
-    });
-  }
-
-  export async function rollback(
-    extensionId: string,
-    options: ExtensionRollbackOptions,
-  ): Promise<ExtensionManagerEntry> {
-    const input = operationInput({
-      id: extensionId,
-      version: options.version,
-      toVersion: options.toVersion,
-      reason: options.reason,
-    });
-    const operation = await beginOperation(options, {
-      action: "extension.rollback",
-      resource: extensionId,
-      input,
-    });
-    const state = await reconstructState(operation.sessionId);
-    const source = resolveEntry(state, extensionId, options.version, [
-      "installed",
-      "enabled",
-      "disabled",
-    ]);
-    if (!source) {
-      await blockOperation(operation, "extension.manager.lifecycle", "extension_not_rollbackable");
-      throw new Error(
-        `Extension "${extensionId}" has no installed, enabled, or disabled version to roll back`,
-      );
-    }
-
-    const targetVersion = resolveRollbackTarget(
-      state,
-      extensionId,
-      source.version,
-      options.toVersion,
-    );
-    if (!targetVersion) {
-      await blockOperation(
-        operation,
-        "extension.manager.lifecycle",
-        "extension_previous_version_missing",
-      );
-      throw new Error(`Extension "${extensionId}" has no previous version to roll back to`);
-    }
-
-    await approveOperation(operation, "extension rollback accepted");
-    return appendLifecycleEvent(operation, "extension.rolled_back", {
-      extensionId,
-      version: targetVersion,
-      actor: actorLabel(options.actor),
-      time: operation.now().getTime(),
-      state: "rolled_back",
-      fromVersion: source.version,
-      ...(options.reason !== undefined ? { reason: truncateAuditText(options.reason) } : {}),
-      manifest: state.versions.get(stateKey(extensionId, targetVersion))?.manifest,
-    });
-  }
-
-  export async function list(options: ExtensionListOptions): Promise<ExtensionManagerEntry[]> {
-    const resource = options.extensionId ?? "all";
-    const operation = await beginOperation(options, {
-      action: "extension.list",
-      resource,
-      input: operationInput({ id: options.extensionId }),
-    });
-    const state = await reconstructState(operation.sessionId);
-    const entries = sortEntries([...state.current.values()]).filter(
-      (entry) => options.extensionId === undefined || entry.id === options.extensionId,
-    );
-
-    await approveOperation(operation, "extension list accepted");
-    return entries;
-  }
-
-  export async function audit(options: ExtensionAuditOptions): Promise<ExtensionAuditEntry[]> {
-    const resource = options.extensionId ?? "all";
-    const operation = await beginOperation(options, {
-      action: "extension.audit",
-      resource,
-      input: operationInput({ id: options.extensionId }),
-    });
-    const state = await reconstructState(operation.sessionId);
-    const entries = state.audit.filter(
-      (entry) =>
-        options.extensionId === undefined ||
-        (entry.kind === "lifecycle"
-          ? entry.extensionId === options.extensionId
-          : entry.resource === options.extensionId),
-    );
-
-    await approveOperation(operation, "extension audit accepted");
-    return entries;
   }
 }
