@@ -336,10 +336,6 @@ export namespace WorkspaceLock {
     rejectWaiters(workspace, unsafeWorkspaceError(workspace, state));
   }
 
-  export function isUnsafe(workspace: string): boolean {
-    return readUnsafeMeta(workspace) !== undefined;
-  }
-
   export function clearUnsafe(workspace: string, token?: string): void {
     const state = readUnsafeMeta(workspace);
     if (token !== undefined) {
