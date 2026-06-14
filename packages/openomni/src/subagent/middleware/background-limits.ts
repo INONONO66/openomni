@@ -48,6 +48,26 @@ interface BackgroundLimitState {
   shouldQueue?: boolean;
 }
 
+interface PreLaunchContext {
+  readonly input: LaunchRequest;
+  readonly activeTasks: readonly Subagent.BackgroundTask[];
+  readonly activeCount: number;
+  readonly pendingQueueSize: number;
+  readonly maxConcurrentPerAgent: number;
+  readonly maxConcurrentTotal: number;
+  readonly maxDepth: number;
+  readonly maxDescendants: number;
+  readonly maxQueueSize: number;
+  readonly traceContext?: TraceContext.Type;
+  readonly resourceDescriptor?: RuntimeResource.Descriptor;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+interface PreLaunchResult {
+  readonly verdict: Policy.PolicyDecision;
+  readonly shouldQueue: boolean;
+}
+
 function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
   return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
@@ -328,26 +348,6 @@ export namespace BackgroundLimitsMiddleware {
     priority: 40,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
-
-  export interface PreLaunchContext {
-    readonly input: LaunchRequest;
-    readonly activeTasks: readonly Subagent.BackgroundTask[];
-    readonly activeCount: number;
-    readonly pendingQueueSize: number;
-    readonly maxConcurrentPerAgent: number;
-    readonly maxConcurrentTotal: number;
-    readonly maxDepth: number;
-    readonly maxDescendants: number;
-    readonly maxQueueSize: number;
-    readonly traceContext?: TraceContext.Type;
-    readonly resourceDescriptor?: RuntimeResource.Descriptor;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  }
-
-  export interface PreLaunchResult {
-    readonly verdict: Policy.PolicyDecision;
-    readonly shouldQueue: boolean;
-  }
 
   export function registrations(state: BackgroundLimitState): PolicyRegistration[] {
     return [
