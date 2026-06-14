@@ -8,8 +8,7 @@ import {
 import { projectConnectorCompletion } from "./connector-completion-projector.js";
 import { createWorkerSpawnWorkItem, failWorkerSpawnExecutor } from "./worker-work-item.js";
 
-export const CONNECTOR_ENDPOINT_EXECUTOR_KIND =
-  "connector_endpoint" satisfies WorkItem.ExecutorKind;
+const CONNECTOR_ENDPOINT_EXECUTOR_KIND = "connector_endpoint" satisfies WorkItem.ExecutorKind;
 
 export interface ConnectorEndpointWorkerSpawnPayload {
   readonly prompt: string;
