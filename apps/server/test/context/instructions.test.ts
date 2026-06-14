@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -177,10 +177,6 @@ describe("InstructionLoader.load", () => {
 });
 
 describe("InstructionLoader caching", () => {
-  afterEach(() => {
-    InstructionLoader._resetCache();
-  });
-
   it("discover returns cached result on repeated calls", () => {
     const ws = makeWorkspace("cache-discover");
     writeFileSync(join(ws, "AGENTS.md"), "# Original");
@@ -190,7 +186,7 @@ describe("InstructionLoader caching", () => {
     expect(second).toBe(first);
   });
 
-  it("discover returns stale global result after file deletion until cache reset", () => {
+  it("discover returns stale global result after file deletion for the same cache key", () => {
     const ws = makeWorkspace("cache-stale-discover");
     const globalDir = makeWorkspace("cache-stale-global-config");
     const agentsPath = join(globalDir, "AGENTS.md");
@@ -204,13 +200,12 @@ describe("InstructionLoader caching", () => {
     const cached = InstructionLoader.discover(ws, globalDir);
     expect(cached.some((f) => f.label === "Global")).toBe(true);
 
-    InstructionLoader._resetCache();
-
-    const fresh = InstructionLoader.discover(ws, globalDir);
+    const freshGlobalDir = makeWorkspace("cache-stale-fresh-global-config");
+    const fresh = InstructionLoader.discover(ws, freshGlobalDir);
     expect(fresh.some((f) => f.label === "Global")).toBe(false);
   });
 
-  it("load returns cached result on repeated calls with same files", () => {
+  it("load returns cached result on repeated calls with the same file list", () => {
     const ws = makeWorkspace("cache-load");
     const filePath = join(ws, "test.md");
     writeFileSync(filePath, "Content A");
@@ -224,9 +219,9 @@ describe("InstructionLoader caching", () => {
     const cached = InstructionLoader.load(files);
     expect(cached).toContain("Content A");
 
-    InstructionLoader._resetCache();
-
-    const fresh = InstructionLoader.load(files);
+    const freshPath = join(ws, "fresh.md");
+    writeFileSync(freshPath, "Content B");
+    const fresh = InstructionLoader.load([{ path: freshPath, priority: 0, label: "Fresh" }]);
     expect(fresh).toContain("Content B");
   });
 });

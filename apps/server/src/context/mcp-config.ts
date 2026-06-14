@@ -69,8 +69,4 @@ export namespace McpConfigLoader {
 
     return [...byName.values()];
   }
-
-  export function _resetCache(): void {
-    discoverCache.clear();
-  }
 }

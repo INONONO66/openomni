@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -209,10 +209,6 @@ describe("SkillLoader.format", () => {
 });
 
 describe("SkillLoader caching", () => {
-  afterEach(() => {
-    SkillLoader._resetCache();
-  });
-
   it("discover returns cached result on repeated calls", () => {
     const ws = realpathSync(mkdtempSync(join(tempRoot, "cache1-")));
     const skillsDir = makeWorkspace(ws);
@@ -224,7 +220,7 @@ describe("SkillLoader caching", () => {
     expect(first).toHaveLength(1);
   });
 
-  it("discover returns stale result after skill added until cache reset", () => {
+  it("discover returns stale result after skill added for the same cache key", () => {
     const ws = realpathSync(mkdtempSync(join(tempRoot, "cache2-")));
     const skillsDir = makeWorkspace(ws);
     writeSkill(skillsDir, "original", "---\nname: original\ndescription: First\n---");
@@ -237,9 +233,12 @@ describe("SkillLoader caching", () => {
     const cached = SkillLoader.discover(ws, emptyGlobalDir);
     expect(cached).toHaveLength(1);
 
-    SkillLoader._resetCache();
+    const freshWs = realpathSync(mkdtempSync(join(tempRoot, "cache2-fresh-")));
+    const freshSkillsDir = makeWorkspace(freshWs);
+    writeSkill(freshSkillsDir, "original", "---\nname: original\ndescription: First\n---");
+    writeSkill(freshSkillsDir, "added", "---\nname: added\ndescription: Second\n---");
 
-    const fresh = SkillLoader.discover(ws, emptyGlobalDir);
+    const fresh = SkillLoader.discover(freshWs, emptyGlobalDir);
     expect(fresh).toHaveLength(2);
   });
 });
