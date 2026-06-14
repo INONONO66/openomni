@@ -201,9 +201,6 @@ export namespace Provider {
 export {
   getSDK,
   getLanguage,
-  ProviderCache,
-  PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES,
-  PROVIDER_SDK_CACHE_MAX_ENTRIES,
 } from "./provider";
 
 export { fetchProxyModels, enrichWithCatalog } from "./proxy-models";
