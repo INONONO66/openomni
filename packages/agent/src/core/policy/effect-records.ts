@@ -38,7 +38,7 @@ export function stableHash(value: unknown): string {
   return stableStringify(value);
 }
 
-export function stableStringify(value: unknown): string {
+function stableStringify(value: unknown): string {
   if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -53,7 +53,7 @@ export function stableStringify(value: unknown): string {
   return `${typeof value}:${JSON.stringify(value)}`;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
