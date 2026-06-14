@@ -20,13 +20,13 @@ interface ModelConfig {
   modelID: string;
 }
 
-export namespace IngressSessionResolver {
-  export interface ResolveResult {
-    session: Session.Info;
-    isNew: boolean;
-    trace?: TraceContextProtocol.Type;
-  }
+interface ResolveResult {
+  readonly session: Session.Info;
+  readonly isNew: boolean;
+  readonly trace?: TraceContextProtocol.Type;
+}
 
+export namespace IngressSessionResolver {
   // Format: "surface:workspace:channel" for legacy events. Explicit ADR-008 targets append
   // `target:<target-key>` so resident and worker sessions do not collide.
   export function extractSurfaceKey(event: ResolvableEvent): string {
