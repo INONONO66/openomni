@@ -2,7 +2,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { SkillLoader, type SkillMeta } from "../../src/context/skills";
+import { SkillLoader } from "../../src/context/skills";
+
+type SkillMeta = ReturnType<typeof SkillLoader.discover>[number];
 
 let tempRoot: string;
 let emptyGlobalDir: string;
