@@ -21,9 +21,9 @@ interface ModelConfig {
 }
 
 interface ResolveResult {
-  readonly session: Session.Info;
-  readonly isNew: boolean;
-  readonly trace?: TraceContextProtocol.Type;
+  session: Session.Info;
+  isNew: boolean;
+  trace?: TraceContextProtocol.Type;
 }
 
 export namespace IngressSessionResolver {
