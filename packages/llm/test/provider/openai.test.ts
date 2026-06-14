@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import { getSDK, getLanguage, CODEX_ALLOWED_MODELS, type Provider } from "../../src/provider/index";
+import { getSDK, getLanguage, type Provider } from "../../src/provider/index";
 import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;
@@ -70,17 +70,5 @@ describe("getSDK (OpenAI)", () => {
 
     expect(lm.modelId).toBe("gpt-5.4");
     expect(lm.config?.provider).toBe("openai.chat");
-  });
-});
-
-describe("CODEX_ALLOWED_MODELS", () => {
-  test("is a Set containing expected codex models", () => {
-    expect(CODEX_ALLOWED_MODELS).toBeInstanceOf(Set);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-5.1-codex-max")).toBe(true);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-5.1-codex-mini")).toBe(true);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-5.2")).toBe(true);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-5.2-codex")).toBe(true);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-5.1-codex")).toBe(true);
-    expect(CODEX_ALLOWED_MODELS.has("gpt-4o")).toBe(false);
   });
 });

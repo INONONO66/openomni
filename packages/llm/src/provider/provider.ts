@@ -196,14 +196,6 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.In
   };
 }
 
-export const CODEX_ALLOWED_MODELS = new Set([
-  "gpt-5.1-codex-max",
-  "gpt-5.1-codex-mini",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-  "gpt-5.1-codex",
-]);
-
 export function filterModels(
   providerID: string,
   authType: "api" | "proxy",
