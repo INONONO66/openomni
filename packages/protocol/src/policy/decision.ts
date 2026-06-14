@@ -1,20 +1,20 @@
 import type { PolicyEffects } from "./effects.js";
 import type { PolicyPermission } from "./permission.js";
 
-export namespace PolicyDecisionHelpers {
-  export interface Options {
-    readonly policyId: string;
-    readonly effects?: PolicyEffects.PolicyEffect[];
-    readonly reasonCodes?: string[];
-    readonly obligations?: PolicyEffects.PolicyObligation[];
-    readonly factsUsed?: string[];
-    readonly durationMs?: number;
-    readonly priority?: number;
-  }
+interface PolicyDecisionOptions {
+  readonly policyId: string;
+  readonly effects?: PolicyEffects.PolicyEffect[];
+  readonly reasonCodes?: string[];
+  readonly obligations?: PolicyEffects.PolicyObligation[];
+  readonly factsUsed?: string[];
+  readonly durationMs?: number;
+  readonly priority?: number;
+}
 
+export namespace PolicyDecisionHelpers {
   function create(
     verdict: PolicyEffects.PolicyDecision["verdict"],
-    options: Options,
+    options: PolicyDecisionOptions,
   ): PolicyEffects.PolicyDecision {
     return {
       policyId: options.policyId,
@@ -28,15 +28,15 @@ export namespace PolicyDecisionHelpers {
     };
   }
 
-  export function allow(options: Options): PolicyEffects.PolicyDecision {
+  export function allow(options: PolicyDecisionOptions): PolicyEffects.PolicyDecision {
     return create("allow", options);
   }
 
-  export function deny(options: Options): PolicyEffects.PolicyDecision {
+  export function deny(options: PolicyDecisionOptions): PolicyEffects.PolicyDecision {
     return create("deny", options);
   }
 
-  export function pending(options: Options): PolicyEffects.PolicyDecision {
+  export function pending(options: PolicyDecisionOptions): PolicyEffects.PolicyDecision {
     return create("pending", options);
   }
 
