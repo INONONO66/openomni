@@ -3,7 +3,7 @@ import { IpcProtocolError } from "./errors";
 const encoder = new TextEncoder();
 
 // 16 MiB — reject any single frame that exceeds this before unbounded growth
-export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 export function encode(msg: unknown): Uint8Array {
   return encoder.encode(`${JSON.stringify(msg)}\n`);
