@@ -11,15 +11,12 @@ export type {
 } from "./types";
 
 export namespace ResidentAgent {
-  export const promptVariants: Record<ResidentPromptFamily, ResidentPromptVariant> = {
+  const promptVariants: Record<ResidentPromptFamily, ResidentPromptVariant> = {
     claude: CLAUDE_RESIDENT_PROMPT_VARIANT,
     gpt: GPT_RESIDENT_PROMPT_VARIANT,
   };
 
-  export const buildPrompt = buildResidentPrompt;
-  export const inferPromptFamily = inferResidentPromptFamily;
-
-  export function getPromptVariant(options: ResidentPromptOptions = {}): ResidentPromptVariant {
+  function getPromptVariant(options: ResidentPromptOptions = {}): ResidentPromptVariant {
     if (options.family) return promptVariants[options.family];
     if (options.model) return promptVariants[inferResidentPromptFamily(options.model)];
     return promptVariants.claude;
