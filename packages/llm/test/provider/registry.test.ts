@@ -12,6 +12,18 @@ function makeModel(providerID: string, npm: string, id?: string): Provider.Model
 }
 
 describe("Provider Registry", () => {
+  describe("public surface", () => {
+    it("does not expose removed dead provider namespace members", async () => {
+      const providerSource = await Bun.file(
+        new URL("../../src/provider/index.ts", import.meta.url),
+      ).text();
+
+      expect(Object.hasOwn(Provider, "BUNDLED_PROVIDERS")).toBe(false);
+      expect(providerSource).not.toMatch(/\bexport\s+const\s+BUNDLED_PROVIDERS\b/);
+      expect(providerSource).not.toMatch(/\bexport\s+type\s+ProviderID\b/);
+    });
+  });
+
   describe("getSDK", () => {
     it("should return configured Anthropic provider with API auth", () => {
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
