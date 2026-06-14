@@ -13,9 +13,9 @@ import { APIError } from "../error";
 import type { Provider } from "../provider";
 
 export namespace Processor {
-  export type ProcessResult = "stop" | "continue" | "compact";
+  type ProcessResult = "stop" | "continue" | "compact";
 
-  export interface ToolResult {
+  interface ToolResult {
     output: string;
     title: string;
     metadata?: Record<string, unknown>;
@@ -47,7 +47,7 @@ export namespace Processor {
     trace?: { traceId: string; sessionId: string; runId?: string; provider?: string };
   }
 
-  export interface ProcessorInfo {
+  interface ProcessorInfo {
     message: Message.AssistantMessage;
     process(streamInput: StreamInput): Promise<ProcessResult>;
   }
