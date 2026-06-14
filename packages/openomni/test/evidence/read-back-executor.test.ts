@@ -81,33 +81,27 @@ describe("ReadBackExecutor", () => {
     expect(check.contentDigest).toBeUndefined();
   });
 
-  test("marks non-error transport rejections as failed read-back results", async () => {
-    const originalFetch = globalThis.fetch;
-    const failingFetch: typeof fetch = Object.assign(() => Promise.reject("transport-string"), {
-      preconnect: originalFetch.preconnect,
-    });
-    globalThis.fetch = failingFetch;
+  test("marks transport failures as failed read-back results", async () => {
+    const origin = await startFixtureServer();
+    await closeFixtureServers();
 
-    try {
-      const check = await ReadBackExecutor.execute(
-        {
-          kind: "url_fetch",
-          target: "http://127.0.0.1/document",
-        },
-        LOCAL_READ_BACK,
-      );
-
-      expect(check).toMatchObject({
+    const check = await ReadBackExecutor.execute(
+      {
         kind: "url_fetch",
-        target: "http://127.0.0.1/document",
-        passed: false,
-      });
-      if (check.kind !== "url_fetch") throw new Error("expected url_fetch check");
-      expect(check.statusCode).toBeUndefined();
-      expect(check.contentDigest).toBeUndefined();
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+        target: `${origin}/document`,
+        timeoutMs: 100,
+      },
+      LOCAL_READ_BACK,
+    );
+
+    expect(check).toMatchObject({
+      kind: "url_fetch",
+      target: `${origin}/document`,
+      passed: false,
+    });
+    if (check.kind !== "url_fetch") throw new Error("expected url_fetch check");
+    expect(check.statusCode).toBeUndefined();
+    expect(check.contentDigest).toBeUndefined();
   });
 
   test("uses timeoutMs as a wall-clock deadline", async () => {
