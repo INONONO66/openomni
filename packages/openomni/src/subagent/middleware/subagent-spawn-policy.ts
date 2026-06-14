@@ -39,6 +39,33 @@ interface PreSpawnState {
   waitTimeoutMs?: number;
 }
 
+interface PreSpawnContext {
+  readonly operation: PreSpawnOperation;
+  readonly sessionId: string;
+  readonly hardTimeoutMs?: number;
+  readonly timeoutMs?: number;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+interface PreSpawnResult {
+  readonly verdict: Policy.PolicyDecision;
+  readonly session?: SessionRecord;
+  readonly runs?: WorkerRunRecord[];
+  readonly latestRun?: WorkerRunRecord;
+  readonly cancelHardTimeoutMs: number;
+  readonly waitTimeoutMs?: number;
+}
+
+interface WaitTimeoutHandle {
+  readonly cancel: () => void;
+}
+
+interface ChildRuntimeMiddlewareInput {
+  readonly middleware?: PolicyRegistration[];
+  readonly hasExplicitRuntimePolicy: boolean;
+}
+
 function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
   return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
@@ -240,28 +267,6 @@ export namespace SubagentSpawnPolicyMiddleware {
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
 
-  export interface PreSpawnContext {
-    readonly operation: PreSpawnOperation;
-    readonly sessionId: string;
-    readonly hardTimeoutMs?: number;
-    readonly timeoutMs?: number;
-    readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  }
-
-  export interface PreSpawnResult {
-    readonly verdict: Policy.PolicyDecision;
-    readonly session?: SessionRecord;
-    readonly runs?: WorkerRunRecord[];
-    readonly latestRun?: WorkerRunRecord;
-    readonly cancelHardTimeoutMs: number;
-    readonly waitTimeoutMs?: number;
-  }
-
-  export interface WaitTimeoutHandle {
-    readonly cancel: () => void;
-  }
-
   export function createDefaultDenylist(): PolicyRegistration {
     return {
       ...DefaultDenylist,
@@ -277,11 +282,6 @@ export namespace SubagentSpawnPolicyMiddleware {
         );
       },
     };
-  }
-
-  export interface ChildRuntimeMiddlewareInput {
-    readonly middleware?: PolicyRegistration[];
-    readonly hasExplicitRuntimePolicy: boolean;
   }
 
   export function buildChildRuntimeMiddleware(
