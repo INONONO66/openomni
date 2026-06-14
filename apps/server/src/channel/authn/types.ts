@@ -2,7 +2,7 @@ import type { Adapter, Policy } from "@openomni/protocol";
 
 export type ChannelAuthnPolicyId = string;
 
-export interface ChannelAuthnDecision {
+interface ChannelAuthnDecision {
   readonly timing: Policy.Timing;
   readonly name: string;
   readonly policyId: ChannelAuthnPolicyId;

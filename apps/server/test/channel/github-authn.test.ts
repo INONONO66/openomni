@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Adapter } from "@openomni/protocol";
-import type { ChannelAuthnDecision } from "../../src/channel/channel-authn";
+import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
 import { GitHubAdapter } from "../../src/channel/github/surface";
+
+type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
 const secret = "github-webhook-secret";
 const config = {
