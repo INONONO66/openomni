@@ -49,12 +49,9 @@ export type {
 export { ExtensionManager, RuntimeBinding } from "./extension";
 export type {
   ExtensionAuditContext,
-  ExtensionAuditEntry,
   ExtensionBindingOperationOptions,
-  ExtensionLifecycleAuditEntry,
   ExtensionManagerEntry,
   ExtensionManifestSummary,
-  ExtensionOperationAuditEntry,
   ExtensionOperationOptions,
   ExtensionRequestInstallOptions,
   ExtensionValidationFailure,

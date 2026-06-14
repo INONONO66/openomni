@@ -26,11 +26,8 @@ export type {
 
 export type {
   ExtensionAuditContext,
-  ExtensionAuditEntry,
   ExtensionBindingOperationOptions,
-  ExtensionLifecycleAuditEntry,
   ExtensionManagerEntry,
-  ExtensionOperationAuditEntry,
   ExtensionOperationOptions,
   ExtensionRequestInstallOptions,
   ExtensionVersionOperationOptions,

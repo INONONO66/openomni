@@ -12,11 +12,6 @@ export type ExtensionAction =
   | "extension.enable";
 
 export type AuditVisibility = "internal" | "llm_reason" | "user_audit";
-type AuditOperationType =
-  | "action_requested"
-  | "policy_evaluated"
-  | "action_approved"
-  | "action_blocked";
 
 interface AuditBase {
   readonly actionId: string;
@@ -99,7 +94,6 @@ export interface AuditState {
 export interface ReconstructedState {
   readonly current: Map<string, ExtensionManagerEntry>;
   readonly versions: Map<string, ExtensionManagerEntry>;
-  readonly audit: ExtensionAuditEntry[];
 }
 
 export interface ExtensionAuditContext {
@@ -137,44 +131,6 @@ export interface ExtensionManagerEntry {
   readonly manifest?: ExtensionManifestSummary;
   readonly error?: string;
 }
-
-export interface ExtensionLifecycleAuditEntry {
-  readonly kind: "lifecycle";
-  readonly actionId: string;
-  readonly parentActionId?: string;
-  readonly visibility: AuditVisibility;
-  readonly timestamp: string;
-  readonly sequence: number;
-  readonly name: LifecycleEventName;
-  readonly extensionId: string;
-  readonly version: string;
-  readonly state: Extension.LifecycleState;
-  readonly actor: string;
-  readonly time: number;
-  readonly reason?: string;
-  readonly fromVersion?: string;
-  readonly manifest?: ExtensionManifestSummary;
-  readonly error?: string;
-}
-
-export interface ExtensionOperationAuditEntry {
-  readonly kind: "operation";
-  readonly actionId: string;
-  readonly parentActionId?: string;
-  readonly visibility: AuditVisibility;
-  readonly timestamp: string;
-  readonly sequence: number;
-  readonly type: AuditOperationType;
-  readonly actor: Record<string, unknown>;
-  readonly action: string;
-  readonly resource: string;
-  readonly input?: Record<string, unknown>;
-  readonly policyId?: string;
-  readonly verdict?: string;
-  readonly reason?: string;
-}
-
-export type ExtensionAuditEntry = ExtensionLifecycleAuditEntry | ExtensionOperationAuditEntry;
 
 export const AUDIT_VISIBILITY: AuditVisibility = "internal";
 export const AUTHORITY_REQUIRED_REASON =

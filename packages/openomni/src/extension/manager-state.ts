@@ -4,12 +4,8 @@ import {
   lifecycleNames,
   LifecyclePayloadSchema,
   type AuditBusEvent,
-  type AuditEvent,
   type AuditState,
-  type ExtensionAuditEntry,
-  type ExtensionLifecycleAuditEntry,
   type ExtensionManagerEntry,
-  type ExtensionOperationAuditEntry,
   type LifecycleEventName,
   type LifecyclePayload,
   type ReconstructedState,
@@ -40,14 +36,8 @@ export async function appendLifecycleEvent(
 export async function reconstructState(sessionId: string): Promise<ReconstructedState> {
   const current = new Map<string, ExtensionManagerEntry>();
   const versions = new Map<string, ExtensionManagerEntry>();
-  const audit: ExtensionAuditEntry[] = [];
 
   for (const event of auditEventsForSession(sessionId)) {
-    const operation = operationAuditEntry(event);
-    if (operation) {
-      audit.push(operation);
-    }
-
     if (event.type !== "bus_event" || !isLifecycleName(event.name)) {
       continue;
     }
@@ -60,10 +50,9 @@ export async function reconstructState(sessionId: string): Promise<Reconstructed
     const entry = lifecycleEntry(parsed.data);
     current.set(entry.id, entry);
     versions.set(stateKey(entry.id, entry.version), entry);
-    audit.push(lifecycleAuditEntry(event.name, event, parsed.data));
   }
 
-  return { current, versions, audit };
+  return { current, versions };
 }
 
 export function resolveEntry(
@@ -93,64 +82,6 @@ function sortEntries(entries: readonly ExtensionManagerEntry[]): ExtensionManage
     if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt;
     return a.version.localeCompare(b.version);
   });
-}
-
-function operationAuditEntry(event: AuditEvent): ExtensionOperationAuditEntry | undefined {
-  if (
-    event.type !== "action_requested" &&
-    event.type !== "policy_evaluated" &&
-    event.type !== "action_approved" &&
-    event.type !== "action_blocked"
-  ) {
-    return undefined;
-  }
-  if (!event.action.startsWith("extension.")) {
-    return undefined;
-  }
-
-  return {
-    kind: "operation",
-    actionId: event.actionId,
-    ...(event.parentActionId !== undefined ? { parentActionId: event.parentActionId } : {}),
-    visibility: event.visibility,
-    timestamp: event.timestamp,
-    sequence: event.sequence,
-    type: event.type,
-    actor: event.actor,
-    action: event.action,
-    resource: event.resource,
-    ...(event.type === "action_requested" && event.input !== undefined
-      ? { input: event.input }
-      : {}),
-    ...(event.type !== "action_requested" ? { policyId: event.policyId } : {}),
-    ...(event.type !== "action_requested" ? { verdict: event.verdict } : {}),
-    ...(event.type !== "action_requested" ? { reason: event.reason } : {}),
-  };
-}
-
-function lifecycleAuditEntry(
-  name: LifecycleEventName,
-  event: AuditBusEvent,
-  payload: LifecyclePayload,
-): ExtensionLifecycleAuditEntry {
-  return {
-    kind: "lifecycle",
-    actionId: event.actionId,
-    ...(event.parentActionId !== undefined ? { parentActionId: event.parentActionId } : {}),
-    visibility: event.visibility,
-    timestamp: event.timestamp,
-    sequence: event.sequence,
-    name,
-    extensionId: payload.extensionId,
-    version: payload.version,
-    state: payload.state,
-    actor: payload.actor,
-    time: payload.time,
-    ...(payload.reason !== undefined ? { reason: payload.reason } : {}),
-    ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
-    ...(payload.manifest !== undefined ? { manifest: payload.manifest } : {}),
-    ...(payload.error !== undefined ? { error: payload.error } : {}),
-  };
 }
 
 function lifecycleEntry(payload: LifecyclePayload): ExtensionManagerEntry {
