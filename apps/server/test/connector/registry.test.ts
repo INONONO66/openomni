@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteStorageAdapter, Storage } from "@openomni/session";
 import {
-  AppConnectorDiscovery,
-  AppConnectorRegistry,
-  BuiltInAppConnectors,
-} from "../../src/index.js";
+  ServerConnectorDiscovery,
+  ServerConnectorRegistry,
+  ServerConnectorDefinitions,
+} from "../../src/connector/index.js";
 
-describe("AppConnectorRegistry", () => {
+describe("ServerConnectorRegistry", () => {
   let tmpDir: string;
   let dbPath: string;
   let adapter: SqliteStorageAdapter;
@@ -30,21 +30,21 @@ describe("AppConnectorRegistry", () => {
   test("does not expose the removed duplicate remove lifecycle helper", async () => {
     // Given
     const registrySource = await Bun.file(
-      new URL("../../src/app-connector/registry.ts", import.meta.url),
+      new URL("../../src/connector/registry.ts", import.meta.url),
     ).text();
 
     // When / Then
-    expect(Object.hasOwn(AppConnectorRegistry, "remove")).toBe(false);
+    expect(Object.hasOwn(ServerConnectorRegistry, "remove")).toBe(false);
     expect(registrySource).not.toMatch(/\bexport\s+function\s+remove\b/);
   });
 
   test("registers an available discovery candidate as a durable installation", async () => {
     // Given
-    const connector = BuiltInAppConnectors.get("app.codex");
+    const connector = ServerConnectorDefinitions.get("app.codex");
     if (connector === undefined) {
-      throw new Error("expected built-in Codex connector");
+      throw new Error("expected server Codex connector");
     }
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [connector],
       runDetectCommand: async () => ({
         exitCode: 0,
@@ -58,7 +58,7 @@ describe("AppConnectorRegistry", () => {
     }
 
     // When
-    const installation = AppConnectorRegistry.register(candidate, {
+    const installation = ServerConnectorRegistry.register(candidate, {
       registeredBy: "act_owner",
     });
     adapter.close();
@@ -72,17 +72,17 @@ describe("AppConnectorRegistry", () => {
       status: "registered",
       registeredBy: "act_owner",
     });
-    expect(AppConnectorRegistry.get(installation.id)).toEqual(installation);
-    expect(AppConnectorRegistry.list()).toEqual([installation]);
+    expect(ServerConnectorRegistry.get(installation.id)).toEqual(installation);
+    expect(ServerConnectorRegistry.list()).toEqual([installation]);
   });
 
   test("requests and grants owner consent for a registered installation", async () => {
     // Given
-    const connector = BuiltInAppConnectors.get("app.codex");
+    const connector = ServerConnectorDefinitions.get("app.codex");
     if (connector === undefined) {
-      throw new Error("expected built-in Codex connector");
+      throw new Error("expected server Codex connector");
     }
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [connector],
       runDetectCommand: async () => ({
         exitCode: 0,
@@ -94,13 +94,13 @@ describe("AppConnectorRegistry", () => {
     if (candidate === undefined) {
       throw new Error("expected discovery candidate");
     }
-    const installation = AppConnectorRegistry.register(candidate, {
+    const installation = ServerConnectorRegistry.register(candidate, {
       registeredBy: "act_owner",
     });
 
     // When
-    const pending = AppConnectorRegistry.requestConsent(installation.id);
-    const consented = AppConnectorRegistry.grantConsent(installation.id, {
+    const pending = ServerConnectorRegistry.requestConsent(installation.id);
+    const consented = ServerConnectorRegistry.grantConsent(installation.id, {
       grantedBy: "act_owner",
       capabilities: ["git"],
       permissions: [{ action: "tool.call", allowlist: ["bash", "edit", "grep", "read"] }],
@@ -116,16 +116,16 @@ describe("AppConnectorRegistry", () => {
       grantedBy: "act_owner",
       capabilities: ["git"],
     });
-    expect(AppConnectorRegistry.get(installation.id)).toEqual(consented);
+    expect(ServerConnectorRegistry.get(installation.id)).toEqual(consented);
   });
 
   test("rejects unavailable discovery candidates at registration", async () => {
     // Given
-    const connector = BuiltInAppConnectors.get("app.codex");
+    const connector = ServerConnectorDefinitions.get("app.codex");
     if (connector === undefined) {
-      throw new Error("expected built-in Codex connector");
+      throw new Error("expected server Codex connector");
     }
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [connector],
       runDetectCommand: async () => ({
         exitCode: 127,
@@ -139,8 +139,8 @@ describe("AppConnectorRegistry", () => {
     }
 
     // When / Then
-    expect(() => AppConnectorRegistry.register(candidate, { registeredBy: "act_owner" })).toThrow(
-      "Cannot register unavailable connector",
-    );
+    expect(() =>
+      ServerConnectorRegistry.register(candidate, { registeredBy: "act_owner" }),
+    ).toThrow("Cannot register unavailable connector");
   });
 });

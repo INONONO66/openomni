@@ -178,7 +178,7 @@ const opencodeConnector: AppConnector.Definition = {
   },
 };
 
-const builtInConnectors = [
+const serverConnectorDefinitions = [
   claudeCodeConnector,
   codexConnector,
   opencodeConnector,
@@ -188,13 +188,13 @@ function cloneConnector(connector: AppConnector.Definition): AppConnector.Defini
   return AppConnector.Definition.parse(structuredClone(connector));
 }
 
-export namespace BuiltInAppConnectors {
+export namespace ServerConnectorDefinitions {
   export function list(): readonly AppConnector.Definition[] {
-    return builtInConnectors.map(cloneConnector);
+    return serverConnectorDefinitions.map(cloneConnector);
   }
 
   export function get(id: string): AppConnector.Definition | undefined {
-    const connector = builtInConnectors.find((candidate) => candidate.id === id);
+    const connector = serverConnectorDefinitions.find((candidate) => candidate.id === id);
     return connector === undefined ? undefined : cloneConnector(connector);
   }
 }

@@ -2,16 +2,20 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { type AppConnector, type Execution, WorkItem } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
-import { BuiltInAppConnectors } from "../../src/app-connector";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
 import { command, expectRejectsWithMessage, workerSpawnPayload } from "./helpers";
+
+const TEST_CONNECTOR_ID = "app.test-connector";
+const TEST_INSTALLATION_ID_PREFIX = "install:test-connector";
+const TEST_ENDPOINT_ID_PREFIX = "endpoint:install:test-connector";
+const TEST_CONNECTOR_NAME = "Test Connector";
 
 const ConnectorEndpointWorkerSpawnOutput = z
   .object({
     output: z
       .object({
         workItemHash: z.string(),
-        connectorId: z.literal("app.codex"),
+        connectorId: z.literal(TEST_CONNECTOR_ID),
         connectorInstallationId: z.string(),
         result: z.object({ status: z.literal("succeeded"), output: z.literal("done") }),
       })
@@ -50,7 +54,7 @@ const connectorEvidenceCases: readonly ConnectorEvidenceCase[] = [
         {
           kind: "connector_log",
           artifactId: "art_cli_log",
-          title: "Codex CLI log",
+          title: "connector log",
           mimeType: "text/plain",
         },
       ],
@@ -77,25 +81,50 @@ const connectorEvidenceCases: readonly ConnectorEvidenceCase[] = [
   },
 ];
 
-function codexConnector(): AppConnector.Definition {
-  const connector = BuiltInAppConnectors.get("app.codex");
-  if (connector === undefined) {
-    throw new Error("expected built-in Codex connector");
-  }
-  return connector;
+function testConnector(): AppConnector.Definition {
+  return {
+    id: TEST_CONNECTOR_ID,
+    name: TEST_CONNECTOR_NAME,
+    version: "1.0.0",
+    description: "Runs a test connector endpoint",
+    detect: {
+      command: "test-connector",
+      testedVersions: ">=1.0.0 <2.0.0",
+    },
+    spawn: {
+      command: "test-connector",
+      promptArgument: "{{prompt}}",
+      cwd: "{{worktree}}",
+    },
+    evidence: {
+      emits: ["exit_code"],
+    },
+    requires: {},
+    driver: {
+      provider: "test-connector",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
+    profile: {
+      kind: "connector_endpoint",
+      taskTypes: ["code.change"],
+    },
+  };
 }
 
-function seedCodexInstallation(
+function seedConnectorInstallation(
   status: AppConnector.InstallationStatus,
   withConsent = status === "enabled",
 ): AppConnector.Installation {
-  const connector = codexConnector();
+  const connector = testConnector();
   return AppConnectorInstallationStore.set({
-    id: `install:codex:${status}`,
+    id: `${TEST_INSTALLATION_ID_PREFIX}:${status}`,
     connectorId: connector.id,
     connectorVersion: connector.version,
     definition: connector,
-    detectedVersion: "0.139.1",
+    detectedVersion: "1.0.0",
     testedVersions: connector.detect.testedVersions,
     status,
     registeredBy: "act_owner",
@@ -108,11 +137,11 @@ function connectorEndpointWorkerCommand(options: ConnectorEndpointCommandOptions
     "worker.spawn",
     {
       kind: "worker",
-      id: "app.codex",
-      endpointId: "endpoint:install:codex:enabled",
+      id: TEST_CONNECTOR_ID,
+      endpointId: `${TEST_ENDPOINT_ID_PREFIX}:enabled`,
       ...options,
     },
-    workerSpawnPayload("build with codex"),
+    workerSpawnPayload("build with test connector"),
   );
 }
 
@@ -150,7 +179,7 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
   });
 
   test("dispatches to injected connector endpoint driver when an enabled matching installation exists", async () => {
-    const installation = seedCodexInstallation("enabled");
+    const installation = seedConnectorInstallation("enabled");
     const requests: Execution.Request[] = [];
     const installationIds: string[] = [];
     const handlers = createConnectorEndpointHandlers(async (request) => {
@@ -160,30 +189,30 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     });
 
     const result = ConnectorEndpointWorkerSpawnOutput.parse(
-      await dispatchConnectorEndpointWorkerSpawn(handlers, { name: "Codex CLI" }),
+      await dispatchConnectorEndpointWorkerSpawn(handlers, { name: TEST_CONNECTOR_NAME }),
     );
 
     expect(result.output).toMatchObject({
       workItemHash: WorkItemStore.list()[0]?.hash,
-      connectorId: "app.codex",
+      connectorId: TEST_CONNECTOR_ID,
       connectorInstallationId: installation.id,
       result: { status: "succeeded", output: "done" },
     });
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
-      prompt: "build with codex",
-      agentName: "endpoint:install:codex:enabled",
+      prompt: "build with test connector",
+      agentName: `${TEST_ENDPOINT_ID_PREFIX}:enabled`,
     });
     expect(installationIds).toEqual([installation.id]);
     expect(WorkItemStore.list()[0]).toMatchObject({
       executorKind: "connector_endpoint",
-      assigneeId: "endpoint:install:codex:enabled",
+      assigneeId: `${TEST_ENDPOINT_ID_PREFIX}:enabled`,
     });
   });
 
   for (const evidenceCase of connectorEvidenceCases) {
     test(evidenceCase.name, async () => {
-      seedCodexInstallation("enabled");
+      seedConnectorInstallation("enabled");
       const handlers = createConnectorEndpointHandlers(async (request) => ({
         ...succeededResult(request.executionRequest),
         ...evidenceCase.resultEvidence,
@@ -206,7 +235,7 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
   }
 
   test("fails closed when an enabled matching installation exists but no connector driver is registered", async () => {
-    seedCodexInstallation("enabled");
+    seedConnectorInstallation("enabled");
     const handlers = createWorkerDispatchHandlers();
 
     await expectConnectorEndpointWorkerSpawnRejects(handlers, missingConnectorDriverOwnerError);
@@ -218,7 +247,7 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
   });
 
   test("marks the WorkItem failed when the connector driver owner throws", async () => {
-    seedCodexInstallation("enabled");
+    seedConnectorInstallation("enabled");
     const handlers = createConnectorEndpointHandlers(async () => {
       throw new Error("runtime exploded");
     });
@@ -253,7 +282,7 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
   });
 
   test("rejects an enabled matching installation without consent before dispatch", () => {
-    expect(() => seedCodexInstallation("enabled", false)).toThrow(
+    expect(() => seedConnectorInstallation("enabled", false)).toThrow(
       "enabled installation requires owner consent",
     );
     expect(WorkItemStore.list()).toHaveLength(0);
@@ -266,8 +295,8 @@ describe("worker.spawn connector endpoint dispatch wiring", () => {
     "disabled",
     "verification_failed",
   ] as const) {
-    test(`fails closed without calling runtime when Codex installation is ${status}`, async () => {
-      seedCodexInstallation(status);
+    test(`fails closed without calling runtime when connector installation is ${status}`, async () => {
+      seedConnectorInstallation(status);
       let dispatchCalled = false;
       const handlers = createConnectorEndpointHandlers(async (request) => {
         dispatchCalled = true;

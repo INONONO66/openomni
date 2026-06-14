@@ -1,18 +1,18 @@
 import { AppConnector, Policy } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Bus } from "@openomni/session";
 import { z } from "zod";
-import { AppConnectorDiscovery } from "./discovery.js";
+import { ServerConnectorDiscovery } from "./discovery.js";
 import type { DetectCommandRunner, DiscoveryCandidate } from "./discovery.js";
 
 const MAX_VERIFICATION_DIAGNOSTIC_LENGTH = 512;
 const sensitiveDiagnosticPattern =
   /\b([A-Z][A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Z0-9_]*)=([^\s]+)/gi;
 
-export interface AppConnectorRegistrationOptions {
+export interface ServerConnectorRegistrationOptions {
   readonly registeredBy: string;
 }
 
-export const AppConnectorConsentOptions = z
+export const ServerConnectorConsentOptions = z
   .object({
     grantedBy: z.string().min(1),
     credentials: z.array(z.string().min(1)).optional(),
@@ -20,17 +20,17 @@ export const AppConnectorConsentOptions = z
     permissions: z.array(Policy.Permission).optional(),
   })
   .strict();
-export type AppConnectorConsentOptions = z.infer<typeof AppConnectorConsentOptions>;
+export type ServerConnectorConsentOptions = z.infer<typeof ServerConnectorConsentOptions>;
 
-export interface AppConnectorSmokeVerifyOptions {
+export interface ServerConnectorSmokeVerifyOptions {
   readonly detectTimeoutMs?: number;
   readonly runDetectCommand?: DetectCommandRunner;
 }
 
-export namespace AppConnectorRegistry {
+export namespace ServerConnectorRegistry {
   export function register(
     candidate: DiscoveryCandidate,
-    options: AppConnectorRegistrationOptions,
+    options: ServerConnectorRegistrationOptions,
   ): AppConnector.Installation {
     if (candidate.status !== "available") {
       throw new Error(`Cannot register unavailable connector ${candidate.id}`);
@@ -71,17 +71,17 @@ export namespace AppConnectorRegistry {
 
   export function grantConsent(
     id: string,
-    options: AppConnectorConsentOptions,
+    options: ServerConnectorConsentOptions,
   ): AppConnector.Installation {
     return AppConnectorInstallationStore.grantConsent(
       id,
-      AppConnectorConsentOptions.parse(options),
+      ServerConnectorConsentOptions.parse(options),
     );
   }
 
   export async function smokeVerify(
     id: string,
-    options: AppConnectorSmokeVerifyOptions = {},
+    options: ServerConnectorSmokeVerifyOptions = {},
   ): Promise<AppConnector.Installation> {
     const installation = AppConnectorInstallationStore.get(id);
     if (installation === undefined) {
@@ -91,7 +91,7 @@ export namespace AppConnectorRegistry {
       throw new Error(`Cannot smoke verify ${installation.status} installation: ${id}`);
     }
 
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [installation.definition],
       detectTimeoutMs: options.detectTimeoutMs,
       runDetectCommand: options.runDetectCommand,

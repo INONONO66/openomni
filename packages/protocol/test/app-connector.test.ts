@@ -9,7 +9,7 @@ function issuePaths(error: { issues: Array<{ path: PropertyKey[] }> }): string[]
 
 function validDriver(): Record<string, unknown> {
   return {
-    provider: "claude-code",
+    provider: "example-provider",
     install: {
       scopes: ["user", "workspace"],
       hooks: ["permission"],
@@ -26,18 +26,18 @@ function validDriver(): Record<string, unknown> {
 
 function validConnector(): Record<string, unknown> {
   return {
-    id: "app.claude-code",
-    name: "Claude Code",
+    id: "app.example-connector",
+    name: "Example Connector",
     version: "1.0.0",
-    description: "Runs Claude Code as an installed CLI application",
+    description: "Runs Example Connector as an installed CLI application",
     detect: {
-      command: "claude",
+      command: "example-cli",
       args: ["--version"],
-      versionPattern: "claude-code (?<version>\\d+\\.\\d+\\.\\d+)",
+      versionPattern: "example-provider (?<version>\\d+\\.\\d+\\.\\d+)",
       testedVersions: ">=1.0.0 <2.0.0",
     },
     spawn: {
-      command: "claude",
+      command: "example-cli",
       args: ["--print", "{{prompt}}"],
       promptArgument: "{{prompt}}",
       cwd: "{{worktree}}",
@@ -45,13 +45,13 @@ function validConnector(): Record<string, unknown> {
     },
     logs: {
       kind: "jsonl",
-      path: "~/.claude/projects/{{workspaceHash}}/*.jsonl",
+      path: "~/.example-connector/projects/{{workspaceHash}}/*.jsonl",
       eventTimeField: "timestamp",
       messageField: "message",
     },
     questionBridge: {
       kind: "hook",
-      command: "openomni-claude-permission-hook",
+      command: "openomni-example-permission-hook",
       promptField: "prompt",
       responseMode: "stdout",
     },
@@ -84,7 +84,7 @@ describe("AppConnector protocol domain", () => {
       // Given
       const installation = {
         id: "install-app-codex",
-        connectorId: "app.claude-code",
+        connectorId: "app.example-connector",
         connectorVersion: "1.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
@@ -109,7 +109,7 @@ describe("AppConnector protocol domain", () => {
       // Then
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.connectorId).toBe("app.claude-code");
+        expect(result.data.connectorId).toBe("app.example-connector");
         expect(result.data.status).toBe("registered");
         expect(result.data.endpointId).toBe("endpoint:install-app-codex");
         expect(result.data.consent?.credentials).toEqual(["ANTHROPIC_API_KEY"]);
@@ -121,7 +121,7 @@ describe("AppConnector protocol domain", () => {
       // Given
       const installation = {
         id: "install-app-codex",
-        connectorId: "app.codex",
+        connectorId: "app.example-worker",
         connectorVersion: "1.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: { ...validConnector(), id: "app.other" },
@@ -147,7 +147,7 @@ describe("AppConnector protocol domain", () => {
       // Given
       const installation = {
         id: "install-app-codex",
-        connectorId: "app.claude-code",
+        connectorId: "app.example-connector",
         connectorVersion: "2.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
@@ -173,7 +173,7 @@ describe("AppConnector protocol domain", () => {
       // Given
       const installation = {
         id: "install-app-codex",
-        connectorId: "app.claude-code",
+        connectorId: "app.example-connector",
         connectorVersion: "1.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
@@ -207,7 +207,7 @@ describe("AppConnector protocol domain", () => {
       // Then
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.id).toBe("app.claude-code");
+        expect(result.data.id).toBe("app.example-connector");
         expect(result.data.detect.testedVersions).toBe(">=1.0.0 <2.0.0");
         expect(result.data.spawn.promptArgument).toBe("{{prompt}}");
         expect(result.data.driver.submit.ack).toBe("accepted");
@@ -443,8 +443,8 @@ describe("AppConnector protocol domain", () => {
       const payload = {
         traceId: "trace-app-connector-verification",
         time: 100,
-        installationId: "install:app.codex",
-        connectorId: "app.codex",
+        installationId: "install:app.example-worker",
+        connectorId: "app.example-worker",
         connectorVersion: "1.0.0",
         reason: "unsupported_version",
         testedVersions: ">=0.139.0 <0.140.0",
@@ -469,8 +469,8 @@ describe("AppConnector protocol domain", () => {
       const payload = {
         traceId: "trace-app-connector-verification",
         time: 100,
-        installationId: "install:app.codex",
-        connectorId: "app.codex",
+        installationId: "install:app.example-worker",
+        connectorId: "app.example-worker",
         connectorVersion: "1.0.0",
         reason: "permission_denied",
         testedVersions: ">=0.139.0 <0.140.0",
@@ -488,8 +488,8 @@ describe("AppConnector protocol domain", () => {
       const payload = {
         traceId: "trace-app-connector-verification",
         time: 100,
-        installationId: "install:app.codex",
-        connectorId: "app.codex",
+        installationId: "install:app.example-worker",
+        connectorId: "app.example-worker",
         connectorVersion: "1.0.0",
         reason: "detect_failed",
         testedVersions: ">=0.139.0 <0.140.0",

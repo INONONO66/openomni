@@ -51,11 +51,11 @@ describe("Dispatch protocol schemas", () => {
       kind: "worker",
       name: "coder",
       endpointId: "endpoint:install-app-codex",
-      connectorInstallationId: "install:app.codex",
+      connectorInstallationId: "install:app.example-worker",
     });
 
     expect(parsed.endpointId).toBe("endpoint:install-app-codex");
-    expect(parsed.connectorInstallationId).toBe("install:app.codex");
+    expect(parsed.connectorInstallationId).toBe("install:app.example-worker");
   });
 
   test("Target rejects executorKind as a public dispatch selector", () => {

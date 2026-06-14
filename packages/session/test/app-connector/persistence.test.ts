@@ -28,14 +28,14 @@ function removeSqliteFiles(path: string): void {
 
 function connectorDefinition(): AppConnector.Definition {
   return {
-    id: "app.codex",
-    name: "Codex CLI",
+    id: "app.example-worker",
+    name: "Example Worker",
     version: "1.0.0",
-    description: "Runs Codex CLI as an installed connector endpoint",
+    description: "Runs Example Worker as an installed connector endpoint",
     detect: {
       command: "codex",
       args: ["--version"],
-      versionPattern: "^codex-cli (?<version>\\d+\\.\\d+\\.\\d+)$",
+      versionPattern: "^example-worker (?<version>\\d+\\.\\d+\\.\\d+)$",
       testedVersions: ">=0.139.0 <0.140.0",
     },
     spawn: {
