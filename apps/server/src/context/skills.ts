@@ -104,8 +104,4 @@ export namespace SkillLoader {
 
     return lines.join("\n");
   }
-
-  export function _resetCache(): void {
-    discoverCache.clear();
-  }
 }

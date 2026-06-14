@@ -109,9 +109,4 @@ export namespace InstructionLoader {
     loadCache.set(key, output);
     return output;
   }
-
-  export function _resetCache(): void {
-    discoverCache.clear();
-    loadCache.clear();
-  }
 }

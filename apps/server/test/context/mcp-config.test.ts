@@ -22,7 +22,6 @@ afterAll(() => {
 
 afterEach(() => {
   Bus.reset();
-  McpConfigLoader._resetCache();
 });
 
 describe("McpConfigLoader.discover", () => {
@@ -209,7 +208,7 @@ describe("McpConfigLoader caching", () => {
     expect(first).toHaveLength(1);
   });
 
-  it("discover caches null for missing config", () => {
+  it("discover caches null for missing config for the same workspace path", () => {
     const dir = join(tempRoot, "cache-null");
     mkdirSync(dir, { recursive: true });
 
@@ -226,9 +225,14 @@ describe("McpConfigLoader caching", () => {
     const cached = McpConfigLoader.discover(dir);
     expect(cached).toBeNull();
 
-    McpConfigLoader._resetCache();
+    const freshDir = join(tempRoot, "cache-null-fresh");
+    mkdirSync(join(freshDir, ".openomni"), { recursive: true });
+    writeFileSync(
+      join(freshDir, ".openomni", "mcp.json"),
+      JSON.stringify([{ name: "late", transport: "stdio", command: "node" }]),
+    );
 
-    const fresh = McpConfigLoader.discover(dir);
+    const fresh = McpConfigLoader.discover(freshDir);
     expect(fresh).toHaveLength(1);
   });
 });
