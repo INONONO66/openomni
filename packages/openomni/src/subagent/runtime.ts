@@ -29,70 +29,70 @@ import {
   runWithTranscript,
 } from "./transcript";
 
+interface SpawnConfig extends RuntimeConfig {
+  parentSessionId?: string;
+  agentName: string;
+  title: string;
+  prompt: string;
+  category?: string;
+  signal?: AbortSignal;
+  softTimeoutMs?: number;
+  hardTimeoutMs?: number;
+  permissions?: Policy.Permission;
+}
+
+interface SendConfig extends RuntimeConfig {
+  sessionId: string;
+  prompt: string;
+  signal?: AbortSignal;
+  softTimeoutMs?: number;
+  hardTimeoutMs?: number;
+  permissions?: Policy.Permission;
+  compaction?: SendCompactionConfig;
+}
+
+interface WaitConfig {
+  sessionId: string;
+  runId: string;
+  timeoutMs?: number;
+}
+
+interface RunResult {
+  sessionId: string;
+  runId: string;
+  output: string;
+  finishReason: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>["finishReason"];
+}
+
+interface SpawnBackgroundResult {
+  sessionId: string;
+  runId: string;
+}
+
+interface WaitResult {
+  status: WorkerRunRecord["status"];
+  output?: string;
+}
+
+interface ResumeConfig extends RuntimeConfig {
+  sessionId: string;
+}
+
+interface ResumeResult {
+  resumed: boolean;
+  sessionId: string;
+  runId: string | undefined;
+  output?: string;
+  finishReason?: RunResult["finishReason"];
+}
+
+interface CancelConfig {
+  sessionId: string;
+  runId?: string;
+  hardTimeoutMs?: number;
+}
+
 export namespace SubagentRuntime {
-  export interface SpawnConfig extends RuntimeConfig {
-    parentSessionId?: string;
-    agentName: string;
-    title: string;
-    prompt: string;
-    category?: string;
-    signal?: AbortSignal;
-    softTimeoutMs?: number;
-    hardTimeoutMs?: number;
-    permissions?: Policy.Permission;
-  }
-
-  export interface SendConfig extends RuntimeConfig {
-    sessionId: string;
-    prompt: string;
-    signal?: AbortSignal;
-    softTimeoutMs?: number;
-    hardTimeoutMs?: number;
-    permissions?: Policy.Permission;
-    compaction?: SendCompactionConfig;
-  }
-
-  export interface WaitConfig {
-    sessionId: string;
-    runId: string;
-    timeoutMs?: number;
-  }
-
-  export interface RunResult {
-    sessionId: string;
-    runId: string;
-    output: string;
-    finishReason: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>["finishReason"];
-  }
-
-  export interface SpawnBackgroundResult {
-    sessionId: string;
-    runId: string;
-  }
-
-  export interface WaitResult {
-    status: WorkerRunRecord["status"];
-    output?: string;
-  }
-
-  export interface ResumeConfig extends RuntimeConfig {
-    sessionId: string;
-  }
-
-  export interface ResumeResult {
-    resumed: boolean;
-    sessionId: string;
-    runId: string | undefined;
-    output?: string;
-    finishReason?: RunResult["finishReason"];
-  }
-
-  export interface CancelConfig {
-    sessionId: string;
-    runId?: string;
-    hardTimeoutMs?: number;
-  }
-
   export async function spawn(config: SpawnConfig): Promise<RunResult> {
     const hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config);
     const decision = await dispatchPreDelegation({
