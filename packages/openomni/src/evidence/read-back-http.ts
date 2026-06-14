@@ -43,8 +43,7 @@ export async function loadReadBackUrl(
     return { statusCode: response.status, ...body };
   } catch (error) {
     if (error instanceof DisallowedNetworkTargetError) throw error;
-    if (error instanceof Error) return failedReadBackHttpResult();
-    throw error;
+    return failedReadBackHttpResult();
   }
 }
 
@@ -92,9 +91,8 @@ async function readBody(
       }
       chunks.push(result.value);
     }
-  } catch (error) {
-    if (error instanceof Error) return incompleteBody();
-    throw error;
+  } catch {
+    return incompleteBody();
   }
   const bodyBytes = collectBytes(chunks, bytes);
   return { body: decode(bodyBytes), bodyDigest: digestBytes(bodyBytes), complete: true };
