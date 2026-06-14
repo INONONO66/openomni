@@ -132,7 +132,7 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
     documentedSkip,
   );
   itSkip(
-    "UNGOVERNED: Worker spawn packages/coordinator/src/worker-pool/supervisor.ts:doStart() — no policy check",
+    "UNGOVERNED: Worker spawn packages/coordinator/src/worker-supervision/supervisor.ts:doStart() — no policy check",
     documentedSkip,
   );
   itSkip(

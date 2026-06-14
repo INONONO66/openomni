@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-describe("worker pool public facade removal", () => {
+describe("worker supervision public facade removal", () => {
   test("root coordinator barrel exposes the worker manager without legacy pool internals", async () => {
     const coordinator = await import("../../src/index");
 
