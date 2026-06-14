@@ -12,7 +12,7 @@ import { applyConnectorReadBackBuilders } from "./read-back-builder.js";
 export type { ConnectorEndpointCredentialMap } from "./env.js";
 export type { ConnectorQuestionBridgeHandler } from "../../src/connector/question-bridge.js";
 
-export interface ConnectorEndpointProcessDriverInput {
+interface ConnectorEndpointProcessDriverInput {
   readonly command: Dispatch.Command;
   readonly executionRequest: Execution.Request;
   readonly installation: AppConnector.Installation;
