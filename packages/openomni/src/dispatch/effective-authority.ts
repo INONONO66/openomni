@@ -1,5 +1,3 @@
-import type { Dispatch } from "@openomni/protocol";
-
 export namespace EffectiveAuthority {
   export type Axis =
     | "blacklist"
@@ -24,7 +22,7 @@ export namespace EffectiveAuthority {
     readonly factsUsed: readonly string[];
   }
 
-  export function axis(
+  function axis(
     axisName: Axis,
     verdict: Verdict,
     reason: string,
@@ -33,7 +31,7 @@ export namespace EffectiveAuthority {
     return { axis: axisName, verdict, reason, evidence };
   }
 
-  export function evaluate(axes: readonly AxisDecision[], allowReason: string): Result {
+  function evaluate(axes: readonly AxisDecision[], allowReason: string): Result {
     const denied = axes.find((entry) => entry.verdict === "deny");
     const factsUsed = axes.flatMap((entry) => [
       `effective_authority.${entry.axis}.${entry.verdict}`,
@@ -199,6 +197,4 @@ export namespace EffectiveAuthority {
     readonly allowed: boolean;
     readonly reason: string;
   };
-
-  export type ActorContext = Dispatch.ActorContext;
 }
