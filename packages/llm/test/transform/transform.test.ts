@@ -35,6 +35,15 @@ describe("ProviderTransform.normalizeMessages", () => {
   };
   const openaiModel = { npm: "@ai-sdk/openai", modelId: "gpt-4o" };
 
+  test("does not expose NormalizeOptions as a public namespace member", async () => {
+    const transformSource = await Bun.file(
+      new URL("../../src/transform/index.ts", import.meta.url),
+    ).text();
+
+    expect(Object.hasOwn(ProviderTransform, "NormalizeOptions")).toBe(false);
+    expect(transformSource).not.toMatch(/\bexport\s+interface\s+NormalizeOptions\b/);
+  });
+
   test("openai is passthrough", () => {
     const msgs: ModelMessage[] = [
       { role: "user", content: "" },

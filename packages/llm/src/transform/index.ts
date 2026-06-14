@@ -21,7 +21,7 @@ export namespace ProviderTransform {
     }
   }
 
-  export interface NormalizeOptions {
+  interface NormalizeOptions {
     npm: string;
     modelId: string;
   }
