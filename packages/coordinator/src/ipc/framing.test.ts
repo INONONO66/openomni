@@ -1,6 +1,8 @@
 import { describe, test, expect } from "bun:test";
-import { LineDecoder, MAX_FRAME_BYTES } from "./framing";
+import { LineDecoder } from "./framing";
 import { IpcProtocolError } from "./errors";
+
+const FRAME_LIMIT_BYTES = 16 * 1024 * 1024;
 
 describe("LineDecoder", () => {
   test("decodes complete lines", () => {
@@ -56,13 +58,13 @@ describe("LineDecoder", () => {
   test("throws IpcProtocolError when buffer exceeds MAX_FRAME_BYTES", () => {
     const dec = new LineDecoder();
     // push slightly over the cap without a newline
-    const oversized = "x".repeat(MAX_FRAME_BYTES + 1);
+    const oversized = "x".repeat(FRAME_LIMIT_BYTES + 1);
     expect(() => dec.push(oversized)).toThrow(IpcProtocolError);
   });
 
   test("resets buffer after oversized rejection", () => {
     const dec = new LineDecoder();
-    const oversized = "x".repeat(MAX_FRAME_BYTES + 1);
+    const oversized = "x".repeat(FRAME_LIMIT_BYTES + 1);
     try {
       dec.push(oversized);
     } catch {
@@ -76,7 +78,7 @@ describe("LineDecoder", () => {
   test("resets streaming decoder state after oversized Uint8Array rejection", () => {
     const dec = new LineDecoder();
     const encoder = new TextEncoder();
-    const prefix = encoder.encode("x".repeat(MAX_FRAME_BYTES + 1));
+    const prefix = encoder.encode("x".repeat(FRAME_LIMIT_BYTES + 1));
     const oversizedWithPartialUtf8 = new Uint8Array(prefix.length + 2);
     oversizedWithPartialUtf8.set(prefix);
     oversizedWithPartialUtf8.set([0xf0, 0x9f], prefix.length);
@@ -87,7 +89,7 @@ describe("LineDecoder", () => {
 
   test("resets buffer after completed oversized frame rejection", () => {
     const dec = new LineDecoder();
-    const oversizedLine = `${JSON.stringify({ data: "y".repeat(MAX_FRAME_BYTES) })}\npartial`;
+    const oversizedLine = `${JSON.stringify({ data: "y".repeat(FRAME_LIMIT_BYTES) })}\npartial`;
 
     expect(() => dec.push(oversizedLine)).toThrow(IpcProtocolError);
     expect(dec.push('{"ok":true}\n')).toEqual([{ ok: true }]);
@@ -96,13 +98,13 @@ describe("LineDecoder", () => {
   test("allows frames just under the cap", () => {
     const dec = new LineDecoder();
     // a partial buffer right at the limit should not throw
-    const justUnder = "x".repeat(MAX_FRAME_BYTES);
+    const justUnder = "x".repeat(FRAME_LIMIT_BYTES);
     expect(() => dec.push(justUnder)).not.toThrow();
   });
 
   test("rejects completed frame exceeding MAX_FRAME_BYTES", () => {
     const dec = new LineDecoder();
-    const payload = JSON.stringify({ data: "y".repeat(MAX_FRAME_BYTES) });
+    const payload = JSON.stringify({ data: "y".repeat(FRAME_LIMIT_BYTES) });
     expect(() => dec.push(`${payload}\n`)).toThrow(IpcProtocolError);
   });
 
@@ -110,9 +112,9 @@ describe("LineDecoder", () => {
     const dec = new LineDecoder();
     // build a JSON line whose total length equals MAX_FRAME_BYTES
     const overhead = '{"d":""}';
-    const filler = "z".repeat(MAX_FRAME_BYTES - overhead.length);
+    const filler = "z".repeat(FRAME_LIMIT_BYTES - overhead.length);
     const line = `{"d":"${filler}"}`;
-    expect(line).toHaveLength(MAX_FRAME_BYTES);
+    expect(line).toHaveLength(FRAME_LIMIT_BYTES);
     const results = dec.push(`${line}\n`);
     expect(results).toHaveLength(1);
   });
