@@ -18,6 +18,20 @@ interface PrefixGuardState {
   serverName?: string;
 }
 
+interface PreToolUseContext {
+  readonly call: Tool.Call;
+  readonly tools: readonly NativeTool[];
+  readonly isServerConnected: (serverName: string) => boolean;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+interface PreToolUseResult {
+  readonly verdict: Policy.PolicyDecision;
+  readonly tool?: NativeTool;
+  readonly serverName?: string;
+}
+
 function evaluatePrefixGuard(input: {
   readonly call: Tool.Call;
   readonly resource: string;
@@ -138,6 +152,10 @@ function createMcpPrefixGuard(state: PrefixGuardState): PolicyRegistration {
   };
 }
 
+function registrations(state: PrefixGuardState): PolicyRegistration[] {
+  return [createMcpPrefixGuard(state)];
+}
+
 export namespace McpPrefixGuardMiddleware {
   export const Definition = {
     name: "mcp-prefix-guard",
@@ -145,24 +163,6 @@ export namespace McpPrefixGuardMiddleware {
     priority: 0,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
-
-  export interface PreToolUseContext {
-    readonly call: Tool.Call;
-    readonly tools: readonly NativeTool[];
-    readonly isServerConnected: (serverName: string) => boolean;
-    readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  }
-
-  export interface PreToolUseResult {
-    readonly verdict: Policy.PolicyDecision;
-    readonly tool?: NativeTool;
-    readonly serverName?: string;
-  }
-
-  export function registrations(state: PrefixGuardState): PolicyRegistration[] {
-    return [createMcpPrefixGuard(state)];
-  }
 
   export async function evaluatePreToolUse(ctx: PreToolUseContext): Promise<PreToolUseResult> {
     const state: PrefixGuardState = {
