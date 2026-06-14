@@ -65,6 +65,34 @@ function recordDecision(
   void onDecision?.(decision);
 }
 
+interface TimeoutOptions {
+  readonly onTimeout?: (error: ToolRuntimePolicyMiddleware.TimeoutError) => void;
+}
+
+interface PreToolContext {
+  readonly toolName: string;
+  readonly toolCallId?: string;
+  readonly input: Record<string, unknown>;
+  readonly riskTier: ToolRiskTier;
+  readonly descriptor?: RuntimeResource.Descriptor;
+  readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
+  readonly workspaceRoot?: string;
+  readonly lockOwnerId: string;
+  readonly signal?: AbortSignal;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+interface PostToolContext {
+  readonly toolName: string;
+  readonly toolCallId?: string;
+  readonly input: Record<string, unknown>;
+  readonly output?: string;
+  readonly handle: ToolRuntimePolicyMiddleware.RuntimePolicyHandle;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
 export namespace ToolRuntimePolicyMiddleware {
   export class TimeoutError extends Error {
     readonly timeoutMs: number;
@@ -76,10 +104,6 @@ export namespace ToolRuntimePolicyMiddleware {
     }
   }
 
-  export interface TimeoutOptions {
-    readonly onTimeout?: (error: TimeoutError) => void;
-  }
-
   export interface RuntimePolicyHandle {
     readonly timeoutMs: number;
     readonly lockOwnerId: string;
@@ -87,33 +111,9 @@ export namespace ToolRuntimePolicyMiddleware {
     lockAcquired: boolean;
   }
 
-  export interface PreToolContext {
-    readonly toolName: string;
-    readonly toolCallId?: string;
-    readonly input: Record<string, unknown>;
-    readonly riskTier: ToolRiskTier;
-    readonly descriptor?: RuntimeResource.Descriptor;
-    readonly timeoutConfig?: ToolExecutorConfig["timeoutMs"];
-    readonly workspaceRoot?: string;
-    readonly lockOwnerId: string;
-    readonly signal?: AbortSignal;
-    readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  }
-
   export interface PreToolResult {
     readonly decision: Policy.PolicyDecision;
     readonly handle: RuntimePolicyHandle;
-  }
-
-  export interface PostToolContext {
-    readonly toolName: string;
-    readonly toolCallId?: string;
-    readonly input: Record<string, unknown>;
-    readonly output?: string;
-    readonly handle: RuntimePolicyHandle;
-    readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   }
 
   export async function evaluatePreTool(ctx: PreToolContext): Promise<PreToolResult> {
