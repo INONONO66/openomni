@@ -9,13 +9,13 @@ type ConnectorVersion = {
 
 const DEFAULT_DETECT_TIMEOUT_MS = 10_000;
 
-export type ServerConnectorDiscoveryStatus =
+type ServerConnectorDiscoveryStatus =
   | "available"
   | "missing"
   | "unsupported_version"
   | "detect_failed";
 
-export interface DetectCommandResult {
+interface DetectCommandResult {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
@@ -31,7 +31,7 @@ export interface DiscoveryCandidate {
   readonly diagnostic?: string;
 }
 
-export interface ServerConnectorDiscoveryOptions {
+interface ServerConnectorDiscoveryOptions {
   readonly connectors?: readonly AppConnector.Definition[];
   readonly detectTimeoutMs?: number;
   readonly runDetectCommand?: DetectCommandRunner;

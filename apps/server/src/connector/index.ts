@@ -8,11 +8,8 @@ export { ServerConnectorDefinitions } from "./definitions.js";
 export { ServerConnectorDiscovery } from "./discovery.js";
 export { ServerConnectorRegistry } from "./registry.js";
 export type {
-  DetectCommandResult,
   DetectCommandRunner,
   DiscoveryCandidate,
-  ServerConnectorDiscoveryOptions,
-  ServerConnectorDiscoveryStatus,
 } from "./discovery.js";
 export type { ConnectorQuestionBridgeHandler };
 
