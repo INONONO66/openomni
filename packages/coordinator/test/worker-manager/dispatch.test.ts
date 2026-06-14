@@ -83,7 +83,7 @@ describe("worker manager dispatch", () => {
     expect(stats.active + stats.idle).toBe(stats.workers);
   });
 
-  test("creates a private per-pool socket directory", () => {
+  test("creates a private per-manager socket directory", () => {
     const entries = fs.readdirSync(socketDir, { withFileTypes: true });
     const privateDirs = entries.filter(
       (entry) => entry.isDirectory() && entry.name.startsWith("openomni-workers-"),

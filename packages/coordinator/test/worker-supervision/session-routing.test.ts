@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createSessionRouting } from "../../src/worker-pool/session-routing";
+import { createSessionRouting } from "../../src/worker-supervision/session-routing";
 
 describe("createSessionRouting", () => {
   test("same session always routes to same worker", () => {

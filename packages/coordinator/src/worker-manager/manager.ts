@@ -3,7 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import { Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { createSessionRouting, type SessionRouter } from "../worker-pool/session-routing";
+import { createSessionRouting, type SessionRouter } from "../worker-supervision/session-routing";
 import {
   WorkerSupervisor,
   type InboundWaitParams,
@@ -12,7 +12,7 @@ import {
   type ToolCallContext,
   type ToolCallParams,
   type ToolCallResult,
-} from "../worker-pool/supervisor";
+} from "../worker-supervision/supervisor";
 
 const DEFAULT_MAX_ACTIVE_WORKERS = 10;
 const HARD_MAX_ACTIVE_WORKERS = 10;

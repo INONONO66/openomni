@@ -12,7 +12,7 @@ src/
 ├── recovery/             # Interrupted worker run recovery
 ├── tool-permission/      # Non-interactive permission policy + audit log (internal; not in barrel)
 ├── worker-manager/       # ⭐ LIVE: OnDemandWorkerManager — spawn on demand, slots, idle shutdown
-└── worker-pool/          # Worker supervisor internals plus SessionRouting helper
+└── worker-supervision/   # Worker supervisor internals plus SessionRouting helper
 ```
 
 ## DEPENDENCIES
@@ -24,8 +24,8 @@ Depends on `@openomni/protocol` and `@openomni/session`. Runtime execution wirin
 | Module | Purpose |
 |--------|---------|
 | `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based dispatch, session affinity, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
-| `worker-pool/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
-| `worker-pool/session-routing.ts` | Session affinity helper used by `worker-manager`; fixed worker-index `route/complete` behavior remains test-covered |
+| `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
+| `worker-supervision/session-routing.ts` | Session affinity helper used by `worker-manager`; session-affinity `route/complete` behavior remains test-covered |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 | `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
 | `credentials/store.ts` / `credentials/injector.ts` | Loads stored credentials, filters by provider prefix, injects provider-scoped credentials into workers |
@@ -48,11 +48,11 @@ dispatch(runId)
 
 `apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager()` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; callbacks `onToolCall`, `onInboundWait`, `onWorkerSnapshot`) and owns dispatch, cancellation, message delivery, stats, and recovery wiring.
 
-Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, `recoverInterruptedRuns`, plus types. `worker-pool/`, `credentials/`, and `tool-permission/` are internal — not exported from the root barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, `recoverInterruptedRuns`, plus types. `worker-supervision/`, `credentials/`, and `tool-permission/` are internal — not exported from the root barrel.
 
 ## TESTS
 
-Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-pool/` supervisor contracts, SessionRouting behavior, barrel contracts, credentials, recovery, tool-permission, and harness smoke coverage.
+Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-supervision/` supervisor contracts, SessionRouting behavior, barrel contracts, credentials, recovery, tool-permission, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 

@@ -12,7 +12,7 @@ type AssertExact<A, B> = IsExact<A, B> extends true ? true : never;
 
 const toolCallResultIsProtocolResult: AssertExact<ToolCallResult, Tool.Result> = true;
 
-describe("worker-pool submodule contracts", () => {
+describe("worker-supervision submodule contracts", () => {
   test("ToolCallResult intentionally tracks the protocol Tool.Result contract", () => {
     expect(toolCallResultIsProtocolResult).toBe(true);
   });
