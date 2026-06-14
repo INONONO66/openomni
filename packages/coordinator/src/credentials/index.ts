@@ -1,6 +1,2 @@
-export { createCredentialInjector, type CredentialInjector } from "./injector";
-export {
-  getCredentialsForProvider,
-  loadCredentials,
-  type Credentials,
-} from "./store";
+export { createCredentialInjector } from "./injector";
+export { getCredentialsForProvider, loadCredentials } from "./store";
