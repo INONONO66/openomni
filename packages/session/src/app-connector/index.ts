@@ -39,6 +39,10 @@ function requireInstallation(id: string): AppConnector.Installation {
   return installation;
 }
 
+function removeInstallation(id: string): boolean {
+  return requireAdapter().remove(id);
+}
+
 function consentRecord(input: ConsentInput): AppConnector.Consent {
   return AppConnector.Consent.parse({
     ...input,
@@ -128,10 +132,6 @@ export namespace AppConnectorInstallationStore {
     return requireAdapter().list();
   }
 
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
-  }
-
   export function requestConsent(id: string): AppConnector.Installation {
     const installation = requireInstallation(id);
     if (installation.status !== "registered") {
@@ -197,6 +197,6 @@ export namespace AppConnectorInstallationStore {
 
   export function uninstall(id: string): boolean {
     requireInstallation(id);
-    return remove(id);
+    return removeInstallation(id);
   }
 }
