@@ -16,13 +16,13 @@ export type ExtensionAction =
   | "extension.audit";
 
 export type AuditVisibility = "internal" | "llm_reason" | "user_audit";
-export type AuditOperationType =
+type AuditOperationType =
   | "action_requested"
   | "policy_evaluated"
   | "action_approved"
   | "action_blocked";
 
-export interface AuditBase {
+interface AuditBase {
   readonly actionId: string;
   readonly parentActionId?: string;
   readonly visibility: AuditVisibility;
