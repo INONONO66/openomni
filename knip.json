@@ -1,0 +1,29 @@
+{
+  "$schema": "https://unpkg.com/knip/schema.json",
+  "ignoreBinaries": ["lefthook", "tsc", "turbo"],
+  "ignoreDependencies": ["@biomejs/biome", "@commitlint/cli", "lefthook", "turbo"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "package.json",
+        "script/**/*.ts",
+        "biome.json",
+        "lefthook.yml",
+        "commitlint.config.*"
+      ],
+      "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
+    },
+    "apps/server": {
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/e2e/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/coordinator": {
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/harness/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/protocol": {
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/**/*.d.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts"]
+    }
+  }
+}
