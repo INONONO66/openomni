@@ -40,7 +40,6 @@ export async function appendLifecycleEvent(
 export async function reconstructState(sessionId: string): Promise<ReconstructedState> {
   const current = new Map<string, ExtensionManagerEntry>();
   const versions = new Map<string, ExtensionManagerEntry>();
-  const installedVersions = new Map<string, string[]>();
   const audit: ExtensionAuditEntry[] = [];
 
   for (const event of auditEventsForSession(sessionId)) {
@@ -62,17 +61,9 @@ export async function reconstructState(sessionId: string): Promise<Reconstructed
     current.set(entry.id, entry);
     versions.set(stateKey(entry.id, entry.version), entry);
     audit.push(lifecycleAuditEntry(event.name, event, parsed.data));
-
-    if (entry.state === "installed") {
-      const installed = installedVersions.get(entry.id) ?? [];
-      if (!installed.includes(entry.version)) {
-        installed.push(entry.version);
-      }
-      installedVersions.set(entry.id, installed);
-    }
   }
 
-  return { current, versions, installedVersions, audit };
+  return { current, versions, audit };
 }
 
 export function resolveEntry(

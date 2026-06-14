@@ -27,15 +27,12 @@ export type {
 export type {
   ExtensionAuditContext,
   ExtensionAuditEntry,
-  ExtensionAuditOptions,
   ExtensionBindingOperationOptions,
   ExtensionLifecycleAuditEntry,
-  ExtensionListOptions,
   ExtensionManagerEntry,
   ExtensionOperationAuditEntry,
   ExtensionOperationOptions,
   ExtensionRequestInstallOptions,
-  ExtensionRollbackOptions,
   ExtensionVersionOperationOptions,
 } from "./manager-types";
 

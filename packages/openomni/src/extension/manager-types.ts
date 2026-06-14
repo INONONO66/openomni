@@ -9,11 +9,7 @@ export type ExtensionAction =
   | "extension.requestInstall"
   | "extension.approve"
   | "extension.install"
-  | "extension.enable"
-  | "extension.disable"
-  | "extension.rollback"
-  | "extension.list"
-  | "extension.audit";
+  | "extension.enable";
 
 export type AuditVisibility = "internal" | "llm_reason" | "user_audit";
 type AuditOperationType =
@@ -103,7 +99,6 @@ export interface AuditState {
 export interface ReconstructedState {
   readonly current: Map<string, ExtensionManagerEntry>;
   readonly versions: Map<string, ExtensionManagerEntry>;
-  readonly installedVersions: Map<string, string[]>;
   readonly audit: ExtensionAuditEntry[];
 }
 
@@ -129,20 +124,6 @@ export interface ExtensionVersionOperationOptions extends ExtensionOperationOpti
 
 export interface ExtensionBindingOperationOptions extends ExtensionVersionOperationOptions {
   readonly binding?: RuntimeBindingController;
-}
-
-export interface ExtensionRollbackOptions extends ExtensionOperationOptions {
-  readonly version?: string;
-  readonly toVersion?: string;
-  readonly reason?: string;
-}
-
-export interface ExtensionListOptions extends ExtensionOperationOptions {
-  readonly extensionId?: string;
-}
-
-export interface ExtensionAuditOptions extends ExtensionOperationOptions {
-  readonly extensionId?: string;
 }
 
 export interface ExtensionManagerEntry {
