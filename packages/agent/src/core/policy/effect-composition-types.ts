@@ -1,6 +1,6 @@
 import type { Policy } from "@openomni/protocol";
 
-export type Boundary = "pre" | "post";
+type Boundary = "pre" | "post";
 
 export interface OrderedDecision {
   readonly decision: Policy.PolicyDecision;
