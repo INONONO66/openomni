@@ -9,13 +9,13 @@ import { MEMORY_GUIDANCE } from "./guidance";
 const PROFILES_DIR = ".openomni/profiles";
 const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
 
-export namespace Profile {
-  export const MiddlewareConfigSchema = z.object({
-    agentName: z.string(),
-    homeRoot: z.string().optional(),
-  });
-  export type MiddlewareConfig = z.infer<typeof MiddlewareConfigSchema>;
+const MiddlewareConfigSchema = z.object({
+  agentName: z.string(),
+  homeRoot: z.string().optional(),
+});
+type MiddlewareConfig = z.infer<typeof MiddlewareConfigSchema>;
 
+export namespace Profile {
   export function createMiddleware(config: MiddlewareConfig): PolicyRegistration[] {
     const home = config.homeRoot ?? homedir();
     const agent = sanitizeName(config.agentName);
