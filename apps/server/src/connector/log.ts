@@ -5,8 +5,6 @@ import { type ConnectorTemplateValues, redactConnectorCredentialValues } from ".
 import { newestConnectorGlobMatch, resolveConnectorLogPath } from "./log-path.js";
 import { aggregateConnectorLogUsage, buildConnectorLogEvent } from "./log-telemetry.js";
 
-export { encodeWorktreeForClaudeProjects } from "./log-path.js";
-
 type ExecutionArtifact = NonNullable<Execution.Result["artifacts"]>[number];
 type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
 

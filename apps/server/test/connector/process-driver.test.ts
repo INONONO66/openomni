@@ -5,7 +5,7 @@ import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Artifact, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
-import { encodeWorktreeForClaudeProjects } from "../../src/connector/log.js";
+import { resolveConnectorLogPath } from "../../src/connector/log-path.js";
 import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
@@ -587,12 +587,14 @@ describe("createConnectorEndpointProcessDriver", () => {
     // Given
     const workspaceRoot = tempDir("connector-runtime-log-glob-worktree");
     const homeRoot = tempDir("connector-runtime-log-glob-home");
-    const projectDir = join(
-      homeRoot,
-      ".claude",
-      "projects",
-      encodeWorktreeForClaudeProjects(workspaceRoot),
-    );
+    const previousHome = process.env.HOME;
+    process.env.HOME = homeRoot;
+    const projectDir = resolveConnectorLogPath("~/.claude/projects/{{workspaceHash}}", {
+      prompt: "ship it",
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      worktree: workspaceRoot,
+    });
     mkdirSync(projectDir, { recursive: true });
     const olderLogPath = join(projectDir, "older.jsonl");
     const newerLogPath = join(projectDir, "newer.jsonl");
@@ -605,8 +607,6 @@ describe("createConnectorEndpointProcessDriver", () => {
     utimesSync(newerLogPath, new Date(1_700_000_010_000), new Date(1_700_000_010_000));
     const scriptPath = join(workspaceRoot, "fake-glob-log.ts");
     writeFileSync(scriptPath, "console.log('stdout should not be final');");
-    const previousHome = process.env.HOME;
-    process.env.HOME = homeRoot;
     const definition = {
       ...fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] }),
       logs: {
@@ -896,12 +896,14 @@ describe("createConnectorEndpointProcessDriver", () => {
     // Given
     const workspaceRoot = tempDir("connector-runtime-glob-log-liveness-worktree");
     const homeRoot = tempDir("connector-runtime-glob-log-liveness-home");
-    const projectDir = join(
-      homeRoot,
-      ".claude",
-      "projects",
-      encodeWorktreeForClaudeProjects(workspaceRoot),
-    );
+    const previousHome = process.env.HOME;
+    process.env.HOME = homeRoot;
+    const projectDir = resolveConnectorLogPath("~/.claude/projects/{{workspaceHash}}", {
+      prompt: "ship it",
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      worktree: workspaceRoot,
+    });
     mkdirSync(projectDir, { recursive: true });
     const logPath = join(projectDir, "session.jsonl");
     const scriptPath = join(workspaceRoot, "fake-glob-log-liveness.ts");
@@ -916,8 +918,6 @@ describe("createConnectorEndpointProcessDriver", () => {
         "}",
       ].join("\n"),
     );
-    const previousHome = process.env.HOME;
-    process.env.HOME = homeRoot;
     const definition = {
       ...fakeConnector("bun", [scriptPath], {
         timeoutMs: 1_000,
