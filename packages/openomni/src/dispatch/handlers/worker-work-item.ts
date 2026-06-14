@@ -40,14 +40,6 @@ export async function createWorkerSpawnWorkItem(
   return workItem.hash;
 }
 
-export async function failUnsupportedWorkerExecutor(
-  workItemHash: string,
-  executorKind: WorkItem.ExecutorKind,
-): Promise<never> {
-  const reason = `worker.spawn executor ${executorKind} is not wired`;
-  return failWorkerSpawnExecutor(workItemHash, executorKind, reason);
-}
-
 export async function failWorkerSpawnExecutor(
   workItemHash: string,
   executorKind: WorkItem.ExecutorKind,
