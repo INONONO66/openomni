@@ -46,10 +46,6 @@ export namespace WorkerHeartbeat {
     };
   }
 
-  export async function send(options: Options): Promise<void> {
-    await sendParsed(Options.parse(options));
-  }
-
   export function start(options: Options): ReturnType<typeof setInterval> {
     const parsed = Options.parse(options);
     return setInterval(() => {

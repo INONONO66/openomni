@@ -3,6 +3,10 @@ import { describe, expect, it, mock } from "bun:test";
 import { WorkerHeartbeat } from "../../src/execution/worker-heartbeat";
 
 describe("worker heartbeat", () => {
+  interface TimerRef {
+    current?: ReturnType<typeof setInterval>;
+  }
+
   it("creates worker snapshots from active run state", () => {
     const snapshot = WorkerHeartbeat.createSnapshot({
       activeRunIds: ["run-1", "run-2"],
@@ -20,10 +24,18 @@ describe("worker heartbeat", () => {
     });
   });
 
-  it("sends heartbeat payloads", async () => {
+  it("sends heartbeat payloads through the interval entrypoint", async () => {
+    const timer: TimerRef = {};
     const serverCall = mock(async () => ({ ok: true }));
+    const callObserved = new Promise<void>((resolve) => {
+      serverCall.mockImplementation(async () => {
+        if (timer.current) clearInterval(timer.current);
+        resolve();
+        return { ok: true };
+      });
+    });
 
-    await WorkerHeartbeat.send({
+    timer.current = WorkerHeartbeat.start({
       workerId: "worker-1",
       ipcAuthToken: "token",
       server: { call: serverCall },
@@ -31,7 +43,10 @@ describe("worker heartbeat", () => {
       getConfigEpoch: () => "epoch-1",
       readMemoryRssMb: () => 10,
       nowMs: () => 123,
+      intervalMs: 1,
     });
+
+    await callObserved;
 
     expect(serverCall).toHaveBeenCalledTimes(1);
     expect(serverCall).toHaveBeenCalledWith("worker.heartbeat", {
@@ -50,20 +65,31 @@ describe("worker heartbeat", () => {
   });
 
   it("ignores supervisor send failures", async () => {
+    const timer: TimerRef = {};
     const serverCall = mock(async () => {
       throw new Error("not connected yet");
     });
+    const callObserved = new Promise<void>((resolve) => {
+      serverCall.mockImplementation(async () => {
+        if (timer.current) clearInterval(timer.current);
+        resolve();
+        throw new Error("not connected yet");
+      });
+    });
 
-    await expect(
-      WorkerHeartbeat.send({
-        workerId: "worker-1",
-        ipcAuthToken: "token",
-        server: { call: serverCall },
-        getActiveRunIds: () => ["run-1"],
-        getConfigEpoch: () => "epoch-1",
-        readMemoryRssMb: () => 10,
-        nowMs: () => 123,
-      }),
-    ).resolves.toBeUndefined();
+    timer.current = WorkerHeartbeat.start({
+      workerId: "worker-1",
+      ipcAuthToken: "token",
+      server: { call: serverCall },
+      getActiveRunIds: () => ["run-1"],
+      getConfigEpoch: () => "epoch-1",
+      readMemoryRssMb: () => 10,
+      nowMs: () => 123,
+      intervalMs: 1,
+    });
+
+    await callObserved;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(serverCall).toHaveBeenCalledTimes(1);
   });
 });
