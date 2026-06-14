@@ -201,7 +201,6 @@ export namespace Provider {
 export {
   getSDK,
   getLanguage,
-  CODEX_ALLOWED_MODELS,
   ProviderCache,
   PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES,
   PROVIDER_SDK_CACHE_MAX_ENTRIES,
