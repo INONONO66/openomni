@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { AppConnector, Execution } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
-import { BuiltInAppConnectors } from "../../src/app-connector";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
 import { command, workerSpawnPayload } from "./helpers";
+
+const TEST_CONNECTOR_ID = "app.test-telemetry";
+const TEST_INSTALLATION_ID = "install:test-telemetry";
+const TEST_ENDPOINT_ID = `endpoint:${TEST_INSTALLATION_ID}`;
 
 type WorkerDispatchHandlerOptions = NonNullable<Parameters<typeof createWorkerDispatchHandlers>[0]>;
 type ConnectorEndpointDriverOwner = NonNullable<
@@ -19,20 +22,47 @@ const ConnectorTelemetryOutput = z
   })
   .passthrough();
 
-function codexConnector(): AppConnector.Definition {
-  const connector = BuiltInAppConnectors.get("app.codex");
-  if (connector === undefined) throw new Error("missing built-in Codex connector");
-  return connector;
+function testConnector(): AppConnector.Definition {
+  return {
+    id: TEST_CONNECTOR_ID,
+    name: "Test Telemetry Connector",
+    version: "1.0.0",
+    description: "Runs a connector endpoint telemetry fixture",
+    detect: {
+      command: "test-telemetry-connector",
+      testedVersions: ">=1.0.0 <2.0.0",
+    },
+    spawn: {
+      command: "test-telemetry-connector",
+      promptArgument: "{{prompt}}",
+      cwd: "{{worktree}}",
+    },
+    evidence: {
+      emits: ["exit_code", "token_usage", "tool_call", "log_event"],
+    },
+    requires: {},
+    driver: {
+      provider: "test-telemetry",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code", "token_usage", "tool_call", "log_event"],
+    },
+    profile: {
+      kind: "connector_endpoint",
+      taskTypes: ["code.change"],
+    },
+  };
 }
 
-function seedCodexInstallation(): void {
-  const connector = codexConnector();
+function seedConnectorInstallation(): void {
+  const connector = testConnector();
   AppConnectorInstallationStore.set({
-    id: "install:codex:telemetry",
+    id: TEST_INSTALLATION_ID,
     connectorId: connector.id,
     connectorVersion: connector.version,
     definition: connector,
-    detectedVersion: "0.139.0",
+    detectedVersion: "1.0.0",
     testedVersions: connector.detect.testedVersions,
     status: "enabled",
     registeredBy: "act_owner",
@@ -45,10 +75,10 @@ function connectorEndpointWorkerCommand() {
     "worker.spawn",
     {
       kind: "worker",
-      id: "app.codex",
-      endpointId: "endpoint:install:codex:telemetry",
+      id: TEST_CONNECTOR_ID,
+      endpointId: TEST_ENDPOINT_ID,
     },
-    workerSpawnPayload("build with codex"),
+    workerSpawnPayload("build with test connector"),
   );
 }
 
@@ -89,7 +119,7 @@ describe("worker.spawn connector endpoint telemetry evidence", () => {
   });
 
   test("records connector token usage and tool calls as WorkItem evidence", async () => {
-    seedCodexInstallation();
+    seedConnectorInstallation();
     const handlers = createConnectorEndpointHandlers(async (request) =>
       resultWithTelemetry(request.executionRequest),
     );

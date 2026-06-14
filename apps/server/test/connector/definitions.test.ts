@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { AppConnector } from "@openomni/protocol";
-import { BuiltInAppConnectors } from "../../src/index.js";
+import { ServerConnectorDefinitions } from "../../src/connector/index.js";
 
-describe("BuiltInAppConnectors", () => {
-  test("lists the first-party connector endpoint definitions", () => {
+describe("ServerConnectorDefinitions", () => {
+  test("lists the server-owned connector endpoint definitions", () => {
     // Given
-    const connectors = BuiltInAppConnectors.list();
+    const connectors = ServerConnectorDefinitions.list();
 
     // When
     const ids = connectors.map((connector) => connector.id);
@@ -14,9 +14,9 @@ describe("BuiltInAppConnectors", () => {
     expect(ids).toEqual(["app.claude-code", "app.codex", "app.opencode"]);
   });
 
-  test("keeps every built-in connector inside the public AppConnector ABI", () => {
+  test("keeps every server connector inside the public AppConnector ABI", () => {
     // Given
-    const connectors = BuiltInAppConnectors.list();
+    const connectors = ServerConnectorDefinitions.list();
 
     // When / Then
     for (const connector of connectors) {
@@ -37,9 +37,9 @@ describe("BuiltInAppConnectors", () => {
 
   test("declares verified headless spawn entrypoints for installed connector endpoints", () => {
     // Given
-    const claude = BuiltInAppConnectors.get("app.claude-code");
-    const codex = BuiltInAppConnectors.get("app.codex");
-    const opencode = BuiltInAppConnectors.get("app.opencode");
+    const claude = ServerConnectorDefinitions.get("app.claude-code");
+    const codex = ServerConnectorDefinitions.get("app.codex");
+    const opencode = ServerConnectorDefinitions.get("app.opencode");
 
     // When / Then
     expect(claude?.spawn).toMatchObject({
@@ -71,7 +71,7 @@ describe("BuiltInAppConnectors", () => {
     };
 
     // When / Then
-    for (const connector of BuiltInAppConnectors.list()) {
+    for (const connector of ServerConnectorDefinitions.list()) {
       const versionOutput = versionOutputById[connector.id];
       const versionPattern = connector.detect.versionPattern;
 
@@ -86,9 +86,9 @@ describe("BuiltInAppConnectors", () => {
     }
   });
 
-  test("keeps built-in tested version ranges inside discovery grammar", () => {
+  test("keeps server tested version ranges inside discovery grammar", () => {
     // Given / When / Then
-    for (const connector of BuiltInAppConnectors.list()) {
+    for (const connector of ServerConnectorDefinitions.list()) {
       const constraints = connector.detect.testedVersions
         .split(" ")
         .filter((constraint) => constraint.length > 0);
@@ -100,15 +100,15 @@ describe("BuiltInAppConnectors", () => {
     }
   });
 
-  test("returns defensive copies of built-in connector data", () => {
+  test("returns defensive copies of server connector data", () => {
     // Given
-    const connectors = BuiltInAppConnectors.list();
+    const connectors = ServerConnectorDefinitions.list();
     const firstConnector = connectors[0];
-    const codexConnector = BuiltInAppConnectors.get("app.codex");
+    const codexConnector = ServerConnectorDefinitions.get("app.codex");
 
     // When
     if (firstConnector === undefined || codexConnector === undefined) {
-      throw new Error("expected built-in connector copies");
+      throw new Error("expected server connector copies");
     }
     const codexArgs = codexConnector.spawn.args;
     if (codexArgs === undefined) {
@@ -119,17 +119,17 @@ describe("BuiltInAppConnectors", () => {
     codexArgs.push("--mutated");
 
     // Then
-    const storedConnector = BuiltInAppConnectors.get("app.claude-code");
-    const storedCodexConnector = BuiltInAppConnectors.get("app.codex");
+    const storedConnector = ServerConnectorDefinitions.get("app.claude-code");
+    const storedCodexConnector = ServerConnectorDefinitions.get("app.codex");
 
     expect(storedConnector?.name).toBe("Claude Code");
     expect(storedConnector?.profile.taskTypes).not.toContain("mutated.task");
     expect(storedCodexConnector?.spawn.args).not.toContain("--mutated");
   });
 
-  test("returns undefined for an unknown built-in connector id", () => {
+  test("returns undefined for an unknown server connector id", () => {
     // Given / When
-    const connector = BuiltInAppConnectors.get("app.unknown");
+    const connector = ServerConnectorDefinitions.get("app.unknown");
 
     // Then
     expect(connector).toBeUndefined();

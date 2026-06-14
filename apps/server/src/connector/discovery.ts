@@ -1,5 +1,5 @@
 import type { AppConnector } from "@openomni/protocol";
-import { BuiltInAppConnectors } from "./built-in.js";
+import { ServerConnectorDefinitions } from "./definitions.js";
 
 type ConnectorVersion = {
   readonly major: number;
@@ -9,7 +9,7 @@ type ConnectorVersion = {
 
 const DEFAULT_DETECT_TIMEOUT_MS = 10_000;
 
-export type AppConnectorDiscoveryStatus =
+export type ServerConnectorDiscoveryStatus =
   | "available"
   | "missing"
   | "unsupported_version"
@@ -25,13 +25,13 @@ export interface DiscoveryCandidate {
   readonly id: string;
   readonly name: string;
   readonly connector: AppConnector.Definition;
-  readonly status: AppConnectorDiscoveryStatus;
+  readonly status: ServerConnectorDiscoveryStatus;
   readonly version?: string;
   readonly testedVersions: string;
   readonly diagnostic?: string;
 }
 
-export interface DiscoveryOptions {
+export interface ServerConnectorDiscoveryOptions {
   readonly connectors?: readonly AppConnector.Definition[];
   readonly detectTimeoutMs?: number;
   readonly runDetectCommand?: DetectCommandRunner;
@@ -41,11 +41,11 @@ export type DetectCommandRunner = (
   connector: AppConnector.Definition,
 ) => Promise<DetectCommandResult>;
 
-export namespace AppConnectorDiscovery {
-  export async function discoverBuiltIns(
-    options: DiscoveryOptions = {},
+export namespace ServerConnectorDiscovery {
+  export async function discover(
+    options: ServerConnectorDiscoveryOptions = {},
   ): Promise<readonly DiscoveryCandidate[]> {
-    const connectors = options.connectors ?? BuiltInAppConnectors.list();
+    const connectors = options.connectors ?? ServerConnectorDefinitions.list();
     const detectTimeoutMs = options.detectTimeoutMs ?? DEFAULT_DETECT_TIMEOUT_MS;
     const runDetectCommand =
       options.runDetectCommand ??
@@ -92,7 +92,7 @@ async function discoverConnector(
 
 function candidate(
   connector: AppConnector.Definition,
-  status: AppConnectorDiscoveryStatus,
+  status: ServerConnectorDiscoveryStatus,
   details: Pick<DiscoveryCandidate, "diagnostic" | "version"> = {},
 ): DiscoveryCandidate {
   return {

@@ -26,6 +26,7 @@ src/
 │   ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 │   ├── telegram/         # Telegram polling surface
 │   └── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
+├── connector/            # Server-owned external app connector definitions, discovery/consent registry, process driver, logs, questions
 ├── context/
 │   ├── index.ts          # Barrel re-exports
 │   ├── assembler.ts      # ContextAssembler.assemble() — builds system prompt context from workspace
@@ -115,6 +116,10 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
 | `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
 `createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Policy.Permission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.
+
+## CONNECTORS
+
+External app connector manifests are server-owned. Claude Code, Codex, OpenCode, and future provider definitions live under `src/connector/`; `@openomni/openomni` only receives normalized dispatch driver owners and never exports provider-specific connector manifests.
 
 ## CHANNELS
 

@@ -4,6 +4,21 @@ import {
   type ConnectorQuestionBridgeHandler,
 } from "./process-driver.js";
 
+export { ServerConnectorDefinitions } from "./definitions.js";
+export { ServerConnectorDiscovery } from "./discovery.js";
+export { ServerConnectorRegistry } from "./registry.js";
+export type {
+  DetectCommandResult,
+  DetectCommandRunner,
+  DiscoveryCandidate,
+  ServerConnectorDiscoveryOptions,
+  ServerConnectorDiscoveryStatus,
+} from "./discovery.js";
+export type {
+  ServerConnectorConsentOptions,
+  ServerConnectorRegistrationOptions,
+  ServerConnectorSmokeVerifyOptions,
+} from "./registry.js";
 export type { ConnectorQuestionBridgeHandler };
 
 export interface ConnectorEndpointDriverOptions {

@@ -30,18 +30,6 @@ export type {
   ResidentPromptVariant,
 } from "./agents";
 
-export { AppConnectorDiscovery, AppConnectorRegistry, BuiltInAppConnectors } from "./app-connector";
-export type {
-  AppConnectorConsentOptions,
-  AppConnectorDiscoveryStatus,
-  AppConnectorRegistrationOptions,
-  AppConnectorSmokeVerifyOptions,
-  DetectCommandResult,
-  DetectCommandRunner,
-  DiscoveryCandidate,
-  DiscoveryOptions,
-} from "./app-connector";
-
 // Skill loader and activation
 export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
 export type {

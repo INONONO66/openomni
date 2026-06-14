@@ -538,7 +538,7 @@ describe("createConnectorEndpointProcessDriver", () => {
     expect(logPath).toContain(workspaceRoot);
   });
 
-  test("stores stdout-backed structured logs for built-in stream connectors", async () => {
+  test("stores stdout-backed structured logs for server stream connectors", async () => {
     // Given
     const workspaceRoot = tempDir("connector-runtime-log-stdout");
     const scriptPath = join(workspaceRoot, "fake-stdout-log.ts");

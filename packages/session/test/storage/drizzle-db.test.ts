@@ -119,8 +119,8 @@ describe("drizzle createDb migrations", () => {
     const { db, sqlite } = createDb(dbPath);
     try {
       await db.insert(drizzleSchema.appConnectorInstallationTable).values({
-        id: "install:app.codex",
-        connector_id: "app.codex",
+        id: "install:app.example-worker",
+        connector_id: "app.example-worker",
         status: "registered",
         data: "{}",
         time_created: 1,
@@ -130,8 +130,8 @@ describe("drizzle createDb migrations", () => {
       const rows = await db.select().from(drizzleSchema.appConnectorInstallationTable);
       expect(rows).toEqual([
         {
-          id: "install:app.codex",
-          connector_id: "app.codex",
+          id: "install:app.example-worker",
+          connector_id: "app.example-worker",
           status: "registered",
           data: "{}",
           time_created: 1,

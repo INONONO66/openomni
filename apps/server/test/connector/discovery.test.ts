@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AppConnector } from "@openomni/protocol";
-import { AppConnectorDiscovery } from "../../src/index.js";
+import { ServerConnectorDiscovery } from "../../src/connector/index.js";
 
-describe("AppConnectorDiscovery", () => {
-  test("discovers installed built-in connector candidates from detect commands", async () => {
+describe("ServerConnectorDiscovery", () => {
+  test("discovers installed server connector candidates from detect commands", async () => {
     // Given
     const detections: Readonly<Record<string, string>> = {
       "app.claude-code": "2.1.173 (Claude Code)\n",
@@ -12,7 +12,7 @@ describe("AppConnectorDiscovery", () => {
     };
 
     // When
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       runDetectCommand: async (connector) => ({
         exitCode: 0,
         stdout: detections[connector.id] ?? "",
@@ -35,7 +35,7 @@ describe("AppConnectorDiscovery", () => {
 
   test("reports missing and unsupported connector candidates without throwing", async () => {
     // Given / When
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       runDetectCommand: async (connector) => {
         if (connector.id === "app.claude-code") {
           return {
@@ -69,12 +69,12 @@ describe("AppConnectorDiscovery", () => {
 
   test("reports missing when the detect command cannot be spawned", async () => {
     // Given / When
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [
         {
-          ...AppConnectorDiscoveryFixtures.codexConnector,
+          ...ServerConnectorDiscoveryFixtures.codexConnector,
           detect: {
-            ...AppConnectorDiscoveryFixtures.codexConnector.detect,
+            ...ServerConnectorDiscoveryFixtures.codexConnector.detect,
             command: "openomni-missing-command",
           },
         },
@@ -91,12 +91,12 @@ describe("AppConnectorDiscovery", () => {
 
   test("times out a hung default detect command as a failed candidate", async () => {
     // Given / When
-    const candidates = await AppConnectorDiscovery.discoverBuiltIns({
+    const candidates = await ServerConnectorDiscovery.discover({
       connectors: [
         {
-          ...AppConnectorDiscoveryFixtures.codexConnector,
+          ...ServerConnectorDiscoveryFixtures.codexConnector,
           detect: {
-            ...AppConnectorDiscoveryFixtures.codexConnector.detect,
+            ...ServerConnectorDiscoveryFixtures.codexConnector.detect,
             command: "bun",
             args: ["-e", "setTimeout(() => {}, 1_000)"],
           },
@@ -112,7 +112,7 @@ describe("AppConnectorDiscovery", () => {
   });
 });
 
-namespace AppConnectorDiscoveryFixtures {
+namespace ServerConnectorDiscoveryFixtures {
   export const codexConnector = {
     id: "app.codex",
     name: "Codex CLI",
