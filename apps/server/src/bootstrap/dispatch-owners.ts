@@ -1,11 +1,13 @@
 import { z } from "zod";
 import {
   DispatchRuntime,
-  createLocalCliAgentRuntime,
   createResidentDispatchHandlers,
   type DispatchOwners,
-  type LocalCliQuestionBridgeHandler,
 } from "@openomni/openomni";
+import {
+  createConnectorEndpointDriver,
+  type ConnectorQuestionBridgeHandler,
+} from "../connector/index";
 
 export interface ServerDispatchOwnersConfig {
   readonly coordinator: NonNullable<DispatchOwners["coordinator"]>;
@@ -30,7 +32,7 @@ const residentAskHandlerOutput = z
 
 function createQuestionBridgeHandler(
   config: ServerDispatchOwnersConfig,
-): LocalCliQuestionBridgeHandler | undefined {
+): ConnectorQuestionBridgeHandler | undefined {
   if (config.model === undefined) return undefined;
 
   const handlers = createResidentDispatchHandlers({
@@ -45,7 +47,7 @@ function createQuestionBridgeHandler(
       {
         action: "resident.ask",
         target: { kind: "resident", sessionId: request.residentSessionId },
-        payload: `Local CLI worker run ${request.runId} asks Resident:\n\n${request.prompt}`,
+        payload: `Connector worker run ${request.runId} asks Resident:\n\n${request.prompt}`,
         wait: true,
       },
       {
@@ -71,7 +73,7 @@ export function createServerDispatchOwners(config: ServerDispatchOwnersConfig): 
   return {
     coordinator: config.coordinator,
     residentRuntime: config.residentRuntime,
-    localCliAgentRuntime: createLocalCliAgentRuntime({
+    connectorEndpointDriver: createConnectorEndpointDriver({
       credentials: config.credentials ?? {},
       questionBridge: createQuestionBridgeHandler(config),
     }),

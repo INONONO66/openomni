@@ -1,29 +1,28 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { LocalCliTemplateValues } from "./local-cli-agent-env.js";
-import { renderLocalCliTemplate } from "./local-cli-agent-env.js";
+import type { ConnectorTemplateValues } from "./env.js";
+import { renderConnectorTemplate } from "./env.js";
 
-export interface LocalCliLogSnapshot {
+export interface ConnectorLogSnapshot {
   readonly path: string;
   readonly mtimeMs: number;
   readonly size: number;
 }
 
-export function resolveLocalCliLogPath(
+export function resolveConnectorLogPath(
   pathTemplate: string,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
 ): string {
-  const workspaceKey =
-    values.worktree === undefined ? "" : encodeWorkspaceForClaudeProjects(values.worktree);
+  const workspaceKey = encodeWorktreeForClaudeProjects(values.worktree);
   const withWorkspace = pathTemplate.split("{{workspaceHash}}").join(workspaceKey);
-  const rendered = renderLocalCliTemplate(withWorkspace, values);
+  const rendered = renderConnectorTemplate(withWorkspace, values);
   if (rendered === "~") return homeDir();
   if (rendered.startsWith("~/")) return join(homeDir(), rendered.slice(2));
   return rendered;
 }
 
-export function newestLocalCliGlobMatch(path: string): string | undefined {
+export function newestConnectorGlobMatch(path: string): string | undefined {
   const dir = dirname(path);
   const filePattern = basename(path);
   if (!existsSync(dir)) return undefined;
@@ -38,19 +37,19 @@ export function newestLocalCliGlobMatch(path: string): string | undefined {
     .at(0);
 }
 
-export function readLocalCliLogSnapshot(
+export function readConnectorLogSnapshot(
   pathTemplate: string,
-  values: LocalCliTemplateValues,
-): LocalCliLogSnapshot | undefined {
-  const resolved = resolveLocalCliLogPath(pathTemplate, values);
-  const path = resolved.includes("*") ? newestLocalCliGlobMatch(resolved) : resolved;
+  values: ConnectorTemplateValues,
+): ConnectorLogSnapshot | undefined {
+  const resolved = resolveConnectorLogPath(pathTemplate, values);
+  const path = resolved.includes("*") ? newestConnectorGlobMatch(resolved) : resolved;
   if (path === undefined || !existsSync(path)) return undefined;
   const stats = statSync(path);
   if (!stats.isFile()) return undefined;
   return { path, mtimeMs: stats.mtimeMs, size: stats.size };
 }
 
-export function encodeWorkspaceForClaudeProjects(workspace: string): string {
+export function encodeWorktreeForClaudeProjects(workspace: string): string {
   return workspace.split("/").join("-").split("\\").join("-");
 }
 

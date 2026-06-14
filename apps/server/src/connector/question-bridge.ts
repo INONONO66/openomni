@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-interface LocalCliQuestionBridgeRequest {
+interface ConnectorQuestionBridgeRequest {
   readonly runId: string;
   readonly sessionId: string;
   readonly residentSessionId: string;
@@ -8,21 +8,21 @@ interface LocalCliQuestionBridgeRequest {
   readonly signal?: AbortSignal;
 }
 
-export type LocalCliQuestionBridgeHandler = (
-  request: LocalCliQuestionBridgeRequest,
+export type ConnectorQuestionBridgeHandler = (
+  request: ConnectorQuestionBridgeRequest,
 ) => Promise<string>;
 
-export interface LocalCliQuestionBridgeServer {
+export interface ConnectorQuestionBridgeServer {
   readonly env: Record<string, string>;
   readonly redactions: readonly string[];
   close(): void;
 }
 
-export interface LocalCliQuestionBridgeServerOptions {
+export interface ConnectorQuestionBridgeServerOptions {
   readonly runId: string;
   readonly sessionId: string;
   readonly residentSessionId: string;
-  readonly handler?: LocalCliQuestionBridgeHandler;
+  readonly handler?: ConnectorQuestionBridgeHandler;
 }
 
 const bridgeRequestSchema = z
@@ -65,9 +65,9 @@ async function parsePrompt(request: Request): Promise<string | Response> {
   return parsed.data.prompt;
 }
 
-export function startLocalCliQuestionBridgeServer(
-  options: LocalCliQuestionBridgeServerOptions,
-): LocalCliQuestionBridgeServer | undefined {
+export function startConnectorQuestionBridgeServer(
+  options: ConnectorQuestionBridgeServerOptions,
+): ConnectorQuestionBridgeServer | undefined {
   const handler = options.handler;
   if (handler === undefined) return undefined;
 

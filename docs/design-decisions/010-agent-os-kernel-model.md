@@ -50,9 +50,9 @@ Semantics:
 - **Time semantics**: expiry, follow-up window, and *politeness-aware retry* — reminders to humans are policy-bounded (e.g. one nudge after N days, then conclude with partial results).
 - **Partial response is a normal mode**: a task waiting on 3 humans may legitimately complete with 1 reply after expiry. Readiness is judged by WorkItem dependencies, not by all-or-nothing joins.
 
-### 3. Installed applications — CLI agents as a first-class executor
+### 3. Installed applications — connector endpoints
 
-Extend `executorKind` (ADR-009 §7) with `local_cli_agent`. CLI coding agents are **applications installed on the OS**: they bring their own agent loop, tools, and context management. OpenOmni does not run their reasoning; it does exactly what an OS does for an app:
+Model CLI coding agents as installed **Connector Endpoints**, not as public executor kinds. Claude Code, Codex, and OpenCode are applications installed on the OS: they bring their own agent loop, tools, and context management. OpenOmni does not run their reasoning; it does exactly what an OS does for an app:
 
 - spawn (`Bun.spawn`, headless mode, prompt as argv),
 - workspace isolation (one task = one git worktree),
@@ -60,13 +60,15 @@ Extend `executorKind` (ADR-009 §7) with `local_cli_agent`. CLI coding agents ar
 - resource limits (timeout, cost ceiling),
 - exit-status and artifact collection (exit code, diff, test results → feeds verification gates directly).
 
-The `AgentRegistry` grows an **application manifest** per app: capabilities, cost profile, and an evidence-backed track record (success rate per task type), updated by the Governor — the routing table by which work is assigned to apps.
+Worker-lane work still starts through `worker.spawn`, but the dispatch target references an `ActorEndpoint` / connector installation (`endpointId` or `connectorInstallationId`) rather than an executor selector. WorkItem and WorkerRun ledgers may record the coarse `connector_endpoint` executor kind for retry and reporting metadata, but provider identity lives in the AppConnector installation and its `ActorEndpoint(channel: "app_connector")`.
+
+Each connector installation carries an endpoint profile: task types, default timeout/retry/autonomy, provider-native driver capabilities, and an evidence-backed track record (success rate per task type), updated by the Governor — the routing table by which work is assigned to installed apps.
 
 **Connector philosophy: don't manage the inside, observe the boundary.** An installed app runs inside the Owner's local trust boundary — the OS does not sandbox it or re-permission its internals; the app's own permission system, configured by the Owner, governs what happens inside. Over-managing the inside is explicitly rejected. OS control lives at three wires:
 
 - **In** — dispatch decides what task enters; the credentials layer decides what secrets materialize; the worktree decides where it works.
-- **Side (question bridge)** — when a headless app needs a decision (permission prompt, clarification), the connector bridges it into the kernel as `resident.ask` (e.g. Claude Code's permission-prompt hook → dispatch → Resident answers within policy or escalates to the Owner). The run suspends and resumes instead of dying.
-- **Out** — exit code, diff, and final message form the completion report; the §7 evidence gate decides what claims count.
+- **Side (question bridge)** — when a headless app needs a decision (permission prompt, clarification), the connector emits a normalized PendingInteraction event. Clarification and permission questions route through `resident.ask` or an Owner-facing PI; the run suspends and resumes instead of dying.
+- **Out** — terminal `report_result` events route to `worker.complete`, where the completion projector records logs, artifacts, token usage, and tool calls before the §7 evidence gate decides what claims count.
 
 **Native log ingestion.** Apps keep their own transcripts (JSONL session logs, stream-json output). The connector tails them and (a) stores the raw log as a WorkItem artifact, (b) projects key events — tool calls, errors, token usage — into the journal as app-internal evidence. This single mechanism gives the §7 gate hard evidence for app claims ("tests ran" = the tool-call record exists), gives §8 RCA its autopsy material for app-executed work (the log is the transcript-equivalent), gives cost tracking real token numbers, and gives **stall detection a liveness signal** (no log activity for N minutes → nudge, or kill and mark interrupted). Raw logs never enter sessions — artifact plus journal projection only.
 
@@ -200,7 +202,7 @@ Every boundary crossed dispatch; every action left a journal record; every wait 
 1. Task ledger + completion-report gate wiring on the worker lane ([ADR-011](./011-task-ledger-evidence-gate.md) — WorkItemStore exists; schema deltas plus exit-path wiring).
 2. Governor v0 ([ADR-012](./012-governor-postmortem-engine.md)): incident-triggered RCA pipeline + daily-batch lane + fingerprint registry, with the slow aggregation loop as a scheduled BusQuery consumer (first journal reader; closes the loop).
 3. `PendingAsk` → `PendingInteraction` migration + correlation routing (requires ActorIdentity foundations from ADR-009).
-4. `local_cli_agent` executor + application manifest (first installed app: Claude Code, dogfooding OpenOmni's own development).
+4. `connector_endpoint` application endpoint + AppConnector driver manifest (first installed app: Claude Code, dogfooding OpenOmni's own development).
 5. Durable cron + boot contract.
 6. Resident shell demotion: cut `execution`/mutating tools, add the peek budget, move mutating MCP/custom tools behind dispatch handlers.
 7. Social budget axis on outbound dispatch.

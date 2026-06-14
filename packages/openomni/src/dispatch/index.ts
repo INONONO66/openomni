@@ -12,6 +12,7 @@ export {
   type DispatchSubmitOptions,
 } from "./runtime.js";
 export type {
+  ConnectorEndpointDriverOwner,
   DeviceDispatchOwner,
   DeviceDispatchOwnerInput,
   DispatchOwners,

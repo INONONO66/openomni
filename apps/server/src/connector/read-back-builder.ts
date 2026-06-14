@@ -1,10 +1,10 @@
 import { type AppConnector, WorkItem } from "@openomni/protocol";
-import type { LocalCliTemplateValues } from "./local-cli-agent-env.js";
+import type { ConnectorTemplateValues } from "./env.js";
 
 interface BuildInput {
   readonly connector: AppConnector.Definition;
   readonly output: string | undefined;
-  readonly values: LocalCliTemplateValues;
+  readonly values: ConnectorTemplateValues;
 }
 
 type BuildResult = { readonly ok: true; readonly output: string | undefined } | BuildFailure;
@@ -18,7 +18,7 @@ type OutputObject = Record<string, unknown>;
 
 const tokenPattern = /\{\{(prompt|worktree|runId|sessionId|output(?:\.[A-Za-z0-9_-]+)*)\}\}/g;
 
-export function applyLocalCliReadBackBuilders(input: BuildInput): BuildResult {
+export function applyConnectorReadBackBuilders(input: BuildInput): BuildResult {
   const builders = input.connector.evidence.completionReport?.readBackRequests ?? [];
   if (builders.length === 0) return { ok: true, output: input.output };
   if (input.output === undefined) {
@@ -72,7 +72,7 @@ function existingReadBackRequests(output: OutputObject): WorkItem.ReadBackReques
 
 function renderReadBackBuilder(
   builder: NonNullable<AppConnector.CompletionReport["readBackRequests"]>[number],
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
   rawOutput: string,
   output: OutputObject,
 ): { readonly ok: true; readonly request: WorkItem.ReadBackRequestEnvelope } | BuildFailure {
@@ -121,7 +121,7 @@ function renderReadBackBuilder(
 
 function renderTemplate(
   template: string,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
   rawOutput: string,
   output: OutputObject,
 ): { readonly ok: true; readonly value: string } | BuildFailure {
@@ -143,7 +143,7 @@ function renderTemplate(
 
 function resolveTemplateValue(
   key: string,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
   rawOutput: string,
   output: OutputObject,
 ): { readonly ok: true; readonly value: string } | BuildFailure {
@@ -151,7 +151,6 @@ function resolveTemplateValue(
     case "prompt":
       return { ok: true, value: values.prompt };
     case "worktree":
-      if (values.worktree === undefined) return { ok: false, error: "missing workspaceRoot" };
       return { ok: true, value: values.worktree };
     case "runId":
       return { ok: true, value: values.runId };

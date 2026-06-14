@@ -31,7 +31,7 @@ function connectorDefinition(): AppConnector.Definition {
     id: "app.codex",
     name: "Codex CLI",
     version: "1.0.0",
-    description: "Runs Codex CLI as an installed local CLI agent",
+    description: "Runs Codex CLI as an installed connector endpoint",
     detect: {
       command: "codex",
       args: ["--version"],
@@ -50,8 +50,15 @@ function connectorDefinition(): AppConnector.Definition {
       capabilities: ["git"],
       permissions: [{ action: "tool.call", allowlist: ["git.*"] }],
     },
+    driver: {
+      provider: "codex",
+      install: { scopes: ["user", "workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["submitted", "accepted", "running", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
       initialAutonomy: "approval_required",
     },
@@ -64,6 +71,7 @@ function installation(id: string, createdAt: number): AppConnector.Installation 
     id,
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: `endpoint:${id}`,
     definition,
     detectedVersion: "0.139.0",
     testedVersions: definition.detect.testedVersions,

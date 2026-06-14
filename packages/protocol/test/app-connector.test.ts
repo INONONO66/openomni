@@ -7,6 +7,23 @@ function issuePaths(error: { issues: Array<{ path: PropertyKey[] }> }): string[]
   return error.issues.map((issue) => issue.path.map((segment) => String(segment)).join("."));
 }
 
+function validDriver(): Record<string, unknown> {
+  return {
+    provider: "claude-code",
+    install: {
+      scopes: ["user", "workspace"],
+      hooks: ["permission"],
+      plugins: [],
+    },
+    submit: {
+      mode: "spawn",
+      ack: "accepted",
+    },
+    observedEvents: ["submitted", "accepted", "running", "completed"],
+    emits: ["exit_code", "diff", "test_result", "tool_call", "token_usage"],
+  };
+}
+
 function validConnector(): Record<string, unknown> {
   return {
     id: "app.claude-code",
@@ -50,8 +67,9 @@ function validConnector(): Record<string, unknown> {
       capabilities: ["git", "network", "filesystem.write"],
       permissions: [{ action: "tool.call", allowlist: ["bash", "edit"] }],
     },
+    driver: validDriver(),
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change", "code.review"],
       defaultTimeoutMs: 600_000,
       defaultMaxAttempts: 2,
@@ -68,6 +86,7 @@ describe("AppConnector protocol domain", () => {
         id: "install-app-codex",
         connectorId: "app.claude-code",
         connectorVersion: "1.0.0",
+        endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
         detectedVersion: "0.139.0",
         testedVersions: ">=0.139.0 <0.140.0",
@@ -92,8 +111,9 @@ describe("AppConnector protocol domain", () => {
       if (result.success) {
         expect(result.data.connectorId).toBe("app.claude-code");
         expect(result.data.status).toBe("registered");
+        expect(result.data.endpointId).toBe("endpoint:install-app-codex");
         expect(result.data.consent?.credentials).toEqual(["ANTHROPIC_API_KEY"]);
-        expect(result.data.definition.profile.executorKind).toBe("local_cli_agent");
+        expect(result.data.definition.profile.kind).toBe("connector_endpoint");
       }
     });
 
@@ -103,6 +123,7 @@ describe("AppConnector protocol domain", () => {
         id: "install-app-codex",
         connectorId: "app.codex",
         connectorVersion: "1.0.0",
+        endpointId: "endpoint:install-app-codex",
         definition: { ...validConnector(), id: "app.other" },
         testedVersions: ">=1.0.0 <2.0.0",
         status: "registered",
@@ -128,6 +149,7 @@ describe("AppConnector protocol domain", () => {
         id: "install-app-codex",
         connectorId: "app.claude-code",
         connectorVersion: "2.0.0",
+        endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
         testedVersions: ">=1.0.0 <2.0.0",
         status: "registered",
@@ -153,6 +175,7 @@ describe("AppConnector protocol domain", () => {
         id: "install-app-codex",
         connectorId: "app.claude-code",
         connectorVersion: "1.0.0",
+        endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
         testedVersions: ">=1.0.0 <2.0.0",
         status: "enabled",
@@ -187,7 +210,8 @@ describe("AppConnector protocol domain", () => {
         expect(result.data.id).toBe("app.claude-code");
         expect(result.data.detect.testedVersions).toBe(">=1.0.0 <2.0.0");
         expect(result.data.spawn.promptArgument).toBe("{{prompt}}");
-        expect(result.data.profile.executorKind).toBe("local_cli_agent");
+        expect(result.data.driver.submit.ack).toBe("accepted");
+        expect(result.data.profile.kind).toBe("connector_endpoint");
       }
     });
 
@@ -200,9 +224,10 @@ describe("AppConnector protocol domain", () => {
         description: "Minimal connector",
         detect: { command: "minimal", testedVersions: "*" },
         spawn: { command: "minimal", args: ["run"] },
+        driver: validDriver(),
         evidence: { emits: ["exit_code"] },
         requires: {},
-        profile: { executorKind: "local_cli_agent", taskTypes: ["read.only"] },
+        profile: { kind: "connector_endpoint", taskTypes: ["read.only"] },
       };
 
       // When
@@ -326,7 +351,7 @@ describe("AppConnector protocol domain", () => {
       const result = AppConnector.Definition.safeParse({
         ...connector,
         profile: {
-          executorKind: "local_cli_agent",
+          kind: "connector_endpoint",
           taskTypes: ["code.change"],
           defaultTimeoutMs: 0,
           defaultMaxAttempts: 0,
@@ -486,7 +511,7 @@ describe("AppConnector protocol domain", () => {
         id: "ext-installed-apps",
         name: "Installed Apps",
         version: "1.0.0",
-        description: "Contributes local CLI app connectors",
+        description: "Contributes connector endpoint apps",
         contributes: {
           appConnectors: [validConnector()],
         },

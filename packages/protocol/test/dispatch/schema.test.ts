@@ -46,31 +46,23 @@ describe("Dispatch protocol schemas", () => {
     expect(parsed.wait).toBe(true);
   });
 
-  test("Target accepts executorKind for worker admission", () => {
+  test("Target accepts connector endpoint selectors for worker admission", () => {
     const parsed = Dispatch.Target.parse({
       kind: "worker",
       name: "coder",
-      executorKind: "local_cli_agent",
+      endpointId: "endpoint:install-app-codex",
+      connectorInstallationId: "install:app.codex",
     });
 
-    expect(parsed.executorKind).toBe("local_cli_agent");
+    expect(parsed.endpointId).toBe("endpoint:install-app-codex");
+    expect(parsed.connectorInstallationId).toBe("install:app.codex");
   });
 
-  test("Target rejects unknown executorKind values", () => {
+  test("Target rejects executorKind as a public dispatch selector", () => {
     const parsed = Dispatch.Target.safeParse({
       kind: "worker",
       name: "coder",
-      executorKind: "spreadsheet_macro",
-    });
-
-    expect(parsed.success).toBe(false);
-  });
-
-  test("Target rejects executorKind on non-worker targets", () => {
-    const parsed = Dispatch.Target.safeParse({
-      kind: "resident",
-      id: "resident-main",
-      executorKind: "local_cli_agent",
+      executorKind: "connector_endpoint",
     });
 
     expect(parsed.success).toBe(false);

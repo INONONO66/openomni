@@ -1,4 +1,4 @@
-import { Dispatch, type Tool, WorkItem } from "@openomni/protocol";
+import { Dispatch, type Tool } from "@openomni/protocol";
 import type { DispatchSubmitOptions } from "../../../../dispatch/runtime.js";
 import { defineTool } from "../../define.js";
 import type { NativeTool, ToolExecutionContext } from "../../types.js";
@@ -42,9 +42,10 @@ const defaultInputSchema = {
         sessionId: { type: "string" },
         parentSessionId: { type: "string" },
         runId: { type: "string" },
+        endpointId: { type: "string" },
+        connectorInstallationId: { type: "string" },
         name: { type: "string" },
         labels: { type: "array", items: { type: "string" } },
-        executorKind: { type: "string", enum: WorkItem.ExecutorKind.options },
       },
       required: ["kind"],
       additionalProperties: false,

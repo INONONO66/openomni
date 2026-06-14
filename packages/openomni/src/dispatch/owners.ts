@@ -34,7 +34,7 @@ export interface DeviceDispatchOwner {
   dispatch(input: DeviceDispatchOwnerInput): Promise<unknown> | unknown;
 }
 
-export interface LocalCliAgentRuntimeOwner {
+export interface ConnectorEndpointDriverOwner {
   dispatch(input: {
     readonly command: Dispatch.Command;
     readonly executionRequest: Execution.Request;
@@ -44,8 +44,8 @@ export interface LocalCliAgentRuntimeOwner {
 
 export interface DispatchOwners {
   readonly coordinator?: CoordinatorLike;
+  readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly device?: DeviceDispatchOwner;
-  readonly localCliAgentRuntime?: LocalCliAgentRuntimeOwner;
   readonly outbound?: OutboundDispatchOwner;
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly scheduler?: DispatchSchedulerOwner;

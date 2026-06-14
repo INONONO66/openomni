@@ -44,14 +44,62 @@ function markMatched(record: PendingInteractionStore.Record): PendingInteraction
   return record;
 }
 
+function requestedAction(
+  command: Dispatch.Command,
+): PendingInteractionStore.Record["allowedActions"][number] {
+  const payload = command.payload;
+  if (payload && typeof payload === "object" && "action" in payload) {
+    const action = payload.action;
+    if (
+      action === "report_result" ||
+      action === "ask_clarification" ||
+      action === "attach_artifact" ||
+      action === "decline_task"
+    ) {
+      return action;
+    }
+  }
+  return "report_result";
+}
+
 export function routePendingInteraction(command: Dispatch.Command): Dispatch.Command {
   if (command.action !== Dispatch.Actions.ActorMessage) return command;
   const match = findPendingInteraction(command);
   if (!match) return command;
-  if (!match.allowedActions.includes("report_result")) return command;
+  const action = requestedAction(command);
+  if (!match.allowedActions.includes(action)) return command;
+  if (action === "ask_clarification") {
+    return Dispatch.Command.parse({
+      ...command,
+      action: Dispatch.Actions.ResidentAsk,
+      target: {
+        kind: "resident",
+        sessionId: match.sessionId,
+      },
+      sessionId: match.sessionId,
+      runId: match.workerRunId,
+      wait: true,
+      actor: {
+        kind: "worker",
+        actorId: match.targetActorId ?? match.endpointId,
+        sessionId: match.sessionId,
+        runId: match.workerRunId,
+        workerRunId: match.workerRunId,
+        trustTier: "assigned_worker",
+        labels: [
+          "actor.worker",
+          "actor.assigned_worker",
+          `pending_interaction.${match.id}`,
+          `endpoint.${match.endpointId}`,
+        ],
+        reason: "pending_interaction.match",
+      },
+    });
+  }
+  if (action !== "report_result") return command;
   return Dispatch.Command.parse({
     ...command,
-    action: Dispatch.Actions.ActorReply,
+    action: Dispatch.Actions.WorkerComplete,
     target: {
       kind: "worker",
       id: match.workerRunId,
@@ -79,7 +127,13 @@ export function routePendingInteraction(command: Dispatch.Command): Dispatch.Com
 }
 
 export function markRoutedPendingInteraction(command: Dispatch.Command): void {
-  if (command.action !== Dispatch.Actions.ActorReply) return;
+  if (
+    command.action !== Dispatch.Actions.ActorReply &&
+    command.action !== Dispatch.Actions.WorkerComplete &&
+    command.action !== Dispatch.Actions.ResidentAsk
+  ) {
+    return;
+  }
   if (command.actor.reason !== "pending_interaction.match") return;
   const pendingInteractionId = command.actor.labels
     ?.find((label) => label.startsWith("pending_interaction."))

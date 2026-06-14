@@ -4,12 +4,12 @@ import { join } from "node:path";
 import type { AppConnector, Dispatch } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
-import { createWorkerDispatchHandlers } from "../dispatch/handlers/worker";
-import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
+import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
+import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
 
-const CompletedLocalCliDispatchOutput = z
+const CompletedConnectorDispatchOutput = z
   .object({
     output: z
       .object({
@@ -28,7 +28,7 @@ const CompletedLocalCliDispatchOutput = z
   })
   .passthrough();
 
-const FailedLocalCliDispatchOutput = z
+const FailedConnectorDispatchOutput = z
   .object({
     output: z
       .object({
@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 function tempDir(name: string): string {
-  const path = join(import.meta.dir, "..", "..", "test", ".tmp", name, crypto.randomUUID());
+  const path = join(import.meta.dir, "..", ".tmp", name, crypto.randomUUID());
   mkdirSync(path, { recursive: true });
   tempRoots.push(path);
   return path;
@@ -69,7 +69,7 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent",
+    description: "Runs a fake connector endpoint",
     detect: {
       command,
       testedVersions: ">=1.0.0 <2.0.0",
@@ -86,8 +86,15 @@ function fakeConnector(command: string, args: readonly string[]): AppConnector.D
       completionReport: { finalMessage: "stdout" },
     },
     requires: {},
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
     },
   };
@@ -98,6 +105,7 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -110,19 +118,19 @@ function installation(definition: AppConnector.Definition): AppConnector.Install
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
   };
 }
 
-describe("createLocalCliAgentRuntime completion stream", () => {
-  test("keeps stdout completion JSON parseable when the local CLI writes stderr diagnostics", async () => {
+describe("createConnectorEndpointProcessDriver completion stream", () => {
+  test("keeps stdout completion JSON parseable when the connector process writes stderr diagnostics", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-completion-json");
+    const workspaceRoot = tempDir("connector-runtime-completion-json");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(
       scriptPath,
@@ -147,7 +155,7 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      localCliAgentRuntime: createLocalCliAgentRuntime(),
+      connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       readBackRecorder: (workItemHash, readBack) =>
         WorkItemStore.addReadBackEvidence(workItemHash, {
           kind: "citation_match",
@@ -161,10 +169,10 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     });
 
     // When
-    const result = CompletedLocalCliDispatchOutput.parse(
+    const result = CompletedConnectorDispatchOutput.parse(
       await handlers["worker.spawn"]({
         ...command(),
-        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        target: { kind: "worker", id: stored.connectorId, endpointId: stored.endpointId },
         workspaceRoot,
       }),
     );
@@ -179,9 +187,9 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     expect(WorkItemStore.list()[0]?.completionReport?.claims[0]?.evidenceIds).toHaveLength(1);
   });
 
-  test("adds connector-declared read-back requests to local CLI completion envelopes", async () => {
+  test("adds connector-declared read-back requests to connector process completion envelopes", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-completion-readback-builder");
+    const workspaceRoot = tempDir("connector-runtime-completion-readback-builder");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(
       scriptPath,
@@ -218,7 +226,7 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const recordedReadBacks: unknown[] = [];
     const handlers = createWorkerDispatchHandlers({
-      localCliAgentRuntime: createLocalCliAgentRuntime(),
+      connectorEndpointDriver: createConnectorEndpointProcessDriver(),
       readBackRecorder: (workItemHash, readBack) => {
         recordedReadBacks.push(readBack);
         return WorkItemStore.addReadBackEvidence(workItemHash, {
@@ -234,10 +242,10 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     });
 
     // When
-    const result = CompletedLocalCliDispatchOutput.parse(
+    const result = CompletedConnectorDispatchOutput.parse(
       await handlers["worker.spawn"]({
         ...command(),
-        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        target: { kind: "worker", id: stored.connectorId, endpointId: stored.endpointId },
         workspaceRoot,
       }),
     );
@@ -261,7 +269,7 @@ describe("createLocalCliAgentRuntime completion stream", () => {
 
   test("fails closed when connector read-back builders contain unsupported templates", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-completion-readback-builder-invalid");
+    const workspaceRoot = tempDir("connector-runtime-completion-readback-builder-invalid");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(
       scriptPath,
@@ -296,14 +304,14 @@ describe("createLocalCliAgentRuntime completion stream", () => {
     } satisfies AppConnector.Definition;
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      localCliAgentRuntime: createLocalCliAgentRuntime(),
+      connectorEndpointDriver: createConnectorEndpointProcessDriver(),
     });
 
     // When
-    const result = FailedLocalCliDispatchOutput.parse(
+    const result = FailedConnectorDispatchOutput.parse(
       await handlers["worker.spawn"]({
         ...command(),
-        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        target: { kind: "worker", id: stored.connectorId, endpointId: stored.endpointId },
         workspaceRoot,
       }),
     );

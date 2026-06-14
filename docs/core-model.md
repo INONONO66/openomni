@@ -172,7 +172,8 @@ Eight categories. Each answers a different question — do not mix them.
 | `SessionOrigin` | How the session was initiated. |
 | `SessionPurpose` | `user_conversation / worker_interaction / self_loop`. |
 | `WorkerRun` | Durable execution record of a delegated task. |
-| `executorKind` | `internal_chat_agent / local_cli_agent / external_api / a2a / human_channel`. |
+| `ConnectorEndpoint` | Installed app endpoint addressable through `ActorEndpoint(channel: "app_connector")`; provider identity and driver wiring live on the AppConnector installation. |
+| `executorKind` | Coarse ledger metadata: `internal_chat_agent / connector_endpoint / external_api / a2a / human_channel`. Dispatch selection for installed apps uses endpoint identity, not this field. |
 | `ChatAgent` | LLM-driven execution loop. |
 | `SubagentRuntime` | Session-locked spawn / send / resume / cancel / wait. |
 

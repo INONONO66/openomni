@@ -6,7 +6,7 @@ import { BuiltInAppConnectors } from "../../src/app-connector";
 import { createWorkerDispatchHandlers } from "../../src/dispatch/handlers/worker";
 import { command, expectRejectsWithMessage, workerSpawnPayload } from "./helpers";
 
-const LocalCliWorkerSpawnOutput = z
+const ConnectorEndpointWorkerSpawnOutput = z
   .object({
     output: z
       .object({
@@ -19,12 +19,12 @@ const LocalCliWorkerSpawnOutput = z
   })
   .passthrough();
 
-const missingLocalCliRuntimeOwnerError =
-  "worker.spawn executor local_cli_agent requires a local CLI runtime owner";
-const missingEnabledLocalCliInstallationError =
-  "worker.spawn executor local_cli_agent requires an enabled AppConnector installation";
+const missingConnectorDriverOwnerError =
+  "worker.spawn connector endpoint requires a connector driver owner";
+const missingEnabledConnectorInstallationError =
+  "worker.spawn connector endpoint requires an enabled AppConnector installation";
 
-type LocalCliEvidenceCase = {
+type ConnectorEvidenceCase = {
   readonly name: string;
   readonly resultEvidence:
     | Pick<Execution.Result, "artifacts">
@@ -33,35 +33,37 @@ type LocalCliEvidenceCase = {
   readonly expectedDetail: string;
 };
 
-type LocalCliCommandOptions = {
+type ConnectorEndpointCommandOptions = {
   readonly name?: string;
 };
 
 type WorkerDispatchHandlerOptions = NonNullable<Parameters<typeof createWorkerDispatchHandlers>[0]>;
-type LocalCliRuntimeOwner = NonNullable<WorkerDispatchHandlerOptions["localCliAgentRuntime"]>;
+type ConnectorEndpointDriverOwner = NonNullable<
+  WorkerDispatchHandlerOptions["connectorEndpointDriver"]
+>;
 
-const localCliEvidenceCases: readonly LocalCliEvidenceCase[] = [
+const connectorEvidenceCases: readonly ConnectorEvidenceCase[] = [
   {
-    name: "records local CLI log artifacts as WorkItem evidence",
+    name: "records connector log artifacts as WorkItem evidence",
     resultEvidence: {
       artifacts: [
         {
-          kind: "local_cli_log",
+          kind: "connector_log",
           artifactId: "art_cli_log",
           title: "Codex CLI log",
           mimeType: "text/plain",
         },
       ],
     },
-    expectedDescription: "local CLI log artifact recorded",
+    expectedDescription: "connector log artifact recorded",
     expectedDetail: "art_cli_log",
   },
   {
-    name: "records local CLI log events as WorkItem evidence",
+    name: "records connector log events as WorkItem evidence",
     resultEvidence: {
       logEvents: [
         {
-          kind: "local_cli_log_event",
+          kind: "connector_log_event",
           artifactId: "art_cli_log",
           message: "tool completed",
           timestamp: "1700000000000",
@@ -70,7 +72,7 @@ const localCliEvidenceCases: readonly LocalCliEvidenceCase[] = [
         },
       ],
     },
-    expectedDescription: "local CLI log event recorded",
+    expectedDescription: "connector log event recorded",
     expectedDetail: "tool_result",
   },
 ];
@@ -101,30 +103,35 @@ function seedCodexInstallation(
   });
 }
 
-function localCliWorkerCommand(options: LocalCliCommandOptions = {}) {
+function connectorEndpointWorkerCommand(options: ConnectorEndpointCommandOptions = {}) {
   return command(
     "worker.spawn",
-    { kind: "worker", id: "app.codex", executorKind: "local_cli_agent", ...options },
+    {
+      kind: "worker",
+      id: "app.codex",
+      endpointId: "endpoint:install:codex:enabled",
+      ...options,
+    },
     workerSpawnPayload("build with codex"),
   );
 }
 
-function dispatchLocalCliWorkerSpawn(
+function dispatchConnectorEndpointWorkerSpawn(
   handlers: ReturnType<typeof createWorkerDispatchHandlers>,
-  options?: LocalCliCommandOptions,
+  options?: ConnectorEndpointCommandOptions,
 ) {
-  return handlers["worker.spawn"](localCliWorkerCommand(options));
+  return handlers["worker.spawn"](connectorEndpointWorkerCommand(options));
 }
 
-function createLocalCliHandlers(dispatch: LocalCliRuntimeOwner["dispatch"]) {
-  return createWorkerDispatchHandlers({ localCliAgentRuntime: { dispatch } });
+function createConnectorEndpointHandlers(dispatch: ConnectorEndpointDriverOwner["dispatch"]) {
+  return createWorkerDispatchHandlers({ connectorEndpointDriver: { dispatch } });
 }
 
-async function expectLocalCliWorkerSpawnRejects(
+async function expectConnectorEndpointWorkerSpawnRejects(
   handlers: ReturnType<typeof createWorkerDispatchHandlers>,
   message: string,
 ): Promise<void> {
-  await expectRejectsWithMessage(() => dispatchLocalCliWorkerSpawn(handlers), message);
+  await expectRejectsWithMessage(() => dispatchConnectorEndpointWorkerSpawn(handlers), message);
 }
 
 function succeededResult(request: Execution.Request): Execution.Result {
@@ -136,24 +143,24 @@ function succeededResult(request: Execution.Request): Execution.Result {
   };
 }
 
-describe("worker.spawn local_cli_agent dispatch wiring", () => {
+describe("worker.spawn connector endpoint dispatch wiring", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
   });
 
-  test("dispatches to injected local CLI runtime when an enabled matching installation exists", async () => {
+  test("dispatches to injected connector endpoint driver when an enabled matching installation exists", async () => {
     const installation = seedCodexInstallation("enabled");
     const requests: Execution.Request[] = [];
     const installationIds: string[] = [];
-    const handlers = createLocalCliHandlers(async (request) => {
+    const handlers = createConnectorEndpointHandlers(async (request) => {
       requests.push(request.executionRequest);
       installationIds.push(request.installation.id);
       return succeededResult(request.executionRequest);
     });
 
-    const result = LocalCliWorkerSpawnOutput.parse(
-      await dispatchLocalCliWorkerSpawn(handlers, { name: "Codex CLI" }),
+    const result = ConnectorEndpointWorkerSpawnOutput.parse(
+      await dispatchConnectorEndpointWorkerSpawn(handlers, { name: "Codex CLI" }),
     );
 
     expect(result.output).toMatchObject({
@@ -163,23 +170,28 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
       result: { status: "succeeded", output: "done" },
     });
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ prompt: "build with codex", agentName: "app.codex" });
+    expect(requests[0]).toMatchObject({
+      prompt: "build with codex",
+      agentName: "endpoint:install:codex:enabled",
+    });
     expect(installationIds).toEqual([installation.id]);
     expect(WorkItemStore.list()[0]).toMatchObject({
-      executorKind: "local_cli_agent",
-      assigneeId: "app.codex",
+      executorKind: "connector_endpoint",
+      assigneeId: "endpoint:install:codex:enabled",
     });
   });
 
-  for (const evidenceCase of localCliEvidenceCases) {
+  for (const evidenceCase of connectorEvidenceCases) {
     test(evidenceCase.name, async () => {
       seedCodexInstallation("enabled");
-      const handlers = createLocalCliHandlers(async (request) => ({
+      const handlers = createConnectorEndpointHandlers(async (request) => ({
         ...succeededResult(request.executionRequest),
         ...evidenceCase.resultEvidence,
       }));
 
-      const result = LocalCliWorkerSpawnOutput.parse(await dispatchLocalCliWorkerSpawn(handlers));
+      const result = ConnectorEndpointWorkerSpawnOutput.parse(
+        await dispatchConnectorEndpointWorkerSpawn(handlers),
+      );
 
       const workItem = WorkItemStore.get(result.output.workItemHash);
       expect(workItem?.evidence).toMatchObject([
@@ -193,29 +205,29 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
     });
   }
 
-  test("fails closed when an enabled matching installation exists but no runtime owner is registered", async () => {
+  test("fails closed when an enabled matching installation exists but no connector driver is registered", async () => {
     seedCodexInstallation("enabled");
     const handlers = createWorkerDispatchHandlers();
 
-    await expectLocalCliWorkerSpawnRejects(handlers, missingLocalCliRuntimeOwnerError);
+    await expectConnectorEndpointWorkerSpawnRejects(handlers, missingConnectorDriverOwnerError);
 
     expect(WorkItemStore.list()[0]).toMatchObject({
-      executorKind: "local_cli_agent",
-      failureReason: missingLocalCliRuntimeOwnerError,
+      executorKind: "connector_endpoint",
+      failureReason: missingConnectorDriverOwnerError,
     });
   });
 
-  test("marks the WorkItem failed when the local CLI runtime owner throws", async () => {
+  test("marks the WorkItem failed when the connector driver owner throws", async () => {
     seedCodexInstallation("enabled");
-    const handlers = createLocalCliHandlers(async () => {
+    const handlers = createConnectorEndpointHandlers(async () => {
       throw new Error("runtime exploded");
     });
 
-    await expectLocalCliWorkerSpawnRejects(handlers, "runtime exploded");
+    await expectConnectorEndpointWorkerSpawnRejects(handlers, "runtime exploded");
 
     const workItem = WorkItemStore.list()[0];
     expect(workItem).toMatchObject({
-      executorKind: "local_cli_agent",
+      executorKind: "connector_endpoint",
       failureReason: "runtime exploded",
     });
     expect(workItem ? WorkItem.deriveStatus(workItem) : undefined).toBe("failed");
@@ -223,17 +235,20 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
 
   test("fails closed when no enabled matching installation exists", async () => {
     let dispatchCalled = false;
-    const handlers = createLocalCliHandlers(async (request) => {
+    const handlers = createConnectorEndpointHandlers(async (request) => {
       dispatchCalled = true;
       return succeededResult(request.executionRequest);
     });
 
-    await expectLocalCliWorkerSpawnRejects(handlers, missingEnabledLocalCliInstallationError);
+    await expectConnectorEndpointWorkerSpawnRejects(
+      handlers,
+      missingEnabledConnectorInstallationError,
+    );
 
     expect(dispatchCalled).toBe(false);
     expect(WorkItemStore.list()[0]).toMatchObject({
-      executorKind: "local_cli_agent",
-      failureReason: missingEnabledLocalCliInstallationError,
+      executorKind: "connector_endpoint",
+      failureReason: missingEnabledConnectorInstallationError,
     });
   });
 
@@ -254,24 +269,27 @@ describe("worker.spawn local_cli_agent dispatch wiring", () => {
     test(`fails closed without calling runtime when Codex installation is ${status}`, async () => {
       seedCodexInstallation(status);
       let dispatchCalled = false;
-      const handlers = createLocalCliHandlers(async (request) => {
+      const handlers = createConnectorEndpointHandlers(async (request) => {
         dispatchCalled = true;
         return succeededResult(request.executionRequest);
       });
 
-      await expectLocalCliWorkerSpawnRejects(handlers, missingEnabledLocalCliInstallationError);
+      await expectConnectorEndpointWorkerSpawnRejects(
+        handlers,
+        missingEnabledConnectorInstallationError,
+      );
 
       expect(dispatchCalled).toBe(false);
       const workItem = WorkItemStore.list()[0];
       expect(workItem).toMatchObject({
-        executorKind: "local_cli_agent",
-        failureReason: missingEnabledLocalCliInstallationError,
+        executorKind: "connector_endpoint",
+        failureReason: missingEnabledConnectorInstallationError,
       });
       expect(workItem?.evidence).toMatchObject([
         {
           kind: "custom",
           passed: false,
-          detail: "executorKind=local_cli_agent",
+          detail: "executorKind=connector_endpoint",
         },
       ]);
       expect(workItem ? WorkItem.deriveStatus(workItem) : undefined).toBe("failed");

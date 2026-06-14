@@ -12,12 +12,27 @@ const evidenceEmits = [
 const codeTaskTypes = ["code.change", "code.review"] satisfies string[];
 const defaultCapabilities = ["git", "network", "filesystem.write"] satisfies string[];
 const defaultStallTimeoutMs = 300_000;
+const providerNativeInstall = {
+  scopes: ["user", "workspace"],
+  hooks: ["permission"],
+  plugins: [],
+} satisfies AppConnector.Driver["install"];
+
+function providerNativeDriver(provider: string): AppConnector.Driver {
+  return {
+    provider,
+    install: providerNativeInstall,
+    submit: { mode: "spawn", ack: "accepted" },
+    observedEvents: ["submitted", "accepted", "running", "completed", "failed", "interrupted"],
+    emits: evidenceEmits,
+  };
+}
 
 const claudeCodeConnector: AppConnector.Definition = {
   id: "app.claude-code",
   name: "Claude Code",
   version: "1.0.0",
-  description: "Runs Claude Code as an installed local CLI agent",
+  description: "Runs Claude Code as an installed connector endpoint",
   detect: {
     command: "claude",
     args: ["--version"],
@@ -55,8 +70,9 @@ const claudeCodeConnector: AppConnector.Definition = {
     capabilities: defaultCapabilities,
     permissions: [{ action: "tool.call", allowlist: ["bash", "edit", "grep", "read"] }],
   },
+  driver: providerNativeDriver("claude-code"),
   profile: {
-    executorKind: "local_cli_agent",
+    kind: "connector_endpoint",
     taskTypes: codeTaskTypes,
     defaultTimeoutMs: 600_000,
     defaultMaxAttempts: 2,
@@ -68,7 +84,7 @@ const codexConnector: AppConnector.Definition = {
   id: "app.codex",
   name: "Codex CLI",
   version: "1.0.0",
-  description: "Runs Codex CLI as an installed local CLI agent",
+  description: "Runs Codex CLI as an installed connector endpoint",
   detect: {
     command: "codex",
     args: ["--version"],
@@ -103,8 +119,9 @@ const codexConnector: AppConnector.Definition = {
     capabilities: defaultCapabilities,
     permissions: [{ action: "tool.call", allowlist: ["bash", "edit", "grep", "read"] }],
   },
+  driver: providerNativeDriver("codex"),
   profile: {
-    executorKind: "local_cli_agent",
+    kind: "connector_endpoint",
     taskTypes: codeTaskTypes,
     defaultTimeoutMs: 600_000,
     defaultMaxAttempts: 2,
@@ -116,7 +133,7 @@ const opencodeConnector: AppConnector.Definition = {
   id: "app.opencode",
   name: "OpenCode",
   version: "1.0.0",
-  description: "Runs OpenCode as an installed local CLI agent",
+  description: "Runs OpenCode as an installed connector endpoint",
   detect: {
     command: "opencode",
     args: ["--version"],
@@ -151,8 +168,9 @@ const opencodeConnector: AppConnector.Definition = {
     capabilities: defaultCapabilities,
     permissions: [{ action: "tool.call", allowlist: ["bash", "edit", "grep", "read"] }],
   },
+  driver: providerNativeDriver("opencode"),
   profile: {
-    executorKind: "local_cli_agent",
+    kind: "connector_endpoint",
     taskTypes: codeTaskTypes,
     defaultTimeoutMs: 600_000,
     defaultMaxAttempts: 2,

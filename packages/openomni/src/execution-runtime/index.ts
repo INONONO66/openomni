@@ -4,14 +4,6 @@ export { InjectionQueue } from "./injection-queue.js";
 export { CronJobRegistry } from "./cron-job-registry.js";
 export { CronJobRunner } from "./cron-job-runner.js";
 export { WorkspaceLock } from "./workspace-lock.js";
-export { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
-export type {
-  LocalCliCredentialMap,
-  LocalCliAgentRuntime,
-  LocalCliAgentRuntimeDispatchInput,
-  LocalCliAgentRuntimeOptions,
-  LocalCliQuestionBridgeHandler,
-} from "./local-cli-agent-runtime.js";
 export {
   AgentToolProvider,
   ToolProxyProvider,

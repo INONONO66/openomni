@@ -1,77 +1,73 @@
 import { resolve } from "node:path";
 import type { AppConnector } from "@openomni/protocol";
 
-export interface LocalCliTemplateValues {
+export interface ConnectorTemplateValues {
   readonly prompt: string;
-  readonly worktree?: string;
+  readonly worktree: string;
   readonly runId: string;
   readonly sessionId: string;
 }
 
-export type LocalCliCredentialMap = Readonly<Record<string, string>>;
+export type ConnectorEndpointCredentialMap = Readonly<Record<string, string>>;
 
-interface LocalCliCredentialEnvSuccess {
+interface ConnectorCredentialEnvSuccess {
   readonly ok: true;
   readonly env: Record<string, string>;
   readonly redactions: readonly string[];
 }
 
-interface LocalCliCredentialEnvFailure {
+interface ConnectorCredentialEnvFailure {
   readonly ok: false;
   readonly error: string;
 }
 
-export type LocalCliCredentialEnvResult =
-  | LocalCliCredentialEnvSuccess
-  | LocalCliCredentialEnvFailure;
+export type ConnectorCredentialEnvResult =
+  | ConnectorCredentialEnvSuccess
+  | ConnectorCredentialEnvFailure;
 
 const REDACTED_CREDENTIAL = "[REDACTED]";
 const QUESTION_BRIDGE_ENV_PREFIX = "OPENOMNI_QUESTION_BRIDGE_";
 const templatePattern = /\{\{(prompt|worktree|runId|sessionId)\}\}/g;
 const inheritedEnvKeys = ["PATH", "SYSTEMROOT", "SystemRoot", "WINDIR"] as const;
 
-function valueForTemplateKey(key: string, values: LocalCliTemplateValues): string {
+function valueForTemplateKey(key: string, values: ConnectorTemplateValues): string {
   switch (key) {
     case "prompt":
       return values.prompt;
     case "worktree":
-      if (values.worktree === undefined) {
-        throw new Error("local CLI spawn template requires workspaceRoot for {{worktree}}");
-      }
       return values.worktree;
     case "runId":
       return values.runId;
     case "sessionId":
       return values.sessionId;
     default:
-      throw new Error(`unsupported local CLI spawn template key: ${key}`);
+      throw new Error(`unsupported connector process spawn template key: ${key}`);
   }
 }
 
-export function renderLocalCliTemplate(value: string, values: LocalCliTemplateValues): string {
+export function renderConnectorTemplate(value: string, values: ConnectorTemplateValues): string {
   return value.replace(templatePattern, (_match, key: string) => valueForTemplateKey(key, values));
 }
 
-export function renderLocalCliArgs(
+export function renderConnectorArgs(
   spawn: AppConnector.Spawn,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
 ): readonly string[] {
-  return (spawn.args ?? []).map((arg) => renderLocalCliTemplate(arg, values));
+  return (spawn.args ?? []).map((arg) => renderConnectorTemplate(arg, values));
 }
 
-export function renderLocalCliCwd(
+export function renderConnectorCwd(
   spawn: AppConnector.Spawn,
-  values: LocalCliTemplateValues,
-): string | undefined {
-  if (spawn.cwd === undefined)
-    return values.worktree === undefined ? undefined : resolve(values.worktree);
-  return resolve(renderLocalCliTemplate(spawn.cwd, values));
+  values: ConnectorTemplateValues,
+): string {
+  if (spawn.cwd === undefined) return resolve(values.worktree);
+  return resolve(renderConnectorTemplate(spawn.cwd, values));
 }
 
-export function renderLocalCliEnv(
+export function renderConnectorEnv(
   spawn: AppConnector.Spawn,
   questionBridge: AppConnector.QuestionBridge | undefined,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
   credentialEnv: Record<string, string>,
   questionBridgeRuntimeEnv: Record<string, string> = {},
 ): Record<string, string> {
@@ -85,7 +81,7 @@ export function renderLocalCliEnv(
       if (key.startsWith(QUESTION_BRIDGE_ENV_PREFIX)) continue;
       const value = spawn.env[key];
       if (value === undefined) continue;
-      env[key] = renderLocalCliTemplate(value, values);
+      env[key] = renderConnectorTemplate(value, values);
     }
   }
   for (const [key, value] of Object.entries(renderQuestionBridgeEnv(questionBridge, values))) {
@@ -102,7 +98,7 @@ export function renderLocalCliEnv(
   return env;
 }
 
-export function redactLocalCliCredentialValues(
+export function redactConnectorCredentialValues(
   value: string,
   redactions: readonly string[],
 ): string {
@@ -113,10 +109,10 @@ export function redactLocalCliCredentialValues(
   return redacted;
 }
 
-export function resolveLocalCliCredentialEnv(
+export function resolveConnectorCredentialEnv(
   installation: AppConnector.Installation,
-  credentials: LocalCliCredentialMap,
-): LocalCliCredentialEnvResult {
+  credentials: ConnectorEndpointCredentialMap,
+): ConnectorCredentialEnvResult {
   const requiredCredentials = installation.definition.requires.credentials ?? [];
   const consentedCredentials = new Set(installation.consent?.credentials ?? []);
   const env: Record<string, string> = {};
@@ -126,14 +122,14 @@ export function resolveLocalCliCredentialEnv(
     if (!consentedCredentials.has(credentialName)) {
       return {
         ok: false,
-        error: `local CLI credential not consented: ${credentialName}`,
+        error: `connector process credential not consented: ${credentialName}`,
       };
     }
     const value = credentials[credentialName];
     if (value === undefined || value.length === 0) {
       return {
         ok: false,
-        error: `local CLI credential unavailable: ${credentialName}`,
+        error: `connector process credential unavailable: ${credentialName}`,
       };
     }
     env[credentialName] = value;
@@ -145,7 +141,7 @@ export function resolveLocalCliCredentialEnv(
 
 function renderQuestionBridgeEnv(
   questionBridge: AppConnector.QuestionBridge | undefined,
-  values: LocalCliTemplateValues,
+  values: ConnectorTemplateValues,
 ): Record<string, string> {
   if (questionBridge === undefined || questionBridge.kind === "none") {
     return { OPENOMNI_QUESTION_BRIDGE_KIND: "none" };
@@ -161,9 +157,9 @@ function renderQuestionBridgeEnv(
     env.OPENOMNI_QUESTION_BRIDGE_RESPONSE_MODE = questionBridge.responseMode;
   }
   if (questionBridge.kind === "hook") {
-    env.OPENOMNI_QUESTION_BRIDGE_COMMAND = renderLocalCliTemplate(questionBridge.command, values);
+    env.OPENOMNI_QUESTION_BRIDGE_COMMAND = renderConnectorTemplate(questionBridge.command, values);
     env.OPENOMNI_QUESTION_BRIDGE_ARGS_JSON = JSON.stringify(
-      (questionBridge.args ?? []).map((arg) => renderLocalCliTemplate(arg, values)),
+      (questionBridge.args ?? []).map((arg) => renderConnectorTemplate(arg, values)),
     );
   }
   return env;

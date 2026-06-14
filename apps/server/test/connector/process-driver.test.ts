@@ -4,13 +4,13 @@ import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import { AppConnectorInstallationStore, Artifact, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
-import { createWorkerDispatchHandlers } from "../dispatch/handlers/worker";
-import { encodeWorkspaceForClaudeProjects } from "./local-cli-agent-log.js";
-import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
+import { createWorkerDispatchHandlers } from "../../../../packages/openomni/src/dispatch/handlers/worker";
+import { encodeWorktreeForClaudeProjects } from "../../src/connector/log.js";
+import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
 
-const LocalCliDispatchOutput = z
+const ConnectorDispatchOutput = z
   .object({
     output: z
       .object({
@@ -47,7 +47,7 @@ afterEach(() => {
 });
 
 function tempDir(name: string): string {
-  const path = join(import.meta.dir, "..", "..", "test", ".tmp", name, crypto.randomUUID());
+  const path = join(import.meta.dir, "..", ".tmp", name, crypto.randomUUID());
   mkdirSync(path, { recursive: true });
   tempRoots.push(path);
   return path;
@@ -63,7 +63,7 @@ function fakeConnector(
     id: "app.fake-cli",
     name: "Fake CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent",
+    description: "Runs a fake connector endpoint",
     detect: {
       command,
       testedVersions: ">=1.0.0 <2.0.0",
@@ -83,8 +83,15 @@ function fakeConnector(
     requires: {
       ...requiresOverrides,
     },
+    driver: {
+      provider: "fake-cli",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
     },
   };
@@ -98,6 +105,7 @@ function installation(
     id: "install:fake-cli",
     connectorId: definition.id,
     connectorVersion: definition.version,
+    endpointId: "endpoint:install:fake-cli",
     definition,
     testedVersions: definition.detect.testedVersions,
     status: "enabled",
@@ -110,9 +118,9 @@ function installation(
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli",
+    dispatchId: "dispatch-connector-endpoint",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.fake-cli", executorKind: "local_cli_agent" },
+    target: { kind: "worker", id: "app.fake-cli", endpointId: "endpoint:install:fake-cli" },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -133,19 +141,49 @@ function request(workspaceRoot: string): Execution.Request {
 function dispatchRuntime(
   definition: AppConnector.Definition,
   workspaceRoot: string,
-  options: Parameters<typeof createLocalCliAgentRuntime>[0] = {},
+  options: Parameters<typeof createConnectorEndpointProcessDriver>[0] = {},
 ): Promise<Execution.Result> {
-  return createLocalCliAgentRuntime(options).dispatch({
+  return createConnectorEndpointProcessDriver(options).dispatch({
     command: command(),
     executionRequest: request(workspaceRoot),
     installation: installation(definition),
   });
 }
 
-describe("createLocalCliAgentRuntime", () => {
+describe("createConnectorEndpointProcessDriver", () => {
+  test("fails before spawning when the execution request has no worktree", async () => {
+    // Given
+    const workspaceRoot = tempDir("connector-runtime-missing-worktree");
+    const scriptPath = join(workspaceRoot, "must-not-run.ts");
+    writeFileSync(scriptPath, "console.log('must not run');");
+    const definition = fakeConnector("bun", [scriptPath]);
+
+    // When
+    const result = await createConnectorEndpointProcessDriver().dispatch({
+      command: command(),
+      executionRequest: {
+        runId: "run_fake",
+        sessionId: "ses_fake",
+        mode: "direct",
+        prompt: "ship it",
+        model: { provider: "anthropic", id: "claude-test" },
+      },
+      installation: installation(definition),
+    });
+
+    // Then
+    expect(result).toMatchObject({
+      runId: "run_fake",
+      sessionId: "ses_fake",
+      status: "failed",
+      finishReason: "worktree_unavailable",
+      error: "connector endpoint process driver requires workspaceRoot worktree",
+    });
+  });
+
   test("runs the AppConnector spawn template with prompt and worktree placeholders", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-happy");
+    const workspaceRoot = tempDir("connector-runtime-happy");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(
       scriptPath,
@@ -177,7 +215,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("renders connector env placeholders without inheriting parent secrets", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-env");
+    const workspaceRoot = tempDir("connector-runtime-env");
     const scriptPath = join(workspaceRoot, "fake-env.ts");
     writeFileSync(
       scriptPath,
@@ -219,7 +257,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("does not inherit parent env when connector env is omitted", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-empty-env");
+    const workspaceRoot = tempDir("connector-runtime-empty-env");
     const scriptPath = join(workspaceRoot, "fake-empty-env.ts");
     writeFileSync(
       scriptPath,
@@ -250,7 +288,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("materializes hook question bridge metadata into the child env", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-question-hook");
+    const workspaceRoot = tempDir("connector-runtime-question-hook");
     const scriptPath = join(workspaceRoot, "fake-question-hook.ts");
     writeFileSync(
       scriptPath,
@@ -299,7 +337,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("materializes disabled question bridge metadata for connectors without a bridge", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-question-none");
+    const workspaceRoot = tempDir("connector-runtime-question-none");
     const scriptPath = join(workspaceRoot, "fake-question-none.ts");
     writeFileSync(
       scriptPath,
@@ -347,7 +385,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("does not let connector env fill omitted hook question bridge fields", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-question-hook-reserved");
+    const workspaceRoot = tempDir("connector-runtime-question-hook-reserved");
     const scriptPath = join(workspaceRoot, "fake-question-hook-reserved.ts");
     writeFileSync(
       scriptPath,
@@ -394,7 +432,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("does not let consented credentials override question bridge metadata", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-question-credential");
+    const workspaceRoot = tempDir("connector-runtime-question-credential");
     const scriptPath = join(workspaceRoot, "fake-question-credential.ts");
     writeFileSync(
       scriptPath,
@@ -416,7 +454,7 @@ describe("createLocalCliAgentRuntime", () => {
     } satisfies AppConnector.Definition;
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: {
         OPENOMNI_QUESTION_BRIDGE_KIND: "credential-kind",
         FAKE_API_KEY: "secret-value",
@@ -442,7 +480,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("stores configured text logs as redacted artifacts and can use them as final output", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-log-artifact");
+    const workspaceRoot = tempDir("connector-runtime-log-artifact");
     const scriptPath = join(workspaceRoot, "fake-log-artifact.ts");
     const logPath = join(workspaceRoot, "agent.log");
     writeFileSync(
@@ -470,7 +508,7 @@ describe("createLocalCliAgentRuntime", () => {
     } satisfies AppConnector.Definition;
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -487,7 +525,7 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.output).not.toContain("secret-value");
     expect(result.artifacts).toHaveLength(1);
     expect(result.artifacts?.[0]).toMatchObject({
-      kind: "local_cli_log",
+      kind: "connector_log",
       title: "Fake CLI run_fake log",
       mimeType: "text/plain",
     });
@@ -502,7 +540,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("stores stdout-backed structured logs for built-in stream connectors", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-log-stdout");
+    const workspaceRoot = tempDir("connector-runtime-log-stdout");
     const scriptPath = join(workspaceRoot, "fake-stdout-log.ts");
     writeFileSync(
       scriptPath,
@@ -526,7 +564,7 @@ describe("createLocalCliAgentRuntime", () => {
     } satisfies AppConnector.Definition;
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -547,13 +585,13 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("stores newest home-expanded workspace glob log for Claude-style connectors", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-log-glob-worktree");
-    const homeRoot = tempDir("local-cli-runtime-log-glob-home");
+    const workspaceRoot = tempDir("connector-runtime-log-glob-worktree");
+    const homeRoot = tempDir("connector-runtime-log-glob-home");
     const projectDir = join(
       homeRoot,
       ".claude",
       "projects",
-      encodeWorkspaceForClaudeProjects(workspaceRoot),
+      encodeWorktreeForClaudeProjects(workspaceRoot),
     );
     mkdirSync(projectDir, { recursive: true });
     const olderLogPath = join(projectDir, "older.jsonl");
@@ -585,7 +623,7 @@ describe("createLocalCliAgentRuntime", () => {
 
     try {
       // When
-      const result = await createLocalCliAgentRuntime({
+      const result = await createConnectorEndpointProcessDriver({
         credentials: { FAKE_API_KEY: "secret-value" },
       }).dispatch({
         command: command(),
@@ -613,7 +651,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("materializes only consented connector credentials into the child env", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-credential-env");
+    const workspaceRoot = tempDir("connector-runtime-credential-env");
     const scriptPath = join(workspaceRoot, "fake-credential-env.ts");
     writeFileSync(
       scriptPath,
@@ -622,7 +660,7 @@ describe("createLocalCliAgentRuntime", () => {
     const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: {
         FAKE_API_KEY: "secret-value",
         UNGRANTED_API_KEY: "must-not-leak",
@@ -646,7 +684,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("redacts consented credentials from stderr and failed results", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-credential-redaction");
+    const workspaceRoot = tempDir("connector-runtime-credential-redaction");
     const scriptPath = join(workspaceRoot, "fake-credential-stderr.ts");
     writeFileSync(
       scriptPath,
@@ -659,7 +697,7 @@ describe("createLocalCliAgentRuntime", () => {
     const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -672,7 +710,7 @@ describe("createLocalCliAgentRuntime", () => {
       status: "failed",
       finishReason: "exit_code:7",
       output: "stdout [REDACTED]",
-      error: "stderr [REDACTED]\nlocal CLI process exited with code 7",
+      error: "stderr [REDACTED]\nconnector process exited with code 7",
     });
     expect(result.output).not.toContain("secret-value");
     expect(result.error).not.toContain("secret-value");
@@ -680,13 +718,13 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("fails before spawning when a required consented credential is unavailable", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-missing-credential");
+    const workspaceRoot = tempDir("connector-runtime-missing-credential");
     const scriptPath = join(workspaceRoot, "fake-should-not-run.ts");
     writeFileSync(scriptPath, "console.log('should not run');");
     const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
 
     // When
-    const result = await createLocalCliAgentRuntime().dispatch({
+    const result = await createConnectorEndpointProcessDriver().dispatch({
       command: command(),
       executionRequest: request(workspaceRoot),
       installation: installation(definition, { credentials: ["FAKE_API_KEY"] }),
@@ -698,20 +736,20 @@ describe("createLocalCliAgentRuntime", () => {
       sessionId: "ses_fake",
       status: "failed",
       finishReason: "credential_unavailable",
-      error: "local CLI credential unavailable: FAKE_API_KEY",
+      error: "connector process credential unavailable: FAKE_API_KEY",
     });
     expect(result.output).toBeUndefined();
   });
 
   test("fails before spawning when a required credential was not consented", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-unconsented-credential");
+    const workspaceRoot = tempDir("connector-runtime-unconsented-credential");
     const scriptPath = join(workspaceRoot, "fake-unconsented.ts");
     writeFileSync(scriptPath, "console.log('should not run');");
     const definition = fakeConnector("bun", [scriptPath], {}, { credentials: ["FAKE_API_KEY"] });
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -725,14 +763,14 @@ describe("createLocalCliAgentRuntime", () => {
       sessionId: "ses_fake",
       status: "failed",
       finishReason: "credential_unavailable",
-      error: "local CLI credential not consented: FAKE_API_KEY",
+      error: "connector process credential not consented: FAKE_API_KEY",
     });
     expect(result.output).toBeUndefined();
   });
 
-  test("returns failed when the local CLI exits non-zero", async () => {
+  test("returns failed when the connector process exits non-zero", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-nonzero");
+    const workspaceRoot = tempDir("connector-runtime-nonzero");
     const scriptPath = join(workspaceRoot, "fake-fail.ts");
     writeFileSync(
       scriptPath,
@@ -754,13 +792,13 @@ describe("createLocalCliAgentRuntime", () => {
       status: "failed",
       finishReason: "exit_code:7",
       output: "stdout before failure",
-      error: "stderr failure\nlocal CLI process exited with code 7",
+      error: "stderr failure\nconnector process exited with code 7",
     });
   });
 
-  test("returns interrupted when the local CLI times out", async () => {
+  test("returns interrupted when the connector process times out", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-timeout");
+    const workspaceRoot = tempDir("connector-runtime-timeout");
     const scriptPath = join(workspaceRoot, "fake-hang.ts");
     writeFileSync(scriptPath, "setTimeout(() => {}, 1_000);");
     const definition = fakeConnector("bun", [scriptPath], { timeoutMs: 10 });
@@ -778,9 +816,9 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("timed out");
   });
 
-  test("returns interrupted when the local CLI stalls without output", async () => {
+  test("returns interrupted when the connector process stalls without output", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-stall");
+    const workspaceRoot = tempDir("connector-runtime-stall");
     const scriptPath = join(workspaceRoot, "fake-stall.ts");
     writeFileSync(
       scriptPath,
@@ -810,9 +848,9 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("150ms");
   });
 
-  test("uses file log activity to keep a silent local CLI alive", async () => {
+  test("uses file log activity to keep a silent connector process alive", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-file-log-liveness");
+    const workspaceRoot = tempDir("connector-runtime-file-log-liveness");
     const logPath = join(workspaceRoot, "agent.jsonl");
     const scriptPath = join(workspaceRoot, "fake-file-log-liveness.ts");
     writeFileSync(
@@ -854,15 +892,15 @@ describe("createLocalCliAgentRuntime", () => {
     });
   });
 
-  test("uses glob log activity to keep a silent local CLI alive", async () => {
+  test("uses glob log activity to keep a silent connector process alive", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-glob-log-liveness-worktree");
-    const homeRoot = tempDir("local-cli-runtime-glob-log-liveness-home");
+    const workspaceRoot = tempDir("connector-runtime-glob-log-liveness-worktree");
+    const homeRoot = tempDir("connector-runtime-glob-log-liveness-home");
     const projectDir = join(
       homeRoot,
       ".claude",
       "projects",
-      encodeWorkspaceForClaudeProjects(workspaceRoot),
+      encodeWorktreeForClaudeProjects(workspaceRoot),
     );
     mkdirSync(projectDir, { recursive: true });
     const logPath = join(projectDir, "session.jsonl");
@@ -918,7 +956,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("returns interrupted when file log activity stalls", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-file-log-stall");
+    const workspaceRoot = tempDir("connector-runtime-file-log-stall");
     const logPath = join(workspaceRoot, "agent.jsonl");
     const scriptPath = join(workspaceRoot, "fake-file-log-stall.ts");
     writeFileSync(
@@ -959,9 +997,9 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).toContain("stalled");
   });
 
-  test("resets the local CLI stall timer on stdout and stderr activity", async () => {
+  test("resets the connector process stall timer on stdout and stderr activity", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-stall-reset");
+    const workspaceRoot = tempDir("connector-runtime-stall-reset");
     const scriptPath = join(workspaceRoot, "fake-stall-reset.ts");
     writeFileSync(
       scriptPath,
@@ -994,7 +1032,7 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("redacts consented credentials from timed-out process output", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-timeout-credential");
+    const workspaceRoot = tempDir("connector-runtime-timeout-credential");
     const scriptPath = join(workspaceRoot, "fake-timeout-secret.ts");
     writeFileSync(
       scriptPath,
@@ -1012,7 +1050,7 @@ describe("createLocalCliAgentRuntime", () => {
     );
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -1033,10 +1071,10 @@ describe("createLocalCliAgentRuntime", () => {
     expect(result.error).not.toContain("secret-value");
   });
 
-  test("returns failed when the local CLI command cannot be spawned", async () => {
+  test("returns failed when the connector process command cannot be spawned", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-missing");
-    const definition = fakeConnector("openomni-missing-local-cli-command", []);
+    const workspaceRoot = tempDir("connector-runtime-missing");
+    const definition = fakeConnector("openomni-missing-connector-command", []);
 
     // When
     const result = await dispatchRuntime(definition, workspaceRoot);
@@ -1053,16 +1091,16 @@ describe("createLocalCliAgentRuntime", () => {
 
   test("redacts consented credentials from spawn errors when credentials were materialized", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-missing-credential-spawn");
+    const workspaceRoot = tempDir("connector-runtime-missing-credential-spawn");
     const definition = fakeConnector(
-      "secret-value-openomni-missing-local-cli-command",
+      "secret-value-openomni-missing-connector-command",
       [],
       {},
       { credentials: ["FAKE_API_KEY"] },
     );
 
     // When
-    const result = await createLocalCliAgentRuntime({
+    const result = await createConnectorEndpointProcessDriver({
       credentials: { FAKE_API_KEY: "secret-value" },
     }).dispatch({
       command: command(),
@@ -1078,26 +1116,26 @@ describe("createLocalCliAgentRuntime", () => {
       finishReason: "spawn_error",
     });
     expect(result.error).toContain("Executable not found");
-    expect(result.error).toContain("[REDACTED]-openomni-missing-local-cli-command");
+    expect(result.error).toContain("[REDACTED]-openomni-missing-connector-command");
     expect(result.error).not.toContain("secret-value");
   });
 
-  test("plugs into worker.spawn local_cli_agent dispatch with the existing evidence gate", async () => {
+  test("plugs into worker.spawn connector endpoint dispatch with the existing evidence gate", async () => {
     // Given
-    const workspaceRoot = tempDir("local-cli-runtime-dispatch");
+    const workspaceRoot = tempDir("connector-runtime-dispatch");
     const scriptPath = join(workspaceRoot, "fake-cli.ts");
     writeFileSync(scriptPath, "console.log(JSON.stringify({done:true,prompt:Bun.argv.at(-1)}));");
     const definition = fakeConnector("bun", [scriptPath, "{{prompt}}"]);
     const stored = AppConnectorInstallationStore.set(installation(definition));
     const handlers = createWorkerDispatchHandlers({
-      localCliAgentRuntime: createLocalCliAgentRuntime(),
+      connectorEndpointDriver: createConnectorEndpointProcessDriver(),
     });
 
     // When
-    const result = LocalCliDispatchOutput.parse(
+    const result = ConnectorDispatchOutput.parse(
       await handlers["worker.spawn"]({
         ...command(),
-        target: { kind: "worker", id: stored.connectorId, executorKind: "local_cli_agent" },
+        target: { kind: "worker", id: stored.connectorId, endpointId: stored.endpointId },
         workspaceRoot,
       }),
     );

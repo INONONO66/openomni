@@ -117,7 +117,7 @@ namespace AppConnectorDiscoveryFixtures {
     id: "app.codex",
     name: "Codex CLI",
     version: "1.0.0",
-    description: "Runs Codex CLI as an installed local CLI agent",
+    description: "Runs Codex CLI as an installed connector endpoint",
     detect: {
       command: "codex",
       args: ["--version"],
@@ -145,8 +145,15 @@ namespace AppConnectorDiscoveryFixtures {
       capabilities: ["git"],
       permissions: [{ action: "tool.call" }],
     },
+    driver: {
+      provider: "codex",
+      install: { scopes: ["user", "workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code"],
+    },
     profile: {
-      executorKind: "local_cli_agent",
+      kind: "connector_endpoint",
       taskTypes: ["code.change"],
       defaultTimeoutMs: 600_000,
       defaultMaxAttempts: 2,

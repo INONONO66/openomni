@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
 import { Storage } from "@openomni/session";
-import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
+import { createConnectorEndpointProcessDriver } from "../../src/connector/process-driver.js";
 
 const tempRoots: string[] = [];
 
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function tempDir(name: string): string {
-  const path = join(import.meta.dir, "..", "..", "test", ".tmp", name, crypto.randomUUID());
+  const path = join(import.meta.dir, "..", ".tmp", name, crypto.randomUUID());
   mkdirSync(path, { recursive: true });
   tempRoots.push(path);
   return path;
@@ -34,9 +34,13 @@ function tempDir(name: string): string {
 
 function command(): Dispatch.Command {
   return {
-    dispatchId: "dispatch-local-cli-telemetry",
+    dispatchId: "dispatch-connector-endpoint-telemetry",
     action: "worker.spawn",
-    target: { kind: "worker", id: "app.telemetry-cli", executorKind: "local_cli_agent" },
+    target: {
+      kind: "worker",
+      id: "app.telemetry-cli",
+      endpointId: "endpoint:install:telemetry-cli",
+    },
     payload: { prompt: "ship it", acceptanceCriteria: ["done"] },
     actor: { kind: "user", actorId: "act_owner" },
     submittedAt: 1,
@@ -62,7 +66,7 @@ function definition(
     id: "app.telemetry-cli",
     name: "Telemetry CLI",
     version: "1.0.0",
-    description: "Runs a fake local CLI agent with telemetry logs",
+    description: "Runs a fake connector endpoint with telemetry logs",
     detect: { command: "bun", testedVersions: ">=1.0.0 <2.0.0" },
     spawn: { command: "bun", args: [scriptPath], cwd: "{{worktree}}", timeoutMs: 1_000 },
     logs: {
@@ -80,7 +84,14 @@ function definition(
       completionReport: { finalMessage: "log" },
     },
     requires: { credentials: [] },
-    profile: { executorKind: "local_cli_agent", taskTypes: ["code.change"] },
+    driver: {
+      provider: "telemetry-cli",
+      install: { scopes: ["workspace"], hooks: [], plugins: [] },
+      submit: { mode: "spawn", ack: "accepted" },
+      observedEvents: ["accepted", "completed"],
+      emits: ["exit_code", "artifact", "log_event", "token_usage", "tool_call"],
+    },
+    profile: { kind: "connector_endpoint", taskTypes: ["code.change"] },
   };
 }
 
@@ -89,6 +100,7 @@ function installation(connector: AppConnector.Definition): AppConnector.Installa
     id: "install:telemetry-cli",
     connectorId: connector.id,
     connectorVersion: connector.version,
+    endpointId: "endpoint:install:telemetry-cli",
     definition: connector,
     testedVersions: connector.detect.testedVersions,
     status: "enabled",
@@ -99,9 +111,9 @@ function installation(connector: AppConnector.Definition): AppConnector.Installa
   };
 }
 
-describe("local CLI structured log telemetry", () => {
+describe("connector process structured log telemetry", () => {
   test("projects declared token usage and tool calls from structured stdout logs", async () => {
-    const workspaceRoot = tempDir("local-cli-runtime-log-telemetry");
+    const workspaceRoot = tempDir("connector-runtime-log-telemetry");
     const scriptPath = join(workspaceRoot, "fake-stdout-log.ts");
     writeFileSync(
       scriptPath,
@@ -112,7 +124,7 @@ describe("local CLI structured log telemetry", () => {
     );
     const connector = definition(scriptPath);
 
-    const result = await createLocalCliAgentRuntime().dispatch({
+    const result = await createConnectorEndpointProcessDriver().dispatch({
       command: command(),
       executionRequest: request(workspaceRoot),
       installation: installation(connector),
@@ -130,7 +142,7 @@ describe("local CLI structured log telemetry", () => {
   });
 
   test("uses the final usage event for cumulative structured token logs", async () => {
-    const workspaceRoot = tempDir("local-cli-runtime-log-cumulative-telemetry");
+    const workspaceRoot = tempDir("connector-runtime-log-cumulative-telemetry");
     const scriptPath = join(workspaceRoot, "fake-stdout-log.ts");
     writeFileSync(
       scriptPath,
@@ -141,7 +153,7 @@ describe("local CLI structured log telemetry", () => {
     );
     const connector = definition(scriptPath, { tokenUsageMode: "cumulative" });
 
-    const result = await createLocalCliAgentRuntime().dispatch({
+    const result = await createConnectorEndpointProcessDriver().dispatch({
       command: command(),
       executionRequest: request(workspaceRoot),
       installation: installation(connector),

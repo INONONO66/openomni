@@ -1,47 +1,41 @@
 import { existsSync } from "node:fs";
 import type { AppConnector, Execution } from "@openomni/protocol";
 import { Artifact } from "@openomni/session";
-import {
-  type LocalCliTemplateValues,
-  redactLocalCliCredentialValues,
-} from "./local-cli-agent-env.js";
-import { newestLocalCliGlobMatch, resolveLocalCliLogPath } from "./local-cli-agent-log-path.js";
-import {
-  aggregateLocalCliLogUsage,
-  buildLocalCliLogEvent,
-} from "./local-cli-agent-log-telemetry.js";
+import { type ConnectorTemplateValues, redactConnectorCredentialValues } from "./env.js";
+import { newestConnectorGlobMatch, resolveConnectorLogPath } from "./log-path.js";
+import { aggregateConnectorLogUsage, buildConnectorLogEvent } from "./log-telemetry.js";
 
-export { encodeWorkspaceForClaudeProjects } from "./local-cli-agent-log-path.js";
+export { encodeWorktreeForClaudeProjects } from "./log-path.js";
 
 type ExecutionArtifact = NonNullable<Execution.Result["artifacts"]>[number];
 type ExecutionLogEvent = NonNullable<Execution.Result["logEvents"]>[number];
 
-export interface LocalCliLogIngestion {
+export interface ConnectorLogIngestion {
   readonly artifacts: ExecutionArtifact[];
   readonly logEvents: ExecutionLogEvent[];
   readonly usage?: Execution.Result["usage"];
   readonly finalMessage?: string;
 }
 
-export interface LocalCliLogIngestionInput {
+export interface ConnectorLogIngestionInput {
   readonly connector: AppConnector.Definition;
   readonly runId: string;
   readonly sessionId: string;
-  readonly values: LocalCliTemplateValues;
+  readonly values: ConnectorTemplateValues;
   readonly redactions: readonly string[];
   readonly stdout: string;
   readonly stderr: string;
 }
 
-export async function ingestLocalCliLogs(
-  input: LocalCliLogIngestionInput,
-): Promise<LocalCliLogIngestion> {
+export async function ingestConnectorLogs(
+  input: ConnectorLogIngestionInput,
+): Promise<ConnectorLogIngestion> {
   const logs = input.connector.logs;
   if (logs === undefined) return { artifacts: [], logEvents: [] };
 
   const rawContent = await readLogContent(logs.path, input);
   if (rawContent === undefined) return { artifacts: [], logEvents: [] };
-  const content = redactLocalCliCredentialValues(rawContent, input.redactions);
+  const content = redactConnectorCredentialValues(rawContent, input.redactions);
   const meta = {
     id: `art_${crypto.randomUUID()}`,
     sessionId: input.sessionId,
@@ -56,28 +50,28 @@ export async function ingestLocalCliLogs(
   return {
     artifacts: [
       {
-        kind: "local_cli_log",
+        kind: "connector_log",
         artifactId: meta.id,
         title: meta.title,
         mimeType: meta.mimeType,
       },
     ],
     logEvents,
-    usage: aggregateLocalCliLogUsage(logs, logEvents),
+    usage: aggregateConnectorLogUsage(logs, logEvents),
     finalMessage: extractFinalLogMessage(logs, content),
   };
 }
 
 async function readLogContent(
   pathTemplate: string,
-  input: LocalCliLogIngestionInput,
+  input: ConnectorLogIngestionInput,
 ): Promise<string | undefined> {
   if (pathTemplate === "stdout") return input.stdout;
   if (pathTemplate === "stderr") return input.stderr;
 
-  const path = resolveLocalCliLogPath(pathTemplate, input.values);
+  const path = resolveConnectorLogPath(pathTemplate, input.values);
   if (path.includes("*")) {
-    const match = newestLocalCliGlobMatch(path);
+    const match = newestConnectorGlobMatch(path);
     return match === undefined ? undefined : Bun.file(match).text();
   }
   if (!existsSync(path)) return undefined;
@@ -92,7 +86,7 @@ function mimeTypeForLog(logs: AppConnector.Logs): string {
     case "text":
       return "text/plain";
     default:
-      throw new Error(`unsupported local CLI log kind: ${(logs as { kind: string }).kind}`);
+      throw new Error(`unsupported connector process log kind: ${(logs as { kind: string }).kind}`);
   }
 }
 
@@ -135,8 +129,8 @@ function extractLogEvents(
     if (typeof message !== "string" || message.length === 0) continue;
     const timestampValue = data[logs.eventTimeField];
     events.push(
-      buildLocalCliLogEvent(logs, data, {
-        kind: "local_cli_log_event",
+      buildConnectorLogEvent(logs, data, {
+        kind: "connector_log_event",
         artifactId,
         message,
         ...(typeof timestampValue === "string" || typeof timestampValue === "number"

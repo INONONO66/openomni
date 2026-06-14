@@ -51,7 +51,7 @@ describe("WorkItem.Info", () => {
       originSessionId: "session_owner",
       workSessionId: "session_worker",
       workerRunId: "wr_1",
-      executorKind: "local_cli_agent",
+      executorKind: "connector_endpoint",
       maxAttempts: 2,
       outcome: "adopted",
       completionReport: validCompletionReport,
@@ -77,7 +77,7 @@ describe("WorkItem.Info", () => {
     expect(item.originSessionId).toBe("session_owner");
     expect(item.workSessionId).toBe("session_worker");
     expect(item.workerRunId).toBe("wr_1");
-    expect(item.executorKind).toBe("local_cli_agent");
+    expect(item.executorKind).toBe("connector_endpoint");
     expect(item.maxAttempts).toBe(2);
     expect(item.outcome).toBe("adopted");
     expect(item.completionReport?.claims[0]?.evidenceIds).toEqual(["ev_test_protocol"]);
@@ -298,7 +298,7 @@ describe("WorkItem.Info", () => {
   test("parses all executorKind and outcome literals", () => {
     const executorKinds = [
       "internal_chat_agent",
-      "local_cli_agent",
+      "connector_endpoint",
       "external_api",
       "a2a",
       "human_channel",

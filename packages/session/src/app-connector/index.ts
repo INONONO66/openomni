@@ -1,10 +1,11 @@
-import { AppConnector } from "@openomni/protocol";
+import { Actor, AppConnector } from "@openomni/protocol";
+import { createHash } from "node:crypto";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 import { assertConsentMatchesRequirements } from "./consent-validation";
 
-type InstallationInput = Omit<AppConnector.Installation, "createdAt" | "updatedAt"> &
-  Partial<Pick<AppConnector.Installation, "createdAt">>;
+type InstallationInput = Omit<AppConnector.Installation, "createdAt" | "updatedAt" | "endpointId"> &
+  Partial<Pick<AppConnector.Installation, "createdAt" | "endpointId">>;
 type ConsentInput = Omit<AppConnector.Consent, "grantedAt"> &
   Partial<Pick<AppConnector.Consent, "grantedAt">>;
 type SmokeVerifiedInput = Pick<AppConnector.Installation, "detectedVersion">;
@@ -24,6 +25,7 @@ function withTimestamps(
   const now = Date.now();
   return AppConnector.Installation.parse({
     ...installation,
+    endpointId: installation.endpointId ?? existing?.endpointId ?? endpointIdFor(installation.id),
     createdAt: existing?.createdAt ?? installation.createdAt ?? now,
     updatedAt: now,
   });
@@ -44,11 +46,77 @@ function consentRecord(input: ConsentInput): AppConnector.Consent {
   });
 }
 
+function endpointIdFor(installationId: string): string {
+  return `endpoint:${installationId}`;
+}
+
+function actorIdFor(installationId: string): string {
+  return `actor:${installationId}`;
+}
+
+function hashPath(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 16);
+}
+
+function workspaceHash(installation: AppConnector.Installation): string | undefined {
+  const worktreePath = installation.workspace?.worktreePath;
+  return worktreePath === undefined ? undefined : hashPath(worktreePath);
+}
+
+function connectorActorIdentity(installation: AppConnector.Installation): Actor.Identity {
+  return Actor.Identity.parse({
+    id: actorIdFor(installation.id),
+    kind: "ai_agent",
+    trustTier: "assigned_worker",
+    relationship: "external_agent",
+    displayName: installation.definition.name,
+    metadata: {
+      connectorId: installation.connectorId,
+      installationId: installation.id,
+    },
+    createdAt: installation.createdAt,
+    updatedAt: installation.updatedAt,
+  });
+}
+
+function connectorActorEndpoint(installation: AppConnector.Installation): Actor.Endpoint {
+  const workspace = workspaceHash(installation);
+  return Actor.Endpoint.parse({
+    id: installation.endpointId,
+    actorId: actorIdFor(installation.id),
+    channel: "app_connector",
+    externalId: installation.id,
+    ...(workspace === undefined ? {} : { workspace }),
+    displayName: installation.definition.name,
+    metadata: {
+      connectorId: installation.connectorId,
+      installationId: installation.id,
+      provider: installation.definition.driver.provider,
+      ...(installation.workspace === undefined
+        ? {}
+        : {
+            repoPathHash: installation.workspace.repoPathHash,
+            worktreePathHash: installation.workspace.worktreePathHash,
+          }),
+    },
+    createdAt: installation.createdAt,
+    updatedAt: installation.updatedAt,
+  });
+}
+
+function upsertActorEndpoint(installation: AppConnector.Installation): void {
+  const actorRegistry = Storage.get().actorRegistry;
+  if (actorRegistry === undefined) return;
+  actorRegistry.setIdentity(connectorActorIdentity(installation));
+  actorRegistry.setEndpoint(connectorActorEndpoint(installation));
+}
+
 export namespace AppConnectorInstallationStore {
   export function set(input: InstallationInput): AppConnector.Installation {
     const adapter = requireAdapter();
     const installation = withTimestamps(input, adapter.get(input.id));
     adapter.set(installation);
+    upsertActorEndpoint(installation);
     return installation;
   }
 

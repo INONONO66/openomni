@@ -21,7 +21,7 @@ const tokenFieldMap = {
   cacheWriteTokens: ["cacheWriteTokens", "cache_write_tokens", "cacheWrite", "cache_write"],
 } satisfies Record<keyof Token.ExecutionUsage, readonly string[]>;
 
-export function buildLocalCliLogEvent(
+export function buildConnectorLogEvent(
   logs: AppConnector.Logs,
   data: StructuredLogData,
   base: LogEventBase,
@@ -34,7 +34,7 @@ export function buildLocalCliLogEvent(
   };
 }
 
-export function aggregateLocalCliLogUsage(
+export function aggregateConnectorLogUsage(
   logs: AppConnector.Logs,
   events: readonly Execution.LogEvent[],
 ): Execution.Result["usage"] {
