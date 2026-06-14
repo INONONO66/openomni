@@ -8,11 +8,11 @@ const MAX_VERIFICATION_DIAGNOSTIC_LENGTH = 512;
 const sensitiveDiagnosticPattern =
   /\b([A-Z][A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Z0-9_]*)=([^\s]+)/gi;
 
-export interface ServerConnectorRegistrationOptions {
+interface ServerConnectorRegistrationOptions {
   readonly registeredBy: string;
 }
 
-export const ServerConnectorConsentOptions = z
+const ServerConnectorConsentOptions = z
   .object({
     grantedBy: z.string().min(1),
     credentials: z.array(z.string().min(1)).optional(),
@@ -20,9 +20,9 @@ export const ServerConnectorConsentOptions = z
     permissions: z.array(Policy.Permission).optional(),
   })
   .strict();
-export type ServerConnectorConsentOptions = z.infer<typeof ServerConnectorConsentOptions>;
+type ServerConnectorConsentOptions = z.infer<typeof ServerConnectorConsentOptions>;
 
-export interface ServerConnectorSmokeVerifyOptions {
+interface ServerConnectorSmokeVerifyOptions {
   readonly detectTimeoutMs?: number;
   readonly runDetectCommand?: DetectCommandRunner;
 }
