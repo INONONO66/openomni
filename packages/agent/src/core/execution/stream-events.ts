@@ -110,31 +110,6 @@ export function emitRunCompleted(
   });
 }
 
-export function emitIgnoredPolicyConfigWarning(
-  agentBase: StreamAgentBase,
-  options: {
-    readonly field: "permissions" | "compaction";
-    readonly replacement: string;
-    readonly middlewareName: string;
-    readonly replacementMiddlewarePresent: boolean;
-  },
-): void {
-  Bus.publish(Operational.Warn, {
-    traceId: agentBase.traceId,
-    ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
-    ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
-    time: Date.now(),
-    component: "agent.policy",
-    msg: `ChatAgentConfig.${options.field} is deprecated and ignored`,
-    context: {
-      field: options.field,
-      replacement: options.replacement,
-      middlewareName: options.middlewareName,
-      replacementMiddlewarePresent: options.replacementMiddlewarePresent,
-    },
-  });
-}
-
 export function emitErrorRetry(
   state: StreamRunState,
   config: ChatAgentConfig,

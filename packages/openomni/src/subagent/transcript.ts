@@ -4,6 +4,7 @@ import {
   type ChatAgentConfig,
   type PolicyRegistration,
 } from "@openomni/agent";
+import type { Policy } from "@openomni/protocol";
 import type { RuntimeModel, RuntimeMessage } from "./shared";
 import {
   buildRuntimeMessages,
@@ -24,7 +25,7 @@ export type RuntimeConfig = {
   /** Child-run middleware assembled from explicit child context only. */
   childMiddleware?: PolicyRegistration[];
   /** Effective child authority exposed to parent-scoped delegation admission only. */
-  admissionPermissions?: ChatAgentConfig["permissions"];
+  admissionPermissions?: Policy.Permission;
 };
 
 export type SendCompactionConfig = {

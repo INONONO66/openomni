@@ -1,4 +1,4 @@
-import type { AgentProfile, Tool, Sink, Policy, Message, Token, Model } from "@openomni/protocol";
+import type { AgentProfile, Tool, Sink, Policy, Token, Model } from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
 import type { PolicyRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
@@ -19,23 +19,6 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
-  /**
-   * @deprecated Runtime builders should pass createToolPermissionPolicy() via middleware.
-   * ChatAgent no longer auto-registers this field.
-   */
-  permissions?: Policy.Permission;
-  /**
-   * @deprecated Runtime builders should pass createCompactionPolicy() via middleware.
-   * ChatAgent no longer auto-registers this field.
-   */
-  compaction?: {
-    contextWindowTokens: number;
-    thresholdRatio?: number;
-    reserveTokens?: number;
-    reserveRatio?: number;
-    protectRecentMessages?: number;
-    onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
-  };
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];

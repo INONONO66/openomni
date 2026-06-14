@@ -8,13 +8,23 @@ import {
 } from "@openomni/agent";
 import type { ChatAgentConfig, PolicyRegistration } from "@openomni/agent";
 import { Policy } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "./middleware/injection-queue-policy.js";
+
+type WorkerCompactionConfig = {
+  readonly contextWindowTokens: number;
+  readonly thresholdRatio?: number;
+  readonly reserveTokens?: number;
+  readonly reserveRatio?: number;
+  readonly protectRecentMessages?: number;
+  readonly onSummarize?: (messages: Message.WithParts[]) => Promise<string>;
+};
 
 export interface WorkerMiddlewareConfig {
   permissions?: Policy.Permission;
   policyPlan?: Policy.PolicyPlan;
-  compaction?: ChatAgentConfig["compaction"];
+  compaction?: WorkerCompactionConfig;
   eventEmitter?: ChatAgentConfig["eventEmitter"];
   source?: string;
   includeLifecycle?: boolean;
@@ -54,7 +64,7 @@ function shouldAppendIdleNudge(
 }
 
 export function buildAgentLifecycleMiddleware(
-  compaction: ChatAgentConfig["compaction"],
+  compaction: WorkerMiddlewareConfig["compaction"],
 ): PolicyRegistration[] {
   return [
     createBudgetReassurancePolicy(),

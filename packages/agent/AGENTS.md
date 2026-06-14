@@ -83,8 +83,6 @@ Also exported from `@openomni/agent`:
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call) => Promise<Tool.Result>`         | Custom tool executor; wrapped by `createToolExecutor`                       |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
-| `permissions?`   | `Policy.Permission`                      | Deprecated; ignored by ChatAgent core. Runtime builders must pass `createToolPermissionPolicy()` via `middleware` |
-| `compaction?`    | `{ contextWindowTokens, ... }`           | Deprecated; ignored by ChatAgent core. Runtime builders must pass `createCompactionPolicy()` via `middleware` |
 | `memory?`        | `Memory`                                 | Memory interface retrieved by the `memory` policy                           |
 | `middleware?`    | `PolicyRegistration[]`                   | Caller-owned policy registrations                                           |
 | `eventEmitter?`  | `AgentEventEmitter`                      | Optional event emitter for external observers                               |
