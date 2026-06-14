@@ -1,5 +1,5 @@
 export namespace WorkerRunState {
-  export interface ActiveRun {
+  interface ActiveRun {
     readonly sessionId: string;
     readonly controller: AbortController;
   }
