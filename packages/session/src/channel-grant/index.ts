@@ -48,14 +48,6 @@ export namespace ChannelGrantStore {
     return grant;
   }
 
-  export function get(id: string): Grant | undefined {
-    return requireAdapter().get(id);
-  }
-
-  export function list(): Grant[] {
-    return requireAdapter().list();
-  }
-
   export function remove(id: string): boolean {
     return requireAdapter().remove(id);
   }
