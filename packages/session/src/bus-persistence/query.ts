@@ -33,6 +33,13 @@ interface TypeCountRow extends CountRow {
   readonly event_type: string;
 }
 
+const QueryStats = z.object({
+  totalEvents: z.number().describe("Total number of events"),
+  byCategory: z.record(z.number()).describe("Event count by category"),
+  byType: z.record(z.number()).describe("Event count by type"),
+});
+type QueryStats = z.infer<typeof QueryStats>;
+
 interface WorkerRunRow {
   readonly run_id: string;
   readonly status: string;
@@ -40,6 +47,16 @@ interface WorkerRunRow {
   readonly time_updated: number;
   readonly event_count: number;
 }
+
+const AuditChainRecord = z.object({
+  seq: z.number(),
+  sessionId: z.string().optional(),
+  eventType: z.string(),
+  eventHash: z.string(),
+  prevHash: z.string(),
+  timeCreated: z.number(),
+});
+type AuditChainRecord = z.infer<typeof AuditChainRecord>;
 
 export namespace BusQuery {
   /**
@@ -69,16 +86,6 @@ export namespace BusQuery {
     limit: z.number().int().positive().optional().describe("Maximum number of results"),
   });
   export type QueryOptions = z.infer<typeof QueryOptions>;
-
-  /**
-   * Statistics about bus events in a session.
-   */
-  export const QueryStats = z.object({
-    totalEvents: z.number().describe("Total number of events"),
-    byCategory: z.record(z.number()).describe("Event count by category"),
-    byType: z.record(z.number()).describe("Event count by type"),
-  });
-  export type QueryStats = z.infer<typeof QueryStats>;
 
   /**
    * List all bus events for a session with optional filtering.
@@ -224,16 +231,6 @@ export namespace BusQuery {
 
     return Promise.resolve(walkChain(rows));
   }
-
-  export const AuditChainRecord = z.object({
-    seq: z.number(),
-    sessionId: z.string().optional(),
-    eventType: z.string(),
-    eventHash: z.string(),
-    prevHash: z.string(),
-    timeCreated: z.number(),
-  });
-  export type AuditChainRecord = z.infer<typeof AuditChainRecord>;
 
   /**
    * Read the append-only audit chain for a session. This table survives
