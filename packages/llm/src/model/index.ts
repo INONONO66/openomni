@@ -134,21 +134,4 @@ export namespace ModelsDev {
       /* non-fatal */
     }
   }
-
-  let initialized = false;
-
-  export function init(): void {
-    if (initialized) return;
-    initialized = true;
-
-    if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
-      ModelsDev.refresh();
-      setInterval(
-        () => {
-          ModelsDev.refresh();
-        },
-        60 * 60 * 1000,
-      ).unref();
-    }
-  }
 }
