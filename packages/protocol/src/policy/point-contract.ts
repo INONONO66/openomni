@@ -5,15 +5,10 @@ import { PolicyEffects } from "./effects.js";
 export namespace PolicyPointContractModule {
   export const Timing = PolicyDefinition.Timing;
   export type Timing = PolicyDefinition.Timing;
-  export const FailPolicy = PolicyDefinition.FailPolicy;
-  export const PolicyEffectType = PolicyEffects.PolicyEffectType;
-  export type PolicyEffectType = PolicyEffects.PolicyEffectType;
+  const FailPolicy = PolicyDefinition.FailPolicy;
+  const PolicyEffectType = PolicyEffects.PolicyEffectType;
+  type PolicyEffectType = PolicyEffects.PolicyEffectType;
   const TimingValue = z.nativeEnum(Timing);
-
-  export type PolicyPointResolver = (
-    timing: Timing,
-    context?: { resourceKind?: string },
-  ) => string[];
 
   const policyPointIds = [
     "session.inbound.pre",

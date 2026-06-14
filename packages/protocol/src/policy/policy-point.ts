@@ -3,9 +3,12 @@ import { PolicyPointContractModule } from "./point-contract.js";
 import { PolicyPointRegistryModule } from "./point-registry.js";
 import { policyKernelVersion } from "./version.js";
 
-export namespace PolicyPointModule {
-  export type PolicyPointResolver = PolicyPointContractModule.PolicyPointResolver;
+type PolicyPointResolver = (
+  timing: PolicyPointContractModule.Timing,
+  context?: { readonly resourceKind?: string },
+) => string[];
 
+export namespace PolicyPointModule {
   const resolvePolicyPoints: PolicyPointResolver = (timing, context) => {
     const pointIds = PolicyPointRegistryModule.policyPointMigrationMapping[timing];
     const resourceKind = context?.resourceKind;
