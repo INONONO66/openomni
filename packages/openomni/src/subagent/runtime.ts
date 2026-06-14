@@ -1,31 +1,18 @@
-import {
-  PolicyEngine,
-  createToolPermissionPolicy,
-  type ChatAgent,
-  type PolicyContext,
-  type PolicyRegistration,
-} from "@openomni/agent";
-import {
-  PolicyDecision,
-  type Policy,
-  type Message,
-  Subagent,
-  type RuntimeResource,
-} from "@openomni/protocol";
-import { Bus, Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
-import {
-  buildAgentLifecycleMiddleware,
-  registrationsAbsentFrom,
-} from "../execution-runtime/middleware.js";
-import { get as getAbortEntry, register as registerAbortController } from "./abort-registry";
+import type { ChatAgent } from "@openomni/agent";
+import { PolicyDecision, type Policy, Subagent } from "@openomni/protocol";
+import { Session, WorkerRun, type WorkerRunRecord } from "@openomni/session";
+import { register as registerAbortController } from "./abort-registry";
 import { SubagentSpawnPolicyMiddleware } from "./middleware/subagent-spawn-policy.js";
 import {
-  buildAbortSignal,
-  executeRun,
-  isTerminalStatus,
-  raceAbortCompletion,
-  setupRunTimeouts,
-} from "./run-lifecycle";
+  applyPreDelegationDecision,
+  buildChildRunMiddleware,
+  dispatchPreDelegation,
+  hasExplicitRuntimePolicy,
+  summarizeChildRuntimeAdmission,
+} from "./runtime-admission";
+import { cancelRuntimeRun } from "./runtime-cancel";
+import { waitForRuntimeRun } from "./runtime-wait";
+import { buildAbortSignal, executeRun, setupRunTimeouts } from "./run-lifecycle";
 import { sendToMailbox } from "./session-mailbox.js";
 import {
   type RuntimeMessage,
@@ -41,219 +28,6 @@ import {
   maybeCompactSendTranscript,
   runWithTranscript,
 } from "./transcript";
-
-const emptyDelegationUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-
-type ResourcePolicyContext = Omit<PolicyContext, "timing"> & {
-  readonly resourceDescriptor: RuntimeResource.Descriptor;
-};
-
-type PreDelegationOperation = "spawn" | "spawn_background" | "send";
-
-interface ChildRuntimeAdmissionSummary {
-  readonly toolNames?: string[];
-  readonly permissions?: Policy.Permission;
-  readonly childRuntimeMiddlewareNames?: string[];
-  readonly hasExplicitRuntimePolicy: boolean;
-}
-
-function hasExplicitRuntimePolicy(config: RuntimeConfig & { permissions?: Policy.Permission }) {
-  return config.permissions !== undefined || config.childMiddleware !== undefined;
-}
-
-function summarizeChildRuntimeAdmission(
-  config: RuntimeConfig & { permissions?: Policy.Permission },
-): ChildRuntimeAdmissionSummary | undefined {
-  const toolNames = config.tools?.map((tool) => tool.name);
-  const permissions = config.admissionPermissions ?? config.permissions;
-  const childRuntimeMiddlewareNames = config.childMiddleware?.map(
-    (registration) => registration.name,
-  );
-  if (
-    toolNames === undefined &&
-    permissions === undefined &&
-    childRuntimeMiddlewareNames === undefined
-  ) {
-    return undefined;
-  }
-
-  return {
-    ...(toolNames !== undefined && { toolNames }),
-    ...(permissions !== undefined && { permissions }),
-    ...(childRuntimeMiddlewareNames !== undefined && { childRuntimeMiddlewareNames }),
-    hasExplicitRuntimePolicy: hasExplicitRuntimePolicy(config),
-  };
-}
-
-function childRuntimeAdmissionFields(
-  summary: ChildRuntimeAdmissionSummary | undefined,
-): Record<string, unknown> {
-  if (summary === undefined) return {};
-  return {
-    childRuntime: summary,
-    ...(summary.toolNames !== undefined && { childToolNames: summary.toolNames.join(",") }),
-    ...(summary.childRuntimeMiddlewareNames !== undefined && {
-      childRuntimeMiddlewareNames: summary.childRuntimeMiddlewareNames.join(","),
-    }),
-    childHasExplicitRuntimePolicy: String(summary.hasExplicitRuntimePolicy),
-  };
-}
-
-function createDelegationTrace(parentSessionId: string | undefined) {
-  if (parentSessionId === undefined) return undefined;
-  return { traceId: crypto.randomUUID(), sessionId: parentSessionId };
-}
-
-function createSubagentDescriptor(
-  childAgent: string,
-  operation: PreDelegationOperation,
-): RuntimeResource.Descriptor {
-  if (operation === "send") {
-    return {
-      id: "worker:agent:subagent_send",
-      kind: "worker",
-      source: { type: "agent", agentId: childAgent },
-      labels: ["source.agent", "delegation.subagent"],
-      capabilities: ["delegation.send"],
-      effects: ["session.message"],
-    };
-  }
-
-  if (operation === "spawn_background") {
-    return {
-      id: "worker:agent:background_launch",
-      kind: "worker",
-      source: { type: "agent", agentId: childAgent },
-      labels: ["source.agent", "delegation.background"],
-      capabilities: ["delegation.background"],
-      effects: ["session.create"],
-    };
-  }
-
-  return {
-    id: "worker:agent:subagent_spawn",
-    kind: "worker",
-    source: { type: "agent", agentId: childAgent },
-    labels: ["source.agent", "delegation.subagent"],
-    capabilities: ["delegation.spawn"],
-    effects: ["session.create"],
-  };
-}
-
-async function dispatchPreDelegation(input: {
-  middleware?: PolicyRegistration[];
-  childAgent: string;
-  parentSessionId?: string;
-  operation: PreDelegationOperation;
-  prompt: string;
-  childRuntime?: ChildRuntimeAdmissionSummary;
-}): Promise<Policy.PolicyDecision> {
-  if (!input.middleware?.length) {
-    return PolicyDecision.allow({
-      policyId: "subagent.delegation",
-      reasonCodes: ["no middleware registered"],
-    });
-  }
-
-  const traceContext = createDelegationTrace(input.parentSessionId);
-  const engine = PolicyEngine.create({
-    traceContext,
-    audit:
-      traceContext === undefined
-        ? false
-        : {
-            sessionId: traceContext.sessionId,
-            action: `delegation.${input.operation}`,
-            resource: `agent.${input.childAgent}`,
-          },
-  });
-  for (const reg of input.middleware) {
-    engine.register(reg);
-  }
-
-  const resourceDescriptor = createSubagentDescriptor(input.childAgent, input.operation);
-  const policyContext: ResourcePolicyContext = {
-    steps: [],
-    usage: emptyDelegationUsage,
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-    toolName: "subagent",
-    toolLabels: resourceDescriptor.labels,
-    toolInput: {
-      operation: input.operation,
-      childAgent: input.childAgent,
-      prompt: input.prompt,
-      ...(input.parentSessionId !== undefined && { parentSessionId: input.parentSessionId }),
-      ...childRuntimeAdmissionFields(input.childRuntime),
-    },
-    labels: [
-      { value: `actor.child:${input.childAgent}`, source: "system" as const },
-      ...(input.parentSessionId !== undefined
-        ? [{ value: `actor.parent:${input.parentSessionId}`, source: "system" as const }]
-        : []),
-    ],
-    resourceDescriptor,
-    traceContext,
-  };
-
-  return engine.dispatch("invoke.prepare", policyContext);
-}
-
-function applyDelegationConstraints(
-  config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
-  decision: Policy.PolicyDecision,
-): void {
-  const constraints = decision.effects
-    .filter(
-      (effect): effect is Extract<Policy.PolicyEffect, { type: "delegation.set_constraints" }> =>
-        effect.type === "delegation.set_constraints",
-    )
-    .at(-1)?.constraints;
-
-  if (!constraints) return;
-  const permissions = constraints.permissions;
-  if (permissions && typeof permissions === "object" && "action" in permissions) {
-    config.permissions = permissions as Policy.Permission;
-  }
-  if (typeof constraints.softTimeoutMs === "number")
-    config.softTimeoutMs = constraints.softTimeoutMs;
-  if (typeof constraints.hardTimeoutMs === "number")
-    config.hardTimeoutMs = constraints.hardTimeoutMs;
-}
-
-function applyPreDelegationDecision(
-  config: { permissions?: Policy.Permission; softTimeoutMs?: number; hardTimeoutMs?: number },
-  decision: Policy.PolicyDecision,
-  fallbackReason: string,
-): void {
-  if (PolicyDecision.isBlocking(decision)) {
-    throw new Error(PolicyDecision.reason(decision, fallbackReason));
-  }
-  applyDelegationConstraints(config, decision);
-}
-
-function buildChildRunMiddleware(
-  config: RuntimeConfig & { permissions?: Policy.Permission },
-  hasExplicitChildRuntimePolicy = hasExplicitRuntimePolicy(config),
-) {
-  // Used by spawn/send/resume for the child run itself. Delegation admission
-  // reads config.middleware separately when applicable, so parent-scoped
-  // policies are not reused as child runtime policies.
-  const childRuntimeMiddleware = SubagentSpawnPolicyMiddleware.buildChildRuntimeMiddleware({
-    middleware: config.childMiddleware,
-    hasExplicitRuntimePolicy: hasExplicitChildRuntimePolicy,
-  });
-  return [
-    ...registrationsAbsentFrom(buildAgentLifecycleMiddleware(undefined), childRuntimeMiddleware),
-    // Subagent run middleware preserves the prior child-run defaults:
-    // budget lifecycle + permission constraints only. Send transcript compaction
-    // is handled separately before resume; idle nudge is worker-runtime owned.
-    ...(config.permissions ? [createToolPermissionPolicy({ permission: config.permissions })] : []),
-    ...childRuntimeMiddleware,
-  ];
-}
 
 export namespace SubagentRuntime {
   export interface SpawnConfig extends RuntimeConfig {
@@ -297,11 +71,7 @@ export namespace SubagentRuntime {
   }
 
   export interface WaitResult {
-    status: Awaited<ReturnType<typeof WorkerRun.get>> extends infer T
-      ? T extends { status: infer S }
-        ? S
-        : never
-      : never;
+    status: WorkerRunRecord["status"];
     output?: string;
   }
 
@@ -500,137 +270,11 @@ export namespace SubagentRuntime {
   }
 
   export async function cancel(config: CancelConfig): Promise<void> {
-    const policy = await SubagentSpawnPolicyMiddleware.evaluatePreSpawn({
-      operation: "cancel",
-      sessionId: config.sessionId,
-      hardTimeoutMs: config.hardTimeoutMs,
-    });
-    if (PolicyDecision.isBlocking(policy.verdict)) return;
-    const session = policy.session;
-    if (!session) return;
-
-    const hardTimeoutMs = policy.cancelHardTimeoutMs;
-
-    if (config.runId) {
-      const entry = getAbortEntry(config.sessionId, config.runId);
-      const hasInFlightOp = !!entry;
-
-      if (hasInFlightOp) {
-        entry.controller.abort();
-        await raceAbortCompletion(config.sessionId, config.runId, hardTimeoutMs);
-      } else {
-        const run = await WorkerRun.get(config.sessionId, config.runId);
-        if (run && !isTerminalStatus(run.status)) {
-          await WorkerRun.updateStatus(config.sessionId, config.runId, "cancelled", {
-            endedAt: Date.now(),
-          });
-        }
-      }
-
-      publishEvent(Subagent.Events.WorkerSessionCancelled, {
-        sessionId: config.sessionId,
-        runId: config.runId,
-      });
-      return;
-    }
-
-    const runs = await WorkerRun.listBySession(config.sessionId);
-    const activeRun = runs.find((r) => r.status === "running" || r.status === "starting");
-    const abortEntry = activeRun ? getAbortEntry(config.sessionId, activeRun.runId) : undefined;
-
-    if (abortEntry) {
-      abortEntry.controller.abort();
-    }
-
-    if (activeRun) {
-      if (abortEntry) {
-        await raceAbortCompletion(config.sessionId, activeRun.runId, hardTimeoutMs);
-      } else {
-        await WorkerRun.updateStatus(config.sessionId, activeRun.runId, "cancelled", {
-          endedAt: Date.now(),
-        });
-      }
-    }
-
-    publishEvent(Subagent.Events.WorkerSessionCancelled, {
-      sessionId: config.sessionId,
-      runId: activeRun?.runId,
-    });
+    return cancelRuntimeRun(config);
   }
 
   export async function wait(config: WaitConfig): Promise<WaitResult> {
-    const policy = await SubagentSpawnPolicyMiddleware.runPreSpawn({
-      operation: "wait",
-      sessionId: config.sessionId,
-      timeoutMs: config.timeoutMs,
-    });
-    const run = await WorkerRun.get(config.sessionId, config.runId);
-    if (!run) {
-      throw new Error(`Worker run ${config.runId} not found in session ${config.sessionId}`);
-    }
-
-    const terminalStatuses = ["succeeded", "failed", "cancelled", "interrupted"] as const;
-    if (terminalStatuses.includes(run.status as (typeof terminalStatuses)[number])) {
-      return getWaitResult(run);
-    }
-
-    return new Promise<WaitResult>((resolve, reject) => {
-      let settled = false;
-
-      const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
-        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
-          settle();
-        }
-      });
-
-      const unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
-        if (data.payload.sessionId === config.sessionId && data.payload.runId === config.runId) {
-          settle();
-        }
-      });
-
-      const timeoutHandle = SubagentSpawnPolicyMiddleware.enforceWaitTimeout(
-        policy.waitTimeoutMs,
-        () => {
-          if (!settled) {
-            settled = true;
-            cleanup();
-            reject(new Error(`wait() timeout exceeded after ${config.timeoutMs}ms`));
-          }
-        },
-      );
-
-      function cleanup() {
-        unsubscribeCompleted();
-        unsubscribeFailed();
-        timeoutHandle?.cancel();
-      }
-
-      async function settle() {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        const finalRun = await WorkerRun.get(config.sessionId, config.runId);
-        if (finalRun) {
-          resolve(getWaitResult(finalRun));
-        } else {
-          reject(new Error(`Worker run ${config.runId} disappeared during wait`));
-        }
-      }
-    });
-  }
-
-  function getWaitResult(run: WorkerRunRecord): WaitResult {
-    let output: string | undefined;
-    if (run.lastMessageId) {
-      const parts = Session.getParts(run.lastMessageId);
-      output = parts.find((part): part is Message.TextPart => part.type === "text")?.text;
-    }
-
-    return {
-      status: run.status,
-      output,
-    };
+    return waitForRuntimeRun(config);
   }
 
   export function buildChildMessages(sessionId: string, repair?: boolean): RuntimeMessage[] {

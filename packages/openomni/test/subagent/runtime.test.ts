@@ -444,7 +444,8 @@ describe("SubagentRuntime", () => {
         middleware: [admissionOnlyPolicy],
       });
 
-      const childRuntimeMiddleware = createSpy.mock.calls[0]?.[0].middleware ?? [];
+      const childRuntimeMiddleware: PolicyRegistration[] =
+        createSpy.mock.calls[0]?.[0].middleware ?? [];
       expect(childRuntimeMiddleware.map((registration) => registration.name)).toContain(
         "subagent:default-denylist",
       );
@@ -491,10 +492,44 @@ describe("SubagentRuntime", () => {
       expect(config.softTimeoutMs).toBe(5000);
       expect(config.hardTimeoutMs).toBe(10000);
       expect(config.permissions).toEqual({ action: "tool.call", allowlist: ["read"] });
-      const childRuntimeMiddleware = createSpy.mock.calls[0]?.[0].middleware ?? [];
+      const childRuntimeMiddleware: PolicyRegistration[] =
+        createSpy.mock.calls[0]?.[0].middleware ?? [];
       expect(childRuntimeMiddleware.map((registration) => registration.name)).toContain(
         "subagent:default-denylist",
       );
+    });
+
+    it("spawn fails closed when invoke.prepare returns invalid permission constraints", async () => {
+      const invalidConstraintPolicy: PolicyRegistration = {
+        name: "test:invalid-constraint",
+        timing: "invoke.prepare",
+        priority: 0,
+        fn: () =>
+          PolicyDecision.allow({
+            policyId: "test:invalid-constraint",
+            effects: [
+              {
+                type: "delegation.set_constraints",
+                constraints: {
+                  permissions: { action: "tool.call", allowlist: [123] },
+                },
+              },
+            ],
+          }),
+      };
+
+      const error = await SubagentRuntime.spawn({
+        agentName: "worker",
+        title: "invalid constraint task",
+        prompt: "should not run",
+        model,
+        middleware: [invalidConstraintPolicy],
+      }).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) throw new Error("expected invalid constraints to throw");
+      expect(error.message).toBe("invoke.prepare policy returned invalid delegation constraints");
+      expect(runCalls).toHaveLength(0);
     });
 
     it("invoke.prepare receives parent/child agent labels", async () => {
