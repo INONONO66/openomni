@@ -29,7 +29,7 @@ openomni/
 │   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
 │   │       └── mcp/            # McpClient
 │   ├── openomni/        # Orchestration: DAG, Ingress, Dispatch, ResidentRuntime, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
-│   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager (worker-pool/ is legacy), IPC transport, recovery, credentials, tool-permission
+│   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -84,7 +84,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | PendingInteraction (planned successor) | `packages/protocol/src/communication/pending-interaction` | Successor to `PendingAsk`; not a pure rename — status enum (`open / resolved / follow_up / expired / cancelled`), `allowedActions`, `followUpWindow`, and `workerRunId / sessionId` strong-coupling all change. Lifecycle managed inside dispatch. |
 | Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
-| Coordinator (legacy fixed pool) | `packages/coordinator/src/worker-pool/` | Legacy; still exported, unused by server, pending removal |
+| Coordinator worker internals | `packages/coordinator/src/worker-pool/` | Internal leaf modules used by `worker-manager`; no root or submodule barrel contract |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |

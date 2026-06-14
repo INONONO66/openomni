@@ -1,19 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 describe("worker pool public facade removal", () => {
-  test("root coordinator barrel no longer exports the legacy WorkerPool facade", async () => {
+  test("root coordinator barrel exposes the worker manager without legacy pool internals", async () => {
     const coordinator = await import("../../src/index");
 
     expect("createWorkerPool" in coordinator).toBe(false);
+    expect("WorkerSupervisor" in coordinator).toBe(false);
+    expect("createSessionRouting" in coordinator).toBe(false);
+    expect("SessionRouting" in coordinator).toBe(false);
     expect("createWorkerManager" in coordinator).toBe(true);
-  });
-
-  test("worker-pool barrel keeps shared internals without the legacy facade", async () => {
-    const workerPool = await import("../../src/worker-pool");
-
-    expect("createWorkerPool" in workerPool).toBe(false);
-    expect("WorkerSupervisor" in workerPool).toBe(true);
-    expect("SessionRouting" in workerPool).toBe(false);
-    expect("createSessionRouting" in workerPool).toBe(true);
   });
 });
