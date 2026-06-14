@@ -97,11 +97,6 @@ export {
   BackgroundManager,
 } from "./subagent";
 
-// Policy compatibility exports
-/**
- * @deprecated Use `BackgroundLimitsMiddleware` from the package root for new code.
- */
-export { BackgroundLimitsPolicy } from "./policy";
 export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,
