@@ -3,11 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteStorageAdapter, Storage } from "@openomni/session";
-import {
-  ServerConnectorDiscovery,
-  ServerConnectorRegistry,
-  ServerConnectorDefinitions,
-} from "../../src/connector/index.js";
+import { ServerConnectorDefinitions } from "../../src/connector/definitions.js";
+import { ServerConnectorDiscovery } from "../../src/connector/discovery.js";
+import { ServerConnectorRegistry } from "../../src/connector/registry.js";
 
 async function registerCodexInstallation(): Promise<string> {
   const connector = ServerConnectorDefinitions.get("app.codex");

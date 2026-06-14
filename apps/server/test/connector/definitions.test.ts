@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AppConnector } from "@openomni/protocol";
-import { ServerConnectorDefinitions } from "../../src/connector/index.js";
+import { ServerConnectorDefinitions } from "../../src/connector/definitions.js";
 
 describe("ServerConnectorDefinitions", () => {
   test("lists the server-owned connector endpoint definitions", () => {
