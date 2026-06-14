@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Number of repeated benchmark runs to summarize
+        required: false
+        default: "5"
 
 concurrency:
   group: bench-${{ github.ref }}
@@ -37,32 +43,33 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@openomni/protocol
 
-      - name: Bench (session)
-        run: bun run bench
-        working-directory: packages/session
-
-      - name: Bench (agent)
-        run: bun run bench
-        working-directory: packages/agent
-
-      - name: Bench (openomni)
-        run: bun run bench
-        working-directory: packages/openomni
-
-      - name: Combine results
+      - name: Run repeated benchmarks
+        env:
+          BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
         run: |
-          mkdir -p bench-results
-          combined="[]"
-          for f in packages/*/bench-results/*.json; do
-            if [ -f "$f" ]; then
-              combined=$(echo "$combined" | bun -e "
-                const existing = JSON.parse(await Bun.stdin.text());
-                const added = JSON.parse(await Bun.file('$f').text());
-                console.log(JSON.stringify([...existing, ...added]));
-              ")
-            fi
+          set -euo pipefail
+          rm -rf bench-results packages/*/bench-results
+          mkdir -p bench-results/runs
+
+          for run in $(seq 1 "$BENCHMARK_RUNS"); do
+            echo "Benchmark run $run/$BENCHMARK_RUNS"
+            rm -rf packages/*/bench-results
+
+            bun run --cwd packages/session bench
+            bun run --cwd packages/agent bench
+            bun run --cwd packages/openomni bench
+
+            mkdir -p "bench-results/runs/$run"
+            cp packages/session/bench-results/session.json "bench-results/runs/$run/session.json"
+            cp packages/agent/bench-results/agent.json "bench-results/runs/$run/agent.json"
+            cp packages/openomni/bench-results/openomni.json "bench-results/runs/$run/openomni.json"
           done
-          echo "$combined" > bench-results/combined.json
+
+      - name: Summarize benchmark runs
+        run: bun run script/summarize-benchmark-runs.ts
+
+      - name: Publish benchmark summary
+        run: cat bench-results/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check gh-pages exists
         id: ghp
@@ -81,7 +88,7 @@ jobs:
           fi
 
       - name: Bootstrap gh-pages branch
-        if: steps.ghp.outputs.exists == 'false' && github.event_name == 'push'
+        if: steps.ghp.outputs.exists == 'false' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
         run: |
           git checkout --orphan gh-pages
           git reset --hard
@@ -100,7 +107,7 @@ jobs:
           tool: customSmallerIsBetter
           output-file-path: bench-results/combined.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' }}
+          auto-push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
