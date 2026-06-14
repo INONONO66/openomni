@@ -13,6 +13,9 @@ Session-backed subagent execution runtime for the openomni orchestration layer.
 | `shared.ts` | `RuntimeModel`, `RuntimeMessage` types and message factory helpers (parameterized agent field) | no |
 | `message-builder.ts` | Message construction and serialization for subagent communication | no |
 | `run-lifecycle.ts` | Abort, timeout, and finalize functions for `WorkerRun` lifecycle | no |
+| `runtime-admission.ts` | Parent-scoped delegation admission, child runtime policy summary, and child-run middleware assembly | no |
+| `runtime-cancel.ts` | Cancel orchestration for active or explicit worker runs | no |
+| `runtime-wait.ts` | Event-driven wait orchestration and `WorkerRun` output projection | no |
 | `transcript.ts` | Compaction bridge and `runWithTranscript` (imports from `@openomni/agent` barrel, no relative cross-package imports) | no |
 | `session-mailbox.ts` | Mailbox abstraction for queued message delivery to a session | no |
 | `abort-registry.ts` | Global registry mapping run IDs to abort controllers | no |
@@ -21,7 +24,7 @@ Session-backed subagent execution runtime for the openomni orchestration layer.
 
 `runtime.ts` was refactored from ~1094 LOC into focused modules. The split follows single-responsibility: each internal module owns one concern (types, message construction, lifecycle, transcript, mailbox delivery). Only runtime-facing classes and middleware are re-exported from `index.ts`; the rest are internal implementation details.
 
-Internal modules (`background-store.ts`, `shared.ts`, `message-builder.ts`, `run-lifecycle.ts`, `transcript.ts`, `session-mailbox.ts`, `abort-registry.ts`) are not exported from the barrel. Import them only from within this domain.
+Internal modules (`background-store.ts`, `shared.ts`, `message-builder.ts`, `run-lifecycle.ts`, `runtime-admission.ts`, `runtime-cancel.ts`, `runtime-wait.ts`, `transcript.ts`, `session-mailbox.ts`, `abort-registry.ts`) are not exported from the barrel. Import them only from within this domain.
 
 ## Dependencies
 
