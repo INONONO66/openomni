@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
-import { Session, Storage } from "@openomni/session";
+import { Storage } from "@openomni/session";
 import { createLocalCliAgentRuntime } from "./local-cli-agent-runtime.js";
 import { startLocalCliQuestionBridgeServer } from "./local-cli-question-bridge.js";
 
@@ -11,7 +11,7 @@ const tempRoots: string[] = [];
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  Session.storage.set("ses_fake", {
+  Storage.getAdapter().session.set("ses_fake", {
     id: "ses_fake",
     title: "Fake CLI session",
     model: { providerID: "anthropic", modelID: "claude-test" },

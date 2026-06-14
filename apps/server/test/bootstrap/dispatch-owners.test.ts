@@ -8,7 +8,7 @@ import {
   type Execution,
 } from "@openomni/protocol";
 import type { DispatchOwners } from "@openomni/openomni";
-import { Bus, PendingAskStore, Session, Storage } from "@openomni/session";
+import { Bus, PendingAskStore, Storage } from "@openomni/session";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 
 const tempRoots: string[] = [];
@@ -17,7 +17,7 @@ beforeEach(() => {
   Bus.reset();
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  Session.storage.set("ses_fake", {
+  Storage.getAdapter().session.set("ses_fake", {
     id: "ses_fake",
     title: "Fake CLI session",
     model: { providerID: "anthropic", modelID: "claude-test" },
@@ -25,7 +25,7 @@ beforeEach(() => {
     spawnDepth: 1,
     parentSessionId: "ses_resident",
   });
-  Session.storage.set("ses_resident", {
+  Storage.getAdapter().session.set("ses_resident", {
     id: "ses_resident",
     title: "Resident session",
     model: { providerID: "anthropic", modelID: "claude-test" },
