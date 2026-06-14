@@ -4,7 +4,9 @@ import { InjectionQueue } from "@openomni/openomni";
 import { WorkerIpcHandlers } from "../../src/execution/worker-ipc-handlers";
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 
-function createRun(sessionId: string): WorkerRunState.ActiveRun {
+type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
+
+function createRun(sessionId: string): ActiveRun {
   return { sessionId, controller: new AbortController() };
 }
 

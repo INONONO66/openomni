@@ -7,6 +7,8 @@ import type { Tool, WorkerBootstrap } from "@openomni/protocol";
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
 import { WorkerRunner } from "../../src/execution/worker-runner";
 
+type ActiveRun = NonNullable<ReturnType<WorkerRunState.ActiveRunRegistry["get"]>>;
+
 const successfulResult: AgentResult = {
   text: "done",
   steps: [],
@@ -110,7 +112,7 @@ describe("WorkerRunner", () => {
 
   it("rejects duplicate run ids without replacing the active run", () => {
     const responses: unknown[] = [];
-    const existingRun: WorkerRunState.ActiveRun = {
+    const existingRun: ActiveRun = {
       sessionId: "session-1",
       controller: new AbortController(),
     };
@@ -473,7 +475,7 @@ describe("WorkerRunner", () => {
                 isCompletion: true,
                 continuationCount: 0,
                 elapsedMs: 0,
-                traceContext: { runId: "run-1", sessionId: "session-1" },
+                traceContext: { traceId: "trace-1", runId: "run-1", sessionId: "session-1" },
               });
 
               expect(decision.effects).toEqual([
@@ -607,6 +609,7 @@ describe("WorkerRunner", () => {
     AgentRegistry.define({
       name: "child",
       description: "child",
+      tools: [],
       model: { provider: "test", id: "child" },
     });
     const responseReceived = new Promise<void>((resolve) => {
@@ -714,6 +717,7 @@ describe("WorkerRunner", () => {
     AgentRegistry.define({
       name: "child",
       description: "child",
+      tools: [],
       model: { provider: "test", id: "child" },
     });
     const backgroundManager = {
@@ -806,7 +810,7 @@ describe("WorkerRunner", () => {
 
   it("aborts a proxied tool IPC wait without waiting for the full IPC timeout", async () => {
     const responses: unknown[] = [];
-    const activeRuns = new Map<string, WorkerRunState.ActiveRun>();
+    const activeRuns = new Map<string, ActiveRun>();
     const serverCalls: Array<{
       method: string;
       params?: Record<string, unknown>;
