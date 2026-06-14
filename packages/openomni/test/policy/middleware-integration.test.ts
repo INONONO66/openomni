@@ -9,12 +9,9 @@ import {
   type Subagent,
 } from "@openomni/protocol";
 import { ChannelGrantStore, Session, Storage } from "@openomni/session";
-import {
-  BackgroundLimitsMiddleware as RootBackgroundLimitsMiddleware,
-  BackgroundLimitsPolicy as RootBackgroundLimitsPolicy,
-} from "../../src";
+import { BackgroundLimitsMiddleware as RootBackgroundLimitsMiddleware } from "../../src";
 import { IngressAuthorityMiddleware } from "../../src/ingress/middleware/ingress-authority";
-import { BackgroundLimitsPolicy } from "../../src/policy/background-limits";
+import { BackgroundLimitsMiddleware } from "../../src/subagent/middleware/background-limits";
 import { SubagentSpawnPolicyMiddleware } from "../../src/subagent/middleware/subagent-spawn-policy";
 import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/middleware/tool-runtime-policy";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
@@ -437,7 +434,7 @@ describe("IngressAuthorityMiddleware integration", () => {
   });
 });
 
-describe("BackgroundLimitsPolicy integration", () => {
+describe("BackgroundLimitsMiddleware integration", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
@@ -448,7 +445,7 @@ describe("BackgroundLimitsPolicy integration", () => {
   });
 
   test("allows launch when all limits are within bounds", async () => {
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest(),
       activeTasks: [],
       activeCount: 0,
@@ -467,7 +464,7 @@ describe("BackgroundLimitsPolicy integration", () => {
   test("denies when per-agent limit is exceeded", async () => {
     const tasks = Array.from({ length: 3 }, () => makeBackgroundTask({ agentName: "worker" }));
 
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ agentName: "worker" }),
       activeTasks: tasks,
       activeCount: 3,
@@ -484,7 +481,7 @@ describe("BackgroundLimitsPolicy integration", () => {
   });
 
   test("denies when depth limit is exceeded", async () => {
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ depth: 6 }),
       activeTasks: [],
       activeCount: 0,
@@ -505,7 +502,7 @@ describe("BackgroundLimitsPolicy integration", () => {
       makeBackgroundTask({ parentSessionId: "parent-session-1" }),
     );
 
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest(),
       activeTasks: tasks,
       activeCount: 5,
@@ -522,7 +519,7 @@ describe("BackgroundLimitsPolicy integration", () => {
   });
 
   test("queues when total concurrency is saturated but queue has capacity", async () => {
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ agentName: "fresh-agent" }),
       activeTasks: [],
       activeCount: 10,
@@ -539,7 +536,7 @@ describe("BackgroundLimitsPolicy integration", () => {
   });
 
   test("denies when total concurrency saturated and queue is full", async () => {
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ agentName: "fresh-agent" }),
       activeTasks: [],
       activeCount: 10,
@@ -568,7 +565,7 @@ describe("BackgroundLimitsPolicy integration", () => {
       maxDescendants: 5,
       maxQueueSize: 20,
     };
-    const regs = BackgroundLimitsPolicy.registrations(state);
+    const regs = BackgroundLimitsMiddleware.registrations(state);
 
     expect(regs).toHaveLength(5);
     const names = regs.map((r) => r.name);
@@ -581,18 +578,17 @@ describe("BackgroundLimitsPolicy integration", () => {
 
   test("package root exports canonical background limits symbols", () => {
     expect(RootBackgroundLimitsMiddleware).toBeDefined();
-    expect(RootBackgroundLimitsPolicy).toBe(BackgroundLimitsPolicy);
-    expect(RootBackgroundLimitsMiddleware).toBe(BackgroundLimitsPolicy);
-    expect(RootBackgroundLimitsMiddleware.PerAgent).toBe(BackgroundLimitsPolicy.PerAgent);
+    expect(RootBackgroundLimitsMiddleware).toBe(BackgroundLimitsMiddleware);
+    expect(RootBackgroundLimitsMiddleware.PerAgent).toBe(BackgroundLimitsMiddleware.PerAgent);
   });
 
   test("all definitions use Policy.Timing invoke.prepare", () => {
     const defs = [
-      BackgroundLimitsPolicy.PerAgent,
-      BackgroundLimitsPolicy.Depth,
-      BackgroundLimitsPolicy.Descendants,
-      BackgroundLimitsPolicy.Total,
-      BackgroundLimitsPolicy.Queue,
+      BackgroundLimitsMiddleware.PerAgent,
+      BackgroundLimitsMiddleware.Depth,
+      BackgroundLimitsMiddleware.Descendants,
+      BackgroundLimitsMiddleware.Total,
+      BackgroundLimitsMiddleware.Queue,
     ];
 
     for (const def of defs) {
@@ -603,7 +599,7 @@ describe("BackgroundLimitsPolicy integration", () => {
 
   test("evaluates background launch through a background worker descriptor", async () => {
     const decisions: Policy.PolicyDecision[] = [];
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ agentName: "worker" }),
       activeTasks: [],
       activeCount: 0,
@@ -942,7 +938,7 @@ describe("cross-middleware deny-wins", () => {
     });
     expect(ingressResult.mode).toBe("direct");
 
-    const bgResult = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const bgResult = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ depth: 10 }),
       activeTasks: [],
       activeCount: 0,
@@ -1050,7 +1046,7 @@ describe("cross-middleware deny-wins", () => {
       }),
     );
 
-    const result = await BackgroundLimitsPolicy.evaluatePreLaunch({
+    const result = await BackgroundLimitsMiddleware.evaluatePreLaunch({
       input: makeLaunchRequest({ agentName: "worker" }),
       activeTasks: tasks,
       activeCount: 3,
