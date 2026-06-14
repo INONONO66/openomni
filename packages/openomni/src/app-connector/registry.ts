@@ -56,10 +56,6 @@ export namespace AppConnectorRegistry {
     return AppConnectorInstallationStore.list();
   }
 
-  export function remove(id: string): boolean {
-    return AppConnectorInstallationStore.remove(id);
-  }
-
   export function disable(id: string): AppConnector.Installation {
     return AppConnectorInstallationStore.disable(id);
   }

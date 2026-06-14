@@ -27,6 +27,17 @@ describe("AppConnectorRegistry", () => {
     await rm(tmpDir, { recursive: true });
   });
 
+  test("does not expose the removed duplicate remove lifecycle helper", async () => {
+    // Given
+    const registrySource = await Bun.file(
+      new URL("../../src/app-connector/registry.ts", import.meta.url),
+    ).text();
+
+    // When / Then
+    expect(Object.hasOwn(AppConnectorRegistry, "remove")).toBe(false);
+    expect(registrySource).not.toMatch(/\bexport\s+function\s+remove\b/);
+  });
+
   test("registers an available discovery candidate as a durable installation", async () => {
     // Given
     const connector = BuiltInAppConnectors.get("app.codex");
