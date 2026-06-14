@@ -13,6 +13,7 @@ describe("worker pool public facade removal", () => {
 
     expect("createWorkerPool" in workerPool).toBe(false);
     expect("WorkerSupervisor" in workerPool).toBe(true);
-    expect("SessionRouting" in workerPool).toBe(true);
+    expect("SessionRouting" in workerPool).toBe(false);
+    expect("createSessionRouting" in workerPool).toBe(true);
   });
 });
