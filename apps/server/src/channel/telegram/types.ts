@@ -5,7 +5,7 @@ export interface TelegramUser {
   username?: string;
 }
 
-export interface TelegramChat {
+interface TelegramChat {
   id: number;
   type: "private" | "group" | "supergroup" | "channel";
   title?: string;
