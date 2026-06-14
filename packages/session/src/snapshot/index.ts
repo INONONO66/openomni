@@ -112,14 +112,6 @@ const SnapshotEvents = {
 export namespace Snapshot {
   let provider: Provider = new InMemorySnapshotProvider();
 
-  export function configure(newProvider: Provider): void {
-    provider = newProvider;
-  }
-
-  export function getProvider(): Provider {
-    return provider;
-  }
-
   export function track(sessionID: string): string {
     const snapshotID = provider.track(sessionID);
     Bus.publish(SnapshotEvents.Tracked, { sessionID, snapshotID });
