@@ -30,7 +30,7 @@ import {
 } from "./transcript";
 
 export namespace SubagentRuntime {
-  export interface SpawnConfig extends RuntimeConfig {
+  interface SpawnConfig extends RuntimeConfig {
     parentSessionId?: string;
     agentName: string;
     title: string;
@@ -42,7 +42,7 @@ export namespace SubagentRuntime {
     permissions?: Policy.Permission;
   }
 
-  export interface SendConfig extends RuntimeConfig {
+  interface SendConfig extends RuntimeConfig {
     sessionId: string;
     prompt: string;
     signal?: AbortSignal;
@@ -52,34 +52,34 @@ export namespace SubagentRuntime {
     compaction?: SendCompactionConfig;
   }
 
-  export interface WaitConfig {
+  interface WaitConfig {
     sessionId: string;
     runId: string;
     timeoutMs?: number;
   }
 
-  export interface RunResult {
+  interface RunResult {
     sessionId: string;
     runId: string;
     output: string;
     finishReason: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>["finishReason"];
   }
 
-  export interface SpawnBackgroundResult {
+  interface SpawnBackgroundResult {
     sessionId: string;
     runId: string;
   }
 
-  export interface WaitResult {
+  interface WaitResult {
     status: WorkerRunRecord["status"];
     output?: string;
   }
 
-  export interface ResumeConfig extends RuntimeConfig {
+  interface ResumeConfig extends RuntimeConfig {
     sessionId: string;
   }
 
-  export interface ResumeResult {
+  interface ResumeResult {
     resumed: boolean;
     sessionId: string;
     runId: string | undefined;
@@ -87,7 +87,7 @@ export namespace SubagentRuntime {
     finishReason?: RunResult["finishReason"];
   }
 
-  export interface CancelConfig {
+  interface CancelConfig {
     sessionId: string;
     runId?: string;
     hardTimeoutMs?: number;
