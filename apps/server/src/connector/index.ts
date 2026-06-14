@@ -14,11 +14,6 @@ export type {
   ServerConnectorDiscoveryOptions,
   ServerConnectorDiscoveryStatus,
 } from "./discovery.js";
-export type {
-  ServerConnectorConsentOptions,
-  ServerConnectorRegistrationOptions,
-  ServerConnectorSmokeVerifyOptions,
-} from "./registry.js";
 export type { ConnectorQuestionBridgeHandler };
 
 export interface ConnectorEndpointDriverOptions {
