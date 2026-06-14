@@ -39,12 +39,6 @@ export namespace SkillLoader {
     return sortSkillDefinitions(skills);
   }
 
-  export async function discover(options: SkillLoaderOptions = {}): Promise<Skill.Definition[]> {
-    const [local, global] = await Promise.all([discoverLocal(options), discoverGlobal(options)]);
-
-    return sortSkillDefinitions([...local, ...global]);
-  }
-
   export async function loadLocal(
     id: string,
     options: SkillLoaderOptions = {},
