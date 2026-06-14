@@ -43,123 +43,123 @@ describe("AgentProfile.Definition", () => {
   });
 
   it("rejects missing required fields", () => {
-    expect(() => AgentProfile.Definition.parse({ name: "x" })).toThrow();
+    expect(AgentProfile.Definition.safeParse({ name: "x" }).success).toBe(false);
   });
 });
 
 describe("rejection (schema-enforced)", () => {
   it("rejects temperature < 0", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         temperature: -0.1,
-      }),
-    ).toThrow());
+      }).success,
+    ).toBe(false));
   it("rejects temperature > 2", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         temperature: 2.1,
-      }),
-    ).toThrow());
+      }).success,
+    ).toBe(false));
 
   it("rejects budget thresholds outside (0, 1)", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { warningThreshold: 1.1 },
-      }),
-    ).toThrow());
+      }).success,
+    ).toBe(false));
 
   it("rejects threshold endpoints", () => {
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { warningThreshold: 0 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
 
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { reassuranceThreshold: 1 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects budget thresholds that invert the staged status order", () => {
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { warningThreshold: 0.4, reassuranceThreshold: 0.8 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
 
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { warningThreshold: 0.6, reassuranceThreshold: 0.6 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
 
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { warningThreshold: 0.5 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
 
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { reassuranceThreshold: 0.9 },
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(false);
   });
 });
 
 describe("acceptance (documents current behavior)", () => {
   it("accepts variant string", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         variant: "high",
-      }),
-    ).not.toThrow());
+      }).success,
+    ).toBe(true));
   it("accepts temperature = 0", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         temperature: 0,
-      }),
-    ).not.toThrow());
+      }).success,
+    ).toBe(true));
   it("accepts temperature = 2", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         temperature: 2,
-      }),
-    ).not.toThrow());
+      }).success,
+    ).toBe(true));
   it("accepts budget with maxTurns", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         budget: { maxTurns: 10 },
-      }),
-    ).not.toThrow());
+      }).success,
+    ).toBe(true));
   it("exposes shared budget threshold defaults", () => {
     expect(AgentProfile.DEFAULT_REASSURANCE_THRESHOLD).toBe(0.6);
     expect(AgentProfile.DEFAULT_WARNING_THRESHOLD).toBe(0.8);
@@ -183,19 +183,25 @@ describe("acceptance (documents current behavior)", () => {
     }
     expect(Model.Status.safeParse("unknown").success).toBe(false);
   });
-  it("keeps AgentProfile.ModelRef as a compatibility alias", () =>
-    expect(AgentProfile.ModelRef.parse({ provider: "openai", id: "gpt-4o" })).toEqual({
+  it("accepts canonical model refs through agent definitions", () =>
+    expect(
+      AgentProfile.Definition.parse({
+        name: "x",
+        description: "x",
+        model: Model.Ref.parse({ provider: "openai", id: "gpt-4o" }),
+      }).model,
+    ).toEqual({
       provider: "openai",
       id: "gpt-4o",
     }));
   it("accepts empty name string", () =>
-    expect(() => AgentProfile.Definition.parse({ name: "", description: "x" })).not.toThrow());
+    expect(AgentProfile.Definition.safeParse({ name: "", description: "x" }).success).toBe(true));
   it("accepts action-only permissions", () =>
-    expect(() =>
-      AgentProfile.Definition.parse({
+    expect(
+      AgentProfile.Definition.safeParse({
         name: "x",
         description: "x",
         permissions: { action: "tool.call" },
-      }),
-    ).not.toThrow());
+      }).success,
+    ).toBe(true));
 });

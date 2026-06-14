@@ -3,9 +3,6 @@ import { Model } from "../model/index.js";
 import { Policy } from "../policy/index.js";
 
 export namespace AgentProfile {
-  export const ModelRef = Model.Ref;
-  export type ModelRef = Model.Ref;
-
   const budgetLimit = z
     .number()
     .int()
@@ -58,7 +55,7 @@ export namespace AgentProfile {
     description: z.string(),
     systemPrompt: z.string().optional(),
     tools: z.string().array().default([]),
-    model: ModelRef.optional(),
+    model: Model.Ref.optional(),
     permissions: Policy.Permission.optional(),
     policyPlan: Policy.PolicyPlan.optional(),
     variant: z.string().optional(),
