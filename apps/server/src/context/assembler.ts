@@ -1,7 +1,7 @@
 import { InstructionLoader } from "./instructions";
 import { SkillLoader } from "./skills";
 
-export interface AssembleConfig {
+interface AssembleConfig {
   workspaceRoot: string;
   globalConfigDir?: string;
 }

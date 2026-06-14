@@ -8,7 +8,7 @@ import { findUp } from "./find-up";
 
 const MAX_SKILLS = 200;
 
-export interface SkillMeta {
+interface SkillMeta {
   name: string;
   description: string;
   path: string;

@@ -156,7 +156,7 @@ function createWorkerDispatchRuntime(options: {
   };
 }
 
-export interface WorkerRunIpcServer {
+interface WorkerRunIpcServer {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   notify(method: string, params?: Record<string, unknown>): void;
 }

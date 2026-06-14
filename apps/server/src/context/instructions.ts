@@ -8,7 +8,7 @@ import { findUp } from "./find-up";
 const FILE_MAX_CHARS = 12_000;
 const TOTAL_MAX_CHARS = 60_000;
 
-export interface InstructionFile {
+interface InstructionFile {
   path: string;
   priority: number;
   label: string;
