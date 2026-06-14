@@ -103,19 +103,19 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
   }
 }
 
+const SnapshotEvents = {
+  Tracked: BusEvent.define(
+    "snapshot.tracked",
+    z.object({ sessionID: z.string(), snapshotID: z.string() }),
+  ),
+  Restored: BusEvent.define(
+    "snapshot.restored",
+    z.object({ sessionID: z.string(), snapshotID: z.string() }),
+  ),
+};
+
 export namespace Snapshot {
   let provider: Provider = new InMemorySnapshotProvider();
-
-  export const Event = {
-    Tracked: BusEvent.define(
-      "snapshot.tracked",
-      z.object({ sessionID: z.string(), snapshotID: z.string() }),
-    ),
-    Restored: BusEvent.define(
-      "snapshot.restored",
-      z.object({ sessionID: z.string(), snapshotID: z.string() }),
-    ),
-  };
 
   export function configure(newProvider: Provider): void {
     provider = newProvider;
@@ -127,13 +127,13 @@ export namespace Snapshot {
 
   export function track(sessionID: string): string {
     const snapshotID = provider.track(sessionID);
-    Bus.publish(Event.Tracked, { sessionID, snapshotID });
+    Bus.publish(SnapshotEvents.Tracked, { sessionID, snapshotID });
     return snapshotID;
   }
 
   export function restore(sessionID: string, snapshotID: string): void {
     provider.restore(sessionID, snapshotID);
-    Bus.publish(Event.Restored, { sessionID, snapshotID });
+    Bus.publish(SnapshotEvents.Restored, { sessionID, snapshotID });
   }
 
   export function diff(sessionID: string, snapshotID: string): Diff {
