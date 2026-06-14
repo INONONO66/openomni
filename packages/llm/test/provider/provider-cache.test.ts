@@ -1,13 +1,9 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { Auth } from "../../src/auth";
-import {
-  getLanguage,
-  getSDK,
-  ProviderCache,
-  PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES,
-  PROVIDER_SDK_CACHE_MAX_ENTRIES,
-  type Provider,
-} from "../../src/provider/index";
+import { getLanguage, getSDK, type Provider } from "../../src/provider/index";
+
+const SDK_CACHE_LIMIT = 64;
+const LANGUAGE_CACHE_LIMIT = 256;
 
 function makeAnthropicModel(id = "claude-sonnet-4-20250514"): Provider.Model {
   return {
@@ -32,10 +28,6 @@ function makeOpenAIModel(id = "gpt-4o"): Provider.Model {
 }
 
 describe("provider caches", () => {
-  beforeEach(() => {
-    ProviderCache.clear();
-  });
-
   test("reuses SDK for the same provider and auth", () => {
     const auth: Auth.Info = { type: "api", key: "sk-test" };
 
@@ -91,11 +83,10 @@ describe("provider caches", () => {
     const firstAuth: Auth.Info = { type: "api", key: "sk-lru-0" };
     const first = getSDK(model, firstAuth);
 
-    for (let i = 1; i <= PROVIDER_SDK_CACHE_MAX_ENTRIES; i++) {
+    for (let i = 1; i <= SDK_CACHE_LIMIT; i++) {
       getSDK(model, { type: "api", key: `sk-lru-${i}` });
     }
 
-    expect(ProviderCache.stats().sdkEntries).toBe(PROVIDER_SDK_CACHE_MAX_ENTRIES);
     expect(getSDK(model, firstAuth)).not.toBe(first);
   });
 
@@ -104,23 +95,23 @@ describe("provider caches", () => {
     const firstAuth: Auth.Info = { type: "api", key: "sk-touch-0" };
     const first = getSDK(model, firstAuth);
 
-    for (let i = 1; i < PROVIDER_SDK_CACHE_MAX_ENTRIES; i++) {
+    for (let i = 1; i < SDK_CACHE_LIMIT; i++) {
       getSDK(model, { type: "api", key: `sk-touch-${i}` });
     }
     expect(getSDK(model, firstAuth)).toBe(first);
     getSDK(model, { type: "api", key: "sk-touch-evict" });
 
-    expect(ProviderCache.stats().sdkEntries).toBe(PROVIDER_SDK_CACHE_MAX_ENTRIES);
     expect(getSDK(model, firstAuth)).toBe(first);
   });
 
   test("bounds language model cache entries", () => {
     const auth: Auth.Info = { type: "proxy", baseURL: "http://localhost:8317" };
+    const first = getLanguage(makeAnthropicModel("claude-lru-0"), auth);
 
-    for (let i = 0; i <= PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES; i++) {
+    for (let i = 1; i <= LANGUAGE_CACHE_LIMIT; i++) {
       getLanguage(makeAnthropicModel(`claude-lru-${i}`), auth);
     }
 
-    expect(ProviderCache.stats().languageEntries).toBe(PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES);
+    expect(getLanguage(makeAnthropicModel("claude-lru-0"), auth)).not.toBe(first);
   });
 });

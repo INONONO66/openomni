@@ -26,8 +26,8 @@ const BUNDLED_PROVIDERS: Record<string, (options: SdkOptions) => ProviderSDK> = 
 
 const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
-export const PROVIDER_SDK_CACHE_MAX_ENTRIES = 64;
-export const PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES = 256;
+const PROVIDER_SDK_CACHE_MAX_ENTRIES = 64;
+const PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES = 256;
 
 type CustomModelLoader = (
   sdk: ProviderSDK,
@@ -144,20 +144,6 @@ function setCached<T>(cache: Map<string, T>, key: string, value: T, maxEntries: 
     cache.delete(oldestKey);
   }
 }
-
-export const ProviderCache = {
-  clear(): void {
-    SDK_CACHE.clear();
-    LANGUAGE_CACHE.clear();
-  },
-
-  stats(): { sdkEntries: number; languageEntries: number } {
-    return {
-      sdkEntries: SDK_CACHE.size,
-      languageEntries: LANGUAGE_CACHE.size,
-    };
-  },
-};
 
 function resolveLanguageModel(
   sdk: ProviderSDK,
