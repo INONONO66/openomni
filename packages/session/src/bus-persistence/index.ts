@@ -27,18 +27,18 @@ interface RuntimeState {
   readonly chains: Map<string, Promise<void>>;
 }
 
-export namespace BusPersistence {
-  export interface Options {
-    readonly resolveSessionId?: (
-      event: Bus.PublishedDescriptor,
-      payload: unknown,
-    ) => string | undefined;
-    readonly now?: () => Date;
-  }
+interface BusPersistenceOptions {
+  readonly resolveSessionId?: (
+    event: Bus.PublishedDescriptor,
+    payload: unknown,
+  ) => string | undefined;
+  readonly now?: () => Date;
+}
 
+export namespace BusPersistence {
   let state: RuntimeState | undefined;
 
-  export function start(options: Options = {}): () => void {
+  export function start(options: BusPersistenceOptions = {}): () => void {
     stop();
 
     const chains = new Map<string, Promise<void>>();
