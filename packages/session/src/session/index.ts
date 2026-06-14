@@ -4,15 +4,15 @@ import { SessionInfo } from "./info";
 import { Storage } from "../storage/storage";
 import { Bus, BusEvent } from "../bus";
 
-export namespace Session {
-  export type RecoveredMessage = {
-    role: "assistant";
-    text: string;
-    timestamp: string;
-    sequence: number;
-    turnIndex: number;
-  };
+type RecoveredMessage = {
+  role: "assistant";
+  text: string;
+  timestamp: string;
+  sequence: number;
+  turnIndex: number;
+};
 
+export namespace Session {
   export const Info = SessionInfo;
   export type Info = SessionInfo;
 
