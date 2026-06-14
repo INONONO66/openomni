@@ -4,22 +4,22 @@ import { Operational, WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 export namespace WorkerBootstrapHandler {
-  export interface ServerPort {
+  interface ServerPort {
     useConnection(id: string): void;
     notify(method: string, params?: Record<string, unknown>): void;
   }
 
-  export interface State {
+  interface State {
     readonly ready: Promise<void>;
     getBootstrap(): WorkerBootstrap.Bootstrap | null;
     resolveAuth(provider: string): Auth.Info | undefined;
   }
 
-  export interface CreateStateOptions {
+  interface CreateStateOptions {
     readonly onBootstrap?: (bootstrap: WorkerBootstrap.Bootstrap) => void;
   }
 
-  export interface HandleOptions {
+  interface HandleOptions {
     readonly params: Record<string, unknown> | undefined;
     readonly ipcAuthToken: string;
     readonly workerId: string;
@@ -29,7 +29,7 @@ export namespace WorkerBootstrapHandler {
     readonly state: MutableState;
   }
 
-  export interface MutableState extends State {
+  interface MutableState extends State {
     setBootstrap(bootstrap: WorkerBootstrap.Bootstrap): void;
     markReady(): void;
     rejectReady(error: Error): void;
