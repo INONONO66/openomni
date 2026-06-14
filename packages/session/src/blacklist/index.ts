@@ -2,7 +2,7 @@ import { Actor } from "@openomni/protocol";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
-export interface BlacklistMatchInput {
+interface BlacklistMatchInput {
   readonly actorId?: string;
   readonly endpointId?: string;
   readonly channel?: string;
