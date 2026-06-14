@@ -1,3 +1,5 @@
+/// <reference types="bun" />
+
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Session } from "../src/session";
 import { Storage } from "../src/storage/storage";
@@ -58,7 +60,7 @@ describe("Session TTL", () => {
       const retrieved = Session.get(session.id);
       expect(retrieved).toBeUndefined();
 
-      const checkAgain = Session.storage.get(session.id);
+      const checkAgain = Storage.getAdapter().session.get(session.id);
       expect(checkAgain).toBeUndefined();
     });
 
@@ -110,7 +112,7 @@ describe("Session TTL", () => {
       expect(sessions.length).toBe(1);
       expect(sessions[0].id).toBe(activeSession.id);
 
-      const checkExpired = Session.storage.get(expiredSession.id);
+      const checkExpired = Storage.getAdapter().session.get(expiredSession.id);
       expect(checkExpired).toBeUndefined();
     });
 
@@ -155,12 +157,12 @@ describe("Session TTL", () => {
         ttlMs: -1000,
       });
 
-      const directCheck = Session.storage.get(session.id);
+      const directCheck = Storage.getAdapter().session.get(session.id);
       expect(directCheck).toBeDefined();
 
       Session.get(session.id);
 
-      const afterGet = Session.storage.get(session.id);
+      const afterGet = Storage.getAdapter().session.get(session.id);
       expect(afterGet).toBeUndefined();
     });
   });

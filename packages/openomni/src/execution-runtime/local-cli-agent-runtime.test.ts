@@ -2,13 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
-import {
-  AppConnectorInstallationStore,
-  Artifact,
-  Session,
-  Storage,
-  WorkItemStore,
-} from "@openomni/session";
+import { AppConnectorInstallationStore, Artifact, Storage, WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import { createWorkerDispatchHandlers } from "../dispatch/handlers/worker";
 import { encodeWorkspaceForClaudeProjects } from "./local-cli-agent-log.js";
@@ -37,7 +31,7 @@ const LocalCliDispatchOutput = z
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  Session.storage.set("ses_fake", {
+  Storage.getAdapter().session.set("ses_fake", {
     id: "ses_fake",
     title: "Fake CLI session",
     model: { providerID: "anthropic", modelID: "claude-test" },

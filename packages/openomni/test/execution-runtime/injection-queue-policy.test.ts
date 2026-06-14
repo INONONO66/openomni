@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { PolicyEngine } from "@openomni/agent";
-import { Session } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware.js";
@@ -29,7 +29,7 @@ async function dispatchTurnFinish(
 
 describe("createInjectionQueueDrainPolicy", () => {
   afterEach(() => {
-    Session.storage.clear();
+    Storage.reset();
   });
 
   it("is a turn.finish policy with priority before idle nudge", () => {

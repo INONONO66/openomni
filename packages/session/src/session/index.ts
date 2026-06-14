@@ -22,59 +22,6 @@ export namespace Session {
     Deleted: BusEvent.define("session.deleted", z.object({ id: z.string() })),
   };
 
-  // Backward compatibility: tests access Session["storage"].clear()
-  export const storage = {
-    clear() {
-      Storage.reset();
-    },
-    get(id: string) {
-      return Storage.getAdapter().session.get(id);
-    },
-    set(id: string, info: Info) {
-      Storage.getAdapter().session.set(id, info);
-    },
-    has(id: string) {
-      return Storage.getAdapter().session.get(id) !== undefined;
-    },
-    delete(id: string) {
-      return Storage.getAdapter().session.remove(id);
-    },
-    values() {
-      return Storage.getAdapter().session.list()[Symbol.iterator]();
-    },
-  };
-
-  // Backward compatibility: tests access Session["messages"].clear()
-  export const messages = {
-    clear() {
-      Storage.reset();
-    },
-    get(sessionID: string) {
-      return Storage.getAdapter().message.list(sessionID);
-    },
-    set(sessionID: string, msgs: Message.Info[]) {
-      const adapter = Storage.getAdapter();
-      const existing = adapter.message.list(sessionID);
-      for (const msg of existing) {
-        adapter.message.remove(sessionID, msg.id);
-      }
-      for (const msg of msgs) {
-        adapter.message.set(sessionID, msg);
-      }
-    },
-    has(sessionID: string) {
-      return Storage.getAdapter().message.list(sessionID).length > 0;
-    },
-    delete(sessionID: string) {
-      const adapter = Storage.getAdapter();
-      const msgs = adapter.message.list(sessionID);
-      for (const msg of msgs) {
-        adapter.message.remove(sessionID, msg.id);
-      }
-      return msgs.length > 0;
-    },
-  };
-
   export function create(input: {
     title: string;
     model: { providerID: string; modelID: string };
