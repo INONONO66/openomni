@@ -49,7 +49,7 @@ export function readConnectorLogSnapshot(
   return { path, mtimeMs: stats.mtimeMs, size: stats.size };
 }
 
-export function encodeWorktreeForClaudeProjects(workspace: string): string {
+function encodeWorktreeForClaudeProjects(workspace: string): string {
   return workspace.split("/").join("-").split("\\").join("-");
 }
 
