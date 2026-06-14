@@ -7,10 +7,6 @@ import {
 export { ServerConnectorDefinitions } from "./definitions.js";
 export { ServerConnectorDiscovery } from "./discovery.js";
 export { ServerConnectorRegistry } from "./registry.js";
-export type {
-  DetectCommandRunner,
-  DiscoveryCandidate,
-} from "./discovery.js";
 export type { ConnectorQuestionBridgeHandler };
 
 export interface ConnectorEndpointDriverOptions {
