@@ -96,7 +96,7 @@ export type WorkerRuntimeConfig = {
   allowAuthFallback?: ChatAgentConfig["allowAuthFallback"];
 };
 
-export type WorkerChildRuntimeConfig = {
+type WorkerChildRuntimeConfig = {
   childDefinition?: RuntimeAgentDefinition;
   tools: ChatAgentConfig["tools"];
   toolExecutor: ChatAgentConfig["toolExecutor"];
