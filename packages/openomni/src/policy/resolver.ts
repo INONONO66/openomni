@@ -87,8 +87,6 @@ class StaticPolicyResolver implements PolicyResolverInstance {
 }
 
 export namespace PolicyResolver {
-  export const DefaultPolicies = [...defaultPolicyIds];
-
   export function create(rules: readonly PolicyResolverRule[] = []): PolicyResolverInstance {
     return new StaticPolicyResolver(rules);
   }
