@@ -86,5 +86,3 @@ export function createSessionRouting(): SessionRouter {
     },
   };
 }
-
-export const SessionRouting = createSessionRouting();

@@ -1,94 +1,95 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
-import { createSessionRouting, SessionRouting } from "../../src/worker-pool/session-routing";
+import { createSessionRouting } from "../../src/worker-pool/session-routing";
 
-describe("SessionRouting", () => {
-  afterEach(() => {
-    SessionRouting.clear();
-  });
-
+describe("createSessionRouting", () => {
   test("same session always routes to same worker", () => {
+    const routing = createSessionRouting();
     const id = "ses_same_affinity";
-    const first = SessionRouting.route(id, 4);
-    const second = SessionRouting.route(id, 4);
+    const first = routing.route(id, 4);
+    const second = routing.route(id, 4);
     expect(second).toBe(first);
-    SessionRouting.complete(id);
-    SessionRouting.complete(id);
+    routing.complete(id);
+    routing.complete(id);
   });
 
   test("keeps same-session affinity until all concurrent routes complete", () => {
+    const routing = createSessionRouting();
     const ts = Date.now();
     const preload = `ses_concurrent_preload_${ts}`;
     const id = `ses_concurrent_${ts}`;
     const blocker = `ses_concurrent_block_${ts}`;
 
-    const preloaded = SessionRouting.route(preload, 2);
-    const first = SessionRouting.route(id, 2);
-    const second = SessionRouting.route(id, 2);
+    const preloaded = routing.route(preload, 2);
+    const first = routing.route(id, 2);
+    const second = routing.route(id, 2);
     expect(first).not.toBe(preloaded);
     expect(second).toBe(first);
 
-    SessionRouting.complete(id);
+    routing.complete(id);
 
-    SessionRouting.route(blocker, 2);
+    routing.route(blocker, 2);
 
-    expect(SessionRouting.route(id, 2)).toBe(first);
+    expect(routing.route(id, 2)).toBe(first);
 
-    SessionRouting.complete(id);
-    SessionRouting.complete(id);
-    SessionRouting.complete(preload);
-    SessionRouting.complete(blocker);
+    routing.complete(id);
+    routing.complete(id);
+    routing.complete(preload);
+    routing.complete(blocker);
 
-    const reassigned = SessionRouting.route(id, 2);
+    const reassigned = routing.route(id, 2);
     expect(reassigned).not.toBe(first);
 
-    SessionRouting.complete(id);
+    routing.complete(id);
   });
 
   test("different sessions can route to different workers", () => {
+    const routing = createSessionRouting();
     const ids = ["ses_a", "ses_b", "ses_c", "ses_d"];
-    const indices = ids.map((id) => SessionRouting.route(id, 4));
+    const indices = ids.map((id) => routing.route(id, 4));
     expect(new Set(indices).size).toBe(4);
-    for (const id of ids) SessionRouting.complete(id);
+    for (const id of ids) routing.complete(id);
   });
 
   test("complete() decrements load", () => {
+    const routing = createSessionRouting();
     const ts = Date.now();
     const a = `ses_fill_a_${ts}`;
     const b = `ses_fill_b_${ts}`;
     const id = `ses_load_decrement_${ts}`;
 
-    const idxA = SessionRouting.route(a, 2);
-    const idxB = SessionRouting.route(b, 2);
+    const idxA = routing.route(a, 2);
+    const idxB = routing.route(b, 2);
     expect(idxA).not.toBe(idxB);
 
-    SessionRouting.complete(a);
+    routing.complete(a);
 
-    const idx = SessionRouting.route(id, 2);
+    const idx = routing.route(id, 2);
     expect(idx).toBe(idxA);
 
-    SessionRouting.complete(b);
-    SessionRouting.complete(id);
+    routing.complete(b);
+    routing.complete(id);
   });
 
   test("after complete(), session can be reassigned to a different worker", () => {
+    const routing = createSessionRouting();
     const id = "ses_reassign";
     const workerCount = 2;
 
-    const first = SessionRouting.route(id, workerCount);
-    SessionRouting.complete(id);
+    const first = routing.route(id, workerCount);
+    routing.complete(id);
 
     const blockers = ["ses_block1", "ses_block2", "ses_block3"];
     for (const blocker of blockers) {
-      SessionRouting.route(blocker, workerCount);
+      routing.route(blocker, workerCount);
     }
 
-    const second = SessionRouting.route(id, workerCount);
+    const second = routing.route(id, workerCount);
     expect(second).not.toBe(first);
 
-    SessionRouting.complete(id);
+    routing.complete(id);
     for (const blocker of blockers) {
-      SessionRouting.complete(blocker);
+      routing.complete(blocker);
     }
   });
 
