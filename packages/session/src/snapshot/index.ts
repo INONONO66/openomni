@@ -8,7 +8,6 @@ export namespace Snapshot {
     track(sessionID: string): string;
     restore(sessionID: string, snapshotID: string): void;
     diff(sessionID: string, snapshotID: string): Diff;
-    remove(snapshotID: string): void;
   }
 
   export interface Diff {
@@ -94,10 +93,6 @@ export class InMemorySnapshotProvider implements Snapshot.Provider {
     return { added, removed, modified };
   }
 
-  remove(snapshotID: string): void {
-    this.snapshots.delete(snapshotID);
-  }
-
   reset(): void {
     this.snapshots.clear();
   }
@@ -138,10 +133,6 @@ export namespace Snapshot {
 
   export function diff(sessionID: string, snapshotID: string): Diff {
     return provider.diff(sessionID, snapshotID);
-  }
-
-  export function remove(snapshotID: string): void {
-    provider.remove(snapshotID);
   }
 
   export function reset(): void {
