@@ -7,6 +7,19 @@ const DEFAULT_INTERVAL_MS = 30_000;
 
 type FireJob = (job: CronJob.Info) => Promise<void>;
 
+interface TickOptions {
+  readonly nowMs?: () => number;
+  readonly fire?: FireJob;
+}
+
+interface StartOptions extends TickOptions {
+  readonly intervalMs?: number;
+}
+
+interface CronJobRunnerHandle {
+  stop(): void;
+}
+
 function parseInteger(value: string, field: string): number {
   if (!/^\d+$/.test(value)) throw new Error(`Invalid cron ${field} value: ${value}`);
   return Number.parseInt(value, 10);
@@ -91,19 +104,6 @@ async function missingFireJob(): Promise<void> {
 }
 
 export namespace CronJobRunner {
-  export interface TickOptions {
-    readonly nowMs?: () => number;
-    readonly fire?: FireJob;
-  }
-
-  export interface StartOptions extends TickOptions {
-    readonly intervalMs?: number;
-  }
-
-  export interface Handle {
-    stop(): void;
-  }
-
   export async function tick(options: TickOptions = {}): Promise<void> {
     const now = options.nowMs?.() ?? Date.now();
     const fire = options.fire ?? missingFireJob;
@@ -148,7 +148,7 @@ export namespace CronJobRunner {
     }
   }
 
-  export function start(options: StartOptions): Handle {
+  export function start(options: StartOptions): CronJobRunnerHandle {
     let running = false;
     let stopped = false;
     const run = async () => {
