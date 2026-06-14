@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createDb } from "../../src/storage/drizzle/db";
-import { appConnectorInstallationTable } from "../../src/storage/drizzle/schema";
+import { drizzleSchema } from "../../src/storage/drizzle/schema";
 
 function tempDbPath(): string {
   return join(tmpdir(), `test-drizzle-db-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
@@ -95,8 +95,10 @@ describe("drizzle createDb migrations", () => {
       expect(sqlite.query("SELECT id FROM pending_ask").get()).toEqual({ id: "ask-1" });
       expect(sqlite.query("SELECT id FROM worker_grant").get()).toEqual({ id: "grant-1" });
       const indexes = sqlite
-        .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pending_ask'")
-        .all() as Array<{ name: string }>;
+        .query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'pending_ask'",
+        )
+        .all();
       expect(indexes.map((row) => row.name)).toEqual(
         expect.arrayContaining([
           "idx_pending_ask_token_hash",
@@ -116,7 +118,7 @@ describe("drizzle createDb migrations", () => {
 
     const { db, sqlite } = createDb(dbPath);
     try {
-      await db.insert(appConnectorInstallationTable).values({
+      await db.insert(drizzleSchema.appConnectorInstallationTable).values({
         id: "install:app.codex",
         connector_id: "app.codex",
         status: "registered",
@@ -125,7 +127,7 @@ describe("drizzle createDb migrations", () => {
         time_updated: 1,
       });
 
-      const rows = await db.select().from(appConnectorInstallationTable);
+      const rows = await db.select().from(drizzleSchema.appConnectorInstallationTable);
       expect(rows).toEqual([
         {
           id: "install:app.codex",
@@ -137,10 +139,10 @@ describe("drizzle createDb migrations", () => {
         },
       ]);
       const indexes = sqlite
-        .query(
+        .query<{ name: string }, []>(
           "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'app_connector_installation'",
         )
-        .all() as Array<{ name: string }>;
+        .all();
       expect(indexes.map((row) => row.name)).toEqual(
         expect.arrayContaining([
           "idx_app_connector_installation_connector",
