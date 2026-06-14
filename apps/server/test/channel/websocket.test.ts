@@ -1,8 +1,11 @@
+import { describe, expect, it } from "bun:test";
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import type { ChannelAuthnDecision } from "../../src/channel/channel-authn";
+import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
 import { WebSocketHandler } from "../../src/channel/websocket";
+
+type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
 function createHandler(decisions: ChannelAuthnDecision[] = []): WebSocketHandler {
   const handler: Adapter.MessageHandler = async () => ({ text: "ok" });

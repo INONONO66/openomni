@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Adapter } from "@openomni/protocol";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecision } from "../../src/channel/channel-authn";
+import type { ChannelAuthnDecisionObserver } from "../../src/channel/authn/types";
+import { ChannelAuthnMiddleware } from "../../src/channel/channel-authn";
+
+type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
 describe("channel-authn trigger policy", () => {
   it("allows Discord mentions and records trigger metadata", () => {

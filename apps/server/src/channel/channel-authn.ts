@@ -1,10 +1,4 @@
-export type {
-  ChannelAuthnDecision,
-  ChannelAuthnDecisionObserver,
-  ChannelTriggerAuthResult,
-  GitHubAuthResult,
-  WebSocketAuthResult,
-} from "./authn/types";
+export type { ChannelAuthnDecisionObserver } from "./authn/types";
 
 import {
   DiscordTriggers as DiscordTriggersDefinition,
