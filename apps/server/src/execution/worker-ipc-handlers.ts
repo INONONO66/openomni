@@ -1,73 +1,64 @@
 import type { InjectionQueue } from "@openomni/openomni";
-import { z } from "zod";
 import type { WorkerRunState } from "./worker-run-state";
 
 export namespace WorkerIpcHandlers {
-  export interface SharedOptions {
+  interface SharedOptions {
     readonly ipcAuthToken: string;
     readonly workerId: string;
   }
 
-  export interface CancelRunOptions extends Pick<SharedOptions, "ipcAuthToken"> {
+  interface CancelRunOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
     readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
   }
 
-  export interface DeliverMessageOptions extends SharedOptions {
+  interface DeliverMessageOptions extends SharedOptions {
     readonly params: Record<string, unknown> | undefined;
     readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "get">;
     readonly injectionQueue: InjectionQueue.Instance;
   }
 
-  export interface ShutdownIdleOptions extends Pick<SharedOptions, "ipcAuthToken"> {
+  interface ShutdownIdleOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
     readonly activeRuns: Pick<WorkerRunState.ReadableActiveRuns, "size">;
   }
 
-  export interface ToolCallSettledOptions extends Pick<SharedOptions, "ipcAuthToken"> {
+  interface ToolCallSettledOptions extends Pick<SharedOptions, "ipcAuthToken"> {
     readonly params: Record<string, unknown> | undefined;
     readonly clearUnsafe: (workspaceRoot: string, callId: string) => void;
   }
 
-  export const CancelRunResponse = z.discriminatedUnion("cancelled", [
-    z.object({
-      cancelled: z.literal(true),
-      runId: z.string(),
-      sessionId: z.string(),
-    }),
-    z.object({
-      cancelled: z.literal(false),
-      error: z.string(),
-    }),
-  ]);
-  export type CancelRunResponse = z.infer<typeof CancelRunResponse>;
+  type CancelRunResponse =
+    | {
+        readonly cancelled: true;
+        readonly runId: string;
+        readonly sessionId: string;
+      }
+    | {
+        readonly cancelled: false;
+        readonly error: string;
+      };
 
-  export const DeliverMessageResponse = z.discriminatedUnion("accepted", [
-    z.object({ accepted: z.literal(true) }),
-    z.object({
-      accepted: z.literal(false),
-      error: z.string(),
-    }),
-  ]);
-  export type DeliverMessageResponse = z.infer<typeof DeliverMessageResponse>;
+  type DeliverMessageResponse =
+    | { readonly accepted: true }
+    | {
+        readonly accepted: false;
+        readonly error: string;
+      };
 
-  export const ShutdownIdleResponse = z.discriminatedUnion("acknowledged", [
-    z.object({ acknowledged: z.literal(true) }),
-    z.object({
-      acknowledged: z.literal(false),
-      error: z.string(),
-    }),
-  ]);
-  export type ShutdownIdleResponse = z.infer<typeof ShutdownIdleResponse>;
+  type ShutdownIdleResponse =
+    | { readonly acknowledged: true }
+    | {
+        readonly acknowledged: false;
+        readonly error: string;
+      };
 
-  export const ToolCallSettledResponse = z.discriminatedUnion("acknowledged", [
-    z.object({ acknowledged: z.literal(true) }),
-    z.object({
-      acknowledged: z.literal(false),
-      error: z.string(),
-    }),
-  ]);
-  export type ToolCallSettledResponse = z.infer<typeof ToolCallSettledResponse>;
+  type ToolCallSettledResponse =
+    | { readonly acknowledged: true }
+    | {
+        readonly acknowledged: false;
+        readonly error: string;
+      };
 
   export function cancelRun(options: CancelRunOptions): CancelRunResponse {
     const { params, ipcAuthToken, activeRuns } = options;
