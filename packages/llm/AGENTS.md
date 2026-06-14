@@ -27,7 +27,7 @@ src/
 ├── agent/
 │   └── index.ts      # Agent.Info schema + defaults (lightweight agent profile)
 ├── model/
-│   └── index.ts      # ModelsDev.get / refresh / init — fetches models.dev catalog
+│   └── index.ts      # ModelsDev.get / refresh — fetches models.dev catalog
 └── util/
     └── lazy.ts       # Lazy initialization helper
 ```
