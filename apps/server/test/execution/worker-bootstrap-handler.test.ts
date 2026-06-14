@@ -9,6 +9,7 @@ const NotificationRecord = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 type NotificationRecord = z.infer<typeof NotificationRecord>;
+type BootstrapServer = Parameters<typeof WorkerBootstrapHandler.handleBootstrap>[0]["server"];
 
 function createServer() {
   const usedConnections: string[] = [];
@@ -24,7 +25,7 @@ function createServer() {
       notify(method: string, params?: Record<string, unknown>) {
         notifications.push({ method, params });
       },
-    } satisfies WorkerBootstrapHandler.ServerPort,
+    } satisfies BootstrapServer,
   };
 }
 
