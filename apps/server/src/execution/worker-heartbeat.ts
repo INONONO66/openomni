@@ -4,21 +4,21 @@ import { z } from "zod";
 const DEFAULT_INTERVAL_MS = 15_000;
 
 export namespace WorkerHeartbeat {
-  export const SnapshotInput = z.object({
+  const SnapshotInput = z.object({
     activeRunIds: z.array(z.string()),
     configEpoch: z.string(),
     memoryRssMb: z.number(),
     lastHeartbeat: z.number(),
   });
-  export type SnapshotInput = z.infer<typeof SnapshotInput>;
+  type SnapshotInput = z.infer<typeof SnapshotInput>;
 
-  export const Server = z.object({
+  const Server = z.object({
     call: z
       .function()
       .args(z.literal("worker.heartbeat"), z.record(z.string(), z.unknown()))
       .returns(z.promise(z.unknown())),
   });
-  export type Server = {
+  type Server = {
     call(method: "worker.heartbeat", params: Record<string, unknown>): Promise<unknown>;
   };
 
