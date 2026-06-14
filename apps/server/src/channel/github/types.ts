@@ -1,13 +1,13 @@
-export interface GitHubUser {
+interface GitHubUser {
   login: string;
   type: string;
 }
 
-export interface GitHubLabel {
+interface GitHubLabel {
   name: string;
 }
 
-export interface GitHubRepository {
+interface GitHubRepository {
   full_name: string;
   owner: { login: string };
   name: string;
