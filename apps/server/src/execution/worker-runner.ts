@@ -165,7 +165,7 @@ export namespace WorkerRunner {
   type ChatAgentOptions = Parameters<typeof ChatAgent.create>[0];
   type WorkerAgent = Pick<ReturnType<typeof ChatAgent.create>, "run">;
 
-  export interface Environment {
+  interface Environment {
     readonly ipcAuthToken: string;
     readonly workerId: string;
     readonly server: WorkerRunIpcServer;
@@ -179,7 +179,7 @@ export namespace WorkerRunner {
     readonly createAgent?: (options: ChatAgentOptions) => WorkerAgent;
   }
 
-  export interface SpawnRunOptions extends Environment {
+  interface SpawnRunOptions extends Environment {
     readonly params: Record<string, unknown> | undefined;
     readonly respond: (result: unknown) => void;
   }
