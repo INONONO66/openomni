@@ -32,6 +32,20 @@ interface PreRunState {
   target?: Ingress.Target;
 }
 
+interface PreRunContext {
+  readonly event: unknown;
+  readonly coordinator?: CoordinatorLike;
+  readonly traceContext?: TraceContext.Type;
+  readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+}
+
+interface PreRunResult {
+  readonly event: Ingress.InboundEvent;
+  readonly coordinator?: CoordinatorLike;
+  readonly mode: Ingress.InboundEvent["mode"];
+  readonly target: Ingress.Target;
+}
+
 function allowDecision(policyId: string, reason: string): Policy.PolicyDecision {
   return PolicyDecision.allow({ policyId, reasonCodes: [reason] });
 }
@@ -456,20 +470,6 @@ export namespace IngressAuthorityMiddleware {
     priority: 35,
     failPolicy: "fail-closed",
   } as const satisfies Policy.Definition;
-
-  export interface PreRunContext {
-    readonly event: unknown;
-    readonly coordinator?: CoordinatorLike;
-    readonly traceContext?: TraceContext.Type;
-    readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
-  }
-
-  export interface PreRunResult {
-    readonly event: Ingress.InboundEvent;
-    readonly coordinator?: CoordinatorLike;
-    readonly mode: Ingress.InboundEvent["mode"];
-    readonly target: Ingress.Target;
-  }
 
   export function registrations(state: PreRunState): PolicyRegistration[] {
     return [
