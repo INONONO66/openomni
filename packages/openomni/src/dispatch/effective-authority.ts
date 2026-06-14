@@ -1,20 +1,20 @@
+type Axis =
+  | "blacklist"
+  | "channel_grant"
+  | "personal_or_channel_default_grant"
+  | "session_ownership_grant"
+  | "pending_interaction_scope";
+
+type Verdict = "allow" | "deny" | "not_required";
+
+interface AxisDecision {
+  readonly axis: Axis;
+  readonly verdict: Verdict;
+  readonly reason: string;
+  readonly evidence?: readonly string[];
+}
+
 export namespace EffectiveAuthority {
-  export type Axis =
-    | "blacklist"
-    | "channel_grant"
-    | "personal_or_channel_default_grant"
-    | "session_ownership_grant"
-    | "pending_interaction_scope";
-
-  export type Verdict = "allow" | "deny" | "not_required";
-
-  export interface AxisDecision {
-    readonly axis: Axis;
-    readonly verdict: Verdict;
-    readonly reason: string;
-    readonly evidence?: readonly string[];
-  }
-
   export interface Result {
     readonly allowed: boolean;
     readonly reason: string;
