@@ -30,6 +30,7 @@ interface SourceMatch {
 
 const hotFiles = [
   "packages/openomni/src/execution-runtime/tool/executor.ts",
+  "packages/openomni/src/execution-runtime/tool/executor-events.ts",
   "apps/server/src/tool/mcp/provider.ts",
   "packages/llm/src/session/processor.ts",
   "packages/openomni/src/ingress/event-projector.ts",
@@ -44,12 +45,20 @@ const rules: readonly SideEffectRule[] = [
     sideEffect: /tool\.execute\(dispatchedCall(?:, \{ signal: linkedAbort\.signal \})?\)/g,
     scopeStart:
       /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
-    requiredBefore: [
-      "Bus.publish(ToolExecution.Started, {",
-      "toolCallId: call.id",
-      "toolName: originalName",
-    ],
+    requiredBefore: ["publishToolStarted({", "toolCallId: call.id", "toolName: originalName"],
     message: "tool.execute must be preceded by a before-side-effect audit publish",
+  },
+  {
+    ruleId: "tool-ledger-before-execute",
+    filePath: "packages/openomni/src/execution-runtime/tool/executor-events.ts",
+    sideEffect: /export function publishToolStarted\(args: \{/g,
+    requiredBefore: [],
+    requiredInScope: [
+      "Bus.publish(ToolExecution.Started, {",
+      "toolCallId: args.toolCallId",
+      "toolName: args.toolName",
+    ],
+    message: "publishToolStarted must append the tool execution started ledger event",
   },
   {
     ruleId: "mcp-ledger-before-execute",
