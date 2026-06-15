@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { z } from "zod";
 import { Bus, BusEvent } from "../../src/bus/index.js";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
@@ -23,7 +23,9 @@ interface BusEventRow {
 }
 
 function db(): Database {
-  return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
+  const descriptor = Object.getOwnPropertyDescriptor(Storage.getAdapter(), "db");
+  if (descriptor?.value instanceof Database) return descriptor.value;
+  throw new Error("Expected SQLite-backed storage adapter");
 }
 
 function rows(): BusEventRow[] {
@@ -109,6 +111,36 @@ describe("BusPersistence", () => {
       durationMs: 123,
       time,
       label: "ok",
+    });
+  });
+
+  test("persists schema-normalized payload defaults", async () => {
+    const session = createSession();
+    const time = Date.UTC(2026, 4, 10, 1, 2, 4);
+    const event = BusEvent.define(
+      "custom.normalized",
+      z.object({
+        sessionId: z.string().default(session.id),
+        traceId: z.string().default("trace-from-schema"),
+        time: z.number().default(time),
+        label: z.string().default("normalized"),
+      }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(event, {});
+
+    const persisted = await waitForRows(1);
+    expect(persisted[0]).toMatchObject({
+      session_id: session.id,
+      trace_id: "trace-from-schema",
+      time_created: time,
+    });
+    expect(JSON.parse(persisted[0].data)).toEqual({
+      sessionId: session.id,
+      traceId: "trace-from-schema",
+      time,
+      label: "normalized",
     });
   });
 
@@ -299,6 +331,7 @@ describe("BusPersistence", () => {
         error: "provider failed with prompt text and token secret",
         err: "raw stack includes api key",
         input: { command: "printenv DISCORD_BOT_TOKEN" },
+        msg: "provider failed with token sk-secret",
         prompt: "summarize private user request",
         systemPrompt: "internal instruction text",
         messages: [{ role: "user", content: "secret prompt" }],
@@ -314,6 +347,7 @@ describe("BusPersistence", () => {
         error: unknown;
         err: unknown;
         input: unknown;
+        msg: unknown;
         prompt: unknown;
         systemPrompt: unknown;
         messages: unknown;
@@ -325,9 +359,60 @@ describe("BusPersistence", () => {
     expect(data.context.error).toEqual({ type: "string", length: 49 });
     expect(data.context.err).toEqual({ type: "string", length: 26 });
     expect(data.context.input).toEqual({ type: "object", keys: ["command"] });
+    expect(data.context.msg).toEqual({ type: "string", length: 36 });
     expect(data.context.prompt).toEqual({ type: "string", length: 30 });
     expect(data.context.systemPrompt).toEqual({ type: "string", length: 25 });
     expect(data.context.messages).toEqual({ type: "array", length: 1 });
     expect(data.context.generatedAt).toBe("2026-05-16T00:00:00.000Z");
+  });
+
+  test("redacts operational context msg without overriding safe log message", async () => {
+    const session = createSession();
+    const event = BusEvent.define(
+      "operational.error.model_resolution",
+      z.object({
+        sessionId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+        component: z.string(),
+        msg: z.string(),
+        context: z.record(z.string(), z.unknown()),
+      }),
+    );
+    let stdout = "";
+    const writeSpy = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdout += typeof chunk === "string" ? chunk : chunk.toString();
+      return true;
+    });
+
+    try {
+      BusPersistence.start();
+      Bus.publish(event, {
+        sessionId: session.id,
+        traceId: "trace-operational",
+        time: Date.UTC(2026, 4, 10, 1, 2, 5),
+        component: "model-resolution",
+        msg: "safe operational summary",
+        context: {
+          msg: "provider failed with token sk-secret",
+          apiKey: "sk-secret",
+        },
+      });
+      await BusPersistence.flush();
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    const data = JSON.parse((await waitForRows(1))[0].data) as {
+      context: { msg: unknown; apiKey: string };
+    };
+    expect(data.context.msg).toEqual({ type: "string", length: 36 });
+    expect(data.context.apiKey).toBe("[redacted]");
+    expect(JSON.stringify(data)).not.toContain("sk-secret");
+
+    const logLine = JSON.parse(stdout.trim()) as { msg: string; apiKey: string };
+    expect(logLine.msg).toBe("safe operational summary");
+    expect(logLine.apiKey).toBe("[redacted]");
+    expect(stdout).not.toContain("sk-secret");
   });
 });
