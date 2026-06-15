@@ -19,6 +19,7 @@ interface SideEffectRule {
   readonly requiredBefore: readonly string[];
   readonly requiredInScope?: readonly string[];
   readonly scopeStart?: RegExp;
+  readonly scopeEnd?: RegExp;
   readonly message: string;
 }
 
@@ -33,7 +34,7 @@ const hotFiles = [
   "packages/llm/src/session/processor.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/openomni/src/ingress/session-bridge.ts",
-  "packages/session/src/session/index.ts",
+  "packages/session/src/session/messages.ts",
 ];
 
 const rules: readonly SideEffectRule[] = [
@@ -104,27 +105,30 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/index.ts",
+    filePath: "packages/session/src/session/messages.ts",
     sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
     scopeStart: /export function addMessage\(/g,
+    scopeEnd: /\nexport function /g,
     requiredBefore: [],
     requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.message.set",
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/index.ts",
+    filePath: "packages/session/src/session/messages.ts",
     sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
     scopeStart: /export function addMessage\(/g,
+    scopeEnd: /\nexport function /g,
     requiredBefore: [],
     requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.session.set",
   },
   {
     ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/index.ts",
+    filePath: "packages/session/src/session/messages.ts",
     sideEffect: /adapter\.part\.set\(messageID, part\)/g,
     scopeStart: /export function addPart\(/g,
+    scopeEnd: /\nexport function /g,
     requiredBefore: [],
     requiredInScope: ["Bus.publish(Event.Updated, { info:"],
     message: "Session.addPart must publish Event.Updated after adapter.part.set",
@@ -187,7 +191,7 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
     const prefix = source.slice(searchStart, sideEffect.index);
     const missingBefore = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
 
-    const scopeEnd = source.indexOf("\n  }", sideEffect.index);
+    const scopeEnd = firstMatchStartAfter(source, rule.scopeEnd, sideEffect.index);
     const scope = source.slice(searchStart, scopeEnd > 0 ? scopeEnd : source.length);
     const missingInScope = (rule.requiredInScope || []).filter(
       (snippet) => !scope.includes(snippet),
@@ -208,6 +212,15 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
       },
     ];
   });
+}
+
+function firstMatchStartAfter(source: string, pattern: RegExp | undefined, offset: number): number {
+  if (!pattern) return source.indexOf("\n  }", offset);
+  return (
+    matches(source, pattern)
+      .map((match) => match.index)
+      .find((index) => index > offset) ?? -1
+  );
 }
 
 function matches(source: string, pattern: RegExp): SourceMatch[] {
