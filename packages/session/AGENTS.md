@@ -38,7 +38,7 @@ src/
 
 ### Circular Dependency Avoidance
 
-`session/info.ts` is a leaf with zero internal imports. `storage/storage.ts` imports `../session/info` (NOT `../session`). `session/index.ts` imports `./info` and `../storage/storage`. This breaks the session ↔ storage cycle.
+`session/info.ts` is a leaf with zero internal imports. `storage/storage.ts` imports `../session/info` (NOT `../session`). Session implementation files import `../storage/storage`; `session/index.ts` is a namespace barrel and does not import storage directly. This breaks the session ↔ storage cycle.
 
 ## KEY PATTERNS
 
