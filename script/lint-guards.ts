@@ -27,7 +27,7 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/permission.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/ingress/middleware/ingress-authority-evaluation.ts",
-  "packages/openomni/src/subagent/middleware/subagent-spawn-policy.ts",
+  "packages/openomni/src/subagent/middleware/subagent-spawn-decisions.ts",
   "packages/openomni/src/subagent/middleware/background-limit-decisions.ts",
   "packages/agent/src/core/policy/builtin/messenger-allow-pattern.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
