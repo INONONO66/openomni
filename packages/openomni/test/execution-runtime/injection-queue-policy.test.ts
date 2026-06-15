@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { PolicyEngine } from "@openomni/agent";
+import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
 import { Session, Storage } from "@openomni/session";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware.js";
+
+type DispatchContext = Parameters<PolicyEngineInstance["dispatch"]>[1];
+
+type LegacyFallbackContext = DispatchContext & {
+  readonly runId: string;
+  readonly sessionId: string;
+  readonly agentName: string;
+};
 
 function baseContext(runId: string, sessionId = "session-1") {
   return {
@@ -91,6 +99,41 @@ describe("createInjectionQueueDrainPolicy", () => {
     expect(Session.getParts("msg-2")).toEqual([
       expect.objectContaining({ type: "text", text: "durable", messageID: "msg-2" }),
     ]);
+  });
+
+  it("uses legacy top-level run and session identifiers when trace context is absent", async () => {
+    const session = Session.create({
+      title: "Legacy Context Policy Test",
+      model: { providerID: "test", modelID: "test-model" },
+    });
+    const queue = InjectionQueue.create();
+    queue.enqueue("legacy-run", {
+      messageId: "msg-legacy",
+      output: "legacy durable",
+      injectToHistory: true,
+      timestamp: 3,
+    });
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(createInjectionQueueDrainPolicy(queue));
+    const context: LegacyFallbackContext = {
+      ...baseContext("unused-run", session.id),
+      traceContext: undefined,
+      runId: "legacy-run",
+      sessionId: session.id,
+      agentName: "legacy-agent",
+    };
+
+    const decision = await engine.dispatch("turn.finish", context);
+
+    expect(decision.effects).toEqual([
+      { type: "prompt.inject_message", message: "legacy durable", role: "assistant" },
+    ]);
+    expect(queue.hasPending("legacy-run")).toBe(false);
+    expect(Session.getMessages(session.id)[0]).toMatchObject({
+      id: "msg-legacy",
+      sessionID: session.id,
+      agent: "legacy-agent",
+    });
   });
 });
 

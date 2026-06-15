@@ -6,6 +6,12 @@ import type { InjectionQueue } from "../injection-queue.js";
 
 const POLICY_ID = "builtin:injection-queue-drain";
 
+type InjectionQueuePolicyContext = PolicyContext & {
+  readonly runId?: string;
+  readonly sessionId?: string;
+  readonly agentName?: string;
+};
+
 export function createInjectionQueueDrainPolicy(
   queue: InjectionQueue.Instance,
 ): PolicyRegistration {
@@ -49,10 +55,10 @@ export function createInjectionQueueDrainPolicy(
 }
 
 function contextString(
-  ctx: PolicyContext,
+  ctx: InjectionQueuePolicyContext,
   key: "agentName" | "runId" | "sessionId",
 ): string | undefined {
-  const value = (ctx as unknown as Record<string, unknown>)[key];
+  const value = ctx[key];
   return typeof value === "string" ? value : undefined;
 }
 
