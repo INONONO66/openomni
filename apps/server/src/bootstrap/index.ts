@@ -2,32 +2,21 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Adapter } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import {
-  initialize,
-  Bus,
-  BusPersistence,
-  PendingAskStore,
-  SurfaceKey,
-  TraceContext,
-  WorkerRun,
-} from "@openomni/session";
+import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
   AgentToolProvider,
   CronAdapter,
   CronJobRunner,
-  DispatchRuntime,
   IngressEngine,
-  IngressEventProjector,
-  IngressHandlers,
   ResidentRuntime,
   SystemToolProvider,
   createDefaultDispatchRuntime,
-  type DispatchHandler,
+  type DispatchRuntime,
 } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { McpConfigLoader } from "../context/index";
 import { createMessageHandler } from "../handler/conversation";
-import { buildAgentDef, buildResidentAgentDef } from "../ingress/bridge";
+import { buildAgentDef } from "../ingress/bridge";
 import { buildToolDispatcher, createExecutionCoordinator } from "../execution/coordinator";
 import { createRouter } from "../server/routes";
 import { McpToolProvider } from "../tool/mcp";
@@ -37,6 +26,7 @@ import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
 import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
+import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
 import { installShutdownHandlers } from "./shutdown";
 import { registerAgent } from "../agents";
 import { createResidentProfile } from "../profile/resident";
@@ -115,164 +105,15 @@ export async function main(): Promise<void> {
     workerScript,
     bootstrap,
     toolDispatcher,
-    askResident: async ({ workerId, sessionId, runId, payload, workspaceRoot, signal }) => {
-      const requestId = crypto.randomUUID();
-      const resolvedWorkspace = workspaceRoot ?? config.workspace?.root ?? process.cwd();
-      if (signal?.aborted) {
-        return { requestId, accepted: false, error: "worker.inbound_wait aborted" };
-      }
-      if (!model) {
-        return {
-          requestId,
-          accepted: false,
-          error: "worker.inbound_wait requires a configured model",
-        };
-      }
-      const run = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-      const mainSessionId = run?.parentSessionId;
-      if (!mainSessionId) {
-        return {
-          requestId,
-          accepted: false,
-          error: `worker.inbound_wait requires a worker run with parent Resident session: ${runId ?? "unknown"}`,
-        };
-      }
-
-      const current = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-      if (runId && current && current.status === "starting") {
-        await WorkerRun.updateStatus(sessionId, runId, "running");
-      }
-      const running = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-      if (runId && running?.status === "running") {
-        await WorkerRun.updateStatus(sessionId, runId, "waiting_input");
-      }
-
-      try {
-        const residentPayload = `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`;
-        const residentHandler: DispatchHandler = async (command, context) => {
-          const surfaceKeys = SurfaceKey.listBySession(mainSessionId);
-          const surfaceKey = surfaceKeys.length === 1 ? surfaceKeys[0] : undefined;
-          const surface = surfaceKey ? SurfaceKey.parse(surfaceKey) : undefined;
-          const tokenHash =
-            typeof command.correlation === "string" ? command.correlation : undefined;
-          PendingAskStore.create({
-            id: command.dispatchId,
-            originSessionId: sessionId,
-            ...(runId ? { originRunId: runId } : {}),
-            originActorKind: "worker",
-            targetKind: "resident",
-            ...(surface ? { endpointId: surface.namespace || surface.surface } : {}),
-            ...(surface?.id ? { channelId: surface.id } : {}),
-            correlation: {
-              ...(tokenHash ? { tokenHash } : {}),
-              ...(surfaceKey ? { externalConversationId: surfaceKey } : {}),
-              ...(surface?.threadId ? { threadId: surface.threadId } : {}),
-            },
-          });
-          try {
-            const trace = command.traceId
-              ? TraceContext.child({ traceId: command.traceId }, { sessionId: mainSessionId })
-              : TraceContext.create({ sessionId: mainSessionId });
-            const residentEvent = {
-              id: command.dispatchId,
-              surface: "dispatch",
-              workspace: resolvedWorkspace,
-              mode: "internal" as const,
-              agentName: "resident",
-              payload:
-                typeof command.payload === "string"
-                  ? command.payload
-                  : JSON.stringify(command.payload),
-              runtime: {
-                durableSessionId: mainSessionId,
-                lifecycle: "active" as const,
-                ...(context?.signal ? { signal: context.signal } : {}),
-              },
-              target: { kind: "resident" as const, sessionId: mainSessionId },
-              meta: {
-                actor: {
-                  role: "worker",
-                  trusted: true,
-                  workerId,
-                  sessionId,
-                  runId,
-                },
-                target: { kind: "resident" as const, sessionId: mainSessionId },
-                agentName: "resident",
-              },
-              agent: buildResidentAgentDef("resident", {
-                systemProvider,
-                agentProvider: requireAgentProvider(),
-                mcpProvider,
-                customProvider,
-                defaultModel: { provider: model.providerID, id: model.id },
-                providerOptions: config.model?.providerOptions,
-                workspaceRoot: resolvedWorkspace,
-              }),
-            };
-            IngressEventProjector.project(
-              residentEvent,
-              mainSessionId,
-              { providerID: model.providerID, modelID: model.id },
-              trace,
-            );
-            const result = await IngressHandlers.handleResident({
-              sessionId: mainSessionId,
-              event: residentEvent,
-              residentRuntime,
-              traceContext: trace,
-            });
-            PendingAskStore.answer(command.dispatchId);
-            return { output: result.result.output };
-          } catch (error) {
-            PendingAskStore.expire(command.dispatchId);
-            throw error;
-          }
-        };
-
-        const dispatchRuntime = new DispatchRuntime();
-        dispatchRuntime.register("resident.ask", residentHandler);
-        const dispatchResult = await dispatchRuntime.submit(
-          {
-            action: "resident.ask",
-            target: { kind: "resident", sessionId: mainSessionId },
-            payload: residentPayload,
-            wait: true,
-            correlation: requestId,
-          },
-          {
-            sessionId,
-            ...(runId ? { runId } : {}),
-            actorKind: "worker",
-            actorId: `${sessionId}:${runId ?? workerId}`,
-            agentName: "worker",
-            trustTier: "assigned_worker",
-            workspaceRoot: resolvedWorkspace,
-            ...(signal ? { signal } : {}),
-          },
-        );
-        if (dispatchResult.status !== "completed") {
-          return {
-            requestId,
-            accepted: false,
-            error:
-              dispatchResult.error ??
-              dispatchResult.reason ??
-              `worker.inbound_wait dispatch ${dispatchResult.status}`,
-          };
-        }
-        return {
-          requestId,
-          accepted: true,
-          output: typeof dispatchResult.output === "string" ? dispatchResult.output : "",
-        };
-      } finally {
-        const after = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-        if (runId && after?.status === "waiting_input") {
-          await WorkerRun.updateStatus(sessionId, runId, "running");
-        }
-      }
-    },
+    askResident: createResidentInboundWaitHandler({
+      serverConfig: config,
+      model,
+      residentRuntime,
+      systemProvider,
+      requireAgentProvider,
+      mcpProvider,
+      customProvider,
+    }),
     maxWorkers: 10,
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
