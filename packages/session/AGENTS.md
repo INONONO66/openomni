@@ -32,7 +32,15 @@ src/
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
-├── work-item/            # WorkItemStore — universal work state engine (CRUD + lifecycle + Bus events + dependency tracking)
+├── work-item/            # WorkItemStore — universal work state engine
+│   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
+│   ├── create.ts         # Work item creation, parent linkage, Created event
+│   ├── crud.ts           # get/list/remove/update plus relation cleanup
+│   ├── lifecycle.ts      # start/complete/fail/cancel, blockers, evidence, retry, outcome
+│   ├── mutation.ts       # mutation persistence, transition validation, Updated/StatusChanged events
+│   ├── dependency.ts     # dependency readiness + cycle detection
+│   ├── builder.ts        # WorkItem.Info construction
+│   └── types.ts          # Internal WorkItemStore implementation types
 └── worker-run/           # WorkerRun — event-sourced subagent execution records
 ```
 
