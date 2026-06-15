@@ -229,6 +229,29 @@ describe("WorkItem.Info", () => {
     ).toThrow();
   });
 
+  test("rejects malformed read-back request targets without throwing from safeParse", () => {
+    for (const target of [
+      "not a url",
+      "ftp://example.com/post",
+      "file:///tmp/post",
+      "javascript:alert(1)",
+    ]) {
+      const result = WorkItem.ReadBackRequest.safeParse({
+        kind: "url_fetch",
+        target,
+      });
+
+      expect(result.success).toBe(false);
+    }
+
+    expect(
+      WorkItem.ReadBackRequest.safeParse({
+        kind: "url_fetch",
+        target: "https://example.com/post",
+      }).success,
+    ).toBe(true);
+  });
+
   test("rejects invalid completion report constraints", () => {
     expect(() =>
       WorkItem.CompletionReport.parse({

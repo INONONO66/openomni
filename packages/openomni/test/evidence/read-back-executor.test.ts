@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, test } from "bun:test";
+import { ZodError } from "zod";
 import { ReadBackExecutor } from "../../src/index";
 import {
   cleanupReadBackFixtures,
@@ -207,6 +208,15 @@ describe("ReadBackExecutor", () => {
         target: "ftp://example.com/document",
       }),
     );
+  });
+
+  test("rejects malformed read-back targets with validation errors", () => {
+    return expect(
+      ReadBackExecutor.execute({
+        kind: "url_fetch",
+        target: "not a url",
+      }),
+    ).rejects.toBeInstanceOf(ZodError);
   });
 
   test("rejects private network read-back targets by default", async () => {

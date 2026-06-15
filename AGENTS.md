@@ -56,7 +56,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Bus persistence observer | `packages/session/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
 | Bus query API | `packages/session/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
 | Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
-| WorkItem schemas + events | `packages/protocol/src/work-item/index.ts` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*` |
+| WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade |
 | WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/set/list/remove) |
 | WorkItemStore engine | `packages/session/src/work-item/index.ts` | CRUD + lifecycle (start/complete/fail/cancel/retry) + blockers + evidence + dependency readiness + cycle detection |
 | Worker run records (subagent) | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
