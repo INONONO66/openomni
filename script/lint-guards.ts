@@ -26,7 +26,7 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 // every public caller still routes through Policy.evaluate.
 const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/permission.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
-  "packages/openomni/src/ingress/middleware/ingress-authority.ts",
+  "packages/openomni/src/ingress/middleware/ingress-authority-evaluation.ts",
   "packages/openomni/src/subagent/middleware/subagent-spawn-policy.ts",
   "packages/openomni/src/subagent/middleware/background-limits.ts",
   "packages/agent/src/core/policy/builtin/messenger-allow-pattern.ts",

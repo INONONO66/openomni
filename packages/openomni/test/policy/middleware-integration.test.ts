@@ -420,17 +420,20 @@ describe("IngressAuthorityMiddleware integration", () => {
   });
 
   test("registrations produce all six middleware steps", () => {
-    const state = { input: makeInboundEvent(), coordinator: stubCoordinator };
-    const regs = IngressAuthorityMiddleware.registrations(state as never);
+    const state = {
+      input: makeInboundEvent(),
+      coordinator: stubCoordinator,
+    } satisfies Parameters<typeof IngressAuthorityMiddleware.registrations>[0];
+    const regs = IngressAuthorityMiddleware.registrations(state);
 
     expect(regs).toHaveLength(6);
     const names = regs.map((r) => r.name);
-    expect(names).toContain("ingress:coordinator-presence");
-    expect(names).toContain("ingress:schema-validation");
-    expect(names).toContain("ingress:blacklist");
-    expect(names).toContain("ingress:channel-grant");
-    expect(names).toContain("ingress:authority");
-    expect(names).toContain("ingress:mode-dispatch");
+    expect(names).toContain(IngressAuthorityMiddleware.CoordinatorPresence.name);
+    expect(names).toContain(IngressAuthorityMiddleware.SchemaValidation.name);
+    expect(names).toContain(IngressAuthorityMiddleware.BlacklistCheck.name);
+    expect(names).toContain(IngressAuthorityMiddleware.ChannelGrantCheck.name);
+    expect(names).toContain(IngressAuthorityMiddleware.AuthorityCheck.name);
+    expect(names).toContain(IngressAuthorityMiddleware.ModeDispatch.name);
   });
 });
 
