@@ -1,6 +1,5 @@
 import { McpClient } from "@openomni/agent";
 import type { McpServerConfig, Tool } from "@openomni/protocol";
-import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type {
@@ -9,18 +8,15 @@ import type {
   ToolExecutionContext,
   ToolProvider,
 } from "@openomni/openomni";
-import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
 import {
-  MCP_TOOL_ACTION,
-  buildActor,
   publishLifecycleApproved,
   publishLifecycleBlocked,
   publishLifecycleRequested,
-  readSessionId,
   resolveLifecycleAudit,
   summarizeServerConfig,
 } from "./provider-audit";
-import { createResultSummary, mcpToolMetadata } from "./provider-metadata";
+import { executeMcpTool } from "./provider-execution";
+import { refreshMcpTools } from "./provider-tool-listing";
 import type {
   McpClientLike,
   McpLifecycleAuditContext,
@@ -28,12 +24,6 @@ import type {
 } from "./provider-types";
 
 export type { McpLifecycleAuditContext, McpToolProviderOptions } from "./provider-types";
-
-function createAbortError(): Error {
-  const error = new Error("MCP tool execution aborted");
-  error.name = "AbortError";
-  return error;
-}
 
 export class McpToolProvider implements ToolProvider {
   readonly name = "mcp";
@@ -169,123 +159,17 @@ export class McpToolProvider implements ToolProvider {
   }
 
   async refreshTools(): Promise<void> {
-    const tools: NativeTool[] = [];
-    for (const [serverName, client] of this.clients) {
-      try {
-        const specs = await client.listTools();
-        for (const spec of specs) {
-          const metadata = mcpToolMetadata(serverName, spec);
-          tools.push({
-            spec: { ...spec, labels: metadata.labels },
-            labels: metadata.labels,
-            descriptor: metadata.descriptor,
-            riskTier: 1,
-            isReadOnly: false,
-            isDestructive: false,
-            isConcurrencySafe: false,
-            source: "mcp",
-            execute: (call, context) => {
-              if (context?.signal?.aborted) return Promise.reject(createAbortError());
-              return client.callTool(call.tool, call.input, call.id, context);
-            },
-          });
-        }
-      } catch (err) {
-        Bus.publish(Operational.Warn, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          component: "server",
-          msg: "failed to list tools from mcp server",
-          context: {
-            serverName,
-            err: err instanceof Error ? err.message : String(err),
-          },
-        });
-      }
-    }
-    this.cachedTools = tools;
+    this.cachedTools = await refreshMcpTools(this.clients);
   }
 
   async execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
-    const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
+    return executeMcpTool({
       call,
+      context,
       tools: this.listTools(),
       isServerConnected: (serverName) =>
         this.clients.has(serverName) && this.connected.has(serverName),
     });
-    const tool = guard.tool;
-    if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
-      const result = {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
-        isError: true,
-      };
-      const sessionId = readSessionId(call);
-      if (sessionId) {
-        Bus.publish(PolicyEvent.ActionBlocked, {
-          traceId: crypto.randomUUID(),
-          sessionId,
-          time: Date.now(),
-          actionId: crypto.randomUUID(),
-          actor: buildActor(sessionId),
-          action: MCP_TOOL_ACTION,
-          resource: tool?.spec.name ?? call.tool,
-          verdict: "deny" as const,
-          reason: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
-        });
-      }
-      return result;
-    }
-
-    const sessionId = readSessionId(call) ?? "";
-    const actionId = crypto.randomUUID();
-    const actor = buildActor(sessionId);
-
-    Bus.publish(PolicyEvent.ActionRequested, {
-      traceId: crypto.randomUUID(),
-      sessionId,
-      time: Date.now(),
-      actionId,
-      actor,
-      action: MCP_TOOL_ACTION,
-      resource: tool.spec.name,
-      context: { input: call.input },
-    });
-
-    const startTime = Date.now();
-    const result = await (context === undefined
-      ? tool.execute({ ...call, tool: tool.spec.name })
-      : tool.execute({ ...call, tool: tool.spec.name }, context));
-    const durationMs = Date.now() - startTime;
-
-    Bus.publish(ToolExecution.Completed, {
-      traceId: crypto.randomUUID(),
-      sessionId,
-      time: Date.now(),
-      actor,
-      toolCallId: call.id,
-      toolName: tool.spec.name,
-      durationMs,
-      isError: result.isError ?? false,
-    });
-
-    if (!result.isError) {
-      const resultSummary = createResultSummary(result.output);
-      const serverName = tool.spec.name.split(".")[0] ?? "unknown";
-
-      Bus.publish(Mcp.ToolCompleted, {
-        traceId: crypto.randomUUID(),
-        serverName,
-        toolName: tool.spec.name,
-        toolCallId: call.id,
-        durationMs,
-        resultSummary,
-        time: Date.now(),
-      });
-    }
-
-    return result;
   }
 
   get serverCount(): number {

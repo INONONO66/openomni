@@ -31,7 +31,7 @@ interface SourceMatch {
 const hotFiles = [
   "packages/openomni/src/execution-runtime/tool/executor.ts",
   "packages/openomni/src/execution-runtime/tool/executor-events.ts",
-  "apps/server/src/tool/mcp/provider.ts",
+  "apps/server/src/tool/mcp/provider-execution.ts",
   "packages/llm/src/session/processor.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/openomni/src/ingress/session-bridge.ts",
@@ -62,10 +62,10 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "mcp-ledger-before-execute",
-    filePath: "apps/server/src/tool/mcp/provider.ts",
+    filePath: "apps/server/src/tool/mcp/provider-execution.ts",
     sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, context)?\)/g,
     scopeStart:
-      /async execute\(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> \{/g,
+      /export async function executeMcpTool\(input: ExecuteMcpToolInput\): Promise<Tool\.Result> \{/g,
     requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
     message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
   },
