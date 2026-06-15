@@ -46,8 +46,16 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
   }
 
   interface BunSocket {
-    data: unknown;
+    data: SocketData;
     write(data: Buffer | Uint8Array | string): number;
+  }
+
+  function setConnectionId(socket: BunSocket, id: string): void {
+    socket.data = { id } satisfies SocketData;
+  }
+
+  function connectionId(socket: BunSocket): string {
+    return socket.data.id;
   }
 
   const connections = new Map<string, { socket: BunSocket; decoder: LineDecoder }>();
@@ -90,11 +98,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
     socket: {
       open(socket: BunSocket) {
         const id = `conn-${++connCounter}`;
-        (socket.data as unknown as SocketData) = { id };
+        setConnectionId(socket, id);
         connections.set(id, { socket, decoder: new LineDecoder() });
       },
       data(socket: BunSocket, raw: Buffer) {
-        const state = connections.get((socket.data as unknown as SocketData).id);
+        const state = connections.get(connectionId(socket));
         if (!state) return;
 
         let messages: unknown[];
@@ -146,13 +154,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
               socket.write(encode(Ipc.createNotification(method, params)));
             };
             try {
-              handler(
-                parsed.method,
-                parsed.params,
-                respond,
-                notify,
-                (socket.data as unknown as SocketData).id,
-              );
+              handler(parsed.method, parsed.params, respond, notify, connectionId(socket));
             } catch (err) {
               socket.write(
                 encode(
@@ -172,7 +174,7 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
                 parsed.params,
                 () => undefined,
                 () => undefined,
-                (socket.data as unknown as SocketData).id,
+                connectionId(socket),
               );
             } catch (error) {
               console.warn(
@@ -184,11 +186,11 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
         }
       },
       close(socket: BunSocket) {
-        const id = (socket.data as unknown as SocketData).id;
+        const id = connectionId(socket);
         removeConnection(id, "socket closed");
       },
       error(socket: BunSocket, _err: Error) {
-        const id = (socket.data as unknown as SocketData).id;
+        const id = connectionId(socket);
         void socket;
         removeConnection(id, "socket error");
       },
