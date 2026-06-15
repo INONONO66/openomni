@@ -10,7 +10,12 @@ src/
 ├── run.ts            # run() — top-level entry: messages+tools → Run.Outcome via Sink
 ├── error.ts          # Re-exports NamedError classes from protocol
 ├── session/
-│   ├── processor.ts  # Processor.create() — drives streaming LLM call + tool turns
+│   ├── processor.ts  # Processor.create() namespace barrel/orchestrator — retry loop + stream driving
+│   ├── processor-events.ts # Stream event dispatch for text/reasoning/tool/step events
+│   ├── processor-sink.ts # Sink projection to Bus telemetry + noop sink
+│   ├── processor-steps.ts # step-start / step-finish token and cost accounting
+│   ├── processor-tools.ts # tool-call execution, result projection, interruption cleanup
+│   ├── processor-types.ts # Internal Processor implementation contracts
 │   ├── index.ts      # Re-exports protocol Message/Tool plus session helpers
 │   ├── convert.ts    # toModelMessages() — Message.WithParts[] → AI SDK messages
 │   └── retry.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
