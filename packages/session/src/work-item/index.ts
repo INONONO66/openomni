@@ -322,20 +322,6 @@ export namespace WorkItemStore {
     });
   }
 
-  export async function setVerificationGate(
-    hash: string,
-    gate: WorkItem.VerificationGate,
-  ): Promise<WorkItem.Info | undefined> {
-    return mutate(hash, (existing, now) => ({
-      changedFields: ["verificationGate"],
-      updated: {
-        ...existing,
-        verificationGate: gate,
-        timestamps: { ...existing.timestamps, updated: now },
-      },
-    }));
-  }
-
   export const recordOutcome = recordWorkItemOutcome;
 
   export function areDependenciesMet(hash: string): DependencyReadiness {
