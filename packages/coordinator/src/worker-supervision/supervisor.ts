@@ -1,62 +1,37 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import { Operational, type Tool, type WorkerBootstrap } from "@openomni/protocol";
+import { Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
+import { cancelWorkerRun, deliverWorkerMessage, dispatchWorkerRun } from "./supervisor-client.js";
+import {
+  buildWorkerEnv,
+  isBootstrapAccepted,
+  isShutdownAcknowledged,
+  resolveRestartDelay,
+  waitForSupervisorReady,
+  waitForWorkerExit,
+  workerStopGraceMs,
+} from "./supervisor-process.js";
+import { handleWorkerRequest } from "./supervisor-requests.js";
+import type {
+  ActiveRequest,
+  InboundWaitHandler,
+  SnapshotHandler,
+  ToolCallHandler,
+} from "./supervisor-types.js";
 
-const MAX_RESTARTS_PER_WINDOW = 10;
 const RESTART_WINDOW_MS = 60_000;
-const MAX_BACKOFF_MS = 30_000;
 const WORKER_CONNECT_TIMEOUT_MS = 10_000;
-const MAX_DISPATCH_TIMEOUT_MS = 600_000;
-const DEFAULT_WORKER_STOP_GRACE_MS = 5_000;
 
-export type ToolCallParams = {
-  runId: string;
-  sessionId: string;
-  callId: string;
-  tool: string;
-  input: Record<string, unknown>;
-  workspaceRoot?: string;
-};
-
-export type ToolCallCancelParams = {
-  runId: string;
-  sessionId: string;
-  callId: string;
-};
-
-export type ToolCallContext = {
-  readonly signal?: AbortSignal;
-};
-
-export type ToolCallResult = Tool.Result;
-
-export type InboundWaitParams = {
-  workerId: string;
-  sessionId: string;
-  callId?: string;
-  runId?: string;
-  workspaceRoot?: string;
-  payload: string;
-  signal?: AbortSignal;
-};
-
-export type InboundWaitResult = {
-  requestId: string;
-  accepted: boolean;
-  output?: string;
-  error?: string;
-};
-
-type ActiveRequest = {
-  readonly runId?: string;
-  readonly sessionId: string;
-  readonly workspaceRoot?: string;
-  readonly controller: AbortController;
-  readonly respond: (result: unknown) => void;
-  completed: boolean;
-};
+export type {
+  InboundWaitParams,
+  InboundWaitResult,
+  ToolCallCancelParams,
+  ToolCallContext,
+  ToolCallParams,
+  ToolCallResult,
+} from "./supervisor-types.js";
 
 export class WorkerSupervisor {
   private proc: Subprocess | null = null;
@@ -77,15 +52,9 @@ export class WorkerSupervisor {
     private readonly script: string,
     socketDir = "/tmp",
     private readonly bootstrap?: WorkerBootstrap.Bootstrap,
-    private readonly toolCallHandler?: (
-      params: ToolCallParams,
-      context?: ToolCallContext,
-    ) => Promise<ToolCallResult>,
-    private readonly snapshotHandler?: (
-      workerId: number,
-      snapshot: WorkerBootstrap.WorkerSnapshot,
-    ) => void,
-    private readonly inboundWaitHandler?: (params: InboundWaitParams) => Promise<InboundWaitResult>,
+    private readonly toolCallHandler?: ToolCallHandler,
+    private readonly snapshotHandler?: SnapshotHandler,
+    private readonly inboundWaitHandler?: InboundWaitHandler,
   ) {
     this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
     this.doStart();
@@ -118,9 +87,6 @@ export class WorkerSupervisor {
     const deadline = Date.now() + WORKER_CONNECT_TIMEOUT_MS;
     let lastError: Error | null = null;
     const bootstrap = this.bootstrap;
-    const toolCallHandler = this.toolCallHandler;
-    const snapshotHandler = this.snapshotHandler;
-    const workerId = this.id;
     const authToken = this.authToken;
 
     while (Date.now() < deadline && !this.stopping && this.running) {
@@ -132,173 +98,34 @@ export class WorkerSupervisor {
         const c = await connectIpcClient(this.socketPath, {
           connectTimeoutMs: 500,
           onRequest: (method, params, respond) => {
-            if (method === "worker.tool_call_cancel") {
-              const p = parseToolCallCancelParams(params);
-              if (!p) {
-                respond({ cancelled: false, error: "invalid worker.tool_call_cancel params" });
-                return;
-              }
-              const active = this.activeToolCalls.get(p.callId);
-              if (!active || active.runId !== p.runId || active.sessionId !== p.sessionId) {
-                respond({ cancelled: false });
-                return;
-              }
-              active.controller.abort();
-              this.respondAndForget(this.activeToolCalls, p.callId, active, {
-                id: p.callId,
-                toolCallId: p.callId,
-                output: "Tool call aborted",
-                isError: true,
-                settlement: "unknown",
-              });
-              respond({ cancelled: true, settlement: "unknown" });
-              return;
-            }
-
-            if (method === "worker.tool_call" && toolCallHandler) {
-              const p = params as ToolCallParams;
-              const controller = new AbortController();
-              const active: ActiveRequest = {
-                runId: p.runId,
-                sessionId: p.sessionId,
-                ...(typeof p.workspaceRoot === "string" ? { workspaceRoot: p.workspaceRoot } : {}),
-                controller,
-                respond,
-                completed: false,
-              };
-              this.activeToolCalls.set(p.callId, active);
-              toolCallHandler(p, { signal: controller.signal })
-                .then((result) =>
-                  this.respondAndForget(this.activeToolCalls, p.callId, active, result),
-                )
-                .catch((err) =>
-                  this.respondAndForget(this.activeToolCalls, p.callId, active, {
-                    id: p.callId,
-                    toolCallId: p.callId,
-                    output: err instanceof Error ? err.message : String(err),
-                    isError: true,
-                  }),
-                )
-                .finally(() => {
-                  this.activeToolCalls.delete(p.callId);
-                  void c
-                    .call(
-                      "worker.tool_call_settled",
-                      {
-                        authToken,
-                        callId: p.callId,
-                        ...(active.workspaceRoot ? { workspaceRoot: active.workspaceRoot } : {}),
-                      },
-                      5_000,
-                    )
-                    .catch((err) => {
-                      console.warn("worker.tool_call_settled notification failed", {
-                        callId: p.callId,
-                        workspaceRoot: active.workspaceRoot,
-                        error: err instanceof Error ? err.message : String(err),
-                      });
+            handleWorkerRequest(method, params, respond, {
+              authToken,
+              workerId: this.id,
+              activeToolCalls: this.activeToolCalls,
+              activeInboundWaitCalls: this.activeInboundWaitCalls,
+              toolCallHandler: this.toolCallHandler,
+              snapshotHandler: this.snapshotHandler,
+              inboundWaitHandler: this.inboundWaitHandler,
+              notifyToolCallSettled: async (callId, workspaceRoot) => {
+                await c
+                  .call(
+                    "worker.tool_call_settled",
+                    {
+                      authToken,
+                      callId,
+                      ...(workspaceRoot ? { workspaceRoot } : {}),
+                    },
+                    5_000,
+                  )
+                  .catch((err) => {
+                    console.warn("worker.tool_call_settled notification failed", {
+                      callId,
+                      workspaceRoot,
+                      error: err instanceof Error ? err.message : String(err),
                     });
-                });
-              return;
-            }
-
-            if (method === "worker.inbound_wait_cancel") {
-              const p = parseInboundWaitCancelParams(params);
-              if (!p) {
-                respond({ cancelled: false, error: "invalid worker.inbound_wait_cancel params" });
-                return;
-              }
-              const callId = p.callId;
-              const active = this.activeInboundWaitCalls.get(callId);
-              if (
-                !active ||
-                active.sessionId !== p.sessionId ||
-                (active.runId ?? "") !== (p.runId ?? "")
-              ) {
-                respond({ cancelled: false });
-                return;
-              }
-              active.controller.abort();
-              this.respondAndForget(this.activeInboundWaitCalls, callId, active, {
-                requestId: callId,
-                accepted: false,
-                error: "worker.inbound_wait aborted",
-              });
-              respond({ cancelled: true, settlement: "unknown" });
-              return;
-            }
-
-            if (method === "worker.heartbeat") {
-              if (snapshotHandler && params?.snapshot) {
-                snapshotHandler(workerId, params.snapshot as WorkerBootstrap.WorkerSnapshot);
-              }
-              respond(null);
-              return;
-            }
-
-            if (method === "worker.inbound_wait") {
-              const requestId = crypto.randomUUID();
-              if (params?.authToken !== authToken) {
-                respond({ requestId, accepted: false, error: "unauthorized worker request" });
-                return;
-              }
-              const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "";
-              const callId =
-                typeof params?.callId === "string" && params.callId.length > 0
-                  ? params.callId
-                  : requestId;
-              const payload = typeof params?.payload === "string" ? params.payload : "";
-              const workspaceRoot =
-                typeof params?.workspaceRoot === "string" ? params.workspaceRoot : undefined;
-              if (!this.inboundWaitHandler || !sessionId || !payload) {
-                respond({
-                  requestId: callId,
-                  accepted: false,
-                  error: this.inboundWaitHandler
-                    ? "worker.inbound_wait requires sessionId and payload"
-                    : "worker.inbound_wait is not configured",
-                });
-                return;
-              }
-
-              const controller = new AbortController();
-              const runId = typeof params?.runId === "string" ? params.runId : undefined;
-              const active: ActiveRequest = {
-                ...(runId !== undefined && { runId }),
-                sessionId,
-                ...(workspaceRoot !== undefined && { workspaceRoot }),
-                controller,
-                respond,
-                completed: false,
-              };
-              this.activeInboundWaitCalls.set(callId, active);
-
-              this.inboundWaitHandler({
-                workerId: String(workerId),
-                sessionId,
-                callId,
-                ...(runId !== undefined && { runId }),
-                ...(workspaceRoot !== undefined && { workspaceRoot }),
-                payload,
-                signal: controller.signal,
-              })
-                .then((result: InboundWaitResult) =>
-                  this.respondAndForget(this.activeInboundWaitCalls, callId, active, result),
-                )
-                .catch((err: unknown) =>
-                  this.respondAndForget(this.activeInboundWaitCalls, callId, active, {
-                    requestId: callId,
-                    accepted: false,
-                    error: err instanceof Error ? err.message : String(err),
-                  }),
-                )
-                .finally(() => {
-                  this.activeInboundWaitCalls.delete(callId);
-                });
-              return;
-            }
-
-            respond(null);
+                  });
+              },
+            });
           },
           onNotification: (method, params) => {
             if (method === "worker.bootstrap_ready" && params?.authToken === authToken) {
@@ -347,26 +174,9 @@ export class WorkerSupervisor {
     }
     this.restartCount++;
 
-    const delay =
-      this.restartCount > MAX_RESTARTS_PER_WINDOW
-        ? MAX_BACKOFF_MS
-        : Math.min(1000 * 2 ** (this.restartCount - 1), MAX_BACKOFF_MS);
-
     setTimeout(() => {
       if (!this.stopping) this.doStart();
-    }, delay);
-  }
-
-  private respondAndForget(
-    activeRequests: Map<string, ActiveRequest>,
-    callId: string,
-    active: ActiveRequest,
-    result: unknown,
-  ): void {
-    if (active.completed) return;
-    active.completed = true;
-    active.respond(result);
-    activeRequests.delete(callId);
+    }, resolveRestartDelay(this.restartCount));
   }
 
   isActive(): boolean {
@@ -382,49 +192,19 @@ export class WorkerSupervisor {
   }
 
   async waitReady(timeoutMs = 10_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      if (this.isReady()) return;
-      await new Promise<void>((r) => setTimeout(r, 200));
-    }
-    throw new Error(`worker ${this.id} not ready after ${timeoutMs}ms`);
+    return waitForSupervisorReady(this.id, () => this.isReady(), timeoutMs);
   }
 
   async dispatch(runId: string, params: Record<string, unknown>): Promise<unknown> {
-    const c = this.client;
-    if (!c?.connected) {
-      throw new Error(`worker ${this.id} not available`);
-    }
-    const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
-    const timeoutMs = Math.min(
-      Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000,
-      MAX_DISPATCH_TIMEOUT_MS,
-    );
-    return c.call(
-      "coordinator.spawn_run",
-      { authToken: this.authToken, runId, ...params },
-      timeoutMs,
-    );
+    return dispatchWorkerRun(this.client, this.id, this.authToken, runId, params);
   }
 
   async cancel(runId: string, sessionId: string): Promise<unknown> {
-    const c = this.client;
-    if (!c?.connected) {
-      return { cancelled: false, error: `worker ${this.id} not available` };
-    }
-    return c.call("coordinator.cancel_run", { authToken: this.authToken, runId, sessionId }, 5_000);
+    return cancelWorkerRun(this.client, this.id, this.authToken, runId, sessionId);
   }
 
   async deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown> {
-    const c = this.client;
-    if (!c?.connected) {
-      return { accepted: false, error: `worker ${this.id} not available` };
-    }
-    return c.call(
-      "worker.deliver_message",
-      { authToken: this.authToken, sessionId, ...(runId ? { runId } : {}), message },
-      5_000,
-    );
+    return deliverWorkerMessage(this.client, this.id, this.authToken, sessionId, message, runId);
   }
 
   async shutdownIdle(): Promise<boolean> {
@@ -456,9 +236,7 @@ export class WorkerSupervisor {
   }
 
   forceKill(): void {
-    if (this.proc && this.running) {
-      this.proc.kill("SIGKILL");
-    }
+    if (this.proc && this.running) this.proc.kill("SIGKILL");
   }
 
   async stop(): Promise<void> {
@@ -485,89 +263,4 @@ export class WorkerSupervisor {
     this.proc = null;
     this.running = false;
   }
-}
-
-function workerStopGraceMs(): number {
-  const raw = process.env.OPENOMNI_WORKER_STOP_GRACE_MS;
-  if (!raw) return DEFAULT_WORKER_STOP_GRACE_MS;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WORKER_STOP_GRACE_MS;
-}
-
-async function waitForWorkerExit(
-  proc: Pick<Subprocess, "exited">,
-  timeoutMs: number,
-): Promise<"exited" | "timeout"> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      proc.exited.then(() => "exited" as const),
-      new Promise<"timeout">((resolve) => {
-        timeout = setTimeout(() => resolve("timeout"), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-const workerEnvKeys = new Set([
-  "PATH",
-  "TMPDIR",
-  "TEMP",
-  "TMP",
-  "BUN_INSTALL",
-  "NODE_ENV",
-  "CI",
-  "OPENOMNI_DB_PATH",
-  "OPENOMNI_MODELS_URL",
-  "OPENOMNI_MODELS_PATH",
-  "OPENOMNI_DISABLE_MODELS_FETCH",
-  "OPENOMNI_WORKER_ENV_FIXTURE",
-  "OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS",
-]);
-
-function buildWorkerEnv(source: NodeJS.ProcessEnv): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of workerEnvKeys) {
-    const value = source[key];
-    if (value !== undefined) env[key] = value;
-  }
-  return env;
-}
-
-function parseToolCallCancelParams(
-  params: Record<string, unknown> | undefined,
-): ToolCallCancelParams | undefined {
-  if (!params) return undefined;
-  const { runId, sessionId, callId } = params;
-  if (typeof runId !== "string" || typeof sessionId !== "string" || typeof callId !== "string") {
-    return undefined;
-  }
-  return { runId, sessionId, callId };
-}
-
-function parseInboundWaitCancelParams(
-  params: Record<string, unknown> | undefined,
-): { runId?: string; sessionId: string; callId: string } | undefined {
-  if (!params) return undefined;
-  const { runId, sessionId, callId } = params;
-  if (typeof sessionId !== "string" || typeof callId !== "string") return undefined;
-  return {
-    ...(typeof runId === "string" ? { runId } : {}),
-    sessionId,
-    callId,
-  };
-}
-
-function isBootstrapAccepted(value: unknown): boolean {
-  return value !== null && typeof value === "object" && (value as { ok?: unknown }).ok === true;
-}
-
-function isShutdownAcknowledged(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value as { acknowledged?: unknown }).acknowledged === true
-  );
 }
