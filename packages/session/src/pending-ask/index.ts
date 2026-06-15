@@ -53,12 +53,7 @@ function updateStatus(
 }
 
 export namespace PendingAskStore {
-  export type Record = Communication.PendingAsk.Record;
-  export type Create = Communication.PendingAsk.Create;
-  export type Status = Communication.PendingAsk.Status;
-  export type CorrelationQuery = Communication.PendingAsk.CorrelationQuery;
-
-  export function create(input: Create): Record {
+  export function create(input: Communication.PendingAsk.Create): Communication.PendingAsk.Record {
     const adapter = requireAdapter();
     const record = nowRecord(input);
     if (adapter.get(record.id)) throw new Error(`PendingAsk already exists: ${record.id}`);
@@ -67,21 +62,28 @@ export namespace PendingAskStore {
     return record;
   }
 
-  export function get(id: string): Record | undefined {
+  export function get(id: string): Communication.PendingAsk.Record | undefined {
     return requireAdapter().get(id);
   }
 
-  export function list(status?: Status[]): Record[] {
+  export function list(
+    status?: Communication.PendingAsk.Status[],
+  ): Communication.PendingAsk.Record[] {
     return requireAdapter().list(status);
   }
 
-  export function findByCorrelation(query: CorrelationQuery): Record[] {
+  export function findByCorrelation(
+    query: Communication.PendingAsk.CorrelationQuery,
+  ): Communication.PendingAsk.Record[] {
     return requireAdapter().findByCorrelation(
       Communication.PendingAsk.CorrelationQuery.parse(query),
     );
   }
 
-  export function answer(id: string, patch: Partial<Pick<Record, "answeredAt">> = {}): Record {
+  export function answer(
+    id: string,
+    patch: Partial<Pick<Communication.PendingAsk.Record, "answeredAt">> = {},
+  ): Communication.PendingAsk.Record {
     const answeredAt = patch.answeredAt ?? Date.now();
     const { record, changed } = updateStatus(id, ["open", "ambiguous"], "answered", {
       answeredAt,
@@ -95,7 +97,7 @@ export namespace PendingAskStore {
     return record;
   }
 
-  export function markAmbiguous(id: string): Record {
+  export function markAmbiguous(id: string): Communication.PendingAsk.Record {
     const { record, changed } = updateStatus(id, ["open"], "ambiguous");
     if (changed) {
       Bus.publish(Communication.PendingAsk.Events.Ambiguous, eventBase(record));
@@ -103,7 +105,7 @@ export namespace PendingAskStore {
     return record;
   }
 
-  export function cancel(id: string): Record {
+  export function cancel(id: string): Communication.PendingAsk.Record {
     const { record, changed } = updateStatus(id, ["open", "ambiguous"], "cancelled");
     if (changed) {
       Bus.publish(Communication.PendingAsk.Events.Cancelled, eventBase(record));
@@ -111,15 +113,11 @@ export namespace PendingAskStore {
     return record;
   }
 
-  export function expire(id: string): Record {
+  export function expire(id: string): Communication.PendingAsk.Record {
     const { record, changed } = updateStatus(id, ["open", "ambiguous"], "expired");
     if (changed) {
       Bus.publish(Communication.PendingAsk.Events.Expired, eventBase(record));
     }
     return record;
-  }
-
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
   }
 }
