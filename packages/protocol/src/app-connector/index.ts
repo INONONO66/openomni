@@ -1,315 +1,66 @@
-import { z } from "zod";
-import { BusEvent } from "../bus/index.js";
-import { Policy } from "../policy/index.js";
+import { Events as EventDescriptors } from "./events.js";
+import * as Schema from "./schemas.js";
 
 export namespace AppConnector {
-  const nonEmptyString = z.string().min(1);
-  const commandArgs = z.array(nonEmptyString);
-  const positiveInteger = z.number().int().positive();
+  export const EvidenceEmitter = Schema.EvidenceEmitter;
+  export type EvidenceEmitter = Schema.EvidenceEmitter;
 
-  export const EvidenceEmitter = z.enum([
-    "exit_code",
-    "diff",
-    "test_result",
-    "tool_call",
-    "token_usage",
-    "artifact",
-    "log_event",
-  ]);
-  export type EvidenceEmitter = z.infer<typeof EvidenceEmitter>;
+  export const InitialAutonomy = Schema.InitialAutonomy;
+  export type InitialAutonomy = Schema.InitialAutonomy;
 
-  export const InitialAutonomy = z.enum(["approval_required", "supervised", "autonomous"]);
-  export type InitialAutonomy = z.infer<typeof InitialAutonomy>;
+  export const DriverInstallScope = Schema.DriverInstallScope;
+  export type DriverInstallScope = Schema.DriverInstallScope;
 
-  export const DriverInstallScope = z.enum(["user", "workspace", "repository"]);
-  export type DriverInstallScope = z.infer<typeof DriverInstallScope>;
+  export const SubmitMode = Schema.SubmitMode;
+  export type SubmitMode = Schema.SubmitMode;
 
-  export const SubmitMode = z.enum(["spawn", "hook", "plugin", "api"]);
-  export type SubmitMode = z.infer<typeof SubmitMode>;
+  export const SubmitAck = Schema.SubmitAck;
+  export type SubmitAck = Schema.SubmitAck;
 
-  export const SubmitAck = z.enum(["submitted", "accepted", "running"]);
-  export type SubmitAck = z.infer<typeof SubmitAck>;
+  export const Detect = Schema.Detect;
+  export type Detect = Schema.Detect;
 
-  export const Detect = z
-    .object({
-      command: nonEmptyString,
-      args: commandArgs.optional(),
-      versionPattern: nonEmptyString.optional(),
-      testedVersions: nonEmptyString,
-    })
-    .strict();
-  export type Detect = z.infer<typeof Detect>;
+  export const Spawn = Schema.Spawn;
+  export type Spawn = Schema.Spawn;
 
-  export const Spawn = z
-    .object({
-      command: nonEmptyString,
-      args: commandArgs.optional(),
-      promptArgument: nonEmptyString.optional(),
-      cwd: nonEmptyString.optional(),
-      env: z.record(nonEmptyString, nonEmptyString).optional(),
-      timeoutMs: positiveInteger.optional(),
-      stallTimeoutMs: positiveInteger.optional(),
-    })
-    .strict();
-  export type Spawn = z.infer<typeof Spawn>;
+  export const Logs = Schema.Logs;
+  export type Logs = Schema.Logs;
 
-  const structuredLogsFields = {
-    path: nonEmptyString,
-    eventTimeField: nonEmptyString,
-    messageField: nonEmptyString,
-    tokenUsageField: nonEmptyString.optional(),
-    tokenUsageMode: z.enum(["cumulative", "delta"]).optional(),
-    toolCallField: nonEmptyString.optional(),
-  };
+  export const QuestionBridge = Schema.QuestionBridge;
+  export type QuestionBridge = Schema.QuestionBridge;
 
-  export const Logs = z.discriminatedUnion("kind", [
-    z
-      .object({
-        kind: z.literal("jsonl"),
-        ...structuredLogsFields,
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("stream_json"),
-        ...structuredLogsFields,
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("text"),
-        path: nonEmptyString,
-      })
-      .strict(),
-  ]);
-  export type Logs = z.infer<typeof Logs>;
+  export const CompletionReport = Schema.CompletionReport;
+  export type CompletionReport = Schema.CompletionReport;
 
-  const bridgeResponseMode = z.enum(["stdout", "file", "webhook"]);
+  export const Evidence = Schema.Evidence;
+  export type Evidence = Schema.Evidence;
 
-  export const QuestionBridge = z.discriminatedUnion("kind", [
-    z
-      .object({
-        kind: z.literal("hook"),
-        command: nonEmptyString,
-        args: commandArgs.optional(),
-        promptField: nonEmptyString.optional(),
-        responseMode: bridgeResponseMode.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("stdio"),
-        promptField: nonEmptyString.optional(),
-        responseMode: bridgeResponseMode.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("none"),
-      })
-      .strict(),
-  ]);
-  export type QuestionBridge = z.infer<typeof QuestionBridge>;
+  export const Requires = Schema.Requires;
+  export type Requires = Schema.Requires;
 
-  export const CompletionReport = z
-    .object({
-      finalMessage: z.enum(["stdout", "stderr", "log", "artifact"]),
-      artifactGlobs: z.array(nonEmptyString).optional(),
-      readBackRequests: z
-        .array(
-          z
-            .object({
-              claimIndex: z.number().int().nonnegative(),
-              request: z.discriminatedUnion("kind", [
-                z
-                  .object({
-                    kind: z.literal("url_fetch"),
-                    target: nonEmptyString,
-                    timeoutMs: positiveInteger.optional(),
-                    maxBodyBytes: positiveInteger.optional(),
-                  })
-                  .strict(),
-                z
-                  .object({
-                    kind: z.literal("api_query"),
-                    target: nonEmptyString,
-                    method: z.enum(["GET", "HEAD"]).optional(),
-                    timeoutMs: positiveInteger.optional(),
-                    maxBodyBytes: positiveInteger.optional(),
-                  })
-                  .strict(),
-                z
-                  .object({
-                    kind: z.literal("citation_match"),
-                    target: nonEmptyString,
-                    quotedText: nonEmptyString,
-                    timeoutMs: positiveInteger.optional(),
-                    maxBodyBytes: positiveInteger.optional(),
-                  })
-                  .strict(),
-              ]),
-            })
-            .strict(),
-        )
-        .max(5)
-        .optional(),
-    })
-    .strict();
-  export type CompletionReport = z.infer<typeof CompletionReport>;
+  export const Driver = Schema.Driver;
+  export type Driver = Schema.Driver;
 
-  export const Evidence = z
-    .object({
-      emits: z.array(EvidenceEmitter).min(1),
-      completionReport: CompletionReport.optional(),
-    })
-    .strict();
-  export type Evidence = z.infer<typeof Evidence>;
+  export const Profile = Schema.Profile;
+  export type Profile = Schema.Profile;
 
-  export const Requires = z
-    .object({
-      credentials: z.array(nonEmptyString).optional(),
-      capabilities: z.array(nonEmptyString).optional(),
-      permissions: z.array(Policy.Permission).optional(),
-    })
-    .strict();
-  export type Requires = z.infer<typeof Requires>;
+  export const Definition = Schema.Definition;
+  export type Definition = Schema.Definition;
 
-  export const Driver = z
-    .object({
-      provider: nonEmptyString,
-      install: z
-        .object({
-          scopes: z.array(DriverInstallScope).min(1),
-          hooks: z.array(nonEmptyString).optional(),
-          plugins: z.array(nonEmptyString).optional(),
-        })
-        .strict(),
-      submit: z
-        .object({
-          mode: SubmitMode,
-          ack: SubmitAck,
-        })
-        .strict(),
-      observedEvents: z.array(nonEmptyString).default([]),
-      emits: z.array(EvidenceEmitter).default([]),
-    })
-    .strict();
-  export type Driver = z.infer<typeof Driver>;
+  export const InstallationStatus = Schema.InstallationStatus;
+  export type InstallationStatus = Schema.InstallationStatus;
 
-  export const Profile = z
-    .object({
-      kind: z.literal("connector_endpoint"),
-      taskTypes: z.array(nonEmptyString).min(1),
-      defaultTimeoutMs: positiveInteger.optional(),
-      defaultMaxAttempts: positiveInteger.optional(),
-      initialAutonomy: InitialAutonomy.optional(),
-    })
-    .strict();
-  export type Profile = z.infer<typeof Profile>;
+  export const Consent = Schema.Consent;
+  export type Consent = Schema.Consent;
 
-  export const Definition = z
-    .object({
-      id: nonEmptyString,
-      name: nonEmptyString,
-      version: nonEmptyString,
-      description: nonEmptyString,
-      detect: Detect,
-      spawn: Spawn,
-      logs: Logs.optional(),
-      questionBridge: QuestionBridge.optional(),
-      driver: Driver,
-      evidence: Evidence,
-      requires: Requires,
-      profile: Profile,
-    })
-    .strict();
-  export type Definition = z.infer<typeof Definition>;
+  export const WorkspaceIdentity = Schema.WorkspaceIdentity;
+  export type WorkspaceIdentity = Schema.WorkspaceIdentity;
 
-  export const InstallationStatus = z.enum([
-    "registered",
-    "pending_consent",
-    "consented",
-    "enabled",
-    "disabled",
-    "verification_failed",
-  ]);
-  export type InstallationStatus = z.infer<typeof InstallationStatus>;
+  export const Installation = Schema.Installation;
+  export type Installation = Schema.Installation;
 
-  export const Consent = z
-    .object({
-      grantedBy: nonEmptyString,
-      grantedAt: positiveInteger,
-      credentials: z.array(nonEmptyString).optional(),
-      capabilities: z.array(nonEmptyString).optional(),
-      permissions: z.array(Policy.Permission).optional(),
-    })
-    .strict();
-  export type Consent = z.infer<typeof Consent>;
+  export const VerificationFailureReason = Schema.VerificationFailureReason;
+  export type VerificationFailureReason = Schema.VerificationFailureReason;
 
-  export const WorkspaceIdentity = z
-    .object({
-      repoPath: nonEmptyString,
-      worktreePath: nonEmptyString,
-      repoPathHash: nonEmptyString,
-      worktreePathHash: nonEmptyString,
-    })
-    .strict();
-  export type WorkspaceIdentity = z.infer<typeof WorkspaceIdentity>;
-
-  export const Installation = z
-    .object({
-      id: nonEmptyString,
-      connectorId: nonEmptyString,
-      connectorVersion: nonEmptyString,
-      endpointId: nonEmptyString,
-      definition: Definition,
-      detectedVersion: nonEmptyString.optional(),
-      testedVersions: nonEmptyString,
-      status: InstallationStatus,
-      registeredBy: nonEmptyString,
-      workspace: WorkspaceIdentity.optional(),
-      consent: Consent.optional(),
-      createdAt: positiveInteger,
-      updatedAt: positiveInteger,
-    })
-    .strict()
-    .refine((record) => record.definition.id === record.connectorId, {
-      message: "definition id must match connectorId",
-      path: ["definition", "id"],
-    })
-    .refine((record) => record.definition.version === record.connectorVersion, {
-      message: "definition version must match connectorVersion",
-      path: ["definition", "version"],
-    })
-    .refine((record) => record.status !== "enabled" || record.consent !== undefined, {
-      message: "enabled installation requires owner consent",
-      path: ["consent"],
-    });
-  export type Installation = z.infer<typeof Installation>;
-
-  export const VerificationFailureReason = z.enum([
-    "missing_candidate",
-    "detect_failed",
-    "unsupported_version",
-  ]);
-  export type VerificationFailureReason = z.infer<typeof VerificationFailureReason>;
-
-  const VerificationEventBase = z.object({
-    traceId: nonEmptyString,
-    time: positiveInteger,
-    installationId: nonEmptyString,
-    connectorId: nonEmptyString,
-    connectorVersion: nonEmptyString,
-    reason: VerificationFailureReason,
-    testedVersions: nonEmptyString,
-    detectedVersion: nonEmptyString.optional(),
-    diagnostic: nonEmptyString.max(512).optional(),
-  });
-
-  export namespace Events {
-    export const VerificationFailed = BusEvent.define(
-      "app_connector.verification.failed",
-      VerificationEventBase,
-    );
-  }
+  export const Events = EventDescriptors;
 }
