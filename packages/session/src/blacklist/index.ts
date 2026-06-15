@@ -49,28 +49,17 @@ function entryMatches(entry: Actor.BlacklistEntry, input: BlacklistMatchInput): 
 }
 
 export namespace BlacklistStore {
-  export type Entry = Actor.BlacklistEntry;
-
-  export function put(input: Entry): Entry {
+  export function put(input: Actor.BlacklistEntry): Actor.BlacklistEntry {
     const store = requireAdapter();
     const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id)));
     store.set(entry);
     return entry;
   }
 
-  export function get(id: string): Entry | undefined {
-    return requireAdapter().get(id);
-  }
-
-  export function list(): Entry[] {
-    return requireAdapter().list();
-  }
-
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
-  }
-
-  export function match(input: BlacklistMatchInput, now = Date.now()): Entry | undefined {
+  export function match(
+    input: BlacklistMatchInput,
+    now = Date.now(),
+  ): Actor.BlacklistEntry | undefined {
     const store = adapter();
     if (!store) return undefined;
     return store.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
