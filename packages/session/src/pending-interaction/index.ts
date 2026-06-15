@@ -81,11 +81,8 @@ function isPastExpiry(record: Communication.PendingInteraction.Record, now: numb
 
 export namespace PendingInteractionStore {
   export type Record = Communication.PendingInteraction.Record;
-  export type Create = Communication.PendingInteraction.Create;
-  export type Status = Communication.PendingInteraction.Status;
-  export type CorrelationQuery = Communication.PendingInteraction.CorrelationQuery;
 
-  export function create(input: Create): Record {
+  export function create(input: Communication.PendingInteraction.Create): Record {
     const adapter = requireAdapter();
     const record = nowRecord(input);
     if (adapter.get(record.id)) {
@@ -100,11 +97,10 @@ export namespace PendingInteractionStore {
     return requireAdapter().get(id);
   }
 
-  export function list(status?: Status[]): Record[] {
-    return requireAdapter().list(status);
-  }
-
-  export function findByCorrelation(query: CorrelationQuery, now = Date.now()): Record[] {
+  export function findByCorrelation(
+    query: Communication.PendingInteraction.CorrelationQuery,
+    now = Date.now(),
+  ): Record[] {
     return requireAdapter()
       .findByCorrelation(Communication.PendingInteraction.CorrelationQuery.parse(query))
       .filter((record) => stillAcceptsFollowUp(record, now));
@@ -151,7 +147,7 @@ export namespace PendingInteractionStore {
     return record;
   }
 
-  export function expire(id: string): Record {
+  function expire(id: string): Record {
     const { record, changed } = updateStatus(id, ["open", "resolved", "follow_up"], "expired");
     if (changed) {
       Bus.publish(Communication.PendingInteraction.Events.Expired, eventBase(record));
@@ -160,12 +156,9 @@ export namespace PendingInteractionStore {
   }
 
   export function cleanupExpired(now = Date.now()): Record[] {
-    return list(["open", "resolved", "follow_up"])
+    return requireAdapter()
+      .list(["open", "resolved", "follow_up"])
       .filter((record) => isPastExpiry(record, now))
       .map((record) => expire(record.id));
-  }
-
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
   }
 }
