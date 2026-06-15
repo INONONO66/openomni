@@ -581,6 +581,47 @@ describe("McpClient connection cleanup", () => {
     expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
   });
 
+  test("preserves the explicit error for unknown runtime transports", async () => {
+    const serverName = "invalid-transport";
+    const observedErrors: Array<{
+      readonly component?: string;
+      readonly error?: string;
+      readonly context?: Record<string, unknown>;
+    }> = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      const errorPayload = payload as {
+        readonly component?: string;
+        readonly error?: string;
+        readonly context?: Record<string, unknown>;
+      };
+      if (
+        event.name === Operational.Error.name &&
+        errorPayload.component === "agent.mcp" &&
+        errorPayload.context?.serverName === serverName
+      ) {
+        observedErrors.push(errorPayload);
+      }
+    });
+    const client = new McpClient({
+      name: serverName,
+      transport: "invalid",
+      command: "mcp-server-filesystem",
+    } as never);
+
+    try {
+      await expect(client.connect()).rejects.toThrow("Unknown transport");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      unsubscribe();
+    }
+
+    expect(observedErrors).toHaveLength(1);
+    expect(observedErrors[0]?.component).toBe("agent.mcp");
+    expect(observedErrors[0]?.error).toBe("Error: Unknown transport");
+    expect(observedErrors[0]?.context?.serverName).toBe(serverName);
+    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
+  });
+
   test("does not double-close when the client closes a transport that omits onclose", async () => {
     const connectError = new Error("connect failed");
     const sdkClient = createConnectableStubClient({ connectError });
