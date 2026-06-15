@@ -10,11 +10,7 @@ function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
 }
 
 export namespace ActorRegistry {
-  export type Identity = Actor.Identity;
-  export type Endpoint = Actor.Endpoint;
-  export type ResolvedEndpoint = Actor.ResolvedEndpoint;
-
-  export function registerIdentity(input: Identity): Identity {
+  export function registerIdentity(input: Actor.Identity): Actor.Identity {
     const adapter = requireAdapter();
     const identity = Actor.Identity.parse(
       withStoreTimestamps(input, adapter.getIdentity(input.id)),
@@ -23,19 +19,15 @@ export namespace ActorRegistry {
     return identity;
   }
 
-  export function getIdentity(id: string): Identity | undefined {
+  export function getIdentity(id: string): Actor.Identity | undefined {
     return requireAdapter().getIdentity(id);
-  }
-
-  export function listIdentities(): Identity[] {
-    return requireAdapter().listIdentities();
   }
 
   export function removeIdentity(id: string): boolean {
     return requireAdapter().removeIdentity(id);
   }
 
-  export function registerEndpoint(input: Endpoint): Endpoint {
+  export function registerEndpoint(input: Actor.Endpoint): Actor.Endpoint {
     const adapter = requireAdapter();
     const endpoint = Actor.Endpoint.parse(
       withStoreTimestamps(input, adapter.getEndpoint(input.id)),
@@ -57,28 +49,20 @@ export namespace ActorRegistry {
     return endpoint;
   }
 
-  export function getEndpoint(id: string): Endpoint | undefined {
+  export function getEndpoint(id: string): Actor.Endpoint | undefined {
     return requireAdapter().getEndpoint(id);
-  }
-
-  export function listEndpoints(actorId?: string, workspace?: string): Endpoint[] {
-    return requireAdapter().listEndpoints(actorId, workspace);
   }
 
   export function resolveEndpoint(
     channel: string,
     externalId: string,
     workspace?: string,
-  ): ResolvedEndpoint | undefined {
+  ): Actor.ResolvedEndpoint | undefined {
     const adapter = requireAdapter();
     const endpoint = adapter.findEndpoint(channel, externalId, workspace);
     if (!endpoint) return undefined;
     const identity = adapter.getIdentity(endpoint.actorId);
     if (!identity) return undefined;
     return { identity, endpoint };
-  }
-
-  export function removeEndpoint(id: string): boolean {
-    return requireAdapter().removeEndpoint(id);
   }
 }
