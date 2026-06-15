@@ -28,7 +28,7 @@ const canonicalPolicyEvaluator = new Set(["packages/protocol/src/policy/permissi
 const canonicalPolicyRequiredFiles = new Set([
   "packages/openomni/src/ingress/middleware/ingress-authority-evaluation.ts",
   "packages/openomni/src/subagent/middleware/subagent-spawn-policy.ts",
-  "packages/openomni/src/subagent/middleware/background-limits.ts",
+  "packages/openomni/src/subagent/middleware/background-limit-decisions.ts",
   "packages/agent/src/core/policy/builtin/messenger-allow-pattern.ts",
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "apps/server/src/channel/authn/decision.ts",
