@@ -84,12 +84,9 @@ function evaluateRecord(
 }
 
 export namespace WorkerGrantStore {
-  export type Record = Communication.WorkerGrant.Record;
-  export type Create = Communication.WorkerGrant.Create;
-  export type Evaluation = Communication.WorkerGrant.Evaluation;
-  export type EvaluationResult = Communication.WorkerGrant.EvaluationResult;
-
-  export function create(input: Create): Record {
+  export function create(
+    input: Communication.WorkerGrant.Create,
+  ): Communication.WorkerGrant.Record {
     const adapter = requireAdapter();
     const record = createRecord(input);
     if (adapter.get(record.id)) throw new Error(`WorkerGrant already exists: ${record.id}`);
@@ -98,19 +95,15 @@ export namespace WorkerGrantStore {
     return record;
   }
 
-  export function get(id: string): Record | undefined {
+  export function get(id: string): Communication.WorkerGrant.Record | undefined {
     return requireAdapter().get(id);
-  }
-
-  export function list(workerRunId?: string): Record[] {
-    return requireAdapter().list(workerRunId);
   }
 
   function persistUpdate(
     id: string,
-    patch: Partial<Omit<Record, "id" | "workerRunId">>,
+    patch: Partial<Omit<Communication.WorkerGrant.Record, "id" | "workerRunId">>,
     event: "updated" | "revoked" | "expired",
-  ): Record {
+  ): Communication.WorkerGrant.Record {
     const adapter = requireAdapter();
     const current = adapter.get(id);
     if (!current) throw new Error(`WorkerGrant not found: ${id}`);
@@ -131,33 +124,31 @@ export namespace WorkerGrantStore {
     return updated;
   }
 
-  export function update(id: string, patch: Partial<Omit<Record, "id" | "workerRunId">>): Record {
-    return persistUpdate(id, patch, "updated");
-  }
-
-  export function revoke(id: string): Record {
+  export function revoke(id: string): Communication.WorkerGrant.Record {
     return persistUpdate(id, { status: "revoked", revokedAt: Date.now() }, "revoked");
   }
 
-  export function expire(id: string): Record {
+  function expire(id: string): Communication.WorkerGrant.Record {
     return persistUpdate(id, { status: "expired" }, "expired");
   }
 
-  export function cleanupExpired(workerRunId?: string): Record[] {
+  export function cleanupExpired(workerRunId?: string): Communication.WorkerGrant.Record[] {
     return requireAdapter()
       .list(workerRunId)
       .filter((grant) => isPastExpiry(grant))
       .map((grant) => expire(grant.id));
   }
 
-  export function evaluate(input: Evaluation): EvaluationResult {
+  export function evaluate(
+    input: Communication.WorkerGrant.Evaluation,
+  ): Communication.WorkerGrant.EvaluationResult {
     const parsedInput = Communication.WorkerGrant.Evaluation.safeParse(input);
     if (!parsedInput.success) {
       return { allowed: false, reason: "worker_grant.evaluation.invalid" };
     }
     const parsed = parsedInput.data;
     const grants = requireAdapter().list(parsed.workerRunId);
-    let firstDenial: EvaluationResult | undefined;
+    let firstDenial: Communication.WorkerGrant.EvaluationResult | undefined;
     for (const grant of grants) {
       const result = evaluateRecord(grant, parsed);
       Bus.publish(Communication.WorkerGrant.Events.Evaluated, {
@@ -170,9 +161,5 @@ export namespace WorkerGrantStore {
       firstDenial ??= result;
     }
     return firstDenial ?? { allowed: false, reason: "worker_grant.no_matching_grant" };
-  }
-
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
   }
 }
