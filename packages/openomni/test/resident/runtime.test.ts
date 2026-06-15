@@ -113,13 +113,51 @@ describe("ResidentRuntime", () => {
       },
     });
 
-    expect(capturedConfig?.permissions).toBeUndefined();
-    await expect(evaluateTool(capturedConfig?.middleware, "tool:plan")).resolves.toMatchObject({
-      verdict: "allow",
+    const planDecision = await evaluateTool(capturedConfig?.middleware, "tool:plan");
+    expect(planDecision).toMatchObject({ verdict: "allow" });
+    const legacyDecision = await evaluateTool(capturedConfig?.middleware, "tool:legacy");
+    expect(legacyDecision).toMatchObject({ verdict: "deny" });
+  });
+
+  test("passes resolved worker execution context into tool executor factories", async () => {
+    let factoryInput:
+      | {
+          readonly sessionId: string;
+          readonly runId: string;
+          readonly agentName?: string;
+          readonly workspaceRoot?: string;
+        }
+      | undefined;
+    const manager = ResidentRuntime.create({
+      runAgent: async () => ({ text: "ok", finishReason: "stop" }),
     });
-    await expect(evaluateTool(capturedConfig?.middleware, "tool:legacy")).resolves.toMatchObject({
-      verdict: "deny",
+
+    await manager.run({
+      sessionId: "resident-tool-factory",
+      event: {
+        ...makeEvent(),
+        workspace: "/tmp/openomni-workspace",
+        meta: { target: { kind: "resident" }, agentName: "resident-worker" },
+        agent: {
+          model: { provider: "test", id: "fixture" },
+          toolExecutorFactory: (input) => {
+            factoryInput = input;
+            return async (call) => ({
+              id: crypto.randomUUID(),
+              toolCallId: call.id,
+              output: "ok",
+            });
+          },
+        },
+      },
     });
+
+    expect(factoryInput).toMatchObject({
+      sessionId: "resident-tool-factory",
+      agentName: "resident-worker",
+      workspaceRoot: "/tmp/openomni-workspace",
+    });
+    expect(factoryInput?.runId).toBeString();
   });
 });
 

@@ -1,106 +1,23 @@
-import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
-import {
-  IngressEvent,
-  type Ingress,
-  type Tool,
-  type TraceContext as TraceContextProtocol,
-} from "@openomni/protocol";
+import { IngressEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { buildWorkerMiddleware } from "../execution-runtime/middleware";
 import { SessionBridge } from "../ingress/session-bridge";
+import { abortRace, createAbortError, throwIfAborted } from "./runtime-abort";
+import { buildResidentAgentConfig, defaultRunAgent } from "./runtime-agent-config";
+import type {
+  ActivationRecord,
+  ResidentLifecycle,
+  ResidentRunContext,
+  ResidentRunResult,
+  ResidentRuntimeOptions,
+  SlotWaiter,
+} from "./runtime-types";
 
-export type ResidentLifecycle = "sleeping" | "hydrating" | "active" | "idle" | "releasing";
-
-export interface ResidentRunContext {
-  readonly sessionId: string;
-  readonly event: Ingress.ResolvedInboundEvent;
-  readonly traceContext?: TraceContextProtocol.Type;
-  readonly signal?: AbortSignal;
-}
-
-export interface ResidentRunResult {
-  readonly output: string;
-  readonly finishReason: string;
-  readonly runId: string;
-  readonly activationId: string;
-}
-
-export interface ResidentRuntimeOptions {
-  readonly maxActive?: number;
-  readonly idleTimeoutMs?: number;
-  readonly slotWaitTimeoutMs?: number;
-  readonly runAgent?: (
-    config: ChatAgentConfig,
-    input: ChatAgentInput,
-  ) => Promise<{
-    text: string;
-    finishReason: string;
-  }>;
-}
-
-interface ActivationRecord {
-  activationId: string;
-  lifecycle: ResidentLifecycle;
-  idleTimer?: ReturnType<typeof setTimeout>;
-  queue: Promise<unknown>;
-  lastUsedAt: number;
-}
-
-type SlotWaiter = { resolve: () => void; reject: (error: Error) => void };
-
-function defaultRunAgent(config: ChatAgentConfig, input: ChatAgentInput) {
-  return ChatAgent.create(config).run(input);
-}
-
-function createAbortError(): Error {
-  const error = new Error("resident run aborted");
-  error.name = "AbortError";
-  return error;
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw createAbortError();
-}
-
-function abortRace(signal: AbortSignal | undefined): {
-  readonly promise: Promise<never>;
-  readonly cleanup: () => void;
-} {
-  if (!signal) {
-    return {
-      promise: new Promise<never>(() => {
-        // No cancellation requested.
-      }),
-      cleanup: () => undefined,
-    };
-  }
-  if (signal.aborted) {
-    return { promise: Promise.reject(createAbortError()), cleanup: () => undefined };
-  }
-  let cleanup: () => void = () => undefined;
-  const promise = new Promise<never>((_, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener("abort", onAbort);
-      reject(createAbortError());
-    };
-    cleanup = () => signal.removeEventListener("abort", onAbort);
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-  return { promise, cleanup };
-}
-
-function extractAgentName(event: Ingress.ResolvedInboundEvent): string | undefined {
-  const internalEvent = event as unknown as {
-    mode?: string;
-    agentName?: unknown;
-    meta?: { agentName?: unknown; agent?: unknown };
-  };
-  if (internalEvent.mode === "internal") {
-    return typeof internalEvent.agentName === "string" ? internalEvent.agentName : undefined;
-  }
-  const raw = internalEvent.meta?.agentName ?? internalEvent.meta?.agent;
-  return typeof raw === "string" ? raw : undefined;
-}
+export type {
+  ResidentLifecycle,
+  ResidentRunContext,
+  ResidentRunResult,
+  ResidentRuntimeOptions,
+} from "./runtime-types";
 
 export class ResidentRuntime {
   private readonly activations = new Map<string, ActivationRecord>();
@@ -244,37 +161,6 @@ export class ResidentRuntime {
     }, this.idleTimeoutMs);
   }
 
-  private buildAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
-    const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot ?? ctx.event.workspace;
-    const toolExecutor = ctx.event.agent.toolExecutorFactory
-      ? ctx.event.agent.toolExecutorFactory({
-          sessionId: ctx.sessionId,
-          runId,
-          agentName: extractAgentName(ctx.event),
-          workspaceRoot,
-        })
-      : ctx.event.agent.toolExecutor;
-
-    const agentProviderOptions = (ctx.event.agent as { providerOptions?: Record<string, unknown> })
-      .providerOptions;
-
-    return {
-      model: ctx.event.agent.model,
-      systemPrompt: ctx.event.agent.systemPrompt,
-      budget: ctx.event.agent.budget,
-      tools: ctx.event.agent.tools,
-      toolExecutor: toolExecutor as
-        | ((call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>)
-        | undefined,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-      ...(agentProviderOptions ? { providerOptions: agentProviderOptions } : {}),
-      middleware: buildWorkerMiddleware({
-        permissions: ctx.event.agent.permissions,
-        ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
-      }),
-    };
-  }
-
   private async runExclusive(ctx: ResidentRunContext): Promise<ResidentRunResult> {
     let slotAcquired = false;
     await this.acquireSlot(ctx.signal);
@@ -299,7 +185,7 @@ export class ResidentRuntime {
           message.role === "user" || message.role === "assistant",
       );
       activation.lifecycle = "active";
-      const agentConfig = this.buildAgentConfig(ctx, runId);
+      const agentConfig = buildResidentAgentConfig(ctx, runId);
       const result = await this.runAgent(agentConfig, {
         messages,
         traceContext,
