@@ -144,6 +144,41 @@ describe("BusPersistence", () => {
     });
   });
 
+  test("falls back to raw payload when schema parsing fails", async () => {
+    const session = createSession();
+    const event = BusEvent.define(
+      "custom.parse_failed",
+      z.object({
+        sessionId: z.string(),
+        traceId: z.string().default("trace-from-schema"),
+        time: z.number(),
+      }),
+    );
+    Object.defineProperty(event.schema, "safeParse", {
+      value: () => {
+        throw new Error("schema failed");
+      },
+    });
+
+    BusPersistence.start();
+    Bus.publish(event, {
+      sessionId: session.id,
+      traceId: "trace-raw",
+      time: Date.UTC(2026, 4, 10, 1, 2, 6),
+    });
+
+    const persisted = await waitForRows(1);
+    expect(persisted[0]).toMatchObject({
+      session_id: session.id,
+      trace_id: "trace-raw",
+    });
+    expect(JSON.parse(persisted[0].data)).toEqual({
+      sessionId: session.id,
+      traceId: "trace-raw",
+      time: Date.UTC(2026, 4, 10, 1, 2, 6),
+    });
+  });
+
   test("skips ephemeral bus events", async () => {
     const session = createSession();
     const event = BusEvent.define(
@@ -180,6 +215,36 @@ describe("BusPersistence", () => {
     expect(persisted).toHaveLength(5);
     expect(persisted.map((row) => JSON.parse(row.data).index)).toEqual([0, 1, 2, 3, 4]);
     expect(persisted.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("sanitizes non-finite trace timing fields before persistence", async () => {
+    const session = createSession();
+    const fallbackTime = Date.UTC(2026, 4, 10, 1, 2, 7);
+    const event = BusEvent.define(
+      "llm.call.completed",
+      z.object({
+        sessionId: z.string(),
+        traceId: z.string(),
+        durationMs: z.number(),
+        time: z.number(),
+      }),
+    );
+
+    BusPersistence.start({ now: () => new Date(fallbackTime) });
+    Bus.publish(event, {
+      sessionId: session.id,
+      traceId: "trace-non-finite",
+      durationMs: Number.NaN,
+      time: Number.POSITIVE_INFINITY,
+    });
+
+    const persisted = await waitForRows(1);
+    expect(persisted[0]).toMatchObject({
+      session_id: session.id,
+      trace_id: "trace-non-finite",
+      duration_ms: null,
+      time_created: fallbackTime,
+    });
   });
 
   test("resolves snapshot events that use sessionID for session-scoped queries", async () => {
@@ -259,6 +324,31 @@ describe("BusPersistence", () => {
       "pending_ask.opened",
       "worker_grant.evaluated",
     ]);
+  });
+
+  test("continues when worker run session lookup fails", async () => {
+    const event = BusEvent.define(
+      "worker_grant.evaluated",
+      z.object({
+        workerRunId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+      }),
+    );
+    db().query("DROP TABLE worker_run_state").run();
+
+    BusPersistence.start();
+    Bus.publish(event, {
+      workerRunId: "missing-worker-run",
+      traceId: "trace-worker-lookup-error",
+      time: Date.UTC(2026, 4, 10, 1, 2, 9),
+    });
+
+    const persisted = await waitForRows(1);
+    expect(persisted[0]).toMatchObject({
+      session_id: null,
+      trace_id: "trace-worker-lookup-error",
+    });
   });
 
   test("observer errors do not crash publishers", async () => {
@@ -364,6 +454,36 @@ describe("BusPersistence", () => {
     expect(data.context.systemPrompt).toEqual({ type: "string", length: 25 });
     expect(data.context.messages).toEqual({ type: "array", length: 1 });
     expect(data.context.generatedAt).toBe("2026-05-16T00:00:00.000Z");
+  });
+
+  test("redacts cyclic payload references before persistence", async () => {
+    const session = createSession();
+    const context: Record<string, unknown> = {};
+    context.self = context;
+    context.child = { parent: context };
+    const event = BusEvent.define(
+      "policy.action.requested",
+      z.object({
+        sessionId: z.string(),
+        traceId: z.string(),
+        time: z.number(),
+        context: z.unknown(),
+      }),
+    );
+
+    BusPersistence.start();
+    Bus.publish(event, {
+      sessionId: session.id,
+      traceId: "trace-cycle",
+      time: Date.UTC(2026, 4, 10, 1, 2, 8),
+      context,
+    });
+
+    const data = JSON.parse((await waitForRows(1))[0].data) as {
+      context: { self: string; child: { parent: string } };
+    };
+    expect(data.context.self).toBe("[redacted]");
+    expect(data.context.child.parent).toBe("[redacted]");
   });
 
   test("redacts operational context msg without overriding safe log message", async () => {

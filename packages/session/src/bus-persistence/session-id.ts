@@ -43,13 +43,17 @@ function sessionIdFromWorkerRun(record: Record<string, unknown> | undefined): st
   if (!workerRunId) return undefined;
   const db = getOptionalDatabase();
   if (db === undefined) return undefined;
-  const row = db
-    .query(
-      `SELECT session_id
-       FROM worker_run_state
-       WHERE run_id = ?
-       LIMIT 1`,
-    )
-    .get(workerRunId) as { session_id: string } | null;
-  return row?.session_id;
+  try {
+    const row = db
+      .query(
+        `SELECT session_id
+         FROM worker_run_state
+         WHERE run_id = ?
+         LIMIT 1`,
+      )
+      .get(workerRunId) as { session_id: string } | null;
+    return row?.session_id;
+  } catch {
+    return undefined;
+  }
 }

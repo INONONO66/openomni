@@ -5,12 +5,16 @@ const sensitiveKeyPattern =
 const rawBodyKeyPattern =
   /^(args|command|content|err|error|input|messages|msg|newString|oldString|output|payload|prompt|systemPrompt|text)$/i;
 
-export function redactForPersistence(value: unknown): unknown {
+export function redactForPersistence(value: unknown, seen = new WeakSet<object>()): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => redactForPersistence(item));
+    if (seen.has(value)) return "[redacted]";
+    seen.add(value);
+    return value.map((item) => redactForPersistence(item, seen));
   }
   const record = toRecord(value);
   if (!record) return value;
+  if (seen.has(record)) return "[redacted]";
+  seen.add(record);
 
   const redacted: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(record)) {
@@ -19,7 +23,7 @@ export function redactForPersistence(value: unknown): unknown {
     } else if (rawBodyKeyPattern.test(key)) {
       redacted[key] = summarizeValue(item);
     } else {
-      redacted[key] = redactForPersistence(item);
+      redacted[key] = redactForPersistence(item, seen);
     }
   }
   return redacted;

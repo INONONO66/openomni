@@ -12,8 +12,15 @@ export async function persist(input: PersistInput): Promise<void> {
   );
   const traceId = getTraceField(input.payload, "traceId") ?? crypto.randomUUID();
   const runId = getTraceField(input.payload, "runId");
-  const durationMs = getNumberTraceField(input.payload, "durationMs");
-  const timeCreated = getNumberTraceField(input.payload, "time") ?? input.now().getTime();
+  const rawDurationMs = getNumberTraceField(input.payload, "durationMs");
+  const durationMs =
+    rawDurationMs !== undefined && Number.isFinite(rawDurationMs) ? rawDurationMs : undefined;
+  const rawTimeCreated = getNumberTraceField(input.payload, "time");
+  const fallbackTimeCreated = input.now().getTime();
+  const timeCreated =
+    rawTimeCreated !== undefined && Number.isFinite(rawTimeCreated)
+      ? rawTimeCreated
+      : finiteOrNow(fallbackTimeCreated);
 
   const prevHash = resolveChainTip(db, input.sessionId);
   const eventHash = computeEventHash({
@@ -59,4 +66,8 @@ function resolveChainTip(db: Database, sessionId: string | undefined): string {
     )
     .get(...(sessionId === undefined ? [] : [scope])) as { event_hash: string | null } | null;
   return row?.event_hash ?? GENESIS_SEED;
+}
+
+function finiteOrNow(value: number): number {
+  return Number.isFinite(value) ? value : Date.now();
 }
