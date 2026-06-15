@@ -1,87 +1,31 @@
-import type { AgentProfile, Extension, McpConfig, Policy, Skill, Tool } from "@openomni/protocol";
+import {
+  registerAgents,
+  registerMcpServers,
+  registerMiddlewares,
+  registerSkills,
+  registerSurfaces,
+  registerTools,
+} from "./runtime-binding-registration";
+import type {
+  RegisteredComponent,
+  RuntimeBindingController,
+  RuntimeBindingExtension,
+  RuntimeBindingTargets,
+} from "./runtime-binding-types";
+import { assertTargets, bindingKey, hasContributions } from "./runtime-binding-validation";
 
-type Awaitable<T> = T | Promise<T>;
-
-export interface RuntimeBindingContext {
-  readonly extensionId: string;
-  readonly version: string;
-}
-
-export interface RuntimeBindingExtension {
-  readonly id: string;
-  readonly version: string;
-  readonly contributes?: Extension.Contributes;
-}
-
-export interface RuntimeAgentTarget {
-  define(definition: AgentProfile.Definition, context: RuntimeBindingContext): Awaitable<void>;
-  remove(
-    name: string,
-    definition: AgentProfile.Definition,
-    context: RuntimeBindingContext,
-  ): Awaitable<void>;
-}
-
-export interface RuntimeToolTarget {
-  register(spec: Tool.Spec, context: RuntimeBindingContext): Awaitable<void>;
-  unregister(name: string, spec: Tool.Spec, context: RuntimeBindingContext): Awaitable<void>;
-}
-
-export interface RuntimeSkillTarget {
-  register(definition: Skill.Definition, context: RuntimeBindingContext): Awaitable<void>;
-  unregister(
-    id: string,
-    definition: Skill.Definition,
-    context: RuntimeBindingContext,
-  ): Awaitable<void>;
-}
-
-export interface RuntimeMcpTarget {
-  addServer(config: McpConfig.ServerConfig, context: RuntimeBindingContext): Awaitable<void>;
-  removeServer(
-    name: string,
-    config: McpConfig.ServerConfig,
-    context: RuntimeBindingContext,
-  ): Awaitable<void>;
-}
-
-export interface RuntimeSurfaceTarget {
-  register(binding: Extension.SurfaceBinding, context: RuntimeBindingContext): Awaitable<void>;
-  unregister(
-    surfaceId: string,
-    binding: Extension.SurfaceBinding,
-    context: RuntimeBindingContext,
-  ): Awaitable<void>;
-}
-
-export interface RuntimeMiddlewareTarget {
-  register(definition: Policy.Definition, context: RuntimeBindingContext): Awaitable<void>;
-  unregister(
-    name: string,
-    definition: Policy.Definition,
-    context: RuntimeBindingContext,
-  ): Awaitable<void>;
-}
-
-export interface RuntimeBindingTargets {
-  readonly agents?: RuntimeAgentTarget;
-  readonly tools?: RuntimeToolTarget;
-  readonly skills?: RuntimeSkillTarget;
-  readonly mcpServers?: RuntimeMcpTarget;
-  readonly surfaces?: RuntimeSurfaceTarget;
-  readonly middlewares?: RuntimeMiddlewareTarget;
-}
-
-export interface RuntimeBindingController {
-  enable(extension: RuntimeBindingExtension): Promise<void>;
-  disable(extension: RuntimeBindingExtension): Promise<void>;
-}
-
-interface RegisteredComponent {
-  readonly kind: string;
-  readonly id: string;
-  readonly undo: () => Promise<void>;
-}
+export type {
+  RuntimeAgentTarget,
+  RuntimeBindingContext,
+  RuntimeBindingController,
+  RuntimeBindingExtension,
+  RuntimeBindingTargets,
+  RuntimeMcpTarget,
+  RuntimeMiddlewareTarget,
+  RuntimeSkillTarget,
+  RuntimeSurfaceTarget,
+  RuntimeToolTarget,
+} from "./runtime-binding-types";
 
 export class RuntimeBinding implements RuntimeBindingController {
   private readonly registrations = new Map<string, RegisteredComponent[]>();
@@ -108,12 +52,12 @@ export class RuntimeBinding implements RuntimeBindingController {
     this.registrations.set(key, registered);
 
     try {
-      await this.registerAgents(contributes.agents ?? [], context, registered);
-      await this.registerTools(contributes.tools ?? [], context, registered);
-      await this.registerSkills(contributes.skills ?? [], context, registered);
-      await this.registerMcpServers(contributes.mcpServers ?? [], context, registered);
-      await this.registerSurfaces(contributes.surfaces ?? [], context, registered);
-      await this.registerMiddlewares(contributes.middlewares ?? [], context, registered);
+      await registerAgents(this.targets, contributes.agents ?? [], context, registered);
+      await registerTools(this.targets, contributes.tools ?? [], context, registered);
+      await registerSkills(this.targets, contributes.skills ?? [], context, registered);
+      await registerMcpServers(this.targets, contributes.mcpServers ?? [], context, registered);
+      await registerSurfaces(this.targets, contributes.surfaces ?? [], context, registered);
+      await registerMiddlewares(this.targets, contributes.middlewares ?? [], context, registered);
     } catch (error) {
       await this.disable(extension);
       throw new Error(
@@ -152,151 +96,6 @@ export class RuntimeBinding implements RuntimeBindingController {
       );
     }
   }
-
-  private async registerAgents(
-    definitions: readonly AgentProfile.Definition[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.agents;
-    if (!target) return;
-
-    for (const definition of definitions) {
-      await target.define(definition, context);
-      registered.push({
-        kind: "agent",
-        id: definition.name,
-        undo: () => Promise.resolve(target.remove(definition.name, definition, context)),
-      });
-    }
-  }
-
-  private async registerTools(
-    specs: readonly Tool.Spec[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.tools;
-    if (!target) return;
-
-    for (const spec of specs) {
-      await target.register(spec, context);
-      registered.push({
-        kind: "tool",
-        id: spec.name,
-        undo: () => Promise.resolve(target.unregister(spec.name, spec, context)),
-      });
-    }
-  }
-
-  private async registerSkills(
-    definitions: readonly Skill.Definition[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.skills;
-    if (!target) return;
-
-    for (const definition of definitions) {
-      await target.register(definition, context);
-      registered.push({
-        kind: "skill",
-        id: definition.id,
-        undo: () => Promise.resolve(target.unregister(definition.id, definition, context)),
-      });
-    }
-  }
-
-  private async registerMcpServers(
-    configs: readonly McpConfig.ServerConfig[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.mcpServers;
-    if (!target) return;
-
-    for (const config of configs) {
-      await target.addServer(config, context);
-      registered.push({
-        kind: "mcpServer",
-        id: config.name,
-        undo: () => Promise.resolve(target.removeServer(config.name, config, context)),
-      });
-    }
-  }
-
-  private async registerSurfaces(
-    bindings: readonly Extension.SurfaceBinding[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.surfaces;
-    if (!target) return;
-
-    for (const binding of bindings) {
-      await target.register(binding, context);
-      registered.push({
-        kind: "surface",
-        id: binding.surfaceId,
-        undo: () => Promise.resolve(target.unregister(binding.surfaceId, binding, context)),
-      });
-    }
-  }
-
-  private async registerMiddlewares(
-    definitions: readonly Policy.Definition[],
-    context: RuntimeBindingContext,
-    registered: RegisteredComponent[],
-  ): Promise<void> {
-    const target = this.targets.middlewares;
-    if (!target) return;
-
-    for (const definition of definitions) {
-      await target.register(definition, context);
-      registered.push({
-        kind: "middleware",
-        id: definition.name,
-        undo: () => Promise.resolve(target.unregister(definition.name, definition, context)),
-      });
-    }
-  }
-}
-
-function assertTargets(
-  contributes: Extension.Contributes | undefined,
-  targets: RuntimeBindingTargets,
-): void {
-  const missing = [
-    ["agents", contributes?.agents, targets.agents],
-    ["tools", contributes?.tools, targets.tools],
-    ["skills", contributes?.skills, targets.skills],
-    ["mcpServers", contributes?.mcpServers, targets.mcpServers],
-    ["surfaces", contributes?.surfaces, targets.surfaces],
-    ["middlewares", contributes?.middlewares, targets.middlewares],
-  ]
-    .filter(
-      ([, values, target]) => Array.isArray(values) && values.length > 0 && target === undefined,
-    )
-    .map(([kind]) => kind);
-
-  if (missing.length > 0) {
-    throw new Error(`Missing runtime binding targets for: ${missing.join(", ")}`);
-  }
-}
-
-function hasContributions(contributes: Extension.Contributes): boolean {
-  return (
-    (contributes?.agents?.length ?? 0) > 0 ||
-    (contributes?.tools?.length ?? 0) > 0 ||
-    (contributes?.skills?.length ?? 0) > 0 ||
-    (contributes?.mcpServers?.length ?? 0) > 0 ||
-    (contributes?.surfaces?.length ?? 0) > 0 ||
-    (contributes?.middlewares?.length ?? 0) > 0
-  );
-}
-
-function bindingKey(extension: RuntimeBindingExtension): string {
-  return `${extension.id}@${extension.version}`;
 }
 
 function errorMessage(error: unknown): string {
