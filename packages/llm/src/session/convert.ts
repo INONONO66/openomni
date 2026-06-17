@@ -1,53 +1,26 @@
 import type { Message } from "@openomni/protocol";
+import type { ModelMessage } from "ai";
 import { type Provider, ProviderTransform } from "../provider";
 
-type SystemMessage = {
-  role: "system";
-  content: string;
-};
+export type SDKMessage = ModelMessage;
+type AssistantMessage = Extract<SDKMessage, { role: "assistant" }>;
+type ToolMessage = Extract<SDKMessage, { role: "tool" }>;
+type AssistantContentBlock = Exclude<AssistantMessage["content"], string>[number];
+type AssistantTextBlock = Extract<AssistantContentBlock, { type: "text" }>;
+type AssistantReasoningBlock = Extract<AssistantContentBlock, { type: "reasoning" }>;
+type AssistantToolCallBlock = Extract<AssistantContentBlock, { type: "tool-call" }>;
+type ToolResultBlock = Extract<ToolMessage["content"][number], { type: "tool-result" }>;
 
-type UserMessage = {
-  role: "user";
-  content: string;
-};
-
-type AssistantTextBlock = {
-  type: "text";
-  text: string;
-};
-
-type AssistantToolCallBlock = {
-  type: "tool-call";
-  toolCallId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-};
-
-type AssistantMessage = {
-  role: "assistant";
-  content: string | Array<AssistantTextBlock | AssistantToolCallBlock>;
-};
-
-type ToolResultBlock = {
-  type: "tool-result";
-  toolCallId: string;
-  toolName: string;
-  output: string;
-};
-
-type ToolMessage = {
-  role: "tool";
-  content: ToolResultBlock[];
-};
-
-export type SDKMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage;
-
-function buildUserBlock(content: string): UserMessage {
+function buildUserBlock(content: string): Extract<SDKMessage, { role: "user" }> {
   return { role: "user", content };
 }
 
 function buildAssistantTextBlock(content: string): AssistantTextBlock {
   return { type: "text", text: content };
+}
+
+function buildAssistantReasoningBlock(content: string): AssistantReasoningBlock {
+  return { type: "reasoning", text: content };
 }
 
 function buildToolCallBlock(call: {
@@ -60,6 +33,7 @@ function buildToolCallBlock(call: {
     toolCallId: call.id,
     toolName: call.tool,
     input: call.input,
+    providerExecuted: false,
   };
 }
 
@@ -76,7 +50,7 @@ function buildToolResultBlock(result: {
     type: "tool-result",
     toolCallId: result.id,
     toolName: result.tool,
-    output: result.output,
+    output: { type: "text", value: result.output },
   };
 }
 
@@ -115,12 +89,17 @@ export function toModelMessages(
       if ("error" in msg.info && msg.info.error) continue;
 
       const textContent: string[] = [];
+      const reasoningContent: string[] = [];
       const toolCalls: AssistantToolCallBlock[] = [];
       const toolResults: ToolMessage[] = [];
 
       for (const part of msg.parts) {
         if (part.type === "text") {
           textContent.push(part.text);
+        }
+
+        if (part.type === "reasoning") {
+          reasoningContent.push(part.text);
         }
 
         if (part.type === "tool") {
@@ -169,10 +148,15 @@ export function toModelMessages(
 
       if (toolCalls.length > 0) {
         // Assistant message with tool calls
-        const assistantContent: Array<AssistantTextBlock | AssistantToolCallBlock> = [];
+        const assistantContent: Array<
+          AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock
+        > = [];
 
         if (textContent.length > 0) {
           assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
+        }
+        if (reasoningContent.length > 0) {
+          assistantContent.push(buildAssistantReasoningBlock(reasoningContent.join("\n")));
         }
         assistantContent.push(...toolCalls);
 
@@ -183,7 +167,20 @@ export function toModelMessages(
           coreMessages.push(result);
         }
       } else if (textContent.length > 0) {
-        coreMessages.push(buildAssistantBlock(textContent.join("\n")));
+        if (reasoningContent.length > 0) {
+          coreMessages.push(
+            buildAssistantBlock([
+              buildAssistantTextBlock(textContent.join("\n")),
+              buildAssistantReasoningBlock(reasoningContent.join("\n")),
+            ]),
+          );
+        } else {
+          coreMessages.push(buildAssistantBlock(textContent.join("\n")));
+        }
+      } else if (reasoningContent.length > 0) {
+        coreMessages.push(
+          buildAssistantBlock([buildAssistantReasoningBlock(reasoningContent.join("\n"))]),
+        );
       }
     }
   }

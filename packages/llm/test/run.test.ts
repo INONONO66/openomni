@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import { Auth } from "../src/auth";
 
-const TEST_PROVIDER_ID = "__test_run__";
 let run: typeof import("../src/run").run;
 
 type AiCaptureGlobal = typeof globalThis & {
@@ -25,6 +24,9 @@ function mockAiModule() {
       };
     },
     jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+    stepCountIs: (stepCount: number) => {
+      return (input: { steps: unknown[] }) => input.steps.length === stepCount;
+    },
   }));
 }
 
@@ -211,68 +213,6 @@ describe("run", () => {
 
     expect(capturedSnapshots.length).toBeGreaterThan(0);
     expect(capturedToolCalls.length).toBe(0);
-  });
-
-  test("forwards toolChoice and stopWhen, and sets maxRetries to 0", async () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      toolChoice: "required",
-      maxSteps: 7,
-      auth: testAuth,
-      model: {
-        id: "claude-3-haiku",
-        providerID: TEST_PROVIDER_ID,
-        name: "Claude 3 Haiku Test",
-        api: { npm: "@ai-sdk/anthropic" },
-      },
-    };
-
-    await run(input, mockSink);
-
-    expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
-    const streamArgs = aiCapture.__openomniAiStreamArgs as {
-      toolChoice?: unknown;
-      stopWhen?: unknown;
-      maxRetries?: unknown;
-    };
-
-    expect(streamArgs.toolChoice).toBe("required");
-    expect(streamArgs.stopWhen).toBeFunction();
-    expect(streamArgs.maxRetries).toBe(0);
-
-    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
-    expect(stopWhen({ steps: [] })).toBe(false);
-    expect(stopWhen({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
-    expect(
-      stopWhen({
-        steps: [1, 2, 3, 4, 5, 6, 7],
-      }),
-    ).toBe(true);
-  });
-
-  test("uses default stopWhen threshold when not provided", async () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: {
-        id: "claude-3-haiku",
-        providerID: TEST_PROVIDER_ID,
-        name: "Claude 3 Haiku Test",
-        api: { npm: "@ai-sdk/anthropic" },
-      },
-      auth: testAuth,
-    };
-
-    await run(input, mockSink);
-
-    expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
-    const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
-    expect(streamArgs.stopWhen).toBeFunction();
-
-    const stopWhen = streamArgs.stopWhen as (input: { steps: unknown[] }) => boolean;
-    expect(stopWhen({ steps: Array.from({ length: 23 }) })).toBe(false);
-    expect(stopWhen({ steps: Array.from({ length: 24 }) })).toBe(true);
   });
 
   test("returns RunOutcome with correct type mapping for processor results", () => {

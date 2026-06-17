@@ -52,10 +52,10 @@ export namespace ModelsDev {
       })
       .optional(),
     status: ModelStatus.optional(),
-    options: z.record(z.string(), z.any()).optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string() }).optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   });
   export type Model = z.infer<typeof Model>;
 
@@ -65,16 +65,12 @@ export namespace ModelsDev {
     env: z.array(z.string()),
     id: z.string(),
     npm: z.string().optional(),
-    models: z.record(z.string(), z.any()),
+    models: z.record(z.string(), z.unknown()),
   });
   export type Provider = z.infer<typeof Provider>;
 
   function modelsUrl() {
     return process.env.OPENOMNI_MODELS_URL || "https://models.dev";
-  }
-
-  function buildFallback(): Record<string, Provider> {
-    return {};
   }
 
   async function writeCache(data: Record<string, Provider>): Promise<void> {
@@ -98,7 +94,7 @@ export namespace ModelsDev {
     const snapshotModule = await import("../provider/models-snapshot.json").catch(() => undefined);
     if (snapshotModule?.default) return snapshotModule.default as Record<string, Provider>;
 
-    if (process.env.OPENOMNI_DISABLE_MODELS_FETCH) return buildFallback();
+    if (process.env.OPENOMNI_DISABLE_MODELS_FETCH) return {};
 
     try {
       const response = await fetch(`${modelsUrl()}/api.json`, {
@@ -113,7 +109,7 @@ export namespace ModelsDev {
       /* non-fatal */
     }
 
-    return buildFallback();
+    return {};
   });
 
   export async function get(): Promise<Record<string, Provider>> {

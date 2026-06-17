@@ -4,8 +4,21 @@ import { LlmCall } from "../src/event/llm.js";
 describe("LlmCall BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
 
+  function parseCompleted(input: unknown): unknown {
+    return LlmCall.Completed.schema.parse(input);
+  }
+
+  function completedParseFails(input: unknown): boolean {
+    try {
+      parseCompleted(input);
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
   test("Completed parses valid token counts", () => {
-    expect(() =>
+    expect(
       LlmCall.Completed.schema.parse({
         ...base,
         provider: "openai",
@@ -15,7 +28,11 @@ describe("LlmCall BusEvents", () => {
         outputTokens: 50,
         finishReason: "stop",
       }),
-    ).not.toThrow();
+    ).toMatchObject({
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
   });
 
   test("Completed rejects negative and fractional token counts", () => {
@@ -28,7 +45,7 @@ describe("LlmCall BusEvents", () => {
       finishReason: "stop",
     };
 
-    expect(() => LlmCall.Completed.schema.parse({ ...valid, inputTokens: -1 })).toThrow();
-    expect(() => LlmCall.Completed.schema.parse({ ...valid, inputTokens: 1.5 })).toThrow();
+    expect(completedParseFails({ ...valid, inputTokens: -1 })).toBe(true);
+    expect(completedParseFails({ ...valid, inputTokens: 1.5 })).toBe(true);
   });
 });

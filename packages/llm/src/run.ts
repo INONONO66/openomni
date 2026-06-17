@@ -119,7 +119,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         tools: sdkTools,
         toolChoice: input.toolChoice,
         maxRetries: 0,
-        stopWhen: ({ steps }: { steps: unknown[] }) => steps.length >= (input.maxSteps ?? 24),
+        stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
         onError: ({ error }: { error: unknown }) => {
           Bus.publish(Operational.Error, {
             traceId: input.trace?.traceId ?? crypto.randomUUID(),
@@ -233,6 +233,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       durationMs,
       inputTokens: finalTokens.input,
       outputTokens: finalTokens.output,
+      reasoningTokens: finalTokens.reasoning,
+      cacheReadTokens: finalTokens.cache.read,
+      cacheWriteTokens: finalTokens.cache.write,
       finishReason,
       time: Date.now(),
     });

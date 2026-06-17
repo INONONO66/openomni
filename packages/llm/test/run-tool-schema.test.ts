@@ -23,6 +23,9 @@ function mockAiModule() {
       };
     },
     jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+    stepCountIs: (stepCount: number) => {
+      return (input: { steps: unknown[] }) => input.steps.length === stepCount;
+    },
   }));
 }
 

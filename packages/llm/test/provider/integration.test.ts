@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
 import { getSDK, getLanguage, Provider } from "../../src/provider/index";
 
+type ModelRef = { readonly modelId?: string };
+type ProviderRef = { readonly provider?: string };
+
 function makeAnthropicModel(id?: string): Provider.Model {
   return {
     id: id ?? "claude-sonnet-4-20250514",
@@ -32,11 +35,11 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id);
+    const sdkLm = sdk.languageModel(model.id) as ModelRef;
     expect(sdkLm).toBeDefined();
     expect(sdkLm.modelId).toBe(model.id);
 
-    const lm = getLanguage(model, auth);
+    const lm = getLanguage(model, auth) as ModelRef;
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe(model.id);
   });
@@ -51,11 +54,11 @@ describe("Provider Integration", () => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id);
+    const sdkLm = sdk.languageModel(model.id) as ModelRef;
     expect(sdkLm).toBeDefined();
     expect(sdkLm.modelId).toBe(model.id);
 
-    const lm = getLanguage(model, auth);
+    const lm = getLanguage(model, auth) as ModelRef;
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe(model.id);
   });
@@ -68,7 +71,7 @@ describe("Provider Integration", () => {
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
 
-    const lm = sdk.languageModel("gpt-4o");
+    const lm = sdk.languageModel("gpt-4o") as ModelRef;
     expect(lm).toBeDefined();
     expect(lm.modelId).toBe("gpt-4o");
   });
@@ -119,5 +122,39 @@ describe("Provider Integration", () => {
   it("snapshot fallback provides data when ModelsDev is loaded", async () => {
     const providers = await Provider.listProviders();
     expect(providers.length).toBeGreaterThan(0);
+  });
+
+  it("maps custom models without stale removed-provider npm metadata", () => {
+    const provider = {
+      id: "custom",
+      name: "Custom",
+      env: [],
+      api: "http://localhost:8317/v1",
+      models: {},
+    };
+    const model = Provider.fromModelsDevModel(provider, {
+      id: "custom-model",
+      name: "Custom Model",
+    });
+
+    expect(model.api?.npm).toBe("@ai-sdk/openai");
+    expect(model.api?.url).toBe("http://localhost:8317/v1");
+  });
+
+  it("resolves custom baseURL models through the OpenAI provider", () => {
+    const auth: Auth.Info = { type: "api", key: "custom-key" };
+    const model: Provider.Model = {
+      id: "custom-model",
+      providerID: "custom",
+      name: "Custom Model",
+      api: { npm: "@ai-sdk/openai", url: "http://localhost:8317/v1" },
+    };
+
+    const sdk = getSDK(model, auth);
+    expect(typeof sdk.languageModel).toBe("function");
+
+    const lm = getLanguage(model, auth) as ModelRef & ProviderRef;
+    expect(lm.modelId).toBe("custom-model");
+    expect(lm.provider).toBe("custom.responses");
   });
 });

@@ -109,6 +109,70 @@ describe("toModelMessages", () => {
     expect(result[0].content).toBe("Response");
   });
 
+  test("preserves assistant reasoning parts during conversion", () => {
+    const model: Provider.Model = {
+      id: "claude-3-5-sonnet",
+      providerID: "anthropic",
+      name: "Claude 3.5 Sonnet",
+      api: {
+        npm: "@ai-sdk/anthropic",
+      },
+    };
+
+    const assistantMsg: Message.WithParts = {
+      info: {
+        id: "msg-2",
+        sessionID: "session-1",
+        role: "assistant",
+        time: { created: 1100 },
+        parentID: "msg-1",
+        modelID: "claude-3-5-sonnet",
+        providerID: "anthropic",
+        agent: "default",
+        path: {
+          cwd: "/home/user",
+          root: "/home/user/project",
+        },
+        cost: 0.001,
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 12,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+      } as Message.AssistantMessage,
+      parts: [
+        {
+          id: "part-1",
+          sessionID: "session-1",
+          messageID: "msg-2",
+          type: "reasoning",
+          text: "I should preserve this.",
+          time: { start: 1100, end: 1101 },
+        } as Message.ReasoningPart,
+        {
+          id: "part-2",
+          sessionID: "session-1",
+          messageID: "msg-2",
+          type: "text",
+          text: "Final answer",
+        } as Message.TextPart,
+      ],
+    };
+
+    const result = toModelMessages([assistantMsg], model);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("assistant");
+    expect(result[0].content).toEqual([
+      { type: "text", text: "Final answer" },
+      { type: "reasoning", text: "I should preserve this." },
+    ]);
+  });
+
   test("converts mixed messages", () => {
     const model: Provider.Model = {
       id: "claude-3-5-sonnet",

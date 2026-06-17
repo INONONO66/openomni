@@ -3,33 +3,23 @@ import type { SDKMessage } from "../session/convert";
 import type { Provider } from "../provider/index";
 
 export namespace ProviderTransform {
-  export function sdkKey(npm: string): string | undefined {
-    switch (npm) {
-      case "@ai-sdk/anthropic":
-      case "@ai-sdk/google-vertex/anthropic":
-        return "anthropic";
-      case "@ai-sdk/openai":
-      case "@ai-sdk/azure":
-        return "openai";
-      case "@ai-sdk/google-vertex":
-      case "@ai-sdk/google":
-        return "google";
-      case "@openrouter/ai-sdk-provider":
-        return "openrouter";
-      default:
-        return undefined;
-    }
-  }
-
   interface NormalizeOptions {
     npm: string;
     modelId: string;
   }
 
+  type SDKMessageWithProviderOptions = SDKMessage & {
+    readonly providerOptions?: Record<string, unknown>;
+  };
+
+  type AssistantMessageContent = Extract<SDKMessage, { role: "assistant" }>["content"];
+  type AssistantContentPart = Exclude<AssistantMessageContent, string>[number];
+  type ToolContentPart = Extract<SDKMessage, { role: "tool" }>["content"][number];
+  type NormalizableContentPart = Exclude<SDKMessage["content"], string>[number];
+
   export function normalizeMessages(
     msgs: SDKMessage[],
     model: Provider.Model | NormalizeOptions,
-    _options: Record<string, unknown> = {},
   ): SDKMessage[] {
     let npm: string | undefined;
     let modelId: string;
@@ -42,23 +32,11 @@ export namespace ProviderTransform {
       modelId = (model as NormalizeOptions).modelId;
     }
 
-    const key = sdkKey(npm || "");
-
-    if (key === "anthropic") {
+    if (isAnthropicPackage(npm)) {
       return normalizeAnthropic(msgs, { npm: npm || "", modelId });
     }
 
     return msgs;
-  }
-
-  export function temperature(model: Provider.Model): number | undefined {
-    const id = model.id.toLowerCase();
-    if (id.includes("claude")) return undefined;
-    return undefined;
-  }
-
-  export function topP(_model: Provider.Model): number | undefined {
-    return undefined;
   }
 
   export function variants(model: Provider.Model): Record<string, Record<string, unknown>> {
@@ -138,6 +116,10 @@ export namespace ProviderTransform {
     return "providerID" in model;
   }
 
+  function isAnthropicPackage(npm: string | undefined): boolean {
+    return npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic";
+  }
+
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {
     let result = msgs
       .map((msg) => {
@@ -147,38 +129,24 @@ export namespace ProviderTransform {
         }
         if (!Array.isArray(msg.content)) return msg;
 
-        const filtered = msg.content.filter((part: Record<string, unknown>) => {
+        const filtered = msg.content.filter((part) => {
           if (part.type === "text" || part.type === "reasoning") {
-            return (part as { text: string }).text !== "";
+            return part.text !== "";
           }
           return true;
         });
         if (filtered.length === 0) return undefined;
-        return { ...msg, content: filtered };
+        return buildMessageWithContent(msg, filtered);
       })
       .filter((msg): msg is SDKMessage => msg !== undefined && msg.content !== "");
 
     if (model.modelId.includes("claude")) {
       result = result.map((msg) => {
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          return {
-            ...msg,
-            content: msg.content.map((part: Record<string, unknown>) => {
-              if (
-                (part.type === "tool-call" || part.type === "tool-result") &&
-                "toolCallId" in part
-              ) {
-                return {
-                  ...part,
-                  toolCallId: (part as { toolCallId: string }).toolCallId.replace(
-                    /[^a-zA-Z0-9_-]/g,
-                    "_",
-                  ),
-                };
-              }
-              return part;
-            }),
-          } as unknown as SDKMessage;
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          return { ...msg, content: msg.content.map(sanitizeAssistantContentPart) };
+        }
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          return { ...msg, content: msg.content.map(sanitizeToolContentPart) };
         }
         return msg;
       });
@@ -206,9 +174,7 @@ export namespace ProviderTransform {
 
     return msgs.map((msg, i) => {
       if (msg.role === "system" || targets.has(i)) {
-        const existing = (msg as Record<string, unknown>).providerOptions as
-          | Record<string, unknown>
-          | undefined;
+        const existing = (msg as SDKMessageWithProviderOptions).providerOptions;
         const existingAnthropic = (existing?.anthropic ?? {}) as Record<string, unknown>;
         return {
           ...msg,
@@ -216,9 +182,65 @@ export namespace ProviderTransform {
             ...existing,
             anthropic: { ...existingAnthropic, cacheControl: { type: "ephemeral" as const } },
           },
-        } as unknown as SDKMessage;
+        };
       }
       return msg;
     });
+  }
+
+  function sanitizeAssistantContentPart(part: AssistantContentPart): AssistantContentPart {
+    if (part.type !== "tool-call") return part;
+    return {
+      ...part,
+      toolCallId: sanitizeToolCallID(part.toolCallId),
+    };
+  }
+
+  function sanitizeToolContentPart(part: ToolContentPart): ToolContentPart {
+    if (part.type !== "tool-result") return part;
+    return {
+      ...part,
+      toolCallId: sanitizeToolCallID(part.toolCallId),
+    };
+  }
+
+  function sanitizeToolCallID(toolCallID: string): string {
+    return toolCallID.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  function buildMessageWithContent(
+    msg: SDKMessage,
+    content: NormalizableContentPart[],
+  ): SDKMessage | undefined {
+    switch (msg.role) {
+      case "assistant":
+        return {
+          ...msg,
+          content: content.filter(isAssistantContentPart),
+        };
+      case "tool":
+        return {
+          ...msg,
+          content: content.filter(isToolContentPart),
+        };
+      case "system":
+      case "user":
+        return msg;
+    }
+  }
+
+  function isAssistantContentPart(part: NormalizableContentPart): part is AssistantContentPart {
+    return (
+      part.type === "text" ||
+      part.type === "file" ||
+      part.type === "reasoning" ||
+      part.type === "tool-call" ||
+      part.type === "tool-result" ||
+      part.type === "tool-approval-request"
+    );
+  }
+
+  function isToolContentPart(part: NormalizableContentPart): part is ToolContentPart {
+    return part.type === "tool-result" || part.type === "tool-approval-response";
   }
 }
