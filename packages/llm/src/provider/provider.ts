@@ -1,6 +1,5 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
+import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { Auth } from "../auth/storage";
 import { Provider } from "./index";
@@ -12,28 +11,20 @@ type SdkOptions = {
   headers?: Record<string, string>;
   [key: string]: unknown;
 };
+type BundledProviderSDK = AnthropicProvider | OpenAIProvider;
+type ProviderSDK = BundledProviderSDK;
 
-type ProviderSDK = {
-  languageModel(modelID: string): unknown;
-  chat?: (modelID: string) => unknown;
-  responses?: (modelID: string) => unknown;
-};
-
-const BUNDLED_PROVIDERS: Record<string, (options: SdkOptions) => ProviderSDK> = {
+const BUNDLED_PROVIDERS = {
   "@ai-sdk/anthropic": (options) => createAnthropic(options),
   "@ai-sdk/openai": (options) => createOpenAI(options),
-};
+} satisfies Record<string, (options: SdkOptions) => BundledProviderSDK>;
 
 const SDK_CACHE = new Map<string, ProviderSDK>();
 const LANGUAGE_CACHE = new Map<string, LanguageModel>();
 const PROVIDER_SDK_CACHE_MAX_ENTRIES = 64;
 const PROVIDER_LANGUAGE_CACHE_MAX_ENTRIES = 256;
 
-type CustomModelLoader = (
-  sdk: ProviderSDK,
-  modelID: string,
-  options?: Record<string, unknown>,
-) => LanguageModel;
+type CustomModelLoader = (sdk: ProviderSDK, modelID: string) => LanguageModel;
 
 interface CustomLoaderResult {
   getModel?: CustomModelLoader;
@@ -50,22 +41,22 @@ const CUSTOM_LOADERS: Record<string, () => CustomLoaderResult> = {
   }),
   openai: () => ({
     getModel(sdk: ProviderSDK, modelID: string) {
-      if (!sdk.responses) {
+      if (!isOpenAIProvider(sdk)) {
         throw new Error("OpenAI responses model loader requires responses support");
       }
-      return sdk.responses(modelID) as LanguageModel;
+      return sdk.responses(modelID);
     },
     options: {},
   }),
 };
 
 export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${JSON.stringify(auth)}`;
   const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
 
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  const factory = BUNDLED_PROVIDERS[npm];
+  const factory = getBundledProviderFactory(npm);
 
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS[providerID];
@@ -74,6 +65,10 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   const sdkOptions: SdkOptions = {
     ...(custom?.options ?? {}),
   };
+  if (model.api?.url && providerID !== "openai") {
+    sdkOptions.baseURL = model.api.url;
+    sdkOptions.name = providerID;
+  }
 
   if (auth.type === "api") {
     sdkOptions.apiKey = auth.key;
@@ -88,17 +83,11 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
     if (!baseURL) {
       throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
     }
-    const sdk =
-      auth.type === "proxy"
-        ? createOpenAI({
-            baseURL,
-            apiKey: sdkOptions.apiKey,
-          })
-        : createOpenAICompatible({
-            name: providerID,
-            baseURL,
-            apiKey: sdkOptions.apiKey,
-          });
+    const sdk = createOpenAI({
+      name: providerID,
+      baseURL,
+      apiKey: sdkOptions.apiKey,
+    });
     setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
     return sdk;
   }
@@ -110,7 +99,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
 
 export function getLanguage(model: Provider.Model, auth: Auth.Info): LanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${modelID}:${JSON.stringify(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${JSON.stringify(auth)}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 
@@ -152,13 +141,30 @@ function resolveLanguageModel(
   auth: Auth.Info,
   custom: CustomLoaderResult | undefined,
 ): LanguageModel {
-  if (providerID === "openai" && auth.type === "proxy" && sdk.chat) {
-    return sdk.chat(modelID) as LanguageModel;
+  if (providerID === "openai" && auth.type === "proxy" && isOpenAIProvider(sdk)) {
+    return sdk.chat(modelID);
   }
   if (custom?.getModel) {
-    return custom.getModel(sdk, modelID) as LanguageModel;
+    return custom.getModel(sdk, modelID);
   }
-  return sdk.languageModel(modelID) as LanguageModel;
+  return sdk.languageModel(modelID);
+}
+
+function isOpenAIProvider(sdk: ProviderSDK): sdk is OpenAIProvider {
+  return "responses" in sdk;
+}
+
+function getBundledProviderFactory(
+  npm: string,
+): ((options: SdkOptions) => BundledProviderSDK) | undefined {
+  switch (npm) {
+    case "@ai-sdk/anthropic":
+      return BUNDLED_PROVIDERS["@ai-sdk/anthropic"];
+    case "@ai-sdk/openai":
+      return BUNDLED_PROVIDERS["@ai-sdk/openai"];
+    default:
+      return undefined;
+  }
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.Info {
@@ -180,14 +186,4 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Provider.In
     npm: provider.npm,
     models,
   };
-}
-
-export function filterModels(
-  providerID: string,
-  authType: "api" | "proxy",
-  models: Provider.Model[],
-): Provider.Model[] {
-  void providerID;
-  void authType;
-  return models;
 }

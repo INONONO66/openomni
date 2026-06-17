@@ -3,7 +3,7 @@ import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
 import { Auth } from "../auth/storage";
-import { fromModelsDevProvider, filterModels } from "./provider";
+import { fromModelsDevProvider } from "./provider";
 import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
@@ -76,10 +76,10 @@ export namespace Provider {
       })
       .optional(),
     status: ProtocolModel.Status.optional(),
-    options: z.record(z.string(), z.any()).optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     release_date: z.string().optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   });
   export type Model = z.infer<typeof Model>;
 
@@ -90,7 +90,7 @@ export namespace Provider {
     env: z.array(z.string()),
     key: z.string().optional(),
     npm: z.string().optional(),
-    options: z.record(z.string(), z.any()).optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
     models: z.record(z.string(), Model),
   });
   export type Info = z.infer<typeof Info>;
@@ -104,7 +104,7 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai",
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -173,8 +173,7 @@ export namespace Provider {
       }
     }
 
-    const models = Object.values(info.models);
-    return filterModels(providerID, authType ?? "api", models);
+    return Object.values(info.models);
   }
 
   export async function listProviders(): Promise<string[]> {

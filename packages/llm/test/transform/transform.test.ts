@@ -3,31 +3,6 @@ import { ProviderTransform } from "../../src/transform";
 import type { Provider } from "../../src/provider/index";
 type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
-describe("ProviderTransform.sdkKey", () => {
-  test("maps anthropic packages", () => {
-    expect(ProviderTransform.sdkKey("@ai-sdk/anthropic")).toBe("anthropic");
-    expect(ProviderTransform.sdkKey("@ai-sdk/google-vertex/anthropic")).toBe("anthropic");
-  });
-
-  test("maps openai packages", () => {
-    expect(ProviderTransform.sdkKey("@ai-sdk/openai")).toBe("openai");
-    expect(ProviderTransform.sdkKey("@ai-sdk/azure")).toBe("openai");
-  });
-
-  test("maps google packages", () => {
-    expect(ProviderTransform.sdkKey("@ai-sdk/google")).toBe("google");
-    expect(ProviderTransform.sdkKey("@ai-sdk/google-vertex")).toBe("google");
-  });
-
-  test("maps openrouter", () => {
-    expect(ProviderTransform.sdkKey("@openrouter/ai-sdk-provider")).toBe("openrouter");
-  });
-
-  test("returns undefined for unknown packages", () => {
-    expect(ProviderTransform.sdkKey("unknown-package")).toBeUndefined();
-  });
-});
-
 describe("ProviderTransform.normalizeMessages", () => {
   const anthropicModel = {
     npm: "@ai-sdk/anthropic",
@@ -41,7 +16,13 @@ describe("ProviderTransform.normalizeMessages", () => {
     ).text();
 
     expect(Object.hasOwn(ProviderTransform, "NormalizeOptions")).toBe(false);
+    expect(Object.hasOwn(ProviderTransform, "sdkKey")).toBe(false);
+    expect(Object.hasOwn(ProviderTransform, "temperature")).toBe(false);
+    expect(Object.hasOwn(ProviderTransform, "topP")).toBe(false);
     expect(transformSource).not.toMatch(/\bexport\s+interface\s+NormalizeOptions\b/);
+    expect(transformSource).not.toMatch(/\bsdkKey\b/);
+    expect(transformSource).not.toMatch(/\btemperature\b/);
+    expect(transformSource).not.toMatch(/\btopP\b/);
   });
 
   test("openai is passthrough", () => {
@@ -109,7 +90,16 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    const part = (result[0].content as Array<Record<string, unknown>>)[0];
+    const content = result[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    if (!Array.isArray(content)) {
+      expect.unreachable("content should be an array");
+    }
+    const part = content[0];
+    expect(part.type).toBe("tool-call");
+    if (part.type !== "tool-call") {
+      expect.unreachable("content part should be a tool call");
+    }
     expect(part.toolCallId).toBe("call_with_dots_and_slashes");
   });
 
@@ -122,13 +112,22 @@ describe("ProviderTransform.normalizeMessages", () => {
             type: "tool-result",
             toolCallId: "id@with#special$chars",
             toolName: "test",
-            output: "ok",
+            output: { type: "text", value: "ok" },
           },
         ],
       },
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
-    const part = (result[0].content as Array<Record<string, unknown>>)[0];
+    const content = result[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    if (!Array.isArray(content)) {
+      expect.unreachable("content should be an array");
+    }
+    const part = content[0];
+    expect(part.type).toBe("tool-result");
+    if (part.type !== "tool-result") {
+      expect.unreachable("content part should be a tool result");
+    }
     expect(part.toolCallId).toBe("id_with_special_chars");
   });
 
@@ -172,8 +171,30 @@ describe("ProviderTransform.normalizeMessages", () => {
     ];
     const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
     expect(result).toHaveLength(1);
-    expect((result[0].content as unknown[]).length).toBe(1);
-    expect((result[0].content as Array<Record<string, unknown>>)[0].type).toBe("tool-call");
+    const content = result[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    if (!Array.isArray(content)) {
+      expect.unreachable("content should be an array");
+    }
+    expect(content.length).toBe(1);
+    expect(content[0].type).toBe("tool-call");
+  });
+
+  test("preserves non-empty reasoning parts while filtering empty reasoning parts", () => {
+    const msgs = [
+      {
+        role: "assistant" as const,
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "keep me" },
+        ],
+      },
+    ] as ModelMessage[];
+
+    const result = ProviderTransform.normalizeMessages(msgs, anthropicModel);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toEqual([{ type: "reasoning", text: "keep me" }]);
   });
 
   test("accepts Provider.Model directly", () => {
@@ -297,7 +318,14 @@ describe("ProviderTransform.applyAnthropicCaching", () => {
       { role: "user", content: "run tool" },
       {
         role: "tool",
-        content: [{ type: "tool-result", toolCallId: "t1", toolName: "x", output: "ok" }],
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "t1",
+            toolName: "x",
+            output: { type: "text", value: "ok" },
+          },
+        ],
       },
       { role: "assistant", content: "done" },
     ];
@@ -363,40 +391,6 @@ describe("normalizeMessages applies caching for anthropic", () => {
     const result = ProviderTransform.normalizeMessages(msgs, openaiModel);
     expect((result[0] as Record<string, unknown>).providerOptions).toBeUndefined();
     expect((result[1] as Record<string, unknown>).providerOptions).toBeUndefined();
-  });
-});
-
-describe("ProviderTransform.temperature", () => {
-  test("returns undefined for claude models", () => {
-    const model: Provider.Model = {
-      id: "claude-sonnet-4-20250514",
-      providerID: "anthropic",
-      name: "Claude Sonnet 4",
-      api: { npm: "@ai-sdk/anthropic" },
-    };
-    expect(ProviderTransform.temperature(model)).toBeUndefined();
-  });
-
-  test("returns undefined for non-claude models", () => {
-    const model: Provider.Model = {
-      id: "gpt-4o",
-      providerID: "openai",
-      name: "GPT-4o",
-      api: { npm: "@ai-sdk/openai" },
-    };
-    expect(ProviderTransform.temperature(model)).toBeUndefined();
-  });
-});
-
-describe("ProviderTransform.topP", () => {
-  test("returns undefined", () => {
-    const model: Provider.Model = {
-      id: "gpt-4o",
-      providerID: "openai",
-      name: "GPT-4o",
-      api: { npm: "@ai-sdk/openai" },
-    };
-    expect(ProviderTransform.topP(model)).toBeUndefined();
   });
 });
 

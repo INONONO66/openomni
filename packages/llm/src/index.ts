@@ -1,6 +1,4 @@
 export { Auth } from "./auth";
-export { getAuthProviders, getAuthProvider } from "./auth/registry";
-export type { AuthCallbacks, AuthProvider, AuthMethod } from "./auth/registry";
 export {
   Provider,
   ProviderTransform,

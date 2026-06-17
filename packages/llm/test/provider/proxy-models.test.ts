@@ -6,8 +6,7 @@ function stubFetch(
   handler: (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>,
 ): { restore: () => void } {
   const original = globalThis.fetch;
-  // biome-ignore lint: test helper needs to override fetch
-  (globalThis as any).fetch = handler;
+  globalThis.fetch = handler;
   return {
     restore: () => {
       globalThis.fetch = original;

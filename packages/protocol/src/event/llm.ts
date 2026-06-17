@@ -28,6 +28,9 @@ export namespace LlmCall {
       durationMs: z.number(),
       inputTokens: Token.Count,
       outputTokens: Token.Count,
+      reasoningTokens: Token.Count.default(0),
+      cacheReadTokens: Token.Count.default(0),
+      cacheWriteTokens: Token.Count.default(0),
       finishReason: z.string(),
     }),
   );

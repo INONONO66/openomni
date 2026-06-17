@@ -823,9 +823,9 @@ describe("Processor", () => {
     });
   });
 
-  describe("cost tracking", () => {
-    test("calculates cost from model.cost and accumulates in assistantMessage", async () => {
-      const modelWithCost: Provider.Model = {
+  describe("token accounting", () => {
+    test("keeps local cost at zero and accumulates AI SDK token usage", async () => {
+      const modelWithCatalogCost: Provider.Model = {
         id: "claude-opus-4-5",
         providerID: "anthropic",
         name: "Claude Opus",
@@ -846,18 +846,18 @@ describe("Processor", () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
-        model: modelWithCost,
+        model: modelWithCatalogCost,
         abort: abortController.signal,
         createStream: async () => mockStream,
       });
 
-      await processor.process({ messages: [], model: modelWithCost, system: "" });
+      await processor.process({ messages: [], model: modelWithCatalogCost, system: "" });
 
-      // inputCost = (10000/1M) * 15.0 = 0.15
-      // outputCost = (5000/1M) * 75.0 = 0.375
-      // totalCost = 0.15 + 0.375 = 0.525
-      expect(mockAssistantMessage.cost).toBeGreaterThan(0);
-      expect(mockAssistantMessage.cost).toBeCloseTo(0.525, 4);
+      expect(mockAssistantMessage.cost).toBe(0);
+      expect(mockAssistantMessage.providerID).toBe("anthropic");
+      expect(mockAssistantMessage.modelID).toBe("claude-3-5-sonnet");
+      expect(mockAssistantMessage.tokens.input).toBe(10000);
+      expect(mockAssistantMessage.tokens.output).toBe(5000);
     });
 
     test("returns zero cost when model.cost is absent", async () => {
@@ -893,7 +893,7 @@ describe("Processor", () => {
       expect(mockAssistantMessage.tokens.output).toBe(5000);
     });
 
-    test("accumulates cost across multiple step-finish events", async () => {
+    test("accumulates tokens across multiple step-finish events", async () => {
       const mockStream = {
         fullStream: (async function* () {
           yield {
@@ -910,7 +910,7 @@ describe("Processor", () => {
         })(),
       };
 
-      const modelWithCost: Provider.Model = {
+      const modelWithCatalogCost: Provider.Model = {
         id: "claude-3-5-sonnet-20241022",
         providerID: "anthropic",
         name: "Claude 3.5 Sonnet",
@@ -920,17 +920,14 @@ describe("Processor", () => {
       const processor = Processor.create({
         assistantMessage: mockAssistantMessage,
         sessionID: "session-456",
-        model: modelWithCost,
+        model: modelWithCatalogCost,
         abort: abortController.signal,
         createStream: async () => mockStream,
       });
 
-      await processor.process({ messages: [], model: modelWithCost, system: "" });
+      await processor.process({ messages: [], model: modelWithCatalogCost, system: "" });
 
-      // step1: (1000/1M)*3 + (500/1M)*15 = 0.003 + 0.0075 = 0.0105
-      // step2: (2000/1M)*3 + (800/1M)*15 = 0.006 + 0.012 = 0.018
-      // total = 0.0285
-      expect(mockAssistantMessage.cost).toBeCloseTo(0.0285, 4);
+      expect(mockAssistantMessage.cost).toBe(0);
       expect(mockAssistantMessage.tokens.input).toBe(3000);
       expect(mockAssistantMessage.tokens.output).toBe(1300);
     });

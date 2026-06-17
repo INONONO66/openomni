@@ -1,6 +1,4 @@
-import { APIError, RetryError } from "../error";
-import { Bus } from "@openomni/session";
-import { LlmCall } from "@openomni/protocol";
+import { APIError } from "../error";
 
 export namespace Retry {
   export const RETRY_INITIAL_DELAY = 2000;
@@ -107,101 +105,11 @@ export namespace Retry {
       }
 
       return undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  interface WithRetryOptions {
-    maxAttempts?: number;
-    signal?: AbortSignal;
-    initialDelay?: number;
-    trace?: { traceId: string; sessionId: string; runId?: string; provider?: string };
-  }
-
-  export async function withRetry<T>(fn: () => Promise<T>, options?: WithRetryOptions): Promise<T> {
-    const maxAttempts = options?.maxAttempts ?? 3;
-    const signal = options?.signal;
-    const initialDelay = options?.initialDelay ?? RETRY_INITIAL_DELAY;
-
-    let lastError: Error | undefined;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        if (signal?.aborted) {
-          throw new DOMException("Aborted", "AbortError");
-        }
-
-        return await fn();
-      } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") {
-          throw e;
-        }
-
-        lastError = e instanceof Error ? e : new Error(String(e));
-
-        if (attempt === maxAttempts) {
-          throw new RetryError({
-            message: `Failed after ${maxAttempts} attempts`,
-            attempts: maxAttempts,
-            lastError: lastError.message,
-          });
-        }
-
-        if (APIError.isInstance(e)) {
-          const retryReason = isRetryable(e);
-          if (!retryReason) {
-            throw e;
-          }
-
-          const delayMs = delay(attempt, e, initialDelay);
-
-          if (options?.trace) {
-            const { traceId, sessionId, runId, provider = "unknown" } = options.trace;
-
-            Bus.publish(LlmCall.RetryDecided, {
-              traceId,
-              sessionId,
-              ...(runId !== undefined && { runId }),
-              attempt,
-              maxAttempts,
-              reason: retryReason,
-              backoffMs: delayMs,
-              time: Date.now(),
-            });
-
-            const isRateLimit =
-              retryReason === "Too Many Requests" || retryReason === "Rate Limited";
-            if (isRateLimit) {
-              Bus.publish(LlmCall.RateLimited, {
-                traceId,
-                sessionId,
-                ...(runId !== undefined && { runId }),
-                provider,
-                retryAfterMs: delayMs,
-                time: Date.now(),
-              });
-            }
-          }
-
-          try {
-            await sleep(delayMs, signal ?? new AbortController().signal);
-          } catch (sleepError) {
-            if (sleepError instanceof DOMException && sleepError.name === "AbortError") {
-              throw sleepError;
-            }
-            throw sleepError;
-          }
-        } else {
-          throw lastError;
-        }
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return undefined;
       }
+      throw error;
     }
-
-    throw new RetryError({
-      message: `Failed after ${maxAttempts} attempts`,
-      attempts: maxAttempts,
-      lastError: lastError?.message,
-    });
   }
 }
