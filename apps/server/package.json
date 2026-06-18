@@ -15,8 +15,10 @@
     "@openomni/openomni": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/session": "workspace:*",
+    "ai": "^6.0.141",
     "gray-matter": "^4.0.3",
     "hono": "^4.0.0",
+    "opensearch-ai-sdk": "0.0.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
