@@ -6,6 +6,7 @@ import type {
   ToolProvider,
   ToolSource,
 } from "@openomni/openomni";
+import { createOpenSearchNativeTools } from "./opensearch";
 
 export class CustomToolProvider implements ToolProvider {
   readonly name = "custom";
@@ -58,8 +59,9 @@ export class CustomToolProvider implements ToolProvider {
       },
     ];
 
+    const defaultTools = [...builtInTools, ...createOpenSearchNativeTools()];
     const duplicate = extraTools.find((candidate) =>
-      builtInTools.some((base) => base.spec.name === candidate.spec.name),
+      defaultTools.some((base) => base.spec.name === candidate.spec.name),
     );
     if (duplicate) {
       throw new Error(`Duplicate custom tool name: ${duplicate.spec.name}`);
@@ -72,7 +74,7 @@ export class CustomToolProvider implements ToolProvider {
       throw new Error(`Duplicate custom tool name: ${firstDuplicate.spec.name}`);
     }
 
-    this.tools = [...builtInTools, ...extraTools];
+    this.tools = [...defaultTools, ...extraTools];
   }
 
   listTools(): NativeTool[] {

@@ -76,6 +76,10 @@ bun run format
 - [Architecture Decision Records](docs/design-decisions/index.md) — ADR-010–013 define the target Agent OS model
 - [Implementation Status](docs/implementation-status.md) — what actually runs today
 
+## Acknowledgements
+
+OpenOmni's default `web_search` and `web_fetch` tools are powered by [minpeter/opensearch](https://github.com/minpeter/opensearch) through its AI SDK tool package.
+
 ## License
 
 MIT
