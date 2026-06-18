@@ -715,8 +715,7 @@ describe("McpToolProvider", () => {
     }
   });
 
-  it("uses the latest session as default lifecycle audit context", async () => {
-    createLedgerSession();
+  it("omits lifecycle audit events when no audit session is provided", async () => {
     const client = makeClient();
     const provider = new McpToolProvider({ createClient: () => client.client });
 
@@ -731,12 +730,7 @@ describe("McpToolProvider", () => {
       const lifecycleEvents = events.filter(
         (e) => e.name === "policy.action.requested" || e.name === "policy.action.approved",
       );
-      expect(lifecycleEvents.map((e) => e.name)).toEqual([
-        "policy.action.requested",
-        "policy.action.approved",
-        "policy.action.requested",
-        "policy.action.approved",
-      ]);
+      expect(lifecycleEvents).toHaveLength(0);
     } finally {
       stop();
     }

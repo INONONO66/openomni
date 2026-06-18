@@ -1,6 +1,6 @@
 import type { McpServerConfig, Tool } from "@openomni/protocol";
 import { PolicyEvent } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Bus } from "@openomni/session";
 import type { McpLifecycleAuditContext, ResolvedLifecycleAudit } from "./provider-types";
 
 /** @internal Package-local helper for McpToolProvider only. */
@@ -18,12 +18,7 @@ export function resolveLifecycleAudit(
 ): ResolvedLifecycleAudit | undefined {
   const sessionId = context?.audit?.sessionId;
   if (typeof sessionId !== "string" || sessionId.length === 0) {
-    const fallbackSession = latestSession();
-    if (!fallbackSession) return undefined;
-    return {
-      sessionId: fallbackSession.id,
-      ...(context?.actor !== undefined && { actor: context.actor }),
-    };
+    return undefined;
   }
   return {
     sessionId,
@@ -124,12 +119,6 @@ export function buildActor(
     kind: "mcp_provider",
     ...(sessionId !== undefined && { sessionId }),
   };
-}
-
-function latestSession(): { readonly id: string } | undefined {
-  return Storage.get()
-    .session.list()
-    .sort((left, right) => right.time.updated - left.time.updated)[0];
 }
 
 function lifecycleBase(audit: ResolvedLifecycleAudit) {
