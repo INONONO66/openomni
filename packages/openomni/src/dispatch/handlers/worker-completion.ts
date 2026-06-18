@@ -26,6 +26,10 @@ const ReadBackRequest = WorkItem.ReadBackRequest.superRefine((request, ctx) => {
 
 type ReadBackRequest = z.infer<typeof ReadBackRequest>;
 
+const ReadBackRequestEnvelope = WorkItem.ReadBackRequestEnvelope.extend({
+  request: ReadBackRequest,
+});
+
 const CompletionReportDraft = z
   .object({
     summary: z.string().min(1),
@@ -47,15 +51,7 @@ const CompletionReportDraft = z
 const CompletionEnvelope = z
   .object({
     completionReport: CompletionReportDraft,
-    readBackRequests: z
-      .array(
-        z.object({
-          claimIndex: z.number().int().nonnegative(),
-          request: ReadBackRequest,
-        }),
-      )
-      .max(MAX_READ_BACK_REQUESTS)
-      .default([]),
+    readBackRequests: z.array(ReadBackRequestEnvelope).max(MAX_READ_BACK_REQUESTS).default([]),
   })
   .superRefine((envelope, ctx) => {
     for (const [requestIndex, readBack] of envelope.readBackRequests.entries()) {
