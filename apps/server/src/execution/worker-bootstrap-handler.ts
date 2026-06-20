@@ -95,7 +95,7 @@ export namespace WorkerBootstrapHandler {
         context: {
           workerId: options.workerId,
           agents: bootstrap.agents.length,
-          mcpTools: bootstrap.toolCatalog.length,
+          runtimeTools: bootstrap.toolCatalog.length,
         },
       });
       options.respond({ ok: true });
