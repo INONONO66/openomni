@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConnector, Dispatch, Execution } from "@openomni/protocol";
+import type { NativeTool } from "@openomni/openomni";
 import { createServerDispatchOwners } from "../../src/bootstrap/dispatch-owners";
 import { assembleBootstrap } from "../../src/bootstrap/worker-bootstrap";
+import type { CustomToolProvider } from "../../src/tool/custom";
 import type { McpToolProvider } from "../../src/tool/mcp";
 
 const tempRoots: string[] = [];
@@ -25,6 +27,55 @@ function fakeMcpProvider(): McpToolProvider {
   return {
     listTools: () => [],
   } as unknown as McpToolProvider;
+}
+
+function fakeMcpProviderWithTool(): McpToolProvider {
+  return {
+    listTools: () => [
+      makeTool({
+        name: "filesystem.read",
+        category: "mcp",
+      }),
+    ],
+  } as unknown as McpToolProvider;
+}
+
+function fakeCustomProvider(): Pick<CustomToolProvider, "listTools"> {
+  return {
+    listTools: () => [
+      makeTool({
+        name: "web_search",
+        category: "custom",
+      }),
+      makeTool({
+        name: "web_fetch",
+        category: "custom",
+      }),
+    ],
+  };
+}
+
+function makeTool(input: {
+  readonly name: string;
+  readonly category: NativeTool["category"];
+}): NativeTool {
+  return {
+    spec: {
+      name: input.name,
+      description: `${input.name} tool`,
+      inputSchema: { type: "object", properties: {} },
+    },
+    riskTier: 0,
+    isReadOnly: true,
+    isDestructive: false,
+    isConcurrencySafe: true,
+    category: input.category,
+    execute: async (call) => ({
+      id: crypto.randomUUID(),
+      toolCallId: call.id,
+      output: `${input.name} result`,
+    }),
+  };
 }
 
 function fakeConnector(command: string, args: readonly string[]): AppConnector.Definition {
@@ -108,6 +159,31 @@ function request(workspaceRoot: string): Execution.Request {
 }
 
 describe("server bootstrap connector endpoint credentials", () => {
+  test("includes custom server tools in the worker runtime catalog", async () => {
+    const bootstrap = await assembleBootstrap(fakeMcpProviderWithTool(), {}, fakeCustomProvider());
+    const byName = Object.fromEntries(
+      bootstrap.toolCatalog.map((entry) => [entry.canonicalName, entry]),
+    );
+
+    expect(byName["filesystem.read"]).toMatchObject({
+      source: "mcp",
+      category: "mcp",
+      mcpServer: "filesystem",
+    });
+    expect(byName.web_search).toMatchObject({
+      source: "server",
+      category: "custom",
+      riskTier: 0,
+    });
+    expect(byName.web_fetch).toMatchObject({
+      source: "server",
+      category: "custom",
+      riskTier: 0,
+    });
+    expect(byName.web_search?.mcpServer).toBeUndefined();
+    expect(byName.web_fetch?.mcpServer).toBeUndefined();
+  });
+
   test("passes Auth.all credentials through bootstrap into the default connector driver with redacted output", async () => {
     const workspaceRoot = tempDir("server-bootstrap-credential-runtime");
     const scriptPath = join(workspaceRoot, "fake-bootstrap-credential.ts");
