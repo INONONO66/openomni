@@ -1,9 +1,9 @@
-import { Subagent, type WorkItem } from "@openomni/protocol";
+import { WorkerRun, type WorkItem } from "@openomni/protocol";
 import { z } from "zod";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
-const transitions: Record<Subagent.WorkerRunStatus, readonly Subagent.WorkerRunStatus[]> = {
+const transitions: Record<WorkerRun.Status, readonly WorkerRun.Status[]> = {
   queued: ["starting"],
   starting: ["running", "failed", "cancelled", "interrupted"],
   running: ["waiting_input", "succeeded", "failed", "cancelled", "interrupted"],
@@ -14,10 +14,7 @@ const transitions: Record<Subagent.WorkerRunStatus, readonly Subagent.WorkerRunS
   interrupted: [],
 };
 
-function isValidTransition(
-  current: Subagent.WorkerRunStatus,
-  next: Subagent.WorkerRunStatus,
-): boolean {
+function isValidTransition(current: WorkerRun.Status, next: WorkerRun.Status): boolean {
   return current === next || transitions[current].includes(next);
 }
 
@@ -29,7 +26,7 @@ function requireAdapter(): WorkerRunStateStore.Adapter {
 }
 
 export namespace WorkerRunStateStore {
-  export type Status = Subagent.WorkerRunStatus;
+  export type Status = WorkerRun.Status;
 
   export interface Record {
     readonly runId: string;
@@ -58,7 +55,7 @@ export namespace WorkerRunStateStore {
   }
 
   export const StatusPrecondition = z.object({
-    status: Subagent.WorkerRunStatus,
+    status: WorkerRun.Status,
     timeUpdated: z.number(),
   });
   export type StatusPrecondition = z.infer<typeof StatusPrecondition>;

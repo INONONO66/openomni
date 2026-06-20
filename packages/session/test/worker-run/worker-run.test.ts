@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Subagent } from "@openomni/protocol";
+import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import { Bus } from "../../src/bus/index";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
@@ -152,7 +152,7 @@ describe("WorkerRun", () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
 
     const events: Array<{ payload: { sessionId: string; runId: string; title: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunStarted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Started, (event) => {
       events.push(event);
     });
 
@@ -170,7 +170,7 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
 
     const events: Array<{ payload: { sessionId: string; runId: string; status: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Completed, (event) => {
       events.push(event);
     });
 
@@ -188,7 +188,7 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
 
     const events: Array<{ payload: { sessionId: string; runId: string; error?: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunFailed, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Failed, (event) => {
       events.push(event);
     });
 
@@ -208,7 +208,7 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "starting");
 
     const events: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunStarted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Started, (event) => {
       events.push(event);
     });
 
