@@ -25,7 +25,7 @@ const CATALOG_FIXTURE = buildToolCatalog([
   },
   {
     source: "agent",
-    tools: [makeTool("subagent"), makeTool("custom-agent-tool")],
+    tools: [makeTool("dispatch"), makeTool("custom-agent-tool")],
   },
 ]);
 
@@ -41,11 +41,11 @@ describe("buildToolCatalog", () => {
 
   test("assigns correct categories from DEFAULT_CATEGORY_MAP", () => {
     const entries = buildToolCatalog([
-      { source: "system", tools: [makeTool("bash"), makeTool("read"), makeTool("subagent")] },
+      { source: "system", tools: [makeTool("bash"), makeTool("read"), makeTool("dispatch")] },
     ]);
     expect(entries.find((e) => e.canonicalName === "bash")?.category).toBe("execution");
     expect(entries.find((e) => e.canonicalName === "read")?.category).toBe("filesystem");
-    expect(entries.find((e) => e.canonicalName === "subagent")?.category).toBe("delegation");
+    expect(entries.find((e) => e.canonicalName === "dispatch")?.category).toBe("delegation");
   });
 });
 
@@ -61,7 +61,7 @@ describe("resolveCategory", () => {
     expect(resolveCategory("glob", "system")).toBe("filesystem");
     expect(resolveCategory("grep.search", "system")).toBe("filesystem");
     expect(resolveCategory("bash", "system")).toBe("execution");
-    expect(resolveCategory("subagent", "agent")).toBe("delegation");
+    expect(resolveCategory("dispatch", "agent")).toBe("delegation");
   });
 
   test("mcp source defaults to 'mcp' for unknown names", () => {

@@ -10,9 +10,7 @@ export function policyPointIdsForDescriptor(
 
   if (timing === "invoke.prepare") {
     if (descriptor.kind === "worker") {
-      return descriptor.labels.includes("delegation.background")
-        ? ["delegation.background.pre"]
-        : ["delegation.subagent.pre"];
+      return ["delegation.worker.pre"];
     }
     if (descriptor.kind === "tool") {
       return descriptor.source?.type === "mcp" || descriptor.source?.type === "skill-mcp"
@@ -23,9 +21,7 @@ export function policyPointIdsForDescriptor(
 
   if (timing === "invoke.result") {
     if (descriptor.kind === "worker") {
-      return descriptor.labels.includes("delegation.background")
-        ? ["delegation.background.post"]
-        : ["delegation.subagent.post"];
+      return ["delegation.worker.post"];
     }
     if (descriptor.kind === "tool") {
       return descriptor.source?.type === "mcp" || descriptor.source?.type === "skill-mcp"

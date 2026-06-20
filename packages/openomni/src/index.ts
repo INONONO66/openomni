@@ -70,15 +70,6 @@ export type {
   RuntimeToolTarget,
 } from "./extension";
 
-// Subagent runtime
-export {
-  SubagentRuntime,
-  SubagentSpawnPolicyMiddleware,
-  BackgroundLimitsMiddleware,
-  SubagentConsultation,
-  BackgroundManager,
-} from "./subagent";
-
 export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,
@@ -99,10 +90,8 @@ export {
   WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
-  buildWorkerChildRuntimeConfig,
   createDispatchTool,
   createToolExecutor,
-  createWorkerSubagentRuntime,
   defineTool,
   ToolRuntimePolicyMiddleware,
   resolveMeta,

@@ -1,4 +1,4 @@
-import { Subagent } from "@openomni/protocol";
+import { WorkerRun } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 
 export function publishWorkerRunStarted(input: {
@@ -7,7 +7,7 @@ export function publishWorkerRunStarted(input: {
   readonly runId: string;
   readonly prompt: string;
 }): void {
-  Bus.publish(Subagent.Events.WorkerRunStarted, {
+  Bus.publish(WorkerRun.Events.Started, {
     traceId: input.traceId,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -21,7 +21,7 @@ export function publishWorkerRunSucceeded(input: {
   readonly sessionId: string;
   readonly runId: string;
 }): void {
-  Bus.publish(Subagent.Events.WorkerRunCompleted, {
+  Bus.publish(WorkerRun.Events.Completed, {
     traceId: input.traceId,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -35,7 +35,7 @@ export function publishWorkerRunCancelled(input: {
   readonly sessionId: string;
   readonly runId: string;
 }): void {
-  Bus.publish(Subagent.Events.WorkerSessionCancelled, {
+  Bus.publish(WorkerRun.Events.Cancelled, {
     traceId: input.traceId,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -50,7 +50,7 @@ export function publishWorkerRunFailed(input: {
   readonly runId: string;
   readonly errorMessage: string;
 }): void {
-  Bus.publish(Subagent.Events.WorkerRunFailed, {
+  Bus.publish(WorkerRun.Events.Failed, {
     traceId: input.traceId,
     sessionId: input.sessionId,
     runId: input.runId,

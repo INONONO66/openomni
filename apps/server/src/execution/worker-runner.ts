@@ -1,17 +1,7 @@
 import { ChatAgent } from "@openomni/agent";
-import {
-  AgentToolProvider,
-  SystemToolProvider,
-  buildToolCatalog,
-  buildWorkerMiddleware,
-  createWorkerSubagentRuntime,
-} from "@openomni/openomni";
-import { Execution, type WorkerBootstrap } from "@openomni/protocol";
+import { AgentToolProvider, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
+import { Execution } from "@openomni/protocol";
 import { createContextMiddleware } from "../context/index";
-import {
-  buildDelegationAdmissionMiddleware,
-  createScopedBackgroundManager,
-} from "./worker-runner-background";
 import {
   publishWorkerRunCancelled,
   publishWorkerRunFailed,
@@ -34,7 +24,6 @@ export namespace WorkerRunner {
       server,
       activeRuns,
       bootstrapReady,
-      backgroundManager,
       injectionQueue,
       defaultWorkspaceRoot,
       getBootstrap,
@@ -94,30 +83,7 @@ export namespace WorkerRunner {
           ...(workspaceRoot ? { workspaceRoot } : {}),
         });
 
-        const toolsRef: Parameters<typeof createWorkerSubagentRuntime>[0]["toolsRef"] = {};
-        const catalogRef: { catalog?: ReturnType<typeof buildToolCatalog> } = {};
-        const agentDefinitionsRef: {
-          definitions?: Map<string, WorkerBootstrap.RuntimeAgentDefinition>;
-        } = {
-          definitions: new Map((bootstrap?.agents ?? []).map((agent) => [agent.name, agent])),
-        };
-
-        const workerSubagentConfig: Parameters<typeof createWorkerSubagentRuntime>[0] = {
-          toolsRef,
-          catalogRef,
-          agentDefinitionsRef,
-          resolveAuth,
-          allowAuthFallback: false,
-          parentSessionId: sessionId,
-          parentPermissions: request.permissions,
-        };
-        const scopedBackgroundManager = createScopedBackgroundManager({
-          backgroundManager,
-          workerSubagentConfig,
-        });
-
         const agentProvider = new AgentToolProvider({
-          subagentRuntime: createWorkerSubagentRuntime(workerSubagentConfig),
           dispatchToolMode: "worker-resident-ask",
           dispatchRuntime: createWorkerDispatchRuntime({
             server,
@@ -127,14 +93,6 @@ export namespace WorkerRunner {
             runId,
             ...(workspaceRoot ? { workspaceRoot } : {}),
           }),
-          middleware: buildDelegationAdmissionMiddleware(request),
-          delegationContext: {
-            depth: 0,
-            maxDepth: 3,
-            visitedAgents: new Set([request.agentName ?? "dev"]),
-            parentAbort: controller.signal,
-          },
-          backgroundManager: scopedBackgroundManager,
         });
 
         const systemTools = systemProvider.listTools();
@@ -152,14 +110,6 @@ export namespace WorkerRunner {
           availableTools,
         );
         const exposedTools = tools ?? [];
-
-        toolsRef.tools = exposedTools;
-        toolsRef.toolExecutor = toolExecutor;
-        catalogRef.catalog = buildToolCatalog([
-          { tools: systemTools, source: "system" },
-          { tools: agentTools, source: "agent" },
-          { tools: proxyTools, source: "mcp" },
-        ]);
 
         const agent = createAgent({
           model: request.model,

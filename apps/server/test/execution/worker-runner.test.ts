@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { AgentRegistry } from "@openomni/agent";
 import type { AgentResult } from "@openomni/agent";
-import { BackgroundManager, InjectionQueue, WorkspaceLock } from "@openomni/openomni";
+import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import type { Tool, WorkerBootstrap } from "@openomni/protocol";
 
 import type { WorkerRunState } from "../../src/execution/worker-run-state";
@@ -38,13 +37,6 @@ function createSpawnOptions(
     },
     activeRuns,
     bootstrapReady: Promise.resolve(),
-    backgroundManager: BackgroundManager.create({
-      maxConcurrentPerAgent: 1,
-      maxConcurrentTotal: 1,
-      maxDepth: 1,
-      resolveAuth: () => undefined,
-      allowAuthFallback: false,
-    }),
     injectionQueue: InjectionQueue.create(),
     defaultWorkspaceRoot: undefined,
     getBootstrap: () => null,
@@ -583,62 +575,20 @@ describe("WorkerRunner", () => {
     }
   });
 
-  it("applies parent policy plans as delegation admission middleware", async () => {
+  it("does not expose subagent as a worker delegation tool", async () => {
     const responses: unknown[] = [];
     let subagentResult: Tool.Result | undefined;
-    const bootstrap: WorkerBootstrap.Bootstrap = {
-      configEpoch: "epoch-1",
-      toolCatalog: [],
-      agents: [
-        {
-          name: "child",
-          description: "child",
-          model: { provider: "test", id: "child" },
-          tools: { all: true },
-          policyPlan: {
-            policies: [
-              {
-                id: "builtin:tool-permission",
-                required: true,
-                config: { permission: { action: "tool.call", allowlist: ["read"] } },
-              },
-            ],
-            labels: ["security"],
-          },
-        },
-      ],
-    };
-    AgentRegistry.define({
-      name: "child",
-      description: "child",
-      tools: [],
-      model: { provider: "test", id: "child" },
-    });
     const responseReceived = new Promise<void>((resolve) => {
       const options = createSpawnOptions(
         {
           ...createValidRequest(),
-          tools: [{ name: "subagent", inputSchema: {} }],
+          tools: [{ name: "dispatch", inputSchema: {} }],
           policyPlan: {
             policies: [
               {
                 id: "builtin:tool-permission",
                 required: true,
-                config: {
-                  permission: {
-                    action: "tool.call",
-                    inputRules: [
-                      {
-                        toolPattern: "subagent",
-                        field: "childRuntimeMiddlewareNames",
-                        pattern: "builtin:tool-permission",
-                        action: "deny",
-                        reason: "child runtime policy requires admission review",
-                        priority: 1,
-                      },
-                    ],
-                  },
-                },
+                config: { permission: { action: "tool.call", allowlist: ["dispatch"] } },
               },
             ],
             labels: ["security"],
@@ -649,7 +599,6 @@ describe("WorkerRunner", () => {
           resolve();
         },
         {
-          getBootstrap: () => bootstrap,
           server: {
             async call() {
               throw new Error("unexpected server call");
@@ -675,139 +624,15 @@ describe("WorkerRunner", () => {
       WorkerRunner.spawnRun(options);
     });
 
-    try {
-      await responseReceived;
+    await responseReceived;
 
-      expect(responses[0]).toMatchObject({ status: "succeeded" });
-      expect(subagentResult).toMatchObject({
-        id: expect.any(String),
-        toolCallId: expect.any(String),
-        isError: true,
-        output: "child runtime policy requires admission review",
-      });
-    } finally {
-      AgentRegistry.clear();
-    }
-  });
-
-  it("enriches background subagent launches with child runtime policy config", async () => {
-    const responses: unknown[] = [];
-    const notifications: Array<{ method: string; params?: Record<string, unknown> }> = [];
-    const launched: Array<Record<string, unknown>> = [];
-    const bootstrap: WorkerBootstrap.Bootstrap = {
-      configEpoch: "epoch-1",
-      toolCatalog: [],
-      agents: [
-        {
-          name: "child",
-          description: "child",
-          model: { provider: "test", id: "child" },
-          tools: { all: true },
-          policyPlan: {
-            policies: [
-              {
-                id: "builtin:tool-permission",
-                required: true,
-                config: { permission: { action: "tool.call", allowlist: ["read"] } },
-              },
-            ],
-            labels: ["security"],
-          },
-        },
-      ],
-    };
-    AgentRegistry.define({
-      name: "child",
-      description: "child",
-      tools: [],
-      model: { provider: "test", id: "child" },
+    expect(responses[0]).toMatchObject({ status: "succeeded" });
+    expect(subagentResult).toMatchObject({
+      id: expect.any(String),
+      toolCallId: expect.any(String),
+      isError: true,
+      output: "Unknown tool: subagent",
     });
-    const backgroundManager = {
-      async launch(input: Record<string, unknown>) {
-        launched.push(input);
-        return {
-          id: "bg_test",
-          agentName: "child",
-          prompt: "background work",
-          status: "running",
-          parentSessionId: "session-1",
-          queuedAt: Date.now(),
-          depth: 0,
-        };
-      },
-      getTask: () => undefined,
-      getResult: () => undefined,
-      cancel: async () => false,
-      listByParent: () => [],
-      cleanup: () => undefined,
-      stats: () => ({ active: 0, pending: 0, total: 0 }),
-      dispose: () => undefined,
-    } as unknown as ReturnType<typeof BackgroundManager.create>;
-    const responseReceived = new Promise<void>((resolve) => {
-      const options = createSpawnOptions(
-        {
-          ...createValidRequest(),
-          tools: [{ name: "subagent", inputSchema: {} }],
-          policyPlan: {
-            policies: [
-              {
-                id: "builtin:tool-permission",
-                required: true,
-                config: { permission: { action: "tool.call", allowlist: ["read"] } },
-              },
-            ],
-            labels: ["security"],
-          },
-        },
-        (result) => {
-          responses.push(result);
-          resolve();
-        },
-        {
-          backgroundManager,
-          getBootstrap: () => bootstrap,
-          server: {
-            async call() {
-              throw new Error("unexpected server call");
-            },
-            notify(method, params) {
-              notifications.push({ method, params });
-            },
-          },
-          createAgent: (options) => ({
-            async run() {
-              if (!options.toolExecutor) throw new Error("tool executor missing");
-              const result = await options.toolExecutor({
-                id: "agent-tool-call",
-                tool: "subagent",
-                input: { agentName: "child", prompt: "background work", background: true },
-              });
-              expect(result.isError).not.toBe(true);
-              return successfulResult;
-            },
-          }),
-        },
-      );
-
-      WorkerRunner.spawnRun(options);
-    });
-
-    try {
-      await responseReceived;
-
-      expect(responses[0]).toMatchObject({ status: "succeeded" });
-      expect(launched).toHaveLength(1);
-      expect(launched[0]).toMatchObject({
-        agentName: "child",
-        parentSessionId: expect.any(String),
-      });
-      expect(launched[0].permissions).toBeUndefined();
-      const childMiddleware = launched[0].childMiddleware;
-      expect(Array.isArray(childMiddleware)).toBe(true);
-      expect(childMiddleware as unknown[]).not.toHaveLength(0);
-    } finally {
-      AgentRegistry.clear();
-    }
   });
 
   it("aborts a proxied tool IPC wait without waiting for the full IPC timeout", async () => {

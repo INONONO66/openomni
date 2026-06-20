@@ -1,7 +1,7 @@
 import { createIpcServer } from "@openomni/coordinator";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
-import { BackgroundManager, InjectionQueue, WorkspaceLock } from "@openomni/openomni";
+import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
@@ -50,14 +50,6 @@ const activeRuns: WorkerRunState.ActiveRunRegistry = new Map();
 const workerBootstrapState = WorkerBootstrapHandler.createState();
 const injectionQueue = InjectionQueue.create();
 
-const backgroundManager = BackgroundManager.create({
-  maxConcurrentPerAgent: 3,
-  maxConcurrentTotal: 10,
-  maxDepth: 3,
-  resolveAuth: workerBootstrapState.resolveAuth,
-  allowAuthFallback: false,
-});
-
 async function shutdownWorker(exitCode: number): Promise<never> {
   await BusPersistence.flush();
   BusPersistence.stop();
@@ -84,7 +76,6 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
       server,
       activeRuns,
       bootstrapReady: workerBootstrapState.ready,
-      backgroundManager,
       injectionQueue,
       defaultWorkspaceRoot: config.workspace?.root,
       getBootstrap: workerBootstrapState.getBootstrap,

@@ -19,16 +19,16 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — depends on session for observability (Bus, TraceContext)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + runtime registry, messenger, MCP — depends on session for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── policy/         # PolicyEngine + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
 │   │   └── src/runtime/        # Multi-agent infrastructure
 │   │       ├── messenger/      # AgentMessenger
 │   │       ├── registry/       # AgentRegistry
-│   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
+│   │       ├── tools/          # Runtime tool helpers
 │   │       └── mcp/            # McpClient
-│   ├── openomni/        # Orchestration: DAG, Ingress, Dispatch, ResidentRuntime, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
+│   ├── openomni/        # Orchestration: DAG, Ingress, Dispatch, ResidentRuntime, BusTransport, execution runtime
 │   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
@@ -48,7 +48,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | --- | --- | --- |
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
 | Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
-| Add subagent lifecycle events | `packages/protocol/src/subagent/index.ts` | `Subagent.Events.*` (worker runs + background tasks) |
+| Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
 | Add policy timing | `packages/protocol/src/policy/index.ts` | 13 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error, pre_ingress, pre_tool_selection, pre_delegation |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
@@ -59,7 +59,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade |
 | WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/set/list/remove) |
 | WorkItemStore engine | `packages/session/src/work-item/index.ts` | CRUD + lifecycle (start/complete/fail/cancel/retry) + blockers + evidence + dependency readiness + cycle detection |
-| Worker run records (subagent) | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
+| Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
 | Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
@@ -70,7 +70,6 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
 | Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
 | Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
-| Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
@@ -82,7 +81,6 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Actor identity (planned) | `packages/protocol/src/actor/` + `packages/session/src/actor/` | `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` / `ActorResolver` per ADR-009 |
 | ChannelGrant / Blacklist (planned) | `packages/protocol/src/actor/channel-grant`, `.../blacklist` | Per-channel policy ceiling and absolute block list per ADR-009 |
 | PendingInteraction (planned successor) | `packages/protocol/src/communication/pending-interaction` | Successor to `PendingAsk`; not a pure rename — status enum (`open / resolved / follow_up / expired / cancelled`), `allowedActions`, `followUpWindow`, and `workerRunId / sessionId` strong-coupling all change. Lifecycle managed inside dispatch. |
-| Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
 | Coordinator worker internals | `packages/coordinator/src/worker-pool/` | Internal leaf modules used by `worker-manager`; no root or submodule barrel contract |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
@@ -118,7 +116,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
 | Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `AgentRegistry`, `SubagentRuntime`, `WorkerRun`, `executorKind` |
+| Worker | Delegated execution actor (internal AI, external AI, human) | `AgentRegistry`, `WorkerRun`, `executorKind` |
 | Actor | Any external entity that interacts with the system | (Planned: `ActorIdentity` / `ActorEndpoint` in `packages/protocol/src/actor/`) |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 
@@ -179,6 +177,6 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. Custom provider endpoints use the OpenAI provider with their catalog API URL as `baseURL`.
 - `packages/agent` is organized as `src/core/` (ChatAgent + policy engine) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The policy engine is the extension point.
-- `packages/openomni` orchestrates ingress, DAG utilities, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
+- `packages/openomni` orchestrates ingress, DAG utilities, dispatch, and Resident runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware).
 - `packages/coordinator` owns multiprocess execution: on-demand worker lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
-- Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.
+- WorkerRun lifecycle events live under `WorkerRun.Events.*` in `packages/protocol/src/worker-run/index.ts`.

@@ -87,7 +87,7 @@ const descriptorFixtures: RuntimeResource.Descriptor[] = [
   RuntimeResource.Descriptor.parse({
     id: "tool:agent:delegate",
     kind: "tool",
-    labels: ["source.agent", "delegation.subagent"],
+    labels: ["source.agent", "delegation.worker"],
     capabilities: ["worker.spawn"],
     effects: ["session.create"],
     source: { type: "agent", agentId: "main-persona", agentProfileRef: "agent-profile:main" },

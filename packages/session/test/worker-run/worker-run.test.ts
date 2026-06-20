@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Subagent } from "@openomni/protocol";
+import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import { Bus } from "../../src/bus/index";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
@@ -152,7 +152,7 @@ describe("WorkerRun", () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
 
     const events: Array<{ payload: { sessionId: string; runId: string; title: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunStarted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Started, (event) => {
       events.push(event);
     });
 
@@ -170,7 +170,7 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
 
     const events: Array<{ payload: { sessionId: string; runId: string; status: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Completed, (event) => {
       events.push(event);
     });
 
@@ -188,7 +188,7 @@ describe("WorkerRun", () => {
     await WorkerRun.updateStatus("sess-1", "run-1", "running");
 
     const events: Array<{ payload: { sessionId: string; runId: string; error?: string } }> = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunFailed, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Failed, (event) => {
       events.push(event);
     });
 
@@ -203,12 +203,30 @@ describe("WorkerRun", () => {
     expect(events[0].payload).toEqual({ sessionId: "sess-1", runId: "run-1", error: "boom" });
   });
 
+  test("updateStatus publishes WorkerRunCancelled when entering cancelled", async () => {
+    await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
+    await WorkerRun.updateStatus("sess-1", "run-1", "starting");
+    await WorkerRun.updateStatus("sess-1", "run-1", "running");
+
+    const events: Array<{ payload: { sessionId: string; runId: string } }> = [];
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Cancelled, (event) => {
+      events.push(event);
+    });
+
+    await WorkerRun.updateStatus("sess-1", "run-1", "cancelled", { endedAt: 1234 });
+    await flushBus();
+    unsubscribe();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].payload).toEqual({ sessionId: "sess-1", runId: "run-1" });
+  });
+
   test("updateStatus does not duplicate lifecycle events for idempotent status writes", async () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
     await WorkerRun.updateStatus("sess-1", "run-1", "starting");
 
     const events: unknown[] = [];
-    const unsubscribe = Bus.subscribe(Subagent.Events.WorkerRunStarted, (event) => {
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Started, (event) => {
       events.push(event);
     });
 
