@@ -203,6 +203,24 @@ describe("WorkerRun", () => {
     expect(events[0].payload).toEqual({ sessionId: "sess-1", runId: "run-1", error: "boom" });
   });
 
+  test("updateStatus publishes WorkerRunCancelled when entering cancelled", async () => {
+    await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
+    await WorkerRun.updateStatus("sess-1", "run-1", "starting");
+    await WorkerRun.updateStatus("sess-1", "run-1", "running");
+
+    const events: Array<{ payload: { sessionId: string; runId: string } }> = [];
+    const unsubscribe = Bus.subscribe(WorkerRunProtocol.Events.Cancelled, (event) => {
+      events.push(event);
+    });
+
+    await WorkerRun.updateStatus("sess-1", "run-1", "cancelled", { endedAt: 1234 });
+    await flushBus();
+    unsubscribe();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].payload).toEqual({ sessionId: "sess-1", runId: "run-1" });
+  });
+
   test("updateStatus does not duplicate lifecycle events for idempotent status writes", async () => {
     await WorkerRun.create("sess-1", { runId: "run-1", title: "one", prompt: "a" });
     await WorkerRun.updateStatus("sess-1", "run-1", "starting");

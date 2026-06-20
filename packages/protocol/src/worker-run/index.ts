@@ -5,6 +5,7 @@ import { WorkItem } from "../work-item/index.js";
 const BaseEvent = z.object({
   traceId: z.string(),
   runId: z.string().optional(),
+  taskId: z.string().optional(),
   sessionId: z.string().optional(),
   time: z.number(),
 });
@@ -77,7 +78,7 @@ export namespace WorkerRun {
       BaseEvent.extend({
         payload: z.object({
           sessionId: z.string(),
-          runId: z.string().optional(),
+          runId: z.string(),
         }),
       }),
     );

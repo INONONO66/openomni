@@ -68,6 +68,17 @@ function publishLifecycleEvent(
     return;
   }
 
+  if (status === "cancelled") {
+    Bus.publish(WorkerRunProtocol.Events.Cancelled, {
+      traceId: crypto.randomUUID(),
+      sessionId,
+      runId: run.runId,
+      time: Date.now(),
+      payload: { sessionId, runId: run.runId },
+    });
+    return;
+  }
+
   if (status === "failed" || status === "interrupted") {
     Bus.publish(WorkerRunProtocol.Events.Failed, {
       traceId: crypto.randomUUID(),
