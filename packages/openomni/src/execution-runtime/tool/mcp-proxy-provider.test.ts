@@ -143,8 +143,8 @@ describe("ToolProxyProvider", () => {
     });
     const agentEntry = makeEntry({
       source: "agent",
-      canonicalName: "subagent",
-      spec: { name: "subagent", description: "Subagent", inputSchema: {} },
+      canonicalName: "dispatch",
+      spec: { name: "dispatch", description: "Dispatch", inputSchema: {} },
     });
     const mcpEntry = makeEntry({
       source: "mcp",
@@ -159,7 +159,7 @@ describe("ToolProxyProvider", () => {
     expect(tools).toHaveLength(3);
     expect(getTool(tools, 0).spec.name).toBe("bash");
     expect(getTool(tools, 0).source).toBe("system");
-    expect(getTool(tools, 1).spec.name).toBe("subagent");
+    expect(getTool(tools, 1).spec.name).toBe("dispatch");
     expect(getTool(tools, 1).source).toBe("agent");
     expect(getTool(tools, 2).spec.name).toBe("filesystem.read");
     expect(getTool(tools, 2).source).toBe("mcp");
