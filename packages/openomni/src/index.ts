@@ -90,6 +90,8 @@ export {
   WorkspaceLock,
   buildToolCatalog,
   buildWorkerMiddleware,
+  createChildAgentRuntime,
+  createChildAgentTool,
   createDispatchTool,
   createToolExecutor,
   defineTool,
@@ -110,6 +112,10 @@ export type {
   ToolRiskTier,
   ToolSource,
   WorkerMiddlewareConfig,
+  ChildAgentRuntime,
+  ChildAgentRuntimeOptions,
+  ChildAgentSnapshot,
+  ChildAgentSpawnInput,
   DispatchToolRuntime,
 } from "./execution-runtime";
 

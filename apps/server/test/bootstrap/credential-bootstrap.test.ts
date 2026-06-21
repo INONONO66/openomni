@@ -23,13 +23,13 @@ function tempDir(name: string): string {
   return path;
 }
 
-function fakeMcpProvider(): McpToolProvider {
+function fakeMcpProvider(): Pick<McpToolProvider, "listTools"> {
   return {
     listTools: () => [],
-  } as unknown as McpToolProvider;
+  };
 }
 
-function fakeMcpProviderWithTool(): McpToolProvider {
+function fakeMcpProviderWithTool(): Pick<McpToolProvider, "listTools"> {
   return {
     listTools: () => [
       makeTool({
@@ -37,7 +37,7 @@ function fakeMcpProviderWithTool(): McpToolProvider {
         category: "mcp",
       }),
     ],
-  } as unknown as McpToolProvider;
+  };
 }
 
 function fakeCustomProvider(): Pick<CustomToolProvider, "listTools"> {
