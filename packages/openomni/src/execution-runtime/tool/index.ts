@@ -1,5 +1,6 @@
 export {
   AgentToolProvider,
+  createChildAgentTool,
   createDispatchTool,
 } from "./agent/index.js";
 export type { DispatchToolRuntime } from "./agent/index.js";
