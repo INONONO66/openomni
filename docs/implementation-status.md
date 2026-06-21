@@ -2,7 +2,7 @@
 
 Single source of truth for the gap between accepted design and running code. Other docs (core-model, AGENTS.md, ADRs) link here instead of restating status inline.
 
-**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: **2026-06-14** (update this date when re-auditing).
+**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: **2026-06-21** (update this date when re-auditing).
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 
@@ -79,6 +79,7 @@ Single source of truth for the gap between accepted design and running code. Oth
 | Component | Status | Code | Notes |
 | --- | --- | --- | --- |
 | On-demand worker manager (spawn on demand, idle shutdown, max active) | ✅ | `packages/coordinator/src/worker-manager/manager.ts` | Used by `apps/server/src/execution/coordinator.ts` |
+| Worker-local `child_agent` tool (same-runtime nested child agents) | ✅ | `apps/server/src/execution/worker-runner.ts`, `packages/openomni/src/execution-runtime/child-agent/`, `packages/openomni/src/execution-runtime/tool/agent/tools/child-agent.ts` | Worker-only tool registered by the server worker runner when requested. Child agents run in-process under the parent worker run, inherit worker context/middleware, can select only tools already exposed to the parent worker, cannot delegate further (`depth >= 1` removes delegation tools), and are cancelled when the parent worker run finishes. This is a lightweight nested execution primitive, not a durable WorkerRun/SubagentRuntime replacement |
 | Worker supervisor internals | ✅ | `packages/coordinator/src/worker-supervision/supervisor.ts` | Shared process supervisor used by `worker-manager`; legacy `createWorkerPool` facade removed |
 | SessionRouting helper | ✅ | `packages/coordinator/src/worker-supervision/session-routing.ts`, `packages/coordinator/src/worker-manager/manager.ts` | `worker-manager` owns an isolated `SessionRouter` instance for live session-to-slot affinity; the old exported singleton and worker-supervision barrel have been removed |
 | Crash recovery (mark interrupted at boot) | ✅ | `packages/coordinator/src/recovery/` | |
