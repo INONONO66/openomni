@@ -15,6 +15,7 @@ const childAgentInputSchema = z.discriminatedUnion("action", [
     action: z.literal("spawn"),
     prompt: z.string().min(1),
     tools: toolSelectionSchema.optional(),
+    notifyOnComplete: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("await"),
@@ -37,6 +38,7 @@ const publicInputSchema = {
   properties: {
     action: { enum: ["spawn", "await", "inspect", "cancel"] },
     prompt: { type: "string" },
+    notifyOnComplete: { type: "boolean" },
     ids: { type: "array", items: { type: "string" } },
     tools: {
       type: "object",
@@ -91,7 +93,13 @@ export function createChildAgentTool(runtime: ChildAgentRuntime) {
       try {
         switch (input.action) {
           case "spawn": {
-            const child = runtime.spawn({ prompt: input.prompt, tools: input.tools });
+            const child = runtime.spawn({
+              prompt: input.prompt,
+              tools: input.tools,
+              ...(input.notifyOnComplete !== undefined
+                ? { notifyOnComplete: input.notifyOnComplete }
+                : {}),
+            });
             return result(call, {
               status: child.status,
               childId: child.id,

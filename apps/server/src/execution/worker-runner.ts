@@ -123,6 +123,7 @@ export namespace WorkerRunner {
           systemPrompt: request.systemPrompt,
           parentMessages: messages,
           parentTools: () => childParentTools,
+          injectionQueue,
           ...(workspaceRoot ? { workspaceRoot } : {}),
           traceContext: { traceId, sessionId, runId },
           parentSignal: controller.signal,

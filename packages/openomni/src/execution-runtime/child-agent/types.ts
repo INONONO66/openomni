@@ -5,6 +5,7 @@ import type {
   ChatAgentInstance,
 } from "@openomni/agent";
 import type { Model, ToolSelection, TraceContext } from "@openomni/protocol";
+import type { InjectionQueue } from "../injection-queue.js";
 import type { NativeTool } from "../tool/types.js";
 
 export type ChildStatus = "running" | "completed" | "failed" | "cancelled";
@@ -27,6 +28,7 @@ export type ChildAgentRuntimeOptions = {
   readonly systemPrompt?: string;
   readonly parentMessages: ChatAgentInput["messages"];
   readonly parentTools: readonly NativeTool[] | (() => readonly NativeTool[]);
+  readonly injectionQueue?: InjectionQueue.Instance;
   readonly workspaceRoot?: string;
   readonly traceContext?: TraceContext.Type;
   readonly parentSignal?: AbortSignal;
@@ -44,6 +46,7 @@ export type ChildAgentRuntimeOptions = {
 export type ChildAgentSpawnInput = {
   readonly prompt: string;
   readonly tools?: ToolSelection.Selection;
+  readonly notifyOnComplete?: boolean;
 };
 
 export type ChildRecord = {
@@ -52,6 +55,7 @@ export type ChildRecord = {
   readonly controller: AbortController;
   status: ChildStatus;
   readonly maxOutputChars: number;
+  readonly notifyOnComplete: boolean;
   result?: AgentResult;
   error?: string;
   completion: Promise<void>;

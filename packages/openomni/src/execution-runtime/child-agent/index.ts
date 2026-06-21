@@ -1,4 +1,5 @@
 export { createChildAgentRuntime } from "./runtime.js";
+export { ChildAgentEvents } from "./events.js";
 export type {
   ChildAgentRuntime,
   ChildAgentRuntimeOptions,

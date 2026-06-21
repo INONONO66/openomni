@@ -2,6 +2,12 @@ import type { ToolSelection, TraceContext } from "@openomni/protocol";
 import { buildToolCatalog, resolveToolSelection } from "../tool/catalog.js";
 import { createToolExecutor } from "../tool/executor.js";
 import type { NativeTool } from "../tool/types.js";
+import {
+  publishChildAgentCancelled,
+  publishChildAgentCompleted,
+  publishChildAgentFailed,
+  publishChildAgentStarted,
+} from "./events.js";
 import type { ChildAgentRuntime, ChildAgentRuntimeOptions, ChildRecord } from "./types.js";
 import {
   DEFAULT_AWAIT_TIMEOUT_MS,
@@ -44,6 +50,29 @@ function childToolRuntime(
     runId: childId,
     workspaceRoot,
   };
+}
+
+function enqueueCompletion(options: ChildAgentRuntimeOptions, record: ChildRecord): void {
+  const parentRunId = options.traceContext?.runId;
+  if (!record.notifyOnComplete || !options.injectionQueue || !parentRunId) return;
+  const child = snapshot(record);
+  const output =
+    child.status === "completed"
+      ? (child.output ?? "")
+      : "Child agent finished with status failed. Await or inspect the child for details.";
+  options.injectionQueue.enqueue(parentRunId, {
+    messageId: crypto.randomUUID(),
+    output: `[child_agent ${record.id} ${child.status}]\n${output}`,
+    injectToHistory: true,
+    timestamp: Date.now(),
+  });
+}
+
+function cancelRecord(options: ChildAgentRuntimeOptions, record: ChildRecord, reason: Error): void {
+  if (record.status !== "running") return;
+  record.status = "cancelled";
+  record.controller.abort(reason);
+  publishChildAgentCancelled(options, record);
 }
 
 function selectChildTools(
@@ -91,9 +120,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
 
   const cancelRunningChildren = () => {
     for (const record of records.values()) {
-      if (record.status !== "running") continue;
-      record.status = "cancelled";
-      record.controller.abort(new Error("parent worker run cancelled"));
+      cancelRecord(options, record, new Error("parent worker run cancelled"));
     }
   };
   options.parentSignal?.addEventListener("abort", cancelRunningChildren, { once: true });
@@ -143,8 +170,10 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
         controller,
         status: "running",
         maxOutputChars,
+        notifyOnComplete: input.notifyOnComplete === true,
         completion: Promise.resolve(),
       };
+      publishChildAgentStarted(options, record);
       record.completion = agent
         .run({
           messages: [...options.parentMessages, { role: "user", content: input.prompt }],
@@ -155,12 +184,16 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
           if (record.status === "cancelled") return;
           record.result = result;
           record.status = "completed";
+          publishChildAgentCompleted(options, record);
+          enqueueCompletion(options, record);
         })
         .catch((error: unknown) => {
           options.parentSignal?.removeEventListener("abort", abortFromParent);
           if (record.status === "cancelled") return;
           record.error = error instanceof Error ? error.message : String(error);
           record.status = "failed";
+          publishChildAgentFailed(options, record);
+          enqueueCompletion(options, record);
         });
       records.set(childId, record);
       return snapshot(record);
@@ -179,10 +212,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
     cancel(ids) {
       const selected = getRecords(records, ids);
       for (const record of selected) {
-        if (record.status === "running") {
-          record.status = "cancelled";
-          record.controller.abort(new Error("child agent cancelled"));
-        }
+        cancelRecord(options, record, new Error("child agent cancelled"));
       }
       return selected.map(snapshot);
     },
@@ -190,8 +220,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
     cancelAll() {
       const selected = [...records.values()].filter((record) => record.status === "running");
       for (const record of selected) {
-        record.status = "cancelled";
-        record.controller.abort(new Error("parent worker run finished"));
+        cancelRecord(options, record, new Error("parent worker run finished"));
       }
       return selected.map(snapshot);
     },
