@@ -643,6 +643,41 @@ describe("handleStop (turn.finish + run.finish)", () => {
     expect(state.continuationCount).toBe(1);
   });
 
+  it("turn.finish assistant injection preserves assistant provenance", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-post-turn-assistant-inject",
+      timing: "turn.finish",
+      priority: 100,
+      fn: () =>
+        allow("test.inject", "continuation", [
+          {
+            type: "prompt.inject_message",
+            message: "child result",
+            role: "assistant",
+          },
+        ]),
+    });
+
+    const state = makeState();
+    state.lastAssistantText = "partial response";
+    const result = await collectEvents(
+      handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts()),
+    );
+
+    expect(result.some((event) => event.type === "turn_complete")).toBe(true);
+    expect(state.continuationCount).toBe(1);
+    expect(state.messages.at(-1)?.info).toMatchObject({
+      role: "assistant",
+      parentID: state.messages.at(-2)?.info.id,
+    });
+    expect(state.messages.at(-1)?.parts[0]).toMatchObject({
+      type: "text",
+      text: "child result",
+    });
+  });
+
   it("turn.finish replace_messages effect mutates state before completion", async () => {
     Bus.reset();
     const { createUserMessage } = await import("../../../src/core/message-factory");
