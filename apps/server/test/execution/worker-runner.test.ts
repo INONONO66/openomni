@@ -320,14 +320,16 @@ describe("WorkerRunner", () => {
               const toolNames = options.tools?.map((tool) => tool.name) ?? [];
               const childAgentTool = options.tools?.find((tool) => tool.name === "child_agent");
               if (!childAgentTool) return successfulResult;
+              const variants = childAgentTool.inputSchema.oneOf;
+              if (!Array.isArray(variants)) throw new Error("child_agent schema missing variants");
 
               expect(toolNames).toContain("child_agent");
-              expect(childAgentTool?.inputSchema).toMatchObject({
-                properties: {
-                  action: { enum: ["spawn", "await", "inspect", "cancel"] },
-                },
-                required: ["action"],
-              });
+              expect(variants).toContainEqual(
+                expect.objectContaining({
+                  properties: expect.objectContaining({ action: { const: "spawn" } }),
+                  required: ["action", "prompt"],
+                }),
+              );
               expect(options.systemPrompt).toContain("child_agent");
               if (!options.toolExecutor) throw new Error("tool executor missing");
               const spawn = await options.toolExecutor({

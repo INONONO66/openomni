@@ -10,6 +10,17 @@ const toolSelectionSchema = z.object({
   deny: z.array(z.string()).optional(),
 });
 
+const toolSelectionPublicSchema = {
+  type: "object",
+  properties: {
+    all: { type: "boolean" },
+    categories: { type: "array", items: { type: "string" } },
+    allow: { type: "array", items: { type: "string" } },
+    deny: { type: "array", items: { type: "string" } },
+  },
+  additionalProperties: false,
+} as const;
+
 const childAgentInputSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("spawn"),
@@ -34,25 +45,46 @@ const childAgentInputSchema = z.discriminatedUnion("action", [
 type ChildAgentInput = z.infer<typeof childAgentInputSchema>;
 
 const publicInputSchema = {
-  type: "object",
-  properties: {
-    action: { enum: ["spawn", "await", "inspect", "cancel"] },
-    prompt: { type: "string" },
-    notifyOnComplete: { type: "boolean" },
-    ids: { type: "array", items: { type: "string" } },
-    tools: {
+  oneOf: [
+    {
       type: "object",
       properties: {
-        all: { type: "boolean" },
-        categories: { type: "array", items: { type: "string" } },
-        allow: { type: "array", items: { type: "string" } },
-        deny: { type: "array", items: { type: "string" } },
+        action: { const: "spawn" },
+        prompt: { type: "string" },
+        notifyOnComplete: { type: "boolean" },
+        tools: toolSelectionPublicSchema,
       },
+      required: ["action", "prompt"],
       additionalProperties: false,
     },
-  },
-  required: ["action"],
-  additionalProperties: false,
+    {
+      type: "object",
+      properties: {
+        action: { const: "await" },
+        ids: { type: "array", items: { type: "string" } },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        action: { const: "inspect" },
+        ids: { type: "array", items: { type: "string" } },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        action: { const: "cancel" },
+        ids: { type: "array", items: { type: "string" } },
+      },
+      required: ["action", "ids"],
+      additionalProperties: false,
+    },
+  ],
 } satisfies Tool.Spec["inputSchema"];
 
 function result(call: Tool.Call, output: unknown, isError?: boolean): Tool.Result {

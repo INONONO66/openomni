@@ -127,6 +127,9 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
 
   return {
     spawn(input) {
+      if (options.parentSignal?.aborted) {
+        throw new Error("parent worker run cancelled");
+      }
       let activeChildren = 0;
       for (const record of records.values()) {
         if (record.status === "running") activeChildren += 1;

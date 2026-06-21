@@ -108,6 +108,59 @@ describe("child_agent tool", () => {
     });
   });
 
+  test("rejects spawn when the parent run is already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let started = false;
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      parentSignal: controller.signal,
+      createAgent: () => ({
+        run: async () => {
+          started = true;
+          return successfulResult;
+        },
+      }),
+    });
+    const tool = createChildAgentTool(runtime);
+
+    const result = await tool.execute(makeCall({ action: "spawn", prompt: "should not start" }));
+
+    expect(started).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.output)).toEqual({
+      status: "failed",
+      error: "parent worker run cancelled",
+    });
+  });
+
+  test("advertises action-specific required fields in the public input schema", () => {
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      createAgent: () => ({ run: async () => successfulResult }),
+    });
+    const tool = createChildAgentTool(runtime);
+
+    const variants = tool.spec.inputSchema.oneOf;
+    if (!Array.isArray(variants)) throw new Error("child_agent schema must define variants");
+    expect(variants).toContainEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({ action: { const: "spawn" } }),
+        required: ["action", "prompt"],
+      }),
+    );
+    expect(variants).toContainEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({ action: { const: "cancel" } }),
+        required: ["action", "ids"],
+      }),
+    );
+  });
+
   test("cancels a running child through AbortSignal", async () => {
     let childSignal: AbortSignal | undefined;
     const runtime = createChildAgentRuntime({

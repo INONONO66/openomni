@@ -73,10 +73,17 @@ describe("WorkerRunner child agent completion notification", () => {
             async run() {
               const childAgentTool = config.tools?.find((tool) => tool.name === "child_agent");
               if (!childAgentTool) return successfulResult;
+              const variants = childAgentTool.inputSchema.oneOf;
+              if (!Array.isArray(variants)) throw new Error("child_agent schema missing variants");
 
-              expect(childAgentTool.inputSchema).toMatchObject({
-                properties: { notifyOnComplete: { type: "boolean" } },
-              });
+              expect(variants).toContainEqual(
+                expect.objectContaining({
+                  properties: expect.objectContaining({
+                    action: { const: "spawn" },
+                    notifyOnComplete: { type: "boolean" },
+                  }),
+                }),
+              );
               if (!config.toolExecutor) throw new Error("tool executor missing");
               const spawn = await config.toolExecutor({
                 id: "spawn-child",
