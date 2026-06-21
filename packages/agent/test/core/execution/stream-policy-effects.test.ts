@@ -31,4 +31,35 @@ describe("StreamPolicyEffects", () => {
       text: "child result",
     });
   });
+
+  it("chains parent ids across injected prompt messages in the same batch", () => {
+    const state = createStreamRunState({
+      messages: [{ role: "user", content: "parent request" }],
+    });
+    const decision = PolicyDecision.allow({
+      policyId: "test",
+      effects: [
+        {
+          type: "prompt.inject_message",
+          message: "first child result",
+          role: "assistant",
+        },
+        {
+          type: "prompt.inject_message",
+          message: "second child result",
+          role: "assistant",
+        },
+      ],
+    });
+
+    StreamPolicyEffects.applyPromptMessageEffects(state, decision);
+
+    const firstInjected = state.messages.at(-2);
+    const secondInjected = state.messages.at(-1);
+    expect(firstInjected?.info.role).toBe("assistant");
+    expect(secondInjected?.info).toMatchObject({
+      role: "assistant",
+      parentID: firstInjected?.info.id,
+    });
+  });
 });

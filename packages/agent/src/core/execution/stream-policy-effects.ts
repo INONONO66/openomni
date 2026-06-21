@@ -46,16 +46,19 @@ export namespace StreamPolicyEffects {
     decision: Policy.PolicyDecision,
   ): void {
     const messages: Message.WithParts[] = [];
+    let parentID = state.messages.at(-1)?.info.id ?? "";
     for (const effect of decision.effects) {
       if (effect.type === "prompt.inject_message") {
-        const parentID = state.messages.at(-1)?.info.id ?? "";
-        messages.push(
+        const message =
           effect.role === "assistant"
             ? createAssistantMessage(effect.message, parentID, state.sessionId)
-            : createUserMessage(effect.message, state.sessionId),
-        );
+            : createUserMessage(effect.message, state.sessionId);
+        messages.push(message);
+        parentID = message.info.id;
       } else if (effect.type === "prompt.append_context") {
-        messages.push(createUserMessage(effect.context, state.sessionId));
+        const message = createUserMessage(effect.context, state.sessionId);
+        messages.push(message);
+        parentID = message.info.id;
       }
     }
     appendStreamMessages(state, messages);
