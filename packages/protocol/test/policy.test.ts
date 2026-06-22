@@ -597,9 +597,9 @@ describe("Policy schemas", () => {
         name: "test-policy",
         timing: "turn.start",
         priority: 100,
-        scope: { agentType: ["subagent", "worker"] },
+        scope: { agentType: ["worker"] },
       });
-      expect(result.scope?.agentType).toEqual(["subagent", "worker"]);
+      expect(result.scope?.agentType).toEqual(["worker"]);
     });
 
     it("parses definition with failPolicy", () => {

@@ -1,18 +1,31 @@
 import { Message } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
-import { createUserMessage } from "../message-factory";
+import { createAssistantMessage, createUserMessage } from "../message-factory";
 import type { ChatAgentConfig } from "../types";
 import { appendStreamMessages, replaceStreamMessages, type StreamRunState } from "./stream-state";
 
 export namespace StreamPolicyEffects {
-  export function injectedPrompts(decision: Policy.PolicyDecision): string[] {
-    const prompts: string[] = [];
+  export function continuationMessages(
+    decision: Policy.PolicyDecision,
+    sessionId: string,
+    parentID: string,
+  ): Message.WithParts[] {
+    const messages: Message.WithParts[] = [];
+    let assistantParentID = parentID;
     for (const effect of decision.effects) {
-      if (effect.type === "prompt.inject_message") prompts.push(effect.message);
-      if (effect.type === "run.continue_with_prompt") prompts.push(effect.prompt);
+      if (effect.type === "prompt.inject_message") {
+        const message =
+          effect.role === "assistant"
+            ? createAssistantMessage(effect.message, assistantParentID, sessionId)
+            : createUserMessage(effect.message, sessionId);
+        messages.push(message);
+        assistantParentID = message.info.id;
+      } else if (effect.type === "run.continue_with_prompt") {
+        messages.push(createUserMessage(effect.prompt, sessionId));
+      }
     }
-    return prompts;
+    return messages;
   }
 
   export function replacementMessages(
@@ -33,11 +46,19 @@ export namespace StreamPolicyEffects {
     decision: Policy.PolicyDecision,
   ): void {
     const messages: Message.WithParts[] = [];
+    let parentID = state.messages.at(-1)?.info.id ?? "";
     for (const effect of decision.effects) {
       if (effect.type === "prompt.inject_message") {
-        messages.push(createUserMessage(effect.message, state.sessionId));
+        const message =
+          effect.role === "assistant"
+            ? createAssistantMessage(effect.message, parentID, state.sessionId)
+            : createUserMessage(effect.message, state.sessionId);
+        messages.push(message);
+        parentID = message.info.id;
       } else if (effect.type === "prompt.append_context") {
-        messages.push(createUserMessage(effect.context, state.sessionId));
+        const message = createUserMessage(effect.context, state.sessionId);
+        messages.push(message);
+        parentID = message.info.id;
       }
     }
     appendStreamMessages(state, messages);

@@ -1,10 +1,8 @@
-import { Subagent, type WorkItem } from "@openomni/protocol";
+import { WorkerRun as WorkerRunProtocol, type WorkItem } from "@openomni/protocol";
 import { Bus } from "../bus/index.js";
 import { WorkerRunStateStore } from "./state-store.js";
 
-// Subagent execution lifecycle per session, kept separate from user-facing work items.
-
-export type WorkerRunStatus = Subagent.WorkerRunStatus;
+export type WorkerRunStatus = WorkerRunProtocol.Status;
 
 export interface WorkerRunRecord {
   runId: string;
@@ -49,7 +47,7 @@ function publishLifecycleEvent(
   error?: string,
 ): void {
   if (status === "starting") {
-    Bus.publish(Subagent.Events.WorkerRunStarted, {
+    Bus.publish(WorkerRunProtocol.Events.Started, {
       traceId: crypto.randomUUID(),
       sessionId,
       runId: run.runId,
@@ -60,7 +58,7 @@ function publishLifecycleEvent(
   }
 
   if (status === "succeeded") {
-    Bus.publish(Subagent.Events.WorkerRunCompleted, {
+    Bus.publish(WorkerRunProtocol.Events.Completed, {
       traceId: crypto.randomUUID(),
       sessionId,
       runId: run.runId,
@@ -70,8 +68,19 @@ function publishLifecycleEvent(
     return;
   }
 
+  if (status === "cancelled") {
+    Bus.publish(WorkerRunProtocol.Events.Cancelled, {
+      traceId: crypto.randomUUID(),
+      sessionId,
+      runId: run.runId,
+      time: Date.now(),
+      payload: { sessionId, runId: run.runId },
+    });
+    return;
+  }
+
   if (status === "failed" || status === "interrupted") {
-    Bus.publish(Subagent.Events.WorkerRunFailed, {
+    Bus.publish(WorkerRunProtocol.Events.Failed, {
       traceId: crypto.randomUUID(),
       sessionId,
       runId: run.runId,

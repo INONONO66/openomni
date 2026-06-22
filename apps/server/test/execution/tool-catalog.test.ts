@@ -86,7 +86,7 @@ describe("tool catalog", () => {
       makeTool("read"),
       makeTool("write"),
       makeTool("bash"),
-      makeTool("subagent"),
+      makeTool("dispatch"),
       makeTool("mcp_tool"),
     ];
     const catalog = buildToolCatalog([
@@ -102,7 +102,7 @@ describe("tool catalog", () => {
   });
 
   it("resolveToolSelection applies depth filtering to delegation and execution categories", () => {
-    const tools = [makeTool("read"), makeTool("write"), makeTool("bash"), makeTool("subagent")];
+    const tools = [makeTool("read"), makeTool("write"), makeTool("bash"), makeTool("dispatch")];
     const catalog = buildToolCatalog([{ tools, source: "system" }]);
 
     const selection: ToolSelection.Selection = {
@@ -112,8 +112,8 @@ describe("tool catalog", () => {
     const depth0 = resolveToolSelection(catalog, selection, undefined, 0);
     expect(depth0.map((e) => e.canonicalName).sort()).toEqual([
       "bash",
+      "dispatch",
       "read",
-      "subagent",
       "write",
     ]);
 

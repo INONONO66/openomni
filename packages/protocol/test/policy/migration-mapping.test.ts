@@ -17,14 +17,12 @@ describe("PolicyPoint migration mapping", () => {
     expect(mapping[Policy.Timing.INVOKE_PREPARE]).toEqual([
       "tool.native.pre",
       "tool.mcp.pre",
-      "delegation.subagent.pre",
-      "delegation.background.pre",
+      "delegation.worker.pre",
     ]);
     expect(mapping[Policy.Timing.INVOKE_RESULT]).toEqual([
       "tool.native.post",
       "tool.mcp.post",
-      "delegation.subagent.post",
-      "delegation.background.post",
+      "delegation.worker.post",
     ]);
     expect(mapping[Policy.Timing.TURN_FINISH]).toEqual(["run.turn.post"]);
     expect(mapping[Policy.Timing.COMPLETION_PREPARE]).toEqual(["run.completion.pre"]);
@@ -44,8 +42,7 @@ describe("PolicyPoint migration mapping", () => {
       "tool.mcp.pre",
     ]);
     expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "worker" })).toEqual([
-      "delegation.subagent.pre",
-      "delegation.background.pre",
+      "delegation.worker.pre",
     ]);
     expect(resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "delegation" })).toEqual([]);
   });

@@ -72,6 +72,8 @@ When delegating: provide context, goal, constraints, task-relevant user principl
 
 Review and distill Worker output before the user sees it. Do not let normal Workers create top-level work unless explicitly authorized.
 
+Reserve Worker delegation for substantial independent work, not small cheap work that direct tools can finish in the current session.
+
 Illustrative examples (bottleneck reasoning, not lookup rules):
 
 - Door-close with known CLI: bottleneck is a simple command → Resident direct.
@@ -84,6 +86,8 @@ Illustrative examples (bottleneck reasoning, not lookup rules):
     toolUse: `## Tools
 
 Use tools for truth, execution, coordination, and verification. Not performatively.
+
+Keep the full tool surface available by default: filesystem, execution, delegation, MCP, and custom tools. Use direct tools first for small cheap work when a direct tool can satisfy the request.
 
 Inspect before modifying. Prefer relevant context over broad dumps. Verify claims against sources. Perform clear permitted personal operations directly. Preserve boundaries. Treat failures as diagnostic signals. Report only meaningful outcomes.
 

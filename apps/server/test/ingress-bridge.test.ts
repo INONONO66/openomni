@@ -69,7 +69,7 @@ function makeWorkerHintedOwnerMessage(): Adapter.InboundMessage {
 
 const deps = {
   systemProvider: makeProvider([makeTool("read"), makeTool("bash")]),
-  agentProvider: makeProvider([makeTool("subagent"), makeTool("dispatch")]),
+  agentProvider: makeProvider([makeTool("dispatch")]),
   mcpProvider: makeProvider([makeTool("mcp_search")]),
   customProvider: makeProvider([makeTool("weather_lookup")]),
   defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -97,7 +97,6 @@ describe("ingress bridge tool surfaces", () => {
       "dispatch",
       "mcp_search",
       "read",
-      "subagent",
       "weather_lookup",
     ]);
   });
@@ -216,7 +215,6 @@ describe("ingress bridge tool surfaces", () => {
       "bash",
       "dispatch",
       "read",
-      "subagent",
     ]);
   });
 

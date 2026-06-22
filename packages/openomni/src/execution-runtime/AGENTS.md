@@ -1,6 +1,6 @@
 # Execution Runtime Notes
 
-Tool system, workspace safety, and worker middleware for `@openomni/openomni`. This domain is used by server workers and subagent execution, but it must stay independent from high-level orchestration policy.
+Tool system, workspace safety, and worker middleware for `@openomni/openomni`. This domain is used by server workers and must stay independent from high-level orchestration policy.
 
 ## Files
 
@@ -18,7 +18,7 @@ Tool system, workspace safety, and worker middleware for `@openomni/openomni`. T
 ## Ownership
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
-- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session child execution tool is `subagent` (`tool/agent/tools/subagent.ts`).
+- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`).
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 ## dispatch tool
