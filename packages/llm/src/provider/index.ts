@@ -3,7 +3,7 @@ import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
 import { Auth } from "../auth/storage";
-import { fromModelsDevProvider } from "./provider";
+import { fromModelsDevProvider } from "./sdk";
 import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
@@ -192,10 +192,10 @@ export namespace Provider {
 export {
   getSDK,
   getLanguage,
-} from "./provider";
+} from "./sdk";
 
 export { fetchProxyModels, enrichWithCatalog } from "./proxy-models";
 
 export { ModelsDev } from "../model";
 
-export { ProviderTransform } from "../transform";
+export { ProviderTransform } from "./transform";

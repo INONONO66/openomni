@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { toModelMessages } from "../../src/session/convert";
+import { toModelMessages } from "../../src/message";
 import type { Provider } from "../../src/provider";
 
 describe("toModelMessages", () => {

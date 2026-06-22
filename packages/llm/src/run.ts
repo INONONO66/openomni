@@ -1,8 +1,8 @@
 import type { Sink, Message, Tool, Run } from "@openomni/protocol";
 import { LlmCall, Operational } from "@openomni/protocol";
-import type { SDKMessage } from "./session/convert";
-import { Processor } from "./session/processor";
-import { toModelMessages } from "./session/convert";
+import type { SDKMessage } from "./message";
+import { Processor } from "./processor";
+import { toModelMessages } from "./message";
 import { type Provider, getLanguage } from "./provider";
 import { Auth } from "./auth/storage";
 import { Bus } from "@openomni/session";

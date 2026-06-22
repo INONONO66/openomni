@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { LlmCall } from "@openomni/protocol";
+import { LlmCall, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { APIError } from "../../src/error";
-import type { Message } from "../../src/session";
-import { Processor } from "../../src/session/processor";
+import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
 
 function assistantMessage(): Message.AssistantMessage {

@@ -1,8 +1,8 @@
 import type { Message, Sink } from "@openomni/protocol";
 import type { Provider } from "../provider";
-import { generateId, type StreamEvent, type ToolResult } from "./processor-types.js";
-import { addStepFinish, addStepStart } from "./processor-steps.js";
-import { cleanupPendingTools, handleToolCall, handleToolResult } from "./processor-tools.js";
+import { generateId, type StreamEvent, type ToolResult } from "./contracts.js";
+import { addStepFinish, addStepStart } from "./step-accounting.js";
+import { cleanupPendingTools, handleToolCall, handleToolResult } from "./tool-projection.js";
 
 type MessagePartWriter = {
   add(part: Message.Part): void;

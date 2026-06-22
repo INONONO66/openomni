@@ -153,7 +153,7 @@ export namespace ModelsDev {
       }
     }
 
-    const snapshotModule = await import("../provider/models-snapshot.json").catch(() => undefined);
+    const snapshotModule = await import("./models-snapshot.json").catch(() => undefined);
     if (snapshotModule?.default) return snapshotModule.default as Record<string, Provider>;
 
     return {};

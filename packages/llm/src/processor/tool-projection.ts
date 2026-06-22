@@ -1,5 +1,5 @@
 import type { Message, Sink } from "@openomni/protocol";
-import { generateId, type StreamEvent, type ToolResult } from "./processor-types.js";
+import { generateId, type StreamEvent, type ToolResult } from "./contracts.js";
 
 export type ToolEventContext = {
   readonly sessionID: string;

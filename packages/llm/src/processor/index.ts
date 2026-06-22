@@ -1,20 +1,16 @@
 import { LlmCall, type Message } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { APIError } from "../error";
-import { Retry } from "./retry";
-import {
-  cleanupPendingTools,
-  createStreamEventState,
-  handleStreamEvent,
-} from "./processor-events.js";
-import { createNoopSink, createProjectedSink, publishStatus } from "./processor-sink.js";
+import { Retry } from "../retry";
+import { cleanupPendingTools, createStreamEventState, handleStreamEvent } from "./stream-events.js";
+import { createNoopSink, createProjectedSink, publishStatus } from "./sink-projection.js";
 import {
   defaultStream,
   type ProcessResult,
   type ProcessorInfo,
   type ProcessorOptions as ProcessorOptionsInternal,
   type StreamInput as StreamInputInternal,
-} from "./processor-types.js";
+} from "./contracts.js";
 
 export namespace Processor {
   const DEFAULT_MAX_RETRY_ATTEMPTS = 10;

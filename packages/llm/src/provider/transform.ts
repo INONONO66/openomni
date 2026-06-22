@@ -1,6 +1,6 @@
 import { Model } from "@openomni/protocol";
-import type { SDKMessage } from "../session/convert";
-import type { Provider } from "../provider/index";
+import type { SDKMessage } from "../message";
+import type { Provider } from "./index";
 
 export namespace ProviderTransform {
   interface NormalizeOptions {
