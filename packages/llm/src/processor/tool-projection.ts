@@ -1,7 +1,7 @@
 import type { Message, Sink } from "@openomni/protocol";
 import { generateId, type StreamEvent, type ToolResult } from "./contracts.js";
 
-export type ToolEventContext = {
+type ToolEventContext = {
   readonly sessionID: string;
   readonly assistantMessage: Message.AssistantMessage;
   readonly sink: Sink;

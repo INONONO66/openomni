@@ -20,8 +20,6 @@ src/
 │   └── contracts.ts  # Internal Processor implementation contracts
 ├── retry/
 │   └── index.ts      # Retry.delay / sleep / isRetryable — exponential backoff + retry-after
-├── session/
-│   └── index.ts      # Compatibility facade only; do not add new session responsibilities here
 ├── auth/
 │   ├── storage.ts    # Auth namespace: get / set / remove / all (credential storage)
 ├── provider/
@@ -44,7 +42,7 @@ src/
 - **`run()` entry point**: Takes `RunInput` (messages, tools, required model, optional auth, system, toolExecutor, toolChoice, maxSteps, providerOptions), drives a Processor loop, and returns `Run.Outcome` via the injected `Sink`. `RunInput.model` is required; do not reintroduce model-less/noop fallback behavior in `run()`.
 - **Provider.Model**: Zod schema with capabilities, cost, limits, status. Built from `models.dev` data via `Provider.fromModelsDevModel()`. `Provider.listModels()` / `listProviders()` / `getProviderInfo()` surface catalog lookups.
 - **Auth.Info** (discriminated union): `{ type: "api", key }` | `{ type: "proxy", baseURL, apiKey? }`. Stored via `Auth.set(providerId, info)` and read by `getSDK()` before each call.
-- **SDK wiring**: `getSDK(model, auth)` resolves to Anthropic / OpenAI. Custom OpenAI-compatible endpoints use `@ai-sdk/openai` with `baseURL` / `name`, keeping returned language models on the same AI SDK provider type version. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key. Provider-specific behavior belongs in `provider/`, `auth/`, or `transform/`, not in call sites.
+- **SDK wiring** (`provider/sdk.ts`): `getSDK(model, auth)` resolves to Anthropic / OpenAI. Custom OpenAI-compatible endpoints use `@ai-sdk/openai` with `baseURL` / `name`, keeping returned language models on the same AI SDK provider type version. SDK and `LanguageModel` instances are cached per `providerID:npm:modelID:auth` key. Provider-specific behavior belongs in `provider/`, `auth/`, or `transform/`, not in call sites.
 - **Provider transforms** (`provider/transform.ts`): `normalizeMessages()` filters empty blocks, sanitizes tool-call IDs, applies Anthropic ephemeral caching to the last two user/assistant messages. `variants(model)` exposes per-provider thinking / reasoning presets; `resolveVariant(model, variant?)` picks one. This is an internal/deep import surface, not a root export.
 - **Processor**: Created via `Processor.create({ assistantMessage, sessionID, model, abort, sink, onToolCall, createStream, maxRetryAttempts? })`. `process()` returns `"stop" | "continue" | "compact"`. Accumulates `TextPart` / `ReasoningPart` / `ToolPart` and publishes through `Sink`. Processor owns `tool-call` and `tool-result` stream projection; `run()`'s AI SDK `execute` callback must not directly emit tool sink events.
 - **Retry**: `Retry.delay(attempt, error?)` computes backoff respecting `retry-after` / `retry-after-ms` headers. `Retry.isRetryable(error)` checks `APIError.isRetryable`. Processor retrying is finite by default; do not use unbounded retry loops or publish `Number.MAX_SAFE_INTEGER` as a retry cap.

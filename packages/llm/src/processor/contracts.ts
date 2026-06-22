@@ -21,7 +21,7 @@ export interface StreamEvent {
   [key: string]: unknown;
 }
 
-export interface Stream {
+interface Stream {
   fullStream: AsyncIterable<StreamEvent>;
 }
 

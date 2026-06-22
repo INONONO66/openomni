@@ -3,7 +3,8 @@ import { LlmCall, Operational } from "@openomni/protocol";
 import type { SDKMessage } from "./message";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
-import { type Provider, getLanguage } from "./provider";
+import type { Provider } from "./provider";
+import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
 import { Bus } from "@openomni/session";
 

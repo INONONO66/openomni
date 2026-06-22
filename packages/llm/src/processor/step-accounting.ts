@@ -3,7 +3,7 @@ import { TokenTracker } from "../token";
 import type { Provider } from "../provider";
 import { generateId, type StreamEvent } from "./contracts.js";
 
-export type StepEventContext = {
+type StepEventContext = {
   readonly sessionID: string;
   readonly assistantMessage: Message.AssistantMessage;
   readonly model: Provider.Model;

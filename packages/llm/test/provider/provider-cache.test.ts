@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Auth } from "../../src/auth";
-import { getLanguage, getSDK, type Provider } from "../../src/provider/index";
+import { getLanguage, getSDK } from "../../src/provider/sdk";
+import type { Provider } from "../../src/provider";
 
 const SDK_CACHE_LIMIT = 64;
 const LANGUAGE_CACHE_LIMIT = 256;

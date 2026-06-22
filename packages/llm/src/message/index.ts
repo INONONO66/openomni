@@ -1,6 +1,7 @@
 import type { Message } from "@openomni/protocol";
 import type { ModelMessage } from "ai";
-import { type Provider, ProviderTransform } from "../provider";
+import type { Provider } from "../provider";
+import { ProviderTransform } from "../provider/transform";
 
 export type SDKMessage = ModelMessage;
 type AssistantMessage = Extract<SDKMessage, { role: "assistant" }>;
