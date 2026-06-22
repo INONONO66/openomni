@@ -17,6 +17,8 @@ import {
 } from "./processor-types.js";
 
 export namespace Processor {
+  const DEFAULT_MAX_RETRY_ATTEMPTS = 10;
+
   export interface StreamInput extends StreamInputInternal {}
   export interface ProcessorOptions extends ProcessorOptionsInternal {}
 
@@ -29,9 +31,13 @@ export namespace Processor {
       sink: configuredSink = createNoopSink(),
       onToolCall,
       createStream = defaultStream,
+      maxRetryAttempts = DEFAULT_MAX_RETRY_ATTEMPTS,
       trace,
     } = options;
 
+    const retryAttemptLimit = Number.isFinite(maxRetryAttempts)
+      ? Math.max(0, Math.floor(maxRetryAttempts))
+      : DEFAULT_MAX_RETRY_ATTEMPTS;
     const sink = createProjectedSink(configuredSink, sessionID);
     let attempt = 0;
     const messageParts: Message.Part[] = [];
@@ -87,6 +93,14 @@ export namespace Processor {
 
               if (retryReason !== undefined) {
                 attempt++;
+
+                if (attempt > retryAttemptLimit) {
+                  cleanupPendingTools(pendingTools, updateMessagePart, sink);
+                  assistantMessage.time.completed = Date.now();
+                  publishStatus(sink, sessionID, { type: "idle" });
+                  throw e;
+                }
+
                 const delayMs = Retry.delay(attempt, APIError.isInstance(e) ? e : undefined);
                 if (trace) {
                   Bus.publish(LlmCall.RetryDecided, {
@@ -94,7 +108,7 @@ export namespace Processor {
                     sessionId: trace.sessionId,
                     ...(trace.runId !== undefined && { runId: trace.runId }),
                     attempt,
-                    maxAttempts: Number.MAX_SAFE_INTEGER,
+                    maxAttempts: retryAttemptLimit,
                     reason: retryReason,
                     backoffMs: delayMs,
                     time: Date.now(),

@@ -7,6 +7,7 @@ export interface ToolResult {
   output: string;
   title: string;
   metadata?: Record<string, unknown>;
+  isError?: boolean;
 }
 
 export interface StreamInput {
@@ -29,6 +30,7 @@ export interface ProcessorOptions {
   sessionID: string;
   model: Provider.Model;
   abort: AbortSignal;
+  maxRetryAttempts?: number;
   sink?: Sink;
   onToolCall?: (part: Message.ToolPart) => Promise<ToolResult>;
   createStream?: (input: StreamInput) => Promise<Stream>;
