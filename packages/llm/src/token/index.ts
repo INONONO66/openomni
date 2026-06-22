@@ -1,7 +1,7 @@
 import type { Token } from "@openomni/protocol";
 import type { LanguageModelUsage } from "ai";
 
-export interface TokenUsage extends Token.ProviderUsage {}
+interface TokenUsage extends Token.ProviderUsage {}
 
 type UsageInput = Partial<LanguageModelUsage>;
 

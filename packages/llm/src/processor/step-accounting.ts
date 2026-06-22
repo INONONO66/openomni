@@ -1,9 +1,9 @@
 import type { Message } from "@openomni/protocol";
 import { TokenTracker } from "../token";
 import type { Provider } from "../provider";
-import { generateId, type StreamEvent } from "./processor-types.js";
+import { generateId, type StreamEvent } from "./contracts.js";
 
-export type StepEventContext = {
+type StepEventContext = {
   readonly sessionID: string;
   readonly assistantMessage: Message.AssistantMessage;
   readonly model: Provider.Model;

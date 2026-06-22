@@ -7,6 +7,7 @@ export interface ToolResult {
   output: string;
   title: string;
   metadata?: Record<string, unknown>;
+  isError?: boolean;
 }
 
 export interface StreamInput {
@@ -20,7 +21,7 @@ export interface StreamEvent {
   [key: string]: unknown;
 }
 
-export interface Stream {
+interface Stream {
   fullStream: AsyncIterable<StreamEvent>;
 }
 
@@ -29,6 +30,7 @@ export interface ProcessorOptions {
   sessionID: string;
   model: Provider.Model;
   abort: AbortSignal;
+  maxRetryAttempts?: number;
   sink?: Sink;
   onToolCall?: (part: Message.ToolPart) => Promise<ToolResult>;
   createStream?: (input: StreamInput) => Promise<Stream>;

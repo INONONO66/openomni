@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, test, beforeEach } from "bun:test";
-import { LlmCall, Operational, type Run, type Sink, type Tool } from "@openomni/protocol";
+import {
+  LlmCall,
+  Operational,
+  type Message,
+  type Run,
+  type Sink,
+  type Tool,
+} from "@openomni/protocol";
 import { Bus, Storage } from "@openomni/session";
-import { Processor } from "../../src/session/processor";
-import type { Message } from "../../src/session";
+import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
 
@@ -125,7 +131,7 @@ describe("Processor", () => {
   describe("Processor.create(input)", () => {
     test("does not expose removed helper type namespace members", async () => {
       const processorSource = await Bun.file(
-        new URL("../../src/session/processor.ts", import.meta.url),
+        new URL("../../src/processor/index.ts", import.meta.url),
       ).text();
 
       expect(Object.hasOwn(Processor, "ProcessResult")).toBe(false);

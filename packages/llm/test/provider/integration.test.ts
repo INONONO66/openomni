@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
-import { getSDK, getLanguage, Provider } from "../../src/provider/index";
+import { getSDK, getLanguage } from "../../src/provider/sdk";
+import { Provider } from "../../src/provider";
 
 type ModelRef = { readonly modelId?: string };
 type ProviderRef = { readonly provider?: string };

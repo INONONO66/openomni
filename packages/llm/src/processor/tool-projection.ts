@@ -1,7 +1,7 @@
 import type { Message, Sink } from "@openomni/protocol";
-import { generateId, type StreamEvent, type ToolResult } from "./processor-types.js";
+import { generateId, type StreamEvent, type ToolResult } from "./contracts.js";
 
-export type ToolEventContext = {
+type ToolEventContext = {
   readonly sessionID: string;
   readonly assistantMessage: Message.AssistantMessage;
   readonly sink: Sink;
@@ -18,6 +18,7 @@ type RunningToolEventContext = Omit<ToolEventContext, "onToolCall"> & {
 };
 
 export async function handleToolCall(event: StreamEvent, context: ToolEventContext): Promise<void> {
+  const input = ((event.input ?? event.args) as Record<string, unknown>) || {};
   const toolPart: Message.ToolPart = {
     id: generateId(),
     sessionID: context.sessionID,
@@ -27,7 +28,7 @@ export async function handleToolCall(event: StreamEvent, context: ToolEventConte
     tool: String(event.toolName),
     state: {
       status: "pending",
-      input: (event.args as Record<string, unknown>) || {},
+      input,
     },
   };
   context.messagePartWriter.add(toolPart);
@@ -40,6 +41,68 @@ export async function handleToolCall(event: StreamEvent, context: ToolEventConte
 
   if (!context.onToolCall) return;
   await runToolCall(toolPart, { ...context, onToolCall: context.onToolCall });
+}
+
+export function handleToolResult(event: StreamEvent, context: ToolEventContext): void {
+  const toolCallId = String(event.toolCallId);
+  const toolPart = context.pendingTools.find((pending) => pending.callID === toolCallId);
+  const outputPayload = normalizeOutputPayload(event);
+  const isError = event.isError === true || outputPayload.isError;
+
+  if (!toolPart) {
+    return;
+  }
+
+  if (isError) {
+    toolPart.state = {
+      status: "error",
+      input: toolPart.state.input,
+      error: outputPayload.output,
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    };
+  } else {
+    toolPart.state = {
+      status: "completed",
+      input: toolPart.state.input,
+      output: outputPayload.output,
+      title: String(event.toolName ?? toolPart.tool),
+      metadata: {},
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    };
+  }
+
+  context.messagePartWriter.update(toolPart);
+  context.sink.onToolResult({
+    id: generateId(),
+    toolCallId,
+    output: outputPayload.output,
+    ...(isError && { isError: true }),
+  });
+
+  const index = context.pendingTools.indexOf(toolPart);
+  if (index >= 0) context.pendingTools.splice(index, 1);
+}
+
+function normalizeOutputPayload(event: StreamEvent): { output: string; isError: boolean } {
+  const raw = event.output;
+  if (typeof raw === "object" && raw !== null && "output" in raw) {
+    const payload = raw as { output?: unknown; isError?: unknown };
+    return {
+      output: String(payload.output ?? ""),
+      isError: payload.isError === true,
+    };
+  }
+  const fallback = event.error ?? event.message ?? "";
+  return {
+    output: String(raw ?? fallback),
+    isError: false,
+  };
 }
 
 export function cleanupPendingTools(

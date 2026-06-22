@@ -260,7 +260,6 @@ async function validateDeepImports(): Promise<string[]> {
 // - remaining entries: pre-existing tech debt (do not extend)
 const ALLOWED_AS_ANY_FILES = new Set([
   "packages/protocol/src/error/index.ts",
-  "packages/llm/src/session/processor.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/agent/src/runtime/messenger/transport.ts",
 ]);

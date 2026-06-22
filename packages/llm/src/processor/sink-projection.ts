@@ -1,8 +1,8 @@
 import { Operational, type Run, type Sink, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { generateId } from "./processor-types.js";
+import { generateId } from "./contracts.js";
 
-export interface ProjectedSink extends Sink {
+interface ProjectedSink extends Sink {
   flush(): Promise<void>;
 }
 

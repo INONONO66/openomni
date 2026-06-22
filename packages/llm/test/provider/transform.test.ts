@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ProviderTransform } from "../../src/transform";
+import { ProviderTransform } from "../../src/provider/transform";
 import type { Provider } from "../../src/provider/index";
 type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
@@ -12,7 +12,7 @@ describe("ProviderTransform.normalizeMessages", () => {
 
   test("does not expose NormalizeOptions as a public namespace member", async () => {
     const transformSource = await Bun.file(
-      new URL("../../src/transform/index.ts", import.meta.url),
+      new URL("../../src/provider/transform.ts", import.meta.url),
     ).text();
 
     expect(Object.hasOwn(ProviderTransform, "NormalizeOptions")).toBe(false);

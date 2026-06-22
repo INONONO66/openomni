@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { Retry } from "../../src/session/retry";
+import { Retry } from "../../src/retry";
 import { APIError, RetryError } from "../../src/error";
 
 describe("Retry", () => {
   test("does not expose removed agent-level retry namespace members", async () => {
-    const retrySource = await Bun.file(
-      new URL("../../src/session/retry.ts", import.meta.url),
-    ).text();
+    const retrySource = await Bun.file(new URL("../../src/retry/index.ts", import.meta.url)).text();
 
     expect(Object.hasOwn(Retry, "DEFAULT_AGENT_RETRY_POLICY")).toBe(false);
     expect(Object.hasOwn(Retry, "calculateAgentBackoffMs")).toBe(false);
@@ -336,7 +334,7 @@ describe("Retry", () => {
   describe("removed retry wrapper", () => {
     test("does not expose withRetry", async () => {
       const retrySource = await Bun.file(
-        new URL("../../src/session/retry.ts", import.meta.url),
+        new URL("../../src/retry/index.ts", import.meta.url),
       ).text();
 
       expect(Object.hasOwn(Retry, "withRetry")).toBe(false);
