@@ -10,16 +10,15 @@ import { Bus } from "@openomni/session";
 /**
  * Input for the run() function.
  *
- * When `model` is provided the function resolves auth credentials
- * and calls the real provider SDK.  When omitted the Processor
- * falls back to its default noop stream (useful for unit tests).
+ * The function resolves auth credentials for the configured model
+ * and calls the real provider SDK.
  */
 export interface RunInput {
   messages: Message.WithParts[];
   tools: Tool.Spec[];
   system?: string;
   signal?: AbortSignal;
-  model?: Provider.Model;
+  model: Provider.Model;
   auth?: Auth.Info;
   allowAuthFallback?: boolean;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
@@ -37,6 +36,9 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   if (!abortSignal) {
     throw new Error("Failed to initialize abort signal");
   }
+  if (abortSignal.aborted) {
+    return { type: "aborted" };
+  }
 
   const sessionID = messages[0]?.info.sessionID || `session-${crypto.randomUUID()}`;
   const messageID = `msg-${crypto.randomUUID()}`;
@@ -48,8 +50,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     role: "assistant",
     time: { created: Date.now() },
     parentID,
-    modelID: model?.id ?? "default",
-    providerID: model?.providerID ?? "default",
+    modelID: model.id,
+    providerID: model.providerID,
     agent: "default",
     path: { cwd: process.cwd(), root: process.cwd() },
     cost: 0,
@@ -61,134 +63,132 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     },
   };
 
-  let createStream: Processor.ProcessorOptions["createStream"];
+  const createStream: Processor.ProcessorOptions["createStream"] = async (streamInput) => {
+    const ai = await import("ai");
+    const auth =
+      input.auth ??
+      (input.allowAuthFallback === false ? undefined : await Auth.get(model.providerID));
+    if (!auth) {
+      throw new Error(
+        `No authentication found for provider: ${model.providerID}. Configure provider credentials or use a proxy auth provider first.`,
+      );
+    }
 
-  if (model) {
-    createStream = async (streamInput) => {
-      const ai = await import("ai");
-      const auth =
-        input.auth ??
-        (input.allowAuthFallback === false ? undefined : await Auth.get(model.providerID));
-      if (!auth) {
-        throw new Error(
-          `No authentication found for provider: ${model.providerID}. Configure provider credentials or use a proxy auth provider first.`,
-        );
-      }
+    const languageModel = getLanguage(model, auth);
 
-      const languageModel = getLanguage(model, auth);
+    const normalizedMessages = toModelMessages(messages, model);
 
-      const normalizedMessages = toModelMessages(messages, model);
+    const systemMessages: SDKMessage[] = streamInput.system
+      ? [{ role: "system" as const, content: streamInput.system }]
+      : [];
 
-      const systemMessages: SDKMessage[] = streamInput.system
-        ? [{ role: "system" as const, content: streamInput.system }]
-        : [];
-
-      const sdkTools: Record<string, unknown> = {};
-      for (const spec of input.tools) {
-        if (input.toolExecutor) {
-          sdkTools[spec.name] = {
-            type: "function" as const,
-            description: spec.description,
-            inputSchema: ai.jsonSchema(spec.inputSchema),
-            execute: async (args: Record<string, unknown>) => {
-              const call: Tool.Call = {
-                id: crypto.randomUUID(),
-                tool: spec.name,
-                input: args,
-              };
-              const result = await input.toolExecutor?.(call, { signal: abortSignal });
-              if (!result) return "";
-              sink.onToolCall(call);
-              sink.onToolResult(result);
-              if (result.isError) return `Error: ${result.output}`;
-              return result.output;
-            },
-          };
-        } else {
-          sdkTools[spec.name] = {
-            type: "function" as const,
-            description: spec.description,
-            inputSchema: ai.jsonSchema(spec.inputSchema),
-          };
-        }
-      }
-
-      const streamArgs = {
-        model: languageModel,
-        messages: [...systemMessages, ...normalizedMessages],
-        tools: sdkTools,
-        toolChoice: input.toolChoice,
-        maxRetries: 0,
-        stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
-        onError: ({ error }: { error: unknown }) => {
-          Bus.publish(Operational.Error, {
-            traceId: input.trace?.traceId ?? crypto.randomUUID(),
-            time: Date.now(),
-            sessionId: sessionID,
-            component: "llm.stream",
-            msg: "streamText error",
-            error: String(error),
-          });
-        },
-        abortSignal: abortSignal,
-        ...(input.providerOptions ?? {}),
-      };
-      const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
-
-      async function* adaptStream(): AsyncGenerator<{
-        type: string;
-        [key: string]: unknown;
-      }> {
-        let inText = false;
-
-        for await (const chunk of streamResult.fullStream) {
-          const event = chunk as { type: string; [key: string]: unknown };
-
-          if (event.type === "text-delta" && !inText) {
-            inText = true;
-            yield { type: "text-start" };
-          }
-
-          if (event.type !== "text-delta" && inText) {
-            inText = false;
-            yield { type: "text-end" };
-          }
-
-          if (event.type === "text-delta") {
-            yield { ...event, text: event.textDelta ?? event.text };
-          } else if (event.type === "reasoning") {
-            yield {
-              ...event,
-              type: "reasoning-delta",
-              text: event.textDelta ?? event.text,
+    const sdkTools: Record<string, unknown> = {};
+    for (const spec of input.tools) {
+      if (input.toolExecutor) {
+        sdkTools[spec.name] = {
+          type: "function" as const,
+          description: spec.description,
+          inputSchema: ai.jsonSchema(spec.inputSchema),
+          execute: async (
+            args: Record<string, unknown>,
+            options?: { toolCallId?: string; abortSignal?: AbortSignal },
+          ) => {
+            const call: Tool.Call = {
+              id: options?.toolCallId ?? crypto.randomUUID(),
+              tool: spec.name,
+              input: args,
             };
-          } else if (event.type === "finish-step") {
-            yield { ...event, type: "step-finish" };
-          } else if (event.type === "start-step") {
-            yield { ...event, type: "step-start" };
-          } else {
-            yield event;
-          }
+            const result = await input.toolExecutor?.(call, {
+              signal: options?.abortSignal ?? abortSignal,
+            });
+            return {
+              output: result?.output ?? "",
+              ...(result?.isError === true && { isError: true }),
+            };
+          },
+        };
+      } else {
+        sdkTools[spec.name] = {
+          type: "function" as const,
+          description: spec.description,
+          inputSchema: ai.jsonSchema(spec.inputSchema),
+        };
+      }
+    }
+
+    const streamArgs = {
+      model: languageModel,
+      messages: [...systemMessages, ...normalizedMessages],
+      tools: sdkTools,
+      toolChoice: input.toolChoice,
+      maxRetries: 0,
+      stopWhen: ai.stepCountIs(input.maxSteps ?? 24),
+      onError: ({ error }: { error: unknown }) => {
+        Bus.publish(Operational.Error, {
+          traceId: input.trace?.traceId ?? crypto.randomUUID(),
+          time: Date.now(),
+          sessionId: sessionID,
+          component: "llm.stream",
+          msg: "streamText error",
+          error: String(error),
+        });
+      },
+      abortSignal: abortSignal,
+      ...(input.providerOptions ?? {}),
+    };
+    const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
+
+    async function* adaptStream(): AsyncGenerator<{
+      type: string;
+      [key: string]: unknown;
+    }> {
+      let inText = false;
+
+      for await (const chunk of streamResult.fullStream) {
+        const event = chunk as { type: string; [key: string]: unknown };
+
+        if (event.type === "text-delta" && !inText) {
+          inText = true;
+          yield { type: "text-start" };
         }
 
-        if (inText) {
+        if (event.type !== "text-delta" && inText) {
+          inText = false;
           yield { type: "text-end" };
         }
+
+        if (event.type === "text-delta") {
+          yield { ...event, text: event.textDelta ?? event.text };
+        } else if (event.type === "reasoning") {
+          yield {
+            ...event,
+            type: "reasoning-delta",
+            text: event.textDelta ?? event.text,
+          };
+        } else if (event.type === "finish-step") {
+          yield { ...event, type: "step-finish" };
+        } else if (event.type === "start-step") {
+          yield { ...event, type: "step-start" };
+        } else {
+          yield event;
+        }
       }
 
-      return { fullStream: adaptStream() };
-    };
-  }
+      if (inText) {
+        yield { type: "text-end" };
+      }
+    }
 
-  const resolvedModel = model ?? ({} as Provider.Model);
+    return { fullStream: adaptStream() };
+  };
   const traceId = input.trace?.traceId ?? crypto.randomUUID();
-  const provider = model?.providerID ?? "default";
-  const modelId = model?.id ?? "default";
+  const provider = model.providerID;
+  const modelId = model.id;
 
   const processor = Processor.create({
     assistantMessage,
     sessionID,
-    model: resolvedModel,
+    model,
     abort: abortSignal,
     sink,
     createStream,
@@ -216,7 +216,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   try {
     const result = await processor.process({
       messages: messages.map((m) => m.info),
-      model: resolvedModel,
+      model,
       system,
     });
 

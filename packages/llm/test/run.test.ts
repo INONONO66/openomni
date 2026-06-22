@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
 import { Auth } from "../src/auth";
+import type { Provider } from "../src/provider";
 
 let run: typeof import("../src/run").run;
 
@@ -33,6 +34,12 @@ function mockAiModule() {
 mockAiModule();
 
 const testAuth = { type: "api", key: "test-key-run" } as const;
+const testModel: Provider.Model = {
+  id: "claude-3-haiku",
+  providerID: "__test_run__",
+  name: "Claude 3 Haiku Test",
+  api: { npm: "@ai-sdk/anthropic" },
+};
 
 describe("run", () => {
   let mockSink: Sink;
@@ -77,6 +84,7 @@ describe("run", () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
     };
 
     expect(input.messages).toEqual([]);
@@ -90,6 +98,8 @@ describe("run", () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
+      auth: testAuth,
       system: "test system prompt",
       signal: abortController.signal,
       toolChoice: "required",
@@ -112,6 +122,8 @@ describe("run", () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
+      auth: testAuth,
     };
 
     const outcome = await run(input, mockSink);
@@ -125,6 +137,8 @@ describe("run", () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
+      auth: testAuth,
       signal: abortController.signal,
     };
 
@@ -194,6 +208,8 @@ describe("run", () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
+      auth: testAuth,
       signal: controller.signal,
     };
 
@@ -201,12 +217,15 @@ describe("run", () => {
 
     expect(outcome.type).toBe("aborted");
     expect(capturedToolCalls.length).toBe(0);
+    expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
   });
 
   test("calls sink methods during execution", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
+      model: testModel,
+      auth: testAuth,
     };
 
     await run(input, mockSink);
