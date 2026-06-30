@@ -20,6 +20,7 @@ const Created = BusEvent.define(
       assigneeId: z.string().optional(),
     }),
   }),
+  { visibility: "llm_reason" },
 );
 
 const Updated = BusEvent.define(
@@ -30,6 +31,7 @@ const Updated = BusEvent.define(
       fields: z.array(z.string()),
     }),
   }),
+  { visibility: "internal" },
 );
 
 const StatusChanged = BusEvent.define(
@@ -41,6 +43,7 @@ const StatusChanged = BusEvent.define(
       to: Status,
     }),
   }),
+  { visibility: "llm_reason" },
 );
 
 const Completed = BusEvent.define(
@@ -51,6 +54,7 @@ const Completed = BusEvent.define(
       sessionId: z.string().optional(),
     }),
   }),
+  { visibility: "llm_reason" },
 );
 
 const Failed = BusEvent.define(
@@ -62,6 +66,7 @@ const Failed = BusEvent.define(
       sessionId: z.string().optional(),
     }),
   }),
+  { visibility: "llm_reason" },
 );
 
 const OutcomeRecorded = BusEvent.define(
@@ -73,6 +78,7 @@ const OutcomeRecorded = BusEvent.define(
       sessionId: z.string().optional(),
     }),
   }),
+  { visibility: "llm_reason" },
 );
 
 const Removed = BusEvent.define(
@@ -83,6 +89,7 @@ const Removed = BusEvent.define(
       sessionId: z.string().optional(),
     }),
   }),
+  { visibility: "internal" },
 );
 
 export const Events = {

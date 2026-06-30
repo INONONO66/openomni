@@ -135,6 +135,7 @@ export namespace Subagent {
           kind: ChildSessionKind,
         }),
       }),
+      { visibility: "internal" },
     );
 
     export const WorkerRunStarted = BusEvent.define(
@@ -146,6 +147,7 @@ export namespace Subagent {
           title: z.string(),
         }),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const WorkerRunCompleted = BusEvent.define(
@@ -157,6 +159,7 @@ export namespace Subagent {
           status: WorkerRunStatus,
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const WorkerRunFailed = BusEvent.define(
@@ -168,6 +171,7 @@ export namespace Subagent {
           error: z.string().optional(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const WorkerSessionResumed = BusEvent.define(
@@ -178,6 +182,7 @@ export namespace Subagent {
           runId: z.string(),
         }),
       }),
+      { visibility: "internal" },
     );
 
     export const WorkerSessionCancelled = BusEvent.define(
@@ -188,6 +193,7 @@ export namespace Subagent {
           runId: z.string().optional(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const WorkerConsultationRequested = BusEvent.define(
@@ -200,6 +206,7 @@ export namespace Subagent {
           mode: ConsultationMode,
         }),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const WorkerConsultationCompleted = BusEvent.define(
@@ -211,6 +218,7 @@ export namespace Subagent {
           consultationId: z.string(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const BackgroundTaskLaunched = BusEvent.define(
@@ -223,6 +231,7 @@ export namespace Subagent {
           status: BackgroundTaskStatus,
         }),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const BackgroundTaskCompleted = BusEvent.define(
@@ -234,6 +243,7 @@ export namespace Subagent {
           sessionId: z.string().optional(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const BackgroundTaskFailed = BusEvent.define(
@@ -244,6 +254,7 @@ export namespace Subagent {
           error: z.string().optional(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const BackgroundTaskCancelled = BusEvent.define(
@@ -253,6 +264,7 @@ export namespace Subagent {
           taskId: z.string(),
         }),
       }),
+      { visibility: "llm_reason" },
     );
   }
 }

@@ -14,16 +14,17 @@ const LogBase = Base.extend({
 });
 
 export namespace Operational {
-  export const Debug = BusEvent.define("operational.debug", LogBase);
+  export const Debug = BusEvent.define("operational.debug", LogBase, { visibility: "ephemeral" });
 
-  export const Info = BusEvent.define("operational.info", LogBase);
+  export const Info = BusEvent.define("operational.info", LogBase, { visibility: "ephemeral" });
 
-  export const Warn = BusEvent.define("operational.warn", LogBase);
+  export const Warn = BusEvent.define("operational.warn", LogBase, { visibility: "internal" });
 
   // biome-ignore lint/suspicious/noShadowRestrictedNames: expose Operational.Error to match the namespaced event API
   export const Error = BusEvent.define(
     "operational.error",
     LogBase.extend({ error: z.string().optional() }),
+    { visibility: "llm_reason" },
   );
 
   export const BootstrapCompleted = BusEvent.define(
@@ -32,6 +33,7 @@ export namespace Operational {
       mode: z.enum(["local", "coordinator"]),
       channelCount: z.number(),
     }),
+    { visibility: "internal" },
   );
 
   export const ShutdownInitiated = BusEvent.define(
@@ -39,9 +41,12 @@ export namespace Operational {
     Base.extend({
       reason: z.string(),
     }),
+    { visibility: "internal" },
   );
 
-  export const RecoveryStarted = BusEvent.define("operational.recovery.started", Base);
+  export const RecoveryStarted = BusEvent.define("operational.recovery.started", Base, {
+    visibility: "ephemeral",
+  });
 
   export const RecoveryCompleted = BusEvent.define(
     "operational.recovery.completed",
@@ -49,5 +54,6 @@ export namespace Operational {
       sessionsRecovered: z.number(),
       durationMs: z.number(),
     }),
+    { visibility: "internal" },
   );
 }

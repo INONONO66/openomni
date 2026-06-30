@@ -18,6 +18,7 @@ const VerificationEventBase = z.object({
 const VerificationFailed = BusEvent.define(
   "app_connector.verification.failed",
   VerificationEventBase,
+  { visibility: "llm_reason" },
 );
 
 export const Events = {

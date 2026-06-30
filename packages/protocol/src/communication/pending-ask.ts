@@ -74,9 +74,11 @@ const EventBase = z.object({
 });
 
 export const Events = {
-  Opened: BusEvent.define("pending_ask.opened", EventBase),
-  Answered: BusEvent.define("pending_ask.answered", EventBase.extend({ answeredAt: z.number() })),
-  Ambiguous: BusEvent.define("pending_ask.ambiguous", EventBase),
-  Cancelled: BusEvent.define("pending_ask.cancelled", EventBase),
-  Expired: BusEvent.define("pending_ask.expired", EventBase),
+  Opened: BusEvent.define("pending_ask.opened", EventBase, { visibility: "internal" }),
+  Answered: BusEvent.define("pending_ask.answered", EventBase.extend({ answeredAt: z.number() }), {
+    visibility: "internal",
+  }),
+  Ambiguous: BusEvent.define("pending_ask.ambiguous", EventBase, { visibility: "internal" }),
+  Cancelled: BusEvent.define("pending_ask.cancelled", EventBase, { visibility: "internal" }),
+  Expired: BusEvent.define("pending_ask.expired", EventBase, { visibility: "internal" }),
 } as const;

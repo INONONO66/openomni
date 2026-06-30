@@ -118,6 +118,7 @@ export namespace Dispatch {
         payloadSummary: z.string().optional(),
         idempotencyKey: z.string().min(1).optional(),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const Authorized = BusEvent.define(
@@ -128,6 +129,7 @@ export namespace Dispatch {
         policyId: z.string().optional(),
         effects: z.array(Policy.PolicyEffect).optional(),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const Denied = BusEvent.define(
@@ -138,6 +140,7 @@ export namespace Dispatch {
         policyId: z.string().optional(),
         effects: z.array(Policy.PolicyEffect).optional(),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const Routed = BusEvent.define(
@@ -145,6 +148,7 @@ export namespace Dispatch {
       EventBase.extend({
         handler: z.string().min(1),
       }),
+      { visibility: "ephemeral" },
     );
 
     export const Completed = BusEvent.define(
@@ -154,6 +158,7 @@ export namespace Dispatch {
         durationMs: z.number().min(0),
         resultSummary: z.string().optional(),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const Failed = BusEvent.define(
@@ -163,6 +168,7 @@ export namespace Dispatch {
         durationMs: z.number().min(0).optional(),
         reason: z.string(),
       }),
+      { visibility: "llm_reason" },
     );
   }
 
