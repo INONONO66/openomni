@@ -5,7 +5,7 @@
 
 OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) for full rationale.
 
-The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
+The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 7 packages and 1 app (Server).
 
 Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md)–[013](docs/design-decisions/013-memory-engine-port.md) (proposed) frame the target as an Agent OS kernel (010) with a task ledger + evidence gate (011), an incident-driven Governor (012), and a pluggable memory port (013). **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -17,12 +17,13 @@ openomni/
 │   └── server/          # Hono server — Discord/Telegram/GitHub/WebSocket channels, tool providers, ingress router
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
+│   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + generic agent-loop runtime primitives — depends on session only for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
-│   │   │   └── policy/         # PolicyEngine + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
+│   │   │   └── policy/         # Agent policy facade + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
 │   │   └── src/runtime/        # Generic runtime primitives: registry, subagent tool contract, background tool shells, MCP client
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
 │   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
@@ -33,10 +34,11 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol ← session ← llm ← agent ← openomni ← coordinator ← server
+protocol ← policy ← agent ← openomni ← coordinator ← server
+protocol ← session ← llm ──────┘
 ```
 
-Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` for loop execution and observability, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `agent` depends on `llm`, `session` for observability, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
 
 ## PACKAGE OWNERSHIP
 
@@ -45,9 +47,10 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | Package | Owns | Must not own |
 | --- | --- | --- |
 | `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
+| `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
 | `packages/session` | Durable state substrate: session/message/part CRUD, Bus, Bus persistence, storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
-| `packages/agent` | Stateless ChatAgent loop, policy engine primitive, tool invocation protocol, generic delegation/subagent tool contract | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
+| `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic delegation/subagent tool contract | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, IPC framing, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy |
 | `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector manifests, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
@@ -105,7 +108,8 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
 | ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, policy engine, memory, delegation, telemetry |
-| Policy engine | `packages/agent/src/core/policy/` | `PolicyEngine.create()` + built-ins in `builtin/` |
+| Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
+| Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
 | Agent registry primitive | `packages/agent/src/runtime/registry/` | Generic registry facade only; product agent registration belongs above it |
 | Generic subagent tool contract | `packages/agent/src/runtime/tools/` | `SubagentTool` may remain as an agent-loop primitive; durable lifecycle belongs in `openomni` |

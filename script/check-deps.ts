@@ -31,7 +31,15 @@ declare const Bun: {
   exit(code: number): never;
 };
 
-type PackageKey = "protocol" | "session" | "llm" | "agent" | "openomni" | "coordinator" | "server";
+type PackageKey =
+  | "protocol"
+  | "policy"
+  | "session"
+  | "llm"
+  | "agent"
+  | "openomni"
+  | "coordinator"
+  | "server";
 
 type PackageRule = {
   displayName: string;
@@ -62,6 +70,12 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageName: "@openomni/session",
     allowedDeps: new Set(["@openomni/protocol"]),
   },
+  policy: {
+    displayName: "policy",
+    packageJsonPath: "packages/policy/package.json",
+    packageName: "@openomni/policy",
+    allowedDeps: new Set(["@openomni/protocol"]),
+  },
   llm: {
     displayName: "llm",
     packageJsonPath: "packages/llm/package.json",
@@ -72,7 +86,12 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
     packageName: "@openomni/agent",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/llm", "@openomni/session"]),
+    allowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/policy",
+      "@openomni/llm",
+      "@openomni/session",
+    ]),
   },
   openomni: {
     displayName: "openomni",
