@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { StreamPolicyEffects } from "../../../src/core/execution/stream-policy-effects";
-import { createStreamRunState } from "../../../src/core/execution/stream-state";
+import { StreamPolicyEffects } from "../../../src/core/execution/policy-effects-apply";
+import { createStreamRunState } from "../../../src/core/execution/run-state";
 
 describe("StreamPolicyEffects", () => {
   it("preserves assistant provenance for injected prompt messages", () => {

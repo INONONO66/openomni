@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentEvent } from "../../../src/core/types";
 import { PolicyEngine } from "../../../src/core/policy";
-import { handleStop } from "../../../src/core/execution/stream-flow";
+import { handleStop } from "../../../src/core/execution/turn-outcome";
 import {
   createStreamRunState,
   type StreamAgentBase,
   type TurnArtifacts,
-} from "../../../src/core/execution/stream-state";
+} from "../../../src/core/execution/run-state";
 import { allow } from "../../helpers/policy-decision";
 
 function makeAgentBase(): StreamAgentBase {
