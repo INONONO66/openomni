@@ -102,10 +102,12 @@ const SnapshotEvents = {
   Tracked: BusEvent.define(
     "snapshot.tracked",
     z.object({ sessionID: z.string(), snapshotID: z.string() }),
+    { visibility: "ephemeral" },
   ),
   Restored: BusEvent.define(
     "snapshot.restored",
     z.object({ sessionID: z.string(), snapshotID: z.string() }),
+    { visibility: "llm_reason" },
   ),
 };
 

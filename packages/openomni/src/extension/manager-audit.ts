@@ -1,5 +1,5 @@
-import { Operational, Policy } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Policy } from "@openomni/protocol";
+import { Storage, createAuditLog } from "@openomni/session";
 import { actorKind, truncateAuditText } from "./audit-util";
 import type { ExtensionManifestSummary } from "./manager-manifest";
 import {
@@ -18,7 +18,6 @@ import {
   type ExtensionOperationOptions,
 } from "./manager-types";
 
-const auditSequences = new Map<string, number>();
 const auditEventsBySession = new Map<string, AuditEvent[]>();
 
 export async function beginOperation(
@@ -149,25 +148,21 @@ export async function appendAuditEvent<T extends AuditEvent>(
   now: () => Date,
   parentActionId?: string,
 ): Promise<T> {
-  const prev = auditSequences.get(sessionId) ?? 0;
-  const sequence = prev + 1;
-  auditSequences.set(sessionId, sequence);
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const actionId = `${sessionId}:${eventType}:extension:${suffix}`;
   const row = event({
-    actionId: `${sessionId}:${eventType}:extension:${sequence}`,
+    actionId,
     ...(parentActionId !== undefined ? { parentActionId } : {}),
     visibility: AUDIT_VISIBILITY,
     timestamp: now().toISOString(),
-    sequence,
+    sequence: 0,
   });
 
-  Bus.publish(Operational.Info, {
-    traceId: sessionId,
-    time: Date.now(),
-    sessionId,
-    component: "extension.manager",
-    msg: eventType,
-    context: { audit: row as unknown as Record<string, unknown> },
-  });
+  createAuditLog(sessionId, "extension.manager").append(
+    eventType,
+    row as unknown as Record<string, unknown>,
+    parentActionId,
+  );
   const events = auditEventsBySession.get(sessionId) ?? [];
   events.push(row);
   auditEventsBySession.set(sessionId, events);

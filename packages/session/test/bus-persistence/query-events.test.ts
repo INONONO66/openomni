@@ -45,11 +45,43 @@ describe("BusQuery event queries", () => {
       runId: "run-1",
       eventType: "agent.execution.started",
       category: "agent",
+      visibility: "internal",
       data: { ok: true },
       traceId: "trace-1",
       durationMs: 12,
       timeCreated: 100,
     });
+  });
+
+  test("listForLlmReasoning returns only model-visible audit events", async () => {
+    insertEvent({
+      sessionId: "sess-1",
+      type: "operational.warn",
+      category: "operational",
+      visibility: "internal",
+      traceId: "trace-internal",
+      timeCreated: 100,
+    });
+    insertEvent({
+      sessionId: "sess-1",
+      type: "llm.call.completed",
+      category: "llm",
+      visibility: "llm_reason",
+      traceId: "trace-llm",
+      timeCreated: 200,
+    });
+    insertEvent({
+      sessionId: "sess-1",
+      type: "ingress.received",
+      category: "ingress",
+      visibility: "user_audit",
+      traceId: "trace-user",
+      timeCreated: 300,
+    });
+
+    const events = await BusQuery.listForLlmReasoning("sess-1");
+
+    expect(events.map((event) => event.traceId)).toEqual(["trace-user", "trace-llm"]);
   });
 
   test("listBySession applies type, category, time, and limit filters", async () => {

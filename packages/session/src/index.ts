@@ -1,4 +1,5 @@
 export { Bus, BusEvent } from "./bus";
+export { createAuditLog } from "./audit/index";
 export { BusPersistence } from "./bus-persistence/index.js";
 export { BusQuery } from "./bus-persistence/query";
 export { Storage, SqliteStorageAdapter, initialize } from "./storage";

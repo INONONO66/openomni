@@ -7,6 +7,7 @@ import type { PersistInput } from "./types.js";
 
 export async function persist(input: PersistInput): Promise<void> {
   const db = getDatabase();
+  const visibility = input.event.visibility ?? "internal";
   const data = JSON.stringify(
     redactForPersistence(input.payload === undefined ? null : input.payload),
   );
@@ -34,13 +35,14 @@ export async function persist(input: PersistInput): Promise<void> {
   db.transaction(() => {
     db.query(
       `INSERT INTO bus_event
-         (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.sessionId ?? null,
       runId ?? null,
       input.event.name,
       categoryOf(input.event.name),
+      visibility,
       data,
       traceId,
       durationMs ?? null,

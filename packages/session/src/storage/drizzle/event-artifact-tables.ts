@@ -24,6 +24,7 @@ export const busEventTable = sqliteTable(
     run_id: text("run_id"),
     event_type: text("event_type").notNull(),
     category: text("category").notNull(),
+    visibility: text("visibility").notNull().default("internal"),
     data: text("data").notNull(),
     trace_id: text("trace_id").notNull(),
     duration_ms: integer("duration_ms"),
@@ -34,6 +35,7 @@ export const busEventTable = sqliteTable(
     index("idx_bus_event_run_time").on(t.run_id, t.time_created),
     index("idx_bus_event_type_session").on(t.event_type, t.session_id),
     index("idx_bus_event_category_session").on(t.category, t.session_id),
+    index("idx_bus_event_visibility_session").on(t.visibility, t.session_id, t.time_created),
     index("idx_bus_event_trace").on(t.trace_id),
   ],
 );

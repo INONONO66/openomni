@@ -16,6 +16,7 @@ interface BusEventRow {
   readonly run_id: string | null;
   readonly event_type: string;
   readonly category: string;
+  readonly visibility: string;
   readonly data: string;
   readonly trace_id: string;
   readonly duration_ms: number | null;
@@ -100,6 +101,7 @@ describe("BusPersistence", () => {
       run_id: "run-1",
       event_type: "llm.call.completed",
       category: "llm",
+      visibility: "internal",
       trace_id: "trace-1",
       duration_ms: 123,
       time_created: time,
@@ -253,27 +255,21 @@ describe("BusPersistence", () => {
     BusPersistence.start();
     const snapshotID = Snapshot.track(session.id);
     Snapshot.restore(session.id, snapshotID);
-    const persisted = await waitForRows(2);
+    const persisted = await waitForRows(1);
 
-    expect(persisted.map((row) => row.event_type)).toEqual([
-      "snapshot.tracked",
-      "snapshot.restored",
-    ]);
+    expect(persisted.map((row) => row.event_type)).toEqual(["snapshot.restored"]);
     for (const row of persisted) {
       expect(row.session_id).toBe(session.id);
       expect(JSON.parse(row.data)).toEqual({ sessionID: session.id, snapshotID });
     }
     expect(persisted[0]).toMatchObject({
       session_id: session.id,
-      event_type: "snapshot.tracked",
+      event_type: "snapshot.restored",
       category: "snapshot",
     });
 
     const sessionEvents = await BusQuery.listBySession(session.id);
-    expect(sessionEvents.map((event) => event.eventType).sort()).toEqual([
-      "snapshot.restored",
-      "snapshot.tracked",
-    ]);
+    expect(sessionEvents.map((event) => event.eventType)).toEqual(["snapshot.restored"]);
   });
 
   test("resolves communication events by originSessionId and workerRunId", async () => {
