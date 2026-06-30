@@ -14,15 +14,17 @@ export interface GenericPolicyContext {
   toolOutput?: string;
   labels?: Policy.LabelEntry[];
   messages?: Message.WithParts[];
+  usage?: unknown;
 }
-
-export type AuditDispatchContextGeneric<TCtx extends GenericPolicyContext> = TCtx & {
-  readonly timing: Policy.Timing;
-};
 
 export type DispatchContextGeneric<TCtx extends GenericPolicyContext> = Omit<TCtx, "timing"> & {
   readonly resourceDescriptor?: RuntimeResource.Descriptor;
 };
+
+export type AuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =
+  DispatchContextGeneric<TCtx> & {
+    readonly timing: Policy.Timing;
+  };
 
 export type PolicyDecision = Policy.PolicyDecision;
 
@@ -50,7 +52,9 @@ export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   priority: number;
   scope?: Policy.Scope;
   failPolicy?: Policy.FailPolicy;
-  fn(ctx: TCtx & { timing: Policy.Timing }): Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+  fn(
+    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+  ): Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
   propagate?: boolean;
 }
 

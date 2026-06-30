@@ -5,16 +5,16 @@ import type {
   MergeResult,
   PriorityApprovalAccumulator,
   RetryAccumulator,
-} from "./effect-composition-types";
+} from "../types";
 import {
   appendPriorityReason,
   appendReason,
   mergeRetry,
   selectPriorityEffect,
-} from "./effect-merge-accumulators";
-import { appendMergedEffects } from "./effect-merge-output";
-import { assertNever, deepMergeRecords } from "./effect-records";
-import { collectPostConflicts } from "./effect-conflicts";
+} from "./accumulators";
+import { appendMergedEffects } from "./output";
+import { assertNever, deepMergeRecords } from "../records";
+import { collectPostConflicts } from "../conflicts";
 
 export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   const merged: MergedEffect[] = [];

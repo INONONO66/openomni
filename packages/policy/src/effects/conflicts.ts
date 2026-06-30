@@ -5,8 +5,8 @@ import {
   type Conflict,
   type EffectEntry,
   type FieldOwner,
-} from "./effect-composition-types";
-import { flattenRecord, pathsOverlap, stableHash } from "./effect-records";
+} from "./types";
+import { flattenRecord, pathsOverlap, stableHash } from "./records";
 
 export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
   return [

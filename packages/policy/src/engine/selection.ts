@@ -1,5 +1,5 @@
 import type { Policy } from "@openomni/protocol";
-import type { GenericPolicyContext, PolicyRegistrationGeneric } from "./engine-types";
+import type { GenericPolicyContext, PolicyRegistrationGeneric } from "./types";
 
 function matchesTiming<TCtx extends GenericPolicyContext>(
   reg: PolicyRegistrationGeneric<TCtx>,

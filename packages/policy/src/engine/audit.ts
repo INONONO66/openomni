@@ -1,10 +1,10 @@
 import { Operational, type Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
-import { auditPoint } from "./engine-points";
+import { auditPoint } from "./points";
 import type {
   AuditDispatchContextGeneric,
   GenericPolicyContext,
   PolicyEngineConfig,
-} from "./engine-types";
+} from "./types";
 
 function buildActor(traceContext: TraceContext.Type | undefined): Record<string, unknown> {
   return {
@@ -24,7 +24,9 @@ function resolveResource(reg: { name: string }, ctx: GenericPolicyContext): stri
   return ctx.toolName ?? reg.name;
 }
 
-function resolveComposedResource(ctx: AuditDispatchContextGeneric<GenericPolicyContext>): string {
+function resolveComposedResource(
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
+): string {
   return ctx.toolName ?? ctx.resourceDescriptor?.id ?? "policy.composed";
 }
 
@@ -37,7 +39,7 @@ export function publishPolicyEvent(
   options: PolicyEngineConfig,
   decision: Policy.PolicyDecision,
   reg: { name: string },
-  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
 ): void {
   if (options.audit === false) return;
 
@@ -71,7 +73,7 @@ export function publishPolicyEvent(
 export function publishComposedDecision(
   options: PolicyEngineConfig,
   timing: Policy.Timing,
-  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
   decision: Policy.PolicyDecision,
 ): void {
   if (options.audit === false) return;
@@ -103,7 +105,7 @@ export function publishComposedDecision(
 
 export function publishDecisionObserverError(
   options: PolicyEngineConfig,
-  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
   decision: Policy.PolicyDecision,
   err: unknown,
 ): void {

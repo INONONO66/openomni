@@ -3,8 +3,8 @@ import type {
   MergedEffect,
   PriorityApprovalAccumulator,
   RetryAccumulator,
-} from "./effect-composition-types";
-import { approvalEffect, retryEffect } from "./effect-merge-accumulators";
+} from "../types";
+import { approvalEffect, retryEffect } from "./accumulators";
 
 export interface EffectAccumulatorSet {
   readonly promptReplace?: MergedEffect;

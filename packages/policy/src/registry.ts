@@ -1,5 +1,5 @@
 import { Operational, type Policy } from "@openomni/protocol";
-import type { AuditEmit, GenericPolicyContext, PolicyRegistrationGeneric } from "./engine-types";
+import type { AuditEmit, GenericPolicyContext, PolicyRegistrationGeneric } from "./engine/types";
 
 export interface RuntimeContext {
   readonly workspaceRoot?: string;

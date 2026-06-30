@@ -1,5 +1,5 @@
 import { Policy, type RuntimeResource } from "@openomni/protocol";
-import type { PolicyPointId } from "./engine-types";
+import type { PolicyPointId } from "./types";
 
 export function policyPointIdsForDescriptor(
   timing: Policy.Timing,

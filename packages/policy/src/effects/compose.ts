@@ -1,14 +1,14 @@
 import type { Policy } from "@openomni/protocol";
 
-import { collectPreConflicts, conflictDiagnostic } from "./effect-conflicts";
-import { mergeEntries } from "./effect-merge-rules";
+import { collectPreConflicts, conflictDiagnostic } from "./conflicts";
+import { mergeEntries } from "./merge/rules";
 import {
   collectEffectEntries,
   collectObligations,
   collectSafeDenyEffects,
   orderDecisions,
   uniquePolicyIds,
-} from "./effect-ordering";
+} from "./ordering";
 
 export function composeEffects(decisions: Policy.PolicyDecision[]): Policy.EffectiveDecision {
   const orderedDecisions = orderDecisions(decisions);

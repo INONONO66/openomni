@@ -5,7 +5,7 @@ import type {
   MergedEffect,
   PriorityApprovalAccumulator,
   RetryAccumulator,
-} from "./effect-composition-types";
+} from "../types";
 
 export function selectPriorityEffect(
   current: MergedEffect | undefined,

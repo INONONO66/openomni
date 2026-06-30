@@ -1,19 +1,12 @@
-import type { AuditDispatchContextGeneric, GenericPolicyContext } from "./engine-types";
+import type { AuditDispatchContextGeneric, GenericPolicyContext } from "./types";
 
 export function immutableSnapshot<TCtx extends GenericPolicyContext>(
   value: AuditDispatchContextGeneric<TCtx>,
 ): Readonly<AuditDispatchContextGeneric<TCtx>> {
-  // steps and usage are agent-loop fields absent from GenericPolicyContext;
-  // access via Record widening for safe duck-typing when present at runtime.
-  const wide = value as AuditDispatchContextGeneric<TCtx> & Record<string, unknown>;
-
   const snapshot = {
     ...value,
-    ...(Array.isArray(wide.steps) && { steps: [...(wide.steps as unknown[])] }),
-    ...(wide.usage !== null &&
-      wide.usage !== undefined &&
-      typeof wide.usage === "object" && { usage: Object.freeze({ ...(wide.usage as object) }) }),
     ...(value.toolInput !== undefined && { toolInput: cloneRecord(value.toolInput) }),
+    ...(isPlainRecord(value.usage) && { usage: cloneRecord(value.usage) }),
     ...(value.toolLabels !== undefined && { toolLabels: [...value.toolLabels] }),
     ...(value.messages !== undefined && { messages: [...value.messages] }),
     ...(value.traceContext !== undefined && {
@@ -22,10 +15,8 @@ export function immutableSnapshot<TCtx extends GenericPolicyContext>(
     ...(value.labels !== undefined && {
       labels: value.labels.map((entry) => Object.freeze({ ...entry })),
     }),
-  } as AuditDispatchContextGeneric<TCtx>;
+  };
 
-  const snap = snapshot as AuditDispatchContextGeneric<TCtx> & Record<string, unknown>;
-  if (Array.isArray(snap.steps)) Object.freeze(snap.steps);
   if (snapshot.toolLabels !== undefined) Object.freeze(snapshot.toolLabels);
   if (snapshot.messages !== undefined) Object.freeze(snapshot.messages);
   if (snapshot.labels !== undefined) Object.freeze(snapshot.labels);

@@ -1,6 +1,6 @@
 import { Policy, PolicyDecision, type RuntimeResource } from "@openomni/protocol";
-import { composeEffects } from "./effect-composition";
-import { allowedEffectTypes, isPreBoundary, policyPointIdsForDescriptor } from "./engine-points";
+import { composeEffects } from "../effects";
+import { allowedEffectTypes, isPreBoundary, policyPointIdsForDescriptor } from "./points";
 
 export const COMPOSED_POLICY_ID = "agent.policy.composed";
 

@@ -1,6 +1,6 @@
 import type { Policy } from "@openomni/protocol";
-import type { EffectEntry, OrderedDecision } from "./effect-composition-types";
-import { stableHash } from "./effect-records";
+import type { EffectEntry, OrderedDecision } from "./types";
+import { stableHash } from "./records";
 
 export function orderDecisions(decisions: Policy.PolicyDecision[]): OrderedDecision[] {
   return decisions
