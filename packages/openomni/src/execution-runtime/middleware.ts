@@ -86,7 +86,7 @@ function buildLegacyPermissionMiddleware(config: WorkerMiddlewareConfig): Policy
     createToolPermissionPolicy({
       permission: config.permissions ?? DEFAULT_TOOL_PERMISSION,
       ...(config.eventEmitter !== undefined && { eventEmitter: config.eventEmitter }),
-      source: config.source ?? "stream-engine",
+      source: config.source ?? "agent-runner",
     }),
   ];
 }
@@ -164,7 +164,7 @@ function hydrateToolPermissionObservability(
     additions.eventEmitter = workerConfig.eventEmitter;
   }
   if (!("source" in config)) {
-    additions.source = workerConfig.source ?? "stream-engine";
+    additions.source = workerConfig.source ?? "agent-runner";
   }
   return Object.keys(additions).length === 0 ? config : { ...config, ...additions };
 }
