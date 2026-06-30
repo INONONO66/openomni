@@ -2,11 +2,11 @@ import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../policy";
 import type { PolicyEngineInstance } from "../policy";
 import type { ChatAgentConfig } from "../types";
-import type { StreamAgentBase } from "./run-state";
+import type { AgentRunBase } from "./run-state";
 
 export function buildPolicyEngine(
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): PolicyEngineInstance {
   const engine = PolicyEngine.create({
     traceContext: {

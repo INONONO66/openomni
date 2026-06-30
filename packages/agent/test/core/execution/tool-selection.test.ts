@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
-import { createStreamRunState } from "../../../src/core/execution/run-state";
+import { createRunState } from "../../../src/core/execution/run-state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool, TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
@@ -45,7 +45,7 @@ function makeState() {
   const input: ChatAgentInput = {
     messages: [{ role: "user", content: "hello" }],
   };
-  return createStreamRunState(input);
+  return createRunState(input);
 }
 
 function filterPolicy(filteredTools: string[]): PolicyRegistration {

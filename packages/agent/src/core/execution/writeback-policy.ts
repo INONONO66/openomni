@@ -3,10 +3,10 @@ import { effectOf } from "./policy-effects";
 import type { PolicyEngineInstance } from "../policy";
 import type { ChatAgentConfig } from "../types";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import type { StreamRunState } from "./run-state";
+import type { RunState } from "./run-state";
 
 export async function dispatchWritebackCommit(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   output: string,

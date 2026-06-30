@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { StreamPolicyEffects } from "../../../src/core/execution/policy-effects-apply";
-import { createStreamRunState } from "../../../src/core/execution/run-state";
+import { PolicyEffectApplier } from "../../../src/core/execution/policy-effects-apply";
+import { createRunState } from "../../../src/core/execution/run-state";
 
-describe("StreamPolicyEffects", () => {
+describe("PolicyEffectApplier", () => {
   it("preserves assistant provenance for injected prompt messages", () => {
-    const state = createStreamRunState({
+    const state = createRunState({
       messages: [{ role: "user", content: "parent request" }],
     });
     const parentID = state.messages.at(-1)?.info.id;
@@ -20,7 +20,7 @@ describe("StreamPolicyEffects", () => {
       ],
     });
 
-    StreamPolicyEffects.applyPromptMessageEffects(state, decision);
+    PolicyEffectApplier.applyPromptMessageEffects(state, decision);
 
     expect(state.messages.at(-1)?.info).toMatchObject({
       role: "assistant",
@@ -33,7 +33,7 @@ describe("StreamPolicyEffects", () => {
   });
 
   it("chains parent ids across injected prompt messages in the same batch", () => {
-    const state = createStreamRunState({
+    const state = createRunState({
       messages: [{ role: "user", content: "parent request" }],
     });
     const decision = PolicyDecision.allow({
@@ -52,7 +52,7 @@ describe("StreamPolicyEffects", () => {
       ],
     });
 
-    StreamPolicyEffects.applyPromptMessageEffects(state, decision);
+    PolicyEffectApplier.applyPromptMessageEffects(state, decision);
 
     const firstInjected = state.messages.at(-2);
     const secondInjected = state.messages.at(-1);

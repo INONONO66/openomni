@@ -6,9 +6,9 @@ import type { PolicyContext } from "../../../src/core/policy/types";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import {
-  createStreamRunState,
-  type StreamAgentBase,
-  type StreamRunState,
+  createRunState,
+  type AgentRunBase,
+  type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import {
@@ -34,11 +34,11 @@ function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
   };
 }
 
-function makeState(): StreamRunState {
-  return createStreamRunState(makeInput());
+function makeState(): RunState {
+  return createRunState(makeInput());
 }
 
-function makeAgentBase(): StreamAgentBase {
+function makeAgentBase(): AgentRunBase {
   return { traceId: "trace-1", sessionId: "sess-1" };
 }
 
@@ -80,7 +80,7 @@ function expectComplete(event: AgentEvent | null): Extract<AgentEvent, { type: "
   return event as Extract<AgentEvent, { type: "complete" }>;
 }
 
-describe("stream helper deny verdicts", () => {
+describe("execution helper deny verdicts", () => {
   it("fail-closes run.start deny before execution", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();

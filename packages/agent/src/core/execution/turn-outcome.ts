@@ -12,31 +12,31 @@ import {
 } from "./run-events";
 import { dispatchPostRunTransform, applyPostCompaction } from "./completion-policy";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import { StreamPolicyEffects } from "./policy-effects-apply";
+import { PolicyEffectApplier } from "./policy-effects-apply";
 import {
   createGuardCompleteEvent,
-  createStreamCompleteEvent,
-  createStreamErrorEvent,
+  createRunCompleteEvent,
+  createRunErrorEvent,
   errorMessage,
 } from "./run-result";
 import {
-  advanceStreamContinuation,
-  advanceStreamTurn,
-  appendStreamMessages,
-  appendStreamStep,
+  advanceRunContinuation,
+  advanceRunTurn,
+  appendRunMessages,
+  appendRunStep,
   type ErrorDecision,
-  type StreamAgentBase,
-  type StreamRunState,
+  type AgentRunBase,
+  type RunState,
   type TurnArtifacts,
   type TurnDecision,
 } from "./run-state";
 import type { PolicyEngineInstance } from "../policy";
 
 export async function* handleStop(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   turn: TurnArtifacts,
 ): AsyncGenerator<AgentEvent, "complete" | "continue"> {
   emitTurnComplete(state, config, agentBase, turn.turnUsage);
@@ -64,11 +64,11 @@ export async function* handleStop(
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turn.turnUsage };
 
   const step = { type: "text" as const, content: state.lastAssistantText };
-  appendStreamStep(state, step);
+  appendRunStep(state, step);
   if (config.onStepFinish) await config.onStepFinish(step);
 
   if (toolAbort) {
-    const event = createStreamCompleteEvent(state, { finishReason: "stop", guardAborted: true });
+    const event = createRunCompleteEvent(state, { finishReason: "stop", guardAborted: true });
     yield event;
     return "complete";
   }
@@ -89,7 +89,7 @@ export async function* handleStop(
 
   if (!PolicyDecision.isBlocking(postTurnDecision)) {
     try {
-      StreamPolicyEffects.applyMessageReplacementEffect(state, postTurnDecision);
+      PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision);
     } catch (error) {
       const reason = errorMessage(error);
       publishDenyDiagnostic(
@@ -114,26 +114,26 @@ export async function* handleStop(
     parentID,
     state.sessionId,
   );
-  const continuationMessages = StreamPolicyEffects.continuationMessages(
+  const continuationMessages = PolicyEffectApplier.continuationMessages(
     postTurnDecision,
     state.sessionId,
     assistantMessage.info.id,
   );
   if (!PolicyDecision.isBlocking(postTurnDecision) && continuationMessages.length > 0) {
-    appendStreamMessages(state, [assistantMessage, ...continuationMessages]);
+    appendRunMessages(state, [assistantMessage, ...continuationMessages]);
     const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
     if (blocked) {
       yield blocked;
       return "complete";
     }
-    advanceStreamContinuation(state);
+    advanceRunContinuation(state);
     return flowDecision(continueDecision(state));
   }
 
   if (PolicyDecision.isBlocking(postTurnDecision)) {
     const reason = PolicyDecision.reason(postTurnDecision, "stop");
     if (effectOf(postTurnDecision, "run.abort")) {
-      const event = createStreamCompleteEvent(state, {
+      const event = createRunCompleteEvent(state, {
         finishReason: reason === "stalled" ? "stalled" : "stop",
         guardAborted: reason !== "stalled",
       });
@@ -145,40 +145,40 @@ export async function* handleStop(
 
   await dispatchPostRunTransform(state, engine, config, agentBase);
   emitRunCompleted(state, agentBase, "stop");
-  const event = createStreamCompleteEvent(state, { finishReason: "stop" });
+  const event = createRunCompleteEvent(state, { finishReason: "stop" });
   yield event;
   return flowDecision({ kind: "complete", event });
 }
 
 export async function* handleContinue(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): AsyncGenerator<AgentEvent, "continue"> {
   emitTurnComplete(state, config, agentBase, turnUsage);
   yield { type: "turn_complete", turnIndex: state.turnIndex, usage: turnUsage };
-  advanceStreamTurn(state);
+  advanceRunTurn(state);
   return continueFlowDecision(continueDecision(state));
 }
 
 export async function handleCompact(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): Promise<"continue" | AgentEvent> {
   const blocked = await applyPostCompaction(state, engine, config, agentBase, false);
   if (blocked) return blocked;
-  advanceStreamTurn(state);
+  advanceRunTurn(state);
   return continueFlowDecision(continueDecision(state));
 }
 
 export async function* handleError(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   error: unknown,
   attempt: number,
   retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
@@ -218,17 +218,17 @@ export async function* handleError(
       maxAttempts: effectiveRetryPolicy.maxAttempts,
       error: lastError,
     });
-    yield createStreamErrorEvent(normalizedError, true);
+    yield createRunErrorEvent(normalizedError, true);
     await Retry.sleep(backoffMs, config.signal);
     return { action: "retry", kind: "error", error: normalizedError, errorMessage: lastError };
   }
 
   emitRunFailed(agentBase, lastError);
-  yield createStreamErrorEvent(normalizedError, false);
+  yield createRunErrorEvent(normalizedError, false);
   return { action: "throw", kind: "error", error: normalizedError, errorMessage: lastError };
 }
 
-function continueDecision(state: StreamRunState): Extract<TurnDecision, { kind: "continue" }> {
+function continueDecision(state: RunState): Extract<TurnDecision, { kind: "continue" }> {
   return {
     kind: "continue",
     messages: state.messages,

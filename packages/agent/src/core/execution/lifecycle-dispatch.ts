@@ -4,13 +4,13 @@ import { checkBudget } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig } from "../types";
 import { emitRunCompleted, publishDenyDiagnostic } from "./run-events";
-import { StreamPolicyEffects } from "./policy-effects-apply";
+import { PolicyEffectApplier } from "./policy-effects-apply";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import { createGuardCompleteEvent, createStreamCompleteEvent, errorMessage } from "./run-result";
-import type { StreamAgentBase, StreamRunState } from "./run-state";
+import { createGuardCompleteEvent, createRunCompleteEvent, errorMessage } from "./run-result";
+import type { AgentRunBase, RunState } from "./run-state";
 
 export async function dispatchPreRun(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
@@ -27,15 +27,15 @@ export async function dispatchPreRun(
     return createGuardCompleteEvent(state, { text: "", steps: [] });
   }
 
-  StreamPolicyEffects.applyPromptMessageEffects(state, preRunDecision);
+  PolicyEffectApplier.applyPromptMessageEffects(state, preRunDecision);
   return null;
 }
 
 export async function dispatchBudgetCheck(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): Promise<AgentEvent | null> {
   const budgetStatus = checkBudget(state.budgetState, config.budget);
   if (budgetStatus !== "exceeded") return null;
@@ -50,11 +50,11 @@ export async function dispatchBudgetCheck(
     publishDenyDiagnostic("run.finish", postRunDecision, state, config, agentBase);
   }
   emitRunCompleted(state, agentBase, "max-steps");
-  return createStreamCompleteEvent(state, { finishReason: "max-steps" });
+  return createRunCompleteEvent(state, { finishReason: "max-steps" });
 }
 
 export async function dispatchModelRequest(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
 ): Promise<AgentEvent | null> {
@@ -64,16 +64,16 @@ export async function dispatchModelRequest(
   );
 
   if (PolicyDecision.isBlocking(decision)) return createGuardCompleteEvent(state);
-  StreamPolicyEffects.applyPromptMessageEffects(state, decision);
+  PolicyEffectApplier.applyPromptMessageEffects(state, decision);
   return null;
 }
 
 export async function dispatchModelResponse(
-  state: StreamRunState,
+  state: RunState,
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   outcomeType: string,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): Promise<AgentEvent | null> {
   const decision = await engine.dispatch(
     "model.response",
@@ -85,7 +85,7 @@ export async function dispatchModelResponse(
 
   if (!PolicyDecision.isBlocking(decision)) {
     try {
-      StreamPolicyEffects.applyMessageReplacementEffect(state, decision);
+      PolicyEffectApplier.applyMessageReplacementEffect(state, decision);
     } catch (error) {
       const reason = errorMessage(error);
       publishDenyDiagnostic(
@@ -101,7 +101,7 @@ export async function dispatchModelResponse(
       );
       return createGuardCompleteEvent(state);
     }
-    StreamPolicyEffects.applyPromptMessageEffects(state, decision);
+    PolicyEffectApplier.applyPromptMessageEffects(state, decision);
     return null;
   }
   if (effectOf(decision, "run.abort")) return createGuardCompleteEvent(state);

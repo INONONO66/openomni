@@ -1,15 +1,15 @@
 import type { AgentEvent, AgentStep } from "../types";
-import { getCompactionCount, type StreamRunState } from "./run-state";
+import { getCompactionCount, type RunState } from "./run-state";
 
 export function createGuardCompleteEvent(
-  state: StreamRunState,
+  state: RunState,
   options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
 ): AgentEvent {
-  return createStreamCompleteEvent(state, { ...options, guardAborted: true });
+  return createRunCompleteEvent(state, { ...options, guardAborted: true });
 }
 
-export function createStreamCompleteEvent(
-  state: StreamRunState,
+export function createRunCompleteEvent(
+  state: RunState,
   options?: {
     text?: string;
     steps?: AgentStep[];
@@ -30,7 +30,7 @@ export function createStreamCompleteEvent(
   };
 }
 
-export function createStreamErrorEvent(error: Error, willRetry: boolean): AgentEvent {
+export function createRunErrorEvent(error: Error, willRetry: boolean): AgentEvent {
   return {
     type: "error",
     error,

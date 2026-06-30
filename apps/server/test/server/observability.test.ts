@@ -71,12 +71,12 @@ describe("observability routes", () => {
       timeUpdated: 200,
     });
 
-    Bus.publish(Operational.Info, {
-      traceId: "trace-info",
+    Bus.publish(Operational.Warn, {
+      traceId: "trace-warn",
       sessionId: session.id,
       time: 100,
       component: "test",
-      msg: "info",
+      msg: "warn",
       context: { secret: "redacted by route" },
     });
     Bus.publish(Operational.Error, {

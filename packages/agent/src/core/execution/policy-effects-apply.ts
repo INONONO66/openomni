@@ -3,9 +3,9 @@ import type { Policy } from "@openomni/protocol";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
 import { createAssistantMessage, createUserMessage } from "../message-factory";
 import type { ChatAgentConfig } from "../types";
-import { appendStreamMessages, replaceStreamMessages, type StreamRunState } from "./run-state";
+import { appendRunMessages, replaceRunMessages, type RunState } from "./run-state";
 
-export namespace StreamPolicyEffects {
+export namespace PolicyEffectApplier {
   export function continuationMessages(
     decision: Policy.PolicyDecision,
     sessionId: string,
@@ -42,7 +42,7 @@ export namespace StreamPolicyEffects {
   }
 
   export function applyPromptMessageEffects(
-    state: StreamRunState,
+    state: RunState,
     decision: Policy.PolicyDecision,
   ): void {
     const messages: Message.WithParts[] = [];
@@ -61,15 +61,15 @@ export namespace StreamPolicyEffects {
         parentID = message.info.id;
       }
     }
-    appendStreamMessages(state, messages);
+    appendRunMessages(state, messages);
   }
 
   export function applyMessageReplacementEffect(
-    state: StreamRunState,
+    state: RunState,
     decision: Policy.PolicyDecision,
   ): void {
     const messages = replacementMessages(decision);
-    if (messages !== undefined) replaceStreamMessages(state, messages);
+    if (messages !== undefined) replaceRunMessages(state, messages);
   }
 
   export function applyToolFilterEffects(

@@ -10,13 +10,13 @@ import {
 import type { AgentEvent, AgentStep, ChatAgentInput, TokenUsage } from "../types";
 import { toMessagesWithParts } from "./shared";
 
-export interface StreamAgentBase {
+export interface AgentRunBase {
   readonly traceId: string;
   readonly sessionId: string;
   readonly runId?: string;
 }
 
-export interface StreamRunState {
+export interface RunState {
   readonly sessionId: string;
   budgetState: BudgetState;
   messages: Message.WithParts[];
@@ -74,7 +74,7 @@ export type ErrorDecision =
   | ({ action: "complete"; errorMessage: string } & Extract<TurnDecision, { kind: "abort" }>)
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
-export function createStreamRunState(input: ChatAgentInput): StreamRunState {
+export function createRunState(input: ChatAgentInput): RunState {
   const sessionId = input.traceContext?.sessionId ?? "runner";
   return {
     sessionId,
@@ -94,20 +94,20 @@ export function createStreamRunState(input: ChatAgentInput): StreamRunState {
   };
 }
 
-export function getCompactionCount(state: StreamRunState): number | undefined {
+export function getCompactionCount(state: RunState): number | undefined {
   return state.compactionCount > 0 ? state.compactionCount : undefined;
 }
 
-export function recordStreamTurn(state: StreamRunState): void {
+export function recordRunTurn(state: RunState): void {
   state.budgetState = recordTurn(state.budgetState);
 }
 
-export function recordStreamToolCall(state: StreamRunState, durationMs: number): void {
+export function recordRunToolCall(state: RunState, durationMs: number): void {
   state.budgetState = recordToolCall(state.budgetState, durationMs);
 }
 
 export function recordAssistantTokenDelta(
-  state: StreamRunState,
+  state: RunState,
   inputTokens: number,
   outputTokens: number,
 ): void {
@@ -117,38 +117,32 @@ export function recordAssistantTokenDelta(
   state.budgetState = recordTokenUsage(state.budgetState, inputTokens, outputTokens);
 }
 
-export function setLastAssistantText(state: StreamRunState, text: string): void {
+export function setLastAssistantText(state: RunState, text: string): void {
   state.lastAssistantText = text;
 }
 
-export function appendStreamStep(state: StreamRunState, step: AgentStep): void {
+export function appendRunStep(state: RunState, step: AgentStep): void {
   state.steps.push(step);
 }
 
-export function appendStreamMessages(
-  state: StreamRunState,
-  messages: readonly Message.WithParts[],
-): void {
+export function appendRunMessages(state: RunState, messages: readonly Message.WithParts[]): void {
   state.messages.push(...messages);
 }
 
-export function replaceStreamMessages(state: StreamRunState, messages: Message.WithParts[]): void {
+export function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
   state.messages = messages;
 }
 
-export function advanceStreamTurn(state: StreamRunState): void {
+export function advanceRunTurn(state: RunState): void {
   state.turnIndex++;
 }
 
-export function advanceStreamContinuation(state: StreamRunState): void {
+export function advanceRunContinuation(state: RunState): void {
   state.continuationCount++;
-  advanceStreamTurn(state);
+  advanceRunTurn(state);
 }
 
-export function applyCompactionMessages(
-  state: StreamRunState,
-  messages: Message.WithParts[],
-): number {
+export function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
   const messagesBefore = state.messages.length;
   state.messages = messages;
   state.compactionCount += 1;

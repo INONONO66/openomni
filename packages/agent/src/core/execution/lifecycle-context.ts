@@ -1,6 +1,6 @@
 import type { DispatchContext } from "../policy";
 import type { ChatAgentConfig } from "../types";
-import type { StreamRunState } from "./run-state";
+import type { RunState } from "./run-state";
 
 type LifecyclePolicyContextOverrides = Partial<
   Pick<
@@ -10,7 +10,7 @@ type LifecyclePolicyContextOverrides = Partial<
 >;
 
 export function buildLifecyclePolicyContext(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
   overrides: LifecyclePolicyContextOverrides = {},
 ): DispatchContext {

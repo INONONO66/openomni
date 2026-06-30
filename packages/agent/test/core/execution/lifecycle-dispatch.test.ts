@@ -16,9 +16,9 @@ import {
 import { buildPolicyEngine } from "../../../src/core/execution/policy-engine-builder";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import {
-  createStreamRunState,
-  type StreamAgentBase,
-  type StreamRunState,
+  createRunState,
+  type AgentRunBase,
+  type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
 import {
@@ -42,7 +42,7 @@ function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
   };
 }
 
-function makeAgentBase(): StreamAgentBase {
+function makeAgentBase(): AgentRunBase {
   return { traceId: "trace-1", sessionId: "sess-1" };
 }
 
@@ -50,8 +50,8 @@ function makeTrace(): TraceContext.Type {
   return { traceId: "trace-1", sessionId: "sess-1" };
 }
 
-function makeState(): StreamRunState {
-  return createStreamRunState(makeInput());
+function makeState(): RunState {
+  return createRunState(makeInput());
 }
 
 function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {

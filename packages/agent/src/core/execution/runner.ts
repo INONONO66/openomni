@@ -14,7 +14,7 @@ import {
   dispatchModelResponse,
   dispatchPreRun,
 } from "./lifecycle-dispatch";
-import { createStreamRunState } from "./run-state";
+import { createRunState } from "./run-state";
 
 export async function* streamAgent(
   input: ChatAgentInput,
@@ -35,7 +35,7 @@ export async function* streamAgent(
   assertToolExecutor(config);
 
   while (attempt <= retryPolicy.maxAttempts) {
-    const state = createStreamRunState(input);
+    const state = createRunState(input);
     const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(

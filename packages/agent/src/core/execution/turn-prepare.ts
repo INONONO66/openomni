@@ -8,13 +8,13 @@ import { createToolExecutor } from "./tool-executor";
 import { emitBudgetReassurance, emitBudgetWarning } from "./run-events";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
 import { buildTurnSystemPrompt } from "./prompt-policy";
-import { StreamPolicyEffects } from "./policy-effects-apply";
-import { createGuardCompleteEvent, createStreamCompleteEvent } from "./run-result";
-import type { BuildTurnResult, StreamAgentBase, StreamRunState, TurnArtifacts } from "./run-state";
+import { PolicyEffectApplier } from "./policy-effects-apply";
+import { createGuardCompleteEvent, createRunCompleteEvent } from "./run-result";
+import type { BuildTurnResult, AgentRunBase, RunState, TurnArtifacts } from "./run-state";
 import {
   recordAssistantTokenDelta,
-  recordStreamToolCall,
-  recordStreamTurn,
+  recordRunToolCall,
+  recordRunTurn,
   setLastAssistantText,
 } from "./run-state";
 
@@ -50,13 +50,13 @@ function resolvePolicyToolName(toolName: string, labels: Map<string, string[]>):
 }
 
 export async function buildTurn(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: TraceContext.Type,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
   const preTurnDecision = await engine.dispatch(
@@ -70,14 +70,14 @@ export async function buildTurn(
     const reason = PolicyDecision.reason(preTurnDecision, "stop");
     return {
       type: "complete",
-      event: createStreamCompleteEvent(state, {
+      event: createRunCompleteEvent(state, {
         finishReason: reason === "stalled" ? "stalled" : "stop",
         guardAborted: reason !== "stalled",
       }),
     };
   }
 
-  StreamPolicyEffects.applyPromptMessageEffects(state, preTurnDecision);
+  PolicyEffectApplier.applyPromptMessageEffects(state, preTurnDecision);
 
   if (preTurnDecision.reasonCodes.includes("budget_reassurance")) {
     const remaining = describeBudgetRemaining(state.budgetState, config.budget);
@@ -98,7 +98,7 @@ export async function buildTurn(
     budgetWarningEvent = { type: "budget_warning", remaining };
   }
 
-  recordStreamTurn(state);
+  recordRunTurn(state);
   if (config.signal?.aborted) throw new Error("aborted");
 
   const toolPolicyDecisions: Array<{ timing: Policy.Timing; decision: Policy.PolicyDecision }> = [];
@@ -110,7 +110,7 @@ export async function buildTurn(
         getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolLabels),
         getToolLabels: (toolName) => toolLabels.get(toolName),
         onToolComplete: (durationMs) => {
-          recordStreamToolCall(state, durationMs);
+          recordRunToolCall(state, durationMs);
         },
         getContext: () => ({
           steps: state.steps,
@@ -153,7 +153,7 @@ export async function buildTurn(
   if (PolicyDecision.isBlocking(toolSelectionDecision)) {
     return { type: "complete", event: createGuardCompleteEvent(state) };
   }
-  const selectedTools = StreamPolicyEffects.applyToolFilterEffects(allTools, toolSelectionDecision);
+  const selectedTools = PolicyEffectApplier.applyToolFilterEffects(allTools, toolSelectionDecision);
 
   const turnUsage: TokenUsage = {
     inputTokens: 0,
@@ -196,7 +196,7 @@ export async function buildTurn(
 }
 
 function createTrackingSink(
-  state: StreamRunState,
+  state: RunState,
   sink: Sink | undefined,
   turnUsage: TokenUsage,
   turnToolCalls: TurnArtifacts["turnToolCalls"],

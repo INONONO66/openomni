@@ -2,7 +2,7 @@ import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol"
 import type { Policy, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { ChatAgentConfig, TokenUsage } from "../types";
-import type { StreamAgentBase, StreamRunState } from "./run-state";
+import type { AgentRunBase, RunState } from "./run-state";
 
 export function emitRunStarted(trace: TraceContext.Type, modelId: string): void {
   Bus.publish(Operational.Info, {
@@ -16,9 +16,9 @@ export function emitRunStarted(trace: TraceContext.Type, modelId: string): void 
 }
 
 export function emitTurnStart(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): void {
   const turnIndex = state.turnIndex;
   const sessionId = eventSessionId(state, agentBase);
@@ -36,9 +36,9 @@ export function emitTurnStart(
 }
 
 export function emitTurnComplete(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
   const sessionId = eventSessionId(state, agentBase);
@@ -66,7 +66,7 @@ export function emitTurnComplete(
 }
 
 export function emitBudgetReassurance(
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   remaining: string,
   threshold: number,
 ): void {
@@ -79,7 +79,7 @@ export function emitBudgetReassurance(
 }
 
 export function emitBudgetWarning(
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   remaining: string,
   threshold: number,
 ): void {
@@ -92,8 +92,8 @@ export function emitBudgetWarning(
 }
 
 export function emitRunCompleted(
-  state: StreamRunState,
-  agentBase: StreamAgentBase,
+  state: RunState,
+  agentBase: AgentRunBase,
   finishReason: "stop" | "max-steps",
 ): void {
   Bus.publish(Operational.Info, {
@@ -111,9 +111,9 @@ export function emitRunCompleted(
 }
 
 export function emitErrorRetry(
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   options: { readonly attempt: number; readonly maxAttempts: number; readonly error: string },
 ): void {
   const sessionId = eventSessionId(state, agentBase);
@@ -134,7 +134,7 @@ export function emitErrorRetry(
   });
 }
 
-export function emitRunFailed(agentBase: StreamAgentBase, error: string): void {
+export function emitRunFailed(agentBase: AgentRunBase, error: string): void {
   Bus.publish(Operational.Error, {
     traceId: agentBase.traceId,
     time: Date.now(),
@@ -146,7 +146,7 @@ export function emitRunFailed(agentBase: StreamAgentBase, error: string): void {
 }
 
 export function emitCompaction(
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
   messagesBefore: number,
   messagesAfter: number,
 ): void {
@@ -161,9 +161,9 @@ export function emitCompaction(
 export function publishDenyDiagnostic(
   timing: Policy.Timing,
   decision: Policy.PolicyDecision,
-  state: StreamRunState,
+  state: RunState,
   config: ChatAgentConfig,
-  agentBase: StreamAgentBase,
+  agentBase: AgentRunBase,
 ): void {
   const reason = PolicyDecision.reason(decision, "denied");
   const sessionId = diagnosticSessionId(state, agentBase);
@@ -190,14 +190,11 @@ export function publishDenyDiagnostic(
   });
 }
 
-function eventSessionId(state: StreamRunState, agentBase: StreamAgentBase): string {
+function eventSessionId(state: RunState, agentBase: AgentRunBase): string {
   return agentBase.sessionId || state.sessionId;
 }
 
-function diagnosticSessionId(
-  state: StreamRunState,
-  agentBase: StreamAgentBase,
-): string | undefined {
+function diagnosticSessionId(state: RunState, agentBase: AgentRunBase): string | undefined {
   const sessionId = eventSessionId(state, agentBase);
   return sessionId === "runner" ? undefined : sessionId;
 }

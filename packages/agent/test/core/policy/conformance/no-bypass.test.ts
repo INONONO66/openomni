@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { createToolExecutor } from "../../../../src/core/execution/tool-executor";
-import { createStreamRunState } from "../../../../src/core/execution/run-state";
+import { createRunState } from "../../../../src/core/execution/run-state";
 import { dispatchWritebackCommit } from "../../../../src/core/execution/writeback-policy";
 import {
   PolicyEngine,
@@ -112,7 +112,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
   it("blocks writeback commit before final output is committed", async () => {
     const engine = PolicyEngine.create();
     engine.register(denyAll("writeback.commit", "writeback denied by conformance policy"));
-    const state = createStreamRunState({ messages: [{ role: "user", content: "hello" }] });
+    const state = createRunState({ messages: [{ role: "user", content: "hello" }] });
 
     const error = await dispatchWritebackCommit(
       state,
