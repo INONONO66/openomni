@@ -19,16 +19,12 @@ openomni/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + multi-agent runtime (messenger, registry, subagent/background tools, MCP) — depends on session for observability (Bus, TraceContext)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + generic agent-loop runtime primitives — depends on session only for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── policy/         # PolicyEngine + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
-│   │   └── src/runtime/        # Multi-agent infrastructure
-│   │       ├── messenger/      # AgentMessenger
-│   │       ├── registry/       # AgentRegistry
-│   │       ├── tools/          # SubagentTool, BackgroundOutputTool, BackgroundCancelTool
-│   │       └── mcp/            # McpClient
-│   ├── openomni/        # Orchestration: DAG, Ingress, Dispatch, ResidentRuntime, SubagentRuntime + BackgroundManager, BusTransport, execution runtime
+│   │   └── src/runtime/        # Generic runtime primitives: registry, subagent tool contract, background tool shells, MCP client
+│   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
 │   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
@@ -40,7 +36,50 @@ openomni/
 protocol ← session ← llm ← agent ← openomni ← coordinator ← server
 ```
 
-Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Bus, TraceContext). `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` for loop execution and observability, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+
+## PACKAGE OWNERSHIP
+
+The package boundary rule is strict: product meaning belongs in `packages/openomni`; lower packages provide primitives. When adding code, first ask whether the change decides "who talks to whom, under what authority, in which session/run, with what durable lifecycle". If yes, it belongs in `packages/openomni` unless it is a pure schema in `packages/protocol`.
+
+| Package | Owns | Must not own |
+| --- | --- | --- |
+| `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
+| `packages/session` | Durable state substrate: session/message/part CRUD, Bus, Bus persistence, storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
+| `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
+| `packages/agent` | Stateless ChatAgent loop, policy engine primitive, tool invocation protocol, generic delegation/subagent tool contract | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
+| `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
+| `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, IPC framing, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy |
+| `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector manifests, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
+
+### Messaging Kernel Rule
+
+All durable messaging should flow through an OpenOmni-owned kernel surface. Target direction:
+
+```
+raw channel event
+  -> server channel adapter normalizes transport payload
+  -> openomni messaging kernel receives a canonical MessageEnvelope/command
+  -> kernel resolves principal, access, correlation, session, target, execution path
+  -> kernel projects messages/events and returns response/writeback instructions
+```
+
+`apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it should pass normalized transport facts to `openomni`. `session` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
+
+### OpenOmni Internal Split
+
+`packages/openomni` is allowed to be the product kernel, but it should be internally split by ownership:
+
+| Kernel area | Responsibility |
+| --- | --- |
+| Messaging | Canonical inbound/internal/outbound envelope entry, correlation, target/session resolution, response/writeback routing |
+| Access | Principal facts, blocklist/channel access/delegation grant/effective access decisions |
+| Orchestration | Resident runtime, Worker run orchestration, session-backed worker runtime, async run scheduler |
+| Ledger | Work item orchestration, completion reports, evidence, verification/read-back gates |
+| Tools | Tool providers, tool executor, workspace lock, injection queue, schedule bridge; no high-level routing policy |
+| Projection | Session message projection, Bus audit events, distilled writeback |
+
+Existing `ingress/` and `dispatch/` are implementation stages of this kernel, not independent product surfaces. New cross-boundary behavior should prefer a central `messaging/` + `access/` facade and only then delegate to legacy ingress/dispatch handlers.
 
 ## WHERE TO LOOK
 
@@ -68,23 +107,22 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, policy engine, memory, delegation, telemetry |
 | Policy engine | `packages/agent/src/core/policy/` | `PolicyEngine.create()` + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
-| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
-| Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
-| Subagent / background tools | `packages/agent/src/runtime/tools/` | SubagentTool, BackgroundOutputTool, BackgroundCancelTool |
-| MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
+| Agent registry primitive | `packages/agent/src/runtime/registry/` | Generic registry facade only; product agent registration belongs above it |
+| Generic subagent tool contract | `packages/agent/src/runtime/tools/` | `SubagentTool` may remain as an agent-loop primitive; durable lifecycle belongs in `openomni` |
+| MCP client primitive | `packages/agent/src/runtime/mcp/` | Generic client; server/openomni own concrete MCP wiring |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
-| Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
-| Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session candidate resolve → dispatch.submit. Actor arrives pre-stamped; identity resolve (`ActorResolver`) is planned per ADR-009 |
+| Messaging kernel | `packages/openomni/src/{messaging,ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection |
+| Ingress engine | `packages/openomni/src/ingress/` | Current inbound stage: authority middleware → session resolution → projection → resident/direct handler |
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator (ADR-008) |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
-| Actor identity (planned) | `packages/protocol/src/actor/` + `packages/session/src/actor/` | `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` / `ActorResolver` per ADR-009 |
-| ChannelGrant / Blacklist (planned) | `packages/protocol/src/actor/channel-grant`, `.../blacklist` | Per-channel policy ceiling and absolute block list per ADR-009 |
-| PendingInteraction (planned successor) | `packages/protocol/src/communication/pending-interaction` | Successor to `PendingAsk`; not a pure rename — status enum (`open / resolved / follow_up / expired / cancelled`), `allowedActions`, `followUpWindow`, and `workerRunId / sessionId` strong-coupling all change. Lifecycle managed inside dispatch. |
+| Principal / actor identity | `packages/protocol/src/actor/` + `packages/session/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
+| ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/session/src/{channel-grant,blacklist}/` | Storage lives in `session`; evaluation and precedence belong in `openomni` access |
+| PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/session/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Durable external-response correlation; kernel owns match precedence and lifecycle transitions |
 | Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
-| Coordinator worker internals | `packages/coordinator/src/worker-pool/` | Internal leaf modules used by `worker-manager`; no root or submodule barrel contract |
+| Coordinator worker internals | `packages/coordinator/src/worker-manager/` + `worker-supervision/` | On-demand worker lifecycle; do not recreate legacy worker-pool facades |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
@@ -92,7 +130,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
-| Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
+| Server inbound bridge | `apps/server/src/ingress/` | Transitional adapter bridge; target direction is raw channel message → OpenOmni `MessageEnvelope` only |
 | Product model | `docs/core-model.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
@@ -100,7 +138,16 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 
 Key coding invariants and repository operating rules are maintained as internal references (`.local.md` files, not committed).
 
-Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent extension.
+Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent-loop extension, OpenOmni kernel for messaging/orchestration decisions.
+
+## CODING BOUNDARY RULES
+
+- Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, or choose worker/resident targets except through an OpenOmni kernel API.
+- Do not add authority decisions to `packages/session`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
+- Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Generic subagent tool primitives are allowed there, but session-backed worker/subagent/background execution belongs in `packages/openomni`.
+- Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
+- Do not add provider behavior outside `packages/llm`.
+- Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
 
 ## MODES
 
@@ -129,19 +176,19 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
 | Controlled inbound | Only Owner / Resident / trusted managers create top-level work | `IngressAuthorityMiddleware` + future `effectiveAuthority` |
 | Worker promotion | Ephemeral worker becomes persistent after repeated value | Future lifecycle schema |
-| PendingInteraction | Durable registry correlating outbound requests with external responses | `PendingAskStore` (transitional) → `PendingInteractionStore` (planned) |
-| ChannelGrant | Per-channel access policy and ceiling | (Planned: `packages/protocol/src/actor/channel-grant`) |
-| Blacklist | Absolute block list checked before all other authority evaluation | (Planned: `packages/protocol/src/actor/blacklist`) |
+| PendingInteraction | Durable registry correlating outbound requests with external responses | `PendingInteractionStore`; `PendingAskStore` remains a transitional resident.ask legacy surface |
+| ChannelAccessRule (legacy ChannelGrant) | Per-channel access policy and ceiling | `Actor.ChannelGrant` schema + `ChannelGrantStore`; OpenOmni access owns evaluation |
+| Blocklist (legacy Blacklist) | Absolute block list checked before all other access evaluation | `Actor.BlacklistEntry` schema + `BlacklistStore`; OpenOmni access owns evaluation |
 
-### Three-layer message flow
+### Kernel-Centered Message Flow
 
-Inbound (and outbound) messages traverse a strict three-layer chain — adding a new channel must only touch `apps/server/`, never ingress or dispatch.
+Inbound and outbound messaging should converge on the OpenOmni kernel. Adding a new channel should touch `apps/server/` only for raw transport and normalization, then route through `packages/openomni` for all messaging semantics.
 
 | Layer | Path | Responsibility |
 | --- | --- | --- |
-| Server channel adapter | `apps/server/src/channel/` | Channel-specific transport; raw → `InboundMessage` (channel-agnostic shape). Implemented. |
-| Ingress | `packages/openomni/src/ingress/` | Resolve default session candidate (`SessionResolver`), hand off to dispatch — implemented. Actor identification (`ActorResolver`) — planned per ADR-009. |
-| Dispatch | `packages/openomni/src/dispatch/` | Cross-boundary gate. Implemented: policy authorize (WorkerGrant) → handler routing. Planned per ADR-009: blacklist → PendingInteraction match (may override session candidate) → channel grant → `TrustTier` → `effectiveAuthority`, dispatch-side projection, PI lifecycle. See `docs/implementation-status.md`. |
+| Server channel adapter | `apps/server/src/channel/` | Channel-specific transport; raw → canonical inbound facts/envelope. No durable routing decisions. |
+| OpenOmni messaging kernel | `packages/openomni/src/{messaging,ingress,dispatch}/` | Principal resolution, blocklist/channel access/trust, PendingInteraction correlation, session/target resolution, dispatch/ingress stage selection, projection/writeback. |
+| Execution primitives | `packages/agent`, `packages/coordinator`, `packages/llm`, `packages/session` | Loop execution, process execution, model I/O, and durable state. These primitives do not decide communication meaning. |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -178,7 +225,7 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. Custom provider endpoints use the OpenAI provider with their catalog API URL as `baseURL`.
-- `packages/agent` is organized as `src/core/` (ChatAgent + policy engine) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. The policy engine is the extension point.
-- `packages/openomni` orchestrates ingress, DAG utilities, and subagent runtime. It also owns `BusTransport` (session bus bridge) and the execution runtime (tool providers, worker middleware). `SubagentRuntime` is session-locked; `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits.
+- `packages/agent` is organized as `src/core/` (ChatAgent + policy engine) and `src/runtime/` (generic registry/tools/mcp primitives). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. Generic subagent tool contracts may remain here, but OpenOmni-specific worker/background lifecycle must not move down into `agent`.
+- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, DAG utilities, session-backed worker runtime, ledger/evidence gates, and tools runtime. Legacy `SubagentRuntime` is session-locked; legacy `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits while the target names move toward `WorkerRuntime` and `AsyncRunScheduler`.
 - `packages/coordinator` owns multiprocess execution: on-demand worker lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
 - Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.

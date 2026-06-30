@@ -1,6 +1,8 @@
 # packages/coordinator
 
-Multiprocess execution coordinator runtime. This package owns on-demand worker lifecycle, IPC transport, recovery, credentials/policy helpers, and the worker supervision used by server-side dispatch. Per [ADR-008](../../docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (accepted): workers spawn on demand and idle-shutdown; there is no fixed pool.
+Multiprocess execution coordinator runtime. This package owns on-demand worker process lifecycle, IPC transport, primitive run delivery, recovery, credentials/policy helpers, and worker supervision used by OpenOmni/server execution. Per [ADR-008](../../docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (accepted): workers spawn on demand and idle-shutdown; there is no fixed pool.
+
+The coordinator is an executor, not the communication kernel. It must not decide actor authority, PendingInteraction/PendingAsk routing, channel/session targets, worker grants, or writeback policy. Those product semantics belong in `@openomni/openomni`.
 
 ## STRUCTURE
 
@@ -23,17 +25,19 @@ Depends on `@openomni/protocol` and `@openomni/session`. Runtime execution wirin
 
 | Module | Purpose |
 |--------|---------|
-| `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based dispatch, session affinity, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
+| `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based run dispatch, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
 | `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
 | `worker-supervision/session-routing.ts` | Session affinity helper used by `worker-manager`; session-affinity `route/complete` behavior remains test-covered |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 | `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
 | `credentials/store.ts` / `credentials/injector.ts` | Loads stored credentials, filters by provider prefix, injects provider-scoped credentials into workers |
-| `tool-permission/*` | Policy load + audit logging for non-interactive tool decisions |
+| `tool-permission/*` | **Enforce-only**: receives a `Policy.Permission` object (assembled by openomni) and applies it via `Policy.evaluate()`. Makes NO authority decisions; does not consult `GrantStore`, `BlacklistStore`, `PendingInteractionStore`, or any actor/trust stores. |
 
 ## WORKER LIFECYCLE (worker-manager)
 
 ```
+
+Session affinity here is an execution optimization only. Do not use it as product routing authority. OpenOmni chooses the target run/session; coordinator only delivers to the primitive worker/run requested by its caller.
 dispatch(runId)
   → reject if stopping / duplicate runId
   → acquireSlot(): free slot | new worker (≤ maxActiveWorkers) | wait in queue
@@ -61,3 +65,4 @@ Tests are split by module: inline IPC/supervisor tests live beside source, while
 - Do NOT add generic catch-all files like `utils.ts` or `helpers.ts`.
 - Do NOT put session-backed orchestration policy here; coordinator executes and recovers worker processes, while `@openomni/openomni` owns orchestration semantics.
 - Do NOT add worker-pool compatibility facades; target `worker-manager` directly.
+- Do NOT add actor, channel, PendingInteraction, PendingAsk, WorkerGrant, SurfaceKey, or writeback logic here.

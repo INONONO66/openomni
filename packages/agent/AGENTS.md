@@ -1,6 +1,8 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the multi-agent runtime (registry, subagent / background tools, MCP client). Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus generic agent-loop runtime primitives (registry, subagent tool contract, background tool shells, MCP client). Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` for observability only (Bus, TraceContext).
+
+This package may own generic subagent/delegation primitives because those are useful to an agent loop. It must not own OpenOmni product communication: session-backed worker lifecycle, external actor authority, channel routing, PendingInteraction/PendingAsk semantics, or durable background orchestration belong in `@openomni/openomni`.
 
 ## STRUCTURE
 
@@ -36,7 +38,7 @@ src/
 └── runtime/
     ├── index.ts                # Re-exports registry / tools / mcp
     ├── registry/
-    │   └── registry.ts         # AgentRegistry.define / get / list / override (AgentProfile.Definition store)
+    │   └── registry.ts         # AgentRegistry.define / get / list / override (generic in-memory profile store)
     ├── tools/
     │   ├── subagent.ts         # SubagentTool — spawn / send / background with delegation checks
     │   ├── background-output.ts# BackgroundOutputTool — block / poll a background task result
@@ -140,12 +142,34 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   │            └─ dispatch(error) → retry (shouldRetry) or throw
 ```
 
-## RUNTIME (MULTI-AGENT)
+## OWNERSHIP BOUNDARY
+
+Allowed here:
+
+- Stateless `ChatAgent` execution and streaming.
+- Generic `PolicyEngine` and policy timing dispatch.
+- Generic tool invocation contracts and tool executor wrapping.
+- Generic delegation guards such as depth/circular detection.
+- A generic `SubagentTool` contract that delegates through caller-provided runtime interfaces.
+- Generic MCP client primitives when no server/OpenOmni product behavior is embedded.
+
+Not allowed here:
+
+- Creating, resolving, or mutating OpenOmni sessions for product orchestration.
+- Choosing whether a message targets Resident, Worker, external actor, schedule, or surface.
+- Looking up `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing.
+- Encoding OpenOmni actor trust, channel grants, worker grants, or external-response lifecycle rules.
+- Persisting durable background task state; background persistence is an OpenOmni/session responsibility.
+- Owning channel-specific or server-specific MCP/tool wiring.
+
+When in doubt, keep the agent package as a loop engine and put product semantics in `packages/openomni`.
+
+## RUNTIME PRIMITIVES
 
 - **AgentRegistry** — global in-memory store of `AgentProfile.Definition` entries keyed by `name`. `define`, `get`, `has`, `list`, `override`, `clear`.
-- **SubagentTool** — tool spec that delegates to another agent through the orchestration layer. Checks `DelegationContext` (depth, circular visited set) before calling `subagentRuntime.spawn / send` or, when `background: true`, a `backgroundManager`. Only middleware with `propagate: true` is inherited.
-- **BackgroundOutputTool / BackgroundCancelTool** — companions to the background path. Fetch or cancel results by `task_id`.
-- **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`.
+- **SubagentTool** — generic tool spec that delegates through caller-provided interfaces. It may enforce generic delegation safety (`DelegationContext`, depth, circular visited set), but the actual session-backed runtime is supplied by `@openomni/openomni`.
+- **BackgroundOutputTool / BackgroundCancelTool** — generic tool shells over a caller-provided background manager. They must not own persistence or OpenOmni task lifecycle.
+- **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`; concrete server wiring belongs above this package.
 
 ## KEY PATTERNS
 
@@ -153,7 +177,7 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 - **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
 - **Policy > ad-hoc hooks**: New extensions MUST use `middleware: [...]`. `PolicyEngine.create()` is the single extension surface.
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
-- **Delegation safety**: `DelegationContext` with `visitedAgents: Set<string>` and `maxDepth` prevents circular / runaway delegation.
+- **Delegation safety**: `DelegationContext` with `visitedAgents: Set<string>` and `maxDepth` prevents circular / runaway delegation. It is a loop-safety primitive, not an OpenOmni worker authority model.
 - **Message format**: `ChatAgentInput.messages` is a simple `{ role: "user" | "assistant"; content: string }[]`. Richer `Message.WithParts[]` is used internally only.
 
 ## ANTI-PATTERNS
@@ -161,3 +185,5 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 - Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `invoke.prepare` policy so behavior is uniform.
+- Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.
+- Do NOT make `SubagentTool` depend on concrete OpenOmni stores. It should stay parameterized by runtime interfaces supplied by `@openomni/openomni`.

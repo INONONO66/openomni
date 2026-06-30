@@ -1,6 +1,8 @@
 # subagent/
 
-Session-backed subagent execution runtime for the openomni orchestration layer.
+Session-backed subagent execution runtime for the OpenOmni workforce kernel.
+
+`@openomni/agent` may own the generic `SubagentTool` contract and delegation safety primitives. This directory owns the OpenOmni-specific durable runtime: child sessions, WorkerRun records, background task lifecycle, admission policy, cancellation, wait/resume semantics, and transcript projection.
 
 ## Files
 
@@ -25,6 +27,14 @@ Session-backed subagent execution runtime for the openomni orchestration layer.
 `runtime.ts` was refactored from ~1094 LOC into focused modules. The split follows single-responsibility: each internal module owns one concern (types, message construction, lifecycle, transcript, mailbox delivery). Only runtime-facing classes and middleware are re-exported from `index.ts`; the rest are internal implementation details.
 
 Internal modules (`background-store.ts`, `shared.ts`, `message-builder.ts`, `run-lifecycle.ts`, `runtime-admission.ts`, `runtime-cancel.ts`, `runtime-wait.ts`, `transcript.ts`, `session-mailbox.ts`, `abort-registry.ts`) are not exported from the barrel. Import them only from within this domain.
+
+## Boundary Rules
+
+- Keep session-backed lifecycle here, not in `packages/agent`.
+- Use `@openomni/session` for durable records, but keep orchestration semantics here: admission, status transitions, cancellation decisions, wait behavior, and output projection are OpenOmni responsibilities.
+- Do not add raw channel, PendingInteraction/PendingAsk, actor trust, or external actor routing logic here unless it is part of a worker/subagent lifecycle handoff owned by the communication kernel.
+- Do not bypass the OpenOmni authority/communication stages when a subagent operation crosses sessions, workers, or external actors.
+- Background task persistence may use session storage, but lifecycle semantics and result shaping stay in this domain.
 
 ## Dependencies
 

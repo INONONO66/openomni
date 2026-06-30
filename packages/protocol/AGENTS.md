@@ -2,6 +2,8 @@
 
 Shared type foundation. Zero internal dependencies. All cross-package Zod schemas live here.
 
+Protocol defines shapes, not behavior. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Runtime meaning belongs in `@openomni/openomni` or lower primitive packages as appropriate.
+
 ## STRUCTURE
 
 ```
@@ -49,6 +51,26 @@ src/
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
 - **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/session`.
 
+## CONTRACT BOUNDARY
+
+Allowed here:
+
+- Zod schemas and inferred TypeScript types.
+- Bus event descriptors via `BusEvent.define()`.
+- Storage adapter interfaces.
+- Wire/request/response contracts for IPC, execution, ingress, dispatch, and tools.
+- Pure helpers that are strictly schema-local, such as ID/hash formatting or status derivation when no storage/runtime facts are consulted.
+
+Not allowed here:
+
+- PendingInteraction/PendingAsk match precedence.
+- Actor trust, channel grant, worker grant, or blacklist evaluation.
+- Session or target resolution.
+- Dispatch/ingress handler routing.
+- Provider behavior, process supervision, storage implementation, or agent-loop execution.
+
+If a helper needs data from stores, runtime context, channel facts, or policy decisions, it does not belong in protocol.
+
 ## FUTURE PRODUCT MODEL CONTRACTS
 
 The product model is documented in `docs/core-model.md`. Future schemas should live here when they become implementation work:
@@ -65,6 +87,7 @@ Keep these as protocol contracts only. Runtime policy and storage implementation
 
 - Do NOT add runtime logic here — this package is schemas/types only.
 - Do NOT import from other `@openomni/*` packages — protocol is the dependency leaf.
+- Do NOT add authority or communication-kernel shortcuts here. Add the schema here, then implement semantics in `packages/openomni`.
 
 ## WHEN MODIFYING
 
