@@ -1,5 +1,5 @@
 import { Policy } from "@openomni/protocol";
-import { Storage, createAuditLog } from "@openomni/session";
+import { AuditLog, Storage } from "@openomni/session";
 import { actorKind, truncateAuditText } from "./audit-util";
 import type { ExtensionManifestSummary } from "./manager-manifest";
 import {
@@ -158,7 +158,7 @@ export async function appendAuditEvent<T extends AuditEvent>(
     sequence: 0,
   });
 
-  createAuditLog(sessionId, "extension.manager").append(
+  AuditLog.create(sessionId, "extension.manager").append(
     eventType,
     row as unknown as Record<string, unknown>,
     parentActionId,

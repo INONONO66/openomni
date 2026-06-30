@@ -1,4 +1,4 @@
-import { createAuditLog } from "@openomni/session";
+import { AuditLog } from "@openomni/session";
 
 const TEXT_SUMMARY_LIMIT = 240;
 
@@ -21,5 +21,5 @@ export function summarizeText(text: string): TextSummary {
 }
 
 export function createIngressAudit(sessionId: string, scope: string) {
-  return createAuditLog(sessionId, scope);
+  return AuditLog.create(sessionId, scope);
 }

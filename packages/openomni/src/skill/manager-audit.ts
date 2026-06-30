@@ -1,5 +1,5 @@
 import { Policy } from "@openomni/protocol";
-import { Storage, createAuditLog } from "@openomni/session";
+import { AuditLog, Storage } from "@openomni/session";
 import type { SkillOperationOptions } from "./manager";
 
 export type SkillAction =
@@ -233,7 +233,7 @@ async function appendAuditEvent<T extends AuditEvent>(
     timestamp: now().toISOString(),
   });
 
-  createAuditLog(sessionId, "skill.manager").append(
+  AuditLog.create(sessionId, "skill.manager").append(
     eventType,
     row as unknown as Record<string, unknown>,
     parentActionId,
