@@ -20,11 +20,15 @@ openomni/
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
 │   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + generic agent-loop runtime primitives — depends on session only for observability (Bus, TraceContext)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + runtime registry, messenger, MCP — depends on session for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── policy/         # Agent policy facade + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
-│   │   └── src/runtime/        # Generic runtime primitives: registry, subagent tool contract, background tool shells, MCP client
+│   │   └── src/runtime/        # Multi-agent infrastructure
+│   │       ├── messenger/      # AgentMessenger
+│   │       ├── registry/       # AgentRegistry
+│   │       ├── tools/          # Runtime tool helpers
+│   │       └── mcp/            # McpClient
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
 │   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
 ├── turbo.json           # Build pipeline config
@@ -50,7 +54,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
 | `packages/session` | Durable state substrate: session/message/part CRUD, Bus, Bus persistence, storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
-| `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic delegation/subagent tool contract | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
+| `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, IPC framing, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy |
 | `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector manifests, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
@@ -90,7 +94,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | --- | --- | --- |
 | Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
 | Add/modify bus events | `packages/protocol/src/event/index.ts` + `event/agent-execution.ts` | `BusEvent.define()` pattern |
-| Add subagent lifecycle events | `packages/protocol/src/subagent/index.ts` | `Subagent.Events.*` (worker runs + background tasks) |
+| Add worker run lifecycle events | `packages/protocol/src/worker-run/index.ts` | `WorkerRun.Events.*` |
 | Add policy timing | `packages/protocol/src/policy/index.ts` | 13 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error, pre_ingress, pre_tool_selection, pre_delegation |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
@@ -101,7 +105,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `VerificationGate`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade |
 | WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/set/list/remove) |
 | WorkItemStore engine | `packages/session/src/work-item/index.ts` | CRUD + lifecycle (start/complete/fail/cancel/retry) + blockers + evidence + dependency readiness + cycle detection |
-| Worker run records (subagent) | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
+| Worker run records | `packages/session/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
 | WorkerRun state store | `packages/session/src/worker-run/state-store.ts` | Direct DB CRUD for worker_run_state table |
 | Add LLM provider | `packages/llm/src/provider/provider.ts` + provider-specific auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
@@ -111,9 +115,9 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
 | Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
-| Agent registry primitive | `packages/agent/src/runtime/registry/` | Generic registry facade only; product agent registration belongs above it |
-| Generic subagent tool contract | `packages/agent/src/runtime/tools/` | `SubagentTool` may remain as an agent-loop primitive; durable lifecycle belongs in `openomni` |
-| MCP client primitive | `packages/agent/src/runtime/mcp/` | Generic client; server/openomni own concrete MCP wiring |
+| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
+| Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
+| MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Messaging kernel | `packages/openomni/src/{messaging,ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection |
@@ -124,7 +128,6 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Principal / actor identity | `packages/protocol/src/actor/` + `packages/session/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
 | ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/session/src/{channel-grant,blacklist}/` | Storage lives in `session`; evaluation and precedence belong in `openomni` access |
 | PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/session/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Durable external-response correlation; kernel owns match precedence and lifecycle transitions |
-| Subagent runtime | `packages/openomni/src/subagent/` | `SubagentRuntime` (spawn/send/resume/cancel/wait), `BackgroundManager`, `SubagentConsultation` |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
 | Coordinator worker internals | `packages/coordinator/src/worker-manager/` + `worker-supervision/` | On-demand worker lifecycle; do not recreate legacy worker-pool facades |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
@@ -148,7 +151,7 @@ Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object
 
 - Do not add product routing to `apps/server`. Channel code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. It must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, or choose worker/resident targets except through an OpenOmni kernel API.
 - Do not add authority decisions to `packages/session`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
-- Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Generic subagent tool primitives are allowed there, but session-backed worker/subagent/background execution belongs in `packages/openomni`.
+- Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Session-backed worker/background execution belongs in `packages/openomni`.
 - Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
 - Do not add provider behavior outside `packages/llm`.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
@@ -169,7 +172,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
 | Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `AgentRegistry`, `SubagentRuntime`, `WorkerRun`, `executorKind` |
+| Worker | Delegated execution actor (internal AI, external AI, human) | `AgentRegistry`, `WorkerRun`, `executorKind` |
 | Actor | Any external entity that interacts with the system | (Planned: `ActorIdentity` / `ActorEndpoint` in `packages/protocol/src/actor/`) |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 
@@ -229,7 +232,7 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. Custom provider endpoints use the OpenAI provider with their catalog API URL as `baseURL`.
-- `packages/agent` is organized as `src/core/` (ChatAgent + policy engine) and `src/runtime/` (generic registry/tools/mcp primitives). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`. Generic subagent tool contracts may remain here, but OpenOmni-specific worker/background lifecycle must not move down into `agent`.
-- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, DAG utilities, session-backed worker runtime, ledger/evidence gates, and tools runtime. Legacy `SubagentRuntime` is session-locked; legacy `BackgroundManager` wraps it for fire-and-forget execution with concurrency / depth limits while the target names move toward `WorkerRuntime` and `AsyncRunScheduler`.
+- `packages/agent` is organized as `src/core/` (ChatAgent + policy facade/built-ins) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`.
+- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, DAG utilities, ledger/evidence gates, and execution runtime tooling.
 - `packages/coordinator` owns multiprocess execution: on-demand worker lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
-- Subagent lifecycle events (`Subagent.Events.*`) are defined in `packages/protocol/src/subagent/index.ts` and published by `SubagentRuntime` / `BackgroundManager`.
+- WorkerRun lifecycle events live under `WorkerRun.Events.*` in `packages/protocol/src/worker-run/index.ts`.

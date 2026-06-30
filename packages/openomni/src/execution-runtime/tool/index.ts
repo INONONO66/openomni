@@ -1,8 +1,7 @@
 export {
   AgentToolProvider,
-  buildWorkerChildRuntimeConfig,
+  createChildAgentTool,
   createDispatchTool,
-  createWorkerSubagentRuntime,
 } from "./agent/index.js";
 export type { DispatchToolRuntime } from "./agent/index.js";
 export { buildToolCatalog, resolveCategory, resolveToolSelection } from "./catalog.js";

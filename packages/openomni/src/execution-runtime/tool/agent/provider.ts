@@ -1,4 +1,3 @@
-import type { SubagentToolOptions } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
 import { createDefaultDispatchRuntime, type DispatchOwners } from "../../../dispatch/index.js";
 import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
@@ -7,52 +6,20 @@ import {
   createWorkerResidentAskDispatchTool,
   type DispatchToolRuntime,
 } from "./tools/dispatch.js";
-import { createSubagentTool } from "./tools/subagent.js";
-import { createSubagentRuntime } from "./tools/subagent-runtime.js";
 
-export type AgentToolProviderOptions = Partial<SubagentToolOptions> & {
+export type AgentToolProviderOptions = {
   readonly dispatchRuntime?: DispatchToolRuntime;
   readonly dispatchOwners?: DispatchOwners;
   readonly dispatchToolMode?: "default" | "worker-resident-ask";
 };
 
-function hasSubagentOptions(options: AgentToolProviderOptions | undefined): boolean {
-  if (!options) return false;
-  return (
-    "context" in options ||
-    "delegationContext" in options ||
-    "middleware" in options ||
-    "defaultModel" in options ||
-    "subagentRuntime" in options ||
-    "backgroundManager" in options
-  );
-}
-
-function resolveSubagentOptions(
-  options: AgentToolProviderOptions | undefined,
-): SubagentToolOptions | undefined {
-  if (!hasSubagentOptions(options)) return undefined;
-  const {
-    dispatchRuntime: _dispatchRuntime,
-    dispatchOwners: _dispatchOwners,
-    dispatchToolMode: _dispatchToolMode,
-    ...partial
-  } = options ?? {};
-  return {
-    ...partial,
-    subagentRuntime: options?.subagentRuntime ?? createSubagentRuntime(),
-  };
-}
-
 export class AgentToolProvider implements ToolProvider {
   readonly name = "agent";
   readonly category: ToolCategory = "agent";
 
-  private readonly subagentOptions: SubagentToolOptions | undefined;
   private extraTools: NativeTool[] = [];
 
   constructor(options?: AgentToolProviderOptions) {
-    this.subagentOptions = resolveSubagentOptions(options);
     const dispatchRuntime =
       options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
     this.register(
@@ -67,7 +34,7 @@ export class AgentToolProvider implements ToolProvider {
   }
 
   listTools(): NativeTool[] {
-    return [createSubagentTool(this.subagentOptions), ...this.extraTools];
+    return [...this.extraTools];
   }
 
   execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {

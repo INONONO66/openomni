@@ -54,8 +54,7 @@ Mechanically these map to three execution lanes ([ADR-010 §6](design-decisions/
 | --- | --- | --- |
 | Built-in | Judgment and read-only perception | Answer from context, peek at a file |
 | Dispatch action (syscall) | Atomic world mutations needing no further reasoning | Turn off a light, send one composed message, schedule a job |
-| Worker (always an isolated process; may use subagents internally) | Independent execution with its own profile and verifiable output | Research, refactoring, negotiation |
-| Subagent (in-process extension of its parent) | Context-inheriting consultation / parallel reasoning — no ticket, no gate | "Review this from a security angle" |
+| Worker (always an isolated process) | Independent execution with its own profile and verifiable output | Research, refactoring, negotiation |
 
 Spawning a Worker for an atomic action is waste; doing multi-step work in the user session is pollution. Every world-mutating lane passes through dispatch — tools that act only inside an agent's own sandbox do not need to.
 
@@ -175,7 +174,6 @@ Eight categories. Each answers a different question — do not mix them.
 | `ConnectorEndpoint` | Installed app endpoint addressable through `ActorEndpoint(channel: "app_connector")`; provider identity and driver wiring live on the AppConnector installation. |
 | `executorKind` | Coarse ledger metadata: `internal_chat_agent / connector_endpoint / external_api / a2a / human_channel`. Dispatch selection for installed apps uses endpoint identity, not this field. |
 | `ChatAgent` | LLM-driven execution loop. |
-| `SubagentRuntime` | Session-locked spawn / send / resume / cancel / wait. |
 
 ### Authority and lifecycle (dispatch concerns)
 
@@ -200,8 +198,7 @@ Eight categories. Each answers a different question — do not mix them.
 
 | Term | Description |
 |---|---|
-| `ExecutionLane` | Where a request executes: `built-in / dispatch action / worker` (+ `subagent` as a parent's in-process extension). Chosen by how much reasoning execution still requires. |
-| `Subagent` | Context-inheriting extension of its parent — no ticket, no gate, dies with the parent. Not a worker tier. |
+| `ExecutionLane` | Where a request executes: `built-in / dispatch action / worker`. Chosen by how much reasoning execution still requires. |
 | `WorkItem` | Task ledger entry — the OS's process table row: criteria, attempts, sessions, executor, evidence, gate. |
 | `CompletionReport` | Mandatory deliverable companion: written claims, each referencing ledger evidence. The distillation unit and evaluation input. |
 | `outcome` | Owner's post-hoc usefulness signal: `adopted / corrected / redone / ignored`. |

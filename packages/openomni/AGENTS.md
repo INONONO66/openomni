@@ -1,6 +1,6 @@
 # packages/openomni
 
-Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/session`, and `@openomni/protocol` to own messaging/routing, access control, Resident/Worker orchestration, ledger/evidence gates, and session-backed worker/background execution. Lower packages provide primitives; this package decides product meaning.
+Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@openomni/session`, and `@openomni/protocol` to own messaging/routing, access control, Resident/Worker orchestration, ledger/evidence gates, dispatch, and worker execution tooling. Lower packages provide primitives; this package decides product meaning.
 
 ## Module Map
 
@@ -14,8 +14,8 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/session`, a
 | `src/access/` | Target direction: principal/channel/delegation grant/effective-access decisions | *(create here before adding new access behavior)* |
 | `src/ingress/` | Current inbound stage: authority middleware, session resolution, projection, resident/direct execution | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` |
-| `src/subagent/` | Session-backed subagent and background execution | `SubagentRuntime`, `SubagentConsultation`, `BackgroundManager` |
-| `src/execution-runtime/` | Tool system, workspace, worker middleware, injection queue, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `createWorkerSubagentRuntime`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
+| `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
+| `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
 
@@ -27,11 +27,10 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/session`, a
 - `src/access/` is the target home for blocklist, channel access rules, trust tier, delegation grants, PendingInteraction scope, and effective-access decisions. Store modules may answer indexed queries; access precedence belongs here.
 - `src/ingress/` is the current inbound stage. It resolves a session through `SurfaceKey`, projects the event into stored messages, then dispatches to the resident/direct handler. `ingestInternal()` accepts internal-origin events (e.g., from `CronAdapter`) without going through the external ingest path. `CronAdapter.fire(job)` creates internal events with `surface="cron"`.
 - `src/dispatch/` is the current cross-boundary command stage. `DispatchRuntime.submit()` authorizes commands, routes PendingInteraction replies, invokes registered handlers, and emits audit events. Treat dispatch as a kernel stage, not as a standalone product layer.
-- `src/subagent/` owns the unified subagent runtime. `SubagentRuntime` runs session-locked spawn / send / resume / cancel / wait operations backed by `WorkerRun` records; `BackgroundManager` wraps the runtime for fire-and-forget execution with concurrency / depth limits.
 - `src/execution-runtime/tool/agent/tools/dispatch.ts` is the `dispatch` tool — the runtime-to-runtime/system egress gate. Worker-to-Resident awaited requests use `resident.ask`; scheduling uses `schedule.create`; cron fire remains internal ingress. `Dispatch.submit()` enforces PolicyEngine authorization and emits Bus audit events. See `src/dispatch/` for the runtime, handlers, and policy.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
 - `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) stores scheduled jobs through the session storage adapter and keeps a process-local fallback map when durable storage is absent. `src/execution-runtime/cron-job-runner.ts` (`CronJobRunner`) polls the registry and accepts an injected fire implementation; server boot wires that to `CronAdapter.fire(job)`.
-- Target domain names are `messaging/`, `access/`, `orchestration/`, `tools/`, `extensions/`, `ledger/`, `profiles/`, and `runtime/`. Legacy folders (`ingress/`, `dispatch/`, `subagent/`, `execution-runtime/`, `skill/`, `extension/`, `evidence/`, `profile/`) remain transitional until a compatibility-backed migration moves them.
+- Target domain names are `messaging/`, `access/`, `orchestration/`, `tools/`, `extensions/`, `ledger/`, `profiles/`, and `runtime/`. Legacy folders (`ingress/`, `dispatch/`, `execution-runtime/`, `skill/`, `extension/`, `evidence/`, `profile/`) remain transitional until a compatibility-backed migration moves them.
 - Resident/Worker orchestration seams, controlled inbound access, self-loop session creation, Worker delegation, durable external waits, ledger/evidence gates, and distilled writeback all belong in this package.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.
@@ -43,7 +42,7 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 - Do not let `apps/server` inspect `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing. Server passes normalized facts; OpenOmni decides.
 - Do not let `packages/session` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
 - Do not let `packages/coordinator` decide actor/session authority. It executes primitive worker-process operations requested by this package.
-- Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Generic subagent tool primitives are allowed in `agent`; session-backed subagent/background orchestration stays here.
+- Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Session-backed worker/background orchestration stays here.
 
 ## Internal Ownership Split
 
@@ -53,7 +52,7 @@ Use these ownership boundaries when adding or moving code:
 | --- | --- | --- |
 | Messaging | Canonical inbound/internal/outbound envelope entry, correlation, target/session resolution, response/writeback routing | Raw channel adapters, provider SDKs, worker process mechanics |
 | Access | Principal facts, blocklist/channel access/trust tier/delegation grant/effective access, PendingInteraction scope | Storage adapter implementation, raw webhook verification |
-| Orchestration | Resident runtime, Worker orchestration, session-backed `WorkerRuntime`/legacy `SubagentRuntime`, `AsyncRunScheduler`/legacy `BackgroundManager` | Generic ChatAgent loop internals, provider transforms |
+| Orchestration | Resident runtime, Worker orchestration, session-backed worker runtime, async run scheduling | Generic ChatAgent loop internals, provider transforms |
 | Ledger | WorkItem orchestration, completion reports, read-back/verification gate execution | Low-level record storage only |
 | Tools | Tool providers, tool executor, workspace lock, injection queue, schedule bridge | Actor/session routing policy |
 | Projection | Session message projection, Bus audit envelopes, distilled writeback | Transport delivery |
@@ -68,7 +67,10 @@ resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 tools/              → no orchestration deps (tool system, workspace, middleware) once migrated from execution-runtime/
 messaging/          → legacy ingress/dispatch/session/access concepts as kernel facade
 access/             → session stores + protocol commands as access-control facade
-orchestration/      → tools/ (uses @openomni/agent + @openomni/session + protocol directly) once migrated from subagent/resident
+orchestration/      → tools/ (uses @openomni/agent + @openomni/session + protocol directly) once migrated from resident
+runtime/            → @openomni/session + @openomni/agent (worker middleware, no bus transport)
+execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
+ingress/            → no sibling deps
 ```
 
 `src/index.ts` re-exports the public surface — use the package barrel instead of deep imports from consumer code.
@@ -83,7 +85,6 @@ Consumers should only use `@openomni/openomni` exports:
 - Resident runtime from `src/resident/`
 - Messaging/ingress/dispatch kernel entry points from `src/messaging`, `src/ingress`, and `src/dispatch`
 
-- Subagent runtime + background manager from `src/subagent/`
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 
 If a symbol is not re-exported from `src/index.ts`, treat it as private to its domain.
@@ -92,8 +93,8 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 - Add new tools or tool providers in `src/execution-runtime/tool/` following the `ToolProvider` interface; tools should call kernel entry points instead of making routing decisions.
 - Add new messaging flows through `src/messaging/` or, while transitional, through existing `src/ingress/` / `src/dispatch/` stages.
-- Add subagent capabilities (new timeout policies, abort semantics, recovery hooks) in `src/subagent/` next to `SubagentRuntime` / `BackgroundManager`.
 - Add Resident/Worker orchestration here when implementing product model contracts: authority checks, self-loop creation, worker delegation, external waits, and distilled writeback are kernel responsibilities.
+- Extend ingress handling in `src/ingress/` when new inbound surfaces or mode dispatch rules arrive.
 
 ## What This Package Is Not
 
@@ -107,7 +108,6 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 - `src/dag/AGENTS.md` — dependency-graph helpers
 - `src/profile/AGENTS.md` and `src/resident/AGENTS.md` do not exist yet; these are intentionally small modules.
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
-- `src/subagent/AGENTS.md` — session-backed subagent runtime and background manager
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware
 
 ## Style Rules

@@ -37,7 +37,7 @@ function sendAndWait(text: string): Promise<string> {
 }
 
 async function main() {
-  console.log("=== OpenOmni E2E Test: Custom Tool + Subagent ===\n");
+  console.log("=== OpenOmni E2E Test: Custom Tool + Dispatch ===\n");
   console.log(`Target: ${WS_URL}`);
 
   console.log("\n--- Test 1: Custom Tool (weather_lookup) ---");

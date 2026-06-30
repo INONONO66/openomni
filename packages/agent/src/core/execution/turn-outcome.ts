@@ -1,6 +1,6 @@
 import { PolicyDecision } from "@openomni/protocol";
 import { effectOf } from "./policy-effects";
-import { createAssistantMessage, createUserMessage } from "../message-factory";
+import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
 import {
@@ -108,13 +108,19 @@ export async function* handleStop(
     }
   }
 
-  const continuationPrompts = StreamPolicyEffects.injectedPrompts(postTurnDecision);
-  if (!PolicyDecision.isBlocking(postTurnDecision) && continuationPrompts.length > 0) {
-    const parentID = state.messages.at(-1)?.info.id ?? "";
-    appendStreamMessages(state, [
-      createAssistantMessage(state.lastAssistantText, parentID, state.sessionId),
-      ...continuationPrompts.map((prompt) => createUserMessage(prompt, state.sessionId)),
-    ]);
+  const parentID = state.messages.at(-1)?.info.id ?? "";
+  const assistantMessage = createAssistantMessage(
+    state.lastAssistantText,
+    parentID,
+    state.sessionId,
+  );
+  const continuationMessages = StreamPolicyEffects.continuationMessages(
+    postTurnDecision,
+    state.sessionId,
+    assistantMessage.info.id,
+  );
+  if (!PolicyDecision.isBlocking(postTurnDecision) && continuationMessages.length > 0) {
+    appendStreamMessages(state, [assistantMessage, ...continuationMessages]);
     const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
     if (blocked) {
       yield blocked;

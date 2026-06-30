@@ -37,10 +37,10 @@ describe("ToolSelection", () => {
     });
 
     test("parses categories with allow", () => {
-      const input = { categories: ["filesystem"], allow: ["subagent"] };
+      const input = { categories: ["filesystem"], allow: ["dispatch"] };
       const parsed = ToolSelection.Selection.parse(input);
       expect(parsed.categories).toEqual(["filesystem"]);
-      expect(parsed.allow).toEqual(["subagent"]);
+      expect(parsed.allow).toEqual(["dispatch"]);
       expect(parsed.all).toBeUndefined();
       expect(parsed.deny).toBeUndefined();
     });

@@ -1,6 +1,6 @@
 # Execution Runtime Notes
 
-Tool system, workspace safety, injection queue, cron bridge, and worker middleware for `@openomni/openomni`. This domain is used by server workers and subagent execution, but it must stay independent from high-level communication and authority policy.
+Tool system, workspace safety, injection queue, cron bridge, and worker middleware for `@openomni/openomni`. This domain is used by server workers and must stay independent from high-level orchestration policy.
 
 ## Files
 
@@ -18,7 +18,7 @@ Tool system, workspace safety, injection queue, cron bridge, and worker middlewa
 ## Ownership
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
-- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`), but it is only a tool wrapper over the OpenOmni dispatch/communication kernel. The in-session child execution tool is `subagent` (`tool/agent/tools/subagent.ts`).
+- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session lightweight child execution tool is `child_agent` (`tool/agent/tools/child-agent.ts`).
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 This domain may expose tools that call communication kernel APIs. It must not make routing or authority decisions itself.
@@ -77,7 +77,7 @@ All external communication must be auditable and policy-gated. The canonical egr
 | `web_search` | `fetch()` via `opensearch-ai-sdk` | **Direct — bypasses dispatch** | MEDIUM (approved) | Resident-only (CustomToolProvider, not passed to workers). Intentional Resident capability. See approved-direct note below. |
 | `web_fetch` | `fetch()` via `opensearch-ai-sdk` | **Direct — bypasses dispatch** | MEDIUM (approved) | Same as `web_search`. Resident-only. |
 | `read`, `write`, `edit`, `glob` | None | n/a | NONE | Workspace-contained filesystem only. |
-| `subagent` | In-process session spawn | Internal only | LOW | No external network; further delegation requires `dispatch`. |
+| `child_agent` | In-process child execution inside a worker run | Internal only | LOW | No external network; further delegation requires `dispatch`. |
 | MCP proxy tools | IPC → server-side MCP handler | `worker.tool_call` IPC | LOW | Worker never touches the network directly; server executes MCP calls and returns results over IPC. |
 
 ### Known Gaps

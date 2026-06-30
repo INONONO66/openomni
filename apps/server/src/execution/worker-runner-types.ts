@@ -1,6 +1,6 @@
 import type { ChatAgent } from "@openomni/agent";
 import type { Auth } from "@openomni/llm";
-import type { BackgroundManager, InjectionQueue } from "@openomni/openomni";
+import type { InjectionQueue } from "@openomni/openomni";
 import type { WorkerBootstrap } from "@openomni/protocol";
 import type { WorkerRunState } from "./worker-run-state";
 import type { WorkerRunIpcServer } from "./worker-runner-ipc";
@@ -14,7 +14,6 @@ interface WorkerRunnerEnvironment {
   readonly server: WorkerRunIpcServer;
   readonly activeRuns: WorkerRunState.ActiveRunRegistry;
   readonly bootstrapReady: Promise<void>;
-  readonly backgroundManager: ReturnType<typeof BackgroundManager.create>;
   readonly injectionQueue: InjectionQueue.Instance;
   readonly defaultWorkspaceRoot: string | undefined;
   readonly getBootstrap: () => WorkerBootstrap.Bootstrap | null;

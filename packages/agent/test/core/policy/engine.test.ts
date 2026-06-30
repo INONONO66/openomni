@@ -204,7 +204,7 @@ describe("PolicyEngine", () => {
       name: "scoped",
       timing: "turn.start",
       priority: 100,
-      scope: { agentType: ["subagent"] },
+      scope: { agentType: ["worker"] },
       fn: scoped,
     });
     engine.register({ name: "unscoped", timing: "turn.start", priority: 200, fn: unscoped });

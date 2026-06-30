@@ -5,13 +5,13 @@ describe("Tool shared contracts", () => {
   test("parses tool config shared by execution and ingress", () => {
     const config = Tool.Config.parse({
       systemTools: ["read"],
-      agentTools: ["subagent"],
+      agentTools: ["dispatch"],
       mcpTools: ["search.query"],
       workspaceRoot: "/workspace",
     });
 
     expect(config.systemTools).toEqual(["read"]);
-    expect(config.agentTools).toEqual(["subagent"]);
+    expect(config.agentTools).toEqual(["dispatch"]);
     expect(config.mcpTools).toEqual(["search.query"]);
     expect(config.workspaceRoot).toBe("/workspace");
   });

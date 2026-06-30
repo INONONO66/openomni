@@ -107,7 +107,7 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 | Provider | Source | Notes |
 | --- | --- | --- |
 | `SystemToolProvider` | `@openomni/openomni` | read / glob / grep / write / edit / bash |
-| `AgentToolProvider` | `@openomni/openomni` | subagent delegation + `dispatch` egress command tool |
+| `AgentToolProvider` | `@openomni/openomni` | `dispatch` egress command tool |
 | `McpToolProvider` | `src/tool/mcp/` | one provider per MCP connection |
 | `CustomToolProvider` | `src/tool/custom/` | user-defined tools |
 `createToolExecutor` (from `@openomni/openomni`) dispatches by sanitized name (periods → underscores), enforces `Policy.Permission`, applies tier-based timeouts, and returns an error-shaped `Tool.Result` on denial / timeout / unknown tool.

@@ -1,8 +1,9 @@
 import { Auth } from "@openomni/llm";
 import type { WorkerBootstrap } from "@openomni/protocol";
-import { resolveCategory } from "@openomni/openomni";
+import { resolveCategory, type NativeTool } from "@openomni/openomni";
 import { createAllAgents } from "../agents";
 import { RuntimeAgentDefinition } from "../agents/runtime-definition";
+import type { CustomToolProvider } from "../tool/custom";
 import type { McpToolProvider } from "../tool/mcp";
 
 function djb2Hash(s: string): string {
@@ -16,21 +17,14 @@ function djb2Hash(s: string): string {
 export async function assembleBootstrap(
   mcpProvider: Pick<McpToolProvider, "listTools">,
   authEntries?: Awaited<ReturnType<typeof Auth.all>>,
+  customProvider?: Pick<CustomToolProvider, "listTools">,
 ): Promise<WorkerBootstrap.Bootstrap> {
   const agents = [...createAllAgents().values()].map(RuntimeAgentDefinition.create);
 
-  const toolCatalog = mcpProvider.listTools().map(
-    (tool): WorkerBootstrap.RuntimeToolCatalogEntry => ({
-      canonicalName: tool.spec.name,
-      exposedName: tool.spec.name,
-      source: "mcp",
-      category: resolveCategory(tool.spec.name, "mcp", tool.category),
-      riskTier: tool.riskTier,
-      spec: tool.spec,
-      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
-      mcpServer: tool.spec.name.includes(".") ? tool.spec.name.split(".")[0] : undefined,
-    }),
-  );
+  const toolCatalog = [
+    ...mcpProvider.listTools().map((tool) => createToolCatalogEntry(tool, "mcp")),
+    ...(customProvider?.listTools().map((tool) => createToolCatalogEntry(tool, "server")) ?? []),
+  ];
 
   const resolvedAuthEntries = authEntries ?? (await Auth.all());
   const credentials: Record<string, string> = {};
@@ -51,4 +45,28 @@ export async function assembleBootstrap(
   const configEpoch = djb2Hash(epochInput);
 
   return { configEpoch, agents, toolCatalog, credentials };
+}
+
+function createToolCatalogEntry(
+  tool: NativeTool,
+  source: WorkerBootstrap.RuntimeToolCatalogEntry["source"],
+): WorkerBootstrap.RuntimeToolCatalogEntry {
+  const mcpServer = source === "mcp" ? getMcpServerName(tool.spec.name) : undefined;
+
+  return {
+    canonicalName: tool.spec.name,
+    exposedName: tool.spec.name,
+    source,
+    category: resolveCategory(tool.spec.name, source, tool.category),
+    riskTier: tool.riskTier,
+    spec: tool.spec,
+    ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
+    ...(mcpServer !== undefined && { mcpServer }),
+  };
+}
+
+function getMcpServerName(toolName: string): string | undefined {
+  if (!toolName.includes(".")) return undefined;
+  const [serverName] = toolName.split(".");
+  return serverName;
 }
