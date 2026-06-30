@@ -109,6 +109,7 @@ export namespace WorkerRunner {
           resolveAuth,
           allowAuthFallback: false,
           parentSessionId: sessionId,
+          workerRunId: runId,
           parentPermissions: request.permissions,
         };
         const scopedBackgroundManager = createScopedBackgroundManager({

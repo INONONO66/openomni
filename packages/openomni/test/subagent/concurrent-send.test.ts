@@ -1,9 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { ChatAgent, type AgentResult, type ChatAgentInput } from "@openomni/agent";
+import {
+  ChatAgent,
+  type AgentResult,
+  type ChatAgentInput,
+  type PolicyRegistration,
+} from "@openomni/agent";
+import { PolicyDecision } from "@openomni/protocol";
 import { Session, Storage } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
+
+const allowDelegation: PolicyRegistration = {
+  name: "test:allow-delegation",
+  timing: "invoke.prepare",
+  priority: 0,
+  fn: () => PolicyDecision.allow({ policyId: "test:allow-delegation" }),
+};
 
 let createSpy: ReturnType<typeof spyOn>;
 const executionLog: string[] = [];
@@ -211,6 +224,7 @@ describe("concurrent send guard", () => {
         title: `task-${i}`,
         prompt: `prompt-${i}`,
         model,
+        middleware: [allowDelegation],
       }),
     );
 

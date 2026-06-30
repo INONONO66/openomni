@@ -88,6 +88,7 @@ export type WorkerRuntimeConfig = {
   // Lazily resolved after createExecutionToolContext — filled before any tool call.
   toolsRef: { tools?: ChatAgentConfig["tools"]; toolExecutor?: ChatAgentConfig["toolExecutor"] };
   parentSessionId: string;
+  workerRunId?: string;
   parentPermissions?: Policy.Permission;
   // Lazily resolved alongside toolsRef — used to compute depth-filtered child tool sets.
   catalogRef?: { catalog?: CatalogEntry[] };
@@ -229,6 +230,7 @@ export function createWorkerSubagentRuntime(cfg: WorkerRuntimeConfig): SubagentR
         tools: childRuntime.tools,
         toolExecutor: childRuntime.toolExecutor,
         parentSessionId: cfg.parentSessionId,
+        workerRunId: cfg.workerRunId,
         permissions: childRuntime.permissions,
         admissionPermissions: childRuntime.admissionPermissions,
         middleware: childRuntime.middleware,

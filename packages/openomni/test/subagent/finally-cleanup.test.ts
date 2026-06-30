@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { ChatAgent, type AgentResult } from "@openomni/agent";
+import { ChatAgent, type AgentResult, type PolicyRegistration } from "@openomni/agent";
+import { PolicyDecision } from "@openomni/protocol";
 import { Session, Storage, WorkerRun } from "@openomni/session";
 import { SubagentRuntime } from "../../src/subagent/runtime";
 import { AbortControllerRegistry } from "../../src/subagent/abort-registry";
@@ -39,6 +40,13 @@ function createParentSession(): string {
   return Session.create({ title: "parent", model: sessionModel }).id;
 }
 
+const allowDelegation: PolicyRegistration = {
+  name: "test:allow-delegation",
+  timing: "invoke.prepare",
+  priority: 0,
+  fn: () => PolicyDecision.allow({ policyId: "test:allow-delegation" }),
+};
+
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
@@ -68,6 +76,7 @@ describe("finally cleanup — spawn", () => {
         title: "task",
         prompt: "do work",
         model,
+        middleware: [allowDelegation],
       }),
     ).rejects.toThrow("agent exploded");
 
@@ -90,6 +99,7 @@ describe("finally cleanup — spawn", () => {
         title: "task",
         prompt: "my prompt",
         model,
+        middleware: [allowDelegation],
       }),
     ).rejects.toThrow("crash");
 
@@ -115,6 +125,7 @@ describe("finally cleanup — spawn", () => {
         title: "task",
         prompt: "do work",
         model,
+        middleware: [allowDelegation],
       }),
     ).rejects.toThrow("boom");
 
@@ -133,6 +144,7 @@ describe("finally cleanup — spawn", () => {
         title: "task",
         prompt: "do work",
         model,
+        middleware: [allowDelegation],
       }),
     ).rejects.toThrow("fatal");
 
@@ -152,6 +164,7 @@ describe("finally cleanup — spawn", () => {
       title: "task",
       prompt: "do work",
       model,
+      middleware: [allowDelegation],
     });
 
     const meta = Session.getWorkerMeta(result.sessionId);

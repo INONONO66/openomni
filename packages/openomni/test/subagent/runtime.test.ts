@@ -35,6 +35,15 @@ function createParentSession(): string {
   }).id;
 }
 
+// Worker spawns (parentSessionId set) require delegation admission middleware; these
+// fixtures supply a permissive one so the spawn clears the fail-closed admission gate.
+const allowDelegation: PolicyRegistration = {
+  name: "test:allow-delegation",
+  timing: "invoke.prepare",
+  priority: 0,
+  fn: () => PolicyDecision.allow({ policyId: "test:allow-delegation" }),
+};
+
 beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
@@ -74,6 +83,7 @@ describe("SubagentRuntime", () => {
       title: "child task",
       prompt: "solve this",
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      middleware: [allowDelegation],
     });
 
     const childSession = Session.get(result.sessionId);

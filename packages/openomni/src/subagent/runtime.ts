@@ -31,6 +31,7 @@ import {
 
 interface SpawnConfig extends RuntimeConfig {
   parentSessionId?: string;
+  workerRunId?: string;
   agentName: string;
   title: string;
   prompt: string;
@@ -99,6 +100,7 @@ export namespace SubagentRuntime {
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
+      workerRunId: config.workerRunId,
       operation: "spawn",
       prompt: config.prompt,
       childRuntime: summarizeChildRuntimeAdmission(config),
@@ -139,6 +141,7 @@ export namespace SubagentRuntime {
       middleware: config.middleware,
       childAgent: config.agentName,
       parentSessionId: config.parentSessionId,
+      workerRunId: config.workerRunId,
       operation: "spawn_background",
       prompt: config.prompt,
       childRuntime: summarizeChildRuntimeAdmission(config),
