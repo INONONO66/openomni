@@ -205,7 +205,7 @@ export namespace SubagentTool {
         return {
           id: crypto.randomUUID(),
           toolCallId: "",
-          output: `${result.output}\n[session:${result.sessionId}]`,
+          output: result.output,
           isError: false,
         };
       } catch (error) {

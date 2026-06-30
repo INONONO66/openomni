@@ -4,20 +4,20 @@ import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
-import { buildTurn } from "../../../src/core/execution/stream-turn";
+import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import {
   createStreamRunState,
   type StreamAgentBase,
   type StreamRunState,
   type TurnArtifacts,
-} from "../../../src/core/execution/stream-state";
+} from "../../../src/core/execution/run-state";
 import {
   dispatchModelRequest,
   dispatchModelResponse,
   dispatchPreRun,
-} from "../../../src/core/execution/stream-policy-dispatch";
-import { dispatchWritebackCommit } from "../../../src/core/execution/stream-writeback-policy";
-import { handleCompact, handleStop } from "../../../src/core/execution/stream-flow";
+} from "../../../src/core/execution/lifecycle-dispatch";
+import { dispatchWritebackCommit } from "../../../src/core/execution/writeback-policy";
+import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
 import { deny } from "../../helpers/policy-decision";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };

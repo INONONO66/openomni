@@ -191,7 +191,7 @@ describe("invoke.prepare middleware dispatch", () => {
   });
 });
 
-describe("error middleware dispatch (stream-engine level)", () => {
+describe("error middleware dispatch (runner level)", () => {
   it("error middleware is registered and dispatchable", async () => {
     const onErrorFn = mock((_ctx: PolicyContext) => abortRun("test.on-error", "test-error-abort"));
 

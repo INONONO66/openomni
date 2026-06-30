@@ -131,7 +131,7 @@ describe("SubagentTool", () => {
 
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(result.isError).toBe(false);
-    expect(result.output).toBe("spawned output\n[session:session-1]");
+    expect(result.output).toBe("spawned output");
   });
 
   it("continues an existing runtime session when sessionId is provided", async () => {
@@ -162,7 +162,7 @@ describe("SubagentTool", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(result.isError).toBe(false);
-    expect(result.output).toBe("continued output\n[session:session-2]");
+    expect(result.output).toBe("continued output");
   });
 
   it("uses an injected context registry without leaking to default or peer contexts", async () => {
