@@ -3,8 +3,8 @@ import type { Policy } from "@openomni/protocol";
 import type { PolicyEngineInstance } from "../policy";
 import { buildSystemPrompt } from "../prompt-builder";
 import type { ChatAgentConfig } from "../types";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import type { StreamRunState } from "./stream-state";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import type { StreamRunState } from "./run-state";
 
 export async function buildTurnSystemPrompt(
   state: StreamRunState,

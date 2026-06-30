@@ -1,22 +1,28 @@
 import type { Policy } from "@openomni/protocol";
-import type { PolicyRegistration } from "./types";
+import type { GenericPolicyContext, PolicyRegistrationGeneric } from "./engine-types";
 
-function matchesTiming(reg: PolicyRegistration, timing: Policy.Timing): boolean {
+function matchesTiming<TCtx extends GenericPolicyContext>(
+  reg: PolicyRegistrationGeneric<TCtx>,
+  timing: Policy.Timing,
+): boolean {
   return Array.isArray(reg.timing) ? reg.timing.includes(timing) : reg.timing === timing;
 }
 
-function matchesScope(reg: PolicyRegistration, agentType: string | undefined): boolean {
+function matchesScope<TCtx extends GenericPolicyContext>(
+  reg: PolicyRegistrationGeneric<TCtx>,
+  agentType: string | undefined,
+): boolean {
   const allowed = reg.scope?.agentType;
   if (!allowed || allowed.length === 0) return true;
   if (!agentType) return false;
   return allowed.includes(agentType);
 }
 
-export function selectRegistrations(
-  registrations: readonly PolicyRegistration[],
+export function selectRegistrations<TCtx extends GenericPolicyContext>(
+  registrations: readonly PolicyRegistrationGeneric<TCtx>[],
   timing: Policy.Timing,
   agentType: string | undefined,
-): PolicyRegistration[] {
+): PolicyRegistrationGeneric<TCtx>[] {
   return registrations
     .map((reg, index) => ({ index, reg }))
     .filter(({ reg }) => matchesTiming(reg, timing) && matchesScope(reg, agentType))

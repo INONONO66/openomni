@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentStep } from "../types";
-import { getCompactionCount, type StreamRunState } from "./stream-state";
+import { getCompactionCount, type StreamRunState } from "./run-state";
 
 export function createGuardCompleteEvent(
   state: StreamRunState,

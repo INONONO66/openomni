@@ -9,16 +9,16 @@ import {
   emitRunFailed,
   emitTurnComplete,
   publishDenyDiagnostic,
-} from "./stream-events";
-import { dispatchPostRunTransform, applyPostCompaction } from "./stream-completion-policy";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import { StreamPolicyEffects } from "./stream-policy-effects";
+} from "./run-events";
+import { dispatchPostRunTransform, applyPostCompaction } from "./completion-policy";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import { StreamPolicyEffects } from "./policy-effects-apply";
 import {
   createGuardCompleteEvent,
   createStreamCompleteEvent,
   createStreamErrorEvent,
   errorMessage,
-} from "./stream-result";
+} from "./run-result";
 import {
   advanceStreamContinuation,
   advanceStreamTurn,
@@ -29,7 +29,7 @@ import {
   type StreamRunState,
   type TurnArtifacts,
   type TurnDecision,
-} from "./stream-state";
+} from "./run-state";
 import type { PolicyEngineInstance } from "../policy";
 
 export async function* handleStop(

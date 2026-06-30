@@ -1,4 +1,5 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
+import type { PolicyRegistration } from "@openomni/agent";
 import {
   Dispatch as DispatchProtocol,
   PolicyDecision as Decision,
@@ -139,6 +140,7 @@ export class DispatchRuntime {
     const engine = PolicyEngine.create({
       traceContext: policyTraceContext(command, trace.traceId),
       onDecision: options.onPolicyDecision ?? this.onPolicyDecision,
+      auditEmit: Bus.publish,
     });
     for (const reg of collectPolicies(
       this.policies,

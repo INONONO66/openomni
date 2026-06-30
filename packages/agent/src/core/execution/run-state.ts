@@ -75,7 +75,7 @@ export type ErrorDecision =
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
 export function createStreamRunState(input: ChatAgentInput): StreamRunState {
-  const sessionId = input.traceContext?.sessionId ?? "stream-engine";
+  const sessionId = input.traceContext?.sessionId ?? "runner";
   return {
     sessionId,
     budgetState: createBudgetState(),

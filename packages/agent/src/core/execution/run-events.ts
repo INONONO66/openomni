@@ -2,7 +2,7 @@ import { AgentExecution, Operational, PolicyDecision } from "@openomni/protocol"
 import type { Policy, TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { ChatAgentConfig, TokenUsage } from "../types";
-import type { StreamAgentBase, StreamRunState } from "./stream-state";
+import type { StreamAgentBase, StreamRunState } from "./run-state";
 
 export function emitRunStarted(trace: TraceContext.Type, modelId: string): void {
   Bus.publish(Operational.Info, {
@@ -199,5 +199,5 @@ function diagnosticSessionId(
   agentBase: StreamAgentBase,
 ): string | undefined {
   const sessionId = eventSessionId(state, agentBase);
-  return sessionId === "stream-engine" ? undefined : sessionId;
+  return sessionId === "runner" ? undefined : sessionId;
 }

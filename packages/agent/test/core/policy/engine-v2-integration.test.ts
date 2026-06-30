@@ -188,7 +188,7 @@ describe("PolicyEngine.dispatch", () => {
 
     try {
       const afterDeny = mock(() => allow());
-      const engine = PolicyEngine.create();
+      const engine = PolicyEngine.create({ auditEmit: Bus.publish });
       engine.register({
         name: "deny-shell",
         timing: "invoke.prepare",

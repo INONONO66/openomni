@@ -1,7 +1,8 @@
+import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../policy";
 import type { PolicyEngineInstance } from "../policy";
 import type { ChatAgentConfig } from "../types";
-import type { StreamAgentBase } from "./stream-state";
+import type { StreamAgentBase } from "./run-state";
 
 export function buildPolicyEngine(
   config: ChatAgentConfig,
@@ -13,6 +14,7 @@ export function buildPolicyEngine(
       ...(agentBase.sessionId !== "" && { sessionId: agentBase.sessionId }),
       ...(agentBase.runId !== undefined && { runId: agentBase.runId }),
     },
+    auditEmit: Bus.publish,
   });
   for (const reg of config.middleware ?? []) {
     engine.register(reg);

@@ -1,6 +1,6 @@
 import type { DispatchContext } from "../policy";
 import type { ChatAgentConfig } from "../types";
-import type { StreamRunState } from "./stream-state";
+import type { StreamRunState } from "./run-state";
 
 type LifecyclePolicyContextOverrides = Partial<
   Pick<

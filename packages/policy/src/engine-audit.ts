@@ -1,8 +1,10 @@
 import { Operational, type Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import { auditPoint } from "./engine-points";
-import type { AuditDispatchContext, PolicyEngineConfig } from "./engine-types";
-import type { PolicyContext, PolicyRegistration } from "./types";
+import type {
+  AuditDispatchContextGeneric,
+  GenericPolicyContext,
+  PolicyEngineConfig,
+} from "./engine-types";
 
 function buildActor(traceContext: TraceContext.Type | undefined): Record<string, unknown> {
   return {
@@ -18,11 +20,11 @@ function resolveAction(timing: Policy.Timing): string {
   return `middleware.${timing}`;
 }
 
-function resolveResource(reg: PolicyRegistration, ctx: PolicyContext): string {
+function resolveResource(reg: { name: string }, ctx: GenericPolicyContext): string {
   return ctx.toolName ?? reg.name;
 }
 
-function resolveComposedResource(ctx: AuditDispatchContext): string {
+function resolveComposedResource(ctx: AuditDispatchContextGeneric<GenericPolicyContext>): string {
   return ctx.toolName ?? ctx.resourceDescriptor?.id ?? "policy.composed";
 }
 
@@ -34,8 +36,8 @@ function auditReason(decision: Policy.PolicyDecision): string {
 export function publishPolicyEvent(
   options: PolicyEngineConfig,
   decision: Policy.PolicyDecision,
-  reg: PolicyRegistration,
-  ctx: AuditDispatchContext,
+  reg: { name: string },
+  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
 ): void {
   if (options.audit === false) return;
 
@@ -45,7 +47,7 @@ export function publishPolicyEvent(
   if (!sessionId || !traceId) return;
   const point = auditPoint(ctx.timing, ctx.resourceDescriptor);
 
-  Bus.publish(PolicyEvent.Evaluated, {
+  options.auditEmit?.(PolicyEvent.Evaluated, {
     traceId,
     sessionId,
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
@@ -69,7 +71,7 @@ export function publishPolicyEvent(
 export function publishComposedDecision(
   options: PolicyEngineConfig,
   timing: Policy.Timing,
-  ctx: AuditDispatchContext,
+  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
   decision: Policy.PolicyDecision,
 ): void {
   if (options.audit === false) return;
@@ -79,7 +81,7 @@ export function publishComposedDecision(
   const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
   if (!sessionId || !traceId) return;
 
-  Bus.publish(PolicyEvent.DecisionComposed, {
+  options.auditEmit?.(PolicyEvent.DecisionComposed, {
     traceId,
     sessionId,
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
@@ -101,12 +103,12 @@ export function publishComposedDecision(
 
 export function publishDecisionObserverError(
   options: PolicyEngineConfig,
-  ctx: AuditDispatchContext,
+  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
   decision: Policy.PolicyDecision,
   err: unknown,
 ): void {
   const traceContext = ctx.traceContext ?? options.traceContext;
-  Bus.publish(Operational.Warn, {
+  options.auditEmit?.(Operational.Warn, {
     traceId: traceContext?.traceId ?? crypto.randomUUID(),
     time: Date.now(),
     ...(traceContext?.sessionId !== undefined && { sessionId: traceContext.sessionId }),

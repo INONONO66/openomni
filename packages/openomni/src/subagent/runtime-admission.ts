@@ -1,10 +1,11 @@
+import { PolicyEngine } from "@openomni/policy";
 import {
-  PolicyEngine,
   createToolPermissionPolicy,
   type PolicyContext,
   type PolicyRegistration,
 } from "@openomni/agent";
 import { Policy, PolicyDecision, type RuntimeResource } from "@openomni/protocol";
+import { Bus, WorkerGrantStore } from "@openomni/session";
 import {
   buildAgentLifecycleMiddleware,
   registrationsAbsentFrom,
@@ -66,15 +67,43 @@ export async function dispatchPreDelegation(input: {
   readonly middleware?: readonly PolicyRegistration[];
   readonly childAgent: string;
   readonly parentSessionId?: string;
+  readonly workerRunId?: string;
   readonly operation: PreDelegationOperation;
   readonly prompt: string;
   readonly childRuntime?: ChildRuntimeAdmissionSummary;
 }): Promise<Policy.PolicyDecision> {
   if (!input.middleware?.length) {
-    return PolicyDecision.allow({
+    // Authority invariant: a Worker spawn crosses a session boundary, so missing
+    // admission middleware fails closed; the Resident (no parent) has top-level authority.
+    if (input.parentSessionId === undefined) {
+      return PolicyDecision.allow({
+        policyId: "subagent.delegation",
+        reasonCodes: ["resident-spawn-allowed"],
+      });
+    }
+    return PolicyDecision.deny({
       policyId: "subagent.delegation",
-      reasonCodes: ["no middleware registered"],
+      reasonCodes: ["no-middleware-registered"],
+      effects: [{ type: "run.abort", reason: "worker spawn requires delegation middleware" }],
     });
+  }
+
+  // Authority invariant: worker actors crossing a session boundary must hold a WorkerGrant.
+  // Mirrors dispatch/policy.ts evaluateWorkerGrant() on the cross-boundary dispatch path.
+  if (input.parentSessionId !== undefined && input.workerRunId !== undefined) {
+    const action = input.operation === "send" ? "worker.send" : "worker.spawn";
+    const grantResult = WorkerGrantStore.evaluate({
+      workerRunId: input.workerRunId,
+      action,
+      sessionId: input.parentSessionId,
+    });
+    if (!grantResult.allowed) {
+      return PolicyDecision.deny({
+        policyId: "subagent.delegation",
+        reasonCodes: [grantResult.reason, "worker-grant.denied"],
+        effects: [{ type: "run.abort", reason: grantResult.reason }],
+      });
+    }
   }
 
   const traceContext = createDelegationTrace(input.parentSessionId);
@@ -88,6 +117,7 @@ export async function dispatchPreDelegation(input: {
             action: `delegation.${input.operation}`,
             resource: `agent.${input.childAgent}`,
           },
+    auditEmit: Bus.publish,
   });
   for (const reg of input.middleware) {
     engine.register(reg);

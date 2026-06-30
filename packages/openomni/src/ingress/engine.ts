@@ -1,4 +1,5 @@
-import { PolicyEngine, type PolicyDecision, type PolicyRegistration } from "@openomni/agent";
+import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
+import type { PolicyRegistration } from "@openomni/agent";
 import {
   Ingress as IngressNamespace,
   type Ingress,
@@ -136,6 +137,7 @@ export namespace IngressEngine {
       const engine = PolicyEngine.create({
         traceContext: trace,
         onDecision: _middlewareDecisionObserver,
+        auditEmit: Bus.publish,
       });
       for (const reg of _ingressPolicies) {
         engine.register(reg);

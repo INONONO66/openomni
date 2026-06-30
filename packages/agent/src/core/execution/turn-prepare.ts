@@ -5,23 +5,18 @@ import { describeBudgetRemaining, effectiveBudgetThresholds } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig, TokenUsage } from "../types";
 import { createToolExecutor } from "./tool-executor";
-import { emitBudgetReassurance, emitBudgetWarning } from "./stream-events";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import { buildTurnSystemPrompt } from "./stream-prompt-policy";
-import { StreamPolicyEffects } from "./stream-policy-effects";
-import { createGuardCompleteEvent, createStreamCompleteEvent } from "./stream-result";
-import type {
-  BuildTurnResult,
-  StreamAgentBase,
-  StreamRunState,
-  TurnArtifacts,
-} from "./stream-state";
+import { emitBudgetReassurance, emitBudgetWarning } from "./run-events";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import { buildTurnSystemPrompt } from "./prompt-policy";
+import { StreamPolicyEffects } from "./policy-effects-apply";
+import { createGuardCompleteEvent, createStreamCompleteEvent } from "./run-result";
+import type { BuildTurnResult, StreamAgentBase, StreamRunState, TurnArtifacts } from "./run-state";
 import {
   recordAssistantTokenDelta,
   recordStreamToolCall,
   recordStreamTurn,
   setLastAssistantText,
-} from "./stream-state";
+} from "./run-state";
 
 export function resolveToolChoice(
   config: ChatAgentConfig,

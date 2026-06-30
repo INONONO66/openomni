@@ -2,8 +2,8 @@ import { PolicyDecision } from "@openomni/protocol";
 import { effectOf } from "./policy-effects";
 import type { PolicyEngineInstance } from "../policy";
 import type { ChatAgentConfig } from "../types";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import type { StreamRunState } from "./stream-state";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import type { StreamRunState } from "./run-state";
 
 export async function dispatchWritebackCommit(
   state: StreamRunState,

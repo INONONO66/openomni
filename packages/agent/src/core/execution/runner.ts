@@ -4,17 +4,17 @@ import { TraceContext } from "@openomni/session";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { resolveProviderModel } from "./shared";
-import { emitRunStarted, emitTurnStart } from "./stream-events";
-import { handleCompact, handleContinue, handleError, handleStop } from "./stream-flow";
-import { assertToolExecutor, buildTurn, resolveToolChoice } from "./stream-turn";
-import { buildPolicyEngine } from "./stream-policy-engine";
+import { emitRunStarted, emitTurnStart } from "./run-events";
+import { handleCompact, handleContinue, handleError, handleStop } from "./turn-outcome";
+import { assertToolExecutor, buildTurn, resolveToolChoice } from "./turn-prepare";
+import { buildPolicyEngine } from "./policy-engine-builder";
 import {
   dispatchBudgetCheck,
   dispatchModelRequest,
   dispatchModelResponse,
   dispatchPreRun,
-} from "./stream-policy-dispatch";
-import { createStreamRunState } from "./stream-state";
+} from "./lifecycle-dispatch";
+import { createStreamRunState } from "./run-state";
 
 export async function* streamAgent(
   input: ChatAgentInput,

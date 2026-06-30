@@ -1,11 +1,11 @@
 import { type Message, PolicyDecision } from "@openomni/protocol";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig } from "../types";
-import { emitCompaction, publishDenyDiagnostic } from "./stream-events";
-import { StreamPolicyEffects } from "./stream-policy-effects";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import { createGuardCompleteEvent, errorMessage } from "./stream-result";
-import { applyCompactionMessages, type StreamAgentBase, type StreamRunState } from "./stream-state";
+import { emitCompaction, publishDenyDiagnostic } from "./run-events";
+import { StreamPolicyEffects } from "./policy-effects-apply";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import { createGuardCompleteEvent, errorMessage } from "./run-result";
+import { applyCompactionMessages, type StreamAgentBase, type StreamRunState } from "./run-state";
 
 export async function dispatchPostRunTransform(
   state: StreamRunState,

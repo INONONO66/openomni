@@ -1,12 +1,13 @@
 import { Policy, PolicyDecision, type RuntimeResource } from "@openomni/protocol";
 import { composeEffects } from "./effect-composition";
 import { allowedEffectTypes, isPreBoundary, policyPointIdsForDescriptor } from "./engine-points";
-import type { PolicyRegistration } from "./types";
 
 export const COMPOSED_POLICY_ID = "agent.policy.composed";
 
 const EFFECT_VALIDATION_REASON = "policy.effect_not_allowed";
 const MIDDLEWARE_ERROR_REASON = "middleware-error";
+
+type RegistrationMeta = { name: string; priority: number };
 
 function totalDurationMs(decisions: readonly Policy.PolicyDecision[]): number {
   return decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0);
@@ -87,7 +88,7 @@ export function composeFinalDecision(
 }
 
 export function middlewareErrorDecision(
-  reg: PolicyRegistration,
+  reg: RegistrationMeta,
   durationMs: number,
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,
@@ -113,7 +114,7 @@ export function middlewareErrorDecision(
 }
 
 function invalidDecision(
-  reg: PolicyRegistration,
+  reg: RegistrationMeta,
   durationMs: number,
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,
@@ -141,7 +142,7 @@ function invalidDecision(
 
 export function normalizeDecision(
   decision: unknown,
-  reg: PolicyRegistration,
+  reg: RegistrationMeta,
   durationMs: number,
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,

@@ -75,7 +75,7 @@ describe("PolicyRegistry", () => {
           { id: "missing.optional", required: false },
           { id: "present.policy", required: true },
         ]),
-        { sessionId: "session-1", runId: "run-1", agentName: "primary" },
+        { sessionId: "session-1", runId: "run-1", agentName: "primary", auditEmit: Bus.publish },
       );
       await Promise.resolve();
 

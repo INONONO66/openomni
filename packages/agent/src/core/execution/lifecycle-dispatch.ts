@@ -3,11 +3,11 @@ import { effectOf } from "./policy-effects";
 import { checkBudget } from "../budget";
 import type { PolicyEngineInstance } from "../policy";
 import type { AgentEvent, ChatAgentConfig } from "../types";
-import { emitRunCompleted, publishDenyDiagnostic } from "./stream-events";
-import { StreamPolicyEffects } from "./stream-policy-effects";
-import { buildLifecyclePolicyContext } from "./stream-policy-context";
-import { createGuardCompleteEvent, createStreamCompleteEvent, errorMessage } from "./stream-result";
-import type { StreamAgentBase, StreamRunState } from "./stream-state";
+import { emitRunCompleted, publishDenyDiagnostic } from "./run-events";
+import { StreamPolicyEffects } from "./policy-effects-apply";
+import { buildLifecyclePolicyContext } from "./lifecycle-context";
+import { createGuardCompleteEvent, createStreamCompleteEvent, errorMessage } from "./run-result";
+import type { StreamAgentBase, StreamRunState } from "./run-state";
 
 export async function dispatchPreRun(
   state: StreamRunState,

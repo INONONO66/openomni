@@ -3,7 +3,7 @@ import type { Policy } from "@openomni/protocol";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
 import { createUserMessage } from "../message-factory";
 import type { ChatAgentConfig } from "../types";
-import { appendStreamMessages, replaceStreamMessages, type StreamRunState } from "./stream-state";
+import { appendStreamMessages, replaceStreamMessages, type StreamRunState } from "./run-state";
 
 export namespace StreamPolicyEffects {
   export function injectedPrompts(decision: Policy.PolicyDecision): string[] {

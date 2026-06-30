@@ -1,5 +1,4 @@
 import { Operational, type Policy, PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
 import {
   COMPOSED_POLICY_ID,
   composeFinalDecision,
@@ -15,25 +14,29 @@ import {
   publishPolicyEvent,
 } from "./engine-audit";
 import type {
-  AuditDispatchContext,
-  DispatchContext,
+  AuditDispatchContextGeneric,
+  DispatchContextGeneric,
+  GenericPolicyContext,
+  PolicyAuditConfig,
   PolicyEngineConfig,
-  PolicyEngineInstance,
+  PolicyEngineInstanceGeneric,
+  PolicyRegistrationGeneric,
 } from "./engine-types";
-import type { PolicyRegistration } from "./types";
-
 export type {
-  DispatchContext,
   PolicyAuditConfig,
   PolicyDecision,
   PolicyEngineConfig,
-  PolicyEngineInstance,
+  GenericPolicyContext,
+  PolicyRegistrationGeneric,
+  PolicyEngineInstanceGeneric,
+  DispatchContextGeneric,
+  AuditDispatchContextGeneric,
 } from "./engine-types";
 
 function recordDecision(
   options: PolicyEngineConfig,
-  reg: PolicyRegistration,
-  ctx: AuditDispatchContext,
+  reg: { name: string },
+  ctx: AuditDispatchContextGeneric<GenericPolicyContext>,
   decision: Policy.PolicyDecision,
 ): Policy.PolicyDecision {
   publishPolicyEvent(options, decision, reg, ctx);
@@ -55,7 +58,7 @@ function publishMiddlewareError(
   failPolicy: Policy.FailPolicy,
   durationMs: number,
 ): void {
-  Bus.publish(Operational.Warn, {
+  options.auditEmit?.(Operational.Warn, {
     traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
     time: Date.now(),
     component: "agent.policy",
@@ -71,7 +74,7 @@ function publishMiddlewareDebug(
   verdict: Policy.PolicyDecision["verdict"],
   durationMs: number,
 ): void {
-  Bus.publish(Operational.Debug, {
+  options.auditEmit?.(Operational.Debug, {
     traceId: options.traceContext?.traceId ?? crypto.randomUUID(),
     time: Date.now(),
     component: "agent.policy",
@@ -80,15 +83,20 @@ function publishMiddlewareDebug(
   });
 }
 
-function create(options: PolicyEngineConfig = {}): PolicyEngineInstance {
-  const registrations: PolicyRegistration[] = [];
+function create<TCtx extends GenericPolicyContext>(
+  options: PolicyEngineConfig = {},
+): PolicyEngineInstanceGeneric<TCtx> {
+  const registrations: PolicyRegistrationGeneric<TCtx>[] = [];
 
   async function dispatch(
     timing: Policy.Timing,
-    ctx: DispatchContext,
+    ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
   ): Promise<Policy.PolicyDecision> {
     const selected = selectRegistrations(registrations, timing, ctx.agentType);
-    const fullCtx: AuditDispatchContext = immutableSnapshot({ ...ctx, timing });
+    const fullCtx: AuditDispatchContextGeneric<TCtx> = immutableSnapshot({
+      ...ctx,
+      timing,
+    } as AuditDispatchContextGeneric<TCtx>);
     const decisions: Policy.PolicyDecision[] = [];
 
     function composeAndPublish(): Policy.PolicyDecision {

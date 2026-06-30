@@ -1,5 +1,6 @@
 import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
 import type { Policy } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import * as Definitions from "./background-limit-definitions.js";
 import { createBackgroundLaunchDescriptor, emptyUsage } from "./background-limit-decisions.js";
 import { createBackgroundLimitRegistrations } from "./background-limit-registrations.js";
@@ -48,6 +49,7 @@ export namespace BackgroundLimitsMiddleware {
         action: "delegation.background.launch",
         resource: `agent.${ctx.input.agentName}`,
       },
+      auditEmit: Bus.publish,
     });
 
     for (const registration of registrations(state)) {

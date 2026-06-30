@@ -41,6 +41,7 @@
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.27.1",
         "@openomni/llm": "workspace:*",
+        "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
         "zod": "^3.22.4",
@@ -81,6 +82,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@openomni/agent": "workspace:*",
+        "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/session": "workspace:*",
         "croner": "^10.0.1",
@@ -88,6 +90,17 @@
       },
       "devDependencies": {
         "@types/bun": "latest",
+      },
+    },
+    "packages/policy": {
+      "name": "@openomni/policy",
+      "version": "0.0.1",
+      "dependencies": {
+        "@openomni/protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5",
       },
     },
     "packages/protocol": {
@@ -225,6 +238,8 @@
     "@openomni/llm": ["@openomni/llm@workspace:packages/llm"],
 
     "@openomni/openomni": ["@openomni/openomni@workspace:packages/openomni"],
+
+    "@openomni/policy": ["@openomni/policy@workspace:packages/policy"],
 
     "@openomni/protocol": ["@openomni/protocol@workspace:packages/protocol"],
 
@@ -710,6 +725,8 @@
 
     "@openomni/openomni/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
+    "@openomni/policy/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
+
     "@openomni/server/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@openomni/session/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
@@ -741,6 +758,8 @@
     "@openomni/llm/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "@openomni/openomni/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
+
+    "@openomni/policy/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "@openomni/server/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
