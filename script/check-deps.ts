@@ -57,6 +57,12 @@ const KNOWN_DEEP_IMPORTS = new Set([
   "apps/server/src/index.ts:@openomni/agent/src/runtime/mcp",
 ]);
 
+const KNOWN_DEEP_RELATIVE_IMPORTS = new Set([
+  "packages/openomni/src/execution-runtime/tool/agent/provider.ts:../../../dispatch/index.js",
+  "packages/openomni/src/execution-runtime/tool/agent/tools/child-agent.ts:../../../child-agent/index.js",
+  "packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts:../../../../dispatch/runtime.js",
+]);
+
 const RULES: Record<PackageKey, PackageRule> = {
   protocol: {
     displayName: "protocol",
@@ -202,6 +208,17 @@ function suggestBarrelImport(importPath: string): string {
   return match ? match[1] : importPath;
 }
 
+function parentTraversalDepth(importPath: string): number {
+  let depth = 0;
+  for (const segment of importPath.split("/")) {
+    if (segment !== "..") {
+      break;
+    }
+    depth += 1;
+  }
+  return depth;
+}
+
 async function validateDependencyDirection(): Promise<string[]> {
   const violations: string[] = [];
 
@@ -265,6 +282,63 @@ async function validateDeepImports(): Promise<string[]> {
       } else {
         violations.push(base);
       }
+      match = importPattern.exec(source);
+    }
+  }
+
+  return violations;
+}
+
+async function validateDeepRelativeImports(): Promise<string[]> {
+  const violations: string[] = [];
+  const importPattern = /(?:from\s+|import\s*\(\s*)["'](\.{2}\/[^"']*)["']/g;
+  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (
+      filePath.includes("/node_modules/") ||
+      filePath.startsWith("node_modules/") ||
+      filePath.includes("/dist/") ||
+      filePath.startsWith("dist/") ||
+      isTestFile(filePath) ||
+      filePath.startsWith("script/")
+    ) {
+      continue;
+    }
+
+    const source = await Bun.file(filePath).text();
+    importPattern.lastIndex = 0;
+
+    let match = importPattern.exec(source);
+    while (match !== null) {
+      const importPath = match[1];
+      const line = lineNumberForOffset(source, match.index);
+      const key = `${filePath}:${importPath}`;
+      const isSelfRootImport = importPath.startsWith("../../src/");
+      const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
+
+      if (!isSelfRootImport && !isDeepRelativeImport) {
+        match = importPattern.exec(source);
+        continue;
+      }
+
+      const isKnown = KNOWN_DEEP_RELATIVE_IMPORTS.has(key);
+      const prefix = isKnown ? "KNOWN" : "VIOLATION";
+      const reason = isSelfRootImport ? "self-root relative import" : "deep relative import";
+      const base = `${prefix}: ${filePath}:${line} imports ${importPath} — ${reason}; use a closer relative import or a domain barrel`;
+
+      if (isKnown) {
+        console.warn(base);
+      } else {
+        violations.push(base);
+      }
+
       match = importPattern.exec(source);
     }
   }
@@ -444,9 +518,15 @@ async function checkDocFreshness(): Promise<string[]> {
 async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
   const deepImportViolations = await validateDeepImports();
+  const deepRelativeImportViolations = await validateDeepRelativeImports();
   const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
-  const violations = [...depViolations, ...deepImportViolations, ...goldenViolations];
+  const violations = [
+    ...depViolations,
+    ...deepImportViolations,
+    ...deepRelativeImportViolations,
+    ...goldenViolations,
+  ];
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
@@ -455,7 +535,7 @@ async function main(): Promise<void> {
 
   if (violations.length === 0 && freshnessWarnings.length === 0) {
     console.log(
-      "OK: dependency direction, package boundaries, golden principles, and doc freshness are valid",
+      "OK: dependency direction, import boundaries, golden principles, and doc freshness are valid",
     );
     process.exit(0);
   }

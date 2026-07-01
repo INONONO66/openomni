@@ -4,13 +4,13 @@ import {
   redactConnectorCredentialValues,
   resolveConnectorCredentialEnv,
 } from "./env.js";
-import { ingestConnectorLogs, type ConnectorLogIngestion } from "../../src/connector/log.js";
+import { ingestConnectorLogs, type ConnectorLogIngestion } from "./log.js";
 import { runConnectorProcess, type ConnectorProcessOutcome } from "./process.js";
-import type { ConnectorQuestionBridgeHandler } from "../../src/connector/question-bridge.js";
+import type { ConnectorQuestionBridgeHandler } from "./question-bridge.js";
 import { applyConnectorReadBackBuilders } from "./read-back-builder.js";
 
 export type { ConnectorEndpointCredentialMap } from "./env.js";
-export type { ConnectorQuestionBridgeHandler } from "../../src/connector/question-bridge.js";
+export type { ConnectorQuestionBridgeHandler } from "./question-bridge.js";
 
 interface ConnectorEndpointProcessDriverInput {
   readonly command: Dispatch.Command;
