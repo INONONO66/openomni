@@ -18,6 +18,14 @@ export function buildEventFilters(
     clauses.push("category = ?");
     params.push(options.category);
   }
+  if (options?.visibility !== undefined) {
+    clauses.push("visibility = ?");
+    params.push(options.visibility);
+  }
+  if (options?.visibilityIn !== undefined && options.visibilityIn.length > 0) {
+    clauses.push(`visibility IN (${options.visibilityIn.map(() => "?").join(", ")})`);
+    params.push(...options.visibilityIn);
+  }
   if (options?.after !== undefined) {
     clauses.push("time_created > ?");
     params.push(options.after);

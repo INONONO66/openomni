@@ -1,7 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
   "ignoreBinaries": ["lefthook", "tsc", "turbo"],
-  "ignoreDependencies": ["@biomejs/biome", "@commitlint/cli", "lefthook", "turbo"],
+  "ignoreDependencies": [
+    "@biomejs/biome",
+    "@commitlint/cli",
+    "lefthook",
+    "turbo"
+  ],
   "workspaces": {
     ".": {
       "entry": [

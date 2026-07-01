@@ -4,6 +4,7 @@ export interface BusEventRow {
   readonly run_id: string | null;
   readonly event_type: string;
   readonly category: string;
+  readonly visibility: string;
   readonly data: string;
   readonly trace_id: string;
   readonly duration_ms: number | null;

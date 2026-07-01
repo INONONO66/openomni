@@ -5,6 +5,7 @@ import { Bus, Session, SqliteStorageAdapter, Storage } from "@openomni/session";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   SkillLoader,
   SkillManager,
@@ -15,17 +16,23 @@ import {
 const fixedDate = new Date("2026-05-04T00:00:00.000Z");
 const actor = { kind: "user", id: "tester" };
 
-type AuditEvent = {
-  readonly type: string;
-  readonly sequence: number;
-  readonly actor?: Record<string, unknown>;
-  readonly action?: string;
-  readonly resource?: string;
-  readonly verdict?: string;
-  readonly reason?: string;
-  readonly visibility?: string;
-  readonly input?: Record<string, unknown>;
-};
+const AuditPayload = z
+  .object({
+    type: z.string(),
+    actor: z.record(z.string(), z.unknown()).optional(),
+    action: z.string().optional(),
+    resource: z.string().optional(),
+    verdict: z.string().optional(),
+    reason: z.string().optional(),
+    visibility: z.string().optional(),
+    input: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+type AuditEvent = z.infer<typeof AuditPayload>;
+
+const AuditEnvelope = z.object({
+  payload: AuditPayload,
+});
 
 let testRoot: string;
 let projectRoot: string;
@@ -50,8 +57,11 @@ beforeEach(async () => {
   collectedEvents = [];
   unsubscribe = Bus.subscribe(Operational.Info, (data) => {
     const audit = data.context?.audit;
-    if (data.component === "skill.manager" && audit) {
-      collectedEvents.push(audit as unknown as AuditEvent);
+    if (data.component !== "skill.manager") return;
+
+    const parsed = AuditEnvelope.safeParse(audit);
+    if (parsed.success) {
+      collectedEvents.push(parsed.data.payload);
     }
   });
 });
@@ -101,7 +111,6 @@ describe("SkillManager", () => {
       "policy_evaluated",
       "action_approved",
     ]);
-    expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
     expect(events[1]).toMatchObject({
       type: "policy_evaluated",
       actor,

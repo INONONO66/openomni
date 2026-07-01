@@ -4,7 +4,8 @@ type GuardRuleId =
   | "ad-hoc-list-membership"
   | "inline-channel-trigger-evaluation"
   | "inline-authorization-throw"
-  | "missing-canonical-policy-evaluator";
+  | "missing-canonical-policy-evaluator"
+  | "policy-package-boundary";
 
 interface GuardViolation {
   readonly ruleId: GuardRuleId;
@@ -42,6 +43,8 @@ const inlineAuthorizationThrowPatterns = [
   /if\s*\(\s*!\s*(?:[\w$]+\.)*(?:isAuthorized|authorized|hasAuthority|hasPermission|isAllowed|canAuthorize)(?:\s*\([^)]*\))?\s*\)\s*(?:\{\s*)?throw\b/gi,
   /if\s*\(\s*(?:[\w$]+\.)*(?:isAuthorized|authorized|hasAuthority|hasPermission|isAllowed|canAuthorize)\s*(?:===\s*false|!==\s*true)\s*\)\s*(?:\{\s*)?throw\b/gi,
 ];
+const policyPackageBoundaryPattern =
+  /(?:from\s+|import\s+)["'](@openomni\/(?:agent|session))[^"']*["']/g;
 
 async function main(): Promise<void> {
   const files = await collectSourceFiles();
@@ -53,6 +56,7 @@ async function main(): Promise<void> {
     violations.push(...validateChannelTriggerEvaluation(filePath, source));
     violations.push(...validateListMembership(filePath, source));
     violations.push(...validateInlineAuthorization(filePath, source));
+    violations.push(...validatePolicyPackageBoundary(filePath, source));
   }
 
   if (violations.length === 0) {
@@ -154,6 +158,19 @@ function validateInlineAuthorization(filePath: string, source: string): GuardVio
         "inline authorization throws belong in approved middleware or policy implementation files",
     })),
   );
+}
+
+function validatePolicyPackageBoundary(filePath: string, source: string): GuardViolation[] {
+  if (!filePath.startsWith("packages/policy/src/")) {
+    return [];
+  }
+
+  return matches(source, policyPackageBoundaryPattern).map((match) => ({
+    ruleId: "policy-package-boundary",
+    filePath,
+    line: lineNumberForOffset(source, match.index),
+    message: "packages/policy must not import from @openomni/agent or @openomni/session",
+  }));
 }
 
 function matches(source: string, pattern: RegExp): SourceMatch[] {

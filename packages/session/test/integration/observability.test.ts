@@ -13,19 +13,6 @@ function db(): Database {
   return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
 }
 
-async function waitForPersistence(expectedCount: number, sessionId?: string): Promise<void> {
-  const query = sessionId
-    ? `SELECT COUNT(*) as count FROM bus_event WHERE session_id = ?`
-    : `SELECT COUNT(*) as count FROM bus_event`;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const row = sessionId
-      ? (db().query(query).get(sessionId) as { count: number })
-      : (db().query(query).get() as { count: number });
-    if (row.count >= expectedCount) return;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-}
-
 function createSession(title = "test"): ReturnType<typeof Session.create> {
   return Session.create({
     title,
@@ -108,20 +95,23 @@ describe("Observability Pipeline Integration", () => {
         usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
       });
 
-      await waitForPersistence(7, sessionId);
+      await BusPersistence.flush();
 
       const sessionEvents = await BusQuery.listBySession(sessionId);
-      expect(sessionEvents).toHaveLength(7);
+      expect(sessionEvents).toHaveLength(4);
 
       const stats = await BusQuery.getStats(sessionId);
-      expect(stats.totalEvents).toBe(7);
-      expect(stats.byCategory.agent).toBe(2);
-      expect(stats.byCategory.llm).toBe(2);
-      expect(stats.byCategory.tool).toBe(2);
+      expect(stats.totalEvents).toBe(4);
+      expect(stats.byCategory.agent).toBe(1);
+      expect(stats.byCategory.llm).toBe(1);
+      expect(stats.byCategory.tool).toBe(1);
       expect(stats.byCategory.session).toBe(1);
 
       const runEvents = await BusQuery.listByRun(runId);
-      expect(runEvents.length).toBeGreaterThanOrEqual(4);
+      expect(runEvents.map((event) => event.eventType).sort()).toEqual([
+        "agent.turn.complete",
+        "tool.execution.completed",
+      ]);
     });
   });
 
@@ -159,17 +149,19 @@ describe("Observability Pipeline Integration", () => {
       const session = createSession("cascade");
       const sessionId = session.id;
 
-      Bus.publish(LlmCall.Started, {
+      Bus.publish(LlmCall.Completed, {
         traceId: "t-cascade",
         sessionId,
         time: Date.now(),
         provider: "openai",
         model: "gpt-4",
-        messageCount: 1,
-        toolCount: 0,
+        durationMs: 300,
+        inputTokens: 10,
+        outputTokens: 5,
+        finishReason: "end_turn",
       });
 
-      await waitForPersistence(2, sessionId);
+      await BusPersistence.flush();
 
       const beforeCount = db()
         .query("SELECT COUNT(*) as count FROM bus_event WHERE session_id = ?")
@@ -234,20 +226,19 @@ describe("Observability Pipeline Integration", () => {
         finishReason: "end_turn",
       });
 
-      await waitForPersistence(4, sessionA.id);
-      await waitForPersistence(3, sessionB.id);
+      await BusPersistence.flush();
 
       const eventsA = await BusQuery.listBySession(sessionA.id);
-      expect(eventsA).toHaveLength(4);
+      expect(eventsA).toHaveLength(2);
 
       const eventsB = await BusQuery.listBySession(sessionB.id);
-      expect(eventsB).toHaveLength(3);
+      expect(eventsB).toHaveLength(2);
 
       const statsA = await BusQuery.getStats(sessionA.id);
-      expect(statsA.totalEvents).toBe(4);
+      expect(statsA.totalEvents).toBe(2);
 
       const statsB = await BusQuery.getStats(sessionB.id);
-      expect(statsB.totalEvents).toBe(3);
+      expect(statsB.totalEvents).toBe(2);
     });
   });
 });

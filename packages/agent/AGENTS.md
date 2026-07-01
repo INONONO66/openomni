@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the runtime registry, messenger, and MCP client. Depends on `@openomni/protocol`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the runtime registry, messenger, and MCP client. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
 
 ## STRUCTURE
 
@@ -35,7 +35,7 @@ src/
 └── runtime/
     ├── index.ts                # Re-exports registry / tools / mcp
     ├── registry/
-    │   └── registry.ts         # AgentRegistry.define / get / list / override (AgentProfile.Definition store)
+    │   └── registry.ts         # AgentRegistry.define / get / list / override (generic in-memory profile store)
     ├── tools/
     │   └── index.ts            # Runtime tool helper exports
     └── mcp/
@@ -137,7 +137,27 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
   │            └─ dispatch(error) → retry (shouldRetry) or throw
 ```
 
-## RUNTIME (MULTI-AGENT)
+## OWNERSHIP BOUNDARY
+
+Allowed here:
+
+- Stateless `ChatAgent` execution and streaming.
+- Generic `PolicyEngine` and policy timing dispatch.
+- Generic tool invocation contracts and tool executor wrapping.
+- Generic MCP client primitives when no server/OpenOmni product behavior is embedded.
+
+Not allowed here:
+
+- Creating, resolving, or mutating OpenOmni sessions for product orchestration.
+- Choosing whether a message targets Resident, Worker, external actor, schedule, or surface.
+- Looking up `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing.
+- Encoding OpenOmni actor trust, channel grants, worker grants, or external-response lifecycle rules.
+- Persisting durable background task state; background persistence is an OpenOmni/session responsibility.
+- Owning channel-specific or server-specific MCP/tool wiring.
+
+When in doubt, keep the agent package as a loop engine and put product semantics in `packages/openomni`.
+
+## RUNTIME PRIMITIVES
 
 - **AgentRegistry** — global in-memory store of `AgentProfile.Definition` entries keyed by `name`. `define`, `get`, `has`, `list`, `override`, `clear`.
 - **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`.
@@ -155,3 +175,4 @@ streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
 - Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `invoke.prepare` policy so behavior is uniform.
+- Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

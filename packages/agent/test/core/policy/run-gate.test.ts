@@ -31,10 +31,10 @@ const mockLlm = createMockLlmConfig({
   },
 });
 
-let streamAgent: typeof import("../../../src/core/execution/stream-engine").streamAgent;
+let streamAgent: typeof import("../../../src/core/execution/runner").streamAgent;
 
 beforeAll(async () => {
-  ({ streamAgent } = await import("../../../src/core/execution/stream-engine"));
+  ({ streamAgent } = await import("../../../src/core/execution/runner"));
 });
 
 const defaultConfig: ChatAgentConfig = {

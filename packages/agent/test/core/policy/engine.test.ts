@@ -442,6 +442,7 @@ describe("PolicyEngine", () => {
         onDecision: () => {
           throw new Error("observer failed");
         },
+        auditEmit: Bus.publish,
       });
       engine.register({
         name: "observer-isolation",
@@ -484,6 +485,7 @@ describe("PolicyEngine", () => {
         onDecision: async () => {
           throw new Error("async observer failed");
         },
+        auditEmit: Bus.publish,
       });
       engine.register({
         name: "async-observer-isolation",
@@ -551,6 +553,7 @@ describe("PolicyEngine", () => {
           runId: "run-policy",
           agentName: "policy-agent",
         },
+        auditEmit: Bus.publish,
       });
       engine.register({
         name: "policy-check",

@@ -18,6 +18,7 @@ export namespace LlmCall {
       messageCount: z.number(),
       toolCount: z.number(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const Completed = BusEvent.define(
@@ -33,6 +34,7 @@ export namespace LlmCall {
       cacheWriteTokens: Token.Count.default(0),
       finishReason: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const RetryDecided = BusEvent.define(
@@ -43,6 +45,7 @@ export namespace LlmCall {
       reason: z.string(),
       backoffMs: z.number(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const RateLimited = BusEvent.define(
@@ -51,5 +54,6 @@ export namespace LlmCall {
       provider: z.string(),
       retryAfterMs: z.number(),
     }),
+    { visibility: "llm_reason" },
   );
 }

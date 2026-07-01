@@ -15,6 +15,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0008_channel_grant/migration.sql" },
   { name: "0009_pending_interaction/migration.sql" },
   { name: "0010_app_connector_installation/migration.sql" },
+  { name: "0011_bus_event_visibility/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

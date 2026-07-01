@@ -80,15 +80,19 @@ const EventBase = z.object({
 });
 
 export const Events = {
-  Opened: BusEvent.define("pending_interaction.opened", EventBase),
+  Opened: BusEvent.define("pending_interaction.opened", EventBase, { visibility: "llm_reason" }),
   Resolved: BusEvent.define(
     "pending_interaction.resolved",
     EventBase.extend({ resolvedAt: z.number() }),
+    { visibility: "llm_reason" },
   ),
-  FollowUp: BusEvent.define("pending_interaction.follow_up", EventBase),
+  FollowUp: BusEvent.define("pending_interaction.follow_up", EventBase, {
+    visibility: "llm_reason",
+  }),
   Cancelled: BusEvent.define(
     "pending_interaction.cancelled",
     EventBase.extend({ cancelledAt: z.number() }),
+    { visibility: "llm_reason" },
   ),
-  Expired: BusEvent.define("pending_interaction.expired", EventBase),
+  Expired: BusEvent.define("pending_interaction.expired", EventBase, { visibility: "llm_reason" }),
 } as const;

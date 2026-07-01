@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, type Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
+import { z } from "zod";
 import { PolicyRegistry, defaultRegistry } from "../../../src/core/policy";
 import type { PolicyFactory } from "../../../src/core/policy";
 import { allow } from "../../helpers/policy-decision";
@@ -28,9 +29,10 @@ describe("PolicyRegistry", () => {
   });
 
   it("resolve() with a valid plan returns policy registrations", () => {
+    const FactoryConfig = z.object({ mode: z.string() });
     const registry = PolicyRegistry.create();
     const factory: PolicyFactory = (config, runtime) => ({
-      name: `test:${runtime.agentName}:${(config as { mode: string }).mode}`,
+      name: `test:${runtime.agentName}:${FactoryConfig.parse(config).mode}`,
       timing: "turn.start",
       priority: 10,
       fn: () => allow(),
@@ -44,6 +46,55 @@ describe("PolicyRegistry", () => {
 
     expect(registrations).toHaveLength(1);
     expect(registrations[0]?.name).toBe("test:primary:strict");
+  });
+
+  it("defaultRegistry() resolves typed builtin configs", () => {
+    const registrations = defaultRegistry().resolve(
+      plan([
+        {
+          id: "builtin:compaction",
+          required: true,
+          config: { contextWindowTokens: 1000, thresholdRatio: 0.8 },
+        },
+        { id: "builtin:idle-nudge", required: true, config: { idleThresholdMs: 1000 } },
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          config: { permission: { action: "tool.call", allowlist: ["read_file"] } },
+        },
+      ]),
+      {},
+    );
+
+    expect(registrations.map((registration) => registration.name)).toEqual([
+      "builtin:compaction",
+      "builtin:idle-nudge",
+      "builtin:tool-permission",
+    ]);
+  });
+
+  it("defaultRegistry() resolves configless default builtin policies", () => {
+    const registrations = defaultRegistry().resolve(
+      plan([
+        { id: "builtin:idle-nudge", required: true },
+        { id: "builtin:tool-permission", required: true },
+      ]),
+      {},
+    );
+
+    expect(registrations.map((registration) => registration.name)).toEqual([
+      "builtin:idle-nudge",
+      "builtin:tool-permission",
+    ]);
+  });
+
+  it("defaultRegistry() rejects malformed builtin configs at resolution", () => {
+    expect(() =>
+      defaultRegistry().resolve(
+        plan([{ id: "builtin:compaction", required: true, config: { thresholdRatio: 0.8 } }]),
+        {},
+      ),
+    ).toThrow();
   });
 
   it("resolve() with a missing required policy throws", () => {
@@ -75,7 +126,7 @@ describe("PolicyRegistry", () => {
           { id: "missing.optional", required: false },
           { id: "present.policy", required: true },
         ]),
-        { sessionId: "session-1", runId: "run-1", agentName: "primary" },
+        { sessionId: "session-1", runId: "run-1", agentName: "primary", auditEmit: Bus.publish },
       );
       await Promise.resolve();
 

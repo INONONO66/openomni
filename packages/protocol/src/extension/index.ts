@@ -81,20 +81,36 @@ export namespace Extension {
   });
 
   export namespace Events {
-    export const Proposed = BusEvent.define("extension.proposed", EventBase);
-    export const Approved = BusEvent.define("extension.approved", EventBase);
-    export const Staged = BusEvent.define("extension.staged", EventBase);
-    export const Installed = BusEvent.define("extension.installed", EventBase);
-    export const Enabled = BusEvent.define("extension.enabled", EventBase);
-    export const Disabled = BusEvent.define("extension.disabled", EventBase);
+    export const Proposed = BusEvent.define("extension.proposed", EventBase, {
+      visibility: "llm_reason",
+    });
+    export const Approved = BusEvent.define("extension.approved", EventBase, {
+      visibility: "llm_reason",
+    });
+    export const Staged = BusEvent.define("extension.staged", EventBase, {
+      visibility: "internal",
+    });
+    export const Installed = BusEvent.define("extension.installed", EventBase, {
+      visibility: "llm_reason",
+    });
+    export const Enabled = BusEvent.define("extension.enabled", EventBase, {
+      visibility: "llm_reason",
+    });
+    export const Disabled = BusEvent.define("extension.disabled", EventBase, {
+      visibility: "llm_reason",
+    });
     export const RolledBack = BusEvent.define(
       "extension.rolled_back",
       EventBase.extend({ fromVersion: z.string() }),
+      { visibility: "llm_reason" },
     );
-    export const Uninstalled = BusEvent.define("extension.uninstalled", EventBase);
+    export const Uninstalled = BusEvent.define("extension.uninstalled", EventBase, {
+      visibility: "llm_reason",
+    });
     export const Failed = BusEvent.define(
       "extension.failed",
       EventBase.extend({ error: z.string() }),
+      { visibility: "llm_reason" },
     );
   }
 }

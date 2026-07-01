@@ -1,4 +1,5 @@
-import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import { PolicyEngine } from "@openomni/policy";
+import type { PolicyRegistration } from "@openomni/agent";
 import { PolicyDecision } from "@openomni/protocol";
 import { resolveTarget } from "../target";
 import { targetRequiresCoordinator } from "./ingress-authority-actor";

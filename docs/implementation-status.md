@@ -6,6 +6,17 @@ Single source of truth for the gap between accepted design and running code. Oth
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 
+## Issue Tracking Snapshot
+
+| Issue | Status | Implementation state |
+| --- | --- | --- |
+| #213 task ledger + completion-report evidence gate | Closed 2026-06-18 | ✅ WorkItem schema/store, evidence gate, read-back invocation, retry exhaustion, and `show open tasks` are wired |
+| #221 authority evaluation chain | Closed 2026-06-18 | ✅ Blacklist, ChannelGrant, TrustTier evaluation, and effectiveAuthority are wired |
+| #215 ActorIdentity + PendingInteraction migration | Open | 🚧 Core Actor/PI schemas, stores, resolver, correlation routing, boot cleanup, and executorKind are wired; full outbound ask proof, partial-response dependency semantics, and complete restart proof remain the issue gate |
+| #216 installed app connector runtime | Open | 🚧 AppConnector ABI, discovery/register/consent storage, endpoint dispatch, log ingestion, stall detection, and evidence projection are wired; CLI UX, full smoke-verify lifecycle, durable question suspension/resumption, and real Claude Code proof remain |
+| #217 durable boot contract | Open | 🚧 Cron persistence/runner and PI boot cleanup are wired; interrupted-run resume-offer surface and combined boot integration proof remain |
+| #222 remove deprecated `AgentProfile.permissions` | Open | 🚧 Runtime warning path is gone, but the schema field remains and needs removal or wiring plus a migration note |
+
 ## Three-layer message flow (ADR-009)
 
 | Component | Status | Code | Notes |
@@ -104,7 +115,7 @@ Everything else behavior-shaping (delegation judgment, session hygiene, evidence
 
 | Item | Action |
 | --- | --- |
-| `AgentProfile.Definition.permissions` is defined but ignored at runtime (warning + `policyPlan` supersedes) | Remove the field or wire it; a schema field that lies violates ADR-002's intent |
+| `AgentProfile.Definition.permissions` remains in the protocol schema after the ignored-config warning path was removed | Remove the field or wire it; a schema field that lies violates ADR-002's intent. Tracked by #222 |
 | `docs/vision.local.md` (v0.2) predates single-mode ingress and current package layout | Refresh or mark archived |
 | `docs/persona-runtime-roadmap.local.md` uses pre-ADR-009 vocabulary (Main/Sub Persona) | Re-vocabulary or fold into ADR-010 ordering |
 

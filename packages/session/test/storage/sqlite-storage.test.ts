@@ -239,6 +239,7 @@ describe("SqliteStorageAdapter", () => {
         "time_created",
         "prev_hash",
         "event_hash",
+        "visibility",
       ]);
       expect(tableColumns(db, "event_chain")).toEqual([
         "seq",
@@ -274,6 +275,7 @@ describe("SqliteStorageAdapter", () => {
           "idx_bus_event_run_time",
           "idx_bus_event_type_session",
           "idx_bus_event_category_session",
+          "idx_bus_event_visibility_session",
           "idx_bus_event_trace",
           "idx_bus_event_hash",
         ]),

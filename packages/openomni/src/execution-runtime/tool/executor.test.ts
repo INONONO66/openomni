@@ -457,20 +457,18 @@ describe("createToolExecutor", () => {
       expect(result.output).toBe("written");
       expect(eventNames).toEqual([
         "policy.action.requested",
-        "policy.evaluated",
         "tool.execution.started",
-        "policy.evaluated",
         "tool.execution.completed",
       ]);
       expect(events[0]?.payload).toMatchObject({
         action: "tool.call",
         resource: "write",
       });
-      expect(events[2]?.payload).toMatchObject({
+      expect(events[1]?.payload).toMatchObject({
         toolCallId: "call-1",
         toolName: "write",
       });
-      expect(events[4]?.payload).toMatchObject({
+      expect(events[2]?.payload).toMatchObject({
         toolCallId: "call-1",
         toolName: "write",
         isError: false,
@@ -508,9 +506,7 @@ describe("createToolExecutor", () => {
       expect(executions).toBe(1);
       expect(eventNames).toEqual([
         "policy.action.requested",
-        "policy.evaluated",
         "tool.execution.started",
-        "policy.evaluated",
         "tool.execution.completed",
       ]);
       expect(events.some((e) => e.name === "policy.action.blocked")).toBe(false);

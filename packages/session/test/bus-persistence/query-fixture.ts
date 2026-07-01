@@ -35,6 +35,7 @@ export function insertEvent(input: {
   readonly runId?: string;
   readonly type: string;
   readonly category: string;
+  readonly visibility?: "internal" | "llm_reason" | "user_audit" | "ephemeral";
   readonly data?: Record<string, unknown>;
   readonly traceId: string;
   readonly durationMs?: number;
@@ -43,14 +44,15 @@ export function insertEvent(input: {
   db()
     .query(
       `INSERT INTO bus_event
-       (session_id, run_id, event_type, category, data, trace_id, duration_ms, time_created)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.sessionId,
       input.runId ?? null,
       input.type,
       input.category,
+      input.visibility ?? "internal",
       JSON.stringify(input.data ?? {}),
       input.traceId,
       input.durationMs ?? null,

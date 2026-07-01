@@ -1,5 +1,5 @@
-import { Policy, Operational } from "@openomni/protocol";
-import { Bus, Storage } from "@openomni/session";
+import { Policy } from "@openomni/protocol";
+import { AuditLog, Storage } from "@openomni/session";
 import type { SkillOperationOptions } from "./manager";
 
 export type SkillAction =
@@ -16,7 +16,6 @@ interface AuditBase {
   readonly parentActionId?: string;
   readonly visibility: AuditVisibility;
   readonly timestamp: string;
-  readonly sequence: number;
 }
 
 interface AuditActionRequested extends AuditBase {
@@ -75,8 +74,6 @@ export interface AuditState {
 
 const AUDIT_VISIBILITY: AuditVisibility = "internal";
 const MAX_AUDIT_TEXT_LENGTH = 256;
-
-const auditSequences = new Map<string, number>();
 
 export async function beginOperation(
   options: SkillOperationOptions,
@@ -223,30 +220,24 @@ async function appendAuditEvent<T extends AuditEvent>(
     readonly parentActionId?: string;
     readonly visibility: AuditVisibility;
     readonly timestamp: string;
-    readonly sequence: number;
   }) => T,
   now: () => Date,
   parentActionId?: string,
 ): Promise<T> {
-  const prev = auditSequences.get(sessionId) ?? 0;
-  const sequence = prev + 1;
-  auditSequences.set(sessionId, sequence);
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const actionId = `${sessionId}:${eventType}:skill:${suffix}`;
   const row = event({
-    actionId: `${sessionId}:${eventType}:skill:${sequence}`,
+    actionId,
     ...(parentActionId !== undefined ? { parentActionId } : {}),
     visibility: AUDIT_VISIBILITY,
     timestamp: now().toISOString(),
-    sequence,
   });
 
-  Bus.publish(Operational.Info, {
-    traceId: sessionId,
-    time: Date.now(),
-    sessionId,
-    component: "skill.manager",
-    msg: eventType,
-    context: { audit: row as unknown as Record<string, unknown> },
-  });
+  AuditLog.create(sessionId, "skill.manager").append(
+    eventType,
+    row as unknown as Record<string, unknown>,
+    parentActionId,
+  );
   return row;
 }
 

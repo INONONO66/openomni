@@ -101,15 +101,15 @@ Architecturally, memory is a **built-in layer plus a pluggable engine port** ([A
 
 ## How It Works — Current and Target
 
-Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch**. The layer chain and the dispatch chokepoint are implemented; most of the authority evaluation inside dispatch is accepted design (ADR-009) that has not landed yet. Per-component truth lives in [Implementation Status](implementation-status.md).
+Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch**. The layer chain, dispatch chokepoint, actor resolution, PendingInteraction routing, and the core ADR-009 authority axes are implemented. Per-component truth lives in [Implementation Status](implementation-status.md).
 
-Status legend: ✅ implemented · 📋 designed (ADR-009), not implemented.
+Status legend: ✅ implemented · 🚧 partially implemented · 📋 designed, not implemented.
 
 - **server channel adapter** (`apps/server/`) ✅ — channel-specific transport. Adds the SDK detail; outputs a channel-agnostic `InboundMessage`.
-- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Resolves a default session candidate (`SessionResolver`) ✅ and hands off to dispatch ✅. Actor identification (`ActorResolver`) 📋 — today the actor arrives pre-stamped by the caller; ingress does not resolve identity.
-- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Policy authorization and handler routing ✅ (WorkerGrant is the one authority axis evaluated today). Blacklist 📋, PendingInteraction match with session override 📋, channel grant 📋, `TrustTier` 📋, `effectiveAuthority` 📋, PendingInteraction lifecycle 📋.
+- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Resolves a default session candidate (`SessionResolver`) ✅, resolves registered actors (`ActorResolver`) ✅, applies inbound Blacklist / ChannelGrant / TrustTier checks ✅, and hands off to dispatch ✅.
+- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Policy authorization and handler routing ✅. WorkerGrant evaluation, PendingInteraction match with session override, Blacklist, ChannelGrant facts, `TrustTier`, `effectiveAuthority`, and PendingInteraction lifecycle are implemented ✅. External egress handlers exist but still require concrete server/channel/API owners 🚧.
 
-Outbound follows the same shape: a Worker or the Resident calls `dispatch.submit(...)` ✅ for internal targets (resident, workers, schedule). External egress targets (`human_channel`, `a2a`, `external_api`) 📋.
+Outbound follows the same shape: a Worker or the Resident calls `dispatch.submit(...)` ✅ for internal targets (resident, workers, schedule). External egress actions (`external.ask`, `a2a.ask`, `api.ask`) are protocol and dispatch-handler surfaces with fail-closed owner injection 🚧; concrete delivery adapters are still pending.
 
 See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#scenarios) for five end-to-end target traces — Owner DM, Task Outreach, External reply (PI matched), Public channel unsolicited, External AI API call. [ADR-010](design-decisions/010-agent-os-kernel-model.md) frames this pipeline as the kernel's syscall gate and PendingInteraction as its blocking-wait primitive.
 
