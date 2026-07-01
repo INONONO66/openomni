@@ -1,12 +1,29 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "extends": ["ultracite/biome/core"],
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "assist": { "enabled": false },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "off",
+        "useSortedAttributes": "off",
+        "useSortedInterfaceMembers": "off",
+        "useSortedProperties": "off"
+      }
+    }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
     "lineWidth": 100
+  },
+  "javascript": {
+    "globals": ["Bun"],
+    "formatter": {
+      "trailingCommas": "all"
+    }
   },
   "linter": {
     "enabled": true,
@@ -15,25 +32,66 @@
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "warn",
+        "useParseIntRadix": "off",
         "useYield": "warn"
       },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "noExtraBooleanCast": "off",
+        "noForEach": "off",
+        "noUselessUndefined": "off",
+        "noVoid": "off",
+        "useIndexOf": "off",
+        "useSimplifiedLogicExpression": "off"
+      },
+      "performance": {
+        "noDelete": "off",
+        "noBarrelFile": "off",
+        "noNamespaceImport": "off",
+        "useTopLevelRegex": "off"
+      },
+      "style": {
+        "noSubstr": "off",
+        "noExportedImports": "off",
+        "noNegationElse": "off",
+        "noNestedTernary": "off",
+        "noNamespace": "off",
+        "noParameterProperties": "off",
+        "useAtIndex": "off",
+        "useBlockStatements": "off",
+        "useConsistentArrayType": "off",
+        "useConsistentArrowReturn": "off",
+        "useConsistentMemberAccessibility": "off",
+        "useConsistentObjectDefinitions": "off",
+        "useConsistentTypeDefinitions": "off",
+        "useDefaultSwitchClause": "off",
+        "useForOf": "off",
+        "useNumberNamespace": "off",
+        "useNumericSeparators": "off",
+        "useReadonlyClassProperties": "off",
+        "useShorthandAssign": "off",
+        "useUnifiedTypeSignatures": "off",
+        "noUnusedTemplateLiteral": "off"
+      },
       "suspicious": {
+        "noBitwiseOperators": "off",
         "noExplicitAny": "warn",
         "noEmptyBlockStatements": "error",
         "noImplicitAnyLet": "warn",
         "noAssignInExpressions": "warn",
-        "noFallthroughSwitchClause": "warn"
+        "noFallthroughSwitchClause": "warn",
+        "noTsIgnore": "off",
+        "useAwait": "off"
       }
     }
   },
   "files": {
     "includes": [
-      "**",
-      "!**/dist/**",
-      "!**/node_modules/**",
-      "!**/.turbo/**",
-      "!**/.omx/**",
-      "!.omx/**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.turbo",
+      "!**/.omx",
+      "!.omx",
       "!bun.lock",
       "!**/*.lock"
     ]
