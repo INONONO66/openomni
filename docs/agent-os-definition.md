@@ -1,6 +1,6 @@
 # What Is an Agent OS — Definition and Qualification Tests
 
-OpenOmni's stated target category is "Agent OS." This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. The project's own scorecard is at the bottom; it is not flattering, by design.
+OpenOmni's root claim is "a single-Owner Agent OS" ([Design Philosophy](design-philosophy.md)). This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. The project's own scorecard is at the bottom; it is not flattering, by design.
 
 ## 1. What an OS functionally is
 

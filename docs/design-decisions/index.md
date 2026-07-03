@@ -1,6 +1,8 @@
 # Architecture Decision Records
 
-Design decisions that shaped OpenOmni. Each record captures **why** a decision was made, not just what. For the overarching design principles, see [Design Philosophy](../design-philosophy.md).
+Design decisions that shaped OpenOmni. Each record captures **why** a decision was made, not just what.
+
+> **Normative status (2026-07-03).** The philosophy-v2 rewrite made [Design Philosophy](../design-philosophy.md), [Core Model](../core-model.md), and [Architecture](../architecture.md) the normative documents. ADRs remain as historical decision records and detailed contract references (notably 009–013); **where an ADR conflicts with the newer docs, the newer docs win** — in particular the three-tier vocabulary in Core Model supersedes ADR-009's seven-category map, and the package-ring target in Architecture supersedes ADR-003's linear chain. Contract detail from 009–013 is being absorbed into Core Model/Architecture; ADRs will be marked Superseded as absorption completes.
 
 ## How the project evolved
 

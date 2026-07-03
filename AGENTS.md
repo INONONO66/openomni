@@ -3,11 +3,11 @@
 
 ## OVERVIEW
 
-OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) for full rationale.
+OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
 
-Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md)–[013](docs/design-decisions/013-memory-engine-port.md) (proposed) frame the target as an Agent OS kernel (010) with a task ledger + evidence gate (011), an incident-driven Governor (012), and a pluggable memory port (013). **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs, package rings, migration phases). ADRs in `docs/design-decisions/` are historical decision records; where they conflict with core-model/architecture, the newer docs win. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 ## STRUCTURE
 
@@ -110,7 +110,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 
 ## PRODUCT MODEL
 
-> Product terminology: **Owner** (the human operator), **Resident** (formerly Main Persona), **Worker** (formerly Sub Persona + external actors), **System Governor** (structural improvement layer). Full vocabulary in [`docs/core-model.md`](docs/core-model.md); authority model and scenarios in [ADR-009](docs/design-decisions/009-external-actor-authority-model.md).
+> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — zero-authority real-time cross-check). Three-tier vocabulary in [`docs/core-model.md`](docs/core-model.md); historical authority-model detail in [ADR-009](docs/design-decisions/009-external-actor-authority-model.md).
 
 ### Subjects
 
