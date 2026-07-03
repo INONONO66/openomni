@@ -17,6 +17,7 @@ export namespace ToolExecution {
     Base.extend({
       inputSummary: z.string().optional(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const Completed = BusEvent.define(
@@ -25,6 +26,7 @@ export namespace ToolExecution {
       durationMs: z.number(),
       isError: z.boolean(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const PermissionDenied = BusEvent.define(
@@ -32,6 +34,7 @@ export namespace ToolExecution {
     Base.extend({
       reason: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const TimedOut = BusEvent.define(
@@ -39,5 +42,6 @@ export namespace ToolExecution {
     Base.extend({
       timeoutMs: z.number(),
     }),
+    { visibility: "llm_reason" },
   );
 }

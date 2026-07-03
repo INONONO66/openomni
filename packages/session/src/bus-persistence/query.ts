@@ -48,6 +48,13 @@ export namespace BusQuery {
     return EventQuery.listErrors(sessionId);
   }
 
+  export function listForLlmReasoning(
+    sessionId: string,
+    options?: Omit<QueryOptions, "visibility" | "visibilityIn">,
+  ): Promise<EventRecord[]> {
+    return EventQuery.listForLlmReasoning(sessionId, options);
+  }
+
   /**
    * Get aggregated statistics about events in a session.
    * @param sessionId - The session ID to query

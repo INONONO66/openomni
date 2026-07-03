@@ -18,7 +18,7 @@ InboundEvent
         └─→ IngressHandlers.handleDirect() → coordinator.dispatch() → ChatAgent.run()
 ```
 
-Only `direct` mode exists. Delegated or asynchronous work is handled through `SubagentRuntime` / `BackgroundManager`.
+Only `direct` mode exists. Delegated or asynchronous work is handled through `dispatch` and coordinator-managed Worker runs.
 
 ### Controlled Inbound Authority
 

@@ -1,0 +1,19 @@
+{
+  "name": "@openomni/policy",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "bunx biome check ./src",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@openomni/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

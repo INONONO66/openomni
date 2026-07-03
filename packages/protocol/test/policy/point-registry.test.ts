@@ -12,12 +12,10 @@ const expectedPointIds = [
   "connection.llm.post",
   "tool.native.pre",
   "tool.mcp.pre",
-  "delegation.subagent.pre",
-  "delegation.background.pre",
+  "delegation.worker.pre",
   "tool.native.post",
   "tool.mcp.post",
-  "delegation.subagent.post",
-  "delegation.background.post",
+  "delegation.worker.post",
   "run.turn.post",
   "run.completion.pre",
   "session.writeback.pre",
@@ -90,14 +88,12 @@ describe("PolicyPoint registry", () => {
     expect(aliases[Policy.Timing.INVOKE_PREPARE]).toEqual([
       "tool.native.pre",
       "tool.mcp.pre",
-      "delegation.subagent.pre",
-      "delegation.background.pre",
+      "delegation.worker.pre",
     ]);
     expect(aliases[Policy.Timing.INVOKE_RESULT]).toEqual([
       "tool.native.post",
       "tool.mcp.post",
-      "delegation.subagent.post",
-      "delegation.background.post",
+      "delegation.worker.post",
     ]);
 
     for (const pointIds of Object.values(aliases)) {

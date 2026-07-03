@@ -18,6 +18,7 @@ export namespace IngressEvent {
       target: IngressTargetLabel,
       payloadLength: z.number(),
     }),
+    { visibility: "user_audit" },
   );
 
   export const ModeDetected = BusEvent.define(
@@ -27,6 +28,7 @@ export namespace IngressEvent {
       mode: z.enum(["plan", "direct", "internal"]),
       target: IngressTargetLabel,
     }),
+    { visibility: "ephemeral" },
   );
 
   export const SessionResolved = BusEvent.define(
@@ -36,6 +38,7 @@ export namespace IngressEvent {
       isNew: z.boolean(),
       target: z.enum(["resident", "worker"]).optional(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const Completed = BusEvent.define(
@@ -46,6 +49,7 @@ export namespace IngressEvent {
       target: IngressTargetLabel,
       durationMs: z.number(),
     }),
+    { visibility: "user_audit" },
   );
 
   export const Failed = BusEvent.define(
@@ -57,5 +61,6 @@ export namespace IngressEvent {
       durationMs: z.number(),
       error: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 }

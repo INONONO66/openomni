@@ -24,12 +24,12 @@ function makeTool(name: string): NativeTool {
 }
 
 describe("AgentToolProvider", () => {
-  it("includes the built-in subagent tool", () => {
+  it("includes the built-in dispatch tool", () => {
     const provider = new AgentToolProvider();
     const tools = provider.listTools();
 
     expect(tools.length).toBeGreaterThanOrEqual(1);
-    expect(tools.some((t) => t.spec.name === "subagent")).toBe(true);
+    expect(tools.some((t) => t.spec.name === "dispatch")).toBe(true);
   });
 
   it("register appends an extra tool to the list", () => {

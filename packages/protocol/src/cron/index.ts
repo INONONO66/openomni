@@ -35,6 +35,7 @@ export namespace CronJob {
         agentName: z.string(),
         schedule: z.string(),
       }),
+      { visibility: "llm_reason" },
     );
 
     export const CronJobFired = BusEvent.define(
@@ -43,6 +44,7 @@ export namespace CronJob {
         jobId: z.string(),
         agentName: z.string(),
       }),
+      { visibility: "user_audit" },
     );
 
     export const CronJobCancelled = BusEvent.define(
@@ -50,6 +52,7 @@ export namespace CronJob {
       BaseEvent.extend({
         jobId: z.string(),
       }),
+      { visibility: "llm_reason" },
     );
   }
 }

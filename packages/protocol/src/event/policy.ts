@@ -38,6 +38,7 @@ export namespace PolicyEvent {
       resource: z.string(),
       context: z.record(z.string(), z.unknown()).optional(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const Evaluated = BusEvent.define(
@@ -51,6 +52,7 @@ export namespace PolicyEvent {
       reason: z.string(),
       beforeSideEffect: z.record(z.string(), z.unknown()).optional(),
     }).merge(PolicyAuditContext),
+    { visibility: "llm_reason" },
   );
 
   export const DecisionComposed = BusEvent.define(
@@ -62,6 +64,7 @@ export namespace PolicyEvent {
       verdict: EffectiveVerdict,
       reason: z.string(),
     }).merge(PolicyAuditContext),
+    { visibility: "llm_reason" },
   );
 
   export const ActionBlocked = BusEvent.define(
@@ -74,6 +77,7 @@ export namespace PolicyEvent {
       verdict: z.enum(["allow", "deny", "pending"]),
       reason: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const ActionApproved = BusEvent.define(
@@ -86,5 +90,6 @@ export namespace PolicyEvent {
       verdict: z.enum(["allow", "deny", "pending"]),
       reason: z.string(),
     }),
+    { visibility: "ephemeral" },
   );
 }

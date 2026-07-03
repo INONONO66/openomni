@@ -1,5 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import { getSDK, getLanguage, type Provider } from "../../src/provider/index";
+import { getSDK, getLanguage } from "../../src/provider/sdk";
+import type { Provider } from "../../src/provider";
 import type { Auth } from "../../src/auth";
 
 const originalFetch = globalThis.fetch;

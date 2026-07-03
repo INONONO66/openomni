@@ -1,4 +1,5 @@
-import type { PolicyDecision, PolicyRegistration } from "@openomni/agent";
+import type { PolicyDecision } from "@openomni/policy";
+import type { PolicyRegistration } from "@openomni/agent";
 import type { Ingress, TraceContext as TraceContextProtocol } from "@openomni/protocol";
 import type { ResidentRuntime } from "../resident/runtime";
 import type { CoordinatorLike } from "./coordinator-like";

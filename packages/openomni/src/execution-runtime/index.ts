@@ -4,16 +4,23 @@ export { InjectionQueue } from "./injection-queue.js";
 export { CronJobRegistry } from "./cron-job-registry.js";
 export { CronJobRunner } from "./cron-job-runner.js";
 export { WorkspaceLock } from "./workspace-lock.js";
+export { createChildAgentRuntime } from "./child-agent/index.js";
+export { ChildAgentEvents } from "./child-agent/index.js";
+export type {
+  ChildAgentRuntime,
+  ChildAgentRuntimeOptions,
+  ChildAgentSnapshot,
+  ChildAgentSpawnInput,
+} from "./child-agent/index.js";
 export {
   AgentToolProvider,
   ToolProxyProvider,
   SystemToolProvider,
   Tool,
   buildToolCatalog,
-  buildWorkerChildRuntimeConfig,
+  createChildAgentTool,
   createDispatchTool,
   createToolExecutor,
-  createWorkerSubagentRuntime,
   defineTool,
   ToolRuntimePolicyMiddleware,
   resolveMeta,

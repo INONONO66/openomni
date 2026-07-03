@@ -1,4 +1,4 @@
-import { PolicyEngine } from "@openomni/agent";
+import { PolicyEngine } from "@openomni/policy";
 import { PolicyDecision as Decision } from "@openomni/protocol";
 import type { HandlerContext } from "./handler-types";
 import { resolveTarget } from "./target";

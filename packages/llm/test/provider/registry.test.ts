@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { getSDK, Provider } from "../../src/provider/index";
+import { getSDK } from "../../src/provider/sdk";
+import { Provider } from "../../src/provider";
 import type { Auth } from "../../src/auth";
 
 function makeModel(providerID: string, npm: string, id?: string): Provider.Model {

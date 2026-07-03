@@ -34,3 +34,13 @@ export function listErrors(sessionId: string): Promise<EventRecord[]> {
     .all(sessionId) as BusEventRow[];
   return Promise.resolve(rows.map(toEventRecord));
 }
+
+export function listForLlmReasoning(
+  sessionId: string,
+  options?: Omit<QueryOptions, "visibility" | "visibilityIn">,
+): Promise<EventRecord[]> {
+  return listBySession(sessionId, {
+    ...options,
+    visibilityIn: ["llm_reason", "user_audit"],
+  });
+}

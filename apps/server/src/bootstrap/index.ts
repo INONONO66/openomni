@@ -90,7 +90,8 @@ export async function main(): Promise<void> {
     msg: "server running in coordinator mode",
   });
   const workerScript = new URL("../execution/worker-entry.ts", import.meta.url).pathname;
-  const bootstrap = await assembleBootstrap(mcpProvider);
+  const customProvider = new CustomToolProvider();
+  const bootstrap = await assembleBootstrap(mcpProvider, undefined, customProvider);
   const hasAnyChannel = Boolean(
     config.telegram.token || config.github.secret || config.discord.token,
   );
@@ -99,8 +100,7 @@ export async function main(): Promise<void> {
     ? await createResidentProfile({ model: { provider: model.providerID, id: model.id } })
     : undefined;
   if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
-  const customProvider = new CustomToolProvider();
-  const toolDispatcher = buildToolDispatcher([mcpProvider]);
+  const toolDispatcher = buildToolDispatcher([mcpProvider, customProvider]);
   const coordinator = createExecutionCoordinator({
     workerScript,
     bootstrap,

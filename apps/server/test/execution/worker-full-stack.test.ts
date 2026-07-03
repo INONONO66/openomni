@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, tes
 import { AgentRegistry } from "@openomni/agent";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
-import { Subagent } from "@openomni/protocol";
+import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
 
 let capturedOnToolCall:
@@ -252,13 +252,13 @@ describe("bus bridge — worker lifecycle events reach server Bus", () => {
   test("dispatch does not publish worker lifecycle events directly", async () => {
     const events: unknown[] = [];
 
-    const unsubscribeStarted = Bus.subscribe(Subagent.Events.WorkerRunStarted, (data) => {
+    const unsubscribeStarted = Bus.subscribe(WorkerRunProtocol.Events.Started, (data) => {
       events.push(data);
     });
-    const unsubscribeCompleted = Bus.subscribe(Subagent.Events.WorkerRunCompleted, (data) => {
+    const unsubscribeCompleted = Bus.subscribe(WorkerRunProtocol.Events.Completed, (data) => {
       events.push(data);
     });
-    const unsubscribeFailed = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+    const unsubscribeFailed = Bus.subscribe(WorkerRunProtocol.Events.Failed, (data) => {
       events.push(data);
     });
 

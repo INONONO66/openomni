@@ -1,10 +1,10 @@
 # Ingress Module
 
-Single entry point that bridges inbound events to direct execution.
+Current inbound stage for the OpenOmni communication kernel. Ingress bridges resolved inbound events to session projection and execution. It is not the long-term owner of all communication semantics; new cross-boundary routing, authority, and correlation behavior should move toward `packages/openomni/src/communication/` and `packages/openomni/src/authority/` facades.
 
 ## Pipeline
 
-Every inbound event flows through three stages:
+The current inbound stage flows through three stages:
 
 1. **Session resolution** (`session-resolver.ts`) — maps surface+workspace+channel to a session via `SurfaceKey` registry. Creates new sessions on first contact; reuses existing ones on repeat.
 2. **Event projection** (`event-projector.ts`) — converts the `InboundEvent` into a `UserMessage` + `TextPart` and persists both to the resolved session.
@@ -14,7 +14,15 @@ Every inbound event flows through three stages:
 | --- | --- | --- | --- |
 | `direct` | `handleDirect` | Builds message array, runs a single `ChatAgent` | Primary path |
 
-External and internal incoming events route through Ingress. Runtime-to-runtime/system egress commands use Dispatch instead; cron fire remains `IngressEngine.ingestInternal()`.
+External and internal incoming events currently route through Ingress. Runtime-to-runtime/system egress commands currently use Dispatch; cron fire remains `IngressEngine.ingestInternal()`. Treat Ingress and Dispatch as kernel implementation stages, not separate product layers.
+
+## Boundary Rules
+
+- Do not add server/channel-specific logic here. Raw transport normalization belongs in `apps/server`; product communication decisions belong in OpenOmni kernel code.
+- Do not query or mutate pending stores from server bridge code to pre-classify inbound messages. PendingInteraction/PendingAsk correlation precedence belongs in OpenOmni communication/authority code.
+- Avoid recomputing targets across helpers. Resolve target/session once in the kernel stage and pass the resolved facts through context.
+- Keep `mode: "direct"` as a compatibility/validation fact unless a real new execution mode is introduced. Do not add mode branches as a substitute for communication routing.
+- Writeback and projection policy belongs in OpenOmni, but low-level message persistence still goes through `@openomni/session`.
 
 ## Session Bridge
 
@@ -24,4 +32,4 @@ External and internal incoming events route through Ingress. Runtime-to-runtime/
 ## Dependencies
 
 - **Upstream**: `@openomni/protocol` (schemas), `@openomni/session` (storage), `@openomni/agent` (ChatAgent)
-- **Downstream**: consumed by `apps/server` (per-message `createMessageHandler` → `IngressEngine.ingest`) and any surface adapter that submits `InboundEvent`s
+- **Downstream**: consumed by `apps/server` (per-message `createMessageHandler` -> `IngressEngine.ingest`) and internal OpenOmni kernel stages that submit resolved inbound events

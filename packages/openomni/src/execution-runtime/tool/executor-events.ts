@@ -68,6 +68,8 @@ export function publishPolicyEvaluated(args: {
   readonly resource: string;
   readonly decision: Policy.PolicyDecision;
 }): void {
+  if (args.decision.verdict === "allow") return;
+
   Bus.publish(PolicyEvent.Evaluated, {
     ...args.base,
     policyId: args.decision.policyId,

@@ -16,6 +16,7 @@ export namespace AgentExecution {
     AgentBase.extend({
       turnIndex: z.number(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const TurnComplete = BusEvent.define(
@@ -24,6 +25,7 @@ export namespace AgentExecution {
       turnIndex: z.number(),
       usage: Token.AgentUsage,
     }),
+    { visibility: "llm_reason" },
   );
 
   export const BudgetWarning = BusEvent.define(
@@ -32,6 +34,7 @@ export namespace AgentExecution {
       remaining: z.string(),
       threshold: z.number(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const BudgetReassurance = BusEvent.define(
@@ -40,6 +43,7 @@ export namespace AgentExecution {
       remaining: z.string(),
       threshold: z.number(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const Compaction = BusEvent.define(
@@ -48,6 +52,7 @@ export namespace AgentExecution {
       messagesBefore: z.number(),
       messagesAfter: z.number(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const ErrorRetry = BusEvent.define(
@@ -57,5 +62,6 @@ export namespace AgentExecution {
       maxAttempts: z.number(),
       error: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 }

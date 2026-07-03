@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Bus, Storage, WorkerRun, WorkerRunStateStore } from "@openomni/session";
-import { Subagent } from "@openomni/protocol";
+import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
 import { recoverInterruptedRuns } from "../../src/recovery";
 
 function seedSession(id: string): void {
@@ -90,7 +90,7 @@ describe("recoverInterruptedRuns", () => {
     await seedRunAtStatus("s3", "r3b", "running");
 
     const events: Array<{ sessionId: string; runId: string; error?: string }> = [];
-    const unsub = Bus.subscribe(Subagent.Events.WorkerRunFailed, (data) => {
+    const unsub = Bus.subscribe(WorkerRunProtocol.Events.Failed, (data) => {
       events.push(data.payload);
     });
 

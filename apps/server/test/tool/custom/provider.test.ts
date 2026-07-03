@@ -21,11 +21,12 @@ describe("CustomToolProvider", () => {
   it("exposes opensearch AI SDK tools by default", () => {
     const provider = new CustomToolProvider();
 
-    expect(provider.listTools().map((tool) => tool.spec.name).sort()).toEqual([
-      "weather_lookup",
-      "web_fetch",
-      "web_search",
-    ]);
+    expect(
+      provider
+        .listTools()
+        .map((tool) => tool.spec.name)
+        .sort(),
+    ).toEqual(["weather_lookup", "web_fetch", "web_search"]);
   });
 
   it("rejects extra tools that duplicate opensearch defaults", () => {

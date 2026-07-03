@@ -81,10 +81,10 @@ const EventBase = z.object({
 });
 
 export const Events = {
-  Created: BusEvent.define("worker_grant.created", EventBase),
-  Updated: BusEvent.define("worker_grant.updated", EventBase),
-  Revoked: BusEvent.define("worker_grant.revoked", EventBase),
-  Expired: BusEvent.define("worker_grant.expired", EventBase),
+  Created: BusEvent.define("worker_grant.created", EventBase, { visibility: "internal" }),
+  Updated: BusEvent.define("worker_grant.updated", EventBase, { visibility: "internal" }),
+  Revoked: BusEvent.define("worker_grant.revoked", EventBase, { visibility: "llm_reason" }),
+  Expired: BusEvent.define("worker_grant.expired", EventBase, { visibility: "llm_reason" }),
   Evaluated: BusEvent.define(
     "worker_grant.evaluated",
     EventBase.extend({
@@ -92,5 +92,6 @@ export const Events = {
       reason: z.string().min(1),
       action: z.string().min(1),
     }),
+    { visibility: "llm_reason" },
   ),
 } as const;

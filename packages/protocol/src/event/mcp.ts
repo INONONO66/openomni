@@ -14,9 +14,10 @@ export namespace Mcp {
       transport: z.enum(["stdio", "sse", "http", "streamable-http"]),
       toolCount: z.number(),
     }),
+    { visibility: "internal" },
   );
 
-  export const Disconnected = BusEvent.define("mcp.disconnected", Base);
+  export const Disconnected = BusEvent.define("mcp.disconnected", Base, { visibility: "internal" });
 
   export const ToolCalled = BusEvent.define(
     "mcp.tool.called",
@@ -24,6 +25,7 @@ export namespace Mcp {
       toolName: z.string(),
       toolCallId: z.string(),
     }),
+    { visibility: "ephemeral" },
   );
 
   export const ToolCompleted = BusEvent.define(
@@ -34,6 +36,7 @@ export namespace Mcp {
       durationMs: z.number(),
       resultSummary: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 
   export const ToolFailed = BusEvent.define(
@@ -43,5 +46,6 @@ export namespace Mcp {
       toolCallId: z.string(),
       error: z.string(),
     }),
+    { visibility: "llm_reason" },
   );
 }

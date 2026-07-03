@@ -32,7 +32,7 @@ const hotFiles = [
   "packages/openomni/src/execution-runtime/tool/executor.ts",
   "packages/openomni/src/execution-runtime/tool/executor-events.ts",
   "apps/server/src/tool/mcp/provider-execution.ts",
-  "packages/llm/src/session/processor.ts",
+  "packages/llm/src/processor/index.ts",
   "packages/openomni/src/ingress/event-projector.ts",
   "packages/openomni/src/ingress/session-bridge.ts",
   "packages/session/src/session/messages.ts",
@@ -71,7 +71,7 @@ const rules: readonly SideEffectRule[] = [
   },
   {
     ruleId: "processor-projected-sink",
-    filePath: "packages/llm/src/session/processor.ts",
+    filePath: "packages/llm/src/processor/index.ts",
     sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
     requiredBefore: ["const sink = createProjectedSink(configuredSink, sessionID);"],
     message: "processor sink side effects must flow through createProjectedSink",

@@ -4,7 +4,7 @@ import { Bus } from "@openomni/session";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
-import { allow, rewriteToolInput } from "../../helpers/policy-decision";
+import { deny } from "../../helpers/policy-decision";
 
 type PolicyEvaluatedEvent = z.infer<typeof PolicyEvent.Evaluated.schema>;
 type PolicyDecisionComposedEvent = z.infer<typeof PolicyEvent.DecisionComposed.schema>;
@@ -36,7 +36,7 @@ async function flushBus(): Promise<void> {
 }
 
 describe("PolicyEngine audit emission", () => {
-  it("emits policy.evaluated with canonical audit context for dispatch", async () => {
+  it("emits policy.evaluated with canonical audit context for blocking dispatch", async () => {
     const descriptor = nativeToolDescriptor("shell");
     const evaluated: PolicyEvaluatedEvent[] = [];
     const unsub = Bus.subscribe(PolicyEvent.Evaluated, (event) => {
@@ -51,13 +51,13 @@ describe("PolicyEngine audit emission", () => {
           runId: "run-config",
           agentName: "config-agent",
         },
+        auditEmit: Bus.publish,
       });
       engine.register({
-        name: "rewrite-shell",
+        name: "deny-shell",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () =>
-          rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell", "rewrite-shell-input"),
+        fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
 
       const ctx = {
@@ -80,14 +80,14 @@ describe("PolicyEngine audit emission", () => {
         traceId: "trace-request",
         sessionId: "sess-request",
         runId: "run-request",
-        policyId: "policy.rewrite-shell",
+        policyId: "policy.deny-shell",
         actor: { kind: "agent", name: "request-agent", runId: "run-request" },
         action: "tool.call",
         resource: "shell",
-        verdict: "allow",
-        reason: "rewrite-shell-input",
-        effects: [{ type: "tool.rewrite_input", input: { command: "pwd" } }],
-        reasonCodes: ["rewrite-shell-input"],
+        verdict: "deny",
+        reason: "blocked-shell",
+        effects: [{ type: "audit.annotate", annotation: "blocked-shell", severity: "error" }],
+        reasonCodes: ["blocked-shell"],
         pointId: "tool.native.pre",
         pointVersion: 1,
         resourceDescriptor: descriptor,
@@ -99,7 +99,7 @@ describe("PolicyEngine audit emission", () => {
     }
   });
 
-  it("emits policy.decision.composed after dispatch effect composition", async () => {
+  it("emits policy.decision.composed for blocking dispatch", async () => {
     const descriptor = nativeToolDescriptor("shell");
     const evaluated: PolicyEvaluatedEvent[] = [];
     const composed: PolicyDecisionComposedEvent[] = [];
@@ -111,19 +111,12 @@ describe("PolicyEngine audit emission", () => {
     });
 
     try {
-      const engine = PolicyEngine.create();
+      const engine = PolicyEngine.create({ auditEmit: Bus.publish });
       engine.register({
-        name: "annotate-shell",
+        name: "deny-shell",
         timing: "invoke.prepare",
         priority: 0,
-        fn: () => allow("policy.annotate-shell", "shell-reviewed"),
-      });
-      engine.register({
-        name: "rewrite-shell",
-        timing: "invoke.prepare",
-        priority: 10,
-        fn: () =>
-          rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell", "rewrite-shell-input"),
+        fn: () => deny("policy.deny-shell", "blocked-shell"),
       });
 
       const decision = await engine.dispatch("invoke.prepare", {
@@ -139,8 +132,11 @@ describe("PolicyEngine audit emission", () => {
       });
       await flushBus();
 
-      expect(decision.effects).toEqual([{ type: "tool.rewrite_input", input: { command: "pwd" } }]);
-      expect(evaluated).toHaveLength(2);
+      expect(decision.effects).toEqual([
+        { type: "run.abort", reason: "blocked-shell" },
+        { type: "audit.annotate", annotation: "blocked-shell", severity: "error" },
+      ]);
+      expect(evaluated).toHaveLength(1);
       expect(composed).toHaveLength(1);
       expect(composed[0]).toMatchObject({
         traceId: "trace-v2",
@@ -149,10 +145,13 @@ describe("PolicyEngine audit emission", () => {
         actor: { kind: "agent", name: "audit-agent", runId: "run-v2" },
         action: "tool.call",
         resource: "shell",
-        verdict: "allow",
-        reason: "shell-reviewed,rewrite-shell-input",
-        effects: [{ type: "tool.rewrite_input", input: { command: "pwd" } }],
-        reasonCodes: ["shell-reviewed", "rewrite-shell-input"],
+        verdict: "deny",
+        reason: "blocked-shell",
+        effects: [
+          { type: "run.abort", reason: "blocked-shell" },
+          { type: "audit.annotate", annotation: "blocked-shell", severity: "error" },
+        ],
+        reasonCodes: ["blocked-shell"],
         pointId: "tool.native.pre",
         pointVersion: 1,
         resourceDescriptor: descriptor,
