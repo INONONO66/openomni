@@ -7,7 +7,7 @@ OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not
 
 The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 6 packages and 1 app (Server).
 
-The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs, package rings, migration phases). ADRs in `docs/design-decisions/` are historical decision records; where they conflict with core-model/architecture, the newer docs win. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs, package rings, migration phases). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 ## STRUCTURE
 
@@ -40,7 +40,7 @@ openomni/
 protocol ← session ← llm ← agent ← openomni ← coordinator ← server
 ```
 
-Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Bus, TraceContext). `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on layers to its left. `protocol` is the leaf (zero internal deps). `agent` depends on `llm` and `session` (for observability: Bus, TraceContext). `server` is the runtime host app. See [Architecture §Code Conventions](docs/architecture.md).
 
 ## WHERE TO LOOK
 
@@ -75,8 +75,8 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Bus transport (session bridge) | `packages/openomni/src/runtime/` | `BusTransport` — bridges `AgentMessenger.Transport` to the session bus |
-| Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session candidate resolve → dispatch.submit. Actor arrives pre-stamped; identity resolve (`ActorResolver`) is planned per ADR-009 |
-| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator (ADR-008) |
+| Ingress engine | `packages/openomni/src/ingress/` | `IngressEngine.ingest()` — session candidate resolve → dispatch.submit. Actor arrives pre-stamped; identity resolve (`ActorResolver`) is planned per `docs/kernel-contract.md` |
+| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
 | Actor identity (planned) | `packages/protocol/src/actor/` + `packages/session/src/actor/` | `ActorIdentity` / `ActorEndpoint` / `ActorRegistry` / `ActorResolver` per ADR-009 |
@@ -93,7 +93,7 @@ Each layer depends only on layers to its left. `protocol` is the leaf (zero inte
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server ingress bridge | `apps/server/src/ingress/` | `buildInboundEvent()`, `detectMode()` |
-| Product model | `docs/core-model.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Resident, Workers, System Governor, controlled inbound authority |
+| Product model | `docs/core-model.md` + `docs/kernel-contract.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
 ## CONVENTIONS
@@ -110,7 +110,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 
 ## PRODUCT MODEL
 
-> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — zero-authority real-time cross-check). Three-tier vocabulary in [`docs/core-model.md`](docs/core-model.md); historical authority-model detail in [ADR-009](docs/design-decisions/009-external-actor-authority-model.md).
+> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — zero-authority real-time cross-check). Three-tier vocabulary in [`docs/core-model.md`](docs/core-model.md); authority-model detail in [`docs/kernel-contract.md`](docs/kernel-contract.md).
 
 ### Subjects
 

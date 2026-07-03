@@ -31,7 +31,7 @@ bun test
 
 ## Code Style
 
-Formatting and linting via [Biome](https://biomejs.dev). TypeScript strict mode throughout. Cross-package contracts use Zod-first types. Public APIs follow the namespace pattern (`Session.create()`, not named exports). See `docs/design-decisions/` for the rationale behind these choices.
+Formatting and linting via [Biome](https://biomejs.dev). TypeScript strict mode throughout. Cross-package contracts use Zod-first types. Public APIs follow the namespace pattern (`Session.create()`, not named exports). See `docs/architecture.md` (Code Conventions) for the rationale behind these choices.
 
 ## Commit Messages
 
@@ -49,7 +49,7 @@ TypeScript monorepo built with Bun and Turborepo. The dependency graph is strict
 protocol ← session ← llm ← agent ← openomni ← coordinator ← server
 ```
 
-Each package depends only on packages to its left. Cross-layer shortcuts are not accepted. See `docs/design-decisions/` for the full architecture rationale.
+Each package depends only on packages to its left. Cross-layer shortcuts are not accepted. See `docs/architecture.md` for the full architecture rationale.
 
 ## License
 

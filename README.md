@@ -74,7 +74,7 @@ bun run format
 - [Usage Model](docs/usage-model.md) — what operating the system looks like from the Owner's seat
 - [Agent OS Definition](docs/agent-os-definition.md) — the five duties and five litmus tests behind the "Agent OS" claim, landscape scored
 - [Bets and Kill Criteria](docs/bets-and-kill-criteria.md) — standing criticisms, falsifiable hypotheses, and the conditions under which claims get downgraded
-- [Architecture Decision Records](docs/design-decisions/index.md) — historical decision records; newer docs win on conflict
+- [Kernel Contract](docs/kernel-contract.md) — normative contract detail: guarantees, authority evaluation, evidence gate, Governor rules, memory port
 - [Implementation Status](docs/implementation-status.md) — what actually runs today
 
 ## Acknowledgements
