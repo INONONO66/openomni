@@ -46,7 +46,7 @@ This delegation chain can go deeper. Workers can spawn sub-workers for specializ
 
 ## Design Philosophy
 
-Agent capability is no longer the bottleneck — reliability is. OpenOmni is built on three principles: reliability over raw capability, structure over instructions, and strict separation between execution and judgment.
+Agent capability is no longer the bottleneck — reliability is. OpenOmni reduces to three kernel primitives (every subject is an **actor**, every boundary-crossing action passes one **gate**, everything lands in one **ledger**), two laws (a claim without evidence did not happen; no one judges their own work), and one dial (the harder an action touches reality, the more the human is involved). Four roles run on top: Workers do, the Resident decides, the Jester doubts, the Governor fixes — and root is the Owner.
 
 → [Design Philosophy](docs/design-philosophy.md)
 
@@ -68,12 +68,13 @@ bun run format
 
 ## Further Reading
 
-- [Design Philosophy](docs/design-philosophy.md)
-- [Core Model](docs/core-model.md)
+- [Design Philosophy](docs/design-philosophy.md) — the one-pager: primitives, laws, roles
+- [Core Model](docs/core-model.md) — the OS specification: actors, gate, ledger, roles, policy hook layer, vocabulary
+- [Architecture](docs/architecture.md) — the kernel in code: three verbs, package rings, migration phases
 - [Usage Model](docs/usage-model.md) — what operating the system looks like from the Owner's seat
 - [Agent OS Definition](docs/agent-os-definition.md) — the five duties and five litmus tests behind the "Agent OS" claim, landscape scored
 - [Bets and Kill Criteria](docs/bets-and-kill-criteria.md) — standing criticisms, falsifiable hypotheses, and the conditions under which claims get downgraded
-- [Architecture Decision Records](docs/design-decisions/index.md) — ADR-010–013 define the target Agent OS model
+- [Kernel Contract](docs/kernel-contract.md) — normative contract detail: guarantees, authority evaluation, evidence gate, Governor rules, memory port
 - [Implementation Status](docs/implementation-status.md) — what actually runs today
 
 ## Acknowledgements

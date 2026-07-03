@@ -6,6 +6,10 @@ Single source of truth for the gap between accepted design and running code. Oth
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 
+## Foundation restructure target (2026-07-03)
+
+The philosophy-v2 rewrite ([Design Philosophy](design-philosophy.md), [Core Model](core-model.md), [Architecture](architecture.md)) sets a structural target the component tables below do not yet reflect: three communication verbs (`ingress.submit` / `dispatch.submit` / `bus.publish`, subagent as the only non-gate path), one ledger (`WorkerRun` absorbed into `WorkItem.attempts`, durable bus as the write path, agent-greppable export), the policy engine relocated to ring 1 with per-point context schemas, and package renames (`session`→`ledger`, `openomni`→`kernel`). Migration runs in five phases (P0 dead-code clean → P1 one channel → P2 one ledger → P3 rings → P4 roles); the phase plan and the audit-confirmed extraction/merge/delete ledger live in [Architecture](architecture.md). A 2026-07 full-package audit additionally confirmed ~5–6k LOC of dead code and 3 bugs (llm catalog refresh path, adaptStream v4 shim, resident definition drift) — tracked for P0. Roadmap SSOT: [#459](https://github.com/INONONO66/openomni/issues/459). Note: the audit ran against `feat/foundation-restructure`; reconcile findings against `main` (which has since absorbed #448–#451) before acting on them.
+
 ## Issue Tracking Snapshot
 
 | Issue | Status | Implementation state |

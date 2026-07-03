@@ -1,84 +1,64 @@
 # Design Philosophy
 
-## Why It Exists
+## Root Claim
 
-AI agents can research, draft, schedule, and execute across channels. What they cannot do reliably is verify their own work, accumulate evidence from past executions, or operate within constraints they cannot circumvent.
+**OpenOmni is a single-Owner Agent OS.** The Owner talks to one shell — the Resident, a judgment partner, not a command prompt — may attach directly to any process (Worker) when useful, and the kernel isolates, observes, and verifies everything that runs.
 
-Push agents into autonomous, long-running operation — running social media accounts, managing content pipelines, executing recurring workflows — and two problems surface:
+The OS framing is not a metaphor; it is the structure. Where the metaphor breaks is deliberate: a real shell never talks back. OpenOmni's shell challenges the Owner with evidence. The OS half guarantees isolation, observation, and verification; the Resident half supplies judgment and dissent.
 
-**The supervision problem.** The agent creates work for you instead of removing it. You set it up, verify it actually did what it said, debug when it fails, and manually close the feedback loop. The agent was supposed to save your time. Instead it converted your time into a different kind of work.
+## The Kernel — Three Primitives
 
-**The trust problem.** The agent reports success, but you cannot trust the report without checking yourself. It says it posted the content, but did it? It says the output matched your requirements, but did it? It says it learned from last week's performance, but its "learning" is a self-assessment that almost always concludes things went well.
+Everything in the system reduces to three primitives. Every other noun in the documentation is a field, format, or policy of one of these.
 
-OpenOmni solves both. Supervision — verification, feedback loops, and improvement — happens inside the infrastructure, not in the user's head. Trust is established through evidence, not self-report.
+**Actor.** Everything that appears in the system — the Owner, the Resident, AI agents, external humans, installed apps, cron — is an actor carrying exactly one authority profile. Trust tier, grants, contact budgets, and voice registers are fields of that profile, not separate concepts.
 
-## Three Principles
+**Gate.** Every action that crosses a boundary passes through one gate (dispatch). Whether to auto-answer or escalate, whether to object, whether to wait on an external reply, what voice to render in — these are policies evaluated around the gate, not separate systems.
 
-### 1. Experience Is Judgment
+**Ledger.** Everything that happens is recorded in one append-only history. Sessions, the event bus, work items, completion reports, and receipts are the same history at different zoom levels. Isolation is the session's job; retrievability is the ledger's. Memory is a compressed view of the ledger, and the original always wins.
 
-An agent's judgment should come from accumulated evidence, not from pattern-matching on training data.
+## Two Laws and a Dial
 
-When an agent encounters a task for the first time, it researches, experiments, and executes with uncertainty. The second time, it references what happened last time. By the tenth time, it has enough accumulated evidence to make a grounded decision without guessing.
+**The evidence law: a claim without a receipt did not happen.** A Worker's "done", the Resident's "you contradicted yourself", a memory's "you prefer X", the Governor's "this fix works" — all of them must point at ledger evidence to count. Corollaries: claims without evidence are treated as work not done; *objections* without evidence are treated as questions; a summary is a self-report of a transcript, so improvement loops read raw records, not summaries.
 
-This requires separating two kinds of knowledge:
+**The separation law: no one judges their own work.** The executor does not grade its own success. The judge does not audit its own consistency. The operator does not improve itself. Every role boundary in the system is this law applied once more.
 
-- **Operational knowledge** — how to approach a type of task. This knowledge shapes strategy.
-- **Outcome evidence** — what actually happened when a specific action was taken. This evidence grounds judgment.
+**The stakes dial.** The harder an action touches reality — money, people, irreversibility, public output — the less runs automatically and the more evidence and Owner involvement is required. Auto-reply thresholds, objection intensity, and permission ceilings are all readings of this one dial, not three separate rule systems.
 
-Operational knowledge tells the agent *how* to act. Outcome evidence tells the agent *whether* it acted correctly. The two inform each other but never substitute for each other. An agent with deep operational knowledge but no outcome evidence is guessing confidently. An agent with outcome evidence but no operational knowledge keeps rediscovering the same lessons.
+## Four Roles and Root
 
-Failures are first-class data. A failure that gets recorded and referenced next time is more valuable than a success that gets forgotten. Over time, the system's map of what works and what doesn't grows denser, and the proportion of decisions made by guessing shrinks.
+Applying the separation law splits the work into four roles. They are not new primitives — all four are just actors with different profiles:
 
-### 2. Structure Determines Behavior
+| Role | Verb | Why it is separate |
+|---|---|---|
+| **Worker** | does | execution split from judgment |
+| **Resident** | decides | the seat of judgment; executes nothing |
+| **Jester** | doubts | the judge must also be checked — live, cheaply |
+| **Governor** | fixes | operation split from improvement |
 
-Agent behavior is not controlled by asking nicely. It is controlled by what the system structurally allows.
+**The Owner is root.** Final decisions are always the Owner's. The system must challenge with evidence but can never replace the Owner's decision — and an override is recorded with the evidence that was on the table (a receipt). The Owner may bypass the Resident and work with any actor directly; bypass is an exception to the interface, never to observation. Even the Owner acting in the physical world is just a work item whose executor is the Owner: verification is waived, recording is not.
 
-Every domain concept in OpenOmni — tools, tasks, agents, skills, permissions — is defined as a schema. The schema is simultaneously a constraint and an interface:
+One consequence worth stating plainly: **hidden work is forbidden; isolated work is required.** Context must not mix (isolation), and work must never disappear (total recall). Raw records are not just for audit — they are the fuel of the improvement loop; every unrecorded trace is training signal the system loses forever.
 
-- **As constraint**: a model cannot invent tools that don't exist, call APIs it's not authorized for, or produce outputs that don't match the expected shape. The structure prevents entire categories of mistakes without spending a single token on instructions.
-- **As interface**: an agent that reads the schema knows exactly what the system can do, what data it can access, and what actions are available. The schema is the map of the system.
+## One Sentence
 
-This has a direct cost implication. When structure enforces correctness, cheaper models become viable for more tasks. You don't need a frontier model to follow a schema — you need a frontier model to make judgment calls in ambiguous situations. Structure handles the unambiguous parts, which turns out to be most of the work.
+> Everything is an actor, every action passes one gate, everything lands in one ledger. Claims stand only on evidence, no one judges their own work, and the harder reality is touched, the more the human is involved. Four roles: do, decide, doubt, fix. Root is you.
 
-The same structure that constrains agents also enables them to extend the system. When a new capability is added through the protocol — a new tool, a new storage adapter, a new event type — agents can immediately discover and use it without code changes. The protocol is not just a wall; it is a door with a specific shape.
+## Why Not an Existing Agent
 
-This principle is concretized as the kernel/userland split in [ADR-010](design-decisions/010-agent-os-kernel-model.md): claims of "guaranteed" or "cannot" are reserved for code-enforced kernel items; everything prompt-shaped is explicitly userland convention.
+OpenClaw-class companions execute when told; Hermes-class companions self-improve through agent-curated memory. OpenOmni is neither's competitor — it is the layer beneath them. Both make excellent Workers *inside* OpenOmni. What neither can be retrofitted into:
 
-### 3. Execution and Judgment Are Separate Concerns
+1. **Executor and judge share one context there.** "It's done" is a self-report from the same context that did the work. An evidence gate requires a judging context outside the executing session — an architecture, not a prompt.
+2. **Self-improvement compounds self-report bias.** An agent grading its own work and writing the grade into its own memory turns bias into operational knowledge. The empirical result behind our Governor design (Meta-Harness, arXiv:2603.28052) shows summary-fed improvement loops are the losing ablation; independent proposers reading raw traces win decisively.
+3. **No accounting layer.** The moment agents spend money, message people, and speak in your name, the binding need is not execution but a process table, an audit log, and an authority model over arbitrary actors — humans included.
 
-An agent that executes a task and then judges its own success is structurally biased. This is not a flaw in any particular model — it is a property of the setup. The agent that chose the approach, executed the steps, and invested the tokens has every incentive to report success.
-
-OpenOmni separates these concerns:
-
-- **Execution** is done by Workers — agents selected for the task, running within defined permissions and budgets.
-- **Structural verification** is done by code — did the action actually happen? Does the output match the expected format? Are the claimed facts present in the source data? These checks are deterministic and cannot be gamed.
-- **Semantic evaluation** is done independently — was the output good? Did it match the intent? This judgment happens in a context that doesn't know how the work was done, only what was requested and what was produced.
-
-The Resident — the user-facing agent — does not execute. It sets direction, distributes work to Workers, and evaluates results. This is also the user's position: you set direction and make the decisions that matter. The system handles everything between "do this" and "here's what happened."
-
-This separation serves cost optimization directly. Execution — the bulk of token spending — can be done by cheaper models under tight structural constraints. Judgment — which requires deeper reasoning — uses more capable models but runs far less often. The expensive model thinks; the cheap models work.
-
-## The Compounding Loop
-
-These three principles connect into a cycle:
-
-1. **Structure** defines what agents can do and how results are measured.
-2. **Execution** happens within that structure, producing outcomes.
-3. **Independent judgment** evaluates those outcomes against criteria the executor doesn't control.
-4. **Evidence** from evaluation is stored as outcome data.
-5. **Accumulated evidence** refines operational knowledge for next time.
-6. **Improved knowledge** leads to better execution in the next cycle.
-
-The System Governor drives this loop. It observes outcomes through the event Bus, then adjusts Policy and Skill to reflect what the evidence shows. When this runs continuously, the system improves without human intervention — not because the model gets smarter, but because the evidence base grows and operational knowledge becomes more grounded.
-
-The loop has a safety property: improvements that break previously working cases are detected and reverted. The system does not optimize blindly — it optimizes with a ratchet that prevents regression.
-
-Over time, the proportion of work that requires human judgment shrinks. Early on, the user is involved in most decisions. As evidence accumulates and the system demonstrates reliability in specific domains, the user's role shifts from supervision to direction-setting.
+The honest caveat: these advantages are structural claims, and structure only pays off when stakes are real. The falsifiable version of this section — including the criterion under which we would abandon OpenOmni and adopt an off-the-shelf companion — lives in [Bets and Kill Criteria](bets-and-kill-criteria.md).
 
 ## What This Is Not
 
-**Not a general-purpose agent framework.** OpenOmni is built for one operator's needs. The architecture decisions — protocol-driven constraints, multi-tier delegation, independent verification — serve a specific operating philosophy. Other projects make different tradeoffs for different goals.
+- **Not a general-purpose agent framework.** Built for one operator; the trade-offs follow from that.
+- **Not a claim of full autonomy.** Autonomy is earned per domain through ledger evidence and revoked the same way.
+- **Not a replacement for the Owner's judgment.** The system executes, verifies, and improves; the Owner directs, decides, and owns values. The boundary moves over time; it never disappears.
 
-**Not a claim that agents should be fully autonomous.** The system is designed to earn autonomy incrementally, through demonstrated reliability in specific domains. Full autonomy is not a goal — appropriate autonomy, backed by evidence, is.
+## Vocabulary Discipline
 
-**Not a replacement for human judgment on things that matter.** The system handles execution, verification, and improvement. The user handles direction, values, and decisions where the stakes are high enough to warrant human attention. The boundary between these shifts over time, but it never disappears.
+The philosophy layer owns exactly ten nouns: Actor, Gate, Ledger, Evidence, Stakes, Owner, Resident, Worker, Jester, Governor. Specification terms (profiles, policy points, work items, receipts, lanes) live in [Core Model](core-model.md); implementation terms (packages, modules) live in [Architecture](architecture.md). The word *guaranteed* is reserved for what the kernel enforces in code — everything prompt-shaped is convention and must be labeled as such.

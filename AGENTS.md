@@ -3,11 +3,11 @@
 
 ## OVERVIEW
 
-OpenOmni — personal AI workforce infrastructure. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) for full rationale.
+OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The user talks to a single always-on Resident, which delegates work to Workers (internal agents, external AI, humans) through controlled inbound authority and isolated sessions. TypeScript monorepo (Bun + Turborepo) with 7 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 7 packages and 1 app (Server).
 
-Product model lives in `docs/core-model.md`; the accepted architecture decisions are [ADR-005](docs/design-decisions/005-persona-workforce-runtime.md) (workforce model), [ADR-008](docs/design-decisions/008-lightweight-main-persona-on-demand-workers.md) (in-process Resident + on-demand workers, shipped), and [ADR-009](docs/design-decisions/009-external-actor-authority-model.md) (external actor authority + the canonical vocabulary). [ADR-010](docs/design-decisions/010-agent-os-kernel-model.md)–[013](docs/design-decisions/013-memory-engine-port.md) (proposed) frame the target as an Agent OS kernel (010) with a task ledger + evidence gate (011), an incident-driven Governor (012), and a pluggable memory port (013). **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
+The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs, package rings, migration phases). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
 ## STRUCTURE
 
@@ -42,7 +42,7 @@ protocol ← policy ← agent ← openomni ← coordinator ← server
 protocol ← session ← llm ──────┘
 ```
 
-Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `agent` depends on `llm`, `session` for observability, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `server` is the runtime host app. See [ADR-003](docs/design-decisions/003-layered-package-architecture.md).
+Each layer depends only on lower primitives. `protocol` is the leaf (zero internal deps). `policy` depends only on protocol and owns the generic policy engine/effect composition primitive. `agent` depends on `llm`, `session` for observability, and `policy` for the loop extension primitive, but it must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `server` is the runtime host app. See [Architecture](docs/architecture.md) — target rings; current split below.
 
 ## PACKAGE OWNERSHIP
 
@@ -122,7 +122,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Messaging kernel | `packages/openomni/src/{messaging,ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection |
 | Ingress engine | `packages/openomni/src/ingress/` | Current inbound stage: authority middleware → session resolution → projection → resident/direct handler |
-| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator (ADR-008) |
+| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
 | Principal / actor identity | `packages/protocol/src/actor/` + `packages/session/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
@@ -138,7 +138,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
 | Server channels | `apps/server/src/channel/` | Discord, Telegram, GitHub, WebSocket |
 | Server inbound bridge | `apps/server/src/ingress/` | Transitional adapter bridge; target direction is raw channel message → OpenOmni `MessageEnvelope` only |
-| Product model | `docs/core-model.md` + `docs/design-decisions/005-persona-workforce-runtime.md` | Resident, Workers, System Governor, controlled inbound authority |
+| Product model | `docs/core-model.md` + `docs/kernel-contract.md` | Resident, Workers, System Governor, controlled inbound authority |
 | Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
 
 ## CONVENTIONS
@@ -164,7 +164,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 
 ## PRODUCT MODEL
 
-> Product terminology: **Owner** (the human operator), **Resident** (formerly Main Persona), **Worker** (formerly Sub Persona + external actors), **System Governor** (structural improvement layer). Full vocabulary in [`docs/core-model.md`](docs/core-model.md); authority model and scenarios in [ADR-009](docs/design-decisions/009-external-actor-authority-model.md).
+> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — zero-authority real-time cross-check). Three-tier vocabulary in [`docs/core-model.md`](docs/core-model.md); authority-model detail in [`docs/kernel-contract.md`](docs/kernel-contract.md).
 
 ### Subjects
 

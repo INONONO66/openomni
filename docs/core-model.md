@@ -1,212 +1,154 @@
-# Core Model
+# Core Model — The OS Specification
 
-OpenOmni's product model is built around a small number of durable concepts: a single always-on assistant that owns the user relationship, a uniform class of delegated actors that do the actual work, and a separate structural layer that improves the system over time. This document describes how those pieces fit together.
+This document specifies the system that [Design Philosophy](design-philosophy.md) states in one page. Philosophy owns ten nouns; this document owns their fields, formats, and states. Implementation truth lives in [Implementation Status](implementation-status.md); package-level structure in [Architecture](architecture.md).
 
-## The Resident
+## The System in One Paragraph
 
-The Resident is the only default user-facing identity. It's always on, always reachable, and owns the relationship with the user across sessions. It understands the user's goals, preferences, and context well enough to decide what to do next without asking for clarification every time.
+Input channels (Telegram, Discord, CLI, email, cron, other agents) are adapters injected by the server. Everything they receive enters through one ingress, is routed, and crosses boundaries only through one gate (dispatch) — to the Resident, to the Owner, to a specific Worker session, or out to an external human. Every step lands in the ledger. The Owner converses with the Resident; Workers execute in isolation; the Jester doubts in real time; the Governor fixes structurally after the fact.
 
-The Resident's job is judgment, not execution. When a request arrives, it picks the cheapest sufficient response: answer directly, hand the work to a Worker, or open an isolated session for deeper reasoning. It evaluates what comes back and decides what to surface to the user.
+## Actors and Authority Profiles
 
-The Resident does not do meta-work. It doesn't rewrite its own rules, restructure its own skills, or adjust system policy. That's the System Governor's job. The Resident can propose changes, but it cannot enact them unilaterally.
+Every subject is an actor with one **authority profile**:
 
-> **Implementation status**: the judgment-only Resident is the target, not the current runtime. Today the Resident is provisioned with a full execution toolset (`filesystem`, `execution` categories — see `apps/server/src/ingress/bridge.ts`). The demotion to a shell profile (read-only perception + dispatch) is owned by [ADR-010](design-decisions/010-agent-os-kernel-model.md); tracking in [Implementation Status](implementation-status.md).
-
-## Workers
-
-Workers are everything that isn't the Resident. That includes internal AI agents, external tools like OpenCode or Claude Code, and humans acting in a defined role. The Resident treats them all the same way: as execution actors that can be called when needed and whose output must be evaluated before it reaches the user.
-
-Workers are like applications. They're invoked for a purpose, they return a result, and they don't own the conversation. A Worker may use the tools it's been explicitly granted, but it doesn't manage other Workers and it doesn't create new top-level work on its own. Normal Workers report results, blockers, and follow-up suggestions back to whoever called them.
-
-This uniformity is intentional. Whether a Worker is a local subprocess, a remote AI agent, or a human contractor, the Resident's interface to it is the same. The complexity of what a Worker does internally doesn't leak into the Resident's decision layer.
-
-## System Governor
-
-The System Governor is a separate, low-privilege layer that observes execution records and failures through the event bus, then adjusts Policy and Skills structurally. It doesn't participate in conversations. It doesn't respond to users. It watches what happens and makes the system better at handling similar situations in the future.
-
-This separation matters. The Resident improving itself through reflection is a reliability risk: it conflates judgment with self-modification, and it means the system's behavior can drift in ways that are hard to audit. The Governor keeps those concerns separate. Structural improvements are observable, attributable, and reviewable.
-
-The Governor can update routing preferences, skill definitions, and policy rules. It cannot rewrite core logic or safety constraints.
-
-Concretely it is a **postmortem engine** with two loops: an incident-driven fast loop (mistake → root-cause analysis over logs and the situation at the time → a structural fix so the same mistake cannot recur — never just an apology) and a periodic slow loop (ledger aggregation: routing hints, evaluation calibration, cost accounting). Its permission formula is *read-omniscient, write-minimal*: it may read everything including Worker transcripts, but its writes are proposals plus a narrow autonomous tier — tightening is autonomous, loosening requires Owner approval, and safety constraints are untouchable. See [ADR-012](design-decisions/012-governor-postmortem-engine.md).
-
-## Controlled Inbound Authority
-
-All work enters through a single Inbound pipeline. The user can create work. The Resident can create work. Explicitly trusted manager Workers can create work. Normal Workers cannot.
-
-This prevents unmanaged recursive work creation. Without this constraint, a Worker completing one task could spawn arbitrary new tasks, and the system would have no coherent picture of what it's doing or why. The Inbound pipeline is the chokepoint that keeps the work queue legible.
-
-The user can also bypass the Resident and target a specific Worker directly. That's a user authority, not a general agent authority. When it happens, the Resident should still have visibility through session lineage so it doesn't lose global context.
-
-## Execution Layers
-
-The Resident picks the cheapest sufficient layer for each request:
-
-**Direct** — the Resident handles it in the current session. No delegation, no forking. Used when the request is within the Resident's own competence and doesn't require specialist depth.
-
-**Delegate** — the Resident hands the work to a Worker and waits for a result. The Worker runs in its own session. The Resident evaluates the output before deciding what to tell the user.
-
-**Fork** — the Resident opens an isolated self-loop session for complex reasoning, planning, or multi-Worker coordination. This is not just a background task. It's a full work session where the Resident can restate the request, refine intent, summon Workers, review their outputs, and return a distilled result to the original session.
-
-Mechanically these map to three execution lanes ([ADR-010 §6](design-decisions/010-agent-os-kernel-model.md)), chosen by how much reasoning execution still requires:
-
-| Lane | Used for | Example |
-| --- | --- | --- |
-| Built-in | Judgment and read-only perception | Answer from context, peek at a file |
-| Dispatch action (syscall) | Atomic world mutations needing no further reasoning | Turn off a light, send one composed message, schedule a job |
-| Worker (always an isolated process) | Independent execution with its own profile and verifiable output | Research, refactoring, negotiation |
-
-Spawning a Worker for an atomic action is waste; doing multi-step work in the user session is pollution. Every world-mutating lane passes through dispatch — tools that act only inside an agent's own sandbox do not need to.
-
-The original user-facing session stays clean. Internal reasoning, failed attempts, experiments, and Worker transcripts belong in child or self-loop sessions. The user sees decisions and results, not process.
-
-## Session Hygiene
-
-The user-facing session is a relationship and decision record, not a work log. Anything that isn't directly useful to the user — intermediate reasoning, Worker transcripts, failed attempts, planning iterations — goes in a child or self-loop session.
-
-This keeps the primary session readable over time. It also makes the system's behavior auditable: you can trace a result back through the session tree to the Worker that produced it and the reasoning that accepted it.
-
-The unit that crosses back from a Worker is the **completion report** — the deliverable plus a written account whose claims reference ledger evidence — never the Worker transcript. The Resident evaluates that report against the acceptance criteria set at delegation time; claims without evidence are treated as work not done ([ADR-011](design-decisions/011-task-ledger-evidence-gate.md)).
-
-## Worker Lifecycle
-
-Workers start ephemeral. A Worker invoked once for a specific task has no durable identity. If the same Worker proves useful repeatedly, it can be promoted to a persistent Worker with a stable identity, its own rules, and accumulated skills.
-
-The promotion path looks like this:
-
-```
-ephemeral invocation
-  → repeated useful work
-  → candidate for persistence
-  → evaluation (usage rate, output adoption, correction rate, role stability)
-  → persistent Worker with durable identity, rules, and skill history
-```
-
-Promotion is not automatic. It requires evidence of repeated value and a stable, reusable role definition. A Worker can also be paused or retired if its role becomes redundant or its output quality degrades.
-
-## Memory Readiness
-
-OpenOmni is designed to integrate with a long-term memory system (Anamnesis), but it doesn't depend on that system being present. The structural prerequisites are already in place:
-
-- session lineage connects original sessions, self-loop sessions, and child Worker sessions;
-- provenance records who produced a result and under what conditions;
-- the event bus produces streams that a memory system can ingest;
-- high-value outputs, preference signals, and behavioral changes can be marked as memory candidates.
-
-Raw session history is not memory. Durable behavioral memory needs to be scoped, attributed, and reviewable. The Resident's personality, domain rules, tone, and routing preferences can evolve through the memory system. Core logic and safety policy cannot.
-
-Architecturally, memory is a **built-in layer plus a pluggable engine port** ([ADR-013](design-decisions/013-memory-engine-port.md)): bounded curated notes and FTS5 session search always work with zero engines configured, while external engines (Anamnesis first; Honcho/Mem0-class providers fit the same port) augment recall and user modeling. Recall is scope-filtered per executor — Workers see task-scoped memory only.
-
----
-
-## How It Works — Current and Target
-
-Every inbound interaction passes through the same three layers — **server channel adapter → ingress → dispatch**. The layer chain, dispatch chokepoint, actor resolution, PendingInteraction routing, and the core ADR-009 authority axes are implemented. Per-component truth lives in [Implementation Status](implementation-status.md).
-
-Status legend: ✅ implemented · 🚧 partially implemented · 📋 designed, not implemented.
-
-- **server channel adapter** (`apps/server/`) ✅ — channel-specific transport. Adds the SDK detail; outputs a channel-agnostic `InboundMessage`.
-- **ingress** (`packages/openomni/src/ingress/`) — channel-agnostic. Resolves a default session candidate (`SessionResolver`) ✅, resolves registered actors (`ActorResolver`) ✅, applies inbound Blacklist / ChannelGrant / TrustTier checks ✅, and hands off to dispatch ✅.
-- **dispatch** (`packages/openomni/src/dispatch/`) — boundary gate. Policy authorization and handler routing ✅. WorkerGrant evaluation, PendingInteraction match with session override, Blacklist, ChannelGrant facts, `TrustTier`, `effectiveAuthority`, and PendingInteraction lifecycle are implemented ✅. External egress handlers exist but still require concrete server/channel/API owners 🚧.
-
-Outbound follows the same shape: a Worker or the Resident calls `dispatch.submit(...)` ✅ for internal targets (resident, workers, schedule). External egress actions (`external.ask`, `a2a.ask`, `api.ask`) are protocol and dispatch-handler surfaces with fail-closed owner injection 🚧; concrete delivery adapters are still pending.
-
-See [ADR-009 Scenarios](design-decisions/009-external-actor-authority-model.md#scenarios) for five end-to-end target traces — Owner DM, Task Outreach, External reply (PI matched), Public channel unsolicited, External AI API call. [ADR-010](design-decisions/010-agent-os-kernel-model.md) frames this pipeline as the kernel's syscall gate and PendingInteraction as its blocking-wait primitive.
-
-**Invariant** (enforced by convention today, kernel rule per ADR-010): a new channel only touches `apps/server/`. Ingress and dispatch must remain unchanged when adding a channel; if they need a change, the boundary is broken.
-
----
-
-## Vocabulary
-
-Eight categories. Each answers a different question — do not mix them.
-
-### Product subjects (user-facing)
-
-| Term | Description |
+| Profile field | Meaning |
 |---|---|
-| **Owner** | The human operator. Has full authority. |
-| **Resident** | The single always-on user-facing assistant. Owns judgment, not execution. |
-| **Worker** | Any delegated execution actor — internal AI, external AI, external human. |
-| **System Governor** | Low-privilege observer that proposes Policy / Skill changes from execution evidence. |
-| **Actor** | Any external entity that interacts with the system. |
+| `TrustTier` | owner / co-owner / manager / collaborator / observer / assigned_worker |
+| `Grant` | ceiling on what the actor may do — channel ceilings and egress permissions on one axis |
+| `SocialBudget` | contact frequency caps and cooldowns for outreach to this actor |
+| `Voice register` | the tone contract for this relationship (formality, emoji, length, warmth) |
+| `Blacklist` | absolute block |
 
-### External identity (ingress concerns)
+Identity is `ActorIdentity` (one canonical subject) with N `Endpoint`s (`channel × externalId`). Humans are not a special case: an external seller, a friend, and the Owner in the physical world are all actors, and all executable work is uniformly a Worker assignment regardless of whether the executor is silicon or human.
 
-| Term | Description |
+## The Gate
+
+### Three verbs, one exception
+
+All communication in the system reduces to three verbs:
+
+1. **`ingress.submit`** — the world enters. Channel adapters normalize everything (Owner messages, external humans, CLI apps, cron) into one schema. Adapters are defined and injected in `apps/server`; adding a channel touches nothing else.
+2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human, targeting a session, spawning or cancelling a Worker: the same verb with a different target.
+3. **`bus.publish`** — something is recorded. Observation only; the bus never carries commands.
+
+The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). Note that even this exception is covered by policy points (`delegation.subagent.pre/post`) — *the gate has one exception; policy has none.*
+
+### Lanes
+
+The gate routes each request to the cheapest sufficient lane:
+
+| Lane | Used for |
 |---|---|
-| `ActorIdentity` | A canonical entity (one person, one external agent). |
-| `ActorEndpoint` | An identity's address on a specific channel: `(channel, externalId)`. |
-| `ActorRegistry` | Store mapping identities ↔ endpoints. |
-| `ActorResolver` | `(channel, externalId) → ActorIdentity?`. |
-| `ActorKind` | `human / ai_agent / service / resident / internal_worker / system`. |
-| `TrustTier` | `owner / co_owner / manager / collaborator / observer / assigned_worker`. |
+| Built-in | judgment and read-only perception in place |
+| Action | one atomic world mutation, no further reasoning |
+| Worker | independent execution in an isolated session with its own profile |
+| Subagent | context-inheriting parallel reasoning inside the parent |
 
-### Communication medium
+Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
 
-| Term | Description |
+### Policy — the cross-cutting hook layer
+
+Policy is not a gate-internal feature: it is a system-wide interception layer (LSM-style). The protocol registers policy points, each with a contract — allowed effect types, default fail policy, required context schema. The registered points cover inbound (`session.inbound.pre`), the gate (`dispatch.action.pre`), the agent loop per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), LLM connections (`connection.llm.pre/post`), prompt and writeback (`prompt.context.pre`, `session.writeback.pre`), tools (`tool.catalog/native/mcp.*`), and delegation (`delegation.subagent/background.*`). Four points are being added for the current model: `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (the evidence gate), `schedule.fire.pre` (cron constraints).
+
+The rulebook:
+
+1. Conflict composition: **deny > pending > allow**; priority orders evaluation, never verdict strength.
+2. Engine failure: side-effect-boundary (pre) points **fail closed** with an incident event; post points fail open. Silent skips are forbidden.
+3. Hot-path discipline: policies are pure and synchronous — **a policy never calls an LLM**. LLM-grade watching is an actor's job (the Jester subscribes to the bus); *policies block, actors speak*.
+4. No recursion: a policy returns a verdict and declares effects; it never invokes verbs. Effects are applied by the host.
+5. Effects outside a point's `allowedEffects` are rejected at registration, not dropped at runtime.
+6. Registering or changing a policy is itself a dispatched action: the Owner freely; the Governor autonomously only in the tightening direction; loosening requires Owner approval; nobody else at all.
+7. `pending` is the escalation primitive — it carries timeout, resume, and expiry semantics, isomorphic to PendingInteraction.
+8. Every decision is recorded with the facts it used. Volume is solved by encoding, never by not recording.
+9. Per-point context schemas are enforced; there is no universal context shape.
+
+### Waiting on the world
+
+Outbound requests that need an external answer open a **PendingInteraction** (open → resolved / follow-up / expired / cancelled). The system sleeps at zero cost; a matching reply — even days later — wakes exactly the right work item.
+
+## The Ledger
+
+One append-only history. `bus.publish` is the only write; everything else is a view:
+
+| View | What it shows |
 |---|---|
-| `Channel` | Transport kind: `telegram / discord / slack / email / a2a / ...`. |
-| `Surface` | A specific instance of a channel (one bot, one workspace, one inbox). |
-| `SurfaceKey` | Routing key for a surface. |
-| `ChannelGrant` | Policy ceiling for a surface (`kind: trusted_channel | broadcast_channel | blocked_channel`, `defaultTier`, `inboundTreatment`). |
-| `Blacklist` | Absolute block list (actor / endpoint / channel / pattern). |
+| `Session` | an isolation scope of the history, linked by lineage (parent/child/self-loop) |
+| `Transcript` | the raw record of a session — exported in agent-greppable form |
+| `WorkItem` | the process-table row: acceptance criteria, attempts, executor, evidence, verdict, outcome |
+| `CompletionReport` | a Worker's exit format — deliverable plus claims, each referencing evidence |
+| `Receipt` | an objection, the evidence shown, and the Owner's acknowledgment of an override |
+| `Memory` | a compressed view; on conflict the original wins; Workers receive task-scoped slices only |
 
-### Message units
+Rules: **record maximally, access selectively** — noise is a viewing problem, not a recording problem. Raw transcripts are the Governor's fuel (see below), which is why greppable export is a kernel requirement, not a nice-to-have. `Outcome` (adopted / corrected / redone / ignored) is the Owner's post-hoc signal that calibrates everything downstream.
 
-| Term | Description |
-|---|---|
-| `InboundMessage` | Server normalizer output. Channel-agnostic shape. |
-| `InboundEvent` | Ingress-stamped event with resolved actor + default session candidate. |
-| `DispatchCommand` | Single dispatch invocation: `action / actor / target / payload / correlation`. |
-| `Envelope` | Wire-level external communication envelope. |
-| `Message` | Persisted session record (`UserMessage / AssistantMessage`). |
+## The Roles
 
-### Session and execution
+### Resident — decides
 
-| Term | Description |
-|---|---|
-| `Session` | Conversation or work scope. |
-| `SessionOwner` | Discriminated union: `actor | worker_run | system`. |
-| `SessionOrigin` | How the session was initiated. |
-| `SessionPurpose` | `user_conversation / worker_interaction / self_loop`. |
-| `WorkerRun` | Durable execution record of a delegated task. |
-| `ConnectorEndpoint` | Installed app endpoint addressable through `ActorEndpoint(channel: "app_connector")`; provider identity and driver wiring live on the AppConnector installation. |
-| `executorKind` | Coarse ledger metadata: `internal_chat_agent / connector_endpoint / external_api / a2a / human_channel`. Dispatch selection for installed apps uses endpoint identity, not this field. |
-| `ChatAgent` | LLM-driven execution loop. |
+The default interface. It owns the relationship and global context — not exclusive access. It executes nothing: it answers, delegates, evaluates, and challenges.
 
-### Authority and lifecycle (dispatch concerns)
+The challenge rules:
 
-| Term | Description |
-|---|---|
-| `PendingInteraction` | Durable registry entry for an outbound request awaiting an external response. Status: `open / resolved / follow_up / expired / cancelled`. |
-| `WorkerGrant` | A Worker's egress permission set (separate axis from ChannelGrant). |
-| `EffectiveAuthority` | 5-dimensional intersection: blacklist × channel × actor × session × PI. |
+1. **Evidence-gated**: an objection must cite the ledger, memory, or an original source. Without a citation it is demoted to a question.
+2. **Trigger**: the hard machinery (receipts) engages only when a dispatchable action or a durable decision is at stake; in plain conversation, disagreement is just conversation.
+3. **One round, then disagree-and-commit**: if the Owner overrides after seeing the evidence, the receipt is recorded and the action proceeds. No repeated nagging. The difference between "just do it" and "I understand the risk, do it" is not tone — it is the existence of a receipt.
+4. **Intensity is learned, not designed**: initial thresholds ride the stakes dial; thereafter the Governor scores override outcomes (when the Resident objected and was overridden — who turned out right?) and calibrates.
 
-### Module names
+### Worker — does
 
-| Term | Description |
-|---|---|
-| `Ingress` | Channel-agnostic entry: normalize → identify → resolve session candidate → hand off to dispatch. |
-| `Dispatch` | Cross-boundary gate: authorize → route → deliver → project → track lifecycle. |
-| `IngressEngine` / `DispatchRuntime` | Public entry points. |
-| `SessionResolver` | Ingress submodule producing the default session candidate from `SurfaceKey`. |
-| `EventProjector` | Dispatch-invoked utility that persists the inbound message into the final session after PI match resolution. |
-| `DispatchHandler` | Per-action handler inside dispatch. |
+Any delegated executor: internal agents, external CLI apps (Claude Code, OpenCode), external humans, the Owner. Uniform contract: isolated session, task-scoped slice of data and permission, exit through a CompletionReport whose claims carry evidence. Human executors are verification-waived but never recording-waived — a one-line chat report suffices and the Resident writes the ledger entry.
 
-### Task and improvement (ledger concerns)
+Split criteria (when one Worker becomes two): split when **permission profiles differ** (web egress vs filesystem) or **verification regimes differ** (source citation vs test suite). An implementation-bound five-minute lookup is the coding Worker's subagent; an independently verifiable investigation is a separate research Worker.
 
-| Term | Description |
-|---|---|
-| `ExecutionLane` | Where a request executes: `built-in / dispatch action / worker`. Chosen by how much reasoning execution still requires. |
-| `WorkItem` | Task ledger entry — the OS's process table row: criteria, attempts, sessions, executor, evidence, gate. |
-| `CompletionReport` | Mandatory deliverable companion: written claims, each referencing ledger evidence. The distillation unit and evaluation input. |
-| `outcome` | Owner's post-hoc usefulness signal: `adopted / corrected / redone / ignored`. |
-| `IncidentFingerprint` | Recurrence identity of a mistake: cause category × task type × failure mode. |
-| `MemoryCandidate` | Scoped, attributed, reviewable memory ingestion unit (`scope`, `category`, `provenance`, `confidence`). |
-| `Memory.Engine` | Pluggable memory port: `ingest / recall / profile / feedback`, kernel-side scope filter. |
-| `ApplicationManifest` | Per-CLI-app registry entry: capabilities, cost profile, evidence-backed track record. |
-| `Connector` | Server-side boundary for an installed app: spawn, question bridge, log ingestion — never manages the app's inside. |
-| `SocialBudget` | Outreach resource axis: per-contact frequency caps, cooldowns, disclosure policy. |
+Workers start ephemeral and earn persistence through ledger evidence (usage, adoption, correction rate); they are demoted the same way.
 
-See [ADR-009](design-decisions/009-external-actor-authority-model.md) for the authority model, routing precedence, and full scenario traces; [ADR-010](design-decisions/010-agent-os-kernel-model.md)–[013](design-decisions/013-memory-engine-port.md) for the Agent OS model, task ledger, Governor, and memory port.
+### Governor — fixes
+
+A separate low-privilege observer, never in conversations. Two loops: an incident-driven fast loop (mistake → root cause from the situation's raw records → a structural fix so recurrence is impossible — never an apology) and a periodic slow loop (routing hints, calibration, cost accounting).
+
+Design commitments (grounded in Meta-Harness, arXiv:2603.28052 — summary-fed improvement loops are the losing ablation; independent proposers over raw traces win):
+
+- **Reads raw**: delegation-time judgment reads distilled reports; the improvement loop reads raw transcripts through selective access (grep-style). Its minimal implementation is literally a scheduled coding-agent session over the ledger store.
+- **Proposals are evaluated before adoption**: the ledger doubles as a regression corpus — past work items with recorded outcomes are the search set for replay/canary evaluation.
+- **Reward tiering**: domains with code-checkable rewards (tests, structural verification) get full search loops; Owner-subjective domains (adopted/ignored signals — sparse, slow) get proposal-only changes. Semantic evaluation stays independent of the adoption signal (Goodhart guard).
+- **Write formula**: read-omniscient, write-minimal — tightening is autonomous, loosening needs the Owner, safety constraints are untouchable. Its primary output form is a policy attached to a hook point, which makes improvement observable as a diff.
+- `IncidentFingerprint` is an index over incidents, never a taxonomy that constrains diagnosis.
+
+### Jester — doubts
+
+A real-time smoke alarm for discourse, filling the quadrant "who checks the judge, live". It is a cheap-detector → expensive-verifier cascade: it produces suspicion cheaply; the Resident or a Worker does the evidence work.
+
+1. **Zero authority** — it can only speak; it blocks and writes nothing.
+2. **Questions only** — it cannot cite evidence (cheap model), so structurally it may only ask; the Resident must answer with evidence or concede. That exchange, visible to the Owner, is the cross-validation.
+3. **Deliberately blind** — it sees a philosophy digest, the tail of the decision log, memory index one-liners, and the current utterance; never the Resident's reasoning.
+4. **Silence is the default** — scored on precision; missed catches are acceptable (the Governor sweeps later); getting muted is death.
+5. **On the ledger like everyone** — every flag is recorded; the Governor scores hit/miss and tunes or retires it.
+6. Tone is an audience property: Jester speaks to the Owner, so it uses whatever register the Owner prefers.
+
+### Voice — a component, not a role and not a policy
+
+Tone is a property of the audience, not of a component. Owner-facing output may be raw and technical. Anything leaving through a human channel passes the Voice component: rendering in the recipient's per-relationship register, consistent over time. An `egress.render.pre` policy may *oblige* rendering; the Voice component *performs* it — policies decide, components execute.
+
+## External Interaction
+
+The assistant is **openly known**: people understand that messaging the Owner's account or bot reaches the Owner's assistant. There is no impersonation problem — only a response-quality bar.
+
+Flow: external message → ingress resolves the actor → the Resident judges *does this need the Owner?* Pure logistics (confirming a set appointment, sharing known facts) auto-answers in that contact's voice register; money, commitments, emotional weight, or novel requests escalate. What auto-answers is configurable per surface (routing settings ride the existing grant machinery). Every auto-reply is on the ledger — the Owner can always see what was said in their name. Hard rule: asked directly "are you human?", the assistant does not lie.
+
+## Data
+
+**Omnivorous in what it can observe, conservative in what it assumes, scoped in what it exposes.**
+
+- **Capability-first**: connectors mount widely; by default nothing is read until needed, then originals are read directly.
+- **Ingestion is earned per domain**: always-on observation starts with small structured domains (calendar, tasks) and expands only where ledger evidence shows proactive intervention actually helped — the same promotion pattern as Workers.
+- The Resident never trusts memory over originals; when memory is load-bearing, it re-checks the source.
+- Workers receive task-scoped slices only, enforced at `memory.recall.pre`.
+
+## Vocabulary — Three Tiers
+
+**Tier 1 (philosophy, exactly ten):** Actor, Gate, Ledger, Evidence, Stakes, Owner, Resident, Worker, Jester, Governor.
+
+**Tier 2 (specification):** authority profile and its fields (TrustTier, Grant, SocialBudget, voice register, Blacklist), ActorIdentity, Endpoint, Channel, Surface, Command, Lane, Subagent, Policy and policy points, Escalation, PendingInteraction, Session, Transcript, WorkItem, CompletionReport, Receipt, Memory, Outcome, Voice.
+
+**Tier 3 (implementation):** packages and modules — see [Architecture](architecture.md). `IngressEngine`, `DispatchRuntime`, `DispatchHandler`, `ActorRegistry`, `EventProjector`, `Connector` are module names, never concepts.
+
+**Demotions and removals:** ChannelGrant/WorkerGrant/TrustTier/SocialBudget → profile fields; EffectiveAuthority → removed as a concept (it is a computation); WorkerRun → removed (absorbed into WorkItem.attempts); InboundMessage/InboundEvent/Envelope/Message → wire formats; SessionOwner/Origin/Purpose → session fields; executorKind → WorkItem field; IncidentFingerprint → Governor index field; MemoryCandidate → ingestion format; ApplicationManifest → app-Worker profile field; ExecutionLane → Lane; System Governor → Governor. The word **"runtime" is banned** as a standalone noun — say agent loop, worker process, or kernel.
