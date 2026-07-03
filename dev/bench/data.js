@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782876785571,
+  "lastUpdate": 1783050923276,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -31867,6 +31867,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515242,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3791066a76737bcc5230c2eaf8c41f9421d6d8a2",
+          "message": "docs: philosophy v2 — agent os root claim, kernel triad, role quartet (#452)\n\n* docs: rewrite design philosophy and core model for philosophy v2\n\nRoot claim: single-Owner Agent OS. Three kernel primitives (actor,\ngate, ledger), two laws and a stakes dial, four roles (worker,\nresident, jester, governor) with Owner as root. Core model becomes\nthe OS specification: authority profiles, three communication verbs,\npolicy hook layer with rulebook, ledger views, challenge rules,\nthree-tier vocabulary with demotions.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: add architecture doc and extend bets with v2 kill criteria\n\nArchitecture maps the kernel to code: measured seven communication\npaths converging to three verbs, bus as the ledger write api, policy\nengine relocation to ring 1, package rings, audit-confirmed\nextraction/merge/delete ledger, P0-P4 migration phases. Bets gain\nB4-B8 (challenge, jester, ingestion, existence, raw-vs-summary) plus\nrole-proliferation indictment entry.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: refresh usage model, status, readme, agents for v2 vocabulary\n\nUsage model gains pushback/receipts, the jester's visible exchange,\nknown-assistant external handling, and owner-as-executor reporting.\nImplementation status gets the restructure target section; ADR index\ngains a normative-status banner (newer docs win); readme and\nAGENTS.md adopt the v2 role vocabulary and link architecture.md.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: absorb adr contracts into kernel-contract and retire adrs\n\nkernel-contract.md consolidates the normative detail from adr-009\nthrough adr-013 (guarantee split, authority evaluation, pending\ninteraction lifecycle, work item + evidence gate, governor rules,\nmemory port) in v2 vocabulary. adr-001-004 conventions absorbed into\narchitecture.md. all adr files deleted; git history preserves the\noriginals. references across readme, agents.md, contributing updated.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-03T03:54:25Z",
+          "tree_id": "e55635a76eee9834fcac81b9a9ed50899589bef2",
+          "url": "https://github.com/INONONO66/openomni/commit/3791066a76737bcc5230c2eaf8c41f9421d6d8a2"
+        },
+        "date": 1783050922827,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6204,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3183,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16493,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8827,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1550,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 780,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2344,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11044,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103927,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 547013,
             "unit": "ns/op"
           }
         ]
