@@ -102,7 +102,7 @@ export class WorkerSlotCoordinator {
     const supervisor = slot.supervisor;
     slot.supervisor = null;
     this.forgetSlot(slot);
-    supervisor?.forceKill();
+    supervisor?.dispose();
   }
 
   async shutdown(): Promise<PromiseSettledResult<void>[]> {

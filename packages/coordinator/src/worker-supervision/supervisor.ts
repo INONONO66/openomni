@@ -240,6 +240,15 @@ export class WorkerSupervisor {
     if (this.proc && this.running) this.proc.kill("SIGKILL");
   }
 
+  /** Kill without restart — for discarding a worker no slot references anymore. */
+  dispose(): void {
+    this.stopping = true;
+    const c = this.client;
+    this.client = null;
+    c?.close();
+    this.forceKill();
+  }
+
   async stop(): Promise<void> {
     this.stopping = true;
     const c = this.client;
