@@ -155,7 +155,15 @@ export class WorkerSupervisor {
     }
 
     if (!this.stopping && this.running && lastError) {
-      throw lastError;
+      // doStart() fires this promise without awaiting it, so a throw here would
+      // surface as an unhandled rejection; report and let waitReady() time out.
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "coordinator.worker",
+        msg: "worker IPC connect failed within deadline",
+        context: { workerId: this.id, error: lastError.message },
+      });
     }
   }
 
