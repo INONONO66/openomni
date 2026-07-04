@@ -1,4 +1,3 @@
-import { createSessionRouting, type SessionRouter } from "../worker-supervision/session-routing";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import type {
   SlotWaiter,
@@ -9,7 +8,7 @@ import type {
 
 export class WorkerSlotCoordinator {
   private readonly slots = new Map<number, WorkerSlot>();
-  private readonly sessionRouting: SessionRouter = createSessionRouting();
+  private readonly sessionAffinity = new Map<string, number>();
   private readonly waiters: SlotWaiter[] = [];
   private nextWorkerId = 0;
 
@@ -116,7 +115,7 @@ export class WorkerSlotCoordinator {
       }),
     );
     this.slots.clear();
-    this.sessionRouting.clear();
+    this.sessionAffinity.clear();
     for (const waiter of this.waiters.splice(0)) {
       waiter.reject(new Error("worker manager is shutting down"));
     }
@@ -124,7 +123,7 @@ export class WorkerSlotCoordinator {
   }
 
   private async tryAcquireSlot(sessionId: string): Promise<WorkerSlot | undefined> {
-    const affinityId = this.sessionRouting.get(sessionId);
+    const affinityId = this.sessionAffinity.get(sessionId);
     const affinitySlot = affinityId === undefined ? undefined : this.slots.get(affinityId);
     if (affinitySlot !== undefined && affinitySlot.ownerSessionId === sessionId) {
       if (affinitySlot.load > 0 || affinitySlot.reserved) return undefined;
@@ -134,7 +133,7 @@ export class WorkerSlotCoordinator {
 
     if (this.slots.size < this.config.maxActiveWorkers) {
       const slot = this.createSlot(sessionId);
-      this.sessionRouting.assign(sessionId, slot.id);
+      this.sessionAffinity.set(sessionId, slot.id);
       return slot;
     }
 
@@ -182,12 +181,12 @@ export class WorkerSlotCoordinator {
   private async reassignSlot(slot: WorkerSlot, sessionId: string): Promise<WorkerSlot> {
     slot.reserved = true;
     this.clearIdleTimer(slot);
-    this.sessionRouting.forgetWorker(slot.id);
+    this.forgetSlotAffinity(slot.id);
     const supervisor = slot.supervisor;
     slot.supervisor = null;
     await supervisor?.stop();
     slot.ownerSessionId = sessionId;
-    this.sessionRouting.assign(sessionId, slot.id);
+    this.sessionAffinity.set(sessionId, slot.id);
     return slot;
   }
 
@@ -253,7 +252,13 @@ export class WorkerSlotCoordinator {
   private forgetSlot(slot: WorkerSlot): void {
     this.clearIdleTimer(slot);
     this.slots.delete(slot.id);
-    this.sessionRouting.forgetWorker(slot.id);
+    this.forgetSlotAffinity(slot.id);
+  }
+
+  private forgetSlotAffinity(workerId: number): void {
+    for (const [sessionId, affinityId] of this.sessionAffinity.entries()) {
+      if (affinityId === workerId) this.sessionAffinity.delete(sessionId);
+    }
   }
 
   private clearIdleTimer(slot: WorkerSlot): void {

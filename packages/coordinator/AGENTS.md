@@ -12,7 +12,7 @@ src/
 ├── ipc/                  # Unix socket transport + framing + protocol errors
 ├── recovery/             # Interrupted worker run recovery
 ├── worker-manager/       # ⭐ LIVE: OnDemandWorkerManager — spawn on demand, slots, idle shutdown
-└── worker-supervision/   # Worker supervisor internals plus SessionRouting helper
+└── worker-supervision/   # Worker supervisor internals
 ```
 
 ## DEPENDENCIES
@@ -25,7 +25,6 @@ Depends on `@openomni/protocol` and `@openomni/session`. Runtime execution wirin
 |--------|---------|
 | `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based run dispatch, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
 | `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
-| `worker-supervision/session-routing.ts` | Session affinity helper used by `worker-manager`; session-affinity `route/complete` behavior remains test-covered |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 | `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
 
@@ -52,7 +51,7 @@ Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager`
 
 ## TESTS
 
-Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-supervision/` supervisor contracts, SessionRouting behavior, barrel contracts, recovery, and harness smoke coverage.
+Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-supervision/` supervisor contracts, barrel contracts, recovery, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 
