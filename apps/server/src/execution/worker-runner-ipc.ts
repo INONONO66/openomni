@@ -148,17 +148,6 @@ export function createMcpProxyProvider(options: {
   });
 }
 
-export function notifyWorkerRunCompleted(
-  server: WorkerRunIpcServer,
-  params: Record<string, unknown>,
-): void {
-  try {
-    server.notify("worker.run_completed", params);
-  } catch {
-    return;
-  }
-}
-
 function createToolCallAbortError(): Error {
   const error = new Error("Tool call aborted");
   error.name = "AbortError";

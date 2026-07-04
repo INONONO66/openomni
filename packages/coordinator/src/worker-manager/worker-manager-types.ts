@@ -28,7 +28,6 @@ export type WorkerManagerConfig = {
   bootstrap?: WorkerBootstrap.Bootstrap;
   onToolCall?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
   onInboundWait?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
-  onWorkerSnapshot?: (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
 };
 
 export type WorkerManagerStats = {

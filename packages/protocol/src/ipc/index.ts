@@ -101,49 +101,8 @@ const methods = {
     params: z.object({ authToken: z.string(), bootstrap: WorkerBootstrap.Bootstrap }),
     result: z.object({ ok: z.boolean(), error: z.string().optional() }),
   },
-  // Central tool permission enforcement — workers ask coordinator before executing any tool
-  "coordinator.check_permission": {
-    params: z.object({
-      runId: z.string(),
-      sessionId: z.string(),
-      tool: z.string(),
-      input: z.record(z.string(), z.unknown()),
-    }),
-    result: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
-  },
-  "worker.ready": {
-    params: z.object({ workerId: z.string(), pid: z.number() }),
-    result: z.object({
-      acknowledged: z.boolean(),
-      bootstrap: WorkerBootstrap.Bootstrap.optional(),
-    }),
-  },
   "worker.bootstrap_ready": {
     params: z.object({ workerId: z.string(), authToken: z.string() }),
-    result: z.null(),
-  },
-  "worker.heartbeat": {
-    params: z.object({
-      authToken: z.string(),
-      workerId: z.string(),
-      activeRunIds: z.array(z.string()),
-      memoryRssMb: z.number(),
-      snapshot: WorkerBootstrap.WorkerSnapshot.optional(),
-    }),
-    result: z.null(),
-  },
-  "worker.run_started": {
-    params: z.object({ runId: z.string(), sessionId: z.string() }),
-    result: z.null(),
-  },
-  "worker.run_completed": {
-    params: z.object({
-      runId: z.string(),
-      sessionId: z.string(),
-      status: z.enum(["succeeded", "failed", "cancelled", "interrupted"]),
-      output: z.string().optional(),
-      error: z.string().optional(),
-    }),
     result: z.null(),
   },
   "worker.tool_call": {
@@ -194,22 +153,6 @@ const methods = {
       workspaceRoot: z.string().optional(),
     }),
     result: z.object({ acknowledged: z.boolean(), error: z.string().optional() }),
-  },
-  "worker.state_update": {
-    params: z.object({
-      runId: z.string(),
-      sessionId: z.string(),
-      event: z.string(),
-      data: z.record(z.string(), z.unknown()).optional(),
-    }),
-    result: z.null(),
-  },
-  "worker.request_restart": {
-    params: z.object({
-      workerId: z.string(),
-      reason: z.string(),
-    }),
-    result: z.object({ acknowledged: z.boolean() }),
   },
 };
 

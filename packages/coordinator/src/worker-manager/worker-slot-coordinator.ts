@@ -66,7 +66,6 @@ export class WorkerSlotCoordinator {
       this.config.socketDir,
       managerConfig.bootstrap,
       managerConfig.onToolCall,
-      managerConfig.onWorkerSnapshot,
       managerConfig.onInboundWait,
     );
     return slot.supervisor;

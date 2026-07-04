@@ -1,4 +1,4 @@
-import type { Tool, WorkerBootstrap } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 
 export type ToolCallParams = {
   runId: string;
@@ -51,7 +51,5 @@ export type ToolCallHandler = (
   params: ToolCallParams,
   context?: ToolCallContext,
 ) => Promise<ToolCallResult>;
-
-export type SnapshotHandler = (workerId: number, snapshot: WorkerBootstrap.WorkerSnapshot) => void;
 
 export type InboundWaitHandler = (params: InboundWaitParams) => Promise<InboundWaitResult>;

@@ -54,14 +54,12 @@ export type ExecutionCoordinator = {
     activeRuns: number;
     maxActiveWorkers: number;
   };
-  getWorkerSnapshots(): Map<number, WorkerBootstrap.WorkerSnapshot>;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   recoverInterruptedRuns(): Promise<RecoveryResult>;
   shutdown(): Promise<void>;
 };
 
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
-  const workerSnapshots = new Map<number, WorkerBootstrap.WorkerSnapshot>();
   const { toolDispatcher } = config;
 
   const workerManager: WorkerManager = createWorkerManager({
@@ -96,9 +94,6 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
           };
         }
       : undefined,
-    onWorkerSnapshot: (workerId, snapshot) => {
-      workerSnapshots.set(workerId, snapshot);
-    },
   });
 
   const activeRuns = new Set<string>();
@@ -134,10 +129,6 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
 
     getStats() {
       return { ...workerManager.getStats(), activeRuns: activeRuns.size };
-    },
-
-    getWorkerSnapshots() {
-      return workerSnapshots;
     },
 
     async waitUntilReady(timeoutMs) {

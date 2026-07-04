@@ -5,7 +5,6 @@ import { InjectionQueue, WorkspaceLock } from "@openomni/openomni";
 import { loadConfig } from "../config";
 import { WorkerBootstrapHandler } from "./worker-bootstrap-handler";
 import { resolveWorkerDbPath } from "./worker-runtime";
-import { WorkerHeartbeat } from "./worker-heartbeat";
 import { WorkerIpcHandlers } from "./worker-ipc-handlers";
 import type { WorkerRunState } from "./worker-run-state";
 import { WorkerRunner } from "./worker-runner";
@@ -113,14 +112,6 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
   } else {
     respond({ ok: true });
   }
-});
-
-WorkerHeartbeat.start({
-  workerId,
-  ipcAuthToken,
-  server,
-  getActiveRunIds: () => [...activeRuns.keys()],
-  getConfigEpoch: () => workerBootstrapState.getBootstrap()?.configEpoch ?? "",
 });
 
 process.on("SIGTERM", async () => {
