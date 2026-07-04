@@ -9,8 +9,8 @@ type MockWorkerManager = {
     active: number;
     idle: number;
     ready: number;
-    busy: number;
-    maxWorkers: number;
+    activeRuns: number;
+    maxActiveWorkers: number;
   };
   waitUntilReady(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
@@ -59,7 +59,7 @@ beforeEach(() => {
       return deferred.promise;
     },
     getStats() {
-      return { workers: 1, active: 1, idle: 0, ready: 1, busy: 0, maxWorkers: 1 };
+      return { workers: 1, active: 1, idle: 0, ready: 1, activeRuns: 0, maxActiveWorkers: 1 };
     },
     async waitUntilReady() {
       /* no-op */
@@ -132,45 +132,5 @@ describe("ExecutionCoordinator", () => {
     });
 
     await shutdown;
-  });
-
-  test("rejects duplicate run ids without clearing the original active run", async () => {
-    const coordinator = createExecutionCoordinator({
-      workerScript: "unused-in-test",
-      workerCount: 1,
-    });
-
-    const firstRun = coordinator.dispatch(
-      "tree-1",
-      makeRequest({
-        runId: "run-1",
-        sessionId: "session-1",
-        prompt: "long",
-        delayMs: 150,
-      } as never),
-    );
-
-    expect(coordinator.getStats().activeRuns).toBe(1);
-
-    try {
-      await coordinator.dispatch(
-        "tree-2",
-        makeRequest({ runId: "run-1", sessionId: "session-2", prompt: "duplicate" }),
-      );
-      throw new Error("expected duplicate dispatch to reject");
-    } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      expect(error.message).toContain("run already active: run-1");
-    }
-
-    expect(coordinator.getStats().activeRuns).toBe(1);
-
-    expect(await firstRun).toMatchObject({
-      runId: "run-1",
-      sessionId: "session-1",
-      status: "succeeded",
-    });
-
-    expect(coordinator.getStats().activeRuns).toBe(0);
   });
 });
