@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783052795826,
+  "lastUpdate": 1783492783473,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -32115,6 +32115,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518632,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ebc2efd5b257573dc93eb401475102f434a84b4",
+          "message": "refactor(coordinator): p0 de-slop — dead modules, write-only telemetry, double ledgers (#461)\n\n* chore(coordinator): delete dead credentials and tool-permission modules\n\nBoth modules had zero production importers (audit-confirmed): worker\ncredential injection is wired in apps/server bootstrap, and the\ncoordinator.check_permission IPC method never had a handler or caller.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* refactor(coordinator,server,protocol): drop write-only worker telemetry\n\nThe heartbeat/snapshot chain (worker-heartbeat sender → IPC →\nsupervisor handleHeartbeat → onWorkerSnapshot → workerSnapshots map →\ngetWorkerSnapshots) had zero readers and no liveness consumer, and the\nworker.run_started/run_completed notifications were dropped at the\nsupervisor, which only listens for bootstrap_ready. Run lifecycle is\nalready reported by the awaited spawn_run RPC reply plus durable Bus\nevents. Also drops never-called IPC vocabulary (check_permission,\nworker.ready, state_update, request_restart) and the WorkerSnapshot\nschema.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* refactor(coordinator): inline session affinity as a plain map\n\nSessionRouter's route()/complete() (least-load selection, refCounts,\nper-worker load tracking) had zero production callers — the slot\ncoordinator only ever used get/assign/forgetWorker/clear, and the slot\nmodel is one owner session per worker with load 0|1, so least-load\nrouting had nothing to route. 88 LOC module becomes a Map field.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* refactor(server): drop duplicate run bookkeeping in ExecutionCoordinator\n\nThe coordinator wrapper kept its own activeRuns Set and repeated the\n'run already active' check that OnDemandWorkerManager already enforces\n(covered by manager.test.ts). Drain now reads the manager's activeRuns\nstat instead of a second ledger.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* fix(coordinator): report failed worker IPC connect instead of throwing\n\nconnectWithRetry is fired without await from doStart(), so throwing on\nfinal failure surfaced as an unhandled rejection. Publish an\nOperational warning and let waitReady() time out with its own error.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* fix(coordinator): stop detached supervisors from restarting as orphans\n\nkillWorker's idle branch detached the supervisor from its slot and\nSIGKILLed the process without setting stopping, so the exited handler\nscheduled a restart of a worker no slot references — an orphan process\nthat even shutdown() (which iterates slots only) could never stop. Add\ndispose() (kill without restart) for the discard path; the loaded-slot\nbranch keeps forceKill, where restart is the supervision contract.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* test(agent): drop no-bypass entries for deleted coordinator code\n\nThe no-bypass conformance ledger still documented credentials/injector.ts\nand tool-permission/policy.ts as known ungoverned paths, but this PR\ndeleted both files — the ungoverned surface they described no longer\nexists. Removing the two stale itSkip entries keeps the ledger honest:\nthese bypasses were eliminated, not merely untracked.\n\nRefs #453\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* chore(coordinator): delete orphaned worker test harness fixture\n\ntest/harness/fixtures.ts (createFakeCoordinator/createFakeWorker) has\nzero importers repo-wide and still wrote a `{ type: \"heartbeat\" }` frame\n— vocabulary this PR removed from the IPC surface. Dead since #101/#122;\ndelete it so the de-slop leaves no misleading heartbeat references.\n\nRefs #453\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-08T15:38:46+09:00",
+          "tree_id": "59c7560c26fa06d037cff01a04424e7e7f4cbf63",
+          "url": "https://github.com/INONONO66/openomni/commit/6ebc2efd5b257573dc93eb401475102f434a84b4"
+        },
+        "date": 1783492783089,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 654,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6200,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9890,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8315,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 835,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1423,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19259,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2330,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 104802,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 529848,
             "unit": "ns/op"
           }
         ]
