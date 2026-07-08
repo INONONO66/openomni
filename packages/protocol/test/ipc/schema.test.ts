@@ -7,8 +7,8 @@ describe("Ipc.Request", () => {
       v: 2,
       type: "request",
       id: "req-1",
-      method: "worker.ready",
-      params: { workerId: "w1", pid: 1234 },
+      method: "worker.bootstrap_ready",
+      params: { workerId: "w1", authToken: "token" },
     };
     const parsed = Ipc.Request.parse(raw);
     const reparsed = Ipc.Request.parse(JSON.parse(JSON.stringify(parsed)));
@@ -16,9 +16,9 @@ describe("Ipc.Request", () => {
   });
 
   test("rejects missing id", () => {
-    expect(Ipc.Request.safeParse({ v: 2, type: "request", method: "worker.ready" }).success).toBe(
-      false,
-    );
+    expect(
+      Ipc.Request.safeParse({ v: 2, type: "request", method: "worker.bootstrap_ready" }).success,
+    ).toBe(false);
   });
 
   test("rejects wrong version", () => {
@@ -27,7 +27,7 @@ describe("Ipc.Request", () => {
         v: 1,
         type: "request",
         id: "req-1",
-        method: "worker.ready",
+        method: "worker.bootstrap_ready",
       }).success,
     ).toBe(false);
   });
@@ -38,7 +38,7 @@ describe("Ipc.Request", () => {
         v: 2,
         type: "notification",
         id: "req-1",
-        method: "worker.ready",
+        method: "worker.bootstrap_ready",
       }).success,
     ).toBe(false);
   });
@@ -74,8 +74,8 @@ describe("Ipc.Notification", () => {
     const raw = {
       v: 2,
       type: "notification",
-      method: "worker.state_update",
-      params: { runId: "run-1", sessionId: "sess-1", event: "turn_start" },
+      method: "worker.deliver_message",
+      params: { sessionId: "sess-1", message: "hello" },
     };
     const parsed = Ipc.Notification.parse(raw);
     const reparsed = Ipc.Notification.parse(JSON.parse(JSON.stringify(parsed)));
@@ -89,12 +89,12 @@ describe("Ipc.Notification", () => {
 
 describe("Ipc helpers", () => {
   test("createRequest produces valid request", () => {
-    const req = Ipc.createRequest("worker.ready", { workerId: "w1", pid: 42 });
+    const req = Ipc.createRequest("worker.bootstrap_ready", { workerId: "w1", authToken: "token" });
     expect(Ipc.Request.safeParse(req).success).toBe(true);
     expect(req.type).toBe("request");
     expect(req.v).toBe(2);
     expect(typeof req.id).toBe("string");
-    expect(req.method).toBe("worker.ready");
+    expect(req.method).toBe("worker.bootstrap_ready");
   });
 
   test("createRequest without params", () => {
@@ -120,14 +120,13 @@ describe("Ipc helpers", () => {
   });
 
   test("createNotification produces valid notification", () => {
-    const notif = Ipc.createNotification("worker.state_update", {
-      runId: "run-1",
+    const notif = Ipc.createNotification("worker.deliver_message", {
       sessionId: "sess-1",
-      event: "turn_end",
+      message: "hello",
     });
     expect(Ipc.Notification.safeParse(notif).success).toBe(true);
     expect(notif.type).toBe("notification");
-    expect(notif.method).toBe("worker.state_update");
+    expect(notif.method).toBe("worker.deliver_message");
   });
 
   test("createNotification without params", () => {
@@ -207,38 +206,6 @@ describe("Ipc.Methods param schemas", () => {
         prompt: "do work",
       }).success,
     ).toBe(false);
-  });
-
-  test("worker.run_completed params valid", () => {
-    expect(
-      Ipc.Methods["worker.run_completed"].params.safeParse({
-        runId: "run-1",
-        sessionId: "sess-1",
-        status: "succeeded",
-        output: "done",
-      }).success,
-    ).toBe(true);
-  });
-
-  test("worker.run_completed rejects invalid status", () => {
-    expect(
-      Ipc.Methods["worker.run_completed"].params.safeParse({
-        runId: "run-1",
-        sessionId: "sess-1",
-        status: "unknown",
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.heartbeat params valid", () => {
-    expect(
-      Ipc.Methods["worker.heartbeat"].params.safeParse({
-        authToken: "token",
-        workerId: "w1",
-        activeRunIds: ["run-1", "run-2"],
-        memoryRssMb: 256,
-      }).success,
-    ).toBe(true);
   });
 
   test("worker.inbound_wait params valid", () => {

@@ -72,21 +72,6 @@ describe("WorkerBootstrap", () => {
     ).toBe(false);
   });
 
-  test("WorkerSnapshot round-trip parse", () => {
-    const snapshot = {
-      activeRuns: ["run1", "run2"],
-      backgroundTasks: [{ id: "task1", status: "running" }],
-      lastHeartbeat: Date.now(),
-      memoryRss: 512000000,
-      configEpoch: "v1.0.0",
-    };
-
-    const parsed = WorkerBootstrap.WorkerSnapshot.parse(snapshot);
-    expect(parsed.activeRuns).toEqual(["run1", "run2"]);
-    expect(parsed.backgroundTasks).toHaveLength(1);
-    expect(parsed.configEpoch).toBe("v1.0.0");
-  });
-
   test("Bootstrap round-trip parse", () => {
     const bootstrap = {
       configEpoch: "v1.0.0",
