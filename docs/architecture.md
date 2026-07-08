@@ -30,7 +30,7 @@ The hook layer already exists and is contract-grade: protocol registers 21 polic
 
 Work remaining:
 
-1. **Four new points + ID-grammar extension** (`memory|egress|work|schedule` prefixes): `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (evidence gate), `schedule.fire.pre` (cron constraints). Note: the grammar's `credential` prefix has zero registered points — consistent with the dead credentials code below.
+1. **Four new points + ID-grammar extension** (`memory|egress|work|schedule` prefixes): `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (evidence gate), `schedule.fire.pre` (cron constraints). Note: the grammar's `credential` prefix has zero registered points — consistent with the coordinator credentials/tool-permission code being dead (deleted in #461).
 2. **Relocate the engine**: contracts live in protocol (correct); the engine lives in `@openomni/agent` (wrong) — move to `@openomni/policy` (ring 1) and enforce per-point input schemas, which structurally eliminates the fabricated context in path 7.
 3. Enforce the rulebook in [Core Model § Policy](core-model.md#policy--the-cross-cutting-hook-layer) — notably registration-time effect validation and the meta-policy that gates policy changes themselves (Owner free / Governor tighten-only / others none).
 
@@ -57,7 +57,7 @@ Each ring depends only inward. `check-deps` gets real rules (the current openomn
 
 **Merge (two implementations → one):** WorkerRun → WorkItem.attempts; ingress's worker spawn/cancel/deliver → dispatch handlers (coordinator becomes the `deliver` driver beneath them); tool-executor double pipeline → one kernel path with a single audit emission; server session back doors → ledger/dispatch APIs.
 
-**Delete (audit-confirmed dead, ~5–6k LOC):** openomni `extension/` (entire), `profile/`, half of `skill/` manager (SkillLoader survives), orphaned policy resolver; server connector registry/discovery/definitions and `router.ts`; session storage drizzle tree + dep, Snapshot, backgroundTask adapter, WalMaintenance; coordinator `credentials/` and `tool-permission/`; the llm retry stack (unreachable in production, `maxRetries: 0`) and 6 of 7 error classes; agent writeback-policy, empty tools barrel, write-only AgentRegistry.
+**Delete (audit-confirmed dead, ~5–6k LOC):** openomni `extension/` (entire), `profile/`, half of `skill/` manager (SkillLoader survives), orphaned policy resolver; server connector registry/discovery/definitions and `router.ts`; session storage drizzle tree + dep, Snapshot, backgroundTask adapter, WalMaintenance; coordinator `credentials/` and `tool-permission/` (done — #461); the llm retry stack (unreachable in production, `maxRetries: 0`) and 6 of 7 error classes; agent writeback-policy, empty tools barrel, write-only AgentRegistry.
 
 **Hygiene:** protocol barrel farm (31/68 index.ts) trimmed; 29 sub-30-LOC single-importer micro-files merged; the word "runtime" (currently 7 meanings) restricted to agent loop / worker process / kernel.
 
