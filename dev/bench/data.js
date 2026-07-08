@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783492783473,
+  "lastUpdate": 1783492953162,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -32239,6 +32239,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 529848,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1516030b4f3155213a04bacc76d248335a81a42c",
+          "message": "docs(status): sync design-round resolutions with roadmap SSOT (#466)\n\n* docs(status): sync design-round resolutions with roadmap SSOT\n\nRecords the 2026-07-05~07 deep-interview resolutions (WAL ledger #455,\nWait unification #215, Execution.Driver #462, resolveRoute #464,\nconcept diet #465) and the #461 coordinator de-slop in the foundation\nrestructure section, matching the #459 SSOT update per the doc-state\nsync rule.\n\nRefs #459\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01G9uY6xnyWr446LYjt2YxeD\n\n* docs(status): frame #461 as P0 opening cut, add #453 snapshot row\n\nThe design-rounds paragraph asserted \"Coordinator de-slop landed first\"\nwhile #461 is still an open PR — merge-order-fragile and premature. Reword\nto describe what #461 does (present tense) and make explicit that it opens\nP0 (#453) rather than closing it: the openomni/server/session/llm/agent\ndead code and the 3 tracked bugs remain. Add a #453 umbrella row to the\nIssue Tracking Snapshot, which previously listed no P0 phase issue despite\nP0 being the active milestone.\n\nRefs #459\nRefs #453\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* docs(status): use approximate LOC for #461 net delta\n\nThe exact \"−1,255 LOC\" drifted once the review-pass commits landed on the\nPR (stale conformance entries + orphaned fixture). Use \"~1.3k LOC net\" so\nthe figure stays honest regardless of the final squash count.\n\nRefs #459\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-08T06:41:25Z",
+          "tree_id": "c4b3428b7b78c711edb58cb1dc44bd894ed4b17b",
+          "url": "https://github.com/INONONO66/openomni/commit/1516030b4f3155213a04bacc76d248335a81a42c"
+        },
+        "date": 1783492952449,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5932,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9264,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8062,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 697,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1344,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20233,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2276,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102882,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 544932,
             "unit": "ns/op"
           }
         ]
