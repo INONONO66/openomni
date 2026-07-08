@@ -139,14 +139,6 @@ describe("policy no-bypass conformance — known ungoverned paths", () => {
     "UNGOVERNED: Worker IPC dispatch packages/coordinator/src/ipc/server.ts — no policy check",
     documentedSkip,
   );
-  itSkip(
-    "UNGOVERNED: Credential injection packages/coordinator/src/credentials/injector.ts — no policy check",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: Tool permission partial packages/coordinator/src/tool-permission/policy.ts — exists but disconnected from v2",
-    documentedSkip,
-  );
   itSkip("UNGOVERNED: Direct LLM run packages/llm/src/run.ts — no policy check", documentedSkip);
   itSkip(
     "UNGOVERNED: Session direct writes packages/session/src/session/index.ts — no policy gate",
