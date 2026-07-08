@@ -15,11 +15,7 @@ import {
   publishWorkerRunStarted,
   publishWorkerRunSucceeded,
 } from "./worker-runner-events";
-import {
-  createMcpProxyProvider,
-  createWorkerDispatchRuntime,
-  notifyWorkerRunCompleted,
-} from "./worker-runner-ipc";
+import { createMcpProxyProvider, createWorkerDispatchRuntime } from "./worker-runner-ipc";
 import { respondSpawnRejected, type WorkerRunnerSpawnOptions } from "./worker-runner-types";
 import {
   buildWorkerInputMessages,
@@ -78,7 +74,6 @@ export namespace WorkerRunner {
 
       try {
         activeRuns.set(runId, { sessionId, controller });
-        server.notify("worker.run_started", { runId, sessionId });
         publishWorkerRunStarted({ traceId, sessionId, runId, prompt: request.prompt });
         await bootstrapReady;
         const bootstrap = getBootstrap();
@@ -175,11 +170,6 @@ export namespace WorkerRunner {
           traceContext: { traceId, sessionId, runId },
         });
         if (controller.signal.aborted) {
-          notifyWorkerRunCompleted(server, {
-            runId,
-            sessionId,
-            status: "cancelled",
-          });
           publishWorkerRunCancelled({ traceId, sessionId, runId });
 
           respond({
@@ -191,12 +181,6 @@ export namespace WorkerRunner {
           return;
         }
 
-        notifyWorkerRunCompleted(server, {
-          runId,
-          sessionId,
-          status: "succeeded",
-          output: runResult.text,
-        });
         publishWorkerRunSucceeded({ traceId, sessionId, runId });
 
         respond({
@@ -210,12 +194,6 @@ export namespace WorkerRunner {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wasCancelled = controller.signal.aborted;
         if (wasCancelled) {
-          notifyWorkerRunCompleted(server, {
-            runId,
-            sessionId,
-            status: "cancelled",
-            error: errorMessage,
-          });
           publishWorkerRunCancelled({ traceId, sessionId, runId });
 
           respond({
@@ -226,12 +204,6 @@ export namespace WorkerRunner {
           });
           return;
         }
-        notifyWorkerRunCompleted(server, {
-          runId,
-          sessionId,
-          status: "failed",
-          error: errorMessage,
-        });
         publishWorkerRunFailed({ traceId, sessionId, runId, errorMessage });
 
         respond({

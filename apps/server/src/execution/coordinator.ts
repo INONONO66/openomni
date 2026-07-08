@@ -54,14 +54,12 @@ export type ExecutionCoordinator = {
     activeRuns: number;
     maxActiveWorkers: number;
   };
-  getWorkerSnapshots(): Map<number, WorkerBootstrap.WorkerSnapshot>;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   recoverInterruptedRuns(): Promise<RecoveryResult>;
   shutdown(): Promise<void>;
 };
 
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
-  const workerSnapshots = new Map<number, WorkerBootstrap.WorkerSnapshot>();
   const { toolDispatcher } = config;
 
   const workerManager: WorkerManager = createWorkerManager({
@@ -96,12 +94,8 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
           };
         }
       : undefined,
-    onWorkerSnapshot: (workerId, snapshot) => {
-      workerSnapshots.set(workerId, snapshot);
-    },
   });
 
-  const activeRuns = new Set<string>();
   let isDraining = false;
 
   return {
@@ -110,18 +104,8 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
         throw new Error("Execution coordinator is draining");
       }
 
-      if (activeRuns.has(request.runId)) {
-        throw new Error(`run already active: ${request.runId}`);
-      }
-
-      activeRuns.add(request.runId);
-
-      try {
-        const raw = await workerManager.dispatch(sessionTreeId, request.runId, { ...request });
-        return Execution.Result.parse(raw);
-      } finally {
-        activeRuns.delete(request.runId);
-      }
+      const raw = await workerManager.dispatch(sessionTreeId, request.runId, { ...request });
+      return Execution.Result.parse(raw);
     },
 
     async cancelRun(runId) {
@@ -133,11 +117,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
     },
 
     getStats() {
-      return { ...workerManager.getStats(), activeRuns: activeRuns.size };
-    },
-
-    getWorkerSnapshots() {
-      return workerSnapshots;
+      return workerManager.getStats();
     },
 
     async waitUntilReady(timeoutMs) {
@@ -152,7 +132,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       isDraining = true;
 
       const deadline = Date.now() + 60_000;
-      while (activeRuns.size > 0 && Date.now() < deadline) {
+      while (workerManager.getStats().activeRuns > 0 && Date.now() < deadline) {
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
       }
 

@@ -30,20 +30,6 @@ export namespace WorkerBootstrap {
   });
   export type RuntimeToolCatalogEntry = z.infer<typeof RuntimeToolCatalogEntry>;
 
-  export const WorkerSnapshot = z.object({
-    activeRuns: z.string().array(),
-    backgroundTasks: z
-      .object({
-        id: z.string(),
-        status: z.string(),
-      })
-      .array(),
-    lastHeartbeat: z.number(),
-    memoryRss: z.number(),
-    configEpoch: z.string(),
-  });
-  export type WorkerSnapshot = z.infer<typeof WorkerSnapshot>;
-
   export const Bootstrap = z.object({
     configEpoch: z.string(),
     agents: RuntimeAgentDefinition.array(),

@@ -21,15 +21,14 @@ Defines the locked-in wire contract between the coordinator process and worker p
 | `coordinator.bootstrap` | Coordinator → Worker | Authenticate the supervisor connection and deliver worker bootstrap config. |
 | `coordinator.spawn_run` | Coordinator → Worker | Spawn a new agent run on the worker. Injects credentials and permissions. |
 | `coordinator.cancel_run` | Coordinator → Worker | Cancel an in-progress run by runId. |
-| `coordinator.check_permission` | Coordinator → Worker (reply) | Response to worker's tool permission query. |
-| `worker.ready` | Worker → Coordinator | Legacy worker startup signal; current runtime uses `coordinator.bootstrap`. |
 | `worker.bootstrap_ready` | Worker → Coordinator | Worker authenticated bootstrap is applied and runs may be accepted. |
-| `worker.heartbeat` | Worker → Coordinator | Periodic liveness + resource report. |
-| `worker.run_started` | Worker → Coordinator | Notify that a run has begun execution. |
-| `worker.run_completed` | Worker → Coordinator | Notify run terminal state (succeeded/failed/cancelled/interrupted). |
+| `worker.deliver_message` | Coordinator → Worker | Deliver a follow-up message into an active run's injection queue. |
+| `worker.shutdown_idle` | Coordinator → Worker | Ask an idle worker to acknowledge and exit gracefully. |
 | `worker.tool_call` | Worker → Coordinator | Request coordinator to execute a tool call on behalf of the run. |
-| `worker.state_update` | Worker → Coordinator | Emit a fine-grained state event (turn_start, tool_start, etc.). |
-| `worker.request_restart` | Worker → Coordinator | Worker requests graceful restart (e.g. memory threshold exceeded). |
+| `worker.tool_call_cancel` | Worker → Coordinator | Abort an in-flight relayed tool call. |
+| `worker.tool_call_settled` | Coordinator → Worker | Confirm a relayed tool call fully settled (workspace lock release). |
+| `worker.inbound_wait` | Worker → Coordinator | Block on an external answer (resident guidance/approval). |
+| `worker.inbound_wait_cancel` | Worker → Coordinator | Abort an in-flight inbound wait. |
 
 ## Versioning Policy
 

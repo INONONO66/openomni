@@ -1,9 +1,7 @@
-import type { WorkerBootstrap } from "@openomni/protocol";
 import type {
   ActiveRequest,
   InboundWaitHandler,
   InboundWaitResult,
-  SnapshotHandler,
   ToolCallCancelParams,
   ToolCallHandler,
   ToolCallParams,
@@ -15,7 +13,6 @@ type RequestContext = {
   readonly activeToolCalls: Map<string, ActiveRequest>;
   readonly activeInboundWaitCalls: Map<string, ActiveRequest>;
   readonly toolCallHandler?: ToolCallHandler;
-  readonly snapshotHandler?: SnapshotHandler;
   readonly inboundWaitHandler?: InboundWaitHandler;
   readonly notifyToolCallSettled: (
     callId: string,
@@ -40,9 +37,6 @@ export function handleWorkerRequest(
       return;
     case "worker.inbound_wait_cancel":
       handleInboundWaitCancel(params, respond, context);
-      return;
-    case "worker.heartbeat":
-      handleHeartbeat(params, respond, context);
       return;
     case "worker.inbound_wait":
       handleInboundWait(params, respond, context);
@@ -138,17 +132,6 @@ function handleInboundWaitCancel(
     error: "worker.inbound_wait aborted",
   });
   respond({ cancelled: true, settlement: "unknown" });
-}
-
-function handleHeartbeat(
-  params: Record<string, unknown> | undefined,
-  respond: Respond,
-  context: RequestContext,
-): void {
-  if (context.snapshotHandler && params?.snapshot) {
-    context.snapshotHandler(context.workerId, params.snapshot as WorkerBootstrap.WorkerSnapshot);
-  }
-  respond(null);
 }
 
 function handleInboundWait(

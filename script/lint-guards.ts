@@ -32,10 +32,7 @@ const canonicalPolicyRequiredFiles = new Set([
   "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "apps/server/src/channel/authn/decision.ts",
 ]);
-const approvedAuthorizationFiles = new Set([
-  "packages/openomni/src/extension/manager.ts",
-  "packages/coordinator/src/tool-permission/policy.ts",
-]);
+const approvedAuthorizationFiles = new Set(["packages/openomni/src/extension/manager.ts"]);
 
 const listMembershipPattern = /\b(?:denylist|allowlist)\s*\??\.\s*includes\s*\(/g;
 const channelNormalizerTriggerPattern = /\bevaluateTriggers\s*\(/g;

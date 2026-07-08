@@ -128,45 +128,6 @@ describe("WorkerRunner", () => {
     expect(activeRuns.get("run-1")).toBe(existingRun);
   });
 
-  it("reports failed runs and cleans state when start notification fails", async () => {
-    const responses: unknown[] = [];
-    const activeRuns = new Map();
-    const responseReceived = new Promise<void>((resolve) => {
-      const options = createSpawnOptions(
-        createValidRequest(),
-        (result) => {
-          responses.push(result);
-          resolve();
-        },
-        {
-          activeRuns,
-          server: {
-            async call() {
-              throw new Error("unexpected server call");
-            },
-            notify() {
-              throw new Error("notify failed");
-            },
-          },
-        },
-      );
-
-      WorkerRunner.spawnRun(options);
-    });
-
-    await responseReceived;
-
-    expect(responses).toEqual([
-      {
-        runId: "run-1",
-        sessionId: "session-1",
-        status: "failed",
-        error: "notify failed",
-      },
-    ]);
-    expect(activeRuns.size).toBe(0);
-  });
-
   it("runs valid spawn requests and cleans active run state after success", async () => {
     const responses: unknown[] = [];
     const notifications: Array<{ method: string; params?: Record<string, unknown> }> = [];
@@ -216,13 +177,7 @@ describe("WorkerRunner", () => {
         finishReason: "stop",
       },
     ]);
-    expect(notifications).toEqual([
-      { method: "worker.run_started", params: { runId: "run-1", sessionId: "session-1" } },
-      {
-        method: "worker.run_completed",
-        params: { runId: "run-1", sessionId: "session-1", status: "succeeded", output: "done" },
-      },
-    ]);
+    expect(notifications).toEqual([]);
     expect(activeRuns.size).toBe(0);
   });
 
@@ -890,18 +845,7 @@ describe("WorkerRunner", () => {
         error: "agent failed",
       },
     ]);
-    expect(notifications).toEqual([
-      { method: "worker.run_started", params: { runId: "run-1", sessionId: "session-1" } },
-      {
-        method: "worker.run_completed",
-        params: {
-          runId: "run-1",
-          sessionId: "session-1",
-          status: "failed",
-          error: "agent failed",
-        },
-      },
-    ]);
+    expect(notifications).toEqual([]);
     expect(activeRuns.size).toBe(0);
   });
 });

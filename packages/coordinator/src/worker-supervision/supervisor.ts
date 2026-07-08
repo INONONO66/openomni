@@ -14,12 +14,7 @@ import {
   workerStopGraceMs,
 } from "./supervisor-process.js";
 import { handleWorkerRequest } from "./supervisor-requests.js";
-import type {
-  ActiveRequest,
-  InboundWaitHandler,
-  SnapshotHandler,
-  ToolCallHandler,
-} from "./supervisor-types.js";
+import type { ActiveRequest, InboundWaitHandler, ToolCallHandler } from "./supervisor-types.js";
 
 const RESTART_WINDOW_MS = 60_000;
 const WORKER_CONNECT_TIMEOUT_MS = 10_000;
@@ -53,7 +48,6 @@ export class WorkerSupervisor {
     socketDir = "/tmp",
     private readonly bootstrap?: WorkerBootstrap.Bootstrap,
     private readonly toolCallHandler?: ToolCallHandler,
-    private readonly snapshotHandler?: SnapshotHandler,
     private readonly inboundWaitHandler?: InboundWaitHandler,
   ) {
     this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
@@ -104,7 +98,6 @@ export class WorkerSupervisor {
               activeToolCalls: this.activeToolCalls,
               activeInboundWaitCalls: this.activeInboundWaitCalls,
               toolCallHandler: this.toolCallHandler,
-              snapshotHandler: this.snapshotHandler,
               inboundWaitHandler: this.inboundWaitHandler,
               notifyToolCallSettled: async (callId, workspaceRoot) => {
                 await c
@@ -162,7 +155,15 @@ export class WorkerSupervisor {
     }
 
     if (!this.stopping && this.running && lastError) {
-      throw lastError;
+      // doStart() fires this promise without awaiting it, so a throw here would
+      // surface as an unhandled rejection; report and let waitReady() time out.
+      Bus.publish(Operational.Warn, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        component: "coordinator.worker",
+        msg: "worker IPC connect failed within deadline",
+        context: { workerId: this.id, error: lastError.message },
+      });
     }
   }
 
@@ -237,6 +238,15 @@ export class WorkerSupervisor {
 
   forceKill(): void {
     if (this.proc && this.running) this.proc.kill("SIGKILL");
+  }
+
+  /** Kill without restart — for discarding a worker no slot references anymore. */
+  dispose(): void {
+    this.stopping = true;
+    const c = this.client;
+    this.client = null;
+    c?.close();
+    this.forceKill();
   }
 
   async stop(): Promise<void> {
