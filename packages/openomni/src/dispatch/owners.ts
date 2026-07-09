@@ -58,5 +58,5 @@ export interface DispatchOwners {
 // definition drift (#453 bug 3).
 export const DEFAULT_DISPATCH_MODEL: Model.Ref = {
   provider: "anthropic",
-  id: "claude-3-5-sonnet-20241022",
+  id: "claude-sonnet-4-5",
 };
