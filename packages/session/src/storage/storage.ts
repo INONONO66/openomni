@@ -47,20 +47,6 @@ export namespace Storage {
       list(sessionId: string): Array<{ id: string; meta: string; content: string }>;
       delete(id: string): void;
     };
-    backgroundTask?: {
-      upsert(
-        id: string,
-        status: string,
-        parentSessionId: string,
-        data: string,
-        output?: string,
-      ): void;
-      get(id: string): { data: string; status: string; output?: string } | undefined;
-      listByStatus(
-        ...statuses: string[]
-      ): Array<{ id: string; data: string; status: string; output?: string }>;
-      delete(id: string): void;
-    };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
     pendingAsk?: ProtocolStorage.PendingAskSubAdapter;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Retry } from "../../src/retry";
-import { APIError, RetryError } from "../../src/error";
+import { APIError } from "../../src/error";
 
 describe("Retry", () => {
   test("does not expose removed agent-level retry namespace members", async () => {
@@ -204,10 +204,7 @@ describe("Retry", () => {
 
   describe("isRetryable(error)", () => {
     test("returns undefined if error is not APIError", () => {
-      const error = new RetryError({
-        message: "Retry failed",
-        attempts: 3,
-      });
+      const error = new Error("Retry failed");
 
       const result = Retry.isRetryable(error);
       expect(result).toBeUndefined();

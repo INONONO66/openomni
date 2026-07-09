@@ -16,7 +16,6 @@ import {
   dispatchModelResponse,
   dispatchPreRun,
 } from "../../../src/core/execution/lifecycle-dispatch";
-import { dispatchWritebackCommit } from "../../../src/core/execution/writeback-policy";
 import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
 import { deny } from "../../helpers/policy-decision";
 
@@ -277,25 +276,6 @@ describe("execution helper deny verdicts", () => {
       expect(hasDenyDiagnostic(diagnostics, "completion.prepare")).toBe(true);
     } finally {
       unsubscribe();
-    }
-  });
-
-  it("fail-closes writeback.commit deny before returning output", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    engine.register({
-      name: "deny-writeback",
-      timing: "writeback.commit",
-      priority: 100,
-      fn: () => deny("test.deny", "no-writeback"),
-    });
-
-    try {
-      await dispatchWritebackCommit(makeState(), engine, makeConfig(), "output");
-      throw new Error("expected writeback deny to throw");
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe("no-writeback");
     }
   });
 });

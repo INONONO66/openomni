@@ -1,9 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { AgentRegistry } from "@openomni/agent";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
-import type { Execution, Ingress, Tool, WorkerBootstrap } from "@openomni/protocol";
+import type { Execution, Ingress, Tool } from "@openomni/protocol";
 
 let capturedOnToolCall:
   | ((
@@ -77,7 +76,6 @@ beforeEach(() => {
     createdBy: "act_owner",
   });
   IngressEngine.setCoordinator(noopCoordinator);
-  AgentRegistry.clear();
   capturedOnToolCall = undefined;
   mockPoolDispatch = async (_sessionId, _runId, params) => ({
     runId: params.runId,
@@ -117,32 +115,6 @@ function makeRequest(overrides: Partial<Execution.Request> = {}): Execution.Requ
     ...overrides,
   };
 }
-
-describe("worker bootstrap — AgentRegistry loaded", () => {
-  test("replaceAll from WorkerBootstrap.Bootstrap populates registry", () => {
-    const bootstrap: WorkerBootstrap.Bootstrap = {
-      configEpoch: "v1",
-      agents: [
-        { name: "dev", description: "Development agent", tools: { allow: ["read", "glob"] } },
-        { name: "oracle", description: "Read-only reasoning agent", tools: {} },
-      ],
-      toolCatalog: [],
-    };
-
-    AgentRegistry.replaceAll(
-      bootstrap.agents.map((a) => ({
-        ...a,
-        tools: a.tools.allow ?? [],
-      })),
-    );
-
-    const agents = AgentRegistry.list();
-    expect(agents).toHaveLength(2);
-    expect(agents.map((a) => a.name)).toContain("dev");
-    expect(agents.map((a) => a.name)).toContain("oracle");
-    expect(AgentRegistry.get("dev")?.tools).toEqual(["read", "glob"]);
-  });
-});
 
 describe("system tool provider — read/glob", () => {
   test("lists read and glob tools when workspace root is set", () => {

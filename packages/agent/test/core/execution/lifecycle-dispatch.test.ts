@@ -11,7 +11,6 @@ import {
   inject,
   replaceMessages,
   replacePrompt,
-  rewriteWriteback,
 } from "../../helpers/policy-decision";
 import { buildPolicyEngine } from "../../../src/core/execution/policy-engine-builder";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
@@ -27,7 +26,6 @@ import {
   dispatchModelResponse,
   dispatchPreRun,
 } from "../../../src/core/execution/lifecycle-dispatch";
-import { dispatchWritebackCommit } from "../../../src/core/execution/writeback-policy";
 import { handleCompact, handleError, handleStop } from "../../../src/core/execution/turn-outcome";
 
 function makeInput(): ChatAgentInput {
@@ -736,39 +734,6 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
     expect(completeEvent).toBeDefined();
     expect(completeEvent?.result.text).toBe("original");
-  });
-});
-
-describe("dispatchWritebackCommit effects", () => {
-  it("applies writeback.rewrite to final output", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    engine.register({
-      name: "test-writeback-rewrite",
-      timing: "writeback.commit",
-      priority: 100,
-      fn: () => rewriteWriteback("rewritten output", "test.writeback", "rewrite"),
-    });
-
-    await expect(
-      dispatchWritebackCommit(makeState(), engine, makeConfig(), "original"),
-    ).resolves.toBe("rewritten output");
-  });
-
-  it("applies writeback.suppress by throwing before output is returned", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create();
-    engine.register({
-      name: "test-writeback-suppress",
-      timing: "writeback.commit",
-      priority: 100,
-      fn: () =>
-        allow("test.writeback", "suppress", [{ type: "writeback.suppress", reason: "redacted" }]),
-    });
-
-    await expect(
-      dispatchWritebackCommit(makeState(), engine, makeConfig(), "secret"),
-    ).rejects.toThrow("redacted");
   });
 });
 

@@ -30,46 +30,6 @@ export type {
   ResidentPromptVariant,
 } from "./agents";
 
-// Skill loader and activation
-export { SkillLoader, SkillManager, SkillRegistry, createSkillActivationMiddleware } from "./skill";
-export type {
-  SkillAuditContext,
-  SkillActivationMiddlewareOptions,
-  SkillInstallOptions,
-  SkillListOptions,
-  SkillLoaderOptions,
-  SkillManagerEntry,
-  SkillManagerRoots,
-  SkillOperationOptions,
-  SkillRegistryOptions,
-  SkillUninstallOptions,
-} from "./skill";
-
-// Extension lifecycle management
-export { ExtensionManager, RuntimeBinding } from "./extension";
-export type {
-  ExtensionAuditContext,
-  ExtensionBindingOperationOptions,
-  ExtensionManagerEntry,
-  ExtensionManifestSummary,
-  ExtensionOperationOptions,
-  ExtensionRequestInstallOptions,
-  ExtensionValidationFailure,
-  ExtensionValidationResult,
-  ExtensionValidationSuccess,
-  ExtensionVersionOperationOptions,
-  RuntimeAgentTarget,
-  RuntimeBindingContext,
-  RuntimeBindingController,
-  RuntimeBindingExtension,
-  RuntimeBindingTargets,
-  RuntimeMcpTarget,
-  RuntimeMiddlewareTarget,
-  RuntimeSkillTarget,
-  RuntimeSurfaceTarget,
-  RuntimeToolTarget,
-} from "./extension";
-
 export { PolicyResolver } from "./policy";
 export type {
   LabelMatcher,

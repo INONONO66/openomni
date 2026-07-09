@@ -53,6 +53,6 @@
   },
   "earned": {
     "dormantActions": [],
-    "dormantTools": ["glob", "grep.search", "write"]
+    "dormantTools": ["bash", "edit", "glob", "grep.search", "read", "write"]
   }
 }

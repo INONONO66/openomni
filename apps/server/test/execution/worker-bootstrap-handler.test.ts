@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { AgentRegistry } from "@openomni/agent";
+import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 
 import { WorkerBootstrapHandler } from "../../src/execution/worker-bootstrap-handler";
@@ -30,10 +29,6 @@ function createServer() {
 }
 
 describe("worker bootstrap handler", () => {
-  afterEach(() => {
-    AgentRegistry.clear();
-  });
-
   it("rejects unauthorized bootstrap requests without mutating state", () => {
     const state = WorkerBootstrapHandler.createState();
     const { server, usedConnections, notifications } = createServer();
@@ -103,16 +98,6 @@ describe("worker bootstrap handler", () => {
 
     expect(responses).toEqual([{ ok: true }]);
     expect(state.getBootstrap()?.configEpoch).toBe("epoch-1");
-    expect(AgentRegistry.get("planner")).toMatchObject({
-      name: "planner",
-      description: "Plans work",
-      systemPrompt: "Plan carefully",
-      tools: ["read"],
-      policyPlan: {
-        policies: [{ id: "builtin:tool-permission", required: true }],
-        labels: ["planner"],
-      },
-    });
     expect(mirroredEpoch).toBe("epoch-1");
     expect(state.resolveAuth("openai")).toEqual({ type: "api", key: "openai-key" });
     expect(state.resolveAuth("anthropic")).toEqual({

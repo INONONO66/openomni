@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Bus } from "../../src/bus/index.ts";
 import { Session } from "../../src/session/index.ts";
-import { Snapshot } from "../../src/snapshot/index.ts";
 import { Storage } from "../../src/storage/storage.ts";
 
 function measureRSS(): number {
@@ -83,7 +82,6 @@ function createSession(index: number): Session.Info {
 describe("session memory regression", () => {
   beforeEach(() => {
     Storage.configure(createMemoryStorage());
-    Snapshot.reset();
     Bus.reset();
   });
 

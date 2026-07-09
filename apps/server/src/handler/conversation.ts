@@ -10,7 +10,6 @@ import {
   buildInboundEvent,
   type BridgeDeps,
 } from "../ingress/bridge";
-import { resolveAgentName } from "../router";
 
 const OPEN_TASK_STATUSES = [
   "pending",
@@ -173,8 +172,7 @@ async function processMessage(
     const pendingInteractionReply = await dispatchPendingInteractionReply(message, deps);
     if (pendingInteractionReply !== undefined) return pendingInteractionReply;
 
-    const agentName = resolveAgentName({ message, defaultAgent: "resident" });
-    const event = buildInboundEvent(message, agentName, deps);
+    const event = buildInboundEvent(message, "resident", deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
     return toResponseText(await IngressEngine.ingest(event));
   } catch (error) {

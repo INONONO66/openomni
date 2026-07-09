@@ -1,15 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  AuthError,
-  NamedError,
-  ProviderError,
-  SessionError,
-  StreamError,
-  RetryError,
-  APIError,
-  AbortedError,
-  OutputLengthError,
-} from "../src/error";
+import { NamedError, ProviderError, APIError } from "../src/error";
 
 describe("NamedError", () => {
   test("Unknown error", () => {
@@ -33,35 +23,6 @@ describe("NamedError", () => {
   });
 });
 
-describe("AuthError", () => {
-  test("construction and properties", () => {
-    const err = new AuthError({ message: "auth failed", provider: "openai" });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("AuthError");
-    expect(err.data.message).toBe("auth failed");
-    expect(err.data.provider).toBe("openai");
-  });
-
-  test("toObject serialization", () => {
-    const err = new AuthError({ message: "denied", provider: "anthropic" });
-    expect(err.toObject()).toEqual({
-      name: "AuthError",
-      data: { message: "denied", provider: "anthropic" },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new AuthError({ message: "test", provider: "openai" });
-    expect(AuthError.isInstance(err)).toBe(true);
-    expect(AuthError.isInstance(new ProviderError({ message: "x", provider: "y" }))).toBe(false);
-  });
-
-  test("schema is defined", () => {
-    expect(AuthError.Schema).toBeDefined();
-  });
-});
-
 describe("ProviderError", () => {
   test("construction and properties", () => {
     const err = new ProviderError({
@@ -78,114 +39,7 @@ describe("ProviderError", () => {
   test("isInstance type guard", () => {
     const err = new ProviderError({ message: "test", provider: "x" });
     expect(ProviderError.isInstance(err)).toBe(true);
-    expect(ProviderError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(false);
-  });
-});
-
-describe("SessionError", () => {
-  test("construction with message and sessionID", () => {
-    const err = new SessionError({
-      message: "session expired",
-      sessionID: "sess_123",
-    });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("SessionError");
-    expect(err.data.message).toBe("session expired");
-    expect(err.data.sessionID).toBe("sess_123");
-  });
-
-  test("construction with message only", () => {
-    const err = new SessionError({ message: "session error" });
-    expect(err.name).toBe("SessionError");
-    expect(err.data.message).toBe("session error");
-    expect(err.data.sessionID).toBeUndefined();
-  });
-
-  test("toObject serialization", () => {
-    const err = new SessionError({
-      message: "session lost",
-      sessionID: "sess_456",
-    });
-    expect(err.toObject()).toEqual({
-      name: "SessionError",
-      data: { message: "session lost", sessionID: "sess_456" },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new SessionError({ message: "test" });
-    expect(SessionError.isInstance(err)).toBe(true);
-    expect(SessionError.isInstance(new AuthError({ message: "x", provider: "y" }))).toBe(false);
-  });
-});
-
-describe("StreamError", () => {
-  test("construction and properties", () => {
-    const err = new StreamError({ message: "stream disconnected" });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("StreamError");
-    expect(err.data.message).toBe("stream disconnected");
-  });
-
-  test("toObject serialization", () => {
-    const err = new StreamError({ message: "connection lost" });
-    expect(err.toObject()).toEqual({
-      name: "StreamError",
-      data: { message: "connection lost" },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new StreamError({ message: "test" });
-    expect(StreamError.isInstance(err)).toBe(true);
-    expect(StreamError.isInstance(new SessionError({ message: "x" }))).toBe(false);
-  });
-});
-
-describe("RetryError", () => {
-  test("construction with all fields", () => {
-    const err = new RetryError({
-      message: "max retries exceeded",
-      attempts: 5,
-      lastError: "timeout",
-    });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("RetryError");
-    expect(err.data.message).toBe("max retries exceeded");
-    expect(err.data.attempts).toBe(5);
-    expect(err.data.lastError).toBe("timeout");
-  });
-
-  test("construction without lastError", () => {
-    const err = new RetryError({ message: "retry failed", attempts: 3 });
-    expect(err.data.message).toBe("retry failed");
-    expect(err.data.attempts).toBe(3);
-    expect(err.data.lastError).toBeUndefined();
-  });
-
-  test("toObject serialization", () => {
-    const err = new RetryError({
-      message: "failed after retries",
-      attempts: 10,
-      lastError: "network error",
-    });
-    expect(err.toObject()).toEqual({
-      name: "RetryError",
-      data: {
-        message: "failed after retries",
-        attempts: 10,
-        lastError: "network error",
-      },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new RetryError({ message: "test", attempts: 1 });
-    expect(RetryError.isInstance(err)).toBe(true);
-    expect(RetryError.isInstance(new StreamError({ message: "x" }))).toBe(false);
+    expect(ProviderError.isInstance(new NamedError.Unknown({ message: "x" }))).toBe(false);
   });
 });
 
@@ -244,62 +98,6 @@ describe("APIError", () => {
   test("isInstance type guard", () => {
     const err = new APIError({ message: "test", isRetryable: true });
     expect(APIError.isInstance(err)).toBe(true);
-    expect(APIError.isInstance(new RetryError({ message: "x", attempts: 1 }))).toBe(false);
-  });
-});
-
-describe("AbortedError", () => {
-  test("construction and properties", () => {
-    const err = new AbortedError({ message: "operation aborted" });
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("AbortedError");
-    expect(err.data.message).toBe("operation aborted");
-  });
-
-  test("toObject serialization", () => {
-    const err = new AbortedError({ message: "user cancelled" });
-    expect(err.toObject()).toEqual({
-      name: "AbortedError",
-      data: { message: "user cancelled" },
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new AbortedError({ message: "test" });
-    expect(AbortedError.isInstance(err)).toBe(true);
-    expect(AbortedError.isInstance(new APIError({ message: "x", isRetryable: false }))).toBe(false);
-  });
-});
-
-describe("OutputLengthError", () => {
-  test("construction with empty data", () => {
-    const err = new OutputLengthError({});
-    expect(err).toBeInstanceOf(Error);
-    expect(err).toBeInstanceOf(NamedError);
-    expect(err.name).toBe("OutputLengthError");
-    expect(err.data).toEqual({});
-  });
-
-  test("toObject serialization", () => {
-    const err = new OutputLengthError({});
-    expect(err.toObject()).toEqual({
-      name: "OutputLengthError",
-      data: {},
-    });
-  });
-
-  test("isInstance type guard", () => {
-    const err = new OutputLengthError({});
-    expect(OutputLengthError.isInstance(err)).toBe(true);
-    expect(OutputLengthError.isInstance(new AbortedError({ message: "x" }))).toBe(false);
-  });
-
-  test("can be thrown and caught", () => {
-    try {
-      throw new OutputLengthError({});
-    } catch (e) {
-      expect(OutputLengthError.isInstance(e)).toBe(true);
-    }
+    expect(APIError.isInstance(new NamedError.Unknown({ message: "x" }))).toBe(false);
   });
 });
