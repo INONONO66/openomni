@@ -57,13 +57,13 @@ The rulebook:
 4. No recursion: a policy returns a verdict and declares effects; it never invokes verbs. Effects are applied by the host.
 5. Effects outside a point's `allowedEffects` are rejected at registration, not dropped at runtime.
 6. Registering or changing a policy is itself a dispatched action: the Owner freely; the Governor autonomously only in the tightening direction; loosening requires Owner approval; nobody else at all.
-7. `pending` is the escalation primitive — it carries timeout, resume, and expiry semantics, isomorphic to PendingInteraction.
+7. `pending` is the escalation primitive — it carries timeout, resume, and expiry semantics, isomorphic to Wait.
 8. Every decision is recorded with the facts it used. Volume is solved by encoding, never by not recording.
 9. Per-point context schemas are enforced; there is no universal context shape.
 
 ### Waiting on the world
 
-Outbound requests that need an external answer open a **PendingInteraction** (open → resolved / follow-up / expired / cancelled). The system sleeps at zero cost; a matching reply — even days later — wakes exactly the right work item.
+Outbound requests that need an external answer open a **Wait** (open → resolved / follow-up / expired / cancelled) with `ownerRef: workItem | session`. One primitive absorbs what were four: PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states (#215). The system sleeps at zero cost; a matching reply — even days later — wakes exactly the right work item. (Transitional code name: `PendingInteraction`, until #215 lands.)
 
 ## The Ledger
 
@@ -147,8 +147,8 @@ Flow: external message → ingress resolves the actor → the Resident judges *d
 
 **Tier 1 (philosophy, exactly ten):** Actor, Gate, Ledger, Evidence, Stakes, Owner, Resident, Worker, Jester, Governor.
 
-**Tier 2 (specification):** authority profile and its fields (TrustTier, Grant, SocialBudget, voice register, Blacklist), ActorIdentity, Endpoint, Channel, Surface, Command, Lane, Subagent, Policy and policy points, Escalation, PendingInteraction, Session, Transcript, WorkItem, CompletionReport, Receipt, Memory, Outcome, Voice.
+**Tier 2 (specification):** authority profile and its fields (TrustTier, Grant, SocialBudget, voice register, Blacklist), ActorIdentity, Endpoint, Channel, Surface, Command, Lane, Subagent, Policy and policy points, Wait, Session, Transcript, WorkItem, CompletionReport, Receipt, Memory, Outcome, Voice.
 
 **Tier 3 (implementation):** packages and modules — see [Architecture](architecture.md). `IngressEngine`, `DispatchRuntime`, `DispatchHandler`, `ActorRegistry`, `EventProjector`, `Connector` are module names, never concepts.
 
-**Demotions and removals:** ChannelGrant/WorkerGrant/TrustTier/SocialBudget → profile fields; EffectiveAuthority → removed as a concept (it is a computation); WorkerRun → removed (absorbed into WorkItem.attempts); InboundMessage/InboundEvent/Envelope/Message → wire formats; SessionOwner/Origin/Purpose → session fields; executorKind → WorkItem field; IncidentFingerprint → Governor index field; MemoryCandidate → ingestion format; ApplicationManifest → app-Worker profile field; ExecutionLane → Lane; System Governor → Governor. The word **"runtime" is banned** as a standalone noun — say agent loop, worker process, or kernel.
+**Demotions and removals:** ChannelGrant/WorkerGrant/TrustTier/SocialBudget → profile fields; EffectiveAuthority → removed as a concept (it is a computation); WorkerRun → removed (absorbed into WorkItem.attempts); Escalation/PendingAsk/PendingInteraction → absorbed into Wait (#215); InboundMessage/InboundEvent/Envelope/Message → wire formats; SessionOwner/Origin/Purpose → session fields; executorKind → WorkItem field; IncidentFingerprint → Governor index field; MemoryCandidate → ingestion format; ApplicationManifest → app-Worker profile field; ExecutionLane → Lane; System Governor → Governor. The word **"runtime" is banned** as a standalone noun — say agent loop, worker process, or kernel.

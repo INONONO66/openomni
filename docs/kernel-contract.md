@@ -14,7 +14,7 @@ Documentation may use "guaranteed", "cannot", or "never" only for kernel items. 
 | Guarantee | Enforced where |
 |---|---|
 | All boundary-crossing effects pass the gate (single chokepoint) | dispatch |
-| Authority evaluation (blacklist → PendingInteraction → channel ceiling → tier → session) | dispatch, before any handler |
+| Authority evaluation (blacklist → wait correlation → channel ceiling → tier → session) | dispatch, before any handler |
 | Budget hard-stops (tokens, money, social budget ceilings) | dispatch / agent loop |
 | Tool permission, fail-closed | tool pipeline |
 | Session ownership and isolation | ledger |
@@ -140,16 +140,16 @@ Every session carries owner, origin, and purpose fields:
 
 Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via PendingInteraction. User-facing sessions stay clean: the Owner never sees the seller conversation directly, only the distilled report.
 
-### PendingInteraction — waiting on the world
+### Wait — waiting on the world
 
-The kernel's blocking-wait primitive, used uniformly for every wait on external latency: a human reply, an A2A response, a slow API, a CI run.
+The kernel's blocking-wait primitive, used uniformly for every wait on external latency: a human reply, an A2A response, a slow API, a CI run. One primitive absorbs what were four — PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states — with `ownerRef: workItem | session` naming who is waiting (#215). Throughout this document, `PendingInteraction` is the transitional code name for the workItem-owned Wait until #215 lands.
 
-- **Suspend**: registering a PendingInteraction ends the worker process (resources drop to zero); the WorkItem attempt and its session remain durable.
+- **Suspend**: registering a Wait ends the worker process (resources drop to zero); the WorkItem attempt and its session remain durable.
 - **Wake**: a correlation-matched inbound routes to the owning work session and resumes execution in a fresh process — even days later.
 - **Time semantics**: expiry, follow-up window, and politeness-aware retry (reminders to humans are policy-bounded — e.g. one nudge after N days, then conclude with partial results).
-- **Partial response is a normal mode**: a task waiting on 3 humans may legitimately complete with 1 reply after expiry; readiness is judged by WorkItem dependencies, not all-or-nothing joins.
+- **Partial response is a normal mode**: a Wait may declare a quorum N-of-M over correlated responses; responses attach as they arrive; the Wait completes on quorum or expiry, whichever comes first. On expiry with partial responses it resolves with `partial: true`, and downstream WorkItem dependencies evaluate with what arrived — never all-or-nothing joins.
 
-Contract fields: `{ id, workItemId, sessionId, targetActorId?, endpointId, channelId, correlation: { tokenHash?, threadId?, replyToMessageId?, externalConversationId? }, allowedActions: (report_result | ask_clarification | attach_artifact | decline_task)[], status, expiresAt, followUpWindow }`.
+Contract fields: `{ id, ownerRef: { kind: workItem | session, id }, targetActorId?, endpointId, channelId, correlation: { tokenHash?, threadId?, replyToMessageId?, externalConversationId? }, allowedActions: (report_result | ask_clarification | attach_artifact | decline_task)[], quorum?, status, expiresAt, followUpWindow }`.
 
 Lifecycle: `open → resolved | follow_up | expired | cancelled`. Correlation matching precedence: `replyToMessageId` → `threadId` → `tokenHash` → single-open fallback. Ambiguity is a routing outcome, not a status: multiple open matches are never guessed — dispatch routes a disambiguation request to the Resident (or the Owner, for Owner-initiated ones) and holds the message in a per-actor staging slot. After resolution, messages within `followUpWindow` still route to the same work item as supplementary information; after the window, normal routing applies. If the interaction expired before the reply, the attempt has already failed — the late sender is blocked (unregistered) or treated as normal conversation (registered). Correlation tokens are single-use/nonce-bound; duplicate IDs are idempotent. A callback with no correlation is an orphan — the Resident is notified; it is never auto-attached to the latest work item. Fan-out is 1 work item + N PendingInteractions, each resolving independently.
 
@@ -306,6 +306,34 @@ Snapshot injection and persistence nudges ride existing policy points (`prompt.c
 
 **Originals win.** Memory is a compressed view of the ledger; on conflict the original record wins, and when memory is load-bearing the Resident re-checks the source before acting on it.
 
-## 6. History
+## 6. Determinism, Replay, and Verification
+
+Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Mechanized by the #467 conformance gate. Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
+
+### State and the ledger fold
+
+- Internal state is a fold: `S = fold(apply, S₀, L)` over the append-only ledger, partitioned per owner key. `apply` is pure — no clock, no randomness, no live reads, no external calls. Nondeterministic values are captured **as events at write time** and never re-derived on replay.
+- **Determinism contract = command-sequence identity**: same inputs must produce the same command sequence, not byte-identical outputs. A replay that attempts a step absent from the ledger fails **loudly** as a nondeterminism error — never silent fold corruption. A static replay-fidelity 1.0 on one golden trace is not accepted as determinism evidence.
+- **The gate is a per-owner-key serialized compare-and-append**: `append(event, expectedHead)` with retry on conflict. The gate evaluates against exactly the state it commits on, closing the check-then-act TOCTOU (two workers passing one budget gate).
+- **Attempts are content-addressed**: `k = h(handler_code_hash, model_id, canonical(input), upstream_keys, dep_lockfile_hash)`. Code or model changes invalidate automatically; identical re-execution results cut off downstream propagation early. Cache keys are not replay keys — replay verifies the recorded environment fingerprint and re-executes loudly on drift.
+- **Event schema evolution**: field renames and semantic re-meanings are forbidden (content-addressing cannot detect them) — a changed meaning is a new event type; shape evolution is upcast-on-read. Enforced as a lint in #467.
+- **External effects are not fold state**: they follow intent → idempotent effect (keyed by event id) → confirmed/failed → boot reconciliation. The ledger is authoritative for internal state and eventually-consistent, via reconciliation, for the world.
+- **Hash chain stance (2026-07-09 reconciliation)**: the chain stays on the write path; boot verifies the tail only — a broken tail becomes a `chain-break` event plus a Governor incident, never a boot refusal; full-chain verification runs only as the offline restore-drill gate (#226).
+
+### Verification typing
+
+`judge(claim, evidence, S) → { verified | asserted | refuted } × checked_predicate`.
+
+- `verified` always stores **which predicate was checked** ("URL returned 200 and contains the quoted string" — not "the claim is true"). `guaranteed` remains reserved for code-enforced kernel behavior.
+- Admission: a completion report is admitted iff no claim is `refuted`, and either its stakes are below threshold or every claim is `verified`. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — N small actions in a window accumulate to the stakes of the large action they compose.
+- A claim with no deterministic verifier is typed `asserted` — a first-class trust signal, not a silent pass. A **high-stakes `asserted` raises to the Owner**.
+- **Verifiers are deterministic code, sandboxed** (no network, no clock, no subprocess; deny-by-default) — purity by capability, not by naming convention. **No LLM-in-verifier.** Four families, strongest first: executable re-check > citation/quote match > frozen-NLI support > constrained-decoding validity (validity only, never promoted to truth). Every verifier's bench must demonstrate discrimination (returns `refuted` on a known-bad input).
+- Language discipline: `replay-of-record` (reconstructing what happened — what this system provides) is never conflated with `deterministic regeneration` (re-running the model to identical outputs — not provided).
+
+### Observability surface
+
+The single source of truth for a run is **one wide, flat, greppable structured event per step** (run id, step, op, model, tokens, deterministic verdict `ok|warn|error` assigned at emit time, state hash, prompt hash). Timelines, trees, diffs, and judgments are derived views. The ledger export is derived JSONL over these events — SQLite remains the primary store; the export is regenerable and rotated, and it is the substrate the Governor (and any coding agent) greps. Failure-step attribution by LLM judges is unreliable; verdicts are attached deterministically at emit, not reconstructed afterward.
+
+## 7. History
 
 ADR-001 through ADR-008 established the conventions now stated directly in [Architecture](architecture.md) and [Core Model](core-model.md) — package namespacing, Zod-first schemas as the language-agnostic boundary, ring layering, and the stateless-agent substrate (durable sessions, disposable worker processes) that makes suspension and resume nearly free — along with the persona-era workforce model that evolved into the current role model (Resident / Worker / Jester / Governor as actor profiles, not packages). All are retired; git history preserves the full records.
