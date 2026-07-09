@@ -88,11 +88,37 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     await supervisor.deliver("test-run-id", params);
 
-    // Math.max(1_000_000, 300_000) + 30_000 = 1_030_000, capped at 600_000
+    // 1_000_000 + 30_000 margin — a finite positive budget is honored above
+    // the backstop so the driver never kills a run the loop still allows.
+    expect(capturedTimeoutMs).toBe(1_030_000);
+  });
+
+  test("unlimited budget (-1 sentinel) gets the 600_000 ms physics backstop", async () => {
+    let capturedTimeoutMs: number | undefined;
+    const mockClient: IpcClient = {
+      connected: true,
+      call: mock(async (_method: string, _params: unknown, timeoutMs: number) => {
+        capturedTimeoutMs = timeoutMs;
+        return { success: true };
+      }),
+      close: () => undefined,
+    };
+
+    const supervisor = createTestSupervisor(mockClient);
+    const params = {
+      budget: {
+        maxWallTimeMs: -1,
+      },
+    };
+
+    await supervisor.deliver("test-run-id", params);
+
+    // -1 means unlimited (AgentBudget): the loop will never stop the run, so
+    // the driver backstop must — and must NOT collapse to margin-only ~30s.
     expect(capturedTimeoutMs).toBe(600_000);
   });
 
-  test("dispatch timeout respects minimum of 330_000 ms when budget is missing", async () => {
+  test("missing budget gets the 600_000 ms physics backstop", async () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
@@ -108,8 +134,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     await supervisor.deliver("test-run-id", params);
 
-    // Math.max(300_000, 300_000) + 30_000 = 330_000
-    expect(capturedTimeoutMs).toBe(330_000);
+    // No budget declared → nothing in the loop bounds the run → the driver
+    // backstop is the only wall-time bound.
+    expect(capturedTimeoutMs).toBe(600_000);
   });
 });
 

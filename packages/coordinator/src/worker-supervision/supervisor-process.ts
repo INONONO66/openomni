@@ -66,10 +66,19 @@ export function resolveRestartDelay(restartCount: number): number {
  * loop inside the worker enforces the budget itself; this ceiling is the
  * physics backstop that kills the process when the loop is the thing that
  * hung. No floor — a task that declares a small budget gets a small ceiling.
+ * A finite positive budget is honored even above MAX_DISPATCH_TIMEOUT_MS so
+ * the driver never kills a run the loop's own budget still allows. Unlimited
+ * (`-1` per AgentBudget, or Infinity), absent, or invalid budgets get the
+ * MAX_DISPATCH_TIMEOUT_MS backstop — unlimited means the loop won't stop the
+ * run, which is exactly when the physics backstop must exist.
  */
 export function resolveDeliverTimeoutMs(params: Record<string, unknown>): number {
   const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
-  return Math.min((budget?.maxWallTimeMs ?? 300_000) + deliverMarginMs(), MAX_DISPATCH_TIMEOUT_MS);
+  const wallTime = budget?.maxWallTimeMs;
+  if (typeof wallTime === "number" && Number.isFinite(wallTime) && wallTime > 0) {
+    return wallTime + deliverMarginMs();
+  }
+  return MAX_DISPATCH_TIMEOUT_MS;
 }
 
 const DEFAULT_DELIVER_MARGIN_MS = 30_000;
