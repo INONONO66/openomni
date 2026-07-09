@@ -1,6 +1,6 @@
 # packages/session
 
-Durable state substrate: session lifecycle, message/part storage, event bus, logs, telemetry, trace context, snapshots, artifacts, event log, surface-key records, worker-run records, and indexed stores used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
+Durable state substrate: session lifecycle, message/part storage, event bus, logs, telemetry, trace context, artifacts, event log, surface-key records, worker-run records, and indexed stores used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
 
 This package stores facts. It must not decide product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback policy belong in `@openomni/openomni`.
 
@@ -23,13 +23,10 @@ src/
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
 │   ├── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
-│   ├── part-time.ts      # Message-part timestamp helpers
-│   ├── wal-maintenance.ts # SQLite WAL checkpoint helpers
-│   └── drizzle/          # Drizzle schema + migration artifacts
+│   └── part-time.ts      # Message-part timestamp helpers
 ├── log/                  # Log namespace for observability records
 ├── telemetry/            # Telemetry helpers
 ├── trace/                # TraceContext helpers
-├── snapshot/             # Snapshot.Provider + InMemorySnapshotProvider; Snapshot.Diff
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
 ├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
@@ -53,11 +50,10 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.getWorkerMeta()` / `updateWorkerMeta()`, etc. No class instances.
-- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and optional `artifact`, `surfaceKey`, `backgroundTask`, `cronJob`, `workItem`, `workerRunState`, and `appConnectorInstallation`. App connector installation records include Owner consent metadata plus disable/uninstall lifecycle operations because the installation record is the lifecycle SSOT. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Unimplemented optional sub-objects gracefully degrade.
+- **Storage.Adapter**: Default is `InMemoryStorage`. `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and optional `artifact`, `surfaceKey`, `cronJob`, `workItem`, `workerRunState`, and `appConnectorInstallation`. App connector installation records include Owner consent metadata plus disable/uninstall lifecycle operations because the installation record is the lifecycle SSOT. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Unimplemented optional sub-objects gracefully degrade.
 - **Migration 0006**: Legacy task/todo tables remain in SQLite for data preservation, but no TypeScript storage sub-adapters expose them.
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation; WorkerRun events flow through `WorkerRun.Events.*`.
 - **SurfaceKey records**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs. In-memory forward/reverse indexes plus optional `Storage.Adapter.surfaceKey` for persistence. This package stores and looks up the mapping; `openomni` decides when the mapping wins over PendingInteraction or other routing facts.
-- **Snapshot.Provider**: Interface for capturing and restoring session message state. `Snapshot.Diff` reports added / removed / modified message IDs.
 - **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.remove()`, `.update()`, `.start()`, `.complete(hash, completionReport)`, `.fail()`, `.cancel()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.addReadBackEvidence()`, `.areDependenciesMet()`, `.retry()`. Publishes `WorkItem.Events.*` (Created, Updated, StatusChanged, Completed, Failed, Removed) on every mutation. Gracefully degrades when `Storage.Adapter.workItem` is absent. Terminal state transitions are validated; completion requires a report whose claim evidence IDs resolve to ledger evidence. `parentHash` is create-only immutable.
 - **WorkerRun**: Stored through the direct `workerRunState` adapter (`worker_run_state` table in SQLite). `WorkerRun.create()`, `WorkerRun.updateStatus()`, `WorkerRun.updateStatusIfCurrent()`, `WorkerRun.get()`, and `WorkerRun.listBySession()` publish lifecycle bus events but do not depend on event-log replay. State transitions such as `waiting_input → running` increment `resumeCount`.
 - **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
@@ -84,7 +80,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `backgroundTask`, `workItem`, and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`; use `WorkerRun` so delegated execution state stays in the dedicated worker-run store.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

@@ -12,7 +12,6 @@ Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomn
 src/
 ├── index.ts              # Entry — calls bootstrap/main()
 ├── config.ts             # loadConfig() — reads env / config files into ServerConfig
-├── router.ts             # Transitional agent-name resolution; target direction is OpenOmni-owned routing
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, model, channels, server, recovery, shutdown
@@ -147,7 +146,7 @@ Channel adapters must not:
 
 ## AGENT REGISTRY
 
-- `apps/server/src/agents/registry.ts` is a **server-local** agent registry (keyed by name) distinct from the `AgentRegistry` inside `@openomni/agent`.
+- `apps/server/src/agents/registry.ts` is the **server-local** agent registry (keyed by name); the former `AgentRegistry` in `@openomni/agent` was removed in the P0 dead-code sweep (#453).
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
