@@ -26,7 +26,7 @@ The 2026-07-09 **determinism/verification round** (red-team + durable-execution 
 | #215 ActorIdentity + PendingInteraction migration | Open | 🚧 Core Actor/PI schemas, stores, resolver, correlation routing, boot cleanup, and executorKind are wired; full outbound ask proof, partial-response dependency semantics, and complete restart proof remain the issue gate |
 | #216 installed app connector runtime | Open | 🚧 AppConnector ABI, discovery/register/consent storage, endpoint dispatch, log ingestion, stall detection, and evidence projection are wired; CLI UX, full smoke-verify lifecycle, durable question suspension/resumption, and real Claude Code proof remain |
 | #217 durable boot contract | Open | 🚧 Cron persistence/runner and PI boot cleanup are wired; interrupted-run resume-offer surface and combined boot integration proof remain |
-| #222 remove deprecated `AgentProfile.permissions` | Open | 🚧 Runtime warning path is gone, but the schema field remains and needs removal or wiring plus a migration note |
+| #222 remove deprecated `AgentProfile.permissions` | Open | ✅ Field removed from `AgentProfile.Definition`; the live tool-permission plumbing (ingress `AgentDef.permissions`, execution request, worker-bootstrap — the #462 path) is untouched. Migration note: no stored data carried the field; profiles passing it were silently stripped by Zod, so removal is behavior-neutral |
 | #469 stakes computation (kernel-observed windowed state) | Open | 📋 New in the 2026-07-09 handoff-hardening round; P2 milestone; no code yet — evidence-gate θ, Voice auto-reply, and objection intensity will consume it |
 | #467 kernel contract conformance gate | Open | 🚧 Increments 1–3 (P0 exit slice) shipped: `script/lint-tools.ts` (vocab grandfather+ratchet vs core-model Tier-1/2, tool lint, #465 naming rules, earned check, Greg Young schema-snapshot lint over 165 protocol types) wired into lefthook pre-push + CI with a `--self-test` discrimination bench, plus the native-JSON round-trip property test (`packages/openomni/src/execution-runtime/tool/round-trip.test.ts`). Increments 4–5 (sandboxed verifier registry, replay conformance) co-land with P2 #455 |
 
@@ -128,7 +128,6 @@ Everything else behavior-shaping (delegation judgment, session hygiene, evidence
 
 | Item | Action |
 | --- | --- |
-| `AgentProfile.Definition.permissions` remains in the protocol schema after the ignored-config warning path was removed | Remove the field or wire it; a schema field that lies violates ADR-002's intent. Tracked by #222 |
 | `docs/vision.local.md` (v0.2) predates single-mode ingress and current package layout | Refresh or mark archived |
 | `docs/persona-runtime-roadmap.local.md` uses pre-ADR-009 vocabulary (Main/Sub Persona) | Re-vocabulary or fold into ADR-010 ordering |
 
