@@ -53,7 +53,6 @@
     "description",
     "model",
     "name",
-    "permissions",
     "policyPlan",
     "systemPrompt",
     "temperature",

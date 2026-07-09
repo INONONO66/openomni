@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the runtime registry, messenger, and MCP client. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
 
 ## STRUCTURE
 
@@ -33,11 +33,7 @@ src/
 │           ├── idle-nudge.ts   # createIdleNudgePolicy (turn.start + invoke.result)
 │           └── tool-permission.ts # createToolPermissionPolicy (invoke.prepare, fail-closed)
 └── runtime/
-    ├── index.ts                # Re-exports registry / tools / mcp
-    ├── registry/
-    │   └── registry.ts         # AgentRegistry.define / get / list / override (generic in-memory profile store)
-    ├── tools/
-    │   └── index.ts            # Runtime tool helper exports
+    ├── index.ts                # Re-exports mcp
     └── mcp/
         ├── client.ts           # McpClient — connect / disconnect / listTools / callTool (stdio / sse / http)
 ```
@@ -68,7 +64,7 @@ Also exported from `@openomni/agent`:
 
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`, `AgentStep`, `AgentEvent`, `AgentBudget`, `TokenUsage`, `Sink`, `AgentEventEmitter`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `PolicyRegistration`, `PolicyEngineInstance`
-- Runtime: `AgentRegistry`, `McpClient`, `McpServerConfig`
+- Runtime: `McpClient`, `McpServerConfig`
 
 ## ChatAgentConfig
 
@@ -159,7 +155,6 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## RUNTIME PRIMITIVES
 
-- **AgentRegistry** — global in-memory store of `AgentProfile.Definition` entries keyed by `name`. `define`, `get`, `has`, `list`, `override`, `clear`.
 - **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`.
 
 ## KEY PATTERNS
