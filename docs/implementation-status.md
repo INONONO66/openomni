@@ -28,6 +28,7 @@ The 2026-07-09 **determinism/verification round** (red-team + durable-execution 
 | #217 durable boot contract | Open | 🚧 Cron persistence/runner and PI boot cleanup are wired; interrupted-run resume-offer surface and combined boot integration proof remain |
 | #222 remove deprecated `AgentProfile.permissions` | Open | 🚧 Runtime warning path is gone, but the schema field remains and needs removal or wiring plus a migration note |
 | #469 stakes computation (kernel-observed windowed state) | Open | 📋 New in the 2026-07-09 handoff-hardening round; P2 milestone; no code yet — evidence-gate θ, Voice auto-reply, and objection intensity will consume it |
+| #467 kernel contract conformance gate | Open | 🚧 Increments 1–3 (P0 exit slice) shipped: `script/lint-tools.ts` (vocab grandfather+ratchet vs core-model Tier-1/2, tool lint, #465 naming rules, earned check, Greg Young schema-snapshot lint over 165 protocol types) wired into lefthook pre-push + CI with a `--self-test` discrimination bench, plus the native-JSON round-trip property test (`packages/openomni/src/execution-runtime/tool/round-trip.test.ts`). Increments 4–5 (sandboxed verifier registry, replay conformance) co-land with P2 #455 |
 
 ## Three-layer message flow (ADR-009)
 

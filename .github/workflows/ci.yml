@@ -54,6 +54,9 @@ jobs:
       - run: bun run script/check-deps.ts
       - run: bun run lint:guards
       - run: bun run lint:side-effects
+      - run: bunx turbo run build --filter=@openomni/protocol
+      - run: bun run lint:tools
+      - run: bun run lint:tools --self-test
 
   test:
     name: Test
