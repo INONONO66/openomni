@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783605986294,
+  "lastUpdate": 1783612955582,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -33851,6 +33851,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 525745,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "466dfd8cce1c8a0f860b7226cf21d44d6fbcec90",
+          "message": "feat: driver lifecycle events on the sink, wall-time kill (#462 step 5) (#481)\n\n* feat: driver lifecycle events on the sink, wall-time kill\n\n#462 step 5, the final P1 slice. New protocol WorkerDriver events\n(spawned/ready/exited/restarted, run delivered/settled, queue\nsaturation) emitted through the injected BusEvent.Sink — worker\nlifecycle is reconstructable from ledger events alone. Wall-time is\nnow driver physics: the deliver ceiling is budget.maxWallTimeMs plus a\nmargin (300s floor removed), IPC timeout SIGKILLs the worker, rejects\nwith typed wall_time_exceeded, and settles the run as interrupted.\nwaitReady aborts immediately on a stopping supervisor instead of\npolling out its timeout.\n\nFolds in review follow-ups: gate-to-worker policy e2e over real IPC\n(#479 W4), typed queue_full/shutting_down tests (#480 W-a), WorkerPool\nstores only its two lazily-read config fields (W-b), DeliverTask\ndocumented (W-c). Repairs the process-wide mock.module leak in\nworker-full-stack.test.ts by making the factory self-neutralizing.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix: guard unlimited and oversized budgets in deliver ceiling\n\nReview finding on #481: maxWallTimeMs -1 (the documented unlimited\nsentinel) fell through min(-1 + margin, cap) to a ~30s ceiling, so every\nrun under an unlimited-budget agent was SIGKILLed at the margin. Finite\npositive budgets are now honored above the 600s backstop (the driver\nnever kills a run the loop's own budget still allows); unlimited, absent,\nor non-finite budgets get the 600s physics backstop.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-10T01:01:31+09:00",
+          "tree_id": "587b81059ffdfc8514e766ce4995174d8f7ae36d",
+          "url": "https://github.com/INONONO66/openomni/commit/466dfd8cce1c8a0f860b7226cf21d44d6fbcec90"
+        },
+        "date": 1783612954911,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2518,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3071,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15460,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8067,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 748,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1455,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1593,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20661,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2388,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10986,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102864,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 526500,
             "unit": "ns/op"
           }
         ]
