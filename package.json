@@ -10,6 +10,7 @@
     "lint": "bun run lint:guards && bun run lint:side-effects && bunx ultracite check --formatter-enabled=false .",
     "lint:guards": "bun run script/lint-guards.ts",
     "lint:side-effects": "bun run script/lint-side-effects.ts",
+    "lint:tools": "bun run script/lint-tools.ts",
     "lint:fix": "bunx ultracite fix .",
     "format": "bunx biome format --write .",
     "check-types": "turbo run check-types",

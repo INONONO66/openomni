@@ -110,7 +110,7 @@ describe("IngressSessionResolver", () => {
       expect(result.session.id).toBeDefined();
       expect(result.session.title).toBe("Session from slack");
       expect(result.session.model.providerID).toBe("anthropic");
-      expect(result.session.model.modelID).toBe("claude-3-5-sonnet-20241022");
+      expect(result.session.model.modelID).toBe("claude-sonnet-4-5");
     });
 
     it("reuses same session for same surface key on second call", () => {

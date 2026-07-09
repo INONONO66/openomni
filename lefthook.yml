@@ -12,6 +12,8 @@ pre-push:
       run: bun run check-types
     dep-check:
       run: bun run script/check-deps.ts
+    lint-tools:
+      run: bun run script/lint-tools.ts
 
 commit-msg:
   commands:

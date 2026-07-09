@@ -1,0 +1,58 @@
+{
+  "_comment": "Grandfathered conformance violations (#467). Ratchet: shrinking this file is autonomous and encouraged; any growth requires Owner sign-off in review. Strict vocab 1:1 (13 namespaces) is #465's P3 exit criterion.",
+  "vocab": {
+    "unmappedNamespaces": [
+      "adapter",
+      "agent",
+      "app-connector",
+      "artifact",
+      "bus",
+      "communication",
+      "cron",
+      "dispatch",
+      "error",
+      "event",
+      "execution",
+      "extension",
+      "ingress",
+      "ipc",
+      "mcp",
+      "message",
+      "model",
+      "run",
+      "sink",
+      "skill",
+      "storage",
+      "token",
+      "tool",
+      "tool-selection",
+      "trace",
+      "worker-bootstrap",
+      "worker-run"
+    ]
+  },
+  "tools": {
+    "exceptions": {
+      "dispatch": ["tool-max-fields"]
+    }
+  },
+  "naming": {
+    "grandfathered": [
+      "packages/protocol/src/communication/envelope.ts:Envelope",
+      "packages/protocol/src/communication/index.ts:Envelope",
+      "packages/protocol/src/policy/plan.ts:PolicyPlanModule",
+      "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",
+      "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",
+      "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
+      "packages/protocol/src/policy/resource.ts:RuntimeResource",
+      "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
+      "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope",
+      "packages/protocol/src/worker-bootstrap/index.ts:RuntimeAgentDefinition",
+      "packages/protocol/src/worker-bootstrap/index.ts:RuntimeToolCatalogEntry"
+    ]
+  },
+  "earned": {
+    "dormantActions": [],
+    "dormantTools": ["glob", "grep.search", "write"]
+  }
+}
