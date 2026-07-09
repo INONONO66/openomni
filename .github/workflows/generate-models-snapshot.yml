@@ -30,7 +30,7 @@ jobs:
           delete-branch: true
           title: "chore(llm): refresh models-snapshot.json"
           body: |
-            Automated weekly refresh of `packages/llm/src/provider/models-snapshot.json`
+            Automated weekly refresh of `packages/llm/src/model/models-snapshot.json`
             from https://models.dev/api.json.
 
             Run locally: `bun run script/generate-models-snapshot.ts`

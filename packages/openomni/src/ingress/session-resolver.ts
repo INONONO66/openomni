@@ -4,6 +4,7 @@ import {
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus, Session, SurfaceKey, TraceContext } from "@openomni/session";
+import { DEFAULT_DISPATCH_MODEL } from "../dispatch/index.js";
 import { resolveTarget, targetKey } from "./target";
 
 interface ResolvableEvent {
@@ -41,8 +42,8 @@ export namespace IngressSessionResolver {
   export function resolve(
     event: ResolvableEvent,
     defaultModel: ModelConfig = {
-      providerID: "anthropic",
-      modelID: "claude-3-5-sonnet-20241022",
+      providerID: DEFAULT_DISPATCH_MODEL.provider,
+      modelID: DEFAULT_DISPATCH_MODEL.id,
     },
     traceContext?: TraceContextProtocol.Type,
   ): ResolveResult {
