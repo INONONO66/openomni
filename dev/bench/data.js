@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783597199059,
+  "lastUpdate": 1783597722768,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -33231,6 +33231,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 538519,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad507a92a186802bd2c2f11b7d020184d9a39f2a",
+          "message": "chore: p0 hygiene — barrel trim, micro-file merges, runtime word (#476)\n\n* chore: p0 hygiene — barrel trim, micro-file merges, runtime word\n\nDerived on post-sweep main per #453's rules: 1 re-export-only barrel\n(event/index.ts) inlined into the root barrel with a vocab-baseline\nshrink (30→29 namespaces); 20 sub-30-LOC single-importer micro-files\nmerged into their importers (2 skipped: plan.ts is baseline-referenced,\ngithub/webhook.ts separation is load-bearing); cheap standalone-runtime\nstring fixes applied, structural renames listed as P3 carry-overs.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix: unbreak getStats self-recursion and stale test string\n\nReview findings on #476: the stats-query.ts merge left the BusQuery\nnamespace member calling itself (namespace scope shadows module scope;\nproper tail calls made it a silent 100%-CPU spin, hitting tests and the\n/observability stats route). Rename the merged implementation to\nqueryStats and drop its export. Also update the actor.test.ts assertion\nto the new 'missing dispatch actor context' message.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-09T20:42:41+09:00",
+          "tree_id": "edb7683eec9b887fc4e266fa74c865a3b9621e67",
+          "url": "https://github.com/INONONO66/openomni/commit/ad507a92a186802bd2c2f11b7d020184d9a39f2a"
+        },
+        "date": 1783597722304,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9904,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2624,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2436,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16028,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 856,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1542,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2260,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10978,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 104047,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 528627,
             "unit": "ns/op"
           }
         ]
