@@ -1,7 +1,14 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import { type BusEvent, Operational, type WorkerBootstrap } from "@openomni/protocol";
+import {
+  type BusEvent,
+  Operational,
+  WorkerDeliveryError,
+  WorkerDriver,
+  type WorkerBootstrap,
+} from "@openomni/protocol";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
+import { IpcTimeoutError } from "../ipc/errors";
 import {
   buildWorkerEnv,
   isBootstrapAccepted,
@@ -85,12 +92,26 @@ export class WorkerSupervisor {
         stderr: "pipe",
       },
     );
+    const generation = this.generation;
+    this.events.publish(WorkerDriver.Spawned, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      workerId: this.id,
+      generation,
+    });
     this.proc.exited.then(() => {
       this.running = false;
       this.bootstrapped = false;
       const prev = this.client;
       this.client = null;
       prev?.close();
+      this.events.publish(WorkerDriver.Exited, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        workerId: this.id,
+        generation,
+        planned: this.stopping,
+      });
       if (!this.stopping) this.scheduleRestart();
     });
     void this.connectWithRetry();
@@ -163,6 +184,12 @@ export class WorkerSupervisor {
         }
         if (!this.stopping && this.running) {
           this.client = c;
+          this.events.publish(WorkerDriver.Ready, {
+            traceId: crypto.randomUUID(),
+            time: Date.now(),
+            workerId: this.id,
+            generation: this.generation,
+          });
         } else {
           c.close();
         }
@@ -194,9 +221,17 @@ export class WorkerSupervisor {
     }
     this.restartCount++;
 
+    const delayMs = resolveRestartDelay(this.restartCount);
+    this.events.publish(WorkerDriver.Restarted, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      workerId: this.id,
+      restartCount: this.restartCount,
+      delayMs,
+    });
     setTimeout(() => {
       if (!this.stopping) this.doStart();
-    }, resolveRestartDelay(this.restartCount));
+    }, delayMs);
   }
 
   isActive(): boolean {
@@ -212,7 +247,12 @@ export class WorkerSupervisor {
   }
 
   async waitReady(timeoutMs = 10_000): Promise<void> {
-    return waitForSupervisorReady(this.id, () => this.isReady(), timeoutMs);
+    return waitForSupervisorReady(
+      this.id,
+      () => this.isReady(),
+      timeoutMs,
+      () => this.stopping,
+    );
   }
 
   // The three worker RPCs live here directly (#462 §3 — supervisor-client.ts
@@ -222,11 +262,36 @@ export class WorkerSupervisor {
     if (!client?.connected) {
       throw new Error(`worker ${this.id} not available`);
     }
-    return client.call(
-      "coordinator.spawn_run",
-      { authToken: this.authToken, runId, ...task },
-      resolveDeliverTimeoutMs(task),
-    );
+    const timeoutMs = resolveDeliverTimeoutMs(task);
+    try {
+      return await client.call(
+        "coordinator.spawn_run",
+        { authToken: this.authToken, runId, ...task },
+        timeoutMs,
+      );
+    } catch (error) {
+      if (error instanceof IpcTimeoutError) {
+        // Wall-time physics (#462 §4): the run outlived its ceiling, so the
+        // process dies regardless of what the agent loop inside is doing —
+        // runaway runs are killed before policy ever sees anything. The kill
+        // triggers the normal exited → restart path for the slot.
+        this.events.publish(Operational.Warn, {
+          traceId: crypto.randomUUID(),
+          time: Date.now(),
+          component: "coordinator.worker",
+          msg: "run exceeded wall-time ceiling; killing worker",
+          context: { workerId: this.id, runId, timeoutMs },
+        });
+        this.forceKill();
+        throw new WorkerDeliveryError({
+          message: `run ${runId} exceeded wall-time ceiling of ${timeoutMs}ms`,
+          code: "wall_time_exceeded",
+          runId,
+          sessionId: typeof task.sessionId === "string" ? task.sessionId : undefined,
+        });
+      }
+      throw error;
+    }
   }
 
   async cancel(runId: string, sessionId: string): Promise<unknown> {

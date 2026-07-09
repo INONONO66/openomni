@@ -21,6 +21,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@openomni/coordinator": "workspace:*",
     "@types/bun": "latest"
   }
 }

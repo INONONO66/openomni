@@ -80,6 +80,7 @@ export const WorkerDeliveryError = NamedError.create(
       "slot_wait_timeout",
       "worker_restarted",
       "session_mismatch",
+      "wall_time_exceeded",
     ]),
     runId: z.string().optional(),
     sessionId: z.string().optional(),
