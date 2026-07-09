@@ -10,8 +10,7 @@ The coordinator is an executor, not the communication kernel. It must not decide
 src/
 ├── index.ts              # Package barrel
 ├── ipc/                  # Unix socket transport + framing + protocol errors
-├── recovery/             # Interrupted worker run recovery
-├── worker-manager/       # ⭐ LIVE: OnDemandWorkerManager — spawn on demand, slots, idle shutdown
+├── worker-manager/       # ⭐ LIVE: worker pool — spawn on demand, slots, idle shutdown
 └── worker-supervision/   # Worker supervisor internals
 ```
 
@@ -23,8 +22,8 @@ Depends on `@openomni/protocol` **only** — a ring-2 process driver (#462). Eve
 
 | Module | Purpose |
 |--------|---------|
-| `worker-manager/manager.ts` | **Primary API.** `createWorkerManager(config, ports)`: one verb — `deliver(runId, task)` (plus `cancel`/`send`/`stats`), typed `WorkerDeliveryError` rejections, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
-| `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
+| `worker-manager/worker-pool.ts` | **Primary API.** One pool module (#462 step 4: the former manager/slot-coordinator split is merged; the class is not exported). `createWorkerManager(config, ports)`: one verb — `deliver(runId, task)` (plus `cancel`/`send`/`stats`), typed `WorkerDeliveryError` rejections, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
+| `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop. Constructed from a `WorkerSupervisorOptions` object; the worker RPCs (`deliver`/`cancel`/`send`) live here (#462 step 4) |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
 
 
@@ -47,7 +46,7 @@ deliver(runId, task)
 
 `apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager(config, ports)` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; ports: `events` = `Bus.publish`, `toolRelay`, `inboundWait`) and owns delivery, cancellation, message send, stats, and recovery wiring (recovery itself lives server-side in `apps/server/src/execution/recovery.ts`).
 
-Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, plus types. `worker-supervision/` is internal — not exported from the root barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager` (live; the pool class itself is not exported), `createIpcServer`, plus types. `worker-supervision/` is internal — not exported from the root barrel.
 
 ## TESTS
 
