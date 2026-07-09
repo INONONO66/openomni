@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783588744195,
+  "lastUpdate": 1783590069056,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -32611,6 +32611,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 532146,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e1a93b66993b7f1c003052eec5afd1dca441375f",
+          "message": "fix: p0 bugs — catalog path, adaptStream shim, resident drift (#471)\n\n* fix: p0 bugs — catalog path, adaptStream shim, resident drift\n\nThree audit-confirmed P0 bugs from #453:\n\n1. Model-catalog refresh: the weekly generator wrote\n   packages/llm/src/provider/models-snapshot.json while the runtime\n   reads packages/llm/src/model/models-snapshot.json — the shipped\n   snapshot could never update. Generator and workflow now write the\n   reader's path; the snapshot is regenerated from models.dev in this\n   change as proof.\n\n2. adaptStream ai-v4 shim: synthesized text-start/text-end around\n   text-delta events, duplicating the real ai-sdk v6 boundary events\n   and writing one empty orphan text part per text block. The shim is\n   removed; only the v6 start-step/finish-step -> step-start/step-finish\n   renames remain. New discrimination test fails on the old code.\n\n3. Resident definition drift: three sites hardcoded the model fallback\n   independently. DEFAULT_DISPATCH_MODEL is now the single kernel-side\n   fallback, exported through the dispatch and root barrels and consumed\n   by ingress session resolution and the server resident bridge.\n\nDoc-state sync: architecture.md Known Bugs marked fixed;\nimplementation-status.md #453 row and foundation paragraphs updated.\n\nRefs #453\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix: point dispatch fallback at a live catalog model\n\nReview finding on #471: the regenerated snapshot dropped the retired\nclaude-3-5-sonnet-20241022, so the new single-source fallback could not\nresolve against its own catalog on the unconfigured path. Swap to\nclaude-sonnet-4-5 (present in the shipped snapshot) and update the\nsession-resolver expectation.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-09T18:40:08+09:00",
+          "tree_id": "7715287dc50eee99c1daaa7f56d6829ad38cee2e",
+          "url": "https://github.com/INONONO66/openomni/commit/e1a93b66993b7f1c003052eec5afd1dca441375f"
+        },
+        "date": 1783590068613,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6179,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11095,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3341,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16323,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 764,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20349,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2377,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 105464,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 534789,
             "unit": "ns/op"
           }
         ]
