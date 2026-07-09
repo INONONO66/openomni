@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783597722768,
+  "lastUpdate": 1783599068650,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -33355,6 +33355,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 528627,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd1b6a36c42912404b99b9e0a462c5805dc5ce8b",
+          "message": "refactor: driver ports — event sink in protocol, session-free core (#477)\n\n#462 migration step 1. All environment coupling enters the coordinator\nthrough an injected WorkerPorts object: the ledger event edge is a\nBusEvent.Sink (type lives in protocol next to the descriptors; no new\nnamespace, rides the existing bus vocabulary), tool execution is\nports.toolRelay, and the resident question bridge is ports.inboundWait.\napps/server/src/execution/coordinator.ts is the composition root that\nbinds events to Bus.publish — the one binding P2 swaps when\nLedger.append splits from lossy Bus.publish.\n\nBoot crash recovery (recoverInterruptedRuns) moves to\napps/server/src/execution/recovery.ts with its test: it is ledger work\nover session stores, not process-driver work. With that, the\ncoordinator drops @openomni/session entirely — protocol-only ring-2\ndriver, the template for llm later.\n\nTests bind collector sinks (new test/harness/ports.ts); the supervisor\nSIGKILL warning test now asserts on the injected sink instead of a Bus\nsubscription. The workspace port from the #462 ports table is deferred:\ncoordinator only passes workspaceRoot through typed task params today —\nthere is no ad-hoc threading to replace until the provisioner lands.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-09T21:10:03+09:00",
+          "tree_id": "20b253626c16d1e7342322a2a2074d7b3bb6d916",
+          "url": "https://github.com/INONONO66/openomni/commit/cd1b6a36c42912404b99b9e0a462c5805dc5ce8b"
+        },
+        "date": 1783599067915,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5870,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9460,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15289,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7981,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1375,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1577,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20430,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2329,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103663,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522544,
             "unit": "ns/op"
           }
         ]
