@@ -59,7 +59,7 @@ resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 policy/             → @openomni/protocol (pure label→plan resolution; consumed by dispatch)
 evidence/           → @openomni/session + @openomni/protocol (read-back → WorkItem evidence)
 execution-runtime/  → no orchestration deps (tool system, workspace, middleware)
-ingress/            → no sibling deps
+ingress/            → dispatch/ (DEFAULT_DISPATCH_MODEL), resident/ (type-only)
 dispatch/           → policy/ (resolver), ingress/ (type-only) — the gate stays the sole author of stamped plans
 ```
 

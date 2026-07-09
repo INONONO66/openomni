@@ -18,7 +18,7 @@ src/
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
 │   ├── dispatch-owners.ts # wires dispatch handler owners (connector driver, outbound, device)
 │   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge for worker resident.ask
-│   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (credentials, policyPlan, tool catalog)
+│   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (configEpoch, agents, tool catalog, credentials); per-run policyPlan travels on Execution.Request, not here
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
 │   └── shutdown.ts       # installShutdownHandlers() — graceful stop for server / channels / MCP
@@ -43,7 +43,7 @@ src/
 │   ├── recovery.ts       # recoverInterruptedRuns() — marks non-terminal runs interrupted at boot (moved from coordinator, #477)
 │   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution
 │   ├── worker-runner*.ts # Worker-side run loop, IPC handlers, events, types
-│   ├── worker-bootstrap-handler.ts # Applies WorkerBootstrap (permissions/policyPlan) inside the worker
+│   ├── worker-bootstrap-handler.ts # Validates and stores WorkerBootstrap, resolves credentials, signals readiness; permissions/policyPlan are applied per run in worker-runner.ts via buildWorkerMiddleware
 │   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
 │   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls OpenOmni kernel/IngressEngine
