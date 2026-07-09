@@ -1,6 +1,6 @@
 # packages/session
 
-Durable state substrate: session lifecycle, message/part storage, event bus, logs, telemetry, trace context, artifacts, event log, surface-key records, worker-run records, and indexed stores used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
+Durable state substrate: session lifecycle, message/part storage, event bus + hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
 
 This package stores facts. It must not decide product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback policy belong in `@openomni/openomni`.
 
@@ -24,12 +24,17 @@ src/
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
 │   ├── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 │   └── part-time.ts      # Message-part timestamp helpers
-├── log/                  # Log namespace for observability records
-├── telemetry/            # Telemetry helpers
+├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/history/verifyChainIntegrity)
+├── actor/                # ActorIdentity / ActorEndpoint registry stores
+├── audit/                # Audit record store
+├── blacklist/            # Blacklist entry store (absolute deny gate data)
+├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
+├── pending-ask/          # PendingAskStore (legacy resident.ask path; absorbed into Wait by #215)
+├── pending-interaction/  # PendingInteractionStore (correlation lookup, follow-up window; transitional Wait)
+├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
 ├── trace/                # TraceContext helpers
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
 ├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
-├── event-log/            # EventLog.append / replay / listIncomplete / markComplete (crash recovery)
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
@@ -38,6 +43,8 @@ src/
 │   ├── lifecycle.ts      # start/complete/fail/cancel, blockers, evidence, retry, outcome
 │   ├── mutation.ts       # mutation persistence, transition validation, Updated/StatusChanged events
 │   ├── dependency.ts     # dependency readiness + cycle detection
+│   ├── retry.ts / retry-policy.ts # retry defaults + kernel-enforced exhaustion blocker
+│   ├── outcome.ts        # Owner adoption outcome recording (adopted/corrected/redone/ignored)
 │   ├── builder.ts        # WorkItem.Info construction
 │   └── types.ts          # Internal WorkItemStore implementation types
 └── worker-run/           # WorkerRun — delegated execution records
@@ -80,7 +87,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `EventLog.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`; use `WorkerRun` so delegated execution state stays in the dedicated worker-run store.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

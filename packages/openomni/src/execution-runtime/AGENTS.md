@@ -6,7 +6,7 @@ Tool system, workspace safety, injection queue, cron bridge, and worker middlewa
 
 | Path | Purpose |
 | --- | --- |
-| `middleware.ts` | Builds default worker middleware registrations. |
+| `middleware.ts` | Builds worker middleware registrations from the gate-stamped `Execution.Request.policyPlan` (#479); builtin ids resolve through `defaultRegistry()`, `builtin:tool-permission` config is hydrated from `request.permissions`, required-but-unregistered ids fail closed. |
 | `workspace-lock.ts` | Serializes workspace-mutating tool execution. |
 | `injection-queue.ts` | `InjectionQueue` — async response buffer keyed by `runId`; drained at `turn.finish` by the injection-queue policy. |
 | `cron-job-registry.ts` | `CronJobRegistry` — storage-backed registry of scheduled jobs with a process-local fallback; populated by `dispatch` `schedule.create` action. |
@@ -58,7 +58,7 @@ Do not reintroduce the removed legacy model-facing inbound tool or compatibility
 - Workspace-mutating tools must go through `WorkspaceLock` unless they are explicitly concurrency-safe.
 - Tool denial, timeout, unknown-tool, and thrown-error paths must return error-shaped `Tool.Result` values.
 - New built-in tools require tests for permission, path containment, timeout behavior where relevant, and output shape.
-- Do not add ingress/session routing policy here. Put policy in OpenOmni communication/authority stages (`src/communication/`, `src/authority/`, or transitional `src/ingress/` / `src/dispatch/`) and pass execution context down.
+- Do not add ingress/session routing policy here. Put policy in the kernel stages (`src/ingress/` / `src/dispatch/`, converging on #464 resolveRoute) and pass execution context down.
 - Do not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` from tool wrappers for routing.
 
 ## Data Egress Gate
@@ -99,6 +99,3 @@ These make direct `fetch()` calls through `opensearch-ai-sdk` to an external sea
 
 Decision: **approved as-is**. The boundary (Resident only, not workers) must be maintained; if `web_search`/`web_fetch` are ever added to a worker tool catalog, they must be reclassified and gated.
 
-## Cleanup notes
-
-- `tool/mcp-proxy-provider.ts` is currently an empty orphan candidate. Delete it once no references exist.

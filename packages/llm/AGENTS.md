@@ -8,7 +8,7 @@ LLM provider abstraction. Handles auth (API key + proxy), provider SDK wiring, s
 src/
 ├── index.ts          # Narrow public API: Auth, Provider, ModelsDev, errors, run, RunInput, TokenTracker
 ├── run.ts            # run() — model-required top-level entry: messages+tools → Run.Outcome via Sink
-├── error.ts          # Re-exports NamedError classes from protocol
+├── error.ts          # ProviderError (NamedError.create) + NamedError/APIError re-exports
 ├── message/
 │   └── index.ts      # toModelMessages() — Message.WithParts[] → AI SDK messages
 ├── processor/
@@ -29,11 +29,9 @@ src/
 │   └── proxy-models.ts # Proxy model catalog fetch/enrichment
 ├── token/
 │   └── index.ts      # TokenTracker.extractUsage
-├── model/
-│   ├── index.ts      # ModelsDev.get / refresh — fetches models.dev catalog
-│   └── models-snapshot.json # Bundled trusted catalog snapshot
-└── util/
-    └── lazy.ts       # Lazy initialization helper
+└── model/
+    ├── index.ts      # ModelsDev.get / refresh — fetches models.dev catalog (lazy helper inlined here)
+    └── models-snapshot.json # Bundled trusted catalog snapshot — the weekly workflow regenerates THIS file (#471)
 ```
 
 ## KEY PATTERNS
