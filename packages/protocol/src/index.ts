@@ -13,6 +13,7 @@ export * from "./event/tool.js";
 export * from "./event/mcp.js";
 export * from "./event/operational.js";
 export * from "./event/policy.js";
+export * from "./event/worker-driver.js";
 export * from "./mcp/index.js";
 export * from "./adapter/index.js";
 export * from "./actor/index.js";

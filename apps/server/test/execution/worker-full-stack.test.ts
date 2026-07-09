@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import * as realCoordinator from "@openomni/coordinator";
 import { IngressEngine, SystemToolProvider, buildWorkerMiddleware } from "@openomni/openomni";
 import { Bus, ChannelGrantStore, Storage } from "@openomni/session";
 import { WorkerRun as WorkerRunProtocol } from "@openomni/protocol";
@@ -21,11 +22,21 @@ let mockPoolDispatch: (
   params: Record<string, unknown>,
 ) => Promise<unknown>;
 
+// bun's mock.module leaks process-wide across test files (mock.restore does
+// not undo it), so the factory must self-neutralize: it intercepts only while
+// this file's suite is running and delegates to the real module otherwise —
+// later test files (e.g. the openomni gate→IPC e2e) get the real pool.
+let interceptWorkerManager = false;
+
 mock.module("@openomni/coordinator", () => ({
+  ...realCoordinator,
   createWorkerManager: (
-    _config: Record<string, unknown>,
-    ports: { toolRelay?: typeof capturedOnToolCall },
+    config: Parameters<typeof realCoordinator.createWorkerManager>[0],
+    ports: Parameters<typeof realCoordinator.createWorkerManager>[1] & {
+      toolRelay?: typeof capturedOnToolCall;
+    },
   ) => {
+    if (!interceptWorkerManager) return realCoordinator.createWorkerManager(config, ports);
     capturedOnToolCall = ports.toolRelay;
     return {
       deliver: (runId: string, task: { sessionId: string } & Record<string, unknown>) =>
@@ -44,16 +55,17 @@ mock.module("@openomni/coordinator", () => ({
       shutdown: async () => undefined,
     };
   },
-  recoverInterruptedRuns: async () => ({ recovered: 0, sessions: [] }),
 }));
 
 let createExecutionCoordinator: typeof import("../../src/execution/coordinator").createExecutionCoordinator;
 
 beforeAll(async () => {
+  interceptWorkerManager = true;
   ({ createExecutionCoordinator } = await import("../../src/execution/coordinator"));
 });
 
 afterAll(() => {
+  interceptWorkerManager = false;
   mock.restore();
 });
 

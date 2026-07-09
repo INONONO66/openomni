@@ -1,4 +1,9 @@
-import { WorkerDeliveryError, type Execution } from "@openomni/protocol";
+import {
+  WorkerDeliveryError,
+  WorkerDriver,
+  type Execution,
+  type WorkerBootstrap,
+} from "@openomni/protocol";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import { createPrivateSocketDir } from "./worker-socket-dir";
@@ -48,7 +53,10 @@ export function createWorkerManager(
 // driver to the protocol command face (#462 §6) — drift becomes a compile
 // error, not a doc.
 class WorkerPool implements WorkerManager, Execution.Driver {
-  private readonly config: WorkerManagerConfig;
+  // Only the two lazily-read config values are stored (#480 review W-b);
+  // holding the whole raw config object invited mutation-at-a-distance.
+  private readonly workerScript: string;
+  private readonly workerBootstrap?: WorkerBootstrap.Bootstrap;
   private readonly ports: WorkerPorts;
   private readonly socketDir: string;
   private readonly maxActiveWorkers: number;
@@ -63,7 +71,8 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   private stopping = false;
 
   constructor(config: WorkerManagerConfig, ports: WorkerPorts) {
-    this.config = config;
+    this.workerScript = config.workerScript;
+    this.workerBootstrap = config.bootstrap;
     this.ports = ports;
     this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp", ports.events);
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
@@ -133,11 +142,52 @@ class WorkerPool implements WorkerManager, Execution.Driver {
           error: "cancelled before worker delivery",
         };
       }
-      return await supervisor.deliver(runId, task);
+      this.ports.events.publish(WorkerDriver.RunDelivered, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        workerId: slot.id,
+        runId,
+        sessionId,
+      });
+      const deliveredAt = Date.now();
+      try {
+        const result = await supervisor.deliver(runId, task);
+        this.publishRunSettled(slot.id, runId, sessionId, "completed", deliveredAt);
+        return result;
+      } catch (error) {
+        const interrupted =
+          error instanceof WorkerDeliveryError && error.data.code === "wall_time_exceeded";
+        this.publishRunSettled(
+          slot.id,
+          runId,
+          sessionId,
+          interrupted ? "interrupted" : "error",
+          deliveredAt,
+        );
+        throw error;
+      }
     } finally {
       this.activeRuns.delete(runId);
       this.releaseLoadedSlot(slot);
     }
+  }
+
+  private publishRunSettled(
+    workerId: number,
+    runId: string,
+    sessionId: string,
+    outcome: "completed" | "interrupted" | "error",
+    deliveredAt: number,
+  ): void {
+    this.ports.events.publish(WorkerDriver.RunSettled, {
+      traceId: crypto.randomUUID(),
+      time: Date.now(),
+      workerId,
+      runId,
+      sessionId,
+      outcome,
+      durationMs: Date.now() - deliveredAt,
+    });
   }
 
   async cancel(runId: string): Promise<unknown> {
@@ -286,10 +336,10 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
     slot.supervisor = new WorkerSupervisor({
       id: slot.id,
-      script: this.config.workerScript,
+      script: this.workerScript,
       events: this.ports.events,
       socketDir: this.socketDir,
-      bootstrap: this.config.bootstrap,
+      bootstrap: this.workerBootstrap,
       toolRelay: this.ports.toolRelay,
       inboundWait: this.ports.inboundWait,
     });
@@ -318,6 +368,12 @@ class WorkerPool implements WorkerManager, Execution.Driver {
 
   private waitForSlot(): Promise<void> {
     if (this.waiters.length >= this.maxQueuedDeliveries) {
+      this.ports.events.publish(WorkerDriver.QueueSaturated, {
+        traceId: crypto.randomUUID(),
+        time: Date.now(),
+        queued: this.waiters.length,
+        maxQueuedDeliveries: this.maxQueuedDeliveries,
+      });
       return Promise.reject(
         new WorkerDeliveryError({ message: "worker delivery queue is full", code: "queue_full" }),
       );

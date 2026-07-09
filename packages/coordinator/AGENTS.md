@@ -37,10 +37,13 @@ deliver(runId, task)
   → acquireSlot(task.sessionId): free slot | new worker (≤ maxActiveWorkers) | wait in queue
   → slot.load++, clear idle timer
   → ensureSupervisor() (created on demand; generation check across restarts)
-  → supervisor.deliver → result
+  → publish WorkerDriver.RunDelivered
+  → supervisor.deliver → result, publish WorkerDriver.RunSettled (completed | interrupted | error)
   → slot.load--; if 0: release one waiter, scheduleIdleShutdown()
        idleShutdownMs elapsed with load 0 → kill worker, forget slot
 ```
+
+Observability is ledger events, not push maps (#462 §4): the supervisor publishes `WorkerDriver.Spawned/Ready/Exited/Restarted` and the pool publishes `RunDelivered/RunSettled/QueueSaturated` through the injected `BusEvent.Sink` — worker lifecycle is reconstructable from these events alone. Wall-time is enforced in the driver: a delivery whose RPC exceeds `budget.maxWallTimeMs` plus a margin (`OPENOMNI_DELIVER_MARGIN_MS`, default 30s) gets the worker SIGKILLed and rejects with `wall_time_exceeded`; the run settles as `interrupted`. The worker-manager barrel also exports the type-only `DeliverTask` shape (`{ sessionId } & Record<string, unknown>`) for composition-root adapters.
 
 ## CONSUMER
 
