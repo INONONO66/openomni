@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783590269212,
+  "lastUpdate": 1783590928288,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -32859,6 +32859,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 521129,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f286a0999edafe88de2f5964e66ae994928add71",
+          "message": "chore: p0 dead code — openomni/server/session/llm/agent sweep (#473)\n\n* chore: p0 dead code — openomni/server/session/llm/agent sweep\n\nPhase issue #453. Deletes the audit-confirmed dead code reconciled\nagainst current main, with per-item zero-consumer proofs in the PR:\nopenomni extension/, profile/, and all of skill/ (server has its own\nSkillLoader; openomni's only skill importers were extension/*); server\nconnector registry/discovery/definitions and router.ts (resolveAgentName\nresult discarded by buildInboundEvent); session drizzle tree +\ndrizzle-orm dep, Snapshot, backgroundTask adapter, WalMaintenance; 6 of\n7 llm error classes; agent writeback-policy, empty tools barrel,\nwrite-only AgentRegistry. The llm retry stack SURVIVED reconciliation —\nprocessor/index.ts drives it on the production path; the audit claim\ndescribed only the AI-SDK maxRetries option. Same-change doc\nreconciliation: implementation-status connector rows + architecture\ndelete ledger updated.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: baseline bash/read/edit as dormant after dead-code sweep\n\nThe deleted dead code held the only static string references to the\nbash/read/edit tool names, so #467's earned check fired on this branch.\nThe tools are consumed at runtime through worker toolsets, not static\nreferences — grandfather them alongside glob/grep.search/write until\nthe earned heuristic learns runtime consumption (#467 fast-follow).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-09T18:54:30+09:00",
+          "tree_id": "29a23846426a6957d6e29c888b2232c8a3bd553d",
+          "url": "https://github.com/INONONO66/openomni/commit/f286a0999edafe88de2f5964e66ae994928add71"
+        },
+        "date": 1783590928018,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9724,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15369,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7999,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 812,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1357,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1582,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20686,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2274,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10826,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 519036,
             "unit": "ns/op"
           }
         ]
