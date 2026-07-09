@@ -60,7 +60,7 @@ export function resolveRestartDelay(restartCount: number): number {
     : Math.min(1000 * 2 ** (restartCount - 1), MAX_BACKOFF_MS);
 }
 
-export function resolveDispatchTimeoutMs(params: Record<string, unknown>): number {
+export function resolveDeliverTimeoutMs(params: Record<string, unknown>): number {
   const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
   return Math.min(
     Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000,

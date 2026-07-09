@@ -1,5 +1,5 @@
 export { createIpcServer } from "./ipc";
-export { createWorkerManager, OnDemandWorkerManager } from "./worker-manager";
+export { createWorkerManager } from "./worker-manager";
 export type {
   InboundWaitParams,
   InboundWaitResult,

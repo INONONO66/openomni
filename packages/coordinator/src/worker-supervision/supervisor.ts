@@ -2,11 +2,11 @@ import fs from "node:fs";
 import type { Subprocess } from "bun";
 import { type BusEvent, Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
-import { cancelWorkerRun, deliverWorkerMessage, dispatchWorkerRun } from "./supervisor-client.js";
 import {
   buildWorkerEnv,
   isBootstrapAccepted,
   isShutdownAcknowledged,
+  resolveDeliverTimeoutMs,
   resolveRestartDelay,
   waitForSupervisorReady,
   waitForWorkerExit,
@@ -27,6 +27,20 @@ export type {
   ToolCallResult,
 } from "./supervisor-types.js";
 
+/** Construction config (#462 §3 — the 7-positional constructor is gone). */
+export type WorkerSupervisorOptions = {
+  id: number;
+  script: string;
+  // The event sink is required on purpose: a defaulted no-op would
+  // silently swallow Operational.Warn — the exact failure mode the
+  // ledger exists to prevent (#477 review W3).
+  events: BusEvent.Sink;
+  socketDir?: string;
+  bootstrap?: WorkerBootstrap.Bootstrap;
+  toolRelay?: ToolCallHandler;
+  inboundWait?: InboundWaitHandler;
+};
+
 export class WorkerSupervisor {
   private proc: Subprocess | null = null;
   private client: IpcClient | null = null;
@@ -41,19 +55,21 @@ export class WorkerSupervisor {
   private readonly activeInboundWaitCalls = new Map<string, ActiveRequest>();
   readonly socketPath: string;
 
-  constructor(
-    readonly id: number,
-    private readonly script: string,
-    // The event sink is required on purpose: a defaulted no-op would
-    // silently swallow Operational.Warn — the exact failure mode the
-    // ledger exists to prevent (#477 review W3).
-    private readonly events: BusEvent.Sink,
-    socketDir = "/tmp",
-    private readonly bootstrap?: WorkerBootstrap.Bootstrap,
-    private readonly toolCallHandler?: ToolCallHandler,
-    private readonly inboundWaitHandler?: InboundWaitHandler,
-  ) {
-    this.socketPath = `${socketDir}/openomni-worker-${id}.sock`;
+  readonly id: number;
+  private readonly script: string;
+  private readonly events: BusEvent.Sink;
+  private readonly bootstrap?: WorkerBootstrap.Bootstrap;
+  private readonly toolRelay?: ToolCallHandler;
+  private readonly inboundWait?: InboundWaitHandler;
+
+  constructor(options: WorkerSupervisorOptions) {
+    this.id = options.id;
+    this.script = options.script;
+    this.events = options.events;
+    this.bootstrap = options.bootstrap;
+    this.toolRelay = options.toolRelay;
+    this.inboundWait = options.inboundWait;
+    this.socketPath = `${options.socketDir ?? "/tmp"}/openomni-worker-${options.id}.sock`;
     this.doStart();
   }
 
@@ -100,8 +116,8 @@ export class WorkerSupervisor {
               workerId: this.id,
               activeToolCalls: this.activeToolCalls,
               activeInboundWaitCalls: this.activeInboundWaitCalls,
-              toolCallHandler: this.toolCallHandler,
-              inboundWaitHandler: this.inboundWaitHandler,
+              toolCallHandler: this.toolRelay,
+              inboundWaitHandler: this.inboundWait,
               notifyToolCallSettled: async (callId, workspaceRoot) => {
                 await c
                   .call(
@@ -199,16 +215,42 @@ export class WorkerSupervisor {
     return waitForSupervisorReady(this.id, () => this.isReady(), timeoutMs);
   }
 
+  // The three worker RPCs live here directly (#462 §3 — supervisor-client.ts
+  // was three thin wrappers around this.client with no second consumer).
   async deliver(runId: string, task: Record<string, unknown>): Promise<unknown> {
-    return dispatchWorkerRun(this.client, this.id, this.authToken, runId, task);
+    const client = this.client;
+    if (!client?.connected) {
+      throw new Error(`worker ${this.id} not available`);
+    }
+    return client.call(
+      "coordinator.spawn_run",
+      { authToken: this.authToken, runId, ...task },
+      resolveDeliverTimeoutMs(task),
+    );
   }
 
   async cancel(runId: string, sessionId: string): Promise<unknown> {
-    return cancelWorkerRun(this.client, this.id, this.authToken, runId, sessionId);
+    const client = this.client;
+    if (!client?.connected) {
+      return { cancelled: false, error: `worker ${this.id} not available` };
+    }
+    return client.call(
+      "coordinator.cancel_run",
+      { authToken: this.authToken, runId, sessionId },
+      5_000,
+    );
   }
 
   async send(sessionId: string, message: string, runId?: string): Promise<unknown> {
-    return deliverWorkerMessage(this.client, this.id, this.authToken, sessionId, message, runId);
+    const client = this.client;
+    if (!client?.connected) {
+      return { accepted: false, error: `worker ${this.id} not available` };
+    }
+    return client.call(
+      "worker.deliver_message",
+      { authToken: this.authToken, sessionId, ...(runId ? { runId } : {}), message },
+      5_000,
+    );
   }
 
   async shutdownIdle(): Promise<boolean> {

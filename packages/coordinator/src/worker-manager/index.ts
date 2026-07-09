@@ -1,6 +1,6 @@
 export {
   createWorkerManager,
-  OnDemandWorkerManager,
+  type DeliverTask,
   type WorkerManager,
   type WorkerManagerConfig,
   type WorkerManagerStats,
@@ -11,4 +11,4 @@ export {
   type ToolCallResult,
   type InboundWaitParams,
   type InboundWaitResult,
-} from "./manager";
+} from "./worker-pool";

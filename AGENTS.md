@@ -122,7 +122,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Principal / actor identity | `packages/protocol/src/actor/` + `packages/session/src/actor/` + `packages/openomni/src/ingress/actor-resolver.ts` | Schemas/storage are lower-level; principal resolution and access semantics belong in `openomni` |
 | ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/session/src/{channel-grant,blacklist}/` | Storage lives in `session`; evaluation and precedence belong in `openomni` access |
 | PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/session/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Durable external-response correlation; kernel owns match precedence and lifecycle transitions |
-| Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `OnDemandWorkerManager` — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
+| Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/` | `createWorkerManager` worker pool — spawn on demand, idle shutdown, max-active cap (used by `apps/server/src/execution/coordinator.ts`) |
 | Coordinator worker internals | `packages/coordinator/src/worker-manager/` + `worker-supervision/` | On-demand worker lifecycle; do not recreate legacy worker-pool facades |
 | Coordinator IPC | `packages/coordinator/src/ipc/` | Unix socket transport, request/response framing |
 | Coordinator recovery | `packages/coordinator/src/recovery/` | Marks interrupted worker runs failed after restart |
