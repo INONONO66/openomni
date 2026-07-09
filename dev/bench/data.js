@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783590069056,
+  "lastUpdate": 1783590269212,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -32735,6 +32735,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 534789,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46c1fdeed1067da2f6315fc6d5b9e4e6bfbc1ad7",
+          "message": "feat: conformance gate p0 — lint-tools, round-trip, earned check (#472)\n\n#467 increments 1-3 (the P0-exit slice; verifier registry and replay\nconformance are increments 4-5 and co-land with P2 #455):\n\n- script/lint-tools.ts: vocab ratchet (protocol namespaces vs core-model\n  Tier-1/2 nouns, injective, 27 grandfathered with a no-new-violations\n  ratchet), tool lint (snake_case <=3 segments, description required,\n  <=5 public fields), #465 naming rules (banned nouns, *Module wrappers,\n  11 grandfathered), earned check (every dispatch action + registered\n  tool needs a non-definition consumer; 3 dormant tools baselined), and\n  the Greg Young schema-snapshot lint (165 protocol types; field\n  removal/rename fails; --update is the Owner-sign-off surface).\n- --self-test discrimination bench: every check must flag a known-bad\n  fixture, per the gate's own no-happy-path-benches rule.\n- Native-JSON round-trip property test over every registered tool spec\n  (200 seeded fuzzed inputs each, edge-string/number corpus, recursive\n  no-field-dropped assertion, 2 negative discrimination cases).\n- Wired into lefthook pre-push and the CI deps job; lint:tools script.\n- implementation-status: #467 row added (increments 1-3 shipped).\n\nVerification: lint-tools passes on the current tree in ~80ms; self-test\npasses; openomni suite 690 pass / 0 fail; turbo check-types clean.\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-09T18:43:26+09:00",
+          "tree_id": "db724db98f82b22f03e5f1a1b0149b04348b7d7b",
+          "url": "https://github.com/INONONO66/openomni/commit/46c1fdeed1067da2f6315fc6d5b9e4e6bfbc1ad7"
+        },
+        "date": 1783590268521,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9211,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2497,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2827,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7924,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 700,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2251,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10969,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102846,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 521129,
             "unit": "ns/op"
           }
         ]
