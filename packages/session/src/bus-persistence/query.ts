@@ -2,7 +2,6 @@ import type { z } from "zod";
 import * as ChainQuery from "./chain-query.js";
 import * as EventQuery from "./event-query.js";
 import * as QueryContracts from "./query-contracts.js";
-import * as StatsQuery from "./stats-query.js";
 import * as WorkerRunHistoryQuery from "./worker-run-history-query.js";
 
 export namespace BusQuery {
@@ -61,7 +60,7 @@ export namespace BusQuery {
    * @returns Statistics object with counts by category and type
    */
   export function getStats(sessionId: string): Promise<QueryContracts.QueryStats> {
-    return StatsQuery.getStats(sessionId);
+    return queryStats(sessionId);
   }
 
   /**
@@ -102,4 +101,32 @@ export namespace BusQuery {
   export function listAuditChain(sessionId: string): Promise<AuditChainRecord[]> {
     return ChainQuery.listAuditChain(sessionId);
   }
+}
+
+// merged from stats-query.ts (#453 hygiene: sub-30-LOC single-importer)
+import type { QueryStats } from "./query-contracts.js";
+import { getDatabase } from "./query-database.js";
+import type { CategoryCountRow, CountRow, TypeCountRow } from "./query-rows.js";
+
+function queryStats(sessionId: string): Promise<QueryStats> {
+  const db = getDatabase();
+  const total = db
+    .query("SELECT COUNT(*) as count FROM bus_event WHERE session_id = ?")
+    .get(sessionId) as CountRow;
+  const categoryRows = db
+    .query(
+      "SELECT category, COUNT(*) as count FROM bus_event WHERE session_id = ? GROUP BY category",
+    )
+    .all(sessionId) as CategoryCountRow[];
+  const typeRows = db
+    .query(
+      "SELECT event_type, COUNT(*) as count FROM bus_event WHERE session_id = ? GROUP BY event_type",
+    )
+    .all(sessionId) as TypeCountRow[];
+
+  return Promise.resolve({
+    totalEvents: total.count,
+    byCategory: Object.fromEntries(categoryRows.map((row) => [row.category, row.count])),
+    byType: Object.fromEntries(typeRows.map((row) => [row.event_type, row.count])),
+  });
 }

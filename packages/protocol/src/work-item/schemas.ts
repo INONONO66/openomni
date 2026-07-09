@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { isHttpUrl } from "./http.js";
-
 const HttpMethod = z.enum(["GET", "HEAD"]);
 const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
 
@@ -215,3 +213,14 @@ export const Info = z.object({
   outcome: Outcome.optional(),
 });
 export type Info = z.infer<typeof Info>;
+
+// merged from http.ts (#453 hygiene: sub-30-LOC single-importer)
+export function isHttpUrl(target: string): boolean {
+  try {
+    const protocol = new URL(target).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch (error) {
+    if (error instanceof TypeError) return false;
+    throw error;
+  }
+}

@@ -5,8 +5,6 @@ import { optionalBoolean, optionalString, requireString } from "../shared/input.
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
 import type { NativeTool, ToolExecutionContext } from "../types.js";
-import { GREP_PROMPT } from "./grep-prompt.js";
-
 type MatchResult = { file: string; line: number; text: string };
 
 const MAX_MATCHES = 100;
@@ -206,3 +204,8 @@ export function createGrepTool(workspaceRoot: string): NativeTool {
     },
   });
 }
+
+// merged from grep-prompt.ts (#453 hygiene: sub-30-LOC single-importer)
+export const GREP_PROMPT = `Search file contents for a regex pattern across the workspace.
+Use include (glob) to narrow the files searched and ignoreCase for case-insensitive matches.
+Returns up to 100 entries as {file, line, text}. Paths must stay within the workspace root.`;

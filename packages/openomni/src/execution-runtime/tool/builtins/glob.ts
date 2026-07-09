@@ -4,8 +4,6 @@ import { defineTool } from "../define.js";
 import { optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
-import { GLOB_PROMPT } from "./glob-prompt.js";
-
 const MAX_RESULTS = 100;
 
 async function executeGlob(call: Tool.Call, workspaceRoot: string): Promise<Tool.Result> {
@@ -70,3 +68,8 @@ export function createGlobTool(workspaceRoot: string) {
     },
   });
 }
+
+// merged from glob-prompt.ts (#453 hygiene: sub-30-LOC single-importer)
+export const GLOB_PROMPT = `Match files against a glob pattern (e.g. '**/*.ts') inside the workspace.
+Results are sorted newest-first by mtime and capped at 100 entries.
+Paths must stay within the workspace root; symlink escapes are rejected.`;

@@ -96,7 +96,7 @@ export function checkBudget(
       traceId: crypto.randomUUID(),
       time: Date.now(),
       component: "agent.budget",
-      msg: "budget exceeded: tool runtime",
+      msg: "budget exceeded: tool wall time",
       context: {
         type: "exceeded",
         turns: state.turns,
@@ -176,7 +176,7 @@ export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget
   const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? 2 * 60 * 1000;
   if (maxToolRuntimeMs !== -1) {
     const remaining = Math.max(0, maxToolRuntimeMs - state.toolRuntimeMs);
-    parts.push(`${Math.round(remaining / 1000)}s tool runtime remaining`);
+    parts.push(`${Math.round(remaining / 1000)}s tool wall time remaining`);
   }
 
   return parts.join(", ");

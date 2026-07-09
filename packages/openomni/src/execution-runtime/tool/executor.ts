@@ -21,7 +21,6 @@ import {
   publishToolStarted,
   publishToolTimedOut,
 } from "./executor-events.js";
-import { createErrorResult } from "./executor-result.js";
 import {
   hasUnknownSettlement,
   markUnsafeWorkspaceForUnsettledTool,
@@ -269,5 +268,15 @@ export function createToolExecutor(
       cleanupAbortSignal?.();
       evaluatePostToolOnce();
     }
+  };
+}
+
+// merged from executor-result.ts (#453 hygiene: sub-30-LOC single-importer)
+export function createErrorResult(call: Tool.Call, message: string): Tool.Result {
+  return {
+    id: crypto.randomUUID(),
+    toolCallId: call.id,
+    output: message,
+    isError: true,
   };
 }

@@ -2,8 +2,6 @@ import { defineTool } from "../define.js";
 import { optionalBoolean, optionalString, requireString } from "../shared/input.js";
 import { errorResult, fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
-import { EDIT_PROMPT } from "./edit-prompt.js";
-
 function replaceOnce(
   text: string,
   search: string,
@@ -121,3 +119,9 @@ async function sha256Hex(text: string): Promise<string> {
 function isSha256Hex(value: string): boolean {
   return /^[0-9a-f]{64}$/.test(value);
 }
+
+// merged from edit-prompt.ts (#453 hygiene: sub-30-LOC single-importer)
+export const EDIT_PROMPT = `Replace an exact substring in a file within the workspace.
+oldString must already exist in the file and must differ from newString.
+Default behavior replaces the first occurrence; set replaceAll=true to replace every match.
+Set expectedFileHash to the current file SHA-256 hash to reject stale edits.`;

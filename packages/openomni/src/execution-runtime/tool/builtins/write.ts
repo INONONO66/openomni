@@ -4,8 +4,6 @@ import { defineTool } from "../define.js";
 import { requireString } from "../shared/input.js";
 import { fromError, successResult } from "../shared/result.js";
 import { resolveContainedPathForCreate } from "../../filesystem/workspace-path.js";
-import { WRITE_PROMPT } from "./write-prompt.js";
-
 export function createWriteTool(workspaceRoot: string) {
   return defineTool<{ path: string; content: string }>({
     name: "write",
@@ -39,3 +37,8 @@ export function createWriteTool(workspaceRoot: string) {
     },
   });
 }
+
+// merged from write-prompt.ts (#453 hygiene: sub-30-LOC single-importer)
+export const WRITE_PROMPT = `Write content to a file inside the workspace.
+Creates parent directories as needed and overwrites any existing file at the path.
+The path must stay within the workspace root; symlink escapes are rejected.`;

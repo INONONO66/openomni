@@ -10,7 +10,6 @@ import {
   trackTransportCloseRequests,
 } from "./client-connection";
 import { attachMcpToolDescriptor } from "./client-descriptor";
-import { requestOptions } from "./client-options";
 import { createTransport } from "./client-transport";
 import type { McpClientDependencies, McpClientHandle, McpTransportFactory } from "./client-types";
 import { convertMcpTool, convertMcpResult } from "./convert";
@@ -169,4 +168,26 @@ export class McpClient {
   get serverName(): string {
     return this.config.name;
   }
+}
+
+// merged from client-options.ts (#453 hygiene: sub-30-LOC single-importer)
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
+export function requestOptions(
+  config: McpServerConfig,
+  context?: { readonly signal?: AbortSignal },
+): RequestOptions | undefined {
+  const timeout = normalizeTimeout(config.timeout);
+  if (context?.signal === undefined && timeout === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(context?.signal !== undefined && { signal: context.signal }),
+    ...(timeout !== undefined && { timeout, maxTotalTimeout: timeout }),
+  };
+}
+
+function normalizeTimeout(timeout: number | undefined): number | undefined {
+  if (timeout === undefined) return undefined;
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : undefined;
 }

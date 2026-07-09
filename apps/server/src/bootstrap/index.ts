@@ -24,7 +24,6 @@ import { CustomToolProvider } from "../tool/custom";
 import { createChannelAdapters } from "./channels";
 import { createServerDispatchOwners } from "./dispatch-owners";
 import { connectMcpServers } from "./mcp";
-import { resolveModel } from "./providers";
 import { runRecovery } from "./recovery";
 import { createResidentInboundWaitHandler } from "./resident-inbound-wait";
 import { installShutdownHandlers } from "./shutdown";
@@ -255,4 +254,15 @@ export async function main(): Promise<void> {
     cronRunner,
     traceId,
   });
+}
+
+// merged from providers.ts (#453 hygiene: sub-30-LOC single-importer)
+import { resolveDefaultProviderModel } from "../agents/model-resolution";
+import type { ServerConfig } from "../config";
+
+export async function resolveModel(config?: ServerConfig) {
+  if (config?.model) {
+    return { providerID: config.model.provider, id: config.model.id, name: config.model.id };
+  }
+  return resolveDefaultProviderModel();
 }

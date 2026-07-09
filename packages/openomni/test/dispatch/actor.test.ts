@@ -23,10 +23,10 @@ describe("deriveActorContext", () => {
     expect(deriveActorContext({ agentName: "task-scheduler-worker" }).kind).toBe("worker");
   });
 
-  test("marks missing runtime context as unknown", () => {
+  test("marks missing dispatch context as unknown", () => {
     const actor = deriveActorContext();
     expect(actor.kind).toBe("unknown");
-    expect(actor.reason).toBe("missing runtime actor context");
+    expect(actor.reason).toBe("missing dispatch actor context");
   });
 
   test("explicit trusted system context can be supplied by runtime", () => {

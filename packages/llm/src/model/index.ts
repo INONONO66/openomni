@@ -2,8 +2,6 @@ import { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Model as ProtocolModel } from "@openomni/protocol";
-import { lazy } from "../util/lazy";
-
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");
 const TRUSTED_REMOTE_PROVIDER_PACKAGES = new Set(["@ai-sdk/anthropic", "@ai-sdk/openai"]);
@@ -177,4 +175,24 @@ export namespace ModelsDev {
       /* non-fatal */
     }
   }
+}
+
+// merged from util/lazy.ts (#453 hygiene: sub-30-LOC single-importer)
+function lazy<T>(fn: () => T) {
+  let value: T | undefined;
+  let loaded = false;
+
+  const result = (): T => {
+    if (loaded) return value as T;
+    loaded = true;
+    value = fn();
+    return value as T;
+  };
+
+  result.reset = () => {
+    loaded = false;
+    value = undefined;
+  };
+
+  return result;
 }
