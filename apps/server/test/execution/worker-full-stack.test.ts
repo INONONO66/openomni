@@ -240,7 +240,7 @@ describe("bus bridge — worker lifecycle events reach server Bus", () => {
     const coordinator = createExecutionCoordinator({ workerScript: "unused" });
     const request = makeRequest({ runId: "run-bus-test", sessionId: "session-bus-test" });
 
-    await coordinator.dispatch("tree-1", request);
+    await coordinator.dispatch("session-bus-test", request);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(events).toHaveLength(0);

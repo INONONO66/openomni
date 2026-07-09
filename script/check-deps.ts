@@ -234,6 +234,66 @@ async function validateDependencyDirection(): Promise<string[]> {
   return violations;
 }
 
+function packageDirOf(rule: PackageRule): string {
+  return rule.packageJsonPath.replace(/\/package\.json$/, "");
+}
+
+/**
+ * Layer-order check at the source level. package.json manifests cannot see
+ * phantom imports (a bare `import "@openomni/session"` resolves through the
+ * hoisted node_modules even when the manifest never declares it), so the
+ * dependency-direction rules are enforced against actual import specifiers.
+ */
+async function validateSourceImportDirection(): Promise<string[]> {
+  const violations: string[] = [];
+  const owners = Object.values(RULES).map((rule) => ({
+    rule,
+    srcPrefix: `${packageDirOf(rule)}/src/`,
+  }));
+  const importPattern =
+    /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
+  const sourceGlob = Bun.glob ? Bun.glob("**/*.ts") : new Bun.Glob("**/*.ts");
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (
+      filePath.includes("/node_modules/") ||
+      filePath.startsWith("node_modules/") ||
+      filePath.includes("/dist/") ||
+      filePath.startsWith("dist/") ||
+      isTestFile(filePath) ||
+      filePath.startsWith("script/")
+    ) {
+      continue;
+    }
+
+    const owner = owners.find(({ srcPrefix }) => filePath.startsWith(srcPrefix));
+    if (!owner) continue;
+
+    const source = await Bun.file(filePath).text();
+    importPattern.lastIndex = 0;
+
+    let match = importPattern.exec(source);
+    while (match !== null) {
+      const dep = match[1];
+      if (!isAllowedDep(owner.rule, dep)) {
+        const line = lineNumberForOffset(source, match.index);
+        violations.push(
+          `VIOLATION: ${filePath}:${line} source-imports ${dep} — not allowed by layer order for ${owner.rule.displayName} (manifest check cannot see phantom imports)`,
+        );
+      }
+      match = importPattern.exec(source);
+    }
+  }
+
+  return violations;
+}
+
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
@@ -513,12 +573,14 @@ async function checkDocFreshness(): Promise<string[]> {
 
 async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
+  const sourceImportViolations = await validateSourceImportDirection();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
   const goldenViolations = await validateGoldenPrinciples();
   const freshnessWarnings = await checkDocFreshness();
   const violations = [
     ...depViolations,
+    ...sourceImportViolations,
     ...deepImportViolations,
     ...deepRelativeImportViolations,
     ...goldenViolations,

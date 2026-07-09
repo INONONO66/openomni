@@ -82,7 +82,7 @@ describe("worker manager dispatch", () => {
     expect(parMs).toBeLessThan(seqMs);
   });
 
-  test("getStats reflects on-demand worker limit", () => {
+  test("stats reflects on-demand worker limit", () => {
     const stats = manager.stats();
     expect(stats.maxActiveWorkers).toBe(4);
     expect(stats.workers).toBeLessThanOrEqual(4);

@@ -1,5 +1,6 @@
 import { CronJobRegistry } from "../execution-runtime/cron-job-registry.js";
 import type { ReadBackExecutor } from "../evidence/read-back-executor.js";
+import type { PolicyResolverInstance } from "../policy/index.js";
 import type { DispatchRegistry } from "./registry.js";
 import { DispatchRuntime, type DispatchRuntimeOptions } from "./runtime.js";
 import type { DispatchOwners } from "./owners.js";
@@ -13,6 +14,8 @@ export interface BuiltInDispatchOptions {
   readonly owners?: DispatchOwners;
   readonly readBack?: ReadBackExecutor.Options;
   readonly readBackEnvelopeTimeoutMs?: number;
+  /** Gate-side task policy stamping rules (#462 §7); defaults to the built-in required plan. */
+  readonly policyResolver?: PolicyResolverInstance;
 }
 
 export function registerBuiltInDispatchHandlers(
@@ -32,6 +35,7 @@ export function registerBuiltInDispatchHandlers(
       defaultModel: owners.defaultModel,
       readBack: options.readBack,
       readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+      policyResolver: options.policyResolver,
     }),
     ...createOutboundDispatchHandlers({ outbound: owners.outbound }),
     ...createDeviceDispatchHandlers({ device: owners.device }),
@@ -55,6 +59,7 @@ export function createDefaultDispatchRuntime(
     owners: options.owners,
     readBack: options.readBack,
     readBackEnvelopeTimeoutMs: options.readBackEnvelopeTimeoutMs,
+    policyResolver: options.policyResolver,
   });
   return runtime;
 }

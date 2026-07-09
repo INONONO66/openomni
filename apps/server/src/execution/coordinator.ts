@@ -1,4 +1,9 @@
-import { Execution, type Tool, type WorkerBootstrap } from "@openomni/protocol";
+import {
+  Execution,
+  WorkerDeliveryError,
+  type Tool,
+  type WorkerBootstrap,
+} from "@openomni/protocol";
 import {
   createWorkerManager,
   type InboundWaitParams,
@@ -107,14 +112,22 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
   let isDraining = false;
 
   return {
-    async dispatch(_sessionTreeId, request) {
+    async dispatch(sessionTreeId, request) {
       if (isDraining) {
         throw new Error("Execution coordinator is draining");
       }
 
-      // Slot affinity keys on task.sessionId; the production dispatch handler
-      // always passes sessionTreeId === request.sessionId (worker.ts), so the
-      // tree id argument is not separately threaded to the driver.
+      // Slot affinity keys on task.sessionId. Every production dispatch site
+      // passes sessionTreeId === request.sessionId; a caller that diverges
+      // would silently shift slot affinity, so the invariant is enforced here.
+      if (sessionTreeId !== request.sessionId) {
+        throw new WorkerDeliveryError({
+          message: `dispatch sessionTreeId ${sessionTreeId} does not match request.sessionId ${request.sessionId}`,
+          code: "session_mismatch",
+          runId: request.runId,
+          sessionId: request.sessionId,
+        });
+      }
       const raw = await workerManager.deliver(request.runId, { ...request });
       return Execution.Result.parse(raw);
     },

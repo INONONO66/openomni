@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import type { Execution } from "@openomni/protocol";
+import { WorkerDeliveryError, type Execution } from "@openomni/protocol";
 
 type MockWorkerManager = {
   deliver(runId: string, task: Record<string, unknown>): Promise<unknown>;
@@ -103,7 +103,7 @@ describe("ExecutionCoordinator", () => {
     });
 
     const firstRun = coordinator.dispatch(
-      "tree-1",
+      "session-1",
       makeRequest({
         runId: "run-1",
         sessionId: "session-1",
@@ -116,7 +116,7 @@ describe("ExecutionCoordinator", () => {
 
     try {
       await coordinator.dispatch(
-        "tree-2",
+        "session-2",
         makeRequest({ runId: "run-2", sessionId: "session-2", prompt: "blocked" }),
       );
       throw new Error("expected dispatch to reject");
@@ -132,5 +132,23 @@ describe("ExecutionCoordinator", () => {
     });
 
     await shutdown;
+  });
+
+  test("rejects a dispatch whose sessionTreeId diverges from request.sessionId", async () => {
+    const coordinator = createExecutionCoordinator({
+      workerScript: "unused-in-test",
+      workerCount: 1,
+    });
+
+    try {
+      await coordinator.dispatch(
+        "tree-other",
+        makeRequest({ runId: "run-mismatch", sessionId: "session-mismatch" }),
+      );
+      throw new Error("expected dispatch to reject");
+    } catch (error) {
+      if (!WorkerDeliveryError.isInstance(error)) throw error;
+      expect(error.data.code).toBe("session_mismatch");
+    }
   });
 });
