@@ -4,6 +4,7 @@ import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
   createToolExecutor,
+  DEFAULT_DISPATCH_MODEL,
   ResidentAgent,
   resolveToolSelection,
 } from "@openomni/openomni";
@@ -80,7 +81,7 @@ export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.Agen
 }
 
 export function buildResidentAgentDef(_agentName: string, deps: BridgeDeps): Ingress.AgentDef {
-  const model = deps.defaultModel ?? { provider: "anthropic", id: "claude-3-5-sonnet-20241022" };
+  const model = deps.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const definition: AgentDefinition = {
     name: "resident",
     description: "Resident user-facing assistant",
