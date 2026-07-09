@@ -1,7 +1,6 @@
 import { Ipc } from "@openomni/protocol";
 import fs from "node:fs";
 
-import { decodeMessage } from "./codec";
 import { IpcConnectionError, IpcProtocolError, IpcTimeoutError } from "./errors";
 import { LineDecoder, encode } from "./framing";
 
@@ -235,4 +234,21 @@ export function createIpcServer(socketPath: string, handler: RequestHandler): Ip
       }
     },
   };
+}
+
+// merged from codec.ts (#453 hygiene: sub-30-LOC single-importer)
+
+export type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
+
+export function decodeMessage(raw: unknown): IpcMessage {
+  const req = Ipc.Request.safeParse(raw);
+  if (req.success) return req.data;
+
+  const res = Ipc.Response.safeParse(raw);
+  if (res.success) return res.data;
+
+  const notif = Ipc.Notification.safeParse(raw);
+  if (notif.success) return notif.data;
+
+  throw new IpcProtocolError(`Unknown message type: ${JSON.stringify(raw)}`);
 }

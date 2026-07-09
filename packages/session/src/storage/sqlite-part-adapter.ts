@@ -1,6 +1,5 @@
 import type { Database } from "bun:sqlite";
 import type { Message } from "@openomni/protocol";
-import { getPartStartTime } from "./part-time";
 import type { Storage } from "./storage";
 
 export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
@@ -49,4 +48,22 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
       return result.changes > 0;
     },
   };
+}
+
+// merged from part-time.ts (#453 hygiene: sub-30-LOC single-importer)
+
+export function getPartStartTime(part: Message.Part): number | undefined {
+  if ((part.type === "text" || part.type === "reasoning") && part.time?.start !== undefined) {
+    return part.time.start;
+  }
+
+  if (
+    part.type === "tool" &&
+    part.state.status !== "pending" &&
+    part.state.time?.start !== undefined
+  ) {
+    return part.state.time.start;
+  }
+
+  return undefined;
 }

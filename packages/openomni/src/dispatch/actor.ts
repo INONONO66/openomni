@@ -60,6 +60,6 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Dispat
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
     ...(trustTier ? { trustTier } : {}),
     labels: [...(context.labels ?? []), `actor.${kind}`],
-    ...(kind === "unknown" ? { reason: "missing runtime actor context" } : {}),
+    ...(kind === "unknown" ? { reason: "missing dispatch actor context" } : {}),
   });
 }

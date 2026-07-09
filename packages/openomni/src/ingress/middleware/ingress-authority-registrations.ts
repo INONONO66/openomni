@@ -3,7 +3,6 @@ import { Ingress, PolicyDecision } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/session";
 import { resolveTarget } from "../target";
 import { getActor, targetRequiresCoordinator } from "./ingress-authority-actor";
-import { blacklistReason } from "./ingress-authority-blacklist";
 import { applyChannelGrantTreatment, channelGrantReason } from "./ingress-authority-channel-grant";
 import { abortDecision, allowDecision, requireParsedEvent } from "./ingress-authority-decisions";
 import { IngressAuthorityDefinitions } from "./ingress-authority-definitions";
@@ -157,4 +156,9 @@ function createModeDispatch(state: PreRunState): PolicyRegistration {
       return allowDecision("ingress.mode", `dispatch mode ${event.mode}`);
     },
   };
+}
+
+// merged from ingress-authority-blacklist.ts (#453 hygiene: sub-30-LOC single-importer)
+export function blacklistReason(kind: string, value: string, reason: string | undefined): string {
+  return reason ?? `blacklist.${kind}.${value}`;
 }

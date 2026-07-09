@@ -4,8 +4,6 @@ import { defineTool } from "../define.js";
 import { optionalPositiveInteger, requireString } from "../shared/input.js";
 import { fromError, successResult } from "../shared/result.js";
 import { resolveContainedPath } from "../../filesystem/workspace-path.js";
-import { READ_PROMPT } from "./read-prompt.js";
-
 async function readFile(path: string, offset?: number, limit?: number): Promise<string> {
   const text = await Bun.file(path).text();
   const lines = text.split(/\r?\n/);
@@ -67,3 +65,8 @@ export function createReadTool(workspaceRoot: string) {
     },
   });
 }
+
+// merged from read-prompt.ts (#453 hygiene: sub-30-LOC single-importer)
+export const READ_PROMPT = `Read file contents or list a directory inside the workspace.
+Files return line-prefixed text (1-indexed); directories return sorted entries with trailing slash for subdirectories.
+Use offset and limit for paginated reads of large files. Paths must stay within the workspace root.`;

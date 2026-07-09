@@ -2,7 +2,6 @@ import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { sleep } from "../../shared/sleep";
 import { Heartbeat } from "./heartbeat";
-import { FATAL_CLOSE_CODES, calculateBackoff } from "./reconnect-backoff";
 import { handleGatewayPayload, type DispatchState } from "./dispatch-router";
 import { GatewayOp, Intents, type GatewayPayload } from "./types";
 
@@ -152,4 +151,12 @@ export class DiscordGateway {
   private sendGateway(payload: Record<string, unknown>): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(payload));
   }
+}
+
+// merged from reconnect-backoff.ts (#453 hygiene: sub-30-LOC single-importer)
+export const FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
+const MAX_BACKOFF_MS = 60_000;
+
+export function calculateBackoff(attempt: number): number {
+  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS) + Math.random() * 1000;
 }
