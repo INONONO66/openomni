@@ -60,21 +60,40 @@ export function resolveRestartDelay(restartCount: number): number {
     : Math.min(1000 * 2 ** (restartCount - 1), MAX_BACKOFF_MS);
 }
 
+/**
+ * The driver-level wall-time ceiling for one delivery (#462 §4): the task's
+ * budget wall time plus a margin for transport/bootstrap overhead. The agent
+ * loop inside the worker enforces the budget itself; this ceiling is the
+ * physics backstop that kills the process when the loop is the thing that
+ * hung. No floor — a task that declares a small budget gets a small ceiling.
+ */
 export function resolveDeliverTimeoutMs(params: Record<string, unknown>): number {
   const budget = (params as { budget?: { maxWallTimeMs?: number } }).budget;
-  return Math.min(
-    Math.max(budget?.maxWallTimeMs ?? 300_000, 300_000) + 30_000,
-    MAX_DISPATCH_TIMEOUT_MS,
-  );
+  return Math.min((budget?.maxWallTimeMs ?? 300_000) + deliverMarginMs(), MAX_DISPATCH_TIMEOUT_MS);
+}
+
+const DEFAULT_DELIVER_MARGIN_MS = 30_000;
+
+function deliverMarginMs(): number {
+  const raw = process.env.OPENOMNI_DELIVER_MARGIN_MS;
+  if (!raw) return DEFAULT_DELIVER_MARGIN_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_DELIVER_MARGIN_MS;
 }
 
 export async function waitForSupervisorReady(
   workerId: number,
   isReady: () => boolean,
   timeoutMs: number,
+  isAborted?: () => boolean,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (isAborted?.() === true) {
+      // A stopping supervisor can never become ready — fail the waiting
+      // delivery immediately instead of polling out the full timeout.
+      throw new Error(`worker ${workerId} stopped while waiting for readiness`);
+    }
     if (isReady()) return;
     await new Promise<void>((r) => setTimeout(r, 200));
   }

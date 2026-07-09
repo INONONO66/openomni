@@ -43,7 +43,7 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
     expect(capturedTimeoutMs).toBe(600_000);
   });
 
-  test("dispatch timeout respects minimum of 330_000 ms for low budget", async () => {
+  test("wall-time ceiling is budget plus margin (no floor — #462 step 5)", async () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
@@ -63,8 +63,9 @@ describe("WorkerSupervisor deliver timeout ceiling", () => {
 
     await supervisor.deliver("test-run-id", params);
 
-    // Math.max(100_000, 300_000) + 30_000 = 330_000
-    expect(capturedTimeoutMs).toBe(330_000);
+    // 100_000 + 30_000 margin = 130_000 — the driver kills at budget+margin,
+    // it no longer floors small budgets at 300s (#462 §4 wall-time physics).
+    expect(capturedTimeoutMs).toBe(130_000);
   });
 
   test("deliver timeout is capped at 600_000 ms for large budgets", async () => {
