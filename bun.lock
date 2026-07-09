@@ -56,7 +56,6 @@
       "version": "0.0.1",
       "dependencies": {
         "@openomni/protocol": "workspace:*",
-        "@openomni/session": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -90,6 +89,7 @@
         "zod": "^3.22.4",
       },
       "devDependencies": {
+        "@openomni/coordinator": "workspace:*",
         "@types/bun": "latest",
       },
     },

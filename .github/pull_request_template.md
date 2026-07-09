@@ -46,7 +46,18 @@ Relates to #
 ## Checklist
 
 - [ ] `bun run check-types` passes
-- [ ] `bun run script/check-deps.ts` clean
-- [ ] Tests added/updated for changes
+- [ ] `bun run script/check-deps.ts` clean (dependency direction + source-import scan)
+- [ ] `bun run lint:tools` and `bun run lint:tools --self-test` pass (baseline growth = Owner sign-off)
+- [ ] Full suite green with an explicit timeout: `bun test --timeout 15000` (a hang is a finding)
+- [ ] Tests added/updated for changes — no weakened assertions
 - [ ] No `as any`, `@ts-ignore`, or `@ts-expect-error` added
+- [ ] **Reconcile-first**: issue/audit claims re-verified on current `main`; deltas recorded above
+- [ ] **Doc-state sync**: `docs/implementation-status.md` + phase issue updated in this PR
 - [ ] AGENTS.md updated if public API or architecture changed
+- [ ] **Independent adversarial review** run by a separate agent/session; verdict linked or pasted in a comment (author's green run alone is not evidence — see AGENTS.md § Execution Discipline)
+
+## Review verdict
+
+<!-- Link or paste the independent pre-merge review verdict (MERGE_OK / BLOCK + findings). -->
+
+Phase issue: #
