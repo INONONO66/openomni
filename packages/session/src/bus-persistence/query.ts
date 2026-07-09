@@ -60,7 +60,7 @@ export namespace BusQuery {
    * @returns Statistics object with counts by category and type
    */
   export function getStats(sessionId: string): Promise<QueryContracts.QueryStats> {
-    return getStats(sessionId);
+    return queryStats(sessionId);
   }
 
   /**
@@ -108,7 +108,7 @@ import type { QueryStats } from "./query-contracts.js";
 import { getDatabase } from "./query-database.js";
 import type { CategoryCountRow, CountRow, TypeCountRow } from "./query-rows.js";
 
-export function getStats(sessionId: string): Promise<QueryStats> {
+function queryStats(sessionId: string): Promise<QueryStats> {
   const db = getDatabase();
   const total = db
     .query("SELECT COUNT(*) as count FROM bus_event WHERE session_id = ?")
