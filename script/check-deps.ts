@@ -109,13 +109,9 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "coordinator",
     packageJsonPath: "packages/coordinator/package.json",
     packageName: "@openomni/coordinator",
-    allowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/session",
-      "@openomni/llm",
-      "@openomni/agent",
-      "@openomni/openomni",
-    ]),
+    // Ring-2 process driver: protocol only (#462 step 1 made it session-free;
+    // this ratchet keeps it that way — widening requires Owner sign-off).
+    allowedDeps: new Set(["@openomni/protocol"]),
   },
   server: {
     displayName: "server",

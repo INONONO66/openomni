@@ -44,8 +44,11 @@ export class WorkerSupervisor {
   constructor(
     readonly id: number,
     private readonly script: string,
+    // The event sink is required on purpose: a defaulted no-op would
+    // silently swallow Operational.Warn — the exact failure mode the
+    // ledger exists to prevent (#477 review W3).
+    private readonly events: BusEvent.Sink,
     socketDir = "/tmp",
-    private readonly events: BusEvent.Sink = { publish: () => undefined },
     private readonly bootstrap?: WorkerBootstrap.Bootstrap,
     private readonly toolCallHandler?: ToolCallHandler,
     private readonly inboundWaitHandler?: InboundWaitHandler,
@@ -196,15 +199,15 @@ export class WorkerSupervisor {
     return waitForSupervisorReady(this.id, () => this.isReady(), timeoutMs);
   }
 
-  async dispatch(runId: string, params: Record<string, unknown>): Promise<unknown> {
-    return dispatchWorkerRun(this.client, this.id, this.authToken, runId, params);
+  async deliver(runId: string, task: Record<string, unknown>): Promise<unknown> {
+    return dispatchWorkerRun(this.client, this.id, this.authToken, runId, task);
   }
 
   async cancel(runId: string, sessionId: string): Promise<unknown> {
     return cancelWorkerRun(this.client, this.id, this.authToken, runId, sessionId);
   }
 
-  async deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown> {
+  async send(sessionId: string, message: string, runId?: string): Promise<unknown> {
     return deliverWorkerMessage(this.client, this.id, this.authToken, sessionId, message, runId);
   }
 

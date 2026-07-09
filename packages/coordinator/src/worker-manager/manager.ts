@@ -1,13 +1,15 @@
+import { WorkerDeliveryError } from "@openomni/protocol";
 import fs from "node:fs";
 import { createPrivateSocketDir } from "./worker-socket-dir";
 import { WorkerSlotCoordinator } from "./worker-slot-coordinator";
 import {
   DEFAULT_IDLE_SHUTDOWN_MS,
   DEFAULT_MAX_ACTIVE_WORKERS,
-  DEFAULT_MAX_QUEUED_DISPATCHES,
+  DEFAULT_MAX_QUEUED_DELIVERIES,
   DEFAULT_SLOT_WAIT_TIMEOUT_MS,
   HARD_MAX_ACTIVE_WORKERS,
   type ActiveRun,
+  type DeliverTask,
   type WorkerManager,
   type WorkerManagerConfig,
   type WorkerManagerStats,
@@ -16,6 +18,7 @@ import {
 } from "./worker-manager-types";
 
 export type {
+  DeliverTask,
   InboundWaitParams,
   InboundWaitResult,
   ToolCallCancelParams,
@@ -40,7 +43,7 @@ export class OnDemandWorkerManager implements WorkerManager {
   private readonly maxActiveWorkers: number;
   private readonly idleShutdownMs: number;
   private readonly slotWaitTimeoutMs: number;
-  private readonly maxQueuedDispatches: number;
+  private readonly maxQueuedDeliveries: number;
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly slotCoordinator: WorkerSlotCoordinator;
   private stopping = false;
@@ -50,7 +53,7 @@ export class OnDemandWorkerManager implements WorkerManager {
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
     this.idleShutdownMs = config.idleShutdownMs ?? DEFAULT_IDLE_SHUTDOWN_MS;
     this.slotWaitTimeoutMs = config.slotWaitTimeoutMs ?? DEFAULT_SLOT_WAIT_TIMEOUT_MS;
-    this.maxQueuedDispatches = config.maxQueuedDispatches ?? DEFAULT_MAX_QUEUED_DISPATCHES;
+    this.maxQueuedDeliveries = config.maxQueuedDeliveries ?? DEFAULT_MAX_QUEUED_DELIVERIES;
     this.slotCoordinator = new WorkerSlotCoordinator({
       managerConfig: config,
       ports,
@@ -58,21 +61,28 @@ export class OnDemandWorkerManager implements WorkerManager {
       maxActiveWorkers: this.maxActiveWorkers,
       idleShutdownMs: this.idleShutdownMs,
       slotWaitTimeoutMs: this.slotWaitTimeoutMs,
-      maxQueuedDispatches: this.maxQueuedDispatches,
+      maxQueuedDeliveries: this.maxQueuedDeliveries,
       isStopping: () => this.stopping,
     });
   }
 
-  async dispatch(
-    sessionId: string,
-    runId: string,
-    params: Record<string, unknown>,
-  ): Promise<unknown> {
+  async deliver(runId: string, task: DeliverTask): Promise<unknown> {
+    const sessionId = task.sessionId;
     if (this.stopping) {
-      throw new Error("worker manager is shutting down");
+      throw new WorkerDeliveryError({
+        message: "worker driver is shutting down",
+        code: "shutting_down",
+        runId,
+        sessionId,
+      });
     }
     if (this.activeRuns.has(runId)) {
-      throw new Error(`run already active: ${runId}`);
+      throw new WorkerDeliveryError({
+        message: `run already active: ${runId}`,
+        code: "duplicate_run",
+        runId,
+        sessionId,
+      });
     }
 
     const activeRun: ActiveRun = { sessionId };
@@ -102,7 +112,12 @@ export class OnDemandWorkerManager implements WorkerManager {
       const generation = supervisor.getGeneration();
       await supervisor.waitReady();
       if (supervisor.getGeneration() !== generation) {
-        throw new Error(`worker ${slot.id} restarted before run ${runId} was delivered`);
+        throw new WorkerDeliveryError({
+          message: `worker ${slot.id} restarted before run ${runId} was delivered`,
+          code: "worker_restarted",
+          runId,
+          sessionId,
+        });
       }
       if (activeRun.cancelled) {
         return {
@@ -112,14 +127,14 @@ export class OnDemandWorkerManager implements WorkerManager {
           error: "cancelled before worker delivery",
         };
       }
-      return await supervisor.dispatch(runId, { sessionId, ...params });
+      return await supervisor.deliver(runId, task);
     } finally {
       this.activeRuns.delete(runId);
       this.slotCoordinator.releaseLoadedSlot(slot);
     }
   }
 
-  async cancelRun(runId: string): Promise<unknown> {
+  async cancel(runId: string): Promise<unknown> {
     const activeRun = this.activeRuns.get(runId);
     if (!activeRun) {
       return { cancelled: false, error: `run not active: ${runId}` };
@@ -136,7 +151,7 @@ export class OnDemandWorkerManager implements WorkerManager {
     return supervisor.cancel(runId, activeRun.sessionId);
   }
 
-  async deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown> {
+  async send(sessionId: string, message: string, runId?: string): Promise<unknown> {
     const activeRun = [...this.activeRuns.entries()].find(
       ([activeRunId, run]) =>
         run.sessionId === sessionId && (runId === undefined || activeRunId === runId),
@@ -152,10 +167,10 @@ export class OnDemandWorkerManager implements WorkerManager {
         error: `worker run not ready: ${runId ?? activeRunId}`,
       };
     }
-    return supervisor.deliverMessage(sessionId, message, runId ?? activeRunId);
+    return supervisor.send(sessionId, message, runId ?? activeRunId);
   }
 
-  getStats(): WorkerManagerStats {
+  stats(): WorkerManagerStats {
     return this.slotCoordinator.getStats(this.activeRuns.size);
   }
 

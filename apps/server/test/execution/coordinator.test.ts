@@ -3,8 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 import type { Execution } from "@openomni/protocol";
 
 type MockWorkerManager = {
-  dispatch(sessionId: string, runId: string, params: Record<string, unknown>): Promise<unknown>;
-  getStats(): {
+  deliver(runId: string, task: Record<string, unknown>): Promise<unknown>;
+  stats(): {
     workers: number;
     active: number;
     idle: number;
@@ -43,7 +43,7 @@ afterAll(() => {
 
 beforeEach(() => {
   mockWorkerManager = {
-    dispatch(_sessionId, _runId, params) {
+    deliver(_runId, params) {
       const deferred = createDeferred<unknown>();
       if (typeof params.delayMs === "number") {
         setTimeout(() => {
@@ -58,7 +58,7 @@ beforeEach(() => {
       }
       return deferred.promise;
     },
-    getStats() {
+    stats() {
       return { workers: 1, active: 1, idle: 0, ready: 1, activeRuns: 0, maxActiveWorkers: 1 };
     },
     async waitUntilReady() {

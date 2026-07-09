@@ -25,7 +25,8 @@ afterAll(async () => {
 
 describe("worker manager crash recovery", () => {
   test("in-flight run fails when worker is killed", async () => {
-    const dispatchPromise = manager.dispatch("crash-session", "crash-run-1", {
+    const dispatchPromise = manager.deliver("crash-run-1", {
+      sessionId: "crash-session",
       delayMs: 500,
       prompt: "test",
     });
@@ -46,13 +47,14 @@ describe("worker manager crash recovery", () => {
   test("manager recovers after worker crash and resumes dispatching", async () => {
     const deadline = Date.now() + 8_000;
     while (Date.now() < deadline) {
-      if (manager.getStats().ready > 0) break;
+      if (manager.stats().ready > 0) break;
       await new Promise<void>((r) => setTimeout(r, 100));
     }
 
-    expect(manager.getStats().ready).toBeGreaterThan(0);
+    expect(manager.stats().ready).toBeGreaterThan(0);
 
-    const result = await manager.dispatch("recovery-session", "recovery-run-1", {
+    const result = await manager.deliver("recovery-run-1", {
+      sessionId: "recovery-session",
       prompt: "test",
     });
     expect((result as Record<string, unknown>).accepted).toBe(true);

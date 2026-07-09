@@ -65,6 +65,26 @@ export abstract class NamedError extends Error {
   );
 }
 
+/**
+ * Typed rejection taxonomy for the worker driver's `deliver` verb (#462 §4).
+ * Callers branch on `data.code`, never on message text.
+ */
+export const WorkerDeliveryError = NamedError.create(
+  "WorkerDeliveryError",
+  z.object({
+    message: z.string(),
+    code: z.enum([
+      "queue_full",
+      "shutting_down",
+      "duplicate_run",
+      "slot_wait_timeout",
+      "worker_restarted",
+    ]),
+    runId: z.string().optional(),
+    sessionId: z.string().optional(),
+  }),
+);
+
 export const APIError = NamedError.create(
   "APIError",
   z.object({

@@ -17,41 +17,41 @@ src/
 
 ## DEPENDENCIES
 
-Depends on `@openomni/protocol` and `@openomni/session`. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
+Depends on `@openomni/protocol` **only** — a ring-2 process driver (#462). Every environment edge (ledger event sink, tool relay, inbound-wait bridge) is injected as a `WorkerPorts` object by the composition root (`apps/server/src/bootstrap`); the CI dep ratchet (`script/check-deps.ts`) enforces protocol-only. Runtime execution wiring lives in `apps/server/src/execution/worker-entry.ts`, so the coordinator receives a worker script path and stays independent of `@openomni/session`, `@openomni/agent`, `@openomni/llm`, and `@openomni/openomni`.
 
 ## MODULES
 
 | Module | Purpose |
 |--------|---------|
-| `worker-manager/manager.ts` | **Primary API.** `createWorkerManager()` / `OnDemandWorkerManager`: slot-based run dispatch, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
+| `worker-manager/manager.ts` | **Primary API.** `createWorkerManager(config, ports)`: one verb — `deliver(runId, task)` (plus `cancel`/`send`/`stats`), typed `WorkerDeliveryError` rejections, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts |
 | `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop |
 | `ipc/*` | Request/response framing, bidirectional client/server transport, protocol errors |
-| `recovery/index.ts` | `recoverInterruptedRuns()` — marks interrupted worker runs failed after restart |
+
 
 ## WORKER LIFECYCLE (worker-manager)
 
 ```
 
 Session affinity here is an execution optimization only. Do not use it as product routing authority. OpenOmni chooses the target run/session; coordinator only delivers to the primitive worker/run requested by its caller.
-dispatch(runId)
-  → reject if stopping / duplicate runId
-  → acquireSlot(): free slot | new worker (≤ maxActiveWorkers) | wait in queue
+deliver(runId, task)
+  → reject (typed WorkerDeliveryError) if stopping / duplicate runId / queue full / slot wait timeout
+  → acquireSlot(task.sessionId): free slot | new worker (≤ maxActiveWorkers) | wait in queue
   → slot.load++, clear idle timer
   → ensureSupervisor() (created on demand; generation check across restarts)
-  → dispatch to supervisor → result
+  → supervisor.deliver → result
   → slot.load--; if 0: release one waiter, scheduleIdleShutdown()
        idleShutdownMs elapsed with load 0 → kill worker, forget slot
 ```
 
 ## CONSUMER
 
-`apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager()` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; callbacks `onToolCall`, `onInboundWait`) and owns dispatch, cancellation, message delivery, stats, and recovery wiring.
+`apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager(config, ports)` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; ports: `events` = `Bus.publish`, `toolRelay`, `inboundWait`) and owns delivery, cancellation, message send, stats, and recovery wiring (recovery itself lives server-side in `apps/server/src/execution/recovery.ts`).
 
-Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, `recoverInterruptedRuns`, plus types. `worker-supervision/` is internal — not exported from the root barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager` / `OnDemandWorkerManager` (live), `createIpcServer`, plus types. `worker-supervision/` is internal — not exported from the root barrel.
 
 ## TESTS
 
-Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` dispatch/crash behavior, `worker-supervision/` supervisor contracts, barrel contracts, recovery, and harness smoke coverage.
+Tests are split by module: inline IPC/supervisor tests live beside source, while `test/` covers `worker-manager/` delivery/crash behavior, `worker-supervision/` supervisor contracts, barrel contracts, recovery, and harness smoke coverage.
 
 ## ANTI-PATTERNS
 

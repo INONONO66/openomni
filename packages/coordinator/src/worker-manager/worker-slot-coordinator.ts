@@ -1,3 +1,4 @@
+import { WorkerDeliveryError } from "@openomni/protocol";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
 import type {
   SlotWaiter,
@@ -21,7 +22,7 @@ export class WorkerSlotCoordinator {
       readonly maxActiveWorkers: number;
       readonly idleShutdownMs: number;
       readonly slotWaitTimeoutMs: number;
-      readonly maxQueuedDispatches: number;
+      readonly maxQueuedDeliveries: number;
       readonly isStopping: () => boolean;
     },
   ) {}
@@ -32,7 +33,11 @@ export class WorkerSlotCoordinator {
       if (slot) return slot;
       await this.waitForSlot();
     }
-    throw new Error("worker manager is shutting down");
+    throw new WorkerDeliveryError({
+      message: "worker driver is shutting down",
+      code: "shutting_down",
+      sessionId,
+    });
   }
 
   releaseReservedSlot(slot: WorkerSlot): void {
@@ -65,8 +70,8 @@ export class WorkerSlotCoordinator {
     slot.supervisor = new WorkerSupervisor(
       slot.id,
       managerConfig.workerScript,
-      this.config.socketDir,
       ports.events,
+      this.config.socketDir,
       managerConfig.bootstrap,
       ports.toolRelay,
       ports.inboundWait,
@@ -121,7 +126,12 @@ export class WorkerSlotCoordinator {
     this.slots.clear();
     this.sessionAffinity.clear();
     for (const waiter of this.waiters.splice(0)) {
-      waiter.reject(new Error("worker manager is shutting down"));
+      waiter.reject(
+        new WorkerDeliveryError({
+          message: "worker driver is shutting down",
+          code: "shutting_down",
+        }),
+      );
     }
     return results;
   }
@@ -147,8 +157,10 @@ export class WorkerSlotCoordinator {
   }
 
   private waitForSlot(): Promise<void> {
-    if (this.waiters.length >= this.config.maxQueuedDispatches) {
-      return Promise.reject(new Error("worker manager dispatch queue is full"));
+    if (this.waiters.length >= this.config.maxQueuedDeliveries) {
+      return Promise.reject(
+        new WorkerDeliveryError({ message: "worker delivery queue is full", code: "queue_full" }),
+      );
     }
     return new Promise((resolve, reject) => {
       const waiter = {} as SlotWaiter;
@@ -156,7 +168,10 @@ export class WorkerSlotCoordinator {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
         reject(
-          new Error(`worker manager slot wait timed out after ${this.config.slotWaitTimeoutMs}ms`),
+          new WorkerDeliveryError({
+            message: `worker slot wait timed out after ${this.config.slotWaitTimeoutMs}ms`,
+            code: "slot_wait_timeout",
+          }),
         );
       }, this.config.slotWaitTimeoutMs);
       waiter.resolve = () => {

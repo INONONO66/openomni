@@ -13,7 +13,7 @@ export const DEFAULT_MAX_ACTIVE_WORKERS = 10;
 export const HARD_MAX_ACTIVE_WORKERS = 10;
 export const DEFAULT_IDLE_SHUTDOWN_MS = 600_000;
 export const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
-export const DEFAULT_MAX_QUEUED_DISPATCHES = 100;
+export const DEFAULT_MAX_QUEUED_DELIVERIES = 100;
 
 export type { ToolCallCancelParams, ToolCallContext, ToolCallParams, ToolCallResult };
 export type { InboundWaitParams, InboundWaitResult };
@@ -24,7 +24,7 @@ export type WorkerManagerConfig = {
   maxActiveWorkers?: number;
   idleShutdownMs?: number;
   slotWaitTimeoutMs?: number;
-  maxQueuedDispatches?: number;
+  maxQueuedDeliveries?: number;
   bootstrap?: WorkerBootstrap.Bootstrap;
 };
 
@@ -50,11 +50,22 @@ export type WorkerManagerStats = {
   maxActiveWorkers: number;
 };
 
+/**
+ * A task handed to `deliver`. Already authorized and policy-stamped by
+ * dispatch (ring 4) — the driver never evaluates policy. `sessionId` keys
+ * slot affinity and is part of the payload the worker receives.
+ */
+export type DeliverTask = { sessionId: string } & Record<string, unknown>;
+
+/**
+ * Ring-2 process driver surface (#462 §1): one verb, no judgment.
+ * Implements the command face of `Execution.Driver` in protocol.
+ */
 export type WorkerManager = {
-  dispatch(sessionId: string, runId: string, params: Record<string, unknown>): Promise<unknown>;
-  cancelRun(runId: string): Promise<unknown>;
-  deliverMessage(sessionId: string, message: string, runId?: string): Promise<unknown>;
-  getStats(): WorkerManagerStats;
+  deliver(runId: string, task: DeliverTask): Promise<unknown>;
+  cancel(runId: string): Promise<unknown>;
+  send(sessionId: string, message: string, runId?: string): Promise<unknown>;
+  stats(): WorkerManagerStats;
   waitUntilReady(timeoutMs?: number): Promise<void>;
   killWorker(index: number): void;
   shutdown(): Promise<void>;

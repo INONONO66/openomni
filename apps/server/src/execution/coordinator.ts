@@ -107,25 +107,28 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
   let isDraining = false;
 
   return {
-    async dispatch(sessionTreeId, request) {
+    async dispatch(_sessionTreeId, request) {
       if (isDraining) {
         throw new Error("Execution coordinator is draining");
       }
 
-      const raw = await workerManager.dispatch(sessionTreeId, request.runId, { ...request });
+      // Slot affinity keys on task.sessionId; the production dispatch handler
+      // always passes sessionTreeId === request.sessionId (worker.ts), so the
+      // tree id argument is not separately threaded to the driver.
+      const raw = await workerManager.deliver(request.runId, { ...request });
       return Execution.Result.parse(raw);
     },
 
     async cancelRun(runId) {
-      return workerManager.cancelRun(runId);
+      return workerManager.cancel(runId);
     },
 
     async deliverMessage(sessionId, message, runId) {
-      return workerManager.deliverMessage(sessionId, message, runId);
+      return workerManager.send(sessionId, message, runId);
     },
 
     getStats() {
-      return workerManager.getStats();
+      return workerManager.stats();
     },
 
     async waitUntilReady(timeoutMs) {
@@ -140,7 +143,7 @@ export function createExecutionCoordinator(config: CoordinatorConfig): Execution
       isDraining = true;
 
       const deadline = Date.now() + 60_000;
-      while (workerManager.getStats().activeRuns > 0 && Date.now() < deadline) {
+      while (workerManager.stats().activeRuns > 0 && Date.now() < deadline) {
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
       }
 
