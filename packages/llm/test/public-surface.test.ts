@@ -12,17 +12,11 @@ describe("@openomni/llm root public surface", () => {
     // Then: only package-level namespaces and entry points are exposed.
     expect(publicKeys).toEqual([
       "APIError",
-      "AbortedError",
       "Auth",
-      "AuthError",
       "ModelsDev",
       "NamedError",
-      "OutputLengthError",
       "Provider",
       "ProviderError",
-      "RetryError",
-      "SessionError",
-      "StreamError",
       "TokenTracker",
       "run",
     ]);

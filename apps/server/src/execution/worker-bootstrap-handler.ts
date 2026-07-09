@@ -1,4 +1,3 @@
-import { AgentRegistry } from "@openomni/agent";
 import type { Auth } from "@openomni/llm";
 import { Operational, WorkerBootstrap } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
@@ -69,18 +68,6 @@ export namespace WorkerBootstrapHandler {
     try {
       const bootstrap = WorkerBootstrap.Bootstrap.parse(options.params.bootstrap);
       options.state.setBootstrap(bootstrap);
-      AgentRegistry.replaceAll(
-        bootstrap.agents.map((agent) => ({
-          name: agent.name,
-          description: agent.description,
-          model: agent.model,
-          systemPrompt: agent.systemPrompt,
-          tools: agent.tools.allow ?? [],
-          permissions: agent.permissions,
-          policyPlan: agent.policyPlan,
-          budget: agent.budget,
-        })),
-      );
       options.server.useConnection(options.connectionId);
       options.state.markReady();
       options.server.notify("worker.bootstrap_ready", {

@@ -5,7 +5,6 @@ import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connec
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
-import { createSqliteBackgroundTaskAdapter } from "./sqlite-background-task-adapter";
 import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
@@ -27,7 +26,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly part: Storage.Adapter["part"];
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly artifact: NonNullable<Storage.Adapter["artifact"]>;
-  readonly backgroundTask: NonNullable<Storage.Adapter["backgroundTask"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
@@ -53,7 +51,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.part = createSqlitePartAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.artifact = createSqliteArtifactAdapter(this.db);
-    this.backgroundTask = createSqliteBackgroundTaskAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);

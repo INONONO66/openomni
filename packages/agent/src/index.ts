@@ -34,7 +34,6 @@ export type {
   PolicyFactory,
   PolicyRegistryInstance,
 } from "./core/policy";
-export { AgentRegistry } from "./runtime/index";
 export { McpClient } from "./runtime/mcp/index";
 export type { McpServerConfig } from "./runtime/mcp/index";
 export {
