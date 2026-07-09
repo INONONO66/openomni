@@ -49,7 +49,13 @@ async function createPendingInteractionFixture(
 describe("server recovery", () => {
   it("expires stale PendingInteractions during boot recovery", async () => {
     const events: string[] = [];
-    Bus.observe((event) => events.push(event.name));
+    const completedPayloads: Array<Record<string, unknown>> = [];
+    Bus.observe((event, data) => {
+      events.push(event.name);
+      if (event.name === "operational.recovery.completed") {
+        completedPayloads.push(data as Record<string, unknown>);
+      }
+    });
     await createPendingInteractionFixture("pi-boot-expired", Date.now() - 1);
     await createPendingInteractionFixture(
       "pi-boot-follow-up-expired",
@@ -58,13 +64,20 @@ describe("server recovery", () => {
     );
     await createPendingInteractionFixture("pi-boot-active", Date.now() + 60_000);
 
-    await runRecovery(undefined, { recoverInterruptedRuns: async () => 0 }, "trace-recovery");
+    await runRecovery(
+      undefined,
+      { recoverInterruptedRuns: async () => ({ recovered: 3, sessions: ["s-1", "s-2"] }) },
+      "trace-recovery",
+    );
 
     expect(PendingInteractionStore.get("pi-boot-expired")?.status).toBe("expired");
     expect(PendingInteractionStore.get("pi-boot-follow-up-expired")?.status).toBe("expired");
     expect(PendingInteractionStore.get("pi-boot-active")?.status).toBe("open");
     expect(events).toContain("pending_interaction.expired");
     expect(events).toContain("operational.recovery.completed");
+    // #477 review W4: the completed event must carry the recovered session
+    // count from RecoveryResult.sessions, not a number-coerced 0.
+    expect(completedPayloads[0]?.sessionsRecovered).toBe(2);
   });
 
   it("runs recovery before inbound dispatch surfaces start", () => {

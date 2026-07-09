@@ -45,17 +45,21 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    expect(manager.getStats()).toMatchObject({ workers: 0, ready: 0, maxActiveWorkers: 2 });
+    expect(manager.stats()).toMatchObject({ workers: 0, ready: 0, maxActiveWorkers: 2 });
 
     const results = await Promise.allSettled(
       Array.from({ length: 5 }, (_, index) =>
-        manager?.dispatch(`session-${index}`, `run-${index}`, { delayMs: 40, prompt: "test" }),
+        manager?.deliver(`run-${index}`, {
+          sessionId: `session-${index}`,
+          delayMs: 40,
+          prompt: "test",
+        }),
       ),
     );
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(5);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(0);
-    expect(manager.getStats().workers).toBeLessThanOrEqual(2);
+    expect(manager.stats().workers).toBeLessThanOrEqual(2);
   });
 
   test("reuses IPC worker affinity before idle shutdown", async () => {
@@ -69,15 +73,21 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = (await manager.dispatch("same-session", "run-1", { prompt: "test" })) as {
+    const first = (await manager.deliver("run-1", {
+      sessionId: "same-session",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
-    const second = (await manager.dispatch("same-session", "run-2", { prompt: "test" })) as {
+    const second = (await manager.deliver("run-2", {
+      sessionId: "same-session",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
 
     expect(second.workerId).toBe(first.workerId);
-    expect(manager.getStats().workers).toBe(1);
+    expect(manager.stats().workers).toBe(1);
   });
 
   test("creates a new worker under cap instead of stealing another session's idle slot", async () => {
@@ -91,15 +101,15 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = (await manager.dispatch("session-a", "run-a", { prompt: "test" })) as {
+    const first = (await manager.deliver("run-a", { sessionId: "session-a", prompt: "test" })) as {
       workerId: string;
     };
-    const second = (await manager.dispatch("session-b", "run-b", { prompt: "test" })) as {
+    const second = (await manager.deliver("run-b", { sessionId: "session-b", prompt: "test" })) as {
       workerId: string;
     };
 
     expect(second.workerId).not.toBe(first.workerId);
-    expect(manager.getStats().workers).toBe(2);
+    expect(manager.stats().workers).toBe(2);
   });
 
   test("shuts idle workers down, then recreates the session worker on demand", async () => {
@@ -113,18 +123,24 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = (await manager.dispatch("resume-session", "run-1", { prompt: "test" })) as {
+    const first = (await manager.deliver("run-1", {
+      sessionId: "resume-session",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
-    expect(manager.getStats().workers).toBe(1);
+    expect(manager.stats().workers).toBe(1);
 
-    await waitFor(() => manager?.getStats().workers === 0, 2_000);
+    await waitFor(() => manager?.stats().workers === 0, 2_000);
 
-    const second = (await manager.dispatch("resume-session", "run-2", { prompt: "test" })) as {
+    const second = (await manager.deliver("run-2", {
+      sessionId: "resume-session",
+      prompt: "test",
+    })) as {
       workerId: string;
     };
     expect(second.workerId).not.toBe(first.workerId);
-    expect(manager.getStats().workers).toBe(1);
+    expect(manager.stats().workers).toBe(1);
   });
 
   test("cancels a run before or during worker delivery", async () => {
@@ -138,15 +154,16 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const dispatch = manager.dispatch("cancel-session", "run-cancel", {
+    const dispatch = manager.deliver("run-cancel", {
+      sessionId: "cancel-session",
       delayMs: 200,
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
-    await waitFor(() => manager?.getStats().ready === 1);
+    await waitFor(() => manager?.stats().activeRuns === 1);
+    await waitFor(() => manager?.stats().ready === 1);
     await new Promise<void>((resolve) => setTimeout(resolve, 25));
 
-    await expect(manager.cancelRun("run-cancel")).resolves.toMatchObject({ cancelled: true });
+    await expect(manager.cancel("run-cancel")).resolves.toMatchObject({ cancelled: true });
     await expect(dispatch).resolves.toMatchObject({ status: "cancelled", runId: "run-cancel" });
   });
 
@@ -162,13 +179,14 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const dispatch = manager.dispatch("startup-cancel-session", "run-startup-cancel", {
+    const dispatch = manager.deliver("run-startup-cancel", {
+      sessionId: "startup-cancel-session",
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
-    expect(manager.getStats().ready).toBe(0);
+    await waitFor(() => manager?.stats().activeRuns === 1);
+    expect(manager.stats().ready).toBe(0);
 
-    await expect(manager.cancelRun("run-startup-cancel")).resolves.toMatchObject({
+    await expect(manager.cancel("run-startup-cancel")).resolves.toMatchObject({
       cancelled: true,
     });
     await expect(dispatch).resolves.toMatchObject({
@@ -188,12 +206,14 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = manager.dispatch("duplicate-session-a", "run-duplicate", {
+    const first = manager.deliver("run-duplicate", {
+      sessionId: "duplicate-session-a",
       delayMs: 100,
       prompt: "test",
     });
     await expect(
-      manager.dispatch("duplicate-session-b", "run-duplicate", {
+      manager.deliver("run-duplicate", {
+        sessionId: "duplicate-session-b",
         delayMs: 100,
         prompt: "test",
       }),
@@ -216,18 +236,20 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = manager.dispatch("duplicate-session", "run-duplicate-same-session", {
+    const first = manager.deliver("run-duplicate-same-session", {
+      sessionId: "duplicate-session",
       delayMs: 100,
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
+    await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expect(
-      manager.dispatch("duplicate-session", "run-duplicate-same-session", {
+      manager.deliver("run-duplicate-same-session", {
+        sessionId: "duplicate-session",
         prompt: "test",
       }),
     ).rejects.toThrow("run already active: run-duplicate-same-session");
-    expect(manager.getStats().activeRuns).toBe(1);
+    expect(manager.stats().activeRuns).toBe(1);
 
     await first;
   });
@@ -244,17 +266,16 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const original = manager.dispatch("duplicate-cancel-session", "run-duplicate-cancel", {
+    const original = manager.deliver("run-duplicate-cancel", {
+      sessionId: "duplicate-cancel-session",
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
+    await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expect(
-      manager.dispatch("other-session", "run-duplicate-cancel", {
-        prompt: "test",
-      }),
+      manager.deliver("run-duplicate-cancel", { sessionId: "other-session", prompt: "test" }),
     ).rejects.toThrow("run already active: run-duplicate-cancel");
-    await expect(manager.cancelRun("run-duplicate-cancel")).resolves.toMatchObject({
+    await expect(manager.cancel("run-duplicate-cancel")).resolves.toMatchObject({
       cancelled: true,
       runId: "run-duplicate-cancel",
       sessionId: "duplicate-cancel-session",
@@ -278,15 +299,16 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = manager.dispatch("busy-session", "run-busy", {
+    const first = manager.deliver("run-busy", {
+      sessionId: "busy-session",
       delayMs: 200,
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
+    await waitFor(() => manager?.stats().activeRuns === 1);
 
     await expect(
-      manager.dispatch("queued-session", "run-queued", { prompt: "test" }),
-    ).rejects.toThrow("worker manager slot wait timed out");
+      manager.deliver("run-queued", { sessionId: "queued-session", prompt: "test" }),
+    ).rejects.toThrow("worker slot wait timed out");
     await first;
   });
 
@@ -301,15 +323,15 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    await manager.dispatch("session-a", "run-a", { prompt: "test" });
+    await manager.deliver("run-a", { sessionId: "session-a", prompt: "test" });
 
     const results = await Promise.allSettled([
-      manager.dispatch("session-b", "run-b", { delayMs: 40, prompt: "test" }),
-      manager.dispatch("session-c", "run-c", { delayMs: 40, prompt: "test" }),
+      manager.deliver("run-b", { sessionId: "session-b", delayMs: 40, prompt: "test" }),
+      manager.deliver("run-c", { sessionId: "session-c", delayMs: 40, prompt: "test" }),
     ]);
 
     expect(results.every((result) => result.status === "fulfilled")).toBe(true);
-    expect(manager.getStats().workers).toBeLessThanOrEqual(1);
+    expect(manager.stats().workers).toBeLessThanOrEqual(1);
   });
 
   test("cancels queued dispatch before worker delivery", async () => {
@@ -323,18 +345,20 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const first = manager.dispatch("busy-session", "run-busy-cancel", {
+    const first = manager.deliver("run-busy-cancel", {
+      sessionId: "busy-session",
       delayMs: 200,
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 1);
+    await waitFor(() => manager?.stats().activeRuns === 1);
 
-    const queued = manager.dispatch("queued-session", "run-queued-cancel", {
+    const queued = manager.deliver("run-queued-cancel", {
+      sessionId: "queued-session",
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().activeRuns === 2);
+    await waitFor(() => manager?.stats().activeRuns === 2);
 
-    await expect(manager.cancelRun("run-queued-cancel")).resolves.toMatchObject({
+    await expect(manager.cancel("run-queued-cancel")).resolves.toMatchObject({
       cancelled: true,
       queued: true,
     });
@@ -356,16 +380,17 @@ describe("on-demand WorkerManager", () => {
       collectorPorts(),
     );
 
-    const dispatch = manager.dispatch("deliver-session", "run-deliver", {
+    const dispatch = manager.deliver("run-deliver", {
+      sessionId: "deliver-session",
       delayMs: 500,
       prompt: "test",
     });
-    await waitFor(() => manager?.getStats().ready === 1);
+    await waitFor(() => manager?.stats().ready === 1);
 
     let delivery: unknown;
     const deadline = Date.now() + 1_000;
     while (Date.now() < deadline) {
-      delivery = await manager.deliverMessage("deliver-session", "adjust your plan", "run-deliver");
+      delivery = await manager.send("deliver-session", "adjust your plan", "run-deliver");
       if (
         delivery !== null &&
         typeof delivery === "object" &&

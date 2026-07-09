@@ -35,7 +35,7 @@ describe("worker manager dispatch", () => {
       collectorPorts(),
     );
     try {
-      expect(defaultManager.getStats().maxActiveWorkers).toBe(10);
+      expect(defaultManager.stats().maxActiveWorkers).toBe(10);
     } finally {
       await defaultManager.shutdown();
     }
@@ -49,7 +49,7 @@ describe("worker manager dispatch", () => {
 
     const results = await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.dispatch(sessionId, runId, { delayMs: 30, prompt: "test" }),
+        manager.deliver(runId, { sessionId: sessionId, delayMs: 30, prompt: "test" }),
       ),
     );
 
@@ -67,14 +67,14 @@ describe("worker manager dispatch", () => {
 
     const seqStart = Date.now();
     for (const { sessionId, runId } of runs) {
-      await manager.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" });
+      await manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" });
     }
     const seqMs = Date.now() - seqStart;
 
     const parStart = Date.now();
     await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.dispatch(sessionId, runId, { delayMs: 50, prompt: "test" }),
+        manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" }),
       ),
     );
     const parMs = Date.now() - parStart;
@@ -83,7 +83,7 @@ describe("worker manager dispatch", () => {
   });
 
   test("getStats reflects on-demand worker limit", () => {
-    const stats = manager.getStats();
+    const stats = manager.stats();
     expect(stats.maxActiveWorkers).toBe(4);
     expect(stats.workers).toBeLessThanOrEqual(4);
     expect(stats.ready).toBeLessThanOrEqual(stats.workers);
@@ -104,7 +104,8 @@ describe("worker manager dispatch", () => {
   });
 
   test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
-    const result = await manager.dispatch("session-budget-1", "run-budget-1", {
+    const result = await manager.deliver("run-budget-1", {
+      sessionId: "session-budget-1",
       delayMs: 10,
       prompt: "test",
       budget: { maxWallTimeMs: 120_000 },
@@ -113,7 +114,8 @@ describe("worker manager dispatch", () => {
   });
 
   test("dispatch without budget defaults to timeout=330_000", async () => {
-    const result = await manager.dispatch("session-budget-2", "run-budget-2", {
+    const result = await manager.deliver("run-budget-2", {
+      sessionId: "session-budget-2",
       delayMs: 10,
       prompt: "test",
     });
@@ -140,27 +142,32 @@ describe("worker manager dispatch", () => {
     );
     try {
       await envManager.waitUntilReady(15_000);
-      const result = await envManager.dispatch("session-env", "run-env", {
+      const result = await envManager.deliver("run-env", {
+        sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_WORKER_ENV_FIXTURE",
       });
       expect((result as Record<string, unknown>).envValue).toBe("runtime-value");
-      const secretResult = await envManager.dispatch("session-env", "run-secret", {
+      const secretResult = await envManager.deliver("run-secret", {
+        sessionId: "session-env",
         prompt: "test",
         envName: "DISCORD_BOT_TOKEN",
       });
       expect((secretResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authTokenResult = await envManager.dispatch("session-env", "run-auth-token", {
+      const authTokenResult = await envManager.deliver("run-auth-token", {
+        sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_WORKER_IPC_TOKEN",
       });
       expect((authTokenResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authFileResult = await envManager.dispatch("session-env", "run-auth-file", {
+      const authFileResult = await envManager.deliver("run-auth-file", {
+        sessionId: "session-env",
         prompt: "test",
         envName: "OPENOMNI_AUTH_FILE",
       });
       expect((authFileResult as Record<string, unknown>).envValue).toBeUndefined();
-      const homeResult = await envManager.dispatch("session-env", "run-home", {
+      const homeResult = await envManager.deliver("run-home", {
+        sessionId: "session-env",
         prompt: "test",
         envName: "HOME",
       });

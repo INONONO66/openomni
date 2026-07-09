@@ -28,11 +28,11 @@ mock.module("@openomni/coordinator", () => ({
   ) => {
     capturedOnToolCall = ports.toolRelay;
     return {
-      dispatch: (sessionId: string, runId: string, params: Record<string, unknown>) =>
-        mockPoolDispatch(sessionId, runId, params),
-      cancelRun: async () => ({ cancelled: true }),
+      deliver: (runId: string, task: { sessionId: string } & Record<string, unknown>) =>
+        mockPoolDispatch(task.sessionId, runId, task),
+      cancel: async () => ({ cancelled: true }),
       killWorker: () => undefined,
-      getStats: () => ({
+      stats: () => ({
         workers: 1,
         active: 0,
         idle: 1,

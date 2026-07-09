@@ -13,14 +13,14 @@ afterEach(() => {
   }
 });
 
-describe("WorkerSupervisor dispatch timeout ceiling", () => {
+describe("WorkerSupervisor deliver timeout ceiling", () => {
   function createTestSupervisor(mockClient: IpcClient): WorkerSupervisor {
     const supervisor = Object.create(WorkerSupervisor.prototype) as WorkerSupervisor;
     Reflect.set(supervisor, "client", mockClient);
     return supervisor;
   }
 
-  test("dispatch timeout is capped at 600_000 ms when budget.maxWallTimeMs is Infinity", async () => {
+  test("deliver timeout is capped at 600_000 ms when budget.maxWallTimeMs is Infinity", async () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
@@ -38,7 +38,7 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
       },
     };
 
-    await supervisor.dispatch("test-run-id", params);
+    await supervisor.deliver("test-run-id", params);
 
     expect(capturedTimeoutMs).toBe(600_000);
   });
@@ -61,13 +61,13 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
       },
     };
 
-    await supervisor.dispatch("test-run-id", params);
+    await supervisor.deliver("test-run-id", params);
 
     // Math.max(100_000, 300_000) + 30_000 = 330_000
     expect(capturedTimeoutMs).toBe(330_000);
   });
 
-  test("dispatch timeout is capped at 600_000 ms for large budgets", async () => {
+  test("deliver timeout is capped at 600_000 ms for large budgets", async () => {
     let capturedTimeoutMs: number | undefined;
     const mockClient: IpcClient = {
       connected: true,
@@ -85,7 +85,7 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
       },
     };
 
-    await supervisor.dispatch("test-run-id", params);
+    await supervisor.deliver("test-run-id", params);
 
     // Math.max(1_000_000, 300_000) + 30_000 = 1_030_000, capped at 600_000
     expect(capturedTimeoutMs).toBe(600_000);
@@ -105,7 +105,7 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
     const supervisor = createTestSupervisor(mockClient);
     const params = {};
 
-    await supervisor.dispatch("test-run-id", params);
+    await supervisor.deliver("test-run-id", params);
 
     // Math.max(300_000, 300_000) + 30_000 = 330_000
     expect(capturedTimeoutMs).toBe(330_000);

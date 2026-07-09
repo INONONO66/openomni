@@ -44,7 +44,7 @@ async function processRetryQueue(
 
 export async function runRecovery(
   handler: Adapter.MessageHandler | undefined,
-  coordinator?: { recoverInterruptedRuns(): Promise<unknown> },
+  coordinator?: { recoverInterruptedRuns(): Promise<{ recovered: number; sessions: string[] }> },
   traceId?: string,
 ): Promise<void> {
   const startTime = Date.now();
@@ -58,7 +58,7 @@ export async function runRecovery(
   let sessionsRecovered = 0;
   try {
     const recoveryResult = await coordinator?.recoverInterruptedRuns();
-    sessionsRecovered = typeof recoveryResult === "number" ? recoveryResult : 0;
+    sessionsRecovered = recoveryResult?.sessions.length ?? 0;
     const expiredPendingInteractions = PendingInteractionStore.cleanupExpired();
     if (expiredPendingInteractions.length > 0) {
       Bus.publish(Operational.Info, {

@@ -75,4 +75,20 @@ export namespace Execution {
 
   export const Result = resultSchema;
   export type Result = z.infer<typeof resultSchema>;
+
+  /**
+   * Command face of an executor driver (#462 §6). `deliver` is the one verb
+   * every executor implements; `send` and `cancel` are capability-declared —
+   * the presence of the method is the declaration, and dispatch rejects a
+   * `send` to a non-capable executor at the gate instead of faking it.
+   * A driver receives tasks already authorized and policy-stamped by
+   * dispatch (ring 4) and enforces process-level physics only — it is never
+   * a gate. Type-only: internals differ per executor; what the gate holds
+   * must be identical.
+   */
+  export interface Driver {
+    deliver(runId: string, task: { sessionId: string } & Record<string, unknown>): Promise<unknown>;
+    cancel?(runId: string): Promise<unknown>;
+    send?(sessionId: string, message: string, runId?: string): Promise<unknown>;
+  }
 }
