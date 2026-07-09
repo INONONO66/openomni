@@ -18,19 +18,16 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
-│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, Snapshot, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
+│   ├── session/         # Session CRUD, Bus pub/sub, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, WorkerRun, WorkItemStore (universal work state), TraceContext
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + runtime registry, messenger, MCP — depends on session for observability (Bus, TraceContext)
+│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on session for observability (Bus, TraceContext)
 │   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
-│   │   │   └── policy/         # Agent policy facade + builtins (budget, memory, tool-permission, compaction, post-tool, post-turn, idle-nudge)
-│   │   └── src/runtime/        # Multi-agent infrastructure
-│   │       ├── messenger/      # AgentMessenger
-│   │       ├── registry/       # AgentRegistry
-│   │       ├── tools/          # Runtime tool helpers
+│   │   │   └── policy/         # Agent policy facade + builtins (budget, compaction, idle-nudge, tool-guard)
+│   │   └── src/runtime/        # MCP client runtime
 │   │       └── mcp/            # McpClient
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
-│   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery, credentials, tool-permission
+│   └── coordinator/     # Multiprocess execution coordinator: on-demand worker manager, worker internals, IPC transport, recovery
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
 ```
@@ -98,7 +95,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Add policy timing | `packages/protocol/src/policy/index.ts` | 13 timings: pre_run, pre_turn, on_system_prompt, pre_tool_use, post_tool_use, post_turn, post_compaction, post_run, on_error, pre_ingress, pre_tool_selection, pre_delegation |
 | Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
 | Session CRUD | `packages/session/src/session/` | Namespace-based API |
-| Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `backgroundTask`, `workItem`, `workerRunState`) |
+| Storage backend | `packages/session/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |
 | Bus persistence observer | `packages/session/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
 | Bus query API | `packages/session/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
 | Surface → session mapping | `packages/session/src/surface-key/` | N:1 SurfaceKey registry |
@@ -115,11 +112,8 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
 | Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
-| Agent messenger | `packages/agent/src/runtime/messenger/` | AgentMessenger |
-| Agent registry | `packages/agent/src/runtime/registry/` | AgentRegistry |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
-| DAG utilities | `packages/openomni/src/dag/` | Pure: `build`, `validateAcyclic`, `getReady`, `complete` |
 | Messaging kernel | `packages/openomni/src/{messaging,ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection |
 | Ingress engine | `packages/openomni/src/ingress/` | Current inbound stage: authority middleware → session resolution → projection → resident/direct handler |
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
@@ -172,7 +166,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
 | Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `AgentRegistry`, `WorkerRun`, `executorKind` |
+| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` attempts (formerly `WorkerRun`), `executorKind` |
 | Actor | Any external entity that interacts with the system | (Planned: `ActorIdentity` / `ActorEndpoint` in `packages/protocol/src/actor/`) |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
 
@@ -232,7 +226,7 @@ bun run --cwd apps/server dev        # Hono server with channels (set env tokens
 - CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks, and direct Bun package/app tests; app manifests may not define test scripts.
 - `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
 - `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. Custom provider endpoints use the OpenAI provider with their catalog API URL as `baseURL`.
-- `packages/agent` is organized as `src/core/` (ChatAgent + policy facade/built-ins) and `src/runtime/` (messenger, registry, tools, mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`.
-- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, DAG utilities, ledger/evidence gates, and execution runtime tooling.
+- `packages/agent` is organized as `src/core/` (ChatAgent + policy facade/built-ins) and `src/runtime/` (mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`.
+- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, ledger/evidence gates, and execution runtime tooling.
 - `packages/coordinator` owns multiprocess execution: on-demand worker lifecycle, IPC transport (Unix socket), recovery of interrupted runs, credentials injection, and tool-permission policy. It depends on all lower packages. See `packages/coordinator/AGENTS.md` for its module map.
 - WorkerRun lifecycle events live under `WorkerRun.Events.*` in `packages/protocol/src/worker-run/index.ts`.

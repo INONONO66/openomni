@@ -7,21 +7,16 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 | Domain | Purpose | Key exports |
 | --- | --- | --- |
 | `src/agents/` | Built-in agent definitions and model-specific prompt variants | `ResidentAgent` |
-| `src/dag/` | Pure dependency-graph utilities | `DAG` |
-| `src/profile/` | Agent profile middleware (soul/user/memory from `~/.openomni/profiles/`) | `Profile` |
 | `src/resident/` | Resident runtime lifecycle (in-process execution, direct mode) | `ResidentRuntime` |
 | `src/messaging/` | Target direction: canonical kernel facade for inbound/internal/outbound message envelopes | *(create here before adding new cross-boundary behavior)* |
 | `src/access/` | Target direction: principal/channel/delegation grant/effective-access decisions | *(create here before adding new access behavior)* |
 | `src/ingress/` | Current inbound stage: authority middleware, session resolution, projection, resident/direct execution | `IngressEngine`, `IngressEventProjector`, `IngressHandlers`, `IngressSessionResolver`, `SessionBridge`, `CronAdapter`, `resolveTarget`, `targetKey` |
 | `src/dispatch/` | Current egress/cross-boundary stage: command authorization, handler routing, PendingInteraction routing | `DispatchRuntime`, `DispatchRegistry`, `createDefaultDispatchRuntime` |
-| `src/runtime/` | Worker middleware and session utilities | *(no public exports; internal wiring only)* |
 | `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
 
 - `src/agents/` contains built-in agent definitions. `src/agents/resident/prompt/` holds the Resident system prompt with model-specific variants (Claude, GPT) and a shared builder. `ResidentAgent.getPrompt({ model })` selects the right variant by provider.
-- `src/dag/` is structural only — it knows step topology, not runtime state.
-- `src/profile/` loads `SOUL.md`, `USER.md`, and `MEMORY.md` from the file system and injects them as `context.prepare` policy effects before agent execution.
 - `src/resident/` provides `ResidentRuntime` for in-process Resident execution without coordinator dispatch.
 - `src/messaging/` is the target home for the canonical kernel API. Until that facade exists, new behavior must still obey the same rule: OpenOmni owns principal resolution handoff, access checks, correlation, session/target resolution, projection, writeback, and response routing.
 - `src/access/` is the target home for blocklist, channel access rules, trust tier, delegation grants, PendingInteraction scope, and effective-access decisions. Store modules may answer indexed queries; access precedence belongs here.
@@ -30,7 +25,7 @@ Product kernel for OpenOmni. Builds on `@openomni/agent`, `@openomni/policy`, `@
 - `src/execution-runtime/tool/agent/tools/dispatch.ts` is the `dispatch` tool — the runtime-to-runtime/system egress gate. Worker-to-Resident awaited requests use `resident.ask`; scheduling uses `schedule.create`; cron fire remains internal ingress. `Dispatch.submit()` enforces PolicyEngine authorization and emits Bus audit events. See `src/dispatch/` for the runtime, handlers, and policy.
 - `src/execution-runtime/injection-queue.ts` (`InjectionQueue`) holds async responses keyed by `runId`. The worker middleware drains the queue at `turn.finish` and injects pending responses into the agent's next turn.
 - `src/execution-runtime/cron-job-registry.ts` (`CronJobRegistry`) stores scheduled jobs through the session storage adapter and keeps a process-local fallback map when durable storage is absent. `src/execution-runtime/cron-job-runner.ts` (`CronJobRunner`) polls the registry and accepts an injected fire implementation; server boot wires that to `CronAdapter.fire(job)`.
-- Target domain names are `messaging/`, `access/`, `orchestration/`, `tools/`, `extensions/`, `ledger/`, `profiles/`, and `runtime/`. Legacy folders (`ingress/`, `dispatch/`, `execution-runtime/`, `skill/`, `extension/`, `evidence/`, `profile/`) remain transitional until a compatibility-backed migration moves them.
+- Target domain names are `messaging/`, `access/`, `orchestration/`, `tools/`, `extensions/`, `ledger/`, `profiles/`, and `runtime/`. Legacy folders (`ingress/`, `dispatch/`, `execution-runtime/`, `evidence/`) remain transitional until a compatibility-backed migration moves them.
 - Resident/Worker orchestration seams, controlled inbound access, self-loop session creation, Worker delegation, durable external waits, ledger/evidence gates, and distilled writeback all belong in this package.
 
 WHY: each domain stays small and focused so the domain docs can stay source-of-truth instead of repeating.
@@ -61,8 +56,6 @@ Use these ownership boundaries when adding or moving code:
 
 ```
 agents/             → @openomni/protocol (Model.Ref only)
-dag/                → no internal deps
-profile/            → @openomni/session + @openomni/agent + @openomni/protocol
 resident/           → @openomni/session + @openomni/agent + @openomni/protocol
 tools/              → no orchestration deps (tool system, workspace, middleware) once migrated from execution-runtime/
 messaging/          → legacy ingress/dispatch/session/access concepts as kernel facade
@@ -80,10 +73,8 @@ ingress/            → no sibling deps
 Consumers should only use `@openomni/openomni` exports:
 
 - Resident agent prompts from `src/agents/`
-- DAG helpers from `src/dag/`
-- Profile middleware from `src/profile/`
 - Resident runtime from `src/resident/`
-- Messaging/ingress/dispatch kernel entry points from `src/messaging`, `src/ingress`, and `src/dispatch`
+- Messaging/ingress/dispatch kernel entry points from `src/ingress` and `src/dispatch`
 
 - Tool system, workspace lock, worker middleware, and cron runtime from `src/execution-runtime/`
 
@@ -105,8 +96,7 @@ If a symbol is not re-exported from `src/index.ts`, treat it as private to its d
 
 ## Domain Docs
 
-- `src/dag/AGENTS.md` — dependency-graph helpers
-- `src/profile/AGENTS.md` and `src/resident/AGENTS.md` do not exist yet; these are intentionally small modules.
+- `src/resident/AGENTS.md` does not exist yet; it is an intentionally small module.
 - `src/ingress/AGENTS.md` — inbound event handling and mode dispatch
 - `src/execution-runtime/AGENTS.md` — tool system, workspace lock, and worker middleware
 
