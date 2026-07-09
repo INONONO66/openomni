@@ -4,6 +4,7 @@ export {
   type WorkerManager,
   type WorkerManagerConfig,
   type WorkerManagerStats,
+  type WorkerPorts,
   type ToolCallCancelParams,
   type ToolCallContext,
   type ToolCallParams,

@@ -23,4 +23,15 @@ export namespace BusEvent {
       ? { name, schema }
       : { name, schema, visibility: options.visibility };
   }
+
+  /**
+   * Event-publishing port for ring-2 drivers (coordinator, llm). Drivers
+   * receive a Sink instead of importing the ledger's Bus directly; the
+   * composition root binds it to Bus.publish, tests bind a collector.
+   * This is the one binding P2 swaps when Ledger.append (fail-closed)
+   * splits from lossy Bus.publish (#462 §2, #455).
+   */
+  export interface Sink {
+    publish<T>(event: Descriptor<T>, data: T): void;
+  }
 }

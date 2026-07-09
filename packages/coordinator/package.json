@@ -10,8 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/protocol": "workspace:*",
-    "@openomni/session": "workspace:*"
+    "@openomni/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

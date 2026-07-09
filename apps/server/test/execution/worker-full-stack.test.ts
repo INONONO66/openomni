@@ -22,8 +22,11 @@ let mockPoolDispatch: (
 ) => Promise<unknown>;
 
 mock.module("@openomni/coordinator", () => ({
-  createWorkerManager: (config: { onToolCall?: typeof capturedOnToolCall }) => {
-    capturedOnToolCall = config.onToolCall;
+  createWorkerManager: (
+    _config: Record<string, unknown>,
+    ports: { toolRelay?: typeof capturedOnToolCall },
+  ) => {
+    capturedOnToolCall = ports.toolRelay;
     return {
       dispatch: (sessionId: string, runId: string, params: Record<string, unknown>) =>
         mockPoolDispatch(sessionId, runId, params),

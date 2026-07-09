@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import type { Subprocess } from "bun";
-import { Operational, type WorkerBootstrap } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { type BusEvent, Operational, type WorkerBootstrap } from "@openomni/protocol";
 import { connectIpcClient, type IpcClient } from "../ipc/client";
 import { cancelWorkerRun, deliverWorkerMessage, dispatchWorkerRun } from "./supervisor-client.js";
 import {
@@ -46,6 +45,7 @@ export class WorkerSupervisor {
     readonly id: number,
     private readonly script: string,
     socketDir = "/tmp",
+    private readonly events: BusEvent.Sink = { publish: () => undefined },
     private readonly bootstrap?: WorkerBootstrap.Bootstrap,
     private readonly toolCallHandler?: ToolCallHandler,
     private readonly inboundWaitHandler?: InboundWaitHandler,
@@ -157,7 +157,7 @@ export class WorkerSupervisor {
     if (!this.stopping && this.running && lastError) {
       // doStart() fires this promise without awaiting it, so a throw here would
       // surface as an unhandled rejection; report and let waitReady() time out.
-      Bus.publish(Operational.Warn, {
+      this.events.publish(Operational.Warn, {
         traceId: crypto.randomUUID(),
         time: Date.now(),
         component: "coordinator.worker",
@@ -259,7 +259,7 @@ export class WorkerSupervisor {
       proc.kill("SIGTERM");
       const graceMs = workerStopGraceMs();
       if ((await waitForWorkerExit(proc, graceMs)) === "timeout") {
-        Bus.publish(Operational.Warn, {
+        this.events.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "coordinator.worker",

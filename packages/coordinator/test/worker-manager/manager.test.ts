@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
+import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
@@ -34,12 +35,15 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
 
 describe("on-demand WorkerManager", () => {
   test("does not spawn workers before first dispatch and caps active processes", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("cap"),
-      maxActiveWorkers: 2,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("cap"),
+        maxActiveWorkers: 2,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     expect(manager.getStats()).toMatchObject({ workers: 0, ready: 0, maxActiveWorkers: 2 });
 
@@ -55,12 +59,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("reuses IPC worker affinity before idle shutdown", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("reuse"),
-      maxActiveWorkers: 2,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("reuse"),
+        maxActiveWorkers: 2,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const first = (await manager.dispatch("same-session", "run-1", { prompt: "test" })) as {
       workerId: string;
@@ -74,12 +81,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("creates a new worker under cap instead of stealing another session's idle slot", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("no-steal"),
-      maxActiveWorkers: 2,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("no-steal"),
+        maxActiveWorkers: 2,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const first = (await manager.dispatch("session-a", "run-a", { prompt: "test" })) as {
       workerId: string;
@@ -93,12 +103,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("shuts idle workers down, then recreates the session worker on demand", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("idle"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 25,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("idle"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 25,
+      },
+      collectorPorts(),
+    );
 
     const first = (await manager.dispatch("resume-session", "run-1", { prompt: "test" })) as {
       workerId: string;
@@ -115,12 +128,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("cancels a run before or during worker delivery", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("cancel"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("cancel"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const dispatch = manager.dispatch("cancel-session", "run-cancel", {
       delayMs: 200,
@@ -136,12 +152,15 @@ describe("on-demand WorkerManager", () => {
 
   test("accepts cancellation while a worker is still starting", async () => {
     process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("startup-cancel"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("startup-cancel"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const dispatch = manager.dispatch("startup-cancel-session", "run-startup-cancel", {
       prompt: "test",
@@ -159,12 +178,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("rejects duplicate run ids across concurrent sessions before worker delivery", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("dup-diff"),
-      maxActiveWorkers: 2,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("dup-diff"),
+        maxActiveWorkers: 2,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const first = manager.dispatch("duplicate-session-a", "run-duplicate", {
       delayMs: 100,
@@ -184,12 +206,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("rejects duplicate run ids for the same session while the original is active", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("dup-same"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("dup-same"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const first = manager.dispatch("duplicate-session", "run-duplicate-same-session", {
       delayMs: 100,
@@ -209,12 +234,15 @@ describe("on-demand WorkerManager", () => {
 
   test("duplicate run rejection preserves cancellation for the original run", async () => {
     process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("dup-cancel"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("dup-cancel"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const original = manager.dispatch("duplicate-cancel-session", "run-duplicate-cancel", {
       prompt: "test",
@@ -239,13 +267,16 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("times out queued dispatches when all workers stay busy", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("queue-timeout"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-      slotWaitTimeoutMs: 25,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("queue-timeout"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+        slotWaitTimeoutMs: 25,
+      },
+      collectorPorts(),
+    );
 
     const first = manager.dispatch("busy-session", "run-busy", {
       delayMs: 200,
@@ -260,12 +291,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("serializes concurrent idle-slot reassignment at worker cap", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("reassign-race"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("reassign-race"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     await manager.dispatch("session-a", "run-a", { prompt: "test" });
 
@@ -279,12 +313,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("cancels queued dispatch before worker delivery", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("queued-cancel"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("queued-cancel"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const first = manager.dispatch("busy-session", "run-busy-cancel", {
       delayMs: 200,
@@ -309,12 +346,15 @@ describe("on-demand WorkerManager", () => {
   });
 
   test("delivers live worker messages to an active run mailbox", async () => {
-    manager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: makeSocketDir("deliver"),
-      maxActiveWorkers: 1,
-      idleShutdownMs: 1_000,
-    });
+    manager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("deliver"),
+        maxActiveWorkers: 1,
+        idleShutdownMs: 1_000,
+      },
+      collectorPorts(),
+    );
 
     const dispatch = manager.dispatch("deliver-session", "run-deliver", {
       delayMs: 500,

@@ -11,6 +11,7 @@ import {
   type WorkerManager,
   type WorkerManagerConfig,
   type WorkerManagerStats,
+  type WorkerPorts,
   type WorkerSlot,
 } from "./worker-manager-types";
 
@@ -24,10 +25,14 @@ export type {
   WorkerManager,
   WorkerManagerConfig,
   WorkerManagerStats,
+  WorkerPorts,
 } from "./worker-manager-types";
 
-export function createWorkerManager(config: WorkerManagerConfig): WorkerManager {
-  return new OnDemandWorkerManager(config);
+export function createWorkerManager(
+  config: WorkerManagerConfig,
+  ports: WorkerPorts,
+): WorkerManager {
+  return new OnDemandWorkerManager(config, ports);
 }
 
 export class OnDemandWorkerManager implements WorkerManager {
@@ -40,14 +45,15 @@ export class OnDemandWorkerManager implements WorkerManager {
   private readonly slotCoordinator: WorkerSlotCoordinator;
   private stopping = false;
 
-  constructor(config: WorkerManagerConfig) {
-    this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp");
+  constructor(config: WorkerManagerConfig, ports: WorkerPorts) {
+    this.socketDir = createPrivateSocketDir(config.socketDir ?? "/tmp", ports.events);
     this.maxActiveWorkers = normalizeMaxActiveWorkers(config.maxActiveWorkers);
     this.idleShutdownMs = config.idleShutdownMs ?? DEFAULT_IDLE_SHUTDOWN_MS;
     this.slotWaitTimeoutMs = config.slotWaitTimeoutMs ?? DEFAULT_SLOT_WAIT_TIMEOUT_MS;
     this.maxQueuedDispatches = config.maxQueuedDispatches ?? DEFAULT_MAX_QUEUED_DISPATCHES;
     this.slotCoordinator = new WorkerSlotCoordinator({
       managerConfig: config,
+      ports,
       socketDir: this.socketDir,
       maxActiveWorkers: this.maxActiveWorkers,
       idleShutdownMs: this.idleShutdownMs,

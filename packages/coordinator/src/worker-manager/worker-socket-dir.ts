@@ -1,25 +1,24 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { type BusEvent, Operational } from "@openomni/protocol";
 
 const SOCKET_PROBE_TIMEOUT_MS = 1000;
 
-export function createPrivateSocketDir(baseDir: string): string {
+export function createPrivateSocketDir(baseDir: string, events: BusEvent.Sink): string {
   fs.mkdirSync(baseDir, { recursive: true, mode: 0o700 });
-  cleanupStaleSocketDirs(baseDir);
+  cleanupStaleSocketDirs(baseDir, events);
   const dir = fs.mkdtempSync(path.join(baseDir, "openomni-workers-"));
   fs.chmodSync(dir, 0o700);
   return dir;
 }
 
-function cleanupStaleSocketDirs(baseDir: string): void {
+function cleanupStaleSocketDirs(baseDir: string, events: BusEvent.Sink): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(baseDir);
   } catch (err) {
-    warnCleanup("failed to read socket base directory", {
+    warnCleanup(events, "failed to read socket base directory", {
       baseDir,
       error: String(err),
     });
@@ -32,22 +31,22 @@ function cleanupStaleSocketDirs(baseDir: string): void {
     try {
       if (!fs.lstatSync(dirPath).isDirectory()) continue;
     } catch (err) {
-      warnCleanup("failed to stat worker directory during cleanup", {
+      warnCleanup(events, "failed to stat worker directory during cleanup", {
         dirPath,
         error: String(err),
       });
       continue;
     }
 
-    void cleanupIfStale(dirPath);
+    void cleanupIfStale(dirPath, events);
   }
 }
 
-async function cleanupIfStale(dirPath: string): Promise<void> {
+async function cleanupIfStale(dirPath: string, events: BusEvent.Sink): Promise<void> {
   try {
     await cleanupIfStaleUnsafe(dirPath);
   } catch (err) {
-    warnCleanup("stale worker directory cleanup failed", {
+    warnCleanup(events, "stale worker directory cleanup failed", {
       dirPath,
       error: String(err),
     });
@@ -85,8 +84,8 @@ function isSocketAlive(socketPath: string): Promise<boolean> {
   });
 }
 
-function warnCleanup(msg: string, context: Record<string, unknown>): void {
-  Bus.publish(Operational.Warn, {
+function warnCleanup(events: BusEvent.Sink, msg: string, context: Record<string, unknown>): void {
+  events.publish(Operational.Warn, {
     traceId: crypto.randomUUID(),
     time: Date.now(),
     component: "coordinator.worker-manager",

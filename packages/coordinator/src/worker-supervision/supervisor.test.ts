@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { type BusEvent, Operational } from "@openomni/protocol";
 import type { IpcClient } from "../ipc/client";
 import { WorkerSupervisor } from "./supervisor";
 
@@ -114,14 +113,18 @@ describe("WorkerSupervisor dispatch timeout ceiling", () => {
 });
 
 describe("WorkerSupervisor stop", () => {
-  function createStopSupervisor(proc: {
-    kill: (signal: NodeJS.Signals) => void;
-    exited: Promise<number>;
-  }): WorkerSupervisor {
+  function createStopSupervisor(
+    proc: {
+      kill: (signal: NodeJS.Signals) => void;
+      exited: Promise<number>;
+    },
+    events: BusEvent.Sink = { publish: () => undefined },
+  ): WorkerSupervisor {
     const supervisor = Object.create(WorkerSupervisor.prototype) as WorkerSupervisor;
     Reflect.set(supervisor, "id", 0);
     Reflect.set(supervisor, "proc", proc);
     Reflect.set(supervisor, "running", true);
+    Reflect.set(supervisor, "events", events);
     Reflect.set(supervisor, "client", {
       connected: true,
       call: mock(async () => ({})),
@@ -134,9 +137,13 @@ describe("WorkerSupervisor stop", () => {
     process.env.OPENOMNI_WORKER_STOP_GRACE_MS = "1";
 
     const warnings: Array<{ msg: string; context?: Record<string, unknown> }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Warn, (event) => {
-      warnings.push(event);
-    });
+    const collector: BusEvent.Sink = {
+      publish(event, data) {
+        if (event.name === Operational.Warn.name) {
+          warnings.push(data as { msg: string; context?: Record<string, unknown> });
+        }
+      },
+    };
     let resolveExit!: (code: number) => void;
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
@@ -150,12 +157,8 @@ describe("WorkerSupervisor stop", () => {
       }),
     };
 
-    try {
-      await createStopSupervisor(proc).stop();
-      await Promise.resolve();
-    } finally {
-      unsubscribe();
-    }
+    await createStopSupervisor(proc, collector).stop();
+    await Promise.resolve();
 
     expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
     expect(warnings).toContainEqual(

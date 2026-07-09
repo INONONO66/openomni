@@ -5,10 +5,10 @@ import {
   type InboundWaitResult,
   type ToolCallContext,
   type WorkerManager,
-  recoverInterruptedRuns as _recoverInterruptedRuns,
-  type RecoveryResult,
 } from "@openomni/coordinator";
 import type { ToolExecutionContext, ToolProvider } from "@openomni/openomni";
+import { Bus } from "@openomni/session";
+import { recoverInterruptedRuns as _recoverInterruptedRuns, type RecoveryResult } from "./recovery";
 
 export type ToolDispatchHandler = (
   call: Tool.Call,
@@ -62,39 +62,47 @@ export type ExecutionCoordinator = {
 export function createExecutionCoordinator(config: CoordinatorConfig): ExecutionCoordinator {
   const { toolDispatcher } = config;
 
-  const workerManager: WorkerManager = createWorkerManager({
-    workerScript: config.workerScript,
-    maxActiveWorkers: config.maxWorkers ?? config.workerCount,
-    idleShutdownMs: config.workerIdleTimeoutMs,
-    socketDir: config.socketDir,
-    bootstrap: config.bootstrap,
-    onInboundWait: config.askResident,
-    onToolCall: toolDispatcher
-      ? async (params, context?: ToolCallContext) => {
-          const call: Tool.Call = {
-            id: params.callId,
-            tool: params.tool,
-            input: params.input,
-          };
-          const handler = toolDispatcher.get(params.tool);
-          if (!handler) {
-            return {
+  const workerManager: WorkerManager = createWorkerManager(
+    {
+      workerScript: config.workerScript,
+      maxActiveWorkers: config.maxWorkers ?? config.workerCount,
+      idleShutdownMs: config.workerIdleTimeoutMs,
+      socketDir: config.socketDir,
+      bootstrap: config.bootstrap,
+    },
+    {
+      // Composition-root binding: the driver's ledger event edge is the
+      // session Bus today; P2 swaps this one binding when Ledger.append
+      // splits from lossy Bus.publish (#462 §2).
+      events: { publish: Bus.publish },
+      inboundWait: config.askResident,
+      toolRelay: toolDispatcher
+        ? async (params, context?: ToolCallContext) => {
+            const call: Tool.Call = {
               id: params.callId,
-              toolCallId: params.callId,
-              output: `Unknown tool: ${params.tool}`,
-              isError: true,
+              tool: params.tool,
+              input: params.input,
+            };
+            const handler = toolDispatcher.get(params.tool);
+            if (!handler) {
+              return {
+                id: params.callId,
+                toolCallId: params.callId,
+                output: `Unknown tool: ${params.tool}`,
+                isError: true,
+              };
+            }
+            const result = await handler(call, context);
+            return {
+              id: result.id,
+              toolCallId: result.toolCallId,
+              output: result.output,
+              isError: result.isError,
             };
           }
-          const result = await handler(call, context);
-          return {
-            id: result.id,
-            toolCallId: result.toolCallId,
-            output: result.output,
-            isError: result.isError,
-          };
-        }
-      : undefined,
-  });
+        : undefined,
+    },
+  );
 
   let isDraining = false;
 
