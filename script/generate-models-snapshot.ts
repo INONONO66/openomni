@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 // Fetch the models.dev catalog, narrow it to the providers bundled with
-// @openomni/llm, and write the result to packages/llm/src/provider/models-snapshot.json.
+// @openomni/llm, and write the result to packages/llm/src/model/models-snapshot.json
+// — the exact file `packages/llm/src/model/index.ts` imports at runtime. The
+// writer and reader must share this one path (#453: the old provider/ path was
+// never read, so the shipped snapshot went permanently stale).
 //
 // The snapshot is the second rung of ModelsDev.get()'s fallback chain (user
 // cache → this snapshot → live fetch → empty). Keeping it fresh avoids silent
@@ -9,7 +12,7 @@
 
 const MODELS_URL = process.env.MODELS_DEV_URL ?? "https://models.dev/api.json";
 const BUNDLED_PROVIDERS = ["anthropic", "openai"] as const;
-const SNAPSHOT_PATH = "packages/llm/src/provider/models-snapshot.json";
+const SNAPSHOT_PATH = "packages/llm/src/model/models-snapshot.json";
 
 const response = await fetch(MODELS_URL, { signal: AbortSignal.timeout(15_000) });
 if (!response.ok) {

@@ -123,6 +123,7 @@ export { ReadBackExecutor } from "./evidence";
 
 // Dispatch runtime
 export {
+  DEFAULT_DISPATCH_MODEL,
   DispatchRuntime,
   DispatchRegistry,
   createDefaultDispatchRuntime,

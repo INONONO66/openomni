@@ -76,9 +76,11 @@ Each ring depends only inward. `check-deps` gets real rules (the current openomn
 
 ## Known Bugs (audit-confirmed)
 
-1. llm model-catalog weekly refresh writes to `src/provider/` while the runtime reads `src/model/` — the catalog never updates.
-2. `run.ts adaptStream` is an ai-v4 shim duplicating v6 `text-start/end` — emits empty text parts.
-3. Resident agent definition drifts across 3 sites (stale hardcoded model fallback): `packages/openomni/src/ingress/session-resolver.ts`, `packages/openomni/src/dispatch/owners.ts`, `apps/server/src/ingress/bridge.ts`.
+All three audit-confirmed bugs are **fixed** (P0 bug-fix PR, #453):
+
+1. ~~llm model-catalog weekly refresh writes to `src/provider/` while the runtime reads `src/model/` — the catalog never updates.~~ Generator and workflow now write the reader's path `packages/llm/src/model/models-snapshot.json`; the snapshot was regenerated live in the same change.
+2. ~~`run.ts adaptStream` is an ai-v4 shim duplicating v6 `text-start/end` — emits empty text parts.~~ The v4 shim is gone; `adaptStream` only renames v6 `start-step`/`finish-step` to the internal `step-start`/`step-finish`. A discrimination test asserts one non-empty text part per v6 text block.
+3. ~~Resident agent definition drifts across 3 sites (stale hardcoded model fallback).~~ `DEFAULT_DISPATCH_MODEL` (`packages/openomni/src/dispatch/owners.ts`) is now the single kernel-side fallback, consumed by ingress session resolution and the server resident bridge.
 
 ## Migration Phases
 

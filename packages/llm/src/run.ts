@@ -139,44 +139,25 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     };
     const streamResult = ai.streamText(streamArgs as Parameters<typeof ai.streamText>[0]);
 
+    // The ai-sdk v6 fullStream already emits text-start/text-delta/text-end
+    // and reasoning-start/delta/end; only the step markers use different
+    // names internally. Synthesizing text boundaries here (the old ai-v4
+    // shim) duplicated the real v6 events and left an empty orphan text part
+    // per block.
     async function* adaptStream(): AsyncGenerator<{
       type: string;
       [key: string]: unknown;
     }> {
-      let inText = false;
-
       for await (const chunk of streamResult.fullStream) {
         const event = chunk as { type: string; [key: string]: unknown };
 
-        if (event.type === "text-delta" && !inText) {
-          inText = true;
-          yield { type: "text-start" };
-        }
-
-        if (event.type !== "text-delta" && inText) {
-          inText = false;
-          yield { type: "text-end" };
-        }
-
-        if (event.type === "text-delta") {
-          yield { ...event, text: event.textDelta ?? event.text };
-        } else if (event.type === "reasoning") {
-          yield {
-            ...event,
-            type: "reasoning-delta",
-            text: event.textDelta ?? event.text,
-          };
-        } else if (event.type === "finish-step") {
+        if (event.type === "finish-step") {
           yield { ...event, type: "step-finish" };
         } else if (event.type === "start-step") {
           yield { ...event, type: "step-start" };
         } else {
           yield event;
         }
-      }
-
-      if (inText) {
-        yield { type: "text-end" };
       }
     }
 

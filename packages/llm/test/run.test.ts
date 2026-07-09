@@ -14,13 +14,18 @@ type AiCaptureGlobal = typeof globalThis & {
 
 const aiCapture = globalThis as AiCaptureGlobal;
 
+type StreamChunk = { type: string; [key: string]: unknown };
+
+let mockStreamChunks: StreamChunk[] = [{ type: "finish" }];
+
 function mockAiModule() {
   mock.module("ai", () => ({
     streamText: (args: Record<string, unknown>) => {
       aiCapture.__openomniAiStreamArgs = args;
+      const chunks = mockStreamChunks;
       return {
         fullStream: (async function* () {
-          yield { type: "finish" };
+          yield* chunks;
         })(),
       };
     },
@@ -53,6 +58,7 @@ describe("run", () => {
   });
 
   beforeEach(() => {
+    mockStreamChunks = [{ type: "finish" }];
     mockAiModule();
     capturedMessages = [];
     capturedToolCalls = [];
@@ -232,6 +238,35 @@ describe("run", () => {
 
     expect(capturedSnapshots.length).toBeGreaterThan(0);
     expect(capturedToolCalls.length).toBe(0);
+  });
+
+  test("v6 text block yields exactly one non-empty text part (no v4 shim duplicates)", async () => {
+    // Real ai-sdk v6 fullStream shape: explicit text-start/text-end frame the deltas.
+    // The removed v4 shim synthesized a second text-start on the first delta,
+    // leaving an orphan empty text part per block — this asserts that never returns.
+    mockStreamChunks = [
+      { type: "start-step" },
+      { type: "text-start", id: "txt_1" },
+      { type: "text-delta", id: "txt_1", text: "hello " },
+      { type: "text-delta", id: "txt_1", text: "world" },
+      { type: "text-end", id: "txt_1" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ];
+    mockAiModule();
+
+    const outcome = await run(
+      { messages: [], tools: [], model: testModel, auth: testAuth },
+      mockSink,
+    );
+
+    expect(outcome.type).toBe("stop");
+    const lastMessage = capturedMessages.at(-1);
+    expect(lastMessage).toBeDefined();
+    const textParts = (lastMessage?.parts ?? []).filter((part) => part.type === "text");
+    expect(textParts.length).toBe(1);
+    expect(textParts[0]?.text).toBe("hello world");
+    expect(textParts.some((part) => part.text === "")).toBe(false);
   });
 
   test("returns RunOutcome with correct type mapping for processor results", () => {

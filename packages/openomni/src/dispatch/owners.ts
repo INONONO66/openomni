@@ -52,6 +52,10 @@ export interface DispatchOwners {
   readonly defaultModel?: Model.Ref;
 }
 
+// The single kernel-side model fallback. Every path that needs a model when
+// none was injected (dispatch handlers, ingress session resolution, the
+// server resident bridge) must consume this constant — a second literal is
+// definition drift (#453 bug 3).
 export const DEFAULT_DISPATCH_MODEL: Model.Ref = {
   provider: "anthropic",
   id: "claude-3-5-sonnet-20241022",

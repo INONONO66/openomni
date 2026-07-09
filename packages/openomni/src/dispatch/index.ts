@@ -11,14 +11,15 @@ export {
   type DispatchRuntimeOptions,
   type DispatchSubmitOptions,
 } from "./runtime.js";
-export type {
-  ConnectorEndpointDriverOwner,
-  DeviceDispatchOwner,
-  DeviceDispatchOwnerInput,
-  DispatchOwners,
-  DispatchSchedulerOwner,
-  OutboundDispatchOwner,
-  OutboundDispatchOwnerInput,
+export {
+  DEFAULT_DISPATCH_MODEL,
+  type ConnectorEndpointDriverOwner,
+  type DeviceDispatchOwner,
+  type DeviceDispatchOwnerInput,
+  type DispatchOwners,
+  type DispatchSchedulerOwner,
+  type OutboundDispatchOwner,
+  type OutboundDispatchOwnerInput,
 } from "./owners.js";
 export {
   createDefaultDispatchRuntime,
