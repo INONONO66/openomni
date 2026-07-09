@@ -79,6 +79,7 @@ export const WorkerDeliveryError = NamedError.create(
       "duplicate_run",
       "slot_wait_timeout",
       "worker_restarted",
+      "session_mismatch",
     ]),
     runId: z.string().optional(),
     sessionId: z.string().optional(),

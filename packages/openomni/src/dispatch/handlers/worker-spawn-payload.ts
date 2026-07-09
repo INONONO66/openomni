@@ -1,4 +1,4 @@
-import type { Dispatch, Model } from "@openomni/protocol";
+import type { Dispatch, Model, Policy } from "@openomni/protocol";
 import { Session } from "@openomni/session";
 import { z } from "zod";
 
@@ -80,6 +80,7 @@ export function buildWorkerSpawnRequest(
   command: Dispatch.Command,
   model: Model.Ref,
   payload: ParsedWorkerSpawnPayload,
+  policyPlan?: Policy.PolicyPlan,
 ) {
   const sessionId = resolveSessionId(command, model);
   return {
@@ -91,5 +92,6 @@ export function buildWorkerSpawnRequest(
     agentName: resolveWorkerAgentName(command.target),
     workspaceRoot: command.workspaceRoot,
     traceId: command.traceId,
+    ...(policyPlan ? { policyPlan } : {}),
   };
 }

@@ -1,4 +1,4 @@
-import { WorkerDeliveryError } from "@openomni/protocol";
+import { WorkerDeliveryError, type Execution } from "@openomni/protocol";
 import fs from "node:fs";
 import { createPrivateSocketDir } from "./worker-socket-dir";
 import { WorkerSlotCoordinator } from "./worker-slot-coordinator";
@@ -38,7 +38,9 @@ export function createWorkerManager(
   return new OnDemandWorkerManager(config, ports);
 }
 
-export class OnDemandWorkerManager implements WorkerManager {
+// Execution.Driver in the implements list binds the concrete driver to the
+// protocol command face (#462 §6) — drift becomes a compile error, not a doc.
+export class OnDemandWorkerManager implements WorkerManager, Execution.Driver {
   private readonly socketDir: string;
   private readonly maxActiveWorkers: number;
   private readonly idleShutdownMs: number;

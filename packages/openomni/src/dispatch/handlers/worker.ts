@@ -2,6 +2,7 @@ import { Execution, type Dispatch, type Model } from "@openomni/protocol";
 import { WorkItemStore } from "@openomni/session";
 import { z } from "zod";
 import type { CoordinatorLike } from "../../ingress/coordinator-like.js";
+import { PolicyResolver, type PolicyResolverInstance } from "../../policy/index.js";
 import type { ConnectorEndpointDriverOwner } from "../owners.js";
 import type { DispatchHandler } from "../registry.js";
 import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
@@ -23,6 +24,12 @@ export interface WorkerDispatchHandlerOptions extends WorkerCompletionOptions {
   readonly coordinator?: CoordinatorLike;
   readonly connectorEndpointDriver?: ConnectorEndpointDriverOwner;
   readonly defaultModel?: Model.Ref;
+  /**
+   * Gate-side task policy stamping (#462 §7). The gate resolves labels into a
+   * PolicyPlan and stamps it onto the delivered task; below the gate the plan
+   * is opaque data — evaluation happens only inside the worker's agent loop.
+   */
+  readonly policyResolver?: PolicyResolverInstance;
 }
 
 const INTERNAL_EXECUTOR_KIND = "internal_chat_agent";
@@ -76,6 +83,7 @@ export function createWorkerDispatchHandlers(
   DispatchHandler
 > {
   const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
+  const policyResolver = options.policyResolver ?? PolicyResolver.create();
   return {
     async "worker.spawn"(command) {
       const payload = parseWorkerSpawnPayload(command.payload);
@@ -90,7 +98,13 @@ export function createWorkerDispatchHandlers(
       }
 
       const coordinator = requireCoordinator(options.coordinator);
-      const request = buildWorkerSpawnRequest(command, model, payload);
+      const policyPlan = policyResolver.resolve({
+        actorLabels: command.actor.labels ?? [],
+        agentLabels: command.target.labels ?? [],
+        runLabels: [],
+        surfaceLabels: [],
+      });
+      const request = buildWorkerSpawnRequest(command, model, payload, policyPlan);
       const workItemHash = await createWorkerSpawnWorkItem(
         command,
         request,

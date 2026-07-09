@@ -3,6 +3,7 @@ import { WorkItem, type Execution } from "@openomni/protocol";
 import { Session, Storage, WorkItemStore } from "@openomni/session";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
+import { PolicyResolver } from "../../src/policy";
 import { command, expectRejectsWithMessage, workerSpawnPayload } from "./helpers";
 
 function registerWorkerSpawnHandler(
@@ -211,5 +212,75 @@ describe("worker.spawn dispatch gate", () => {
     const child = Session.get(dispatchedSessionId);
     expect(child?.parentSessionId).toBe(parent.id);
     expect(child?.spawnDepth).toBe((parent.spawnDepth ?? 0) + 1);
+  });
+
+  test("worker.spawn stamps the default required policy plan onto the request", async () => {
+    const requests: Execution.Request[] = [];
+    const registry = registerWorkerSpawnHandler(async (_sessionId, request) => {
+      requests.push(request);
+      return {
+        runId: request.runId,
+        sessionId: request.sessionId,
+        status: "succeeded",
+        output: "done",
+      };
+    });
+
+    const base = command(
+      "worker.spawn",
+      { kind: "worker", name: "coder", labels: ["web-search"] },
+      workerSpawnPayload("research it"),
+    );
+    await registry.get("worker.spawn")?.({
+      ...base,
+      actor: { ...base.actor, labels: ["trusted"] },
+    });
+
+    expect(requests).toHaveLength(1);
+    const plan = requests[0]?.policyPlan;
+    expect(plan).toBeDefined();
+    expect(plan?.policies).toContainEqual({ id: "builtin:tool-permission", required: true });
+    expect(plan?.policies).toContainEqual({ id: "builtin:idle-nudge", required: true });
+    expect(plan?.labels).toEqual(expect.arrayContaining(["trusted", "web-search"]));
+  });
+
+  test("worker.spawn applies injected resolver rules by task label", async () => {
+    const requests: Execution.Request[] = [];
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: {
+        coordinator: {
+          dispatch: async (_sessionId, request) => {
+            requests.push(request);
+            return {
+              runId: request.runId,
+              sessionId: request.sessionId,
+              status: "succeeded",
+              output: "done",
+            };
+          },
+        },
+      },
+      policyResolver: PolicyResolver.create([
+        {
+          match: { any: ["web-search"] },
+          policies: ["custom:no-social-post"],
+          required: true,
+        },
+      ]),
+    });
+
+    await registry.get("worker.spawn")?.(
+      command(
+        "worker.spawn",
+        { kind: "worker", name: "coder", labels: ["web-search"] },
+        workerSpawnPayload("research it"),
+      ),
+    );
+
+    expect(requests[0]?.policyPlan?.policies).toContainEqual({
+      id: "custom:no-social-post",
+      required: true,
+    });
   });
 });
