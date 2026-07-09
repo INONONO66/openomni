@@ -8,30 +8,23 @@
 src/
 ├── index.ts                    # Public API
 ├── core/
-│   ├── chat-agent.ts           # ChatAgent.create() — wraps streamAgent + provides run() / stream()
-│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink, legacy types
+│   ├── chat-agent.ts           # ChatAgent.create() — provides run() / stream()
+│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult, AgentStep, AgentEvent, AgentBudget, TokenUsage, Sink
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
-│   ├── memory.ts               # Memory interface + InMemoryMemory (Jaccard retrieval)
 │   ├── runtime-context.ts      # Runtime context helpers for agent execution
 │   ├── prompt-builder.ts       # System prompt composition helpers
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
-│   ├── telemetry.ts            # Telemetry.span / counter / histogram (OpenTelemetry; disabled by default)
-│   ├── execution/
-│   │   ├── stream-engine.ts    # streamAgent() — retry loop + turn loop + policy dispatch
-│   │   ├── tool-executor.ts    # Wraps user toolExecutor with invoke.prepare / invoke.result dispatch
-│   │   └── compaction.ts       # InMemoryCompactor for message compression
+│   ├── execution/              # The agent loop, decomposed: runner.ts (entry), turn-prepare.ts / turn-outcome.ts (turn loop), lifecycle-dispatch.ts / completion-policy.ts (run.lifecycle/completion points), policy-effects*.ts (effect application), prompt-policy.ts, tool-executor.ts (tool.native/mcp pre/post dispatch), run-state.ts / run-events.ts / run-result.ts, compaction.ts (InMemoryCompactor)
 │   └── policy/
-│       ├── engine.ts           # PolicyEngine.create() — register, dispatch canonical PolicyDecision
+│       ├── index.ts            # Re-exports PolicyEngine from @openomni/policy (the engine moved there in #451)
+│       ├── registry.ts         # PolicyRegistry + defaultRegistry() — builtin policy id → factory resolution
 │       ├── types.ts            # PolicyContext, PolicyFn, PolicyRegistration
 │       └── builtin/
 │           ├── budget.ts       # createBudgetReassurancePolicy / createBudgetWarningPolicy
-│           ├── memory.ts       # createMemoryPolicy (context.prepare)
-│           ├── compaction.ts   # createCompactionPolicy (completion.prepare)
-│           ├── post-tool.ts    # createPostToolPolicy (invoke.result)
-│           ├── post-turn.ts    # createPostTurnPolicy (turn.finish)
-│           ├── idle-nudge.ts   # createIdleNudgePolicy (turn.start + invoke.result)
-│           └── tool-permission.ts # createToolPermissionPolicy (invoke.prepare, fail-closed)
+│           ├── compaction.ts   # createCompactionPolicy
+│           ├── idle-nudge.ts   # createIdleNudgePolicy
+│           └── tool-guard.ts   # createToolPermissionPolicy (fail-closed)
 └── runtime/
     ├── index.ts                # Re-exports mcp
     └── mcp/
@@ -44,7 +37,7 @@ src/
 import { ChatAgent, PolicyEngine } from "@openomni/agent";
 
 const agent = ChatAgent.create({
-  model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+  model: { provider: "anthropic", id: "claude-haiku-4-5" },
   systemPrompt: "You are a helpful assistant.",
   tools: [],
   budget: { maxTurns: 10, maxToolCalls: 20 },
@@ -76,61 +69,57 @@ Also exported from `@openomni/agent`:
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call) => Promise<Tool.Result>`         | Custom tool executor; wrapped by `createToolExecutor`                       |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
-| `memory?`        | `Memory`                                 | Memory interface retrieved by the `memory` policy                           |
 | `middleware?`    | `PolicyRegistration[]`                   | Caller-owned policy registrations                                           |
 | `eventEmitter?`  | `AgentEventEmitter`                      | Optional event emitter for external observers                               |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |
 
 ## POLICY ENGINE
 
-The policy engine is the extension surface. Agent execution dispatches through the core `Policy.Timing` points defined in `@openomni/protocol`:
+The policy engine is the extension surface. The engine itself lives in `@openomni/policy` (re-exported here); agent execution dispatches through the registered policy points defined in `@openomni/protocol` `policy/point-registry.ts`:
 
 ```
-run.start → turn.start → context.prepare → resources.prepare
-        → model.request → model.response
-        → invoke.prepare → invoke.result
-        → turn.finish → completion.prepare → run.finish → error
+run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
+        → connection.llm.pre → connection.llm.post
+        → tool.native.pre / tool.mcp.pre → tool.native.post / tool.mcp.post
+        → run.turn.post → run.completion.pre → run.lifecycle.post → run.error.error
 ```
 
-- **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`.
+- **Registration**: `PolicyRegistration { name, timing, priority, scope?, failPolicy?, fn, propagate? }`. Lower `priority` runs first; `scope.agentType` optionally filters by agent kind; `failPolicy` is `fail-open` (default) or `fail-closed`. Pre-boundary points default fail-closed per the protocol point contracts.
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
-- **System prompt effects**: `dispatch("context.prepare", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
+- **System prompt effects**: `dispatch("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction, idle nudge).
-- **Builtins** (priority in parentheses):
-  - `tool-permission` (0, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns deny with `tool.skip_invocation` / `run.abort` / `tool.require_approval`
-  - `budget-reassurance` (10) — injects a reassurance system message around 60% budget
-  - `budget-warning` (20) — injects a warning around 80% budget
-  - `memory` (100) — appends similar memory entries to the system prompt
-  - `post-tool` (200) — user-supplied tool-output enricher
-  - `post-turn` (250) — user-supplied post-turn judgement (continuation / abort)
-  - `idle-nudge` (300) — detects idle ≥ threshold (default 60s), injects a nudge; after `maxNudges` (default 3) aborts with reason `stalled`
-  - `compaction` (900) — triggers `InMemoryCompactor.compact()` when token threshold is exceeded
+- **Builtins** (resolved by id through `defaultRegistry()`; stamped plans from the dispatch gate (#479) reference these ids):
+  - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns deny with `tool.skip_invocation` / `run.abort` / `tool.require_approval`
+  - `builtin:budget-reassurance` / `builtin:budget-warning` — inject reassurance/warning system messages as budget consumption climbs
+  - `builtin:idle-nudge` — detects idle ≥ threshold (default 60s), injects a nudge; after `maxNudges` (default 3) aborts with reason `stalled`
+  - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
+  A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
 
-## TURN LIFECYCLE (StreamEngine)
+## TURN LIFECYCLE (core/execution)
 
 ```
-streamAgent(input, config, sink) [AsyncGenerator<AgentEvent>]
+runner.ts (entry) [AsyncGenerator<AgentEvent>]
   ├─ retry loop (maxAttempts)
   │   ├─ build PolicyEngine (config.middleware only)
-  │   ├─ dispatch(run.start)                    → allow (with effects) / deny
+  │   ├─ dispatch(run.lifecycle.pre)            → allow (with effects) / deny
   │   └─ turn loop (while budget ok)
-  │       ├─ checkBudget → if exceeded, dispatch(run.finish) + yield complete
-  │       ├─ dispatch(turn.start)               → budget warnings, idle-nudge
-  │       ├─ dispatch(context.prepare)          → memory enrichment, identity
-  │       ├─ dispatch(resources.prepare)        → filter/modify tools exposed to LLM
-  │       ├─ dispatch(model.request)
+  │       ├─ checkBudget → if exceeded, dispatch(run.lifecycle.post) + yield complete
+  │       ├─ dispatch(run.turn.pre)             → budget warnings, idle-nudge
+  │       ├─ dispatch(prompt.context.pre)       → context/prompt enrichment
+  │       ├─ dispatch(tool.catalog.pre)         → filter/modify tools exposed to LLM
+  │       ├─ dispatch(connection.llm.pre)
   │       ├─ llmRun via @openomni/llm
-  │       ├─ dispatch(model.response)
-  │       │    └─ tool calls flow through createToolExecutor:
-  │       │         ├─ dispatch(invoke.prepare)  → tool-permission (fail-closed)
+  │       ├─ dispatch(connection.llm.post)
+  │       │    └─ tool calls flow through tool-executor.ts:
+  │       │         ├─ dispatch(tool.native.pre / tool.mcp.pre)  → tool-permission (fail-closed)
   │       │         ├─ execute tool
-  │       │         └─ dispatch(invoke.result) → idle-nudge reset, enrichment
+  │       │         └─ dispatch(tool.native.post / tool.mcp.post) → idle-nudge reset, enrichment
   │       ├─ outcome === "stop"?
-  │       │    ├─ dispatch(turn.finish)         → allow (with continuation effects) / deny
-  │       │    ├─ if continuation: dispatch(completion.prepare) → loop
-  │       │    └─ else: dispatch(run.finish) + yield complete
+  │       │    ├─ dispatch(run.turn.post)       → allow (with continuation effects) / deny
+  │       │    ├─ if continuation: dispatch(run.completion.pre) → loop
+  │       │    └─ else: dispatch(run.lifecycle.post) + yield complete
   │       └─ outcome === "error"/"aborted"?
-  │            └─ dispatch(error) → retry (shouldRetry) or throw
+  │            └─ dispatch(run.error.error) → retry (shouldRetry) or throw
 ```
 
 ## OWNERSHIP BOUNDARY
@@ -169,5 +158,5 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 - Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
-- Do NOT bypass `Policy.evaluate()` by returning placeholder tool results in user code; use a `invoke.prepare` policy so behavior is uniform.
+- Do NOT bypass the policy engine by returning placeholder tool results in user code; use a `tool.native.pre` / `tool.mcp.pre` policy so behavior is uniform.
 - Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

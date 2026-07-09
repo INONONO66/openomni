@@ -1,6 +1,6 @@
 # Ingress Module
 
-Current inbound stage for the OpenOmni communication kernel. Ingress bridges resolved inbound events to session projection and execution. It is not the long-term owner of all communication semantics; new cross-boundary routing, authority, and correlation behavior should move toward `packages/openomni/src/communication/` and `packages/openomni/src/authority/` facades.
+Current inbound stage for the OpenOmni communication kernel. Ingress bridges resolved inbound events to session projection and execution. It is not the long-term owner of all communication semantics; inbound routing converges on the single kernel `resolveRoute` pipeline (#464: blacklist → wait correlation → ceiling → actor → surface), and this module's scattered decision sites are consolidation targets, not extension points.
 
 ## Pipeline
 
@@ -19,7 +19,7 @@ External and internal incoming events currently route through Ingress. Runtime-t
 ## Boundary Rules
 
 - Do not add server/channel-specific logic here. Raw transport normalization belongs in `apps/server`; product communication decisions belong in OpenOmni kernel code.
-- Do not query or mutate pending stores from server bridge code to pre-classify inbound messages. PendingInteraction/PendingAsk correlation precedence belongs in OpenOmni communication/authority code.
+- Do not query or mutate pending stores from server bridge code to pre-classify inbound messages. PendingInteraction/PendingAsk correlation precedence belongs in the kernel routing pipeline (#464).
 - Avoid recomputing targets across helpers. Resolve target/session once in the kernel stage and pass the resolved facts through context.
 - Keep `mode: "direct"` as a compatibility/validation fact unless a real new execution mode is introduced. Do not add mode branches as a substitute for communication routing.
 - Writeback and projection policy belongs in OpenOmni, but low-level message persistence still goes through `@openomni/session`.

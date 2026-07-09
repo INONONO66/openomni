@@ -14,9 +14,11 @@ src/
 ├── config.ts             # loadConfig() — reads env / config files into ServerConfig
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
-│   ├── index.ts          # main() — wires storage, tool providers, model, channels, server, recovery, shutdown
+│   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), channels, server, recovery, shutdown
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
-│   ├── providers.ts      # resolveModel() — picks a default LLM model from stored credentials
+│   ├── dispatch-owners.ts # wires dispatch handler owners (connector driver, outbound, device)
+│   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge for worker resident.ask
+│   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (configEpoch, agents, tool catalog, credentials); per-run policyPlan travels on Execution.Request, not here
 │   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
 │   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
 │   └── shutdown.ts       # installShutdownHandlers() — graceful stop for server / channels / MCP
@@ -27,7 +29,7 @@ src/
 │   ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 │   ├── telegram/         # Telegram polling surface
 │   └── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
-├── connector/            # Server-owned external app connector definitions, discovery/consent registry, process driver, logs, questions
+├── connector/            # Server-owned connector process driver, log ingestion/telemetry, question bridge, read-back builder, env (definitions/discovery/registry were deleted in #473 — installations resolve from SQLite records)
 ├── context/
 │   ├── index.ts          # Barrel re-exports
 │   ├── assembler.ts      # ContextAssembler.assemble() — builds system prompt context from workspace
@@ -37,8 +39,11 @@ src/
 │   ├── middleware.ts      # createContextMiddleware() — context.prepare middleware that appends context
 │   └── skills.ts         # SkillLoader — loads skill definitions from workspace
 ├── execution/
-│   ├── coordinator.ts    # createExecutionCoordinator() + buildToolDispatcher() — worker manager wrapper
+│   ├── coordinator.ts    # createExecutionCoordinator() — wraps createWorkerManager(config, ports); binds events/toolRelay/inboundWait ports (#477)
+│   ├── recovery.ts       # recoverInterruptedRuns() — marks non-terminal runs interrupted at boot (moved from coordinator, #477)
 │   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution
+│   ├── worker-runner*.ts # Worker-side run loop, IPC handlers, events, types
+│   ├── worker-bootstrap-handler.ts # Validates and stores WorkerBootstrap, resolves credentials, signals readiness; permissions/policyPlan are applied per run in worker-runner.ts via buildWorkerMiddleware
 │   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
 │   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls OpenOmni kernel/IngressEngine
@@ -69,8 +74,8 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
 3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
-5. `resolveModel()` — pick a default model from stored credentials (if any).
-6. `createExecutionCoordinator({ workerScript, bootstrap, toolDispatcher })` — create on-demand worker manager; `toolDispatcher` covers MCP tools.
+5. `resolveModel()` (in `bootstrap/index.ts`) — pick a default model from stored credentials (if any); kernel-side fallback is `DEFAULT_DISPATCH_MODEL` from `@openomni/openomni` (#471).
+6. `createExecutionCoordinator(...)` — wraps `createWorkerManager(config, ports)`; the server is the composition root that binds the event sink (`Bus.publish`), tool relay, and inbound-wait ports (#477). MCP tools are covered by the tool relay.
 7. Configure OpenOmni kernel/ingress with coordinator, dispatch owners, agent resolver, and runtime providers.
 8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, defaultModel, workspaceRoot })`.
 9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
