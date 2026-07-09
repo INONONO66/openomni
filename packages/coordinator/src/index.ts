@@ -1,6 +1,3 @@
-export { recoverInterruptedRuns } from "./recovery";
-export type { RecoveryResult } from "./recovery";
-
 export { createIpcServer } from "./ipc";
 export { createWorkerManager, OnDemandWorkerManager } from "./worker-manager";
 export type {
@@ -13,4 +10,5 @@ export type {
   WorkerManager,
   WorkerManagerConfig,
   WorkerManagerStats,
+  WorkerPorts,
 } from "./worker-manager";

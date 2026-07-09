@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
+import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
@@ -11,7 +12,10 @@ let manager: WorkerManager;
 
 beforeAll(async () => {
   fs.mkdirSync(socketDir, { recursive: true });
-  manager = createWorkerManager({ maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir });
+  manager = createWorkerManager(
+    { maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir },
+    collectorPorts(),
+  );
   await manager.waitUntilReady(15_000);
 }, 20_000);
 
@@ -23,10 +27,13 @@ describe("worker manager dispatch", () => {
   test("WorkerManager defaults to ten active workers", async () => {
     const defaultSocketDir = `${socketDir}-default`;
     fs.mkdirSync(defaultSocketDir, { recursive: true });
-    const defaultManager = createWorkerManager({
-      workerScript: WORKER_ENTRY,
-      socketDir: defaultSocketDir,
-    });
+    const defaultManager = createWorkerManager(
+      {
+        workerScript: WORKER_ENTRY,
+        socketDir: defaultSocketDir,
+      },
+      collectorPorts(),
+    );
     try {
       expect(defaultManager.getStats().maxActiveWorkers).toBe(10);
     } finally {
@@ -123,11 +130,14 @@ describe("worker manager dispatch", () => {
     process.env.DISCORD_BOT_TOKEN = "secret-token";
     const envSocketDir = `${socketDir}-env`;
     fs.mkdirSync(envSocketDir, { recursive: true });
-    const envManager = createWorkerManager({
-      maxActiveWorkers: 1,
-      workerScript: WORKER_ENTRY,
-      socketDir: envSocketDir,
-    });
+    const envManager = createWorkerManager(
+      {
+        maxActiveWorkers: 1,
+        workerScript: WORKER_ENTRY,
+        socketDir: envSocketDir,
+      },
+      collectorPorts(),
+    );
     try {
       await envManager.waitUntilReady(15_000);
       const result = await envManager.dispatch("session-env", "run-env", {

@@ -1,4 +1,4 @@
-import type { WorkerBootstrap } from "@openomni/protocol";
+import type { BusEvent, WorkerBootstrap } from "@openomni/protocol";
 import type {
   InboundWaitParams,
   InboundWaitResult,
@@ -26,8 +26,19 @@ export type WorkerManagerConfig = {
   slotWaitTimeoutMs?: number;
   maxQueuedDispatches?: number;
   bootstrap?: WorkerBootstrap.Bootstrap;
-  onToolCall?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
-  onInboundWait?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
+};
+
+/**
+ * Environment ports injected by the composition root (#462 §2). The driver
+ * owns process physics only; every edge to the rest of the system comes in
+ * through here — the ledger event edge via `events`, tool execution via
+ * `toolRelay` (the dispatcher, ring 4), and the resident question bridge
+ * via `inboundWait`. Tests bind a collector sink instead of the Bus.
+ */
+export type WorkerPorts = {
+  events: BusEvent.Sink;
+  toolRelay?: (params: ToolCallParams, context?: ToolCallContext) => Promise<ToolCallResult>;
+  inboundWait?: (params: InboundWaitParams) => Promise<InboundWaitResult>;
 };
 
 export type WorkerManagerStats = {

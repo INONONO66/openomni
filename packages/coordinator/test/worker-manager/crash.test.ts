@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
+import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
 
@@ -11,7 +12,10 @@ let manager: WorkerManager;
 
 beforeAll(async () => {
   fs.mkdirSync(socketDir, { recursive: true });
-  manager = createWorkerManager({ maxActiveWorkers: 1, workerScript: WORKER_ENTRY, socketDir });
+  manager = createWorkerManager(
+    { maxActiveWorkers: 1, workerScript: WORKER_ENTRY, socketDir },
+    collectorPorts(),
+  );
   await manager.waitUntilReady(15_000);
 }, 20_000);
 

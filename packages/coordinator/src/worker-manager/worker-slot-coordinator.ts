@@ -3,6 +3,7 @@ import type {
   SlotWaiter,
   WorkerManagerConfig,
   WorkerManagerStats,
+  WorkerPorts,
   WorkerSlot,
 } from "./worker-manager-types";
 
@@ -15,6 +16,7 @@ export class WorkerSlotCoordinator {
   constructor(
     private readonly config: {
       readonly managerConfig: WorkerManagerConfig;
+      readonly ports: WorkerPorts;
       readonly socketDir: string;
       readonly maxActiveWorkers: number;
       readonly idleShutdownMs: number;
@@ -59,13 +61,15 @@ export class WorkerSlotCoordinator {
     if (slot.supervisor?.isActive() === true) return slot.supervisor;
 
     const managerConfig = this.config.managerConfig;
+    const ports = this.config.ports;
     slot.supervisor = new WorkerSupervisor(
       slot.id,
       managerConfig.workerScript,
       this.config.socketDir,
+      ports.events,
       managerConfig.bootstrap,
-      managerConfig.onToolCall,
-      managerConfig.onInboundWait,
+      ports.toolRelay,
+      ports.inboundWait,
     );
     return slot.supervisor;
   }
