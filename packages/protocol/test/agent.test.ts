@@ -20,7 +20,6 @@ describe("AgentProfile.Definition", () => {
       systemPrompt: "You are a coder.",
       tools: ["read_file", "write_file"],
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      permissions: { action: "tool.call", allowlist: ["read_file"] },
       policyPlan: {
         policies: [{ id: "builtin:tool-permission", required: true }],
         labels: ["runtime"],
@@ -31,8 +30,6 @@ describe("AgentProfile.Definition", () => {
     });
     expect(result.model?.provider).toBe("anthropic");
     expect(result.model?.id).toBe("claude-3-haiku-20240307");
-    expect(result.permissions?.action).toBe("tool.call");
-    expect(result.permissions?.allowlist).toEqual(["read_file"]);
     expect(result.policyPlan?.policies[0]?.id).toBe("builtin:tool-permission");
     expect(result.policyPlan?.labels).toEqual(["runtime"]);
     expect(result.variant).toBe("high");

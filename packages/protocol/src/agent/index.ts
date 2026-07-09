@@ -56,7 +56,6 @@ export namespace AgentProfile {
     systemPrompt: z.string().optional(),
     tools: z.string().array().default([]),
     model: Model.Ref.optional(),
-    permissions: Policy.Permission.optional(),
     policyPlan: Policy.PolicyPlan.optional(),
     variant: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
