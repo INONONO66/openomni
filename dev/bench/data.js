@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783613154889,
+  "lastUpdate": 1783613944272,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -34099,6 +34099,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 479616,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "32e9a1a3ad823d48d01042d282a232a086450c2c",
+          "message": "docs: sync package AGENTS.md to post-p1-step tree (#483)\n\n* docs: sync package AGENTS.md to post-p1-step tree\n\nGrep-verified every path/module/export claim in the 10 package and\nnested AGENTS.md files against current main and fixed the drift the\nP0/P1 merges (#471-#480) created: protocol's structure tree regenerated\n(29 real namespaces; ghost notification/ and event-log/ dropped; policy\nsection rewritten from the pre-v2 14-timing list to the 19-point\nregistry), session's tree gains the 8 undocumented store dirs and\nbus-persistence, agent's structure/builtins/turn-lifecycle rewritten to\nthe decomposed execution modules and the four real builtin policies with\nv2 point names, server bootstrap/execution/connector trees updated\n(providers.ts merge, recovery move, connector registry deletion),\nopenomni's aspirational messaging/access target folders replaced with\nthe #456/#464 plan and policy//evidence/ rows added, coordinator's dead\nADR link and stale recovery-ownership claim fixed, llm's merged\nutil/lazy and error.ts reality reflected. protocol/src/ipc/AGENTS.md was\nverified clean.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: fix three false claims, note driver lifecycle events\n\nFact-check findings on #483: worker-bootstrap.ts never carries\npolicyPlan (per-run plans travel on Execution.Request via the gate);\nworker-bootstrap-handler.ts validates/stores and resolves credentials —\npermission/plan application happens per run in worker-runner.ts; the\nopenomni ingress/ block missed the runtime DEFAULT_DISPATCH_MODEL edge\ninto dispatch/. Also document the #481 WorkerDriver lifecycle events and\nwall-time physics on the coordinator pool row (merged after this branch\nwas cut).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-10T01:18:07+09:00",
+          "tree_id": "812dbf722c5a1a4e71df11636ce6cb9d09b5fbc7",
+          "url": "https://github.com/INONONO66/openomni/commit/32e9a1a3ad823d48d01042d282a232a086450c2c"
+        },
+        "date": 1783613944002,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2485,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2286,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7851,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 790,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 692,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1262,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 19869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2395,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10952,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102362,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 519551,
             "unit": "ns/op"
           }
         ]
