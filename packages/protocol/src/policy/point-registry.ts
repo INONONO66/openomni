@@ -7,9 +7,9 @@ export namespace PolicyPointRegistryModule {
   const Timing = PolicyPointContractModule.Timing;
   type Timing = PolicyPointContractModule.Timing;
   type RegisteredPolicyPointId = PolicyPointContractModule.RegisteredPolicyPointId;
-  type PolicyPointContract = PolicyPointContractModule.PolicyPointContract;
+  type PolicyPointContract = PolicyPointContractModule.PolicyPointContractSnapshot;
 
-  export const PolicyPointRegistry = {
+  export const PolicyPointRegistry = Object.freeze({
     "session.inbound.pre": contract(
       "session.inbound.pre",
       "pre",
@@ -198,7 +198,7 @@ export namespace PolicyPointRegistryModule {
       "fail-closed",
       false,
     ),
-  } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>;
+  } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>);
 
   export const policyPointMigrationMapping = {
     [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],

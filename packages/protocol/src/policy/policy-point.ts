@@ -1,15 +1,17 @@
 import { z } from "zod";
 import { PolicyPointContractModule } from "./point-contract.js";
+import {
+  policyPointInputSchemas,
+  type PolicyPointInputMap as PolicyPointInputMapType,
+} from "./point-input-schemas.js";
 import { PolicyPointRegistryModule } from "./point-registry.js";
 import { policyKernelVersion } from "./version.js";
 
-type PolicyPointResolver = (
-  timing: PolicyPointContractModule.Timing,
-  context?: { readonly resourceKind?: string },
-) => string[];
-
 export namespace PolicyPointModule {
-  const resolvePolicyPoints: PolicyPointResolver = (timing, context) => {
+  const resolvePolicyPoints = (
+    timing: PolicyPointContractModule.Timing,
+    context?: { readonly resourceKind?: string },
+  ): string[] => {
     const pointIds = PolicyPointRegistryModule.policyPointMigrationMapping[timing];
     const resourceKind = context?.resourceKind;
 
@@ -20,7 +22,6 @@ export namespace PolicyPointModule {
     );
   };
 
-  // Preserve the original augmented Zod schema contract while moving registry data out of the facade.
   export const PolicyPoint = Object.assign(PolicyPointContractModule.policyPoint, {
     version: policyKernelVersion,
     Id: PolicyPointContractModule.PolicyPointId,
@@ -30,8 +31,19 @@ export namespace PolicyPointModule {
       PolicyPointContractModule.PolicyPointContract,
     ),
     Registry: PolicyPointRegistryModule.PolicyPointRegistry,
+    InputSchemas: policyPointInputSchemas,
     MigrationMapping: PolicyPointRegistryModule.policyPointMigrationMapping,
     resolve: resolvePolicyPoints,
+  });
+  Object.defineProperties(PolicyPoint, {
+    Registry: {
+      configurable: false,
+      writable: false,
+    },
+    InputSchemas: {
+      configurable: false,
+      writable: false,
+    },
   });
 
   export type PolicyPoint = z.infer<typeof PolicyPointContractModule.policyPoint> & {
@@ -41,4 +53,6 @@ export namespace PolicyPointModule {
     >;
     resolve: typeof PolicyPoint.resolve;
   };
+
+  export type PolicyPointInputMap = PolicyPointInputMapType;
 }

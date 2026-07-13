@@ -6,6 +6,7 @@ import {
   normalizeDecision,
 } from "./decisions";
 import { defaultFailPolicy } from "./points";
+import { createPolicyRegistrationStore } from "./registration";
 import { immutableSnapshot } from "./context";
 import { publishComposedDecision } from "./audit";
 import { publishMiddlewareDebug, publishMiddlewareError, recordDecision } from "./telemetry";
@@ -14,19 +15,18 @@ import type {
   GenericPolicyContext,
   PolicyEngineConfig,
   PolicyEngineInstanceGeneric,
-  PolicyRegistrationGeneric,
 } from "./types";
 
 export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   options: PolicyEngineConfig = {},
 ): PolicyEngineInstanceGeneric<TCtx> {
-  const registrations: PolicyRegistrationGeneric<TCtx>[] = [];
+  const registrations = createPolicyRegistrationStore<TCtx>();
 
   async function dispatch(
     timing: Policy.Timing,
     ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
   ): Promise<Policy.PolicyDecision> {
-    const selected = selectRegistrations(registrations, timing, ctx.agentType);
+    const selected = registrations.selectLegacy(timing, ctx.agentType);
     const fullCtx = immutableSnapshot({
       ...ctx,
       timing,
@@ -78,38 +78,8 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
 
   return {
     register(reg) {
-      registrations.push(reg);
+      registrations.register(reg);
     },
     dispatch,
   };
-}
-
-// merged from selection.ts (#453 hygiene: sub-30-LOC single-importer)
-function matchesTiming<TCtx extends GenericPolicyContext>(
-  reg: PolicyRegistrationGeneric<TCtx>,
-  timing: Policy.Timing,
-): boolean {
-  return Array.isArray(reg.timing) ? reg.timing.includes(timing) : reg.timing === timing;
-}
-
-function matchesScope<TCtx extends GenericPolicyContext>(
-  reg: PolicyRegistrationGeneric<TCtx>,
-  agentType: string | undefined,
-): boolean {
-  const allowed = reg.scope?.agentType;
-  if (!allowed || allowed.length === 0) return true;
-  if (!agentType) return false;
-  return allowed.includes(agentType);
-}
-
-export function selectRegistrations<TCtx extends GenericPolicyContext>(
-  registrations: readonly PolicyRegistrationGeneric<TCtx>[],
-  timing: Policy.Timing,
-  agentType: string | undefined,
-): PolicyRegistrationGeneric<TCtx>[] {
-  return registrations
-    .map((reg, index) => ({ index, reg }))
-    .filter(({ reg }) => matchesTiming(reg, timing) && matchesScope(reg, agentType))
-    .sort((a, b) => a.reg.priority - b.reg.priority || a.index - b.index)
-    .map(({ reg }) => reg);
 }

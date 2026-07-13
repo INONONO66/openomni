@@ -58,8 +58,28 @@ export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   propagate?: boolean;
 }
 
+export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
+  readonly kind: "point";
+  readonly name: string;
+  readonly pointIds: readonly PolicyPointId[];
+  readonly effectCapabilities: Readonly<
+    Partial<Record<PolicyPointId, readonly Policy.PolicyEffectType[]>>
+  >;
+  readonly priority: number;
+  readonly scope?: Policy.Scope;
+  readonly failPolicy?: Policy.FailPolicy;
+  readonly fn: (
+    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+  readonly propagate?: boolean;
+}
+
+export type PolicyEngineRegistrationGeneric<TCtx extends GenericPolicyContext> =
+  | PolicyRegistrationGeneric<TCtx>
+  | CanonicalPolicyRegistrationGeneric<TCtx>;
+
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
-  register(reg: PolicyRegistrationGeneric<TCtx>): void;
+  register(reg: PolicyEngineRegistrationGeneric<TCtx>): void;
   dispatch(
     timing: Policy.Timing,
     ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,

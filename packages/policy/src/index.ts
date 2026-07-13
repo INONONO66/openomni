@@ -1,8 +1,10 @@
-export { PolicyEngine } from "./engine";
+export { PolicyEngine, PolicyRegistrationError } from "./engine";
 export type {
   PolicyDecision,
   PolicyEngineConfig,
   GenericPolicyContext,
+  CanonicalPolicyRegistrationGeneric,
+  PolicyEngineRegistrationGeneric,
   PolicyRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
@@ -13,12 +15,11 @@ export type {
 } from "./engine";
 export { PolicyRegistry } from "./registry";
 export type { PolicyFactory, PolicyRegistryInstance, RuntimeContext } from "./registry";
-export { composeEffects } from "./effects";
+export { composeEffects, mergeEntries } from "./effects";
 export type {
   OrderedDecision,
   EffectEntry,
   Conflict,
   MergeResult,
+  EffectAccumulatorSet,
 } from "./effects";
-export { mergeEntries } from "./effects";
-export type { EffectAccumulatorSet } from "./effects";

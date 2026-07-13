@@ -52,6 +52,7 @@ export namespace Policy {
   export type PolicyPointResolver = typeof PolicyPointModule.PolicyPoint.resolve;
   export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint> &
     Pick<typeof PolicyPointModule.PolicyPoint, "MigrationMapping" | "resolve">;
+  export type PolicyPointInputMap = PolicyPointModule.PolicyPointInputMap;
   export const PolicyPlan = PolicyPlanModule.PolicyPlan;
   export type PolicyPlan = z.infer<typeof PolicyPlan>;
 }

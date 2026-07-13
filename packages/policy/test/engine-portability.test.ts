@@ -1,33 +1,70 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, PolicyDecision, PolicyEvent, type RuntimeResource } from "@openomni/protocol";
+import { Operational, PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "@openomni/policy";
 
-function createTestDescriptor(): RuntimeResource.Descriptor {
+function createDispatchContext() {
   return {
-    id: "dispatch:test",
-    kind: "dispatch",
-    labels: [],
-    capabilities: [],
-    effects: [],
+    agentType: "resident",
+    resourceDescriptor: {
+      id: "dispatch:test",
+      kind: "dispatch" as const,
+      labels: [],
+      capabilities: [],
+      effects: [],
+    },
   };
 }
 
+function createAuditedEngine() {
+  const events: Array<{ name: string; data: unknown }> = [];
+  const engine = PolicyEngine.create({
+    auditEmit: (event, data) => {
+      events.push({ name: event.name, data });
+    },
+  });
+  return { engine, events };
+}
+
 describe("PolicyEngine portability", () => {
+  it("does not match a scoped legacy registration when agentType is empty", async () => {
+    const engine = PolicyEngine.create();
+    let invocationCount = 0;
+
+    engine.register({
+      name: "scoped-legacy",
+      timing: "turn.start",
+      priority: 100,
+      scope: { agentType: ["resident"] },
+      fn: () => {
+        invocationCount++;
+        return PolicyDecision.deny({ policyId: "scoped.legacy" });
+      },
+    });
+
+    const decision = await engine.dispatch("turn.start", { agentType: "" });
+
+    expect(decision.verdict).toBe("allow");
+    expect(invocationCount).toBe(0);
+  });
+
+  it("accepts legacy timing registrations unchanged", async () => {
+    const engine = PolicyEngine.create();
+
+    engine.register({
+      name: "legacy-registration",
+      timing: "turn.start",
+      priority: 100,
+      fn: () => PolicyDecision.deny({ policyId: "legacy.registration" }),
+    });
+
+    const decision = await engine.dispatch("turn.start", {});
+
+    expect(decision.verdict).toBe("deny");
+  });
+
   it("creates independent engine instances with no shared state", async () => {
-    const recorded1: Array<{ name: string; data: unknown }> = [];
-    const recorded2: Array<{ name: string; data: unknown }> = [];
-
-    const engine1 = PolicyEngine.create({
-      auditEmit: (event, data) => {
-        recorded1.push({ name: event.name, data });
-      },
-    });
-
-    const engine2 = PolicyEngine.create({
-      auditEmit: (event, data) => {
-        recorded2.push({ name: event.name, data });
-      },
-    });
+    const { engine: engine1, events: events1 } = createAuditedEngine();
+    const { engine: engine2, events: events2 } = createAuditedEngine();
 
     engine1.register({
       name: "policy-1",
@@ -43,29 +80,25 @@ describe("PolicyEngine portability", () => {
       fn: () => PolicyDecision.deny({ policyId: "engine2.policy" }),
     });
 
-    const ctx = {
-      agentType: "resident",
-      resourceDescriptor: createTestDescriptor(),
-    };
+    const ctx = createDispatchContext();
 
     const decision1 = await engine1.dispatch("turn.start", ctx);
     const decision2 = await engine2.dispatch("turn.start", ctx);
 
     expect(decision1.verdict).toBe("allow");
     expect(decision2.verdict).toBe("deny");
-    expect(recorded1.length).toBeGreaterThan(0);
-    expect(recorded2.length).toBeGreaterThan(0);
-    expect(recorded1).not.toEqual(recorded2);
+    expect(events1).toHaveLength(1);
+    expect(events2).toHaveLength(1);
+    expect(events1[0]?.data).toMatchObject({
+      context: { name: "policy-1", verdict: "allow" },
+    });
+    expect(events2[0]?.data).toMatchObject({
+      context: { name: "policy-2", verdict: "deny" },
+    });
   });
 
   it("dispatches policy and fires audit callback without Bus", async () => {
-    const auditEvents: Array<{ name: string; data: unknown }> = [];
-
-    const engine = PolicyEngine.create({
-      auditEmit: (event, data) => {
-        auditEvents.push({ name: event.name, data });
-      },
-    });
+    const { engine, events } = createAuditedEngine();
 
     engine.register({
       name: "test-policy",
@@ -74,31 +107,14 @@ describe("PolicyEngine portability", () => {
       fn: () => PolicyDecision.allow({ policyId: "test.allow" }),
     });
 
-    const decision = await engine.dispatch("turn.start", {
-      agentType: "resident",
-      resourceDescriptor: createTestDescriptor(),
-    });
+    const decision = await engine.dispatch("turn.start", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
-    expect(auditEvents.length).toBeGreaterThan(0);
-    expect(
-      auditEvents.some(
-        (event) =>
-          event.name === PolicyEvent.Evaluated.name ||
-          event.name === PolicyEvent.DecisionComposed.name ||
-          event.name === Operational.Debug.name,
-      ),
-    ).toBe(true);
+    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
   });
 
   it("denies and fires audit callback on deny verdict", async () => {
-    const auditEvents: Array<{ name: string; data: unknown }> = [];
-
-    const engine = PolicyEngine.create({
-      auditEmit: (event, data) => {
-        auditEvents.push({ name: event.name, data });
-      },
-    });
+    const { engine, events } = createAuditedEngine();
 
     engine.register({
       name: "deny-policy",
@@ -107,23 +123,14 @@ describe("PolicyEngine portability", () => {
       fn: () => PolicyDecision.deny({ policyId: "test.deny" }),
     });
 
-    const decision = await engine.dispatch("turn.start", {
-      agentType: "resident",
-      resourceDescriptor: createTestDescriptor(),
-    });
+    const decision = await engine.dispatch("turn.start", createDispatchContext());
 
     expect(decision.verdict).toBe("deny");
-    expect(auditEvents.length).toBeGreaterThan(0);
+    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
   });
 
   it("runs without server, session, or agent bootstrap", async () => {
-    const auditLog: string[] = [];
-
-    const engine = PolicyEngine.create({
-      auditEmit: (event) => {
-        auditLog.push(event.name);
-      },
-    });
+    const { engine, events } = createAuditedEngine();
 
     engine.register({
       name: "standalone-policy",
@@ -136,12 +143,9 @@ describe("PolicyEngine portability", () => {
       },
     });
 
-    const decision = await engine.dispatch("turn.start", {
-      agentType: "resident",
-      resourceDescriptor: createTestDescriptor(),
-    });
+    const decision = await engine.dispatch("turn.start", createDispatchContext());
 
     expect(decision.verdict).toBe("allow");
-    expect(auditLog.length).toBeGreaterThan(0);
+    expect(events.some(({ name }) => name === Operational.Debug.name)).toBe(true);
   });
 });

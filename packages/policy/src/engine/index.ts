@@ -5,6 +5,8 @@ export type {
   PolicyDecision,
   PolicyEngineConfig,
   GenericPolicyContext,
+  CanonicalPolicyRegistrationGeneric,
+  PolicyEngineRegistrationGeneric,
   PolicyRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
@@ -12,6 +14,8 @@ export type {
   AuditEmit,
   PolicyPointId,
 } from "./types";
+
+export { PolicyRegistrationError } from "./registration";
 
 export { createPolicyEngine };
 
