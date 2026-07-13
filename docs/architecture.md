@@ -6,12 +6,12 @@ This document maps [Core Model](core-model.md) onto the codebase: the target str
 
 Target: all communication is `ingress.submit` (world enters) / `dispatch.submit` (boundary crossed) / `bus.publish` (recorded, observe-only), with the in-process subagent as the only non-gate path.
 
-Measured reality — seven paths exist today:
+The audit found seven paths; current reconciliation status:
 
 | # | Path | Verdict |
 |---|---|---|
 | 1 | `DispatchRuntime.submit` — policies + lifecycle events on the bus | ✅ the real gate |
-| 2 | coordinator `WorkerManager.dispatch` + `supervisor.deliverMessage` — a second delivery system that shares the gate's name | rename to `deliver`, demote to a driver *under* the worker dispatch handler |
+| 2 | coordinator worker manager + supervisor process delivery | ✅ renamed to `deliver` and demoted to a typed driver beneath the worker dispatch handler (#478); no gate vocabulary remains in the coordinator's public API |
 | 3 | ~40 server files importing `session` directly; PendingAsk correlation performed by the server | back doors — route through ledger/dispatch APIs; correlation returns to the kernel |
 | 4 | ingress re-implements worker spawn/cancel/deliver alongside dispatch | delete; delegate to dispatch |
 | 5 | `createToolExecutor` double pipeline (agent + openomni nested) — audit events emitted twice | collapse to one pipeline, one audit emission |
@@ -28,13 +28,14 @@ Decisions from the 2026-07-09 handoff-hardening round: the export's physical for
 
 ## Policy: Complete the Existing Hook Layer
 
-The hook layer already exists and is contract-grade: protocol registers 19 policy points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`) each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, input schema, and version. Nineteen effect types cover prompt/tool/run/delegation/writeback/audit interventions.
+The hook layer already exists and is contract-grade: protocol registers 19 policy points (`session.inbound.pre`, `dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`, `session.writeback.pre`) each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), `requiredContext`, `inputSchema`, and version. Nineteen effect types cover prompt/tool/run/delegation/writeback/audit interventions.
 
-Work remaining:
+Current status and work remaining:
 
 1. **Four new points + ID-grammar extension** (`memory|egress|work|schedule` prefixes): `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (evidence gate), `schedule.fire.pre` (cron constraints). Note: the grammar's `credential` prefix has zero registered points — consistent with the coordinator credentials/tool-permission code being dead (deleted in #461).
-2. **Relocate the engine**: contracts live in protocol (correct); the engine lives in `@openomni/agent` (wrong) — move to `@openomni/policy` (ring 1) and enforce per-point input schemas, which structurally eliminates the fabricated context in path 7.
-3. Enforce the rulebook in [Core Model § Policy](core-model.md#policy--the-cross-cutting-hook-layer) — notably registration-time effect validation and the meta-policy that gates policy changes themselves (Owner free / Governor tighten-only / others none).
+2. **Engine relocation is complete**: contracts live in protocol and `PolicyEngine` lives in `@openomni/policy` (ring 1), with `@openomni/agent` retaining only its agent-scoped facade and built-ins (#451).
+3. Enforce each point's `requiredContext` and `inputSchema`, which structurally eliminates the fabricated context in path 7.
+4. Enforce the rulebook in [Core Model § Policy](core-model.md#policy--the-cross-cutting-hook-layer) — notably registration-time effect validation and the meta-policy that gates policy changes themselves (Owner free / Governor tighten-only / others none).
 
 Honest state of the gate's one exception: the registered points are `delegation.worker.pre/post` (there is no `delegation.subagent.*`), and nothing in production dispatches them yet. Until #454 makes depth≥1 child agents emit gated ledger events, the invariant is the weaker, labeled form: every **top-level** action passes the gate; subagents are bounded by the parent grant.
 
@@ -55,7 +56,7 @@ Each ring depends only inward. `check-deps` gets real rules (the current openomn
 
 ## Extraction / Merge / Delete Ledger
 
-**Extract (wrong home → right home):** PolicyEngine agent → policy; Bus session → ledger core; PendingAsk correlation server → kernel.
+**Extract (wrong home → right home):** PolicyEngine agent → policy (done — #451); Bus session → ledger core; PendingAsk correlation server → kernel.
 
 **Merge (two implementations → one):** WorkerRun → WorkItem.attempts; ingress's worker spawn/cancel/deliver → dispatch handlers (coordinator becomes the `deliver` driver beneath them); tool-executor double pipeline → one kernel path with a single audit emission; server session back doors → ledger/dispatch APIs.
 
@@ -76,7 +77,7 @@ Each ring depends only inward. `check-deps` gets real rules (the current openomn
 
 ## Known Bugs (audit-confirmed)
 
-All three audit-confirmed bugs are **fixed** (P0 bug-fix PR, #453):
+All three audit-confirmed bugs are **fixed** by P0 bug-fix PR #471 (tracked by #453):
 
 1. ~~llm model-catalog weekly refresh writes to `src/provider/` while the runtime reads `src/model/` — the catalog never updates.~~ Generator and workflow now write the reader's path `packages/llm/src/model/models-snapshot.json`; the snapshot was regenerated live in the same change.
 2. ~~`run.ts adaptStream` is an ai-v4 shim duplicating v6 `text-start/end` — emits empty text parts.~~ The v4 shim is gone; `adaptStream` only renames v6 `start-step`/`finish-step` to the internal `step-start`/`step-finish`. A discrimination test asserts one non-empty text part per v6 text block.
@@ -86,8 +87,8 @@ All three audit-confirmed bugs are **fixed** (P0 bug-fix PR, #453):
 
 | Phase | Content |
 |---|---|
-| **P0 clean** | delete the dead-code list, fix the 3 bugs; reconcile with `feat/foundation-restructure` |
-| **P1 one channel** | enforce the three verbs: coordinator rename/demote, close server back doors, delete ingress double implementation, single tool-executor, cut dispatch's agent coupling |
+| **P0 clean — complete** | ✅ Coordinator dead-module/double-ledger cleanup opened the phase in #461; the 3 bug fixes, conformance-gate exit slice, remaining dead-code sweep, deprecated-field removal, and post-sweep hygiene shipped in #471/#472/#473/#475/#476 |
+| **P1 one channel — partial** | 🚧 The coordinator/worker-driver slice shipped in #477-#481: injected ports and a session-free coordinator, typed `deliver`, gate-side policy-plan stamping, one pool with supervisor options, and driver lifecycle/wall-time enforcement. Remaining: enforce policy `requiredContext` + `inputSchema` and registration-time validation against `allowedEffects`; gate subagent delegation (#454); land #464's single `resolveRoute` pipeline with exactly one `RoutingDecision` ledger event per inbound message; close server back doors; delete ingress's double implementation; collapse to one tool-executor path |
 | **P2 one ledger** | WorkerRun absorption, durable bus as the ledger write path, greppable export (the heart of #213) |
 | **P3 rings** | package moves/renames, real check-deps rules, tsconfig base |
 | **P4 roles** | Resident demoted to a judgment-only shell profile, Jester, Voice egress, Governor MVP (scheduled coding-agent session over the ledger) |
