@@ -15,6 +15,19 @@ function baseContext(): Omit<PolicyContext, "timing"> {
 }
 
 describe("agent legacy dispatch canonical enforcement", () => {
+  it("returns a composed allow when no policy is registered", async () => {
+    const engine = PolicyEngine.create();
+
+    const verdict = await engine.dispatch("turn.start", {
+      ...baseContext(),
+      sessionId: "session-test",
+      runId: "run-test",
+      turnIndex: 0,
+    });
+
+    expect(verdict).toMatchObject({ verdict: "allow", policyId: "agent.policy.composed" });
+  });
+
   it("audits the exact canonical MCP point selected from legacy labels", async () => {
     // Given
     const traceContext = {

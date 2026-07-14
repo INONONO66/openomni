@@ -215,17 +215,6 @@ describe("PolicyEngine", () => {
     expect(unscoped).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a composed allow when no policy is registered", async () => {
-    const engine = PolicyEngine.create();
-    const verdict = await engine.dispatch("turn.start", {
-      ...baseCtx(),
-      sessionId: "session-test",
-      runId: "run-test",
-      turnIndex: 0,
-    });
-    expect(verdict).toMatchObject({ verdict: "allow", policyId: "agent.policy.composed" });
-  });
-
   it("runs policy at multiple timings when timing is an array", async () => {
     const engine = PolicyEngine.create();
     const fn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
