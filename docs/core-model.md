@@ -30,7 +30,7 @@ All communication in the system reduces to three verbs:
 2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human, targeting a session, spawning or cancelling a Worker: the same verb with a different target.
 3. **`bus.publish`** — something is recorded. Observation only; the bus never carries commands.
 
-The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). Note that even this exception is covered by policy points (`delegation.subagent.pre/post`) — *the gate has one exception; policy has none.*
+The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). The production `child_agent` runtime implements this exception, but spawn and terminal settlement still pass through `delegation.worker.pre/post` — *the gate has one exception; policy has none.*
 
 ### Lanes
 
@@ -47,7 +47,7 @@ Spawning a Worker for an atomic action is waste; doing multi-step work in the Ow
 
 ### Policy — the cross-cutting hook layer
 
-Policy is not a gate-internal feature: it is a system-wide interception layer (LSM-style). The protocol registers policy points, each with a contract — allowed effect types, default fail policy, required context schema. The registered points cover inbound (`session.inbound.pre`), the gate (`dispatch.action.pre`), the agent loop per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), LLM connections (`connection.llm.pre/post`), prompt and writeback (`prompt.context.pre`, `session.writeback.pre`), tools (`tool.catalog/native/mcp.*`), and delegation (`delegation.subagent/background.*`). Four points are being added for the current model: `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (the evidence gate), `schedule.fire.pre` (cron constraints).
+Policy is not a gate-internal feature: it is a system-wide interception layer (LSM-style). The protocol registers policy points, each with a contract — allowed effect types, default fail policy, required context schema. The registered points cover inbound (`session.inbound.pre`), the gate (`dispatch.action.pre`), the agent loop per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), LLM connections (`connection.llm.pre/post`), prompt and writeback (`prompt.context.pre`, `session.writeback.pre`), tools (`tool.catalog/native/mcp.*`), and delegation (`delegation.worker.pre/post`). The target model also names four planned points: `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (the evidence gate), and `schedule.fire.pre` (cron constraints).
 
 The rulebook:
 

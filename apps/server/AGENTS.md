@@ -4,7 +4,7 @@ Hono/Bun runtime host that exposes OpenOmni through external channels (Discord /
 
 Inbound messages should flow as: raw channel payload -> channel adapter transport/auth/dedupe -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback policy.
 
-Depends on `@openomni/protocol`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `execution/worker-entry.ts`, `context/middleware.ts`, and `agents/` import agent runtime APIs or types directly.
+Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. `execution/worker-entry.ts`, `context/middleware.ts`, and `agents/` import agent runtime APIs or types directly.
 
 ## STRUCTURE
 
@@ -36,7 +36,7 @@ src/
 │   ├── find-up.ts        # findUp() — walks up directory tree to locate config files
 │   ├── instructions.ts   # InstructionLoader — loads AGENTS.md / CLAUDE.md instruction files
 │   ├── mcp-config.ts     # McpConfigLoader.discover() / merge() — project-level MCP server config
-│   ├── middleware.ts      # createContextMiddleware() — context.prepare middleware that appends context
+│   ├── middleware.ts      # createContextMiddleware() — canonical prompt.context.pre policy that appends context
 │   └── skills.ts         # SkillLoader — loads skill definitions from workspace
 ├── execution/
 │   ├── coordinator.ts    # createExecutionCoordinator() — wraps createWorkerManager(config, ports); binds events/toolRelay/inboundWait ports (#477)
@@ -167,7 +167,7 @@ This registry is transitional runtime configuration. Product routing should move
 `src/context/` assembles the system prompt context injected into each agent run:
 
 - `ContextAssembler.assemble({ workspaceRoot })` — reads AGENTS.md, CLAUDE.md, skill files, and MCP config from the workspace tree.
-- `createContextMiddleware(config)` — wraps the assembler as an `context.prepare` middleware registration for `ChatAgent`.
+- `createContextMiddleware(config)` — wraps the assembler as a canonical `prompt.context.pre` registration for `ChatAgent`, declaring the `prompt.append_context` effect capability.
 - `McpConfigLoader.discover(root)` / `merge(...)` — finds and merges project-level MCP server configs.
 - `InstructionLoader` / `SkillLoader` — load instruction and skill files from the workspace.
 
