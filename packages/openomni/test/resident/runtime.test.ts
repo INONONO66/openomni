@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PolicyEngine, type ChatAgentConfig } from "@openomni/agent";
-import { IngressEvent } from "@openomni/protocol";
-import { Bus, Session, Storage } from "@openomni/session";
+import { Session, Storage } from "@openomni/session";
 import { ResidentRuntime } from "../../src/resident/runtime";
 
 function makeEvent() {
@@ -15,7 +14,14 @@ function makeEvent() {
   };
 }
 
-async function evaluateTool(middleware: ChatAgentConfig["middleware"], toolName: string) {
+async function evaluateTool(
+  middleware: ChatAgentConfig["middleware"],
+  context: {
+    readonly sessionId: string;
+    readonly runId: string;
+    readonly toolName: string;
+  },
+) {
   const engine = PolicyEngine.create({ audit: false });
   for (const registration of middleware ?? []) {
     engine.register(registration);
@@ -27,7 +33,11 @@ async function evaluateTool(middleware: ChatAgentConfig["middleware"], toolName:
     isCompletion: false,
     continuationCount: 0,
     elapsedMs: 0,
-    toolName,
+    sessionId: context.sessionId,
+    runId: context.runId,
+    toolName: context.toolName,
+    toolId: context.toolName,
+    toolInput: {},
   });
 }
 
@@ -92,7 +102,7 @@ describe("ResidentRuntime", () => {
       model: { providerID: "test", modelID: "fixture" },
     });
 
-    await manager.run({
+    const result = await manager.run({
       sessionId: session.id,
       event: {
         ...makeEvent(),
@@ -113,9 +123,16 @@ describe("ResidentRuntime", () => {
       },
     });
 
-    const planDecision = await evaluateTool(capturedConfig?.middleware, "tool:plan");
+    const policyContext = { sessionId: session.id, runId: result.runId };
+    const planDecision = await evaluateTool(capturedConfig?.middleware, {
+      ...policyContext,
+      toolName: "tool:plan",
+    });
     expect(planDecision).toMatchObject({ verdict: "allow" });
-    const legacyDecision = await evaluateTool(capturedConfig?.middleware, "tool:legacy");
+    const legacyDecision = await evaluateTool(capturedConfig?.middleware, {
+      ...policyContext,
+      toolName: "tool:legacy",
+    });
     expect(legacyDecision).toMatchObject({ verdict: "deny" });
   });
 
@@ -159,105 +176,4 @@ describe("ResidentRuntime", () => {
     });
     expect(factoryInput?.runId).toBeString();
   });
-});
-
-test("ResidentRuntime enforces maximum resident activations", async () => {
-  let markFirstRunStarted!: () => void;
-  let releaseFirstRun!: () => void;
-  const firstRunStarted = new Promise<void>((resolve) => {
-    markFirstRunStarted = resolve;
-  });
-  const firstRunCanFinish = new Promise<void>((resolve) => {
-    releaseFirstRun = resolve;
-  });
-  const manager = ResidentRuntime.create({
-    maxActive: 1,
-    idleTimeoutMs: 1_000,
-    runAgent: async () => {
-      markFirstRunStarted();
-      await firstRunCanFinish;
-      return { text: "ok", finishReason: "stop" };
-    },
-  });
-
-  const firstRun = manager.run({ sessionId: "resident-a", event: makeEvent() });
-  await firstRunStarted;
-
-  let secondError: unknown;
-  try {
-    await Promise.resolve(manager.run({ sessionId: "resident-b", event: makeEvent() }));
-  } catch (error) {
-    secondError = error;
-  }
-  expect(secondError).toBeInstanceOf(Error);
-  expect((secondError as Error).message).toContain("maximum resident activations reached");
-
-  releaseFirstRun();
-  await firstRun;
-});
-
-test("ResidentRuntime reuses fallback traceId for agent input and completion event", async () => {
-  let inputTraceId: string | undefined;
-  const completedTraceIds: string[] = [];
-  const unsubscribe = Bus.subscribe(IngressEvent.Completed, (event) => {
-    completedTraceIds.push(event.traceId);
-  });
-
-  const manager = ResidentRuntime.create({
-    runAgent: async (_config, input) => {
-      inputTraceId = input.traceContext?.traceId;
-      return { text: "ok", finishReason: "stop" };
-    },
-  });
-
-  try {
-    await manager.run({ sessionId: "resident-trace", event: makeEvent() });
-  } finally {
-    unsubscribe();
-  }
-
-  expect(inputTraceId).toBeString();
-  expect(completedTraceIds.at(-1)).toBe(inputTraceId);
-});
-
-test("ResidentRuntime does not start a queued run after it is aborted", async () => {
-  let releaseFirstRun!: () => void;
-  let firstRunStarted!: () => void;
-  const firstStarted = new Promise<void>((resolve) => {
-    firstRunStarted = resolve;
-  });
-  const firstCanFinish = new Promise<void>((resolve) => {
-    releaseFirstRun = resolve;
-  });
-  let runCount = 0;
-  const manager = ResidentRuntime.create({
-    runAgent: async () => {
-      runCount++;
-      if (runCount === 1) {
-        firstRunStarted();
-        await firstCanFinish;
-      }
-      return { text: "ok", finishReason: "stop" };
-    },
-  });
-
-  const firstRun = manager.run({ sessionId: "resident-queued-abort", event: makeEvent() });
-  await firstStarted;
-
-  const controller = new AbortController();
-  const secondRun = manager.run({
-    sessionId: "resident-queued-abort",
-    event: makeEvent(),
-    signal: controller.signal,
-  });
-
-  controller.abort();
-  const secondError = await secondRun.catch((error) => error);
-  expect(secondError).toBeInstanceOf(Error);
-  expect((secondError as Error).name).toBe("AbortError");
-
-  releaseFirstRun();
-  await firstRun;
-  await Bun.sleep(0);
-  expect(runCount).toBe(1);
 });

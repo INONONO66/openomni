@@ -4,9 +4,13 @@ import { PolicyDecision, type Policy } from "@openomni/protocol";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware";
 import { PolicyResolver } from "../../src/policy";
 
-function baseCtx(
-  overrides?: Partial<Omit<PolicyContext, "timing">>,
-): Omit<PolicyContext, "timing"> {
+type PreDispatchContext = Omit<PolicyContext, "timing"> & {
+  readonly sessionId?: string;
+  readonly runId?: string;
+  readonly toolId?: string;
+};
+
+function baseCtx(overrides?: Partial<PreDispatchContext>): PreDispatchContext {
   return {
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -51,7 +55,7 @@ describe("policy pipeline integration", () => {
       timing: "turn.start",
       priority: 0,
       failPolicy: "fail-closed",
-      fn: (ctx) => {
+      fn: (ctx: PolicyContext) => {
         const hasGitHubLabel =
           ctx.labels?.some((label) => label.value === "surface.github") ?? false;
         if (hasGitHubLabel) {
@@ -108,7 +112,7 @@ describe("policy pipeline integration", () => {
       timing: "invoke.prepare",
       priority: -10,
       failPolicy: "fail-closed",
-      fn: (ctx) => {
+      fn: (ctx: PolicyContext) => {
         const isWriteTool = ctx.toolLabels?.includes("capability.write") ?? false;
         if (isWriteTool) {
           return PolicyDecision.deny({
@@ -155,7 +159,10 @@ describe("policy pipeline integration", () => {
     const verdict = await engine.dispatch(
       "invoke.prepare",
       baseCtx({
+        sessionId: "session-permissions-only",
+        runId: "run-permissions-only",
         toolName: "github.create_issue_comment",
+        toolId: "github.create_issue_comment",
         toolCallId: "call-comment",
         toolLabels: ["surface.github", "capability.write"],
         toolInput: { body: "Looks good." },

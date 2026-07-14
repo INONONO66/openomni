@@ -1,7 +1,6 @@
 import { Policy } from "@openomni/protocol";
 import type {
   AuditDispatchContextGeneric,
-  CanonicalPolicyRegistrationGeneric,
   PolicyEngineCompatibilityGeneric,
   PolicyPointId,
 } from "@openomni/policy";
@@ -15,8 +14,11 @@ function matchingPoint(
 }
 
 function isMcpContext(ctx: Readonly<AuditDispatchContextGeneric<PolicyContext>>): boolean {
-  const source = ctx.resourceDescriptor?.source?.type;
-  if (source === "mcp" || source === "skill-mcp") return true;
+  const descriptor = ctx.resourceDescriptor;
+  if (descriptor !== undefined) {
+    const source = descriptor.source?.type;
+    return source === "mcp" || source === "skill-mcp";
+  }
   return ctx.toolLabels?.some((label) => /^source[.:](mcp|skill-mcp)$/.test(label)) ?? false;
 }
 
@@ -38,16 +40,7 @@ function resolveLegacyPoint(
   return undefined;
 }
 
-function invokeCanonicalAtLegacyDispatch(
-  registration: CanonicalPolicyRegistrationGeneric<PolicyContext>,
-  ctx: Readonly<AuditDispatchContextGeneric<PolicyContext>>,
-  pointId: PolicyPointId,
-) {
-  return registration.fn(Object.freeze({ ...ctx, pointId }));
-}
-
 export const agentPolicyCompatibility = {
   includeLegacyAtPoint: true,
   resolvePointForLegacyDispatch: resolveLegacyPoint,
-  invokeCanonicalAtLegacyDispatch,
 } satisfies PolicyEngineCompatibilityGeneric<PolicyContext>;

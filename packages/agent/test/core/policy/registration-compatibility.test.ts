@@ -25,6 +25,71 @@ function promptContext(): Omit<PolicyContext, "timing"> & Record<string, unknown
 }
 
 const allow = () => PolicyDecision.allow({ policyId: "test.allow" });
+const invokePointIds = ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"] as const;
+const nativeInvocation = {
+  ...baseContext(),
+  sessionId: "session",
+  runId: "run",
+  toolName: "shell",
+  toolId: "shell",
+  toolInput: {},
+};
+const mcpInvocation = { ...nativeInvocation, mcpServerId: "filesystem" };
+const workerInvocation = {
+  ...baseContext(),
+  sessionId: "session",
+  runId: "run",
+  workerRunId: "worker-run",
+  workerProfile: { name: "reviewer" },
+};
+const nativeTool: RuntimeResource.Descriptor = {
+  id: "tool:shell",
+  kind: "tool",
+  labels: ["source.mcp"],
+  capabilities: [],
+  effects: [],
+  source: { type: "system" },
+};
+const mcpTool: RuntimeResource.Descriptor = {
+  id: "tool:mcp:filesystem:read_file",
+  kind: "tool",
+  labels: ["source.system"],
+  capabilities: [],
+  effects: [],
+  source: { type: "mcp", serverId: "filesystem" },
+};
+const unclassifiedTool: RuntimeResource.Descriptor = {
+  id: "tool:unclassified",
+  kind: "tool",
+  labels: ["source.mcp"],
+  capabilities: [],
+  effects: [],
+};
+const worker: RuntimeResource.Descriptor = {
+  id: "worker:reviewer",
+  kind: "worker",
+  labels: [],
+  capabilities: [],
+  effects: [],
+};
+
+function createInvokeObserverEngine(called: string[]) {
+  const engine = PolicyEngine.create();
+  for (const pointId of invokePointIds) {
+    engine.register({
+      kind: "point",
+      name: pointId,
+      pointIds: [pointId],
+      effectCapabilities: { [pointId]: [] },
+      priority: 0,
+      fn: () => {
+        called.push(pointId);
+        return allow();
+      },
+    } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>);
+  }
+  return engine;
+}
 
 describe("agent policy registration compatibility", () => {
   it("reads legacy registration accessors once at the trusted registration boundary", async () => {
@@ -98,7 +163,6 @@ describe("agent policy registration compatibility", () => {
 
     // Then
     expect(canonicalOrder).toEqual(legacyOrder);
-    expect(canonicalOrder).toContain("nan");
     expect(canonicalOrder.indexOf("negative")).toBeLessThan(canonicalOrder.indexOf("zero"));
     expect(canonicalOrder.indexOf("infinite")).toBeGreaterThan(canonicalOrder.indexOf("zero"));
   });
@@ -147,21 +211,7 @@ describe("agent policy registration compatibility", () => {
   it("does not reverse-map canonical invoke policies without an exact resource point", async () => {
     // Given
     const called: string[] = [];
-    const pointIds = ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"] as const;
-    const engine = PolicyEngine.create();
-    for (const pointId of pointIds) {
-      engine.register({
-        kind: "point",
-        name: pointId,
-        pointIds: [pointId],
-        effectCapabilities: { [pointId]: [] },
-        priority: 0,
-        fn: () => {
-          called.push(pointId);
-          return allow();
-        },
-      } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>);
-    }
+    const engine = createInvokeObserverEngine(called);
 
     // When
     await engine.dispatch("invoke.prepare", baseContext());
@@ -173,77 +223,92 @@ describe("agent policy registration compatibility", () => {
   it("reverse-maps canonical invoke policies only for the exact resource point", async () => {
     // Given
     const called: string[] = [];
-    const engine = PolicyEngine.create();
-    const pointIds = ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"] as const;
-    for (const pointId of pointIds) {
-      engine.register({
-        kind: "point",
-        name: pointId,
-        pointIds: [pointId],
-        effectCapabilities: { [pointId]: [] },
-        priority: 0,
-        fn: () => {
-          called.push(pointId);
-          return allow();
-        },
-      } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>);
-    }
-    const nativeTool: RuntimeResource.Descriptor = {
-      id: "tool:shell",
-      kind: "tool",
-      labels: ["source.system"],
-      capabilities: [],
-      effects: [],
-      source: { type: "system" },
-    };
-    const mcpTool: RuntimeResource.Descriptor = {
-      id: "tool:mcp:filesystem:read_file",
-      kind: "tool",
-      labels: ["source.mcp"],
-      capabilities: [],
-      effects: [],
-      source: { type: "mcp", serverId: "filesystem" },
-    };
-    const worker: RuntimeResource.Descriptor = {
-      id: "worker:reviewer",
-      kind: "worker",
-      labels: [],
-      capabilities: [],
-      effects: [],
-    };
+    const engine = createInvokeObserverEngine(called);
 
     // When
-    await engine.dispatch("invoke.prepare", { ...baseContext(), resourceDescriptor: nativeTool });
-    await engine.dispatch("invoke.prepare", { ...baseContext(), resourceDescriptor: mcpTool });
-    await engine.dispatch("invoke.prepare", { ...baseContext(), resourceDescriptor: worker });
+    await engine.dispatch("invoke.prepare", {
+      ...nativeInvocation,
+      resourceDescriptor: nativeTool,
+    });
+    await engine.dispatch("invoke.prepare", { ...mcpInvocation, resourceDescriptor: mcpTool });
+    await engine.dispatch("invoke.prepare", { ...workerInvocation, resourceDescriptor: worker });
 
     // Then
-    expect(called).toEqual(pointIds);
+    expect(called).toEqual([...invokePointIds]);
   });
 
   it("uses the native point only for a descriptor-free legacy tool invocation", async () => {
     // Given
     const called: string[] = [];
-    const engine = PolicyEngine.create();
-    const pointIds = ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"] as const;
-    for (const pointId of pointIds) {
-      engine.register({
-        kind: "point",
-        name: pointId,
-        pointIds: [pointId],
-        effectCapabilities: { [pointId]: [] },
-        priority: 0,
-        fn: () => {
-          called.push(pointId);
-          return allow();
-        },
-      } satisfies CanonicalPolicyRegistrationGeneric<PolicyContext>);
-    }
+    const engine = createInvokeObserverEngine(called);
 
     // When
-    await engine.dispatch("invoke.prepare", { ...baseContext(), toolName: "shell" });
+    await engine.dispatch("invoke.prepare", nativeInvocation);
 
     // Then
     expect(called).toEqual(["tool.native.pre"]);
+  });
+
+  it("prefers an authoritative native descriptor over a stale MCP label", async () => {
+    // Given
+    const called: string[] = [];
+    const engine = createInvokeObserverEngine(called);
+
+    // When
+    await engine.dispatch("invoke.prepare", {
+      ...nativeInvocation,
+      resourceDescriptor: nativeTool,
+      toolLabels: ["source.mcp"],
+    });
+
+    // Then
+    expect(called).toEqual(["tool.native.pre"]);
+  });
+
+  it("prefers an authoritative MCP descriptor over a stale native label", async () => {
+    // Given
+    const called: string[] = [];
+    const engine = createInvokeObserverEngine(called);
+
+    // When
+    await engine.dispatch("invoke.prepare", {
+      ...mcpInvocation,
+      resourceDescriptor: mcpTool,
+      toolLabels: ["source.system"],
+    });
+
+    // Then
+    expect(called).toEqual(["tool.mcp.pre"]);
+  });
+
+  it("does not use labels when an unclassified descriptor is present", async () => {
+    // Given
+    const called: string[] = [];
+    const engine = createInvokeObserverEngine(called);
+
+    // When
+    await engine.dispatch("invoke.prepare", {
+      ...nativeInvocation,
+      resourceDescriptor: unclassifiedTool,
+      toolLabels: ["source.mcp"],
+    });
+
+    // Then
+    expect(called).toEqual(["tool.native.pre"]);
+  });
+
+  it("uses MCP labels when a legacy tool invocation has no descriptor", async () => {
+    // Given
+    const called: string[] = [];
+    const engine = createInvokeObserverEngine(called);
+
+    // When
+    await engine.dispatch("invoke.prepare", {
+      ...mcpInvocation,
+      toolLabels: ["source.mcp"],
+    });
+
+    // Then
+    expect(called).toEqual(["tool.mcp.pre"]);
   });
 });

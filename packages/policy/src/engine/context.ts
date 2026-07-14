@@ -1,4 +1,10 @@
-import type { AuditDispatchContextGeneric, GenericPolicyContext } from "./types";
+import type { Policy } from "@openomni/protocol";
+import type {
+  AuditDispatchContextGeneric,
+  CanonicalAuditDispatchContextGeneric,
+  GenericPolicyContext,
+  PolicyPointId,
+} from "./types";
 
 export function immutableSnapshot<TCtx extends GenericPolicyContext>(
   value: AuditDispatchContextGeneric<TCtx>,
@@ -28,10 +34,18 @@ type ImmutablePointSnapshot<TValue extends object> =
   | { readonly success: true; readonly value: Readonly<TValue> }
   | { readonly success: false };
 
+export function immutablePointSnapshot<TCtx extends GenericPolicyContext>(
+  value: Readonly<AuditDispatchContextGeneric<TCtx>>,
+  added: Readonly<{ readonly pointId: PolicyPointId; readonly timing: Policy.Timing }>,
+): ImmutablePointSnapshot<CanonicalAuditDispatchContextGeneric<TCtx>>;
 export function immutablePointSnapshot<TValue extends object, TAdded extends object>(
   value: TValue,
   added: TAdded,
-): ImmutablePointSnapshot<TValue & TAdded> {
+): ImmutablePointSnapshot<TValue & TAdded>;
+export function immutablePointSnapshot(
+  value: object,
+  added: object,
+): ImmutablePointSnapshot<object> {
   try {
     if (!isPlainRecord(value)) return { success: false };
     const snapshot = { ...structuredClone(value), ...added };

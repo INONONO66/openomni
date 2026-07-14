@@ -65,11 +65,6 @@ export interface PolicyEngineCompatibilityGeneric<TCtx extends GenericPolicyCont
     timing: Policy.Timing,
     ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
   ) => PolicyPointId | undefined;
-  readonly invokeCanonicalAtLegacyDispatch?: (
-    registration: CanonicalPolicyRegistrationGeneric<TCtx>,
-    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
-    pointId: PolicyPointId,
-  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
 }
 
 export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
