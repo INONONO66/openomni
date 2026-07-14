@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` (for observability: Log, Bus, Telemetry, TraceContext).
+`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` for Bus and TraceContext observability.
 
 ## STRUCTURE
 
@@ -67,7 +67,7 @@ Also exported from `@openomni/agent`:
 | `systemPrompt?`  | `string`                                 | Base system prompt                                                          |
 | `tools?`         | `(Tool.Spec & { descriptor?: RuntimeResource.Descriptor })[]` | Tool specs plus optional structured policy provenance; descriptors survive catalog preparation and tool execution |
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
-| `toolExecutor?`  | `(call) => Promise<Tool.Result>`         | Custom tool executor; wrapped by `createToolExecutor`                       |
+| `toolExecutor?`  | `(call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>` | Custom tool executor; wrapped by `createToolExecutor` |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
 | `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing registrations are accepted only for compatibility |
 | `eventEmitter?`  | `AgentEventEmitter`                      | Optional event emitter for external observers                               |
@@ -156,7 +156,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## ANTI-PATTERNS
 
-- Agent depends on `@openomni/session` for observability only (Log, Bus, Telemetry, TraceContext). Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
+- Agent depends on `@openomni/session` for Bus and TraceContext observability only. Do NOT use session for state management — orchestration that needs session state lives in `@openomni/openomni`.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass the policy engine by returning placeholder tool results in user code; use a `tool.native.pre` / `tool.mcp.pre` policy so behavior is uniform.
 - Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

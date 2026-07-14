@@ -30,7 +30,7 @@ All communication in the system reduces to three verbs:
 2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human, targeting a session, spawning or cancelling a Worker: the same verb with a different target.
 3. **`bus.publish`** — something is recorded. Observation only; the bus never carries commands.
 
-The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). The production `child_agent` runtime implements this exception and always dispatches and audits `delegation.worker.pre/post`; optional injected delegation policies may return deny or pending for a spawn, while parent-tool bounding and nesting denial are unconditional structural controls — *the gate has one exception; policy interception has none.*
+The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). The production `child_agent` runtime implements this exception: every spawn dispatches and audits `delegation.worker.pre`, and every accepted spawn that creates a child is settled exactly once as completed, failed, or cancelled through `delegation.worker.post`. An optional injected delegation policy may return deny or pending at the pre point; that path creates no child and therefore has no post settlement. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one exception; policy interception has none.*
 
 ### Lanes
 
