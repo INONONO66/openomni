@@ -48,12 +48,12 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
         ? undefined
         : immutablePointSnapshot<TCtx>(fullCtx, { pointId, timing });
     const auditCtx = pointId === undefined ? fullCtx : Object.freeze({ ...fullCtx, pointId });
-    const canonicalContractFailure =
-      pointId === undefined || pointSnapshot === undefined
-        ? undefined
-        : pointSnapshot.success
-          ? validatePointContract(pointId, pointSnapshot.value)
-          : pointContractDecision(pointId, "policy.input_invalid");
+    let canonicalContractFailure: Policy.PolicyDecision | undefined;
+    if (pointId !== undefined && pointSnapshot !== undefined) {
+      canonicalContractFailure = pointSnapshot.success
+        ? validatePointContract(pointId, pointSnapshot.value)
+        : pointContractDecision(pointId, "policy.input_invalid");
+    }
     const selected =
       pointId === undefined
         ? registrations.selectLegacy(timing, fullCtx.agentType)
@@ -68,6 +68,17 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     }
 
     if (selected.length === 0) {
+      if (canonicalContractFailure !== undefined) {
+        decisions.push(
+          recordDecision(
+            options,
+            { name: "policy.point.contract" },
+            auditCtx,
+            canonicalContractFailure,
+          ),
+        );
+        return composeAndPublish();
+      }
       const decision = PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
       publishComposedDecision(options, timing, auditCtx, decision);
       return decision;
@@ -205,7 +216,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
         : { decision: engineDecision };
     const declaredEffects = declaredEffectsFor(reg, pointId, contract.allowedEffects);
     const undeclared = normalized.parsed?.effects.find(
-      (effect) => !declaredEffects.some((declared) => declared === effect.type),
+      (effect) => !declaredEffects.includes(effect.type),
     );
     const enforced =
       undeclared === undefined

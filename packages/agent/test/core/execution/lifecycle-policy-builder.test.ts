@@ -1,50 +1,54 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/session";
 import { abortRun } from "../../helpers/policy-decision";
 import { buildPolicyEngine } from "../../../src/core/execution/policy-engine-builder";
 import { makeAgentBase, makeConfig } from "./lifecycle-dispatch-fixture";
+
+const validToolNativePreContext = {
+  steps: [],
+  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+  turnCount: 0,
+  isCompletion: false,
+  continuationCount: 0,
+  elapsedMs: 0,
+  sessionId: "session-test",
+  runId: "run-test",
+  toolId: "bash",
+  toolInput: {},
+  toolName: "bash",
+};
 
 describe("buildPolicyEngine policy ownership", () => {
   it("does not register default middleware", async () => {
     Bus.reset();
     const engine = buildPolicyEngine(makeConfig(), makeAgentBase());
 
-    await expect(
-      engine.dispatch("invoke.prepare", {
-        steps: [],
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        turnCount: 0,
-        isCompletion: false,
-        continuationCount: 0,
-        elapsedMs: 0,
-        toolName: "bash",
-      }),
-    ).resolves.toMatchObject({ verdict: "allow" });
+    const decision = await engine.dispatch("invoke.prepare", validToolNativePreContext);
+
+    expect(decision).toMatchObject({ verdict: "allow", policyId: "agent.policy.composed" });
   });
 
   it("honors explicit middleware supplied by the runtime builder", async () => {
+    const denyBash = mock(() => abortRun("test.deny", "test.deny"));
     const config = makeConfig({
       middleware: [
         {
           name: "test:deny-bash",
           timing: "invoke.prepare",
           priority: 0,
-          fn: () => abortRun("test.deny", "blocked"),
+          fn: denyBash,
         },
       ],
     });
 
     const engine = buildPolicyEngine(config, makeAgentBase());
-    await expect(
-      engine.dispatch("invoke.prepare", {
-        steps: [],
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        turnCount: 0,
-        isCompletion: false,
-        continuationCount: 0,
-        elapsedMs: 0,
-        toolName: "bash",
-      }),
-    ).resolves.toMatchObject({ verdict: "deny" });
+    const decision = await engine.dispatch("invoke.prepare", validToolNativePreContext);
+
+    expect(decision).toMatchObject({
+      verdict: "deny",
+      policyId: "agent.policy.composed",
+      reasonCodes: ["test.deny"],
+    });
+    expect(denyBash).toHaveBeenCalledTimes(1);
   });
 });

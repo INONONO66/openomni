@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyDecision } from "@openomni/protocol";
+import { PolicyDecision, PolicyEvent } from "@openomni/protocol";
 import {
   type GenericPolicyContext,
   PolicyEngine,
@@ -14,8 +14,24 @@ interface TestContext extends GenericPolicyContext {
 
 const compatibility = {
   resolvePointForLegacyDispatch: (timing) =>
-    timing === "context.prepare" ? "prompt.context.pre" : undefined,
+    timing === "context.prepare"
+      ? "prompt.context.pre"
+      : timing === "invoke.prepare"
+        ? "tool.native.pre"
+        : undefined,
 } satisfies PolicyEngineCompatibilityGeneric<TestContext>;
+
+function createAuditedEngine(id: string) {
+  const events: Array<{ readonly name: string; readonly data: unknown }> = [];
+  const engine = PolicyEngine.create<TestContext>(
+    {
+      traceContext: { traceId: `trace-${id}`, sessionId: `session-${id}` },
+      auditEmit: (event, data) => events.push({ name: event.name, data }),
+    },
+    compatibility,
+  );
+  return { engine, events };
+}
 
 const promptContext = {
   sessionId: "session-legacy-canonical",
@@ -24,6 +40,47 @@ const promptContext = {
 } as const;
 
 describe("PolicyEngine legacy-to-canonical compatibility", () => {
+  test("denies a mapped fail-closed contract when no registrations match", async () => {
+    // Given
+    const { engine, events } = createAuditedEngine("legacy-canonical-fail-closed");
+
+    // When
+    const decision = await engine.dispatch("invoke.prepare", {});
+
+    // Then
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.context_missing");
+    const evaluated = PolicyEvent.Evaluated.schema.parse(
+      events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
+    );
+    expect(evaluated).toMatchObject({
+      policyId: "policy.point.contract",
+      pointId: "tool.native.pre",
+      verdict: "deny",
+      reasonCodes: ["policy.context_missing"],
+    });
+  });
+
+  test("enforces a mapped canonical contract when no registrations match", async () => {
+    // Given
+    const { engine, events } = createAuditedEngine("legacy-canonical-contract");
+
+    // When
+    const decision = await engine.dispatch("context.prepare", {});
+
+    // Then
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toContain("policy.context_missing");
+    const evaluated = PolicyEvent.Evaluated.schema.parse(
+      events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
+    );
+    expect(evaluated).toMatchObject({
+      policyId: "policy.point.contract",
+      pointId: "prompt.context.pre",
+      reasonCodes: ["policy.context_missing"],
+    });
+  });
+
   test("enforces canonical required context before invoking middleware", async () => {
     // Given
     const engine = PolicyEngine.create<TestContext>({}, compatibility);
