@@ -202,18 +202,16 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
         cancelRecord(record, "parent worker run cancelled");
         return snapshot(record);
       }
-      const runCompletion = agent
-        .run({
-          messages: [...options.parentMessages, { role: "user", content: input.prompt }],
-          traceContext: childTraceContext(policy.traceContext, childId),
-        })
-        .then((result) => {
-          return settleCompleted(options, policy, record, result);
-        })
-        .catch((error: unknown) => {
-          return settleFailed(options, policy, record, error);
-        });
-      if (record.status === "running") record.completion = runCompletion;
+      const runCompletion = Promise.resolve()
+        .then(() =>
+          agent.run({
+            messages: [...options.parentMessages, { role: "user", content: input.prompt }],
+            traceContext: childTraceContext(policy.traceContext, childId),
+          }),
+        )
+        .then((result) => settleCompleted(options, policy, record, result))
+        .catch((error: unknown) => settleFailed(options, policy, record, error));
+      record.completion = runCompletion;
       return snapshot(record);
     },
 
