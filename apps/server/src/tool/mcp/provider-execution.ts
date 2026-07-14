@@ -15,8 +15,8 @@ interface ExecuteMcpToolInput {
 
 interface ExecutionAudit {
   readonly traceId: string;
-  readonly sessionId?: string;
-  readonly runId?: string;
+  readonly sessionId: string;
+  readonly runId: string;
 }
 
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
@@ -26,7 +26,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
     call,
     tools: input.tools,
     isServerConnected: input.isServerConnected,
-    ...(context?.traceContext !== undefined && { traceContext: context.traceContext }),
+    traceContext: { ...(context?.traceContext ?? {}), ...audit },
   });
   const tool = guard.tool;
   if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
@@ -38,17 +38,11 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
     });
   }
 
-  const sessionId = audit.sessionId ?? "";
   const actionId = crypto.randomUUID();
-  const actor = buildActor(sessionId);
-  const eventAudit = {
-    traceId: audit.traceId,
-    sessionId,
-    ...(audit.runId !== undefined && { runId: audit.runId }),
-  };
+  const actor = buildActor(audit.sessionId);
 
   Bus.publish(PolicyEvent.ActionRequested, {
-    ...eventAudit,
+    ...audit,
     time: Date.now(),
     actionId,
     actor,
@@ -64,7 +58,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   const durationMs = Date.now() - startTime;
 
   Bus.publish(ToolExecution.Completed, {
-    ...eventAudit,
+    ...audit,
     time: Date.now(),
     actor,
     toolCallId: call.id,
@@ -104,21 +98,16 @@ function publishBlockedResult(input: {
     output: reason,
     isError: true,
   };
-  const sessionId = audit.sessionId;
-  if (sessionId) {
-    Bus.publish(PolicyEvent.ActionBlocked, {
-      traceId: audit.traceId,
-      sessionId,
-      ...(audit.runId !== undefined && { runId: audit.runId }),
-      time: Date.now(),
-      actionId: crypto.randomUUID(),
-      actor: buildActor(sessionId),
-      action: MCP_TOOL_ACTION,
-      resource: tool?.spec.name ?? call.tool,
-      verdict: "deny" as const,
-      reason,
-    });
-  }
+  Bus.publish(PolicyEvent.ActionBlocked, {
+    ...audit,
+    time: Date.now(),
+    actionId: crypto.randomUUID(),
+    actor: buildActor(audit.sessionId),
+    action: MCP_TOOL_ACTION,
+    resource: tool?.spec.name ?? call.tool,
+    verdict: "deny" as const,
+    reason,
+  });
   return result;
 }
 
@@ -130,14 +119,14 @@ function resolveExecutionAudit(
   if (traceContext !== undefined) {
     return {
       traceId: traceContext.traceId,
-      ...(traceContext.sessionId !== undefined && { sessionId: traceContext.sessionId }),
-      ...(traceContext.runId !== undefined && { runId: traceContext.runId }),
+      sessionId: traceContext.sessionId ?? crypto.randomUUID(),
+      runId: traceContext.runId ?? crypto.randomUUID(),
     };
   }
 
-  const sessionId = readSessionId(call);
   return {
     traceId: crypto.randomUUID(),
-    ...(sessionId !== undefined && { sessionId }),
+    sessionId: readSessionId(call) ?? crypto.randomUUID(),
+    runId: crypto.randomUUID(),
   };
 }

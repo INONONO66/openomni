@@ -43,16 +43,11 @@ export function createToolExecutor(
   const config = ctx.config ?? {};
   const postTimeoutSettleGraceMs =
     config.postTimeoutSettleGraceMs ?? DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS;
-  const { workspaceRoot } = config;
-  const runtime = config.runtime;
-
-  const eventBase = () => createEventBase(runtime);
+  const eventBase = () => createEventBase(config.runtime);
 
   return async (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
-    if (!tool) {
-      return createErrorResult(call, `Unknown tool: ${call.tool}`);
-    }
+    if (!tool) return createErrorResult(call, `Unknown tool: ${call.tool}`);
 
     if (context?.signal?.aborted) {
       return createErrorResult(call, "Tool execution aborted");
@@ -60,11 +55,9 @@ export function createToolExecutor(
 
     const originalName = tool.spec.name;
     const actionId = crypto.randomUUID();
-    const actor = buildActor(runtime);
-    let cleanupAbortSignal: (() => void) | undefined;
+    const actor = buildActor(config.runtime);
     const abortController = new AbortController();
     const linkedAbort = linkAbortSignals(abortController.signal, context?.signal);
-    cleanupAbortSignal = linkedAbort.cleanup;
     if (linkedAbort.signal.aborted) throw createAbortError();
 
     publishActionRequested({
@@ -75,7 +68,7 @@ export function createToolExecutor(
       input: call.input,
     });
 
-    const enrichedCall = injectImplicitInputs(call, tool, runtime);
+    const enrichedCall = injectImplicitInputs(call, tool, config.runtime);
     const dispatchedCall = resolveDispatchedCall(enrichedCall, tool);
     let policy: ToolRuntimePolicyMiddleware.PreToolResult | undefined;
     let shouldEvaluatePostTool = false;
@@ -142,7 +135,7 @@ export function createToolExecutor(
         riskTier: tool.riskTier,
         ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
         timeoutConfig: config.timeoutMs,
-        workspaceRoot,
+        workspaceRoot: config.workspaceRoot,
         lockOwnerId,
         signal: linkedAbort.signal,
       });
@@ -189,7 +182,8 @@ export function createToolExecutor(
         toolName: originalName,
       });
 
-      toolExecution = tool.execute(dispatchedCall, { signal: linkedAbort.signal });
+      const executionContext = { ...context, signal: linkedAbort.signal };
+      toolExecution = tool.execute(dispatchedCall, executionContext);
       const result = await enforceTimeoutAndAbort(
         toolExecution,
         policy.handle.timeoutMs,
@@ -265,13 +259,12 @@ export function createToolExecutor(
       });
       return result;
     } finally {
-      cleanupAbortSignal?.();
+      linkedAbort.cleanup();
       evaluatePostToolOnce();
     }
   };
 }
 
-// merged from executor-result.ts (#453 hygiene: sub-30-LOC single-importer)
 export function createErrorResult(call: Tool.Call, message: string): Tool.Result {
   return {
     id: crypto.randomUUID(),

@@ -97,4 +97,79 @@ describe("McpToolProvider canonical policy trace", () => {
       stop();
     }
   });
+
+  it("uses one fallback audit identity for a successful context-free call", async () => {
+    const provider = new McpToolProvider();
+    const { tool } = makeTool("search.query");
+    seedProvider(provider, [tool], ["search"]);
+    const { events, stop } = collectBusEvents();
+
+    try {
+      await provider.execute({
+        id: "call-mcp-fallback",
+        tool: "search_query",
+        input: { sessionId: "session-mcp-fallback" },
+      });
+
+      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      const traceId = auditEvents[0]?.payload.traceId;
+      const runId = auditEvents[0]?.payload.runId;
+      expect(typeof traceId).toBe("string");
+      expect(typeof runId).toBe("string");
+      expect(auditEvents.map((event) => event.name)).toEqual([
+        PolicyEvent.Evaluated.name,
+        PolicyEvent.DecisionComposed.name,
+        PolicyEvent.ActionRequested.name,
+        ToolExecution.Completed.name,
+        Mcp.ToolCompleted.name,
+      ]);
+      for (const event of auditEvents) {
+        expect(event.payload.traceId).toBe(traceId);
+        if (event.name !== Mcp.ToolCompleted.name) {
+          expect(event.payload).toMatchObject({
+            sessionId: "session-mcp-fallback",
+            runId,
+          });
+        }
+      }
+    } finally {
+      stop();
+    }
+  });
+
+  it("uses one fallback audit identity for a blocked context-free call", async () => {
+    const provider = new McpToolProvider();
+    const { tool, execute } = makeTool("search.query");
+    seedProvider(provider, [tool]);
+    const { events, stop } = collectBusEvents();
+
+    try {
+      await provider.execute({
+        id: "call-mcp-fallback-blocked",
+        tool: "search_query",
+        input: { sessionId: "session-mcp-fallback-blocked" },
+      });
+
+      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      const traceId = auditEvents[0]?.payload.traceId;
+      const runId = auditEvents[0]?.payload.runId;
+      expect(typeof traceId).toBe("string");
+      expect(typeof runId).toBe("string");
+      expect(auditEvents.map((event) => event.name)).toEqual([
+        PolicyEvent.Evaluated.name,
+        PolicyEvent.DecisionComposed.name,
+        PolicyEvent.ActionBlocked.name,
+      ]);
+      for (const event of auditEvents) {
+        expect(event.payload).toMatchObject({
+          traceId,
+          sessionId: "session-mcp-fallback-blocked",
+          runId,
+        });
+      }
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+  });
 });

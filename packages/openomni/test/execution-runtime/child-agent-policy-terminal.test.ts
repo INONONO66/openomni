@@ -133,6 +133,38 @@ describe("child agent delegation terminal policy", () => {
     ]);
   });
 
+  test("preserves cancellation completion when run synchronously aborts the parent", async () => {
+    const contexts: Array<Record<string, unknown>> = [];
+    const parentController = new AbortController();
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      parentSignal: parentController.signal,
+      awaitTimeoutMs: 25,
+      delegationPolicies: [observingPolicy(contexts)],
+      createAgent: () => ({
+        run: () => {
+          parentController.abort();
+          return new Promise<AgentResult>(() => undefined);
+        },
+      }),
+    });
+
+    const child = await runtime.spawn({ prompt: "abort synchronously in run" });
+    const [settled] = await runtime.await([child.id]);
+    runtime.cancel([child.id]);
+    await runtime.await([child.id]);
+
+    expect(settled).toMatchObject({ status: "cancelled" });
+    expect(postContexts(contexts)).toEqual([
+      expect.objectContaining({
+        workerRunId: child.id,
+        workerResult: { status: "cancelled", reason: "parent worker run cancelled" },
+      }),
+    ]);
+  });
+
   for (const cancellationSource of ["parentTools", "createAgent"] as const) {
     test(`settles cancellation once when ${cancellationSource} aborts the parent during spawn`, async () => {
       const contexts: Array<Record<string, unknown>> = [];
