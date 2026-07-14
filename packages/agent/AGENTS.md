@@ -49,7 +49,7 @@ const agent = ChatAgent.create({
 const result = await agent.run({
   messages: [{ role: "user", content: "Hello!" }],
 });
-// result.finishReason: 'stop' | 'tool-calls' | 'max-steps' | 'handoff'
+// result.finishReason: 'stop' | 'tool-calls' | 'max-steps' | 'handoff' | 'stalled'
 // result.text / result.steps / result.usage
 ```
 
@@ -89,7 +89,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction, idle nudge).
 - **Builtins** (resolved by id through `defaultRegistry()`; stamped plans from the dispatch gate (#479) reference these ids):
-  - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; returns deny with `tool.skip_invocation` / `run.abort` / `tool.require_approval`
+  - `builtin:tool-permission` (`tool-guard.ts`, fail-closed) — enforces `Policy.Permission` and `InputRule`; denial returns `run.abort` plus `audit.annotate`, while approval requirements return pending with `tool.require_approval`
   - `builtin:budget-reassurance` / `builtin:budget-warning` — inject reassurance/warning system messages as budget consumption climbs
   - `builtin:idle-nudge` — detects idle ≥ threshold (default 60s), injects a nudge; after `maxNudges` (default 3) aborts with reason `stalled`
   - `builtin:compaction` — triggers `InMemoryCompactor.compact()` when the token threshold is exceeded
