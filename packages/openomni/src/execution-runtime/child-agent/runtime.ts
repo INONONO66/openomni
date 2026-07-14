@@ -2,12 +2,9 @@ import type { ToolSelection, TraceContext } from "@openomni/protocol";
 import { buildToolCatalog, resolveToolSelection } from "../tool/catalog.js";
 import { createToolExecutor } from "../tool/executor.js";
 import type { NativeTool } from "../tool/types.js";
-import {
-  publishChildAgentCancelled,
-  publishChildAgentCompleted,
-  publishChildAgentFailed,
-  publishChildAgentStarted,
-} from "./events.js";
+import { publishChildAgentStarted } from "./events.js";
+import { createDelegationPolicyRuntime } from "./policy.js";
+import { settleCancelled, settleCompleted, settleFailed } from "./settlement.js";
 import type { ChildAgentRuntime, ChildAgentRuntimeOptions, ChildRecord } from "./types.js";
 import {
   DEFAULT_AWAIT_TIMEOUT_MS,
@@ -52,29 +49,6 @@ function childToolRuntime(
   };
 }
 
-function enqueueCompletion(options: ChildAgentRuntimeOptions, record: ChildRecord): void {
-  const parentRunId = options.traceContext?.runId;
-  if (!record.notifyOnComplete || !options.injectionQueue || !parentRunId) return;
-  const child = snapshot(record);
-  const output =
-    child.status === "completed"
-      ? (child.output ?? "")
-      : "Child agent finished with status failed. Await or inspect the child for details.";
-  options.injectionQueue.enqueue(parentRunId, {
-    messageId: crypto.randomUUID(),
-    output: `[child_agent ${record.id} ${child.status}]\n${output}`,
-    injectToHistory: true,
-    timestamp: Date.now(),
-  });
-}
-
-function cancelRecord(options: ChildAgentRuntimeOptions, record: ChildRecord, reason: Error): void {
-  if (record.status !== "running") return;
-  record.status = "cancelled";
-  record.controller.abort(reason);
-  publishChildAgentCancelled(options, record);
-}
-
 function selectChildTools(
   source: ChildAgentRuntimeOptions["parentTools"],
   selection: ToolSelection.Selection | undefined,
@@ -114,19 +88,34 @@ async function waitForCompletion(
 
 export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): ChildAgentRuntime {
   const records = new Map<string, ChildRecord>();
+  const policy = createDelegationPolicyRuntime(options);
   const maxChildren = options.maxChildren ?? DEFAULT_MAX_CHILDREN;
   const awaitTimeoutMs = options.awaitTimeoutMs ?? DEFAULT_AWAIT_TIMEOUT_MS;
   const maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
 
+  const cancelRecord = (record: ChildRecord, reason: string): void => {
+    if (record.status !== "running") return;
+    record.completion = settleCancelled(options, policy, record, new Error(reason));
+  };
+
   const cancelRunningChildren = () => {
     for (const record of records.values()) {
-      cancelRecord(options, record, new Error("parent worker run cancelled"));
+      cancelRecord(record, "parent worker run cancelled");
     }
   };
   options.parentSignal?.addEventListener("abort", cancelRunningChildren, { once: true });
 
   return {
-    spawn(input) {
+    async spawn(input) {
+      if (options.parentSignal?.aborted) {
+        throw new Error("parent worker run cancelled");
+      }
+      const childId = crypto.randomUUID();
+      await policy.dispatchPre(childId, {
+        name: "child_agent",
+        model: options.model,
+        prompt: input.prompt,
+      });
       if (options.parentSignal?.aborted) {
         throw new Error("parent worker run cancelled");
       }
@@ -136,37 +125,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
         if (activeChildren >= maxChildren)
           throw new Error(`child agent limit reached: ${maxChildren}`);
       }
-      const childId = crypto.randomUUID();
       const controller = new AbortController();
-      const abortFromParent = () => controller.abort(new Error("parent worker run cancelled"));
-      options.parentSignal?.addEventListener("abort", abortFromParent, { once: true });
-      const childTools = selectChildTools(options.parentTools, input.tools);
-      const toolExecutor =
-        childTools.length > 0
-          ? createToolExecutor({
-              tools: childTools,
-              config: {
-                workspaceRoot: options.workspaceRoot,
-                runtime: childToolRuntime(options.traceContext, childId, options.workspaceRoot),
-              },
-            })
-          : undefined;
-      const agent = options.createAgent({
-        model: options.model,
-        systemPrompt: options.systemPrompt,
-        signal: controller.signal,
-        auth: options.auth,
-        allowAuthFallback: options.allowAuthFallback,
-        ...(options.budget ? { budget: options.budget } : {}),
-        ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
-        ...(options.middleware ? { middleware: options.middleware } : {}),
-        tools: childTools.map((tool) => ({
-          ...tool.spec,
-          name: tool.spec.name.replace(/\./g, "_"),
-        })),
-        ...(toolExecutor ? { toolExecutor } : {}),
-      });
-
       const record: ChildRecord = {
         id: childId,
         prompt: input.prompt,
@@ -176,29 +135,66 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
         notifyOnComplete: input.notifyOnComplete === true,
         completion: Promise.resolve(),
       };
+      const abortDuringConstruction = () => {
+        controller.abort(new Error("parent worker run cancelled"));
+      };
+      options.parentSignal?.addEventListener("abort", abortDuringConstruction, { once: true });
+
+      let agent: ReturnType<ChildAgentRuntimeOptions["createAgent"]> | undefined;
+      try {
+        const childTools = selectChildTools(options.parentTools, input.tools);
+        if (!controller.signal.aborted) {
+          const toolExecutor =
+            childTools.length > 0
+              ? createToolExecutor({
+                  tools: childTools,
+                  config: {
+                    workspaceRoot: options.workspaceRoot,
+                    runtime: childToolRuntime(policy.traceContext, childId, options.workspaceRoot),
+                  },
+                })
+              : undefined;
+          agent = options.createAgent({
+            model: options.model,
+            systemPrompt: options.systemPrompt,
+            signal: controller.signal,
+            auth: options.auth,
+            allowAuthFallback: options.allowAuthFallback,
+            ...(options.budget ? { budget: options.budget } : {}),
+            ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
+            ...(options.middleware ? { middleware: options.middleware } : {}),
+            tools: childTools.map((tool) => ({
+              ...tool.spec,
+              name: tool.spec.name.replace(/\./g, "_"),
+            })),
+            ...(toolExecutor ? { toolExecutor } : {}),
+          });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
+          throw error;
+        }
+      }
+
       publishChildAgentStarted(options, record);
+      records.set(childId, record);
+      options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
+      if (controller.signal.aborted || agent === undefined) {
+        cancelRecord(record, "parent worker run cancelled");
+        return snapshot(record);
+      }
       record.completion = agent
         .run({
           messages: [...options.parentMessages, { role: "user", content: input.prompt }],
-          traceContext: childTraceContext(options.traceContext, childId),
+          traceContext: childTraceContext(policy.traceContext, childId),
         })
         .then((result) => {
-          options.parentSignal?.removeEventListener("abort", abortFromParent);
-          if (record.status === "cancelled") return;
-          record.result = result;
-          record.status = "completed";
-          publishChildAgentCompleted(options, record);
-          enqueueCompletion(options, record);
+          return settleCompleted(options, policy, record, result);
         })
         .catch((error: unknown) => {
-          options.parentSignal?.removeEventListener("abort", abortFromParent);
-          if (record.status === "cancelled") return;
-          record.error = error instanceof Error ? error.message : String(error);
-          record.status = "failed";
-          publishChildAgentFailed(options, record);
-          enqueueCompletion(options, record);
+          return settleFailed(options, policy, record, error);
         });
-      records.set(childId, record);
       return snapshot(record);
     },
 
@@ -215,7 +211,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
     cancel(ids) {
       const selected = getRecords(records, ids);
       for (const record of selected) {
-        cancelRecord(options, record, new Error("child agent cancelled"));
+        cancelRecord(record, "child agent cancelled");
       }
       return selected.map(snapshot);
     },
@@ -223,7 +219,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
     cancelAll() {
       const selected = [...records.values()].filter((record) => record.status === "running");
       for (const record of selected) {
-        cancelRecord(options, record, new Error("parent worker run finished"));
+        cancelRecord(record, "parent worker run finished");
       }
       return selected.map(snapshot);
     },

@@ -59,6 +59,19 @@ export interface PolicyEngineConfig {
   readonly auditEmit?: AuditEmit;
 }
 
+export interface PolicyEngineCompatibilityGeneric<TCtx extends GenericPolicyContext> {
+  readonly includeLegacyAtPoint?: boolean;
+  readonly resolvePointForLegacyDispatch?: (
+    timing: Policy.Timing,
+    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+  ) => PolicyPointId | undefined;
+  readonly invokeCanonicalAtLegacyDispatch?: (
+    registration: CanonicalPolicyRegistrationGeneric<TCtx>,
+    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+    pointId: PolicyPointId,
+  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+}
+
 export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   name: string;
   timing: Policy.Timing | Policy.Timing[];

@@ -22,12 +22,15 @@ import type {
   DispatchPointContextGeneric,
   GenericPolicyContext,
   PolicyEngineConfig,
+  PolicyEngineCompatibilityGeneric,
+  PolicyEngineRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   PolicyPointId,
 } from "./types";
 
 export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   options: PolicyEngineConfig = {},
+  compatibility: PolicyEngineCompatibilityGeneric<TCtx> = {},
 ): PolicyEngineInstanceGeneric<TCtx> {
   const registrations = createPolicyRegistrationStore<TCtx>();
 
@@ -35,11 +38,18 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     timing: Policy.Timing,
     ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
   ): Promise<Policy.PolicyDecision> {
-    const selected = registrations.selectLegacy(timing, ctx.agentType);
     const fullCtx = immutableSnapshot({
       ...ctx,
       timing,
     });
+    const pointId =
+      compatibility.invokeCanonicalAtLegacyDispatch === undefined
+        ? undefined
+        : compatibility.resolvePointForLegacyDispatch?.(timing, fullCtx);
+    const selected =
+      pointId === undefined
+        ? registrations.selectLegacy(timing, fullCtx.agentType)
+        : registrations.selectLegacyCompatible(timing, fullCtx.agentType, pointId);
     const decisions: Policy.PolicyDecision[] = [];
 
     function composeAndPublish(): Policy.PolicyDecision {
@@ -58,7 +68,17 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       let decision: Policy.PolicyDecision;
       const startTime = Date.now();
       try {
-        decision = await reg.fn(fullCtx);
+        if ("kind" in reg) {
+          if (
+            pointId === undefined ||
+            compatibility.invokeCanonicalAtLegacyDispatch === undefined
+          ) {
+            continue;
+          }
+          decision = await compatibility.invokeCanonicalAtLegacyDispatch(reg, fullCtx, pointId);
+        } else {
+          decision = await reg.fn(fullCtx);
+        }
       } catch (err) {
         const durationMs = Date.now() - startTime;
         const failPolicy = reg.failPolicy ?? defaultFailPolicy(timing, ctx.resourceDescriptor);
@@ -131,7 +151,9 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
       return composeAndPublish();
     }
 
-    const selected = registrations.selectPoint(pointId, fullCtx.agentType);
+    const selected = compatibility.includeLegacyAtPoint
+      ? registrations.selectPointCompatible(pointId, fullCtx.agentType)
+      : registrations.selectPoint(pointId, fullCtx.agentType);
     if (selected.length === 0) {
       const decision = PolicyDecision.allow({ policyId: COMPOSED_POLICY_ID });
       publishComposedDecision(options, timing, fullCtx, decision);
@@ -158,7 +180,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
         engineDecision === undefined
           ? normalizePointDecision(middlewareDecision, reg, pointId, durationMs)
           : { decision: engineDecision };
-      const declaredEffects = reg.effectCapabilities[pointId] ?? [];
+      const declaredEffects = declaredEffectsFor(reg, pointId, contract.allowedEffects);
       const undeclared = normalized.parsed?.effects.find(
         (effect) => !declaredEffects.some((declared) => declared === effect.type),
       );
@@ -182,4 +204,12 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     dispatch,
     dispatchPoint,
   };
+}
+
+function declaredEffectsFor<TCtx extends GenericPolicyContext>(
+  registration: PolicyEngineRegistrationGeneric<TCtx>,
+  pointId: PolicyPointId,
+  legacyEffects: readonly Policy.PolicyEffectType[],
+): readonly Policy.PolicyEffectType[] {
+  return "kind" in registration ? (registration.effectCapabilities[pointId] ?? []) : legacyEffects;
 }

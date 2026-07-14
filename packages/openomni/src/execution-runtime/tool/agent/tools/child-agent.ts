@@ -125,7 +125,7 @@ export function createChildAgentTool(runtime: ChildAgentRuntime) {
       try {
         switch (input.action) {
           case "spawn": {
-            const child = runtime.spawn({
+            const child = await runtime.spawn({
               prompt: input.prompt,
               tools: input.tools,
               ...(input.notifyOnComplete !== undefined

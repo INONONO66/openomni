@@ -1,4 +1,8 @@
-import { PolicyEngine, type PolicyRegistration } from "@openomni/agent";
+import {
+  PolicyEngine,
+  type CanonicalPolicyRegistrationGeneric,
+  type GenericPolicyContext,
+} from "@openomni/policy";
 import {
   Policy,
   PolicyDecision,
@@ -6,16 +10,16 @@ import {
   type Tool,
   type TraceContext,
 } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import type { NativeTool } from "@openomni/openomni";
 
-const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+type McpPolicyContext = GenericPolicyContext;
 
 interface PrefixGuardState {
   readonly call: Tool.Call;
-  readonly tools: readonly NativeTool[];
+  readonly tool?: NativeTool;
+  readonly serverName?: string;
   readonly isServerConnected: (serverName: string) => boolean;
-  tool?: NativeTool;
-  serverName?: string;
 }
 
 interface PreToolUseContext {
@@ -81,13 +85,13 @@ function resolveTool(tools: readonly NativeTool[], name: string): NativeTool | u
 }
 
 function createMcpDescriptor(
-  call: Tool.Call,
+  attemptedToolName: string,
   tool: NativeTool | undefined,
+  serverName: string | undefined,
 ): RuntimeResource.Descriptor {
   if (tool?.descriptor) return tool.descriptor;
 
-  const toolName = tool?.spec.name ?? call.tool;
-  const serverName = toolName.includes(".") ? toolName.slice(0, toolName.indexOf(".")) : undefined;
+  const toolName = tool?.spec.name ?? attemptedToolName;
   const labels = tool?.spec.labels ?? tool?.labels ?? ["source.mcp"];
   return {
     id: `tool:mcp:${toolName}`,
@@ -99,106 +103,126 @@ function createMcpDescriptor(
   };
 }
 
-function createMcpPrefixGuard(state: PrefixGuardState): PolicyRegistration {
+function resolveMcpServerId(tool: NativeTool): string | undefined {
+  const descriptorSource = tool.descriptor?.source;
+  if (descriptorSource?.type === "mcp" && descriptorSource.serverId) {
+    return descriptorSource.serverId;
+  }
+
+  const dotIndex = tool.spec.name.indexOf(".");
+  return dotIndex > 0 ? tool.spec.name.slice(0, dotIndex) : undefined;
+}
+
+function resolveAttemptedServerId(toolName: string): string | undefined {
+  const dottedName = toolName.replace(/_/g, ".");
+  const dotIndex = dottedName.indexOf(".");
+  return dotIndex > 0 ? dottedName.slice(0, dotIndex) : undefined;
+}
+
+function createMcpPrefixGuard(
+  state: PrefixGuardState,
+): CanonicalPolicyRegistrationGeneric<McpPolicyContext> {
   return {
     ...McpPrefixGuardMiddleware.Definition,
-    failPolicy: "fail-closed",
     fn: () => {
-      const tool = resolveTool(state.tools, state.call.tool);
-      if (!tool) {
+      if (!state.tool) {
         return evaluatePrefixGuard({
           call: state.call,
           resource: state.call.tool,
           allowed: false,
           allowReason: "mcp tool prefix and server connection validated",
           denyReason: `Unknown tool: ${state.call.tool}`,
+          serverName: state.serverName,
         });
       }
 
-      state.tool = tool;
-      const dotIndex = tool.spec.name.indexOf(".");
-      if (dotIndex === -1) {
+      if (state.serverName === undefined) {
         return evaluatePrefixGuard({
           call: state.call,
-          resource: tool.spec.name,
+          resource: state.tool.spec.name,
           allowed: false,
           allowReason: "mcp tool prefix and server connection validated",
-          denyReason: `MCP tool name must be prefixed with server name: ${tool.spec.name}`,
+          denyReason: `MCP tool name must be prefixed with server name: ${state.tool.spec.name}`,
         });
       }
 
-      const serverName = tool.spec.name.slice(0, dotIndex);
-      state.serverName = serverName;
-      if (!state.isServerConnected(serverName)) {
+      if (!state.isServerConnected(state.serverName)) {
         return evaluatePrefixGuard({
           call: state.call,
-          resource: tool.spec.name,
+          resource: state.tool.spec.name,
           allowed: false,
           allowReason: "mcp tool prefix and server connection validated",
-          denyReason: `MCP server not found: ${serverName}`,
-          serverName,
+          denyReason: `MCP server not found: ${state.serverName}`,
+          serverName: state.serverName,
         });
       }
 
       return evaluatePrefixGuard({
         call: state.call,
-        resource: tool.spec.name,
+        resource: state.tool.spec.name,
         allowed: true,
         allowReason: "mcp tool prefix and server connection validated",
-        denyReason: `MCP server not found: ${serverName}`,
-        serverName,
+        denyReason: `MCP server not found: ${state.serverName}`,
+        serverName: state.serverName,
       });
     },
   };
 }
 
-function registrations(state: PrefixGuardState): PolicyRegistration[] {
-  return [createMcpPrefixGuard(state)];
-}
-
 export namespace McpPrefixGuardMiddleware {
   export const Definition = {
+    kind: "point",
     name: "mcp-prefix-guard",
-    timing: "invoke.prepare",
+    pointIds: ["tool.mcp.pre"],
+    effectCapabilities: {
+      "tool.mcp.pre": ["tool.skip_invocation", "audit.annotate"],
+    },
     priority: 0,
     failPolicy: "fail-closed",
-  } as const satisfies Policy.Definition;
+  } as const satisfies Omit<CanonicalPolicyRegistrationGeneric<McpPolicyContext>, "fn">;
 
   export async function evaluatePreToolUse(ctx: PreToolUseContext): Promise<PreToolUseResult> {
+    const tool = resolveTool(ctx.tools, ctx.call.tool);
+    const serverName =
+      tool === undefined ? resolveAttemptedServerId(ctx.call.tool) : resolveMcpServerId(tool);
+
     const state: PrefixGuardState = {
       call: ctx.call,
-      tools: ctx.tools,
+      ...(tool !== undefined && { tool }),
+      ...(serverName !== undefined && { serverName }),
       isServerConnected: ctx.isServerConnected,
     };
-    const engine = PolicyEngine.create({
-      traceContext: ctx.traceContext,
+    const sessionId = ctx.traceContext?.sessionId ?? crypto.randomUUID();
+    const runId = ctx.traceContext?.runId ?? crypto.randomUUID();
+    const traceContext: TraceContext.Type = {
+      ...(ctx.traceContext ?? {}),
+      traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
+      sessionId,
+      runId,
+    };
+    const engine = PolicyEngine.create<McpPolicyContext>({
+      traceContext,
       onDecision: ctx.onDecision,
-      audit: false,
+      auditEmit: Bus.publish,
     });
+    engine.register(createMcpPrefixGuard(state));
 
-    for (const registration of registrations(state)) {
-      engine.register(registration);
-    }
-
-    const tool = resolveTool(ctx.tools, ctx.call.tool);
-    const verdict = await engine.dispatch("invoke.prepare", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 0,
+    const verdict = await engine.dispatchPoint("tool.mcp.pre", {
+      sessionId,
+      runId,
+      toolId: tool?.spec.name ?? ctx.call.tool,
+      ...(serverName !== undefined && { mcpServerId: serverName }),
       toolName: ctx.call.tool,
       toolCallId: ctx.call.id,
       toolInput: ctx.call.input,
-      traceContext: ctx.traceContext,
-      resourceDescriptor: createMcpDescriptor(ctx.call, tool),
+      traceContext,
+      resourceDescriptor: createMcpDescriptor(ctx.call.tool, tool, serverName),
     });
 
     return {
       verdict,
-      ...(state.tool !== undefined && { tool: state.tool }),
-      ...(state.serverName !== undefined && { serverName: state.serverName }),
+      ...(tool !== undefined && { tool }),
+      ...(serverName !== undefined && { serverName }),
     };
   }
 }

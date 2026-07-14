@@ -26,16 +26,20 @@ export async function* streamAgent(
   let lastError = "";
 
   const trace = input.traceContext ?? TraceContext.empty();
+  const sessionId = trace.sessionId ?? crypto.randomUUID();
+  const runId = trace.runId ?? crypto.randomUUID();
+  const resolvedTrace = { ...trace, sessionId, runId };
   const agentBase = {
     traceId: trace.traceId,
-    sessionId: trace.sessionId ?? "",
-    runId: trace.runId,
+    sessionId,
+    runId,
+    actorId: trace.agentName ?? runId,
   };
-  emitRunStarted(trace, config.model.id);
+  emitRunStarted(resolvedTrace, config.model.id);
   assertToolExecutor(config);
 
   while (attempt <= retryPolicy.maxAttempts) {
-    const state = createRunState(input);
+    const state = createRunState({ ...input, traceContext: resolvedTrace });
     const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
@@ -43,7 +47,7 @@ export async function* streamAgent(
       );
       const configuredToolChoice = resolveToolChoice(config);
 
-      const preRunEvent = await dispatchPreRun(state, engine, config);
+      const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
       if (preRunEvent) {
         yield preRunEvent;
         return;
@@ -63,7 +67,7 @@ export async function* streamAgent(
           engine,
           providerModel,
           configuredToolChoice,
-          trace,
+          resolvedTrace,
           agentBase,
           sink,
         );
@@ -75,7 +79,7 @@ export async function* streamAgent(
         if (turnResult.budgetWarningEvent) yield turnResult.budgetWarningEvent;
 
         const runLlm = config.llm?.run ?? llmRun;
-        const modelRequestEvent = await dispatchModelRequest(state, engine, config);
+        const modelRequestEvent = await dispatchModelRequest(state, engine, config, agentBase);
         if (modelRequestEvent) {
           yield modelRequestEvent;
           return;
@@ -85,7 +89,10 @@ export async function* streamAgent(
           state,
           engine,
           config,
-          outcome.type,
+          {
+            outcome,
+            responseTokens: turnResult.turn.turnUsage.outputTokens,
+          },
           agentBase,
         );
         if (modelResponseEvent) {

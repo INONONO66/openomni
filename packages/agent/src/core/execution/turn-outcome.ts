@@ -17,7 +17,6 @@ import {
   createGuardCompleteEvent,
   createRunCompleteEvent,
   createRunErrorEvent,
-  errorMessage,
 } from "./run-result";
 import {
   advanceRunContinuation,
@@ -73,10 +72,16 @@ export async function* handleStop(
     return "complete";
   }
 
-  const postTurnDecision = await engine.dispatch(
-    "turn.finish",
-    buildLifecyclePolicyContext(state, config, {
+  const postTurnDecision = await engine.dispatchPoint(
+    "run.turn.post",
+    buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion: true,
+      turnIndex: state.turnIndex,
+      turnResult: {
+        type: "stop",
+        text: state.lastAssistantText,
+        usage: turn.turnUsage,
+      },
     }),
   );
 
@@ -91,7 +96,7 @@ export async function* handleStop(
     try {
       PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision);
     } catch (error) {
-      const reason = errorMessage(error);
+      const reason = error instanceof Error ? error.message : String(error);
       publishDenyDiagnostic(
         "turn.finish",
         PolicyDecision.deny({
@@ -184,10 +189,18 @@ export async function* handleError(
   retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
 ): AsyncGenerator<AgentEvent, ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const onErrorDecision = await engine.dispatch(
-    "error",
-    buildLifecyclePolicyContext(state, config, {
-      toolInput: { error: normalizedError },
+  const onErrorDecision = await engine.dispatchPoint(
+    "run.error.error",
+    buildLifecyclePolicyContext(state, config, agentBase, {
+      toolInput: {
+        error: {
+          name: normalizedError.name,
+          message: normalizedError.message,
+          ...(normalizedError.stack === undefined ? {} : { stack: normalizedError.stack }),
+        },
+      },
+      errorCode: normalizedError.name || "Error",
+      errorPhase: "agent.run",
     }),
   );
 

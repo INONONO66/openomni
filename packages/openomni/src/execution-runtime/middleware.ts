@@ -6,7 +6,7 @@ import {
   createToolPermissionPolicy,
   defaultRegistry,
 } from "@openomni/agent";
-import type { ChatAgentConfig, PolicyRegistration } from "@openomni/agent";
+import type { ChatAgentConfig, PolicyEngineRegistration } from "@openomni/agent";
 import { Policy } from "@openomni/protocol";
 import type { Message } from "@openomni/protocol";
 import type { InjectionQueue } from "./injection-queue.js";
@@ -35,7 +35,7 @@ export interface WorkerMiddlewareConfig {
 const FAIL_CLOSED_TOOL_PERMISSION: Policy.Permission = { action: "tool.call", denylist: ["*"] };
 const DEFAULT_TOOL_PERMISSION: Policy.Permission = { action: "tool.call" };
 
-export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyRegistration[] {
+export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyEngineRegistration[] {
   const policyPlanMiddleware = config.policyPlan
     ? resolvePoliciesFromPlan(hydrateToolPermissionConfig(config.policyPlan, config))
     : undefined;
@@ -57,15 +57,15 @@ export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyReg
 
 function shouldAppendIdleNudge(
   config: WorkerMiddlewareConfig,
-  policyPlanMiddleware: PolicyRegistration[] | undefined,
+  policyPlanMiddleware: PolicyEngineRegistration[] | undefined,
 ): boolean {
   if (config.includeIdle === false) return false;
   return !policyPlanMiddleware?.some((registration) => registration.name === "builtin:idle-nudge");
 }
 
-export function buildAgentLifecycleMiddleware(
+function buildAgentLifecycleMiddleware(
   compaction: WorkerMiddlewareConfig["compaction"],
-): PolicyRegistration[] {
+): PolicyEngineRegistration[] {
   return [
     createBudgetReassurancePolicy(),
     createBudgetWarningPolicy(),
@@ -73,15 +73,17 @@ export function buildAgentLifecycleMiddleware(
   ];
 }
 
-export function registrationsAbsentFrom(
-  registrations: PolicyRegistration[],
-  existing: PolicyRegistration[],
-): PolicyRegistration[] {
+function registrationsAbsentFrom(
+  registrations: PolicyEngineRegistration[],
+  existing: PolicyEngineRegistration[],
+): PolicyEngineRegistration[] {
   const existingNames = new Set(existing.map((registration) => registration.name));
   return registrations.filter((registration) => !existingNames.has(registration.name));
 }
 
-function buildLegacyPermissionMiddleware(config: WorkerMiddlewareConfig): PolicyRegistration[] {
+function buildLegacyPermissionMiddleware(
+  config: WorkerMiddlewareConfig,
+): PolicyEngineRegistration[] {
   return [
     createToolPermissionPolicy({
       permission: config.permissions ?? DEFAULT_TOOL_PERMISSION,
@@ -91,30 +93,9 @@ function buildLegacyPermissionMiddleware(config: WorkerMiddlewareConfig): Policy
   ];
 }
 
-function resolvePoliciesFromPlan(plan: Policy.PolicyPlan): PolicyRegistration[] {
+function resolvePoliciesFromPlan(plan: Policy.PolicyPlan): PolicyEngineRegistration[] {
   const registry = defaultRegistry();
   return registry.resolve(plan, {});
-}
-
-export function resolvePolicyPlanToolPermission(
-  plan: Policy.PolicyPlan | undefined,
-  fallbackPermission: Policy.Permission | undefined,
-): Policy.Permission | undefined {
-  if (!plan) return fallbackPermission;
-  const toolPermissionPolicy = plan.policies.find(
-    (policy) => policy.id === "builtin:tool-permission",
-  );
-  if (!toolPermissionPolicy) return undefined;
-  return resolveToolPermissionConfig(toolPermissionPolicy.config ?? {}, fallbackPermission);
-}
-
-function resolveToolPermissionConfig(
-  config: Record<string, unknown>,
-  fallbackPermission: Policy.Permission | undefined,
-): Policy.Permission {
-  if (!("permission" in config)) return fallbackPermission ?? DEFAULT_TOOL_PERMISSION;
-  const parsed = Policy.Permission.safeParse(config.permission);
-  return parsed.success ? parsed.data : FAIL_CLOSED_TOOL_PERMISSION;
 }
 
 function hydrateToolPermissionConfig(

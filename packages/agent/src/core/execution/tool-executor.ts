@@ -5,6 +5,7 @@ import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import { effectOf, effectsOf, matchesToolPattern } from "./policy-effects";
 import { summarizeInput } from "./shared";
+import { dispatchToolPost, dispatchToolPre } from "./tool-policy-dispatch";
 
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];
@@ -25,42 +26,12 @@ export interface ToolExecutorOptions {
     usage?: TokenUsage;
   };
   getPolicyToolName?: (toolName: string) => string | undefined;
-  getToolLabels?: (toolName: string) => string[] | undefined;
+  getToolLabels?: (toolName: string) => readonly string[] | undefined;
+  getToolDescriptor?: (toolName: string) => RuntimeResource.Descriptor | undefined;
   onToolComplete?: (durationMs: number) => void;
   onDecision?: (timing: Policy.Timing, decision: Policy.PolicyDecision) => void | Promise<void>;
   traceContext?: TraceContext.Type;
   signal?: AbortSignal;
-}
-
-function sourceFromLabels(
-  labels: readonly string[] | undefined,
-): RuntimeResource.Source | undefined {
-  const sourceLabel = labels?.find(
-    (label) => label.startsWith("source.") || label.startsWith("source:"),
-  );
-  const sourceType = sourceLabel?.replace(/^source[.:]/, "");
-  if (sourceType === "mcp") return { type: "mcp" };
-  if (sourceType === "skill-mcp") return { type: "skill-mcp" };
-  if (sourceType === "agent") return { type: "agent" };
-  if (sourceType === "server") return { type: "server" };
-  if (sourceType === "system") return { type: "system" };
-  return undefined;
-}
-
-function toolDescriptor(
-  toolName: string,
-  labels: readonly string[] | undefined,
-): RuntimeResource.Descriptor {
-  const source = sourceFromLabels(labels);
-  const descriptor: RuntimeResource.Descriptor = {
-    id: source ? `tool:${source.type}:${toolName}` : `tool:${toolName}`,
-    kind: "tool",
-    labels: labels ? [...labels] : [],
-    capabilities: [],
-    effects: [],
-  };
-  if (source !== undefined) descriptor.source = source;
-  return descriptor;
 }
 
 export function createToolExecutor(
@@ -72,16 +43,19 @@ export function createToolExecutor(
     getContext,
     getPolicyToolName,
     getToolLabels,
+    getToolDescriptor,
     onToolComplete,
     onDecision,
     traceContext,
     signal,
   } = options;
   const traceId = traceContext?.traceId ?? crypto.randomUUID();
-  const sessionId = traceContext?.sessionId ?? "";
+  const eventSessionId = traceContext?.sessionId ?? "";
+  const policySessionId = traceContext?.sessionId ?? crypto.randomUUID();
+  const policyRunId = traceContext?.runId ?? crypto.randomUUID();
   const eventBase = {
     traceId,
-    sessionId,
+    sessionId: eventSessionId,
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
     ...(traceContext?.agentName !== undefined && { actor: { agentName: traceContext.agentName } }),
   };
@@ -106,7 +80,8 @@ export function createToolExecutor(
         publishDecisionObserverError(timing, decision, err);
       });
     } catch (err) {
-      publishDecisionObserverError(timing, decision, err);
+      const error = err instanceof Error ? err : String(err);
+      publishDecisionObserverError(timing, decision, error);
     }
   }
 
@@ -140,19 +115,23 @@ export function createToolExecutor(
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const toolLabels = getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName);
-    const preDecision = await engine.dispatch("invoke.prepare", {
+    const toolDescriptor = getToolDescriptor?.(call.tool) ?? getToolDescriptor?.(policyToolName);
+    const policyContext = {
+      sessionId: policySessionId,
+      runId: policyRunId,
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
       usage,
-      isCompletion: false,
-      continuationCount: 0,
-      toolName: policyToolName,
-      toolCallId: call.id,
+    };
+    const preDecision = await dispatchToolPre(
+      engine,
+      policyContext,
+      policyToolName,
+      call,
       toolLabels,
-      toolInput: call.input,
-      resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
-    });
+      toolDescriptor,
+    );
 
     recordDecision("invoke.prepare", preDecision);
 
@@ -233,19 +212,15 @@ export function createToolExecutor(
       time: Date.now(),
     });
 
-    const postDecision = await engine.dispatch("invoke.result", {
-      steps: ctx?.steps ?? [],
-      turnCount: ctx?.turnCount ?? 0,
-      elapsedMs: ctx?.elapsedMs ?? 0,
-      usage,
-      isCompletion: false,
-      continuationCount: 0,
-      toolName: policyToolName,
-      toolCallId: call.id,
+    const postDecision = await dispatchToolPost(
+      engine,
+      policyContext,
+      policyToolName,
+      call,
+      result,
       toolLabels,
-      toolOutput: result.output,
-      resourceDescriptor: toolDescriptor(policyToolName, toolLabels),
-    });
+      toolDescriptor,
+    );
 
     recordDecision("invoke.result", postDecision);
     const postAbort = effectOf(postDecision, "run.abort");

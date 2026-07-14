@@ -5,4 +5,5 @@ export type {
   ChildAgentRuntimeOptions,
   ChildAgentSnapshot,
   ChildAgentSpawnInput,
+  DelegationPolicyRegistration,
 } from "./types.js";

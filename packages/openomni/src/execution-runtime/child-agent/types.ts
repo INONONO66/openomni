@@ -4,7 +4,8 @@ import type {
   ChatAgentInput,
   ChatAgentInstance,
 } from "@openomni/agent";
-import type { Model, ToolSelection, TraceContext } from "@openomni/protocol";
+import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "@openomni/policy";
+import type { Model, Policy, ToolSelection, TraceContext } from "@openomni/protocol";
 import type { InjectionQueue } from "../injection-queue.js";
 import type { NativeTool } from "../tool/types.js";
 
@@ -13,6 +14,37 @@ export type ChildStatus = "running" | "completed" | "failed" | "cancelled";
 export const DEFAULT_MAX_CHILDREN = 4;
 export const DEFAULT_AWAIT_TIMEOUT_MS = 60_000;
 export const DEFAULT_MAX_OUTPUT_CHARS = 4_000;
+
+export type DelegationPolicyPointId = "delegation.worker.pre" | "delegation.worker.post";
+
+export type ChildWorkerProfile = {
+  readonly name: "child_agent";
+  readonly model: Model.Ref;
+  readonly prompt: string;
+};
+
+export type ChildWorkerResult =
+  | { readonly status: "completed"; readonly result: AgentResult }
+  | { readonly status: "failed"; readonly error: string }
+  | { readonly status: "cancelled"; readonly reason: string };
+
+export interface DelegationPolicyContext extends GenericPolicyContext {
+  readonly sessionId?: string;
+  readonly runId?: string;
+  readonly workerRunId?: string;
+  readonly workerProfile?: ChildWorkerProfile;
+  readonly workerResult?: ChildWorkerResult;
+}
+
+export type DelegationPolicyRegistration = Omit<
+  CanonicalPolicyRegistrationGeneric<DelegationPolicyContext>,
+  "pointIds" | "effectCapabilities"
+> & {
+  readonly pointIds: readonly DelegationPolicyPointId[];
+  readonly effectCapabilities: Readonly<
+    Partial<Record<DelegationPolicyPointId, readonly Policy.PolicyEffectType[]>>
+  >;
+};
 
 export type ChildAgentSnapshot = {
   readonly id: string;
@@ -40,6 +72,7 @@ export type ChildAgentRuntimeOptions = {
   readonly budget?: ChatAgentConfig["budget"];
   readonly providerOptions?: ChatAgentConfig["providerOptions"];
   readonly middleware?: ChatAgentConfig["middleware"];
+  readonly delegationPolicies?: readonly DelegationPolicyRegistration[];
   readonly createAgent: (config: ChatAgentConfig) => Pick<ChatAgentInstance, "run">;
 };
 
@@ -62,7 +95,7 @@ export type ChildRecord = {
 };
 
 export type ChildAgentRuntime = {
-  readonly spawn: (input: ChildAgentSpawnInput) => ChildAgentSnapshot;
+  readonly spawn: (input: ChildAgentSpawnInput) => Promise<ChildAgentSnapshot>;
   readonly inspect: (ids?: readonly string[]) => readonly ChildAgentSnapshot[];
   readonly await: (ids?: readonly string[]) => Promise<readonly ChildAgentSnapshot[]>;
   readonly cancel: (ids: readonly string[]) => readonly ChildAgentSnapshot[];

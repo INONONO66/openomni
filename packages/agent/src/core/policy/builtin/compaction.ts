@@ -1,13 +1,15 @@
 import { PolicyDecision } from "@openomni/protocol";
 import { InMemoryCompactor, type CompactionOptions } from "../../execution/compaction";
-import type { PolicyRegistration } from "../types";
+import type { CanonicalPolicyRegistration } from "../types";
 
 type CompactionConfig = CompactionOptions;
 
-export function createCompactionPolicy(config: CompactionConfig): PolicyRegistration {
+export function createCompactionPolicy(config: CompactionConfig): CanonicalPolicyRegistration {
   return {
     name: "builtin:compaction",
-    timing: "completion.prepare",
+    kind: "point",
+    pointIds: ["run.completion.pre"],
+    effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
     priority: 900,
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {

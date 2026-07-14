@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Dispatch, Policy } from "../../src/index.js";
+import { Dispatch, Policy, Run } from "../../src/index.js";
 
 const pointIds = [
   "session.inbound.pre",
@@ -205,6 +205,15 @@ describe("PolicyPoint executable input schemas", () => {
     const typedInput: Policy.PolicyPointInputMap["dispatch.action.pre"] = parsed;
 
     expect(typedInput).toEqual(validDispatchInput);
+  });
+
+  test("represents max-steps only at the agent lifecycle policy boundary", () => {
+    const input = { sessionId, runId, runOutcome: { type: "max-steps" } };
+
+    expect(Policy.PolicyPoint.InputSchemas["run.lifecycle.post"].safeParse(input).success).toBe(
+      true,
+    );
+    expect(Run.Outcome.safeParse(input.runOutcome).success).toBe(false);
   });
 
   test("rejects malformed canonical dispatch fields", () => {

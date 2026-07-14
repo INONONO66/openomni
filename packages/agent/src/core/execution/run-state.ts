@@ -14,6 +14,7 @@ export interface AgentRunBase {
   readonly traceId: string;
   readonly sessionId: string;
   readonly runId?: string;
+  readonly actorId?: string;
 }
 
 export interface RunState {

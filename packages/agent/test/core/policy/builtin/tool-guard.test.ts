@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createToolPermissionPolicy } from "../../../../src/core/policy/builtin/tool-guard";
 import type { PolicyContext } from "../../../../src/core/policy";
+import type { AgentEventEmitter } from "../../../../src/core/types";
 
 function baseCtx(overrides?: Partial<PolicyContext>): PolicyContext {
   return {
@@ -142,9 +143,48 @@ describe("createToolPermissionPolicy", () => {
     expect(verdict.verdict).toBe("allow");
   });
 
+  it("fails closed when permission evaluation throws", async () => {
+    // Given
+    const hostileInput = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        get: () => {
+          throw new Error("hostile tool input");
+        },
+      },
+    );
+    const mw = createToolPermissionPolicy({
+      permission: {
+        action: "tool.call",
+        inputRules: [
+          {
+            toolPattern: "shell_exec",
+            field: "cmd",
+            pattern: "^rm\\s",
+            action: "deny",
+            priority: 10,
+          },
+        ],
+      },
+    });
+
+    // When
+    const verdict = await mw.fn(
+      baseCtx({
+        toolName: "shell_exec",
+        toolCallId: "call-hostile-input",
+        toolInput: hostileInput,
+      }),
+    );
+
+    // Then
+    expect(verdict.verdict).toBe("deny");
+    expect(verdict.reasonCodes).toContain("tool_permission_evaluation_failed");
+  });
+
   it("emits tool.execution.permission_denied event on deny", async () => {
     const events: Array<{ name: string; data: unknown }> = [];
-    const mockEmitter = {
+    const mockEmitter: AgentEventEmitter = {
       emit: (name: string, data: unknown) => {
         events.push({ name, data });
       },
@@ -152,9 +192,7 @@ describe("createToolPermissionPolicy", () => {
 
     const mw = createToolPermissionPolicy({
       permission: { action: "tool.call", denylist: ["blocked_tool"] },
-      eventEmitter: mockEmitter as unknown as Parameters<
-        typeof createToolPermissionPolicy
-      >[0]["eventEmitter"],
+      eventEmitter: mockEmitter,
     });
     const verdict = await mw.fn(
       baseCtx({
@@ -187,23 +225,11 @@ describe("createToolPermissionPolicy", () => {
     expect(blocked?.reason).toBe("denylist");
   });
 
-  it("has name builtin:tool-permission", () => {
+  it("registers canonical metadata", () => {
     const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
-  });
-
-  it("has timing invoke.prepare", () => {
-    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
-    expect(mw.timing).toBe("invoke.prepare");
-  });
-
-  it("has priority 0", () => {
-    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
+    expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
     expect(mw.priority).toBe(0);
-  });
-
-  it("has failPolicy fail-closed", () => {
-    const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
     expect(mw.failPolicy).toBe("fail-closed");
   });
 

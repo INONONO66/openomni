@@ -30,22 +30,34 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
   }
 }
 
-function buildToolLabelMap(tools: ChatAgentConfig["tools"]): Map<string, string[]> {
-  const labels = new Map<string, string[]>();
+type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
+  readonly labels?: readonly string[];
+};
+
+function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, ToolPolicyMetadata> {
+  const metadata = new Map<string, ToolPolicyMetadata>();
   for (const tool of tools ?? []) {
-    if (!tool.labels || tool.labels.length === 0) continue;
-    labels.set(tool.name, tool.labels);
-    const canonical = tool.labels.find((label) => label.startsWith("tool:"))?.slice(5);
-    if (canonical) labels.set(canonical, tool.labels);
+    const labels = tool.labels ?? tool.descriptor?.labels;
+    if (labels === undefined && tool.descriptor === undefined) continue;
+    const value = {
+      ...(labels !== undefined && { labels }),
+      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
+    };
+    metadata.set(tool.name, value);
+    const canonical = labels?.find((label) => label.startsWith("tool:"))?.slice(5);
+    if (canonical) metadata.set(canonical, value);
     const dotted = tool.name.replace(/_/g, ".");
-    if (dotted !== tool.name) labels.set(dotted, tool.labels);
+    if (dotted !== tool.name) metadata.set(dotted, value);
   }
-  return labels;
+  return metadata;
 }
 
-function resolvePolicyToolName(toolName: string, labels: Map<string, string[]>): string {
-  const toolLabels = labels.get(toolName) ?? labels.get(toolName.replace(/_/g, "."));
-  const canonical = toolLabels?.find((label) => label.startsWith("tool:"));
+function resolvePolicyToolName(
+  toolName: string,
+  metadata: Map<string, ToolPolicyMetadata>,
+): string {
+  const toolMetadata = metadata.get(toolName) ?? metadata.get(toolName.replace(/_/g, "."));
+  const canonical = toolMetadata?.labels?.find((label) => label.startsWith("tool:"));
   return canonical ? canonical.slice(5) : toolName;
 }
 
@@ -59,9 +71,9 @@ export async function buildTurn(
   agentBase: AgentRunBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnDecision = await engine.dispatch(
-    "turn.start",
-    buildLifecyclePolicyContext(state, config),
+  const preTurnDecision = await engine.dispatchPoint(
+    "run.turn.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
   );
 
   let budgetReassuranceEvent: Extract<AgentEvent, { type: "budget_reassurance" }> | undefined;
@@ -102,13 +114,14 @@ export async function buildTurn(
   if (config.signal?.aborted) throw new Error("aborted");
 
   const toolPolicyDecisions: Array<{ timing: Policy.Timing; decision: Policy.PolicyDecision }> = [];
-  const toolLabels = buildToolLabelMap(config.tools);
+  const toolMetadata = buildToolMetadataMap(config.tools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
         toolExecutor: config.toolExecutor,
         engine,
-        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolLabels),
-        getToolLabels: (toolName) => toolLabels.get(toolName),
+        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolMetadata),
+        getToolLabels: (toolName) => toolMetadata.get(toolName)?.labels,
+        getToolDescriptor: (toolName) => toolMetadata.get(toolName)?.descriptor,
         onToolComplete: (durationMs) => {
           recordRunToolCall(state, durationMs);
         },
@@ -126,7 +139,7 @@ export async function buildTurn(
       })
     : undefined;
 
-  const systemResult = await buildTurnSystemPrompt(state, config, engine);
+  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase);
   if (systemResult.blocked) {
     return { type: "complete", event: createGuardCompleteEvent(state) };
   }
@@ -134,21 +147,18 @@ export async function buildTurn(
 
   const allTools = config.tools ?? [];
   const catalogLabels: Policy.LabelEntry[] = [];
-  for (const [name, labels] of toolLabels) {
-    for (const label of labels) {
+  for (const [name, metadata] of toolMetadata) {
+    for (const label of metadata.labels ?? []) {
       catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
     }
   }
-  const toolSelectionDecision = await engine.dispatch("resources.prepare", {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs: Date.now() - state.startTime,
-    messages: state.messages,
-    labels: catalogLabels,
-  });
+  const toolSelectionDecision = await engine.dispatchPoint(
+    "tool.catalog.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, {
+      labels: catalogLabels,
+      availableTools: allTools,
+    }),
+  );
 
   if (PolicyDecision.isBlocking(toolSelectionDecision)) {
     return { type: "complete", event: createGuardCompleteEvent(state) };

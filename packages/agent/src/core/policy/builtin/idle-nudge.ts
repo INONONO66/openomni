@@ -1,12 +1,12 @@
 import { PolicyDecision } from "@openomni/protocol";
-import type { PolicyRegistration } from "../types";
+import type { CanonicalPolicyRegistration } from "../types";
 
 export interface IdleNudgeConfig {
   idleThresholdMs?: number;
   maxNudges?: number;
 }
 
-export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): PolicyRegistration {
+export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): CanonicalPolicyRegistration {
   const idleThresholdMs = config.idleThresholdMs ?? 60000;
   const maxNudges = config.maxNudges ?? 3;
 
@@ -16,7 +16,13 @@ export function createIdleNudgePolicy(config: IdleNudgeConfig = {}): PolicyRegis
 
   return {
     name: "builtin:idle-nudge",
-    timing: ["turn.start", "invoke.result"],
+    kind: "point",
+    pointIds: ["run.turn.pre", "tool.native.post", "tool.mcp.post"],
+    effectCapabilities: {
+      "run.turn.pre": ["prompt.inject_message", "run.abort"],
+      "tool.native.post": [],
+      "tool.mcp.post": [],
+    },
     priority: 300,
     fn: (ctx) => {
       if (ctx.timing === "invoke.result") {

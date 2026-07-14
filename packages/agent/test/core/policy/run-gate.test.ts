@@ -144,13 +144,13 @@ describe("run.finish middleware dispatch", () => {
     });
 
     expect(postRunFn).toHaveBeenCalledTimes(1);
-    const ctx = postRunFn.mock.calls[0][0] as PolicyContext;
-    expect(ctx.timing).toBe("run.finish");
-    expect(ctx.isCompletion).toBe(true);
-    expect(Array.isArray(ctx.steps)).toBe(true);
+    const ctx = postRunFn.mock.calls[0]?.[0] as PolicyContext | undefined;
+    expect(ctx?.timing).toBe("run.finish");
+    expect(ctx?.isCompletion).toBe(true);
+    expect(Array.isArray(ctx?.steps)).toBe(true);
   });
 
-  it("fires after budget exceeded (max-steps completion)", async () => {
+  it("reports an honest max-steps outcome after budget exceeded", async () => {
     const postRunFn = mock((_ctx: PolicyContext) => allow());
 
     const events = await collectEvents({
@@ -164,6 +164,9 @@ describe("run.finish middleware dispatch", () => {
     const result = getResult(events);
     expect(result?.finishReason).toBe("max-steps");
     expect(postRunFn).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(postRunFn.mock.calls[0]?.[0] ?? {}, "runOutcome")).toEqual({
+      type: "max-steps",
+    });
   });
 
   it("does NOT fire after turn.start abort", async () => {

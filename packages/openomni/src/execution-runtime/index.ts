@@ -11,6 +11,7 @@ export type {
   ChildAgentRuntimeOptions,
   ChildAgentSnapshot,
   ChildAgentSpawnInput,
+  DelegationPolicyRegistration,
 } from "./child-agent/index.js";
 export {
   AgentToolProvider,

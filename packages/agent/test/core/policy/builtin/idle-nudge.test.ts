@@ -113,12 +113,11 @@ describe("createIdleNudgePolicy", () => {
     expect(message).toContain("126s");
   });
 
-  it("registers for both turn.start and invoke.result timings with priority 300", () => {
+  it("registers canonical turn and tool-result points with priority 300", () => {
     const mw = createIdleNudgePolicy();
     expect(mw.name).toBe("builtin:idle-nudge");
     expect(mw.priority).toBe(300);
-    expect(Array.isArray(mw.timing)).toBe(true);
-    expect(mw.timing).toContain("turn.start");
-    expect(mw.timing).toContain("invoke.result");
+    expect(mw.kind).toBe("point");
+    expect(mw.pointIds).toEqual(["run.turn.pre", "tool.native.post", "tool.mcp.post"]);
   });
 });

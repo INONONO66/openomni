@@ -76,6 +76,7 @@ export type {
   ChildAgentRuntimeOptions,
   ChildAgentSnapshot,
   ChildAgentSpawnInput,
+  DelegationPolicyRegistration,
   DispatchToolRuntime,
 } from "./execution-runtime";
 

@@ -210,11 +210,12 @@ describe("createCompactionPolicy", () => {
     expect(middleware.name).toBe("builtin:compaction");
   });
 
-  it("has timing completion.prepare", () => {
+  it("registers the canonical completion point", () => {
     const middleware = createCompactionPolicy({
       contextWindowTokens: 1000,
     });
 
-    expect(middleware.timing).toBe("completion.prepare");
+    expect(middleware.pointIds).toEqual(["run.completion.pre"]);
+    expect(middleware.effectCapabilities["run.completion.pre"]).toEqual(["run.replace_messages"]);
   });
 });

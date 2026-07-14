@@ -24,7 +24,9 @@ export type {
 } from "./core/runtime-context";
 export { PolicyEngine, PolicyRegistry, defaultRegistry } from "./core/policy";
 export type {
+  CanonicalPolicyRegistration,
   PolicyContext,
+  PolicyEngineRegistration,
   PolicyFn,
   PolicyRegistration,
   PolicyDecision,

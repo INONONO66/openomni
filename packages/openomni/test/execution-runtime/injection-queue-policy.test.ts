@@ -1,17 +1,11 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
 import { Session, Storage } from "@openomni/session";
 import { InjectionQueue } from "../../src/execution-runtime/injection-queue.js";
 import { createInjectionQueueDrainPolicy } from "../../src/execution-runtime/middleware/injection-queue-policy.js";
 import { buildWorkerMiddleware } from "../../src/execution-runtime/middleware.js";
 
-type DispatchContext = Parameters<PolicyEngineInstance["dispatch"]>[1];
-
-type LegacyFallbackContext = DispatchContext & {
-  readonly runId: string;
-  readonly sessionId: string;
-  readonly agentName: string;
-};
+type TurnPostContext = Parameters<PolicyEngineInstance["dispatchPoint"]>[1];
 
 function baseContext(runId: string, sessionId = "session-1") {
   return {
@@ -21,8 +15,12 @@ function baseContext(runId: string, sessionId = "session-1") {
     isCompletion: true,
     continuationCount: 0,
     elapsedMs: 0,
+    sessionId,
+    runId,
+    turnIndex: 0,
+    turnResult: { type: "stop" },
     traceContext: { traceId: "trace-1", runId, sessionId, agentName: "main" },
-  };
+  } satisfies TurnPostContext;
 }
 
 async function dispatchTurnFinish(
@@ -32,7 +30,7 @@ async function dispatchTurnFinish(
 ) {
   const engine = PolicyEngine.create({ audit: false });
   engine.register(createInjectionQueueDrainPolicy(queue));
-  return engine.dispatch("turn.finish", baseContext(runId, sessionId));
+  return engine.dispatchPoint("run.turn.post", baseContext(runId, sessionId));
 }
 
 describe("createInjectionQueueDrainPolicy", () => {
@@ -40,11 +38,15 @@ describe("createInjectionQueueDrainPolicy", () => {
     Storage.reset();
   });
 
-  it("is a turn.finish policy with priority before idle nudge", () => {
+  it("declares the run.turn.post point and only prompt injection effects", () => {
     const registration = createInjectionQueueDrainPolicy(InjectionQueue.create());
 
     expect(registration.name).toBe("builtin:injection-queue-drain");
-    expect(registration.timing).toBe("turn.finish");
+    expect(registration.kind).toBe("point");
+    expect(registration.pointIds).toEqual(["run.turn.post"]);
+    expect(registration.effectCapabilities).toEqual({
+      "run.turn.post": ["prompt.inject_message"],
+    });
     expect(registration.priority).toBe(150);
   });
 
@@ -101,7 +103,36 @@ describe("createInjectionQueueDrainPolicy", () => {
     ]);
   });
 
-  it("uses legacy top-level run and session identifiers when trace context is absent", async () => {
+  it("still emits drained responses when history persistence fails", async () => {
+    const queue = InjectionQueue.create();
+    queue.enqueue("run-storage-failure", {
+      messageId: "msg-storage-failure",
+      output: "deliver despite storage failure",
+      injectToHistory: true,
+      timestamp: 4,
+    });
+    const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+
+    let decision: Awaited<ReturnType<typeof dispatchTurnFinish>>;
+    try {
+      decision = await dispatchTurnFinish(queue, "run-storage-failure", "session-storage-failure");
+    } finally {
+      addMessageSpy.mockRestore();
+    }
+
+    expect(decision.effects).toEqual([
+      {
+        type: "prompt.inject_message",
+        message: "deliver despite storage failure",
+        role: "assistant",
+      },
+    ]);
+    expect(queue.hasPending("run-storage-failure")).toBe(false);
+  });
+
+  it("uses canonical run and session identifiers when trace context is absent", async () => {
     const session = Session.create({
       title: "Legacy Context Policy Test",
       model: { providerID: "test", modelID: "test-model" },
@@ -115,15 +146,14 @@ describe("createInjectionQueueDrainPolicy", () => {
     });
     const engine = PolicyEngine.create({ audit: false });
     engine.register(createInjectionQueueDrainPolicy(queue));
-    const context: LegacyFallbackContext = {
+    const context: TurnPostContext = {
       ...baseContext("unused-run", session.id),
       traceContext: undefined,
       runId: "legacy-run",
       sessionId: session.id,
-      agentName: "legacy-agent",
     };
 
-    const decision = await engine.dispatch("turn.finish", context);
+    const decision = await engine.dispatchPoint("run.turn.post", context);
 
     expect(decision.effects).toEqual([
       { type: "prompt.inject_message", message: "legacy durable", role: "assistant" },
@@ -132,7 +162,7 @@ describe("createInjectionQueueDrainPolicy", () => {
     expect(Session.getMessages(session.id)[0]).toMatchObject({
       id: "msg-legacy",
       sessionID: session.id,
-      agent: "legacy-agent",
+      agent: "injection-queue",
     });
   });
 });

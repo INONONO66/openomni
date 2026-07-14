@@ -45,11 +45,12 @@ const dispatchTarget = z
     labels: z.array(z.string()).optional(),
   })
   .strict();
-const runOutcome = z.discriminatedUnion("type", [
+const lifecycleRunOutcome = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stop") }),
   z.object({ type: z.literal("continue") }),
   z.object({ type: z.literal("compact") }),
   z.object({ type: z.literal("aborted") }),
+  z.object({ type: z.literal("max-steps") }),
   z.object({
     type: z.literal("error"),
     error: z.object({
@@ -186,7 +187,9 @@ export const policyPointInputSchemas = Object.freeze({
   "session.writeback.pre": validator(
     z.object({ sessionId: id, runId: id, writebackPayload: requiredValue }).passthrough(),
   ),
-  "run.lifecycle.post": validator(z.object({ sessionId: id, runId: id, runOutcome }).passthrough()),
+  "run.lifecycle.post": validator(
+    z.object({ sessionId: id, runId: id, runOutcome: lifecycleRunOutcome }).passthrough(),
+  ),
   "run.error.error": validator(
     z.object({ sessionId: id, runId: id, errorCode: id, errorPhase: id }).passthrough(),
   ),
