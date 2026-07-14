@@ -1,49 +1,56 @@
 import { Policy, PolicyDecision, type RuntimeResource } from "@openomni/protocol";
 import { composeEffects } from "../effects";
-import { allowedEffectTypes, isPreBoundary, policyPointIdsForDescriptor } from "./points";
+import {
+  allowedEffectTypes,
+  allowedEffectTypesAtPoint,
+  isPreBoundary,
+  policyPointIdsForDescriptor,
+} from "./points";
+import type { PolicyPointId } from "./types";
 
 export const COMPOSED_POLICY_ID = "agent.policy.composed";
 
 const EFFECT_VALIDATION_REASON = "policy.effect_not_allowed";
 const MIDDLEWARE_ERROR_REASON = "middleware-error";
 
-type RegistrationMeta = { name: string; priority: number };
+type RegistrationMeta = { readonly name: string; readonly priority: number };
+type EffectMembership = {
+  readonly has: (effectType: Policy.PolicyEffectType) => boolean;
+};
 
 function totalDurationMs(decisions: readonly Policy.PolicyDecision[]): number {
   return decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0);
 }
 
 function validationFailure(
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
   effects: readonly Policy.PolicyEffect[],
+  allowed: EffectMembership,
+  boundary: string,
 ): Policy.PolicyDecision | undefined {
-  const allowed = allowedEffectTypes(timing, descriptor);
   const invalid = effects.find((effect) => !allowed.has(effect.type));
   if (!invalid) return undefined;
 
-  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
-  const annotation =
-    pointId === undefined
-      ? `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${timing}`
-      : `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${pointId}`;
-
   return PolicyDecision.deny({
     policyId: COMPOSED_POLICY_ID,
-    effects: [{ type: "audit.annotate", annotation, severity: "error" }],
+    effects: [
+      {
+        type: "audit.annotate",
+        annotation: `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${boundary}`,
+        severity: "error",
+      },
+    ],
     reasonCodes: [EFFECT_VALIDATION_REASON],
   });
 }
 
 function enforceDenyAbort(
   decision: Policy.PolicyDecision,
-  timing: Policy.Timing,
-  descriptor: RuntimeResource.Descriptor | undefined,
+  allowed: EffectMembership,
+  sideEffectBoundary: boolean,
 ): Policy.PolicyDecision {
   if (decision.verdict !== "deny") return decision;
   if (decision.effects.some((effect) => effect.type === "run.abort")) return decision;
-  if (!isPreBoundary(timing, descriptor)) return decision;
-  if (!allowedEffectTypes(timing, descriptor).has("run.abort")) return decision;
+  if (!sideEffectBoundary || !allowed.has("run.abort")) return decision;
 
   const reason = decision.reasonCodes[0] ?? "policy.deny";
   return {
@@ -57,11 +64,9 @@ function composedDecision(
   decisions: readonly Policy.PolicyDecision[],
 ): Policy.PolicyDecision {
   const reasonSources =
-    effective.verdict === "deny"
-      ? decisions.filter((decision) => decision.verdict === "deny")
-      : effective.verdict === "pending"
-        ? decisions.filter((decision) => decision.verdict === "pending")
-        : decisions;
+    effective.verdict === "allow"
+      ? decisions
+      : decisions.filter((decision) => decision.verdict === effective.verdict);
   const reasonCodes = reasonSources.flatMap((decision) => decision.reasonCodes);
   const obligations = effective.obligations.length === 0 ? undefined : effective.obligations;
 
@@ -80,11 +85,26 @@ export function composeFinalDecision(
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,
 ): Policy.PolicyDecision {
+  const allowed = allowedEffectTypes(timing, descriptor);
+  const pointId = policyPointIdsForDescriptor(timing, descriptor)[0];
   const effective = composeEffects([...decisions]);
   const decision =
-    validationFailure(timing, descriptor, effective.mergedEffects) ??
+    validationFailure(effective.mergedEffects, allowed, pointId ?? timing) ??
     composedDecision(effective, decisions);
-  return enforceDenyAbort(decision, timing, descriptor);
+  return enforceDenyAbort(decision, allowed, isPreBoundary(timing, descriptor));
+}
+
+export function composeFinalPointDecision(
+  decisions: readonly Policy.PolicyDecision[],
+  pointId: PolicyPointId,
+): Policy.PolicyDecision {
+  const contract = Policy.PolicyPoint.Registry[pointId];
+  const allowed = allowedEffectTypesAtPoint(pointId);
+  const effective = composeEffects([...decisions]);
+  const decision =
+    validationFailure(effective.mergedEffects, allowed, pointId) ??
+    composedDecision(effective, decisions);
+  return enforceDenyAbort(decision, allowed, contract.sideEffectBoundary);
 }
 
 export function middlewareErrorDecision(

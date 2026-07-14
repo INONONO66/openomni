@@ -1,8 +1,5 @@
 import type { Policy } from "@openomni/protocol";
-import {
-  snapshotCanonicalRegistration,
-  validateRegistrationBoundary,
-} from "./registration-validation";
+import { prepareRegistrationBoundary } from "./registration-validation";
 import type {
   CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
@@ -12,12 +9,6 @@ import type {
 } from "./types";
 
 export { PolicyRegistrationError } from "./registration-validation";
-
-export function isCanonicalPolicyRegistration<TCtx extends GenericPolicyContext>(
-  registration: PolicyEngineRegistrationGeneric<TCtx>,
-): registration is CanonicalPolicyRegistrationGeneric<TCtx> {
-  return "kind" in registration && registration.kind === "point";
-}
 
 function matchesScope<TCtx extends GenericPolicyContext>(
   registration: PolicyEngineRegistrationGeneric<TCtx>,
@@ -63,21 +54,18 @@ export interface PolicyRegistrationStore<TCtx extends GenericPolicyContext> {
 export function createPolicyRegistrationStore<
   TCtx extends GenericPolicyContext,
 >(): PolicyRegistrationStore<TCtx> {
-  const registrations: PolicyEngineRegistrationGeneric<TCtx>[] = [];
+  const legacyRegistrations: PolicyRegistrationGeneric<TCtx>[] = [];
+  const pointRegistrations: CanonicalPolicyRegistrationGeneric<TCtx>[] = [];
 
   return {
     register(registration) {
-      validateRegistrationBoundary(registration);
-      registrations.push(
-        isCanonicalPolicyRegistration(registration)
-          ? snapshotCanonicalRegistration(registration)
-          : registration,
-      );
+      const prepared = prepareRegistrationBoundary<TCtx>(registration);
+      if (prepared.kind === "point") pointRegistrations.push(prepared.registration);
+      else legacyRegistrations.push(prepared.registration);
     },
     selectLegacy(timing, agentType) {
       const selected: PolicyRegistrationGeneric<TCtx>[] = [];
-      for (const registration of registrations) {
-        if (isCanonicalPolicyRegistration(registration)) continue;
+      for (const registration of legacyRegistrations) {
         if (matchesTiming(registration, timing) && matchesScope(registration, agentType)) {
           selected.push(registration);
         }
@@ -86,8 +74,7 @@ export function createPolicyRegistrationStore<
     },
     selectPoint(pointId, agentType) {
       const selected: CanonicalPolicyRegistrationGeneric<TCtx>[] = [];
-      for (const registration of registrations) {
-        if (!isCanonicalPolicyRegistration(registration)) continue;
+      for (const registration of pointRegistrations) {
         if (registration.pointIds.includes(pointId) && matchesScope(registration, agentType)) {
           selected.push(registration);
         }

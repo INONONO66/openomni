@@ -1,7 +1,18 @@
 import { Dispatch, PolicyDecision, type Policy } from "@openomni/protocol";
-import type { PolicyRegistration } from "@openomni/agent";
+import type { GenericPolicyContext } from "@openomni/policy";
 import { BlacklistStore, PendingInteractionStore, WorkerGrantStore } from "@openomni/session";
 import { EffectiveAuthority } from "./effective-authority.js";
+import type { DispatchPolicyRegistration } from "./policy-registration.js";
+
+export interface DispatchPolicyContext extends GenericPolicyContext {
+  readonly actor?: Dispatch.ActorContext;
+  readonly dispatchId?: string;
+  readonly action?: string;
+  readonly target?: Dispatch.Target;
+  readonly correlation?: Dispatch.Command["correlation"];
+  readonly sessionId?: string;
+  readonly runId?: string;
+}
 
 function deny(reason: string, factsUsed: readonly string[] = []): Policy.PolicyDecision {
   return PolicyDecision.deny({
@@ -30,10 +41,6 @@ function decide(result: EffectiveAuthority.Result): Policy.PolicyDecision {
     : deny(result.reason, result.factsUsed);
 }
 
-function blacklistReason(kind: string, value: string, reason: string | undefined): string {
-  return reason ?? `dispatch.blacklist.${kind}.${value}`;
-}
-
 function blacklistMatchInput(
   actor: Dispatch.ActorContext | undefined,
   target: Dispatch.Target | undefined,
@@ -58,29 +65,25 @@ function blacklistMatchInput(
   };
 }
 
-export function createDefaultDispatchPolicy(): PolicyRegistration {
+export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
   return {
+    kind: "point",
     name: "dispatch.default-authority",
-    timing: "dispatch.authorize",
+    pointIds: ["dispatch.action.pre"],
+    effectCapabilities: {
+      "dispatch.action.pre": ["audit.annotate", "run.abort"],
+    },
     priority: 0,
     failPolicy: "fail-closed",
     fn(ctx) {
-      const input = ctx.toolInput as {
-        actor?: Dispatch.ActorContext;
-        action?: unknown;
-        target?: Dispatch.Target;
-        correlation?: Dispatch.Command["correlation"];
-      };
-      const action = typeof input.action === "string" ? input.action : "";
-      const actor = input.actor;
-      const target = input.target;
-      const blacklisted = BlacklistStore.match(
-        blacklistMatchInput(actor, target, input.correlation),
-      );
+      const action = ctx.action ?? "";
+      const actor = ctx.actor;
+      const target = ctx.target;
+      const blacklisted = BlacklistStore.match(blacklistMatchInput(actor, target, ctx.correlation));
       if (blacklisted) {
         return decide(
           EffectiveAuthority.blockedByBlacklist(
-            blacklistReason(blacklisted.kind, blacklisted.value, blacklisted.reason),
+            blacklisted.reason ?? `dispatch.blacklist.${blacklisted.kind}.${blacklisted.value}`,
             blacklisted.kind,
           ),
         );
@@ -138,7 +141,7 @@ export function createDefaultDispatchPolicy(): PolicyRegistration {
       }
 
       if (actor.kind === "worker" && isExternalEgress(action)) {
-        const granted = evaluateWorkerGrant(actor, action, target, isExternalCreate(action));
+        const granted = evaluateWorkerGrant(actor, action, target);
         return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.external.denied"));
       }
 
@@ -206,7 +209,6 @@ function evaluateWorkerGrant(
   actor: Dispatch.ActorContext,
   action: string,
   target: Dispatch.Target | undefined,
-  createsExternalTask = false,
 ): { allowed: boolean; reason: string } {
   if (!actor.workerRunId) return { allowed: false, reason: "worker_grant.worker_run.required" };
   return WorkerGrantStore.evaluate({
@@ -215,6 +217,6 @@ function evaluateWorkerGrant(
     sessionId: target?.sessionId ?? target?.parentSessionId ?? actor.sessionId,
     actorId: target?.id ?? target?.name ?? actor.actorId,
     endpointId: target?.id ?? target?.name,
-    createsExternalTask,
+    createsExternalTask: isExternalCreate(action),
   });
 }

@@ -2,8 +2,11 @@ import { Policy } from "@openomni/protocol";
 import type {
   CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
-  PolicyPointId,
+  PolicyEngineRegistrationGeneric,
+  PolicyRegistrationGeneric,
 } from "./types";
+import { captureFrozenArray } from "./array-snapshot";
+import { snapshotCanonicalBindings } from "./registration-snapshot";
 
 type PolicyRegistrationErrorCode =
   | "invalid_registration_kind"
@@ -60,149 +63,201 @@ function isObject(value: unknown): value is object {
 }
 
 const canonicalMetadataSchema = Policy.Definition.omit({ timing: true });
+const policyTimingValues: ReadonlySet<string> = new Set(Object.values(Policy.Timing));
 
-function registrationName(registration: object): string {
-  const name = Reflect.get(registration, "name");
+function registrationName(name: unknown): string {
   return typeof name === "string" ? name : "<unknown>";
 }
 
-function hasValidCanonicalMetadata(registration: object): boolean {
-  const propagate = Reflect.get(registration, "propagate");
-  return (
-    canonicalMetadataSchema.safeParse(registration).success &&
-    typeof Reflect.get(registration, "fn") === "function" &&
-    (propagate === undefined || typeof propagate === "boolean")
-  );
+interface ClassificationFields {
+  readonly kind: unknown;
+  readonly name: unknown;
+  readonly pointIds: unknown;
+  readonly effectCapabilities: unknown;
 }
 
-export function validateRegistrationBoundary(registration: unknown): void {
-  if (!isObject(registration)) {
-    throw registrationError("<unknown>", "invalid_canonical_registration");
-  }
-  const name = registrationName(registration);
-  if (!Reflect.has(registration, "kind")) {
-    if (Reflect.has(registration, "pointIds") || Reflect.has(registration, "effectCapabilities")) {
-      throw registrationError(name, "invalid_canonical_registration");
+interface SharedMetadataFields {
+  readonly priority: unknown;
+  readonly scope: unknown;
+  readonly failPolicy: unknown;
+  readonly fn: unknown;
+  readonly propagate: unknown;
+}
+
+function readClassificationFields(registration: object): ClassificationFields {
+  return {
+    kind: Reflect.get(registration, "kind"),
+    name: Reflect.get(registration, "name"),
+    pointIds: Reflect.get(registration, "pointIds"),
+    effectCapabilities: Reflect.get(registration, "effectCapabilities"),
+  };
+}
+
+function readSharedMetadataFields(registration: object): SharedMetadataFields {
+  return {
+    priority: Reflect.get(registration, "priority"),
+    scope: Reflect.get(registration, "scope"),
+    failPolicy: Reflect.get(registration, "failPolicy"),
+    fn: Reflect.get(registration, "fn"),
+    propagate: Reflect.get(registration, "propagate"),
+  };
+}
+
+function isCanonicalPolicyFunction<TCtx extends GenericPolicyContext>(
+  value: unknown,
+): value is CanonicalPolicyRegistrationGeneric<TCtx>["fn"] {
+  return typeof value === "function";
+}
+
+function isLegacyPolicyFunction<TCtx extends GenericPolicyContext>(
+  value: unknown,
+): value is PolicyRegistrationGeneric<TCtx>["fn"] {
+  return typeof value === "function";
+}
+
+function isPolicyTiming(value: unknown): value is Policy.Timing {
+  return typeof value === "string" && policyTimingValues.has(value);
+}
+
+type LegacyTimingSnapshot =
+  | { readonly success: true; readonly value: Policy.Timing | Policy.Timing[] }
+  | { readonly success: false };
+
+function captureLegacyTiming(value: unknown): LegacyTimingSnapshot {
+  if (isPolicyTiming(value)) return { success: true, value };
+  const captured = captureFrozenArray(value);
+  if (!captured.success || !captured.value.every(isPolicyTiming)) return { success: false };
+  return { success: true, value: captured.value };
+}
+
+function captureScope(value: unknown): unknown {
+  if (!isObject(value)) return value;
+  const agentType = Reflect.get(value, "agentType");
+  if (agentType === undefined) return {};
+  const captured = captureFrozenArray(agentType);
+  return { agentType: captured.success ? captured.value : agentType };
+}
+
+function frozenScope(scope: Policy.Scope | undefined): Policy.Scope | undefined {
+  if (scope === undefined) return undefined;
+  const snapshot = {
+    ...scope,
+    ...(scope.agentType === undefined ? {} : { agentType: [...scope.agentType] }),
+  };
+  if (snapshot.agentType !== undefined) Object.freeze(snapshot.agentType);
+  return Object.freeze(snapshot);
+}
+
+export type PreparedPolicyRegistration<TCtx extends GenericPolicyContext> =
+  | {
+      readonly kind: "legacy";
+      readonly registration: PolicyRegistrationGeneric<TCtx>;
     }
-    return;
-  }
-  if (Reflect.get(registration, "kind") !== "point") {
-    throw registrationError(name, "invalid_registration_kind");
-  }
-  if (!hasValidCanonicalMetadata(registration)) {
+  | {
+      readonly kind: "point";
+      readonly registration: CanonicalPolicyRegistrationGeneric<TCtx>;
+    };
+
+function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
+  registration: object,
+  classification: ClassificationFields,
+): PreparedPolicyRegistration<TCtx> {
+  const name = registrationName(classification.name);
+  if (classification.kind === undefined) {
     throw registrationError(name, "invalid_canonical_registration");
   }
-
-  const pointIds = Reflect.get(registration, "pointIds");
-  const effectCapabilities = Reflect.get(registration, "effectCapabilities");
+  if (classification.kind !== "point") {
+    throw registrationError(name, "invalid_registration_kind");
+  }
+  const fields = { ...classification, ...readSharedMetadataFields(registration) };
+  const metadata = canonicalMetadataSchema.safeParse({
+    ...fields,
+    scope: captureScope(fields.scope),
+  });
   if (
-    !Array.isArray(pointIds) ||
-    !pointIds.every((pointId) => typeof pointId === "string") ||
-    !isObject(effectCapabilities)
+    !metadata.success ||
+    !isCanonicalPolicyFunction<TCtx>(fields.fn) ||
+    (fields.propagate !== undefined && typeof fields.propagate !== "boolean")
   ) {
     throw registrationError(name, "invalid_canonical_registration");
   }
-  for (const pointId of Object.keys(effectCapabilities)) {
-    const effects = Reflect.get(effectCapabilities, pointId);
-    if (!Array.isArray(effects) || !effects.every((effect) => typeof effect === "string")) {
-      throw registrationError(name, "invalid_canonical_registration", { pointId });
-    }
+  if (!isObject(fields.effectCapabilities)) {
+    throw registrationError(name, "invalid_canonical_registration");
   }
-}
-
-function isPolicyPointId(value: string): value is PolicyPointId {
-  return Object.getOwnPropertyDescriptor(Policy.PolicyPoint.Registry, value) !== undefined;
-}
-
-function validatePointBindings<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
-): void {
-  if (registration.pointIds.length === 0) {
-    throw registrationError(registration.name, "empty_point_ids");
-  }
-  if (new Set(registration.pointIds).size !== registration.pointIds.length) {
-    throw registrationError(registration.name, "duplicate_point_id");
-  }
-
-  for (const pointId of registration.pointIds) {
-    if (!isPolicyPointId(pointId)) {
-      throw registrationError(registration.name, "unknown_point_id", { pointId });
-    }
-  }
-}
-
-function validateEffectCapabilities<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
-): void {
-  const capabilityPointIds = Object.keys(registration.effectCapabilities);
-  if (capabilityPointIds.length === 0) {
-    throw registrationError(registration.name, "empty_effect_capabilities");
-  }
-
-  for (const pointId of registration.pointIds) {
-    if (Object.getOwnPropertyDescriptor(registration.effectCapabilities, pointId) === undefined) {
-      throw registrationError(registration.name, "missing_effect_capabilities", { pointId });
-    }
-  }
-
-  for (const pointId of capabilityPointIds) {
-    if (!isPolicyPointId(pointId)) {
-      throw registrationError(registration.name, "unknown_point_id", { pointId });
-    }
-    if (!registration.pointIds.includes(pointId)) {
-      throw registrationError(registration.name, "unbound_effect_capabilities", { pointId });
-    }
-
-    const effects = registration.effectCapabilities[pointId];
-    if (effects === undefined) {
-      throw registrationError(registration.name, "missing_effect_capabilities", { pointId });
-    }
-    if (new Set(effects).size !== effects.length) {
-      throw registrationError(registration.name, "duplicate_effect_capability", { pointId });
-    }
-    const allowedEffects = Policy.PolicyPoint.Registry[pointId].allowedEffects;
-    for (const effectType of effects) {
-      if (!allowedEffects.includes(effectType)) {
-        throw registrationError(registration.name, "disallowed_effect_capability", {
-          pointId,
-          effectType,
-        });
-      }
-    }
-  }
-}
-
-export function snapshotCanonicalRegistration<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
-): CanonicalPolicyRegistrationGeneric<TCtx> {
-  validatePointBindings(registration);
-  validateEffectCapabilities(registration);
-
-  const effectCapabilities: Partial<Record<PolicyPointId, readonly Policy.PolicyEffectType[]>> = {};
-  for (const pointId of registration.pointIds) {
-    const effects = registration.effectCapabilities[pointId];
-    if (effects === undefined) {
-      throw registrationError(registration.name, "missing_effect_capabilities", { pointId });
-    }
-    effectCapabilities[pointId] = Object.freeze([...effects]);
-  }
-
-  let scope: Policy.Scope | undefined;
-  if (registration.scope !== undefined) {
-    scope = {
-      ...registration.scope,
-      ...(registration.scope.agentType === undefined
-        ? {}
-        : { agentType: [...registration.scope.agentType] }),
-    };
-    if (scope.agentType !== undefined) Object.freeze(scope.agentType);
-    Object.freeze(scope);
-  }
-
-  return Object.freeze({
-    ...registration,
-    pointIds: Object.freeze([...registration.pointIds]),
-    effectCapabilities: Object.freeze(effectCapabilities),
+  const { pointIds, effectCapabilities } = snapshotCanonicalBindings(
+    fields.pointIds,
+    fields.effectCapabilities,
+    (code, details = {}) => {
+      throw registrationError(name, code, details);
+    },
+  );
+  const scope = frozenScope(metadata.data.scope);
+  const trusted = Object.freeze({
+    kind: "point",
+    name: metadata.data.name,
+    priority: metadata.data.priority,
+    pointIds,
+    effectCapabilities,
     ...(scope === undefined ? {} : { scope }),
-  });
+    ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
+    fn: fields.fn,
+    ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
+  } satisfies CanonicalPolicyRegistrationGeneric<TCtx>);
+  return { kind: "point", registration: trusted };
+}
+
+function prepareLegacyRegistration<TCtx extends GenericPolicyContext>(
+  registration: object,
+  classification: ClassificationFields,
+): PreparedPolicyRegistration<TCtx> {
+  const fields = {
+    name: classification.name,
+    timing: Reflect.get(registration, "timing"),
+    ...readSharedMetadataFields(registration),
+  };
+  const name = registrationName(fields.name);
+  const timing = captureLegacyTiming(fields.timing);
+  const scopeResult =
+    fields.scope === undefined ? undefined : Policy.Scope.safeParse(captureScope(fields.scope));
+  const failPolicyResult =
+    fields.failPolicy === undefined ? undefined : Policy.FailPolicy.safeParse(fields.failPolicy);
+  if (
+    typeof fields.name !== "string" ||
+    !timing.success ||
+    typeof fields.priority !== "number" ||
+    scopeResult?.success === false ||
+    failPolicyResult?.success === false ||
+    !isLegacyPolicyFunction<TCtx>(fields.fn) ||
+    (fields.propagate !== undefined && typeof fields.propagate !== "boolean")
+  ) {
+    throw registrationError(name, "invalid_canonical_registration");
+  }
+  const scope = scopeResult?.success === true ? frozenScope(scopeResult.data) : undefined;
+  const failPolicy = failPolicyResult?.success === true ? failPolicyResult.data : undefined;
+  const trusted = Object.freeze({
+    name: fields.name,
+    timing: timing.value,
+    priority: fields.priority,
+    ...(scope === undefined ? {} : { scope }),
+    ...(failPolicy === undefined ? {} : { failPolicy }),
+    fn: fields.fn,
+    ...(fields.propagate === undefined ? {} : { propagate: fields.propagate }),
+  } satisfies PolicyRegistrationGeneric<TCtx>);
+  return { kind: "legacy", registration: trusted };
+}
+
+export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
+  registration: PolicyEngineRegistrationGeneric<TCtx>,
+): PreparedPolicyRegistration<TCtx> {
+  if (!isObject(registration)) {
+    throw registrationError("<unknown>", "invalid_canonical_registration");
+  }
+  const classification = readClassificationFields(registration);
+  const hasCanonicalFields =
+    classification.kind !== undefined ||
+    classification.pointIds !== undefined ||
+    classification.effectCapabilities !== undefined;
+  return hasCanonicalFields
+    ? prepareCanonicalRegistration<TCtx>(registration, classification)
+    : prepareLegacyRegistration<TCtx>(registration, classification);
 }

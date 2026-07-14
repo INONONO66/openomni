@@ -1,6 +1,29 @@
 import { Policy, type RuntimeResource } from "@openomni/protocol";
 import type { PolicyPointId } from "./types";
 
+class PolicyPointTimingError extends Error {
+  constructor(pointId: PolicyPointId) {
+    super(`No legacy timing maps to registered policy point: ${pointId}`);
+    this.name = "PolicyPointTimingError";
+  }
+}
+
+const timingByPointId: ReadonlyMap<PolicyPointId, Policy.Timing> = (() => {
+  const inverse = new Map<PolicyPointId, Policy.Timing>();
+  for (const timing of Object.values(Policy.Timing)) {
+    for (const pointId of Policy.PolicyPoint.resolve(timing)) {
+      if (!inverse.has(pointId)) inverse.set(pointId, timing);
+    }
+  }
+  return inverse;
+})();
+
+export function timingForPolicyPoint(pointId: PolicyPointId): Policy.Timing {
+  const timing = timingByPointId.get(pointId);
+  if (timing !== undefined) return timing;
+  throw new PolicyPointTimingError(pointId);
+}
+
 export function policyPointIdsForDescriptor(
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,
@@ -66,6 +89,12 @@ export function allowedEffectTypes(
   }
 
   return allowed;
+}
+
+export function allowedEffectTypesAtPoint(
+  pointId: PolicyPointId,
+): ReadonlySet<Policy.PolicyEffectType> {
+  return new Set(Policy.PolicyPoint.Registry[pointId].allowedEffects);
 }
 
 export function isPreBoundary(

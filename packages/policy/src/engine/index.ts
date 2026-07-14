@@ -10,13 +10,13 @@ export type {
   PolicyRegistrationGeneric,
   PolicyEngineInstanceGeneric,
   DispatchContextGeneric,
+  DispatchPointContextGeneric,
   AuditDispatchContextGeneric,
+  CanonicalAuditDispatchContextGeneric,
   AuditEmit,
   PolicyPointId,
 } from "./types";
 
 export { PolicyRegistrationError } from "./registration";
-
-export { createPolicyEngine };
 
 export const PolicyEngine = { create: createPolicyEngine };

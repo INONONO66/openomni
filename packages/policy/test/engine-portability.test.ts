@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/policy";
+import { Operational, type Policy, PolicyDecision } from "@openomni/protocol";
+import {
+  type GenericPolicyContext,
+  PolicyEngine,
+  type PolicyRegistrationGeneric,
+} from "@openomni/policy";
+import { createPolicyRegistrationStore } from "../src/engine/registration";
 
 function createDispatchContext() {
   return {
@@ -60,6 +65,78 @@ describe("PolicyEngine portability", () => {
     const decision = await engine.dispatch("turn.start", {});
 
     expect(decision.verdict).toBe("deny");
+  });
+
+  it("snapshots negative legacy priorities and sorts them before zero", () => {
+    const store = createPolicyRegistrationStore();
+    const early: PolicyRegistrationGeneric<GenericPolicyContext> = {
+      name: "early",
+      timing: "turn.start",
+      priority: -10,
+      fn: () => PolicyDecision.allow({ policyId: "early" }),
+    };
+    const normal: PolicyRegistrationGeneric<GenericPolicyContext> = {
+      name: "normal",
+      timing: "turn.start",
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "normal" }),
+    };
+
+    store.register(normal);
+    store.register(early);
+    early.priority = 100;
+    const selected = store.selectLegacy("turn.start", undefined);
+
+    expect(selected.map(({ name }) => name)).toEqual(["early", "normal"]);
+    expect(selected[0]?.priority).toBe(-10);
+    expect(Object.isFrozen(selected[0])).toBe(true);
+  });
+
+  it("preserves legacy empty names and non-finite numeric priorities", () => {
+    const store = createPolicyRegistrationStore();
+    const registration: PolicyRegistrationGeneric<GenericPolicyContext> = {
+      name: "",
+      timing: "turn.start",
+      priority: Number.POSITIVE_INFINITY,
+      fn: () => PolicyDecision.allow({ policyId: "legacy-runtime-shape" }),
+    };
+
+    store.register(registration);
+    registration.name = "changed";
+    registration.priority = 0;
+    const stored = store.selectLegacy("turn.start", undefined)[0];
+
+    expect(stored?.name).toBe("");
+    expect(stored?.priority).toBe(Number.POSITIVE_INFINITY);
+    expect(Object.isFrozen(stored)).toBe(true);
+  });
+
+  it("captures each external legacy timing array value once", () => {
+    const store = createPolicyRegistrationStore();
+    let lengthReads = 0;
+    let elementReads = 0;
+    const timing = new Proxy<Policy.Timing[]>(["turn.start"], {
+      get: (target, property, receiver) => {
+        if (property === "length") lengthReads += 1;
+        if (property === "0") {
+          elementReads += 1;
+          return elementReads === 1 ? "turn.start" : "error";
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    store.register({
+      name: "single-read-timing",
+      timing,
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "single-read-timing" }),
+    });
+    const stored = store.selectLegacy("turn.start", undefined)[0];
+
+    expect(stored?.timing).toEqual(["turn.start"]);
+    expect(lengthReads).toBe(1);
+    expect(elementReads).toBe(1);
   });
 
   it("creates independent engine instances with no shared state", async () => {

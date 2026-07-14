@@ -1,5 +1,4 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import type { PolicyRegistration } from "@openomni/agent";
 import {
   Dispatch as DispatchProtocol,
   PolicyDecision as Decision,
@@ -11,10 +10,9 @@ import {
   markRoutedPendingInteraction,
   routePendingInteraction,
 } from "./pending-interaction-routing.js";
-import { createDefaultDispatchPolicy } from "./policy.js";
+import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
+import { registerDispatchPolicy, type DispatchPolicyRegistration } from "./policy-registration.js";
 import { DispatchRegistry, type DispatchHandler, type DispatchHandlerContext } from "./registry.js";
-
-const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 type DispatchEventPayload = {
   readonly dispatchId: string;
@@ -29,7 +27,7 @@ type DispatchEventPayload = {
 };
 
 export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchHandlerContext {
-  readonly policies?: readonly PolicyRegistration[];
+  readonly policies?: readonly DispatchPolicyRegistration[];
   readonly includeDefaultPolicies?: boolean;
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
   readonly sourceTool?: string;
@@ -37,7 +35,7 @@ export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchH
 
 export interface DispatchRuntimeOptions {
   readonly registry?: DispatchRegistry;
-  readonly policies?: readonly PolicyRegistration[];
+  readonly policies?: readonly DispatchPolicyRegistration[];
   readonly includeDefaultPolicies?: boolean;
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 }
@@ -76,10 +74,10 @@ function policyTraceContext(command: DispatchProtocol.Command, fallbackTraceId: 
 }
 
 function collectPolicies(
-  runtimePolicies: readonly PolicyRegistration[],
-  submitPolicies: readonly PolicyRegistration[] | undefined,
+  runtimePolicies: readonly DispatchPolicyRegistration[],
+  submitPolicies: readonly DispatchPolicyRegistration[] | undefined,
   includeDefaultPolicies: boolean,
-): PolicyRegistration[] {
+): DispatchPolicyRegistration[] {
   return [
     ...(includeDefaultPolicies ? [createDefaultDispatchPolicy()] : []),
     ...runtimePolicies,
@@ -96,7 +94,7 @@ function normalizeHandlerOutput(value: Awaited<ReturnType<DispatchHandler>>): un
 
 export class DispatchRuntime {
   readonly registry: DispatchRegistry;
-  private readonly policies: readonly PolicyRegistration[];
+  private readonly policies: readonly DispatchPolicyRegistration[];
   private readonly includeDefaultPolicies: boolean;
   private readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 
@@ -137,7 +135,7 @@ export class DispatchRuntime {
       ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
     });
 
-    const engine = PolicyEngine.create({
+    const engine = PolicyEngine.create<DispatchPolicyContext>({
       traceContext: policyTraceContext(command, trace.traceId),
       onDecision: options.onPolicyDecision ?? this.onPolicyDecision,
       auditEmit: Bus.publish,
@@ -147,31 +145,22 @@ export class DispatchRuntime {
       options.policies,
       options.includeDefaultPolicies ?? this.includeDefaultPolicies,
     )) {
-      engine.register(reg);
+      registerDispatchPolicy(engine, reg);
     }
 
-    const decision = await engine.dispatch("dispatch.authorize", {
-      steps: [],
-      usage: emptyUsage,
-      turnCount: 0,
-      isCompletion: false,
-      continuationCount: 0,
-      elapsedMs: 0,
+    const decision = await engine.dispatchPoint("dispatch.action.pre", {
+      actor: command.actor,
+      dispatchId: command.dispatchId,
+      action: command.action,
+      target: command.target,
+      ...(command.correlation !== undefined && { correlation: command.correlation }),
+      ...(command.sessionId !== undefined && { sessionId: command.sessionId }),
+      ...(command.runId !== undefined && { runId: command.runId }),
       labels: [
         { value: `dispatch.${command.action}`, source: "system" },
         { value: `actor.${command.actor.kind}`, source: "system" },
         { value: `target.${command.target.kind}`, source: "system" },
       ],
-      toolName: "dispatch",
-      toolInput: {
-        actor: command.actor,
-        dispatchId: command.dispatchId,
-        action: command.action,
-        target: command.target,
-        correlation: command.correlation,
-        sessionId: command.sessionId,
-        runId: command.runId,
-      },
       resourceDescriptor: resourceDescriptor(command.action),
       traceContext: policyTraceContext(command, trace.traceId),
     });

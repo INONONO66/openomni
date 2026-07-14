@@ -84,6 +84,7 @@ export { ReadBackExecutor } from "./evidence";
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,
+  DispatchPolicyRegistrationError,
   DispatchRuntime,
   DispatchRegistry,
   createDefaultDispatchRuntime,
@@ -105,6 +106,9 @@ export type {
   DispatchHandlerContext,
   DispatchHandlerResult,
   DispatchOwners,
+  DispatchPolicyContext,
+  DispatchPolicyRegistration,
+  DispatchPolicyRegistrationErrorCode,
   DispatchRuntimeContext,
   DispatchRuntimeOptions,
   DispatchSchedulerOwner,

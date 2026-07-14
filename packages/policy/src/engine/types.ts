@@ -24,7 +24,20 @@ export type DispatchContextGeneric<TCtx extends GenericPolicyContext> = Omit<TCt
 export type AuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =
   DispatchContextGeneric<TCtx> & {
     readonly timing: Policy.Timing;
+    readonly pointId?: PolicyPointId;
   };
+
+export type CanonicalAuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =
+  AuditDispatchContextGeneric<TCtx> & {
+    readonly pointId: PolicyPointId;
+  };
+
+export type DispatchPointContextGeneric<
+  TCtx extends GenericPolicyContext,
+  TPointId extends PolicyPointId,
+> = DispatchContextGeneric<TCtx> &
+  Partial<Policy.PolicyPointInputMap[TPointId]> &
+  Record<string, unknown>;
 
 export type PolicyDecision = Policy.PolicyDecision;
 
@@ -69,7 +82,7 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   readonly scope?: Policy.Scope;
   readonly failPolicy?: Policy.FailPolicy;
   readonly fn: (
-    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+    ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
   ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
   readonly propagate?: boolean;
 }
@@ -79,9 +92,15 @@ export type PolicyEngineRegistrationGeneric<TCtx extends GenericPolicyContext> =
   | CanonicalPolicyRegistrationGeneric<TCtx>;
 
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
+  register(reg: PolicyRegistrationGeneric<TCtx>): void;
+  register(reg: CanonicalPolicyRegistrationGeneric<TCtx>): void;
   register(reg: PolicyEngineRegistrationGeneric<TCtx>): void;
   dispatch(
     timing: Policy.Timing,
     ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
+  ): Promise<Policy.PolicyDecision>;
+  dispatchPoint<TPointId extends PolicyPointId>(
+    pointId: TPointId,
+    ctx: DispatchPointContextGeneric<TCtx, TPointId>,
   ): Promise<Policy.PolicyDecision>;
 }

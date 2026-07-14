@@ -8,11 +8,30 @@ import { PolicyPointRegistryModule } from "./point-registry.js";
 import { policyKernelVersion } from "./version.js";
 
 export namespace PolicyPointModule {
+  type Timing = PolicyPointContractModule.Timing;
+  type RegisteredPolicyPointId = PolicyPointContractModule.RegisteredPolicyPointId;
+
+  class PolicyPointResolutionError extends Error {
+    constructor(readonly timing: Timing) {
+      super(`No canonical policy points map to timing: ${timing}`);
+      this.name = "PolicyPointResolutionError";
+    }
+  }
+
+  const canonicalMigrationMapping: ReadonlyMap<Timing, readonly RegisteredPolicyPointId[]> =
+    new Map(
+      Object.values(PolicyPointContractModule.Timing).map((timing) => [
+        timing,
+        Object.freeze([...PolicyPointRegistryModule.policyPointMigrationMapping[timing]]),
+      ]),
+    );
+
   const resolvePolicyPoints = (
-    timing: PolicyPointContractModule.Timing,
+    timing: Timing,
     context?: { readonly resourceKind?: string },
-  ): string[] => {
-    const pointIds = PolicyPointRegistryModule.policyPointMigrationMapping[timing];
+  ): RegisteredPolicyPointId[] => {
+    const pointIds = canonicalMigrationMapping.get(timing);
+    if (pointIds === undefined) throw new PolicyPointResolutionError(timing);
     const resourceKind = context?.resourceKind;
 
     if (resourceKind === undefined) return [...pointIds];
@@ -47,10 +66,7 @@ export namespace PolicyPointModule {
   });
 
   export type PolicyPoint = z.infer<typeof PolicyPointContractModule.policyPoint> & {
-    MigrationMapping: Record<
-      PolicyPointContractModule.Timing,
-      PolicyPointContractModule.RegisteredPolicyPointId[]
-    >;
+    MigrationMapping: Record<Timing, RegisteredPolicyPointId[]>;
     resolve: typeof PolicyPoint.resolve;
   };
 
