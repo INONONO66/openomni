@@ -100,7 +100,11 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       });
     }
 
-    const activeRun: ActiveRun = { sessionId };
+    const activeRun: ActiveRun = {
+      runId,
+      sessionId,
+      ...(typeof task.traceId === "string" ? { traceId: task.traceId } : {}),
+    };
     this.activeRuns.set(runId, activeRun);
     let slot: WorkerSlot;
     try {
@@ -334,13 +338,30 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   private ensureSupervisor(slot: WorkerSlot): WorkerSupervisor {
     if (slot.supervisor?.isActive() === true) return slot.supervisor;
 
+    const toolRelay = this.ports.toolRelay;
     slot.supervisor = new WorkerSupervisor({
       id: slot.id,
       script: this.workerScript,
       events: this.ports.events,
       socketDir: this.socketDir,
       bootstrap: this.workerBootstrap,
-      toolRelay: this.ports.toolRelay,
+      toolRelay:
+        toolRelay === undefined
+          ? undefined
+          : (params, context) => {
+              const activeRun = this.activeRuns.get(params.runId);
+              if (activeRun?.slot !== slot || activeRun.traceId === undefined) {
+                return toolRelay(params, context);
+              }
+              return toolRelay(params, {
+                ...context,
+                traceContext: {
+                  traceId: activeRun.traceId,
+                  sessionId: activeRun.sessionId,
+                  runId: activeRun.runId,
+                },
+              });
+            },
       inboundWait: this.ports.inboundWait,
     });
     return slot.supervisor;

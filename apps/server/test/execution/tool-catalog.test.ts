@@ -2,7 +2,7 @@ import { describe, it, expect, mock } from "bun:test";
 
 import { buildToolCatalog, resolveToolSelection } from "@openomni/openomni";
 import { buildToolDispatcher } from "../../src/execution/coordinator";
-import type { NativeTool, ToolProvider } from "@openomni/openomni";
+import type { NativeTool, ToolExecutionContext, ToolProvider } from "@openomni/openomni";
 import type { ToolSelection } from "@openomni/protocol";
 import type { Tool } from "@openomni/protocol";
 
@@ -152,11 +152,19 @@ describe("tool catalog", () => {
     const dispatcher = buildToolDispatcher([provider]);
     const controller = new AbortController();
     const call: Tool.Call = { id: "call-ctx", tool: "known_tool", input: {} };
+    const context = {
+      signal: controller.signal,
+      traceContext: {
+        traceId: "trace-ctx",
+        sessionId: "session-ctx",
+        runId: "run-ctx",
+      },
+    } satisfies ToolExecutionContext;
 
-    const result = await dispatcher.get("known_tool")?.(call, { signal: controller.signal });
+    const result = await dispatcher.get("known_tool")?.(call, context);
 
     expect(result?.output).toBe("mock-provider result");
-    expect(provider.execute).toHaveBeenCalledWith(call, { signal: controller.signal });
+    expect(provider.execute).toHaveBeenCalledWith(call, context);
   });
 
   it("unknown tool name produces an isError result containing the tool name", async () => {

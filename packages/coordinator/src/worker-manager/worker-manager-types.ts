@@ -1,9 +1,9 @@
-import type { BusEvent, WorkerBootstrap } from "@openomni/protocol";
+import type { BusEvent, TraceContext, WorkerBootstrap } from "@openomni/protocol";
 import type {
   InboundWaitParams,
   InboundWaitResult,
   ToolCallCancelParams,
-  ToolCallContext,
+  ToolCallContext as SupervisorToolCallContext,
   ToolCallParams,
   ToolCallResult,
   WorkerSupervisor,
@@ -15,8 +15,12 @@ export const DEFAULT_IDLE_SHUTDOWN_MS = 600_000;
 export const DEFAULT_SLOT_WAIT_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_QUEUED_DELIVERIES = 100;
 
-export type { ToolCallCancelParams, ToolCallContext, ToolCallParams, ToolCallResult };
+export type { ToolCallCancelParams, ToolCallParams, ToolCallResult };
 export type { InboundWaitParams, InboundWaitResult };
+
+export type ToolCallContext = SupervisorToolCallContext & {
+  readonly traceContext?: TraceContext.Type;
+};
 
 export type WorkerManagerConfig = {
   workerScript: string;
@@ -81,7 +85,9 @@ export type WorkerSlot = {
 };
 
 export type ActiveRun = {
-  sessionId: string;
+  readonly runId: string;
+  readonly sessionId: string;
+  readonly traceId?: string;
   slot?: WorkerSlot;
   cancelled?: boolean;
 };
