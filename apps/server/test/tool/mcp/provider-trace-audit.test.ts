@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { McpClient } from "@openomni/agent";
 import type { TraceContext } from "@openomni/protocol";
 import { Mcp, Operational, PolicyEvent, ToolExecution } from "@openomni/protocol";
 import { McpToolProvider } from "../../../src/tool/mcp";
+import { refreshMcpTools } from "../../../src/tool/mcp/provider-tool-listing";
 import {
   collectBusEvents,
   installStorageFixture,
@@ -10,6 +12,23 @@ import {
 } from "./provider-test-fixture";
 
 installStorageFixture();
+
+function expectFallbackAuditIdentity(
+  events: ReturnType<typeof collectBusEvents>["events"],
+  spoofedSessionId: string,
+): void {
+  const { traceId, sessionId, runId } = events[0]?.payload ?? {};
+  expect(typeof traceId).toBe("string");
+  expect(typeof sessionId).toBe("string");
+  expect(sessionId).not.toBe(spoofedSessionId);
+  expect(typeof runId).toBe("string");
+  for (const event of events) {
+    expect(event.payload.traceId).toBe(traceId);
+    if (event.name !== Mcp.ToolCompleted.name) {
+      expect(event.payload).toMatchObject({ sessionId, runId });
+    }
+  }
+}
 
 describe("McpToolProvider canonical policy trace", () => {
   it("uses the active trace for every successful MCP execution event", async () => {
@@ -21,6 +40,9 @@ describe("McpToolProvider canonical policy trace", () => {
       traceId: "trace-mcp-execution",
       sessionId: "session-mcp-execution",
       runId: "run-mcp-execution",
+      taskId: "task-mcp-execution",
+      agentName: "agent-mcp-execution",
+      parentSpanId: "span-mcp-execution",
     };
     const executionContext = { signal: controller.signal, traceContext };
     const { events, stop } = collectBusEvents();
@@ -112,10 +134,6 @@ describe("McpToolProvider canonical policy trace", () => {
       });
 
       const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
-      const traceId = auditEvents[0]?.payload.traceId;
-      const runId = auditEvents[0]?.payload.runId;
-      expect(typeof traceId).toBe("string");
-      expect(typeof runId).toBe("string");
       expect(auditEvents.map((event) => event.name)).toEqual([
         PolicyEvent.Evaluated.name,
         PolicyEvent.DecisionComposed.name,
@@ -123,15 +141,82 @@ describe("McpToolProvider canonical policy trace", () => {
         ToolExecution.Completed.name,
         Mcp.ToolCompleted.name,
       ]);
-      for (const event of auditEvents) {
-        expect(event.payload.traceId).toBe(traceId);
-        if (event.name !== Mcp.ToolCompleted.name) {
-          expect(event.payload).toMatchObject({
-            sessionId: "session-mcp-fallback",
-            runId,
-          });
-        }
-      }
+      expectFallbackAuditIdentity(auditEvents, "session-mcp-fallback");
+    } finally {
+      stop();
+    }
+  });
+
+  it("uses one fallback trace across provider and real MCP client events", async () => {
+    // Given
+    const client = new McpClient(
+      {
+        name: "search",
+        transport: "sse",
+        url: "https://example.test/mcp",
+      },
+      {
+        client: {
+          connect: async () => undefined,
+          close: async () => undefined,
+          listTools: async () => ({
+            tools: [
+              {
+                name: "query",
+                description: "Search query",
+                inputSchema: { type: "object" as const },
+              },
+            ],
+          }),
+          callTool: async () => ({
+            content: [{ type: "text" as const, text: "search ok" }],
+          }),
+        },
+      },
+    );
+    const provider = new McpToolProvider();
+    const tools = await refreshMcpTools(new Map([["search", client]]));
+    seedProvider(provider, tools, ["search"]);
+    const { events, stop } = collectBusEvents();
+
+    try {
+      // When
+      const result = await provider.execute({
+        id: "call-mcp-cross-layer-fallback",
+        tool: "search_query",
+        input: { sessionId: "spoofed-session" },
+      });
+
+      // Then
+      expect(result.output).toBe("search ok");
+      const relevantNames = new Set([
+        PolicyEvent.ActionRequested.name,
+        Mcp.ToolCalled.name,
+        ToolExecution.Completed.name,
+        Mcp.ToolCompleted.name,
+      ]);
+      const relevantEvents = events.filter((event) => relevantNames.has(event.name));
+      expect(relevantEvents.map((event) => event.name)).toEqual([
+        PolicyEvent.ActionRequested.name,
+        Mcp.ToolCalled.name,
+        ToolExecution.Completed.name,
+        Mcp.ToolCompleted.name,
+      ]);
+      const traceIds = new Set(relevantEvents.map((event) => event.payload.traceId));
+      expect(traceIds.size).toBe(1);
+      const [traceId] = traceIds;
+      expect(typeof traceId).toBe("string");
+      expect(traceId).not.toBe("");
+
+      const action = relevantEvents[0]?.payload;
+      const completion = relevantEvents[2]?.payload;
+      expect(action?.sessionId).not.toBe("spoofed-session");
+      expect(typeof action?.sessionId).toBe("string");
+      expect(typeof action?.runId).toBe("string");
+      expect(completion).toMatchObject({
+        sessionId: action?.sessionId,
+        runId: action?.runId,
+      });
     } finally {
       stop();
     }
@@ -151,22 +236,12 @@ describe("McpToolProvider canonical policy trace", () => {
       });
 
       const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
-      const traceId = auditEvents[0]?.payload.traceId;
-      const runId = auditEvents[0]?.payload.runId;
-      expect(typeof traceId).toBe("string");
-      expect(typeof runId).toBe("string");
       expect(auditEvents.map((event) => event.name)).toEqual([
         PolicyEvent.Evaluated.name,
         PolicyEvent.DecisionComposed.name,
         PolicyEvent.ActionBlocked.name,
       ]);
-      for (const event of auditEvents) {
-        expect(event.payload).toMatchObject({
-          traceId,
-          sessionId: "session-mcp-fallback-blocked",
-          runId,
-        });
-      }
+      expectFallbackAuditIdentity(auditEvents, "session-mcp-fallback-blocked");
       expect(execute).not.toHaveBeenCalled();
     } finally {
       stop();

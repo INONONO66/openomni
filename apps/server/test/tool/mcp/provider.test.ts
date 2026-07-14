@@ -23,11 +23,20 @@ describe("McpToolProvider", () => {
       toolCallId: "call-1",
       output: "search.query ok",
     });
-    expect(execute).toHaveBeenCalledWith({
-      id: "call-1",
-      tool: "search.query",
-      input: { query: "hello" },
-    });
+    expect(execute).toHaveBeenCalledWith(
+      {
+        id: "call-1",
+        tool: "search.query",
+        input: { query: "hello" },
+      },
+      {
+        traceContext: {
+          traceId: expect.any(String),
+          sessionId: expect.any(String),
+          runId: expect.any(String),
+        },
+      },
+    );
   });
 
   it("forwards execution context to resolved MCP tools", async () => {

@@ -3,7 +3,7 @@ import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/proto
 import { Bus } from "@openomni/session";
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
-import { MCP_TOOL_ACTION, buildActor, readSessionId } from "./provider-audit";
+import { MCP_TOOL_ACTION, buildActor } from "./provider-audit";
 import { createResultSummary } from "./provider-metadata";
 
 interface ExecuteMcpToolInput {
@@ -21,12 +21,16 @@ interface ExecutionAudit {
 
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
   const { call, context } = input;
-  const audit = resolveExecutionAudit(call, context);
+  const audit = resolveExecutionAudit(context);
+  const executionContext: ToolExecutionContext = {
+    ...(context ?? {}),
+    traceContext: { ...(context?.traceContext ?? {}), ...audit },
+  };
   const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
     call,
     tools: input.tools,
     isServerConnected: input.isServerConnected,
-    traceContext: { ...(context?.traceContext ?? {}), ...audit },
+    traceContext: executionContext.traceContext,
   });
   const tool = guard.tool;
   if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
@@ -52,9 +56,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   });
 
   const startTime = Date.now();
-  const result = await (context === undefined
-    ? tool.execute({ ...call, tool: tool.spec.name })
-    : tool.execute({ ...call, tool: tool.spec.name }, context));
+  const result = await tool.execute({ ...call, tool: tool.spec.name }, executionContext);
   const durationMs = Date.now() - startTime;
 
   Bus.publish(ToolExecution.Completed, {
@@ -111,22 +113,11 @@ function publishBlockedResult(input: {
   return result;
 }
 
-function resolveExecutionAudit(
-  call: Tool.Call,
-  context: ToolExecutionContext | undefined,
-): ExecutionAudit {
+function resolveExecutionAudit(context: ToolExecutionContext | undefined): ExecutionAudit {
   const traceContext = context?.traceContext;
-  if (traceContext !== undefined) {
-    return {
-      traceId: traceContext.traceId,
-      sessionId: traceContext.sessionId ?? crypto.randomUUID(),
-      runId: traceContext.runId ?? crypto.randomUUID(),
-    };
-  }
-
   return {
-    traceId: crypto.randomUUID(),
-    sessionId: readSessionId(call) ?? crypto.randomUUID(),
-    runId: crypto.randomUUID(),
+    traceId: traceContext?.traceId ?? crypto.randomUUID(),
+    sessionId: traceContext?.sessionId ?? crypto.randomUUID(),
+    runId: traceContext?.runId ?? crypto.randomUUID(),
   };
 }
