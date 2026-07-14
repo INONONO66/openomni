@@ -6,6 +6,7 @@ import {
 } from "@openomni/protocol";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
+import { type ActiveRunRegistry, bindToolRelayTrace, createActiveRun } from "./worker-run-trace";
 import { createPrivateSocketDir } from "./worker-socket-dir";
 import {
   DEFAULT_IDLE_SHUTDOWN_MS,
@@ -13,7 +14,6 @@ import {
   DEFAULT_MAX_QUEUED_DELIVERIES,
   DEFAULT_SLOT_WAIT_TIMEOUT_MS,
   HARD_MAX_ACTIVE_WORKERS,
-  type ActiveRun,
   type DeliverTask,
   type SlotWaiter,
   type WorkerManager,
@@ -63,7 +63,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   private readonly idleShutdownMs: number;
   private readonly slotWaitTimeoutMs: number;
   private readonly maxQueuedDeliveries: number;
-  private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly activeRuns: ActiveRunRegistry = new Map();
   private readonly slots = new Map<number, WorkerSlot>();
   private readonly sessionAffinity = new Map<string, number>();
   private readonly waiters: SlotWaiter[] = [];
@@ -100,11 +100,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       });
     }
 
-    const activeRun: ActiveRun = {
-      runId,
-      sessionId,
-      ...(typeof task.traceId === "string" ? { traceId: task.traceId } : {}),
-    };
+    const activeRun = createActiveRun(runId, task);
     this.activeRuns.set(runId, activeRun);
     let slot: WorkerSlot;
     try {
@@ -338,30 +334,13 @@ class WorkerPool implements WorkerManager, Execution.Driver {
   private ensureSupervisor(slot: WorkerSlot): WorkerSupervisor {
     if (slot.supervisor?.isActive() === true) return slot.supervisor;
 
-    const toolRelay = this.ports.toolRelay;
     slot.supervisor = new WorkerSupervisor({
       id: slot.id,
       script: this.workerScript,
       events: this.ports.events,
       socketDir: this.socketDir,
       bootstrap: this.workerBootstrap,
-      toolRelay:
-        toolRelay === undefined
-          ? undefined
-          : (params, context) => {
-              const activeRun = this.activeRuns.get(params.runId);
-              if (activeRun?.slot !== slot || activeRun.traceId === undefined) {
-                return toolRelay(params, context);
-              }
-              return toolRelay(params, {
-                ...context,
-                traceContext: {
-                  traceId: activeRun.traceId,
-                  sessionId: activeRun.sessionId,
-                  runId: activeRun.runId,
-                },
-              });
-            },
+      toolRelay: bindToolRelayTrace(this.ports.toolRelay, this.activeRuns, slot),
       inboundWait: this.ports.inboundWait,
     });
     return slot.supervisor;
