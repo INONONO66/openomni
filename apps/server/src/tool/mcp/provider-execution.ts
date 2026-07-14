@@ -13,8 +13,15 @@ interface ExecuteMcpToolInput {
   readonly isServerConnected: (serverName: string) => boolean;
 }
 
+interface ExecutionAudit {
+  readonly traceId: string;
+  readonly sessionId?: string;
+  readonly runId?: string;
+}
+
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
   const { call, context } = input;
+  const audit = resolveExecutionAudit(call, context);
   const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
     call,
     tools: input.tools,
@@ -23,20 +30,25 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   });
   const tool = guard.tool;
   if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
-    return publishBlockedResult(
+    return publishBlockedResult({
       call,
       tool,
-      PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
-    );
+      reason: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
+      audit,
+    });
   }
 
-  const sessionId = readSessionId(call) ?? "";
+  const sessionId = audit.sessionId ?? "";
   const actionId = crypto.randomUUID();
   const actor = buildActor(sessionId);
+  const eventAudit = {
+    traceId: audit.traceId,
+    sessionId,
+    ...(audit.runId !== undefined && { runId: audit.runId }),
+  };
 
   Bus.publish(PolicyEvent.ActionRequested, {
-    traceId: crypto.randomUUID(),
-    sessionId,
+    ...eventAudit,
     time: Date.now(),
     actionId,
     actor,
@@ -52,8 +64,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   const durationMs = Date.now() - startTime;
 
   Bus.publish(ToolExecution.Completed, {
-    traceId: crypto.randomUUID(),
-    sessionId,
+    ...eventAudit,
     time: Date.now(),
     actor,
     toolCallId: call.id,
@@ -67,7 +78,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
     const serverName = tool.spec.name.split(".")[0] ?? "unknown";
 
     Bus.publish(Mcp.ToolCompleted, {
-      traceId: crypto.randomUUID(),
+      traceId: audit.traceId,
       serverName,
       toolName: tool.spec.name,
       toolCallId: call.id,
@@ -80,22 +91,25 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   return result;
 }
 
-function publishBlockedResult(
-  call: Tool.Call,
-  tool: NativeTool | undefined,
-  reason: string,
-): Tool.Result {
+function publishBlockedResult(input: {
+  readonly call: Tool.Call;
+  readonly tool: NativeTool | undefined;
+  readonly reason: string;
+  readonly audit: ExecutionAudit;
+}): Tool.Result {
+  const { call, tool, reason, audit } = input;
   const result = {
     id: crypto.randomUUID(),
     toolCallId: call.id,
     output: reason,
     isError: true,
   };
-  const sessionId = readSessionId(call);
+  const sessionId = audit.sessionId;
   if (sessionId) {
     Bus.publish(PolicyEvent.ActionBlocked, {
-      traceId: crypto.randomUUID(),
+      traceId: audit.traceId,
       sessionId,
+      ...(audit.runId !== undefined && { runId: audit.runId }),
       time: Date.now(),
       actionId: crypto.randomUUID(),
       actor: buildActor(sessionId),
@@ -106,4 +120,24 @@ function publishBlockedResult(
     });
   }
   return result;
+}
+
+function resolveExecutionAudit(
+  call: Tool.Call,
+  context: ToolExecutionContext | undefined,
+): ExecutionAudit {
+  const traceContext = context?.traceContext;
+  if (traceContext !== undefined) {
+    return {
+      traceId: traceContext.traceId,
+      ...(traceContext.sessionId !== undefined && { sessionId: traceContext.sessionId }),
+      ...(traceContext.runId !== undefined && { runId: traceContext.runId }),
+    };
+  }
+
+  const sessionId = readSessionId(call);
+  return {
+    traceId: crypto.randomUUID(),
+    ...(sessionId !== undefined && { sessionId }),
+  };
 }

@@ -128,7 +128,9 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
         prompt: input.prompt,
       });
       if (options.parentSignal?.aborted) {
-        throw new Error("parent worker run cancelled");
+        const reason = new Error("parent worker run cancelled");
+        await policy.dispatchPost(childId, { status: "cancelled", reason: reason.message });
+        throw reason;
       }
       let activeChildren = 0;
       for (const record of records.values()) {

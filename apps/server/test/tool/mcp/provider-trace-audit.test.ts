@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { TraceContext } from "@openomni/protocol";
-import { PolicyEvent } from "@openomni/protocol";
+import { Mcp, Operational, PolicyEvent, ToolExecution } from "@openomni/protocol";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import {
   collectBusEvents,
@@ -12,7 +12,7 @@ import {
 installStorageFixture();
 
 describe("McpToolProvider canonical policy trace", () => {
-  it("correlates canonical policy audit with the active tool execution trace", async () => {
+  it("uses the active trace for every successful MCP execution event", async () => {
     const provider = new McpToolProvider();
     const { tool, execute } = makeTool("search.query");
     seedProvider(provider, [tool], ["search"]);
@@ -27,24 +27,72 @@ describe("McpToolProvider canonical policy trace", () => {
 
     try {
       await provider.execute(
-        { id: "call-mcp-execution", tool: "search_query", input: {} },
+        {
+          id: "call-mcp-execution",
+          tool: "search_query",
+          input: { sessionId: "spoofed-session" },
+        },
         executionContext,
       );
 
-      const pointEvents = events.filter(
-        (event) =>
-          (event.name === PolicyEvent.Evaluated.name ||
-            event.name === PolicyEvent.DecisionComposed.name) &&
-          event.payload.pointId === "tool.mcp.pre",
-      );
-      expect(pointEvents).toHaveLength(2);
-      for (const event of pointEvents) {
-        expect(event.payload).toMatchObject(traceContext);
+      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      expect(auditEvents.map((event) => event.name)).toEqual([
+        PolicyEvent.Evaluated.name,
+        PolicyEvent.DecisionComposed.name,
+        PolicyEvent.ActionRequested.name,
+        ToolExecution.Completed.name,
+        Mcp.ToolCompleted.name,
+      ]);
+      for (const event of auditEvents) {
+        expect(event.payload.traceId).toBe(traceContext.traceId);
+        if (event.name !== Mcp.ToolCompleted.name) {
+          expect(event.payload).toMatchObject({
+            sessionId: traceContext.sessionId,
+            runId: traceContext.runId,
+          });
+        }
       }
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({ id: "call-mcp-execution", tool: "search.query" }),
         executionContext,
       );
+    } finally {
+      stop();
+    }
+  });
+
+  it("uses the active trace for every blocked MCP execution event", async () => {
+    const provider = new McpToolProvider();
+    const { tool, execute } = makeTool("search.query");
+    seedProvider(provider, [tool]);
+    const traceContext: TraceContext.Type = {
+      traceId: "trace-mcp-blocked",
+      sessionId: "session-mcp-blocked",
+      runId: "run-mcp-blocked",
+    };
+    const { events, stop } = collectBusEvents();
+
+    try {
+      const result = await provider.execute(
+        {
+          id: "call-mcp-blocked",
+          tool: "search_query",
+          input: { sessionId: "spoofed-blocked-session" },
+        },
+        { traceContext },
+      );
+
+      expect(result.output).toBe("MCP server not found: search");
+      const auditEvents = events.filter((event) => event.name !== Operational.Debug.name);
+      expect(auditEvents.map((event) => event.name)).toEqual([
+        PolicyEvent.Evaluated.name,
+        PolicyEvent.DecisionComposed.name,
+        PolicyEvent.ActionBlocked.name,
+      ]);
+      for (const event of auditEvents) {
+        expect(event.payload).toMatchObject(traceContext);
+      }
+      expect(execute).not.toHaveBeenCalled();
     } finally {
       stop();
     }

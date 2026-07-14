@@ -28,44 +28,57 @@ function makeTool(name: string): NativeTool {
 }
 
 describe("child agent delegation pre-policy", () => {
-  test("blocks before agent creation when delegation.worker.pre denies", async () => {
-    let created = false;
-    const policy: DelegationPolicyRegistration = {
-      kind: "point",
-      name: "deny-child",
-      pointIds: ["delegation.worker.pre"],
-      effectCapabilities: { "delegation.worker.pre": ["run.abort"] },
-      priority: 0,
-      fn: (context) => {
-        expect(context).toMatchObject({
-          pointId: "delegation.worker.pre",
-          sessionId: "session-1",
-          runId: "parent-run",
-          workerProfile: { name: "child_agent", model, prompt: "blocked task" },
-        });
-        return PolicyDecision.deny({
-          policyId: "deny-child",
-          reasonCodes: ["delegation.denied"],
-          effects: [{ type: "run.abort", reason: "delegation.denied" }],
-        });
-      },
-    };
-    const runtime = createChildAgentRuntime({
-      model,
-      parentMessages: [],
-      parentTools: [],
-      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
-      delegationPolicies: [policy],
-      createAgent: () => {
-        created = true;
-        return { run: async () => successfulResult };
-      },
-    });
+  for (const verdict of ["deny", "pending"] as const) {
+    test(`blocks without post settlement when delegation.worker.pre returns ${verdict}`, async () => {
+      const pointIds: unknown[] = [];
+      let created = false;
+      const policy: DelegationPolicyRegistration = {
+        kind: "point",
+        name: `${verdict}-child`,
+        pointIds: ["delegation.worker.pre", "delegation.worker.post"],
+        effectCapabilities: {
+          "delegation.worker.pre": ["run.abort"],
+          "delegation.worker.post": ["audit.annotate"],
+        },
+        priority: 0,
+        fn: (context) => {
+          pointIds.push(context.pointId);
+          if (context.pointId === "delegation.worker.post") {
+            return PolicyDecision.allow({ policyId: `${verdict}-child` });
+          }
+          expect(context).toMatchObject({
+            sessionId: "session-1",
+            runId: "parent-run",
+            workerProfile: { name: "child_agent", model, prompt: "blocked task" },
+          });
+          const options = {
+            policyId: `${verdict}-child`,
+            reasonCodes: ["delegation.blocked"],
+            effects: [{ type: "run.abort" as const, reason: "delegation.blocked" }],
+          };
+          return verdict === "deny"
+            ? PolicyDecision.deny(options)
+            : PolicyDecision.pending(options);
+        },
+      };
+      const runtime = createChildAgentRuntime({
+        model,
+        parentMessages: [],
+        parentTools: [],
+        traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+        delegationPolicies: [policy],
+        createAgent: () => {
+          created = true;
+          return { run: async () => successfulResult };
+        },
+      });
 
-    await expect(runtime.spawn({ prompt: "blocked task" })).rejects.toThrow("delegation.denied");
-    expect(created).toBe(false);
-    expect(runtime.inspect()).toEqual([]);
-  });
+      await expect(runtime.spawn({ prompt: "blocked task" })).rejects.toThrow("delegation.blocked");
+      expect(pointIds).toEqual(["delegation.worker.pre"]);
+      expect(created).toBe(false);
+      expect(runtime.inspect()).toEqual([]);
+    });
+  }
 
   test("fails closed when delegation.worker.pre policy throws", async () => {
     let created = false;
@@ -93,6 +106,55 @@ describe("child agent delegation pre-policy", () => {
 
     await expect(runtime.spawn({ prompt: "must not start" })).rejects.toThrow();
     expect(created).toBe(false);
+  });
+
+  test("settles cancellation when an allowed pre policy aborts the parent", async () => {
+    const contexts: Array<Record<string, unknown>> = [];
+    const parentController = new AbortController();
+    let created = false;
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      parentSignal: parentController.signal,
+      delegationPolicies: [
+        {
+          kind: "point",
+          name: "abort-then-allow",
+          pointIds: ["delegation.worker.pre", "delegation.worker.post"],
+          effectCapabilities: {
+            "delegation.worker.pre": ["audit.annotate"],
+            "delegation.worker.post": ["audit.annotate"],
+          },
+          priority: 0,
+          fn: (context) => {
+            contexts.push(context);
+            if (context.pointId === "delegation.worker.pre") parentController.abort();
+            return PolicyDecision.allow({ policyId: "abort-then-allow" });
+          },
+        },
+      ],
+      createAgent: () => {
+        created = true;
+        return { run: async () => successfulResult };
+      },
+    });
+
+    await expect(runtime.spawn({ prompt: "cancel after acceptance" })).rejects.toThrow(
+      "parent worker run cancelled",
+    );
+
+    const [pre, post] = contexts;
+    expect(contexts.map((context) => context.pointId)).toEqual([
+      "delegation.worker.pre",
+      "delegation.worker.post",
+    ]);
+    expect(post).toMatchObject({
+      workerRunId: pre?.workerRunId,
+      workerResult: { status: "cancelled", reason: "parent worker run cancelled" },
+    });
+    expect(created).toBe(false);
+    expect(runtime.inspect()).toEqual([]);
   });
 
   test("preserves parent tool bounds and prevents nested delegation", async () => {
