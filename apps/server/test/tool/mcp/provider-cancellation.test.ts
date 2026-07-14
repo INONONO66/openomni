@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createToolExecutor, WorkspaceLock } from "@openomni/openomni";
-import type { Tool } from "@openomni/protocol";
+import { Operational, type Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { McpToolProvider } from "../../../src/tool/mcp";
 import { installStorageFixture, makeClient } from "./provider-test-fixture";
 
@@ -87,6 +88,7 @@ describe("McpToolProvider", () => {
   });
 
   it("marks the workspace unsafe after MCP abort settlement grace when the call hangs", async () => {
+    // Given: a timed-out MCP call that never settles and an exact warning barrier.
     const workspace = mkdtempSync(join(tmpdir(), "openomni-mcp-abort-grace-"));
     const client = makeClient();
     client.listTools.mockResolvedValueOnce([
@@ -99,6 +101,23 @@ describe("McpToolProvider", () => {
         }),
     );
     const provider = new McpToolProvider({ createClient: () => client.client });
+    const subscriberCountBeforeWarning = Bus.stats().subscriberCount;
+    let unsubscribeSettlementWarning: () => void = () => undefined;
+    const settlementWarning = new Promise<void>((resolve) => {
+      unsubscribeSettlementWarning = Bus.subscribe(Operational.Warn, (event) => {
+        if (
+          event.component !== "executor" ||
+          event.msg !== "timed-out tool did not settle before post-timeout grace elapsed" ||
+          event.context?.toolName !== "search.query" ||
+          event.context.toolCallId !== "call-mcp-hung" ||
+          event.context.graceMs !== 20
+        ) {
+          return;
+        }
+        unsubscribeSettlementWarning();
+        resolve();
+      });
+    });
 
     try {
       await provider.addServer({ name: "search", transport: "stdio", command: "search-mcp" });
@@ -112,16 +131,19 @@ describe("McpToolProvider", () => {
         },
       });
 
+      // When: the executor times out while the underlying MCP call remains pending.
       const result = await executor({ id: "call-mcp-hung", tool: "search.query", input: {} });
       expect(result.isError).toBe(true);
       expect(result.output).toBe("timeout after 10ms");
 
+      // Then: the lock remains held until the exact post-grace warning is observed.
       const blockedProbe = await WorkspaceLock.acquire(workspace, "probe-before-grace", 5).catch(
         (error) => error,
       );
       expect(blockedProbe).toBeInstanceOf(Error);
 
-      await Bun.sleep(40);
+      await settlementWarning;
+      expect(Bus.stats().subscriberCount).toBe(subscriberCountBeforeWarning);
       const unsafeProbe = await WorkspaceLock.acquire(workspace, "probe-after-grace", 50).catch(
         (error) => error,
       );
@@ -130,6 +152,7 @@ describe("McpToolProvider", () => {
       expect(unsafeProbe.message).toContain("workspace marked unsafe");
       WorkspaceLock.clearUnsafe(workspace);
     } finally {
+      unsubscribeSettlementWarning();
       rmSync(workspace, { recursive: true, force: true });
     }
   });
