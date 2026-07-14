@@ -184,8 +184,10 @@ export function createToolExecutor(
     const startMs = Date.now();
     let result: Tool.Result;
     try {
+      const executionTraceContext = context?.traceContext ?? traceContext;
       result = await toolExecutor(effectiveCall, {
         signal: context?.signal ?? signal,
+        ...(executionTraceContext !== undefined && { traceContext: executionTraceContext }),
       });
     } catch (err) {
       const durationMs = Date.now() - startMs;

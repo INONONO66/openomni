@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TraceContext } from "../trace/index.js";
 
 export namespace Tool {
   /**
@@ -87,10 +88,12 @@ export namespace Tool {
    * Per-call runtime context for tool execution callbacks. Cancellation is
    * cooperative: executors pass an aborted signal before returning timeout or
    * run-cancel results, and tools that start long-running work should stop their
-   * own side effects when it aborts.
+   * own side effects when it aborts. Correlation metadata is limited to the
+   * identifiers needed by downstream audit emitters.
    */
   export interface ExecutionContext {
     readonly signal?: AbortSignal;
+    readonly traceContext?: Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">;
   }
 
   export const Result = z.object({

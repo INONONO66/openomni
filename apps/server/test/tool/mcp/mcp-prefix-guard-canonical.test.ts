@@ -154,7 +154,7 @@ describe("McpPrefixGuardMiddleware canonical point dispatch", () => {
     expectPointAudit(events, "deny");
   });
 
-  it("dispatches missing server identity through the canonical contract fail-closed path", async () => {
+  it("translates a known tool's missing prefix after canonical fail-closed audit", async () => {
     const captured: Array<{
       readonly pointId: string;
       readonly context: Record<string, unknown>;
@@ -177,7 +177,10 @@ describe("McpPrefixGuardMiddleware canonical point dispatch", () => {
     expect(result.verdict).toMatchObject({
       verdict: "deny",
       policyId: "agent.policy.composed",
-      reasonCodes: ["policy.context_missing"],
+      reasonCodes: [
+        "MCP tool name must be prefixed with server name: query",
+        "policy.context_missing",
+      ],
     });
     expect(captured[0]?.context).not.toHaveProperty("mcpServerId");
     expect(captured[0]).toMatchObject({
@@ -186,6 +189,12 @@ describe("McpPrefixGuardMiddleware canonical point dispatch", () => {
     });
     expect(isServerConnected).not.toHaveBeenCalled();
     expectPointAudit(events, "deny");
+    expect(events.evaluated).toContainEqual(
+      expect.objectContaining({ pointId: "tool.mcp.pre", reason: "policy.context_missing" }),
+    );
+    expect(events.composed).toContainEqual(
+      expect.objectContaining({ pointId: "tool.mcp.pre", reason: "policy.context_missing" }),
+    );
   });
 
   it("emits canonical point audit when the derived MCP server is disconnected", async () => {

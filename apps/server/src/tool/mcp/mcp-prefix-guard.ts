@@ -18,7 +18,7 @@ type McpPolicyContext = GenericPolicyContext;
 interface PrefixGuardState {
   readonly call: Tool.Call;
   readonly tool?: NativeTool;
-  readonly serverName?: string;
+  readonly serverName: string;
   readonly isServerConnected: (serverName: string) => boolean;
 }
 
@@ -136,16 +136,6 @@ function createMcpPrefixGuard(
         });
       }
 
-      if (state.serverName === undefined) {
-        return evaluatePrefixGuard({
-          call: state.call,
-          resource: state.tool.spec.name,
-          allowed: false,
-          allowReason: "mcp tool prefix and server connection validated",
-          denyReason: `MCP tool name must be prefixed with server name: ${state.tool.spec.name}`,
-        });
-      }
-
       if (!state.isServerConnected(state.serverName)) {
         return evaluatePrefixGuard({
           call: state.call,
@@ -186,12 +176,6 @@ export namespace McpPrefixGuardMiddleware {
     const serverName =
       tool === undefined ? resolveAttemptedServerId(ctx.call.tool) : resolveMcpServerId(tool);
 
-    const state: PrefixGuardState = {
-      call: ctx.call,
-      ...(tool !== undefined && { tool }),
-      ...(serverName !== undefined && { serverName }),
-      isServerConnected: ctx.isServerConnected,
-    };
     const sessionId = ctx.traceContext?.sessionId ?? crypto.randomUUID();
     const runId = ctx.traceContext?.runId ?? crypto.randomUUID();
     const traceContext: TraceContext.Type = {
@@ -205,7 +189,16 @@ export namespace McpPrefixGuardMiddleware {
       onDecision: ctx.onDecision,
       auditEmit: Bus.publish,
     });
-    engine.register(createMcpPrefixGuard(state));
+    if (serverName !== undefined) {
+      engine.register(
+        createMcpPrefixGuard({
+          call: ctx.call,
+          ...(tool !== undefined && { tool }),
+          serverName,
+          isServerConnected: ctx.isServerConnected,
+        }),
+      );
+    }
 
     const verdict = await engine.dispatchPoint("tool.mcp.pre", {
       sessionId,
@@ -219,8 +212,24 @@ export namespace McpPrefixGuardMiddleware {
       resourceDescriptor: createMcpDescriptor(ctx.call.tool, tool, serverName),
     });
 
+    let returnedVerdict = verdict;
+    if (
+      tool !== undefined &&
+      serverName === undefined &&
+      PolicyDecision.isBlocking(verdict) &&
+      verdict.reasonCodes.includes("policy.context_missing")
+    ) {
+      returnedVerdict = {
+        ...verdict,
+        reasonCodes: [
+          `MCP tool name must be prefixed with server name: ${tool.spec.name}`,
+          ...verdict.reasonCodes,
+        ],
+      };
+    }
+
     return {
-      verdict,
+      verdict: returnedVerdict,
       ...(tool !== undefined && { tool }),
       ...(serverName !== undefined && { serverName }),
     };

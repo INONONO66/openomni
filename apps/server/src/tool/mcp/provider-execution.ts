@@ -19,6 +19,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
     call,
     tools: input.tools,
     isServerConnected: input.isServerConnected,
+    ...(context?.traceContext !== undefined && { traceContext: context.traceContext }),
   });
   const tool = guard.tool;
   if (PolicyDecision.isBlocking(guard.verdict) || !tool) {

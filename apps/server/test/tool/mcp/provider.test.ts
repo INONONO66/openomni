@@ -122,7 +122,7 @@ describe("McpToolProvider", () => {
 
     expect(result).toMatchObject({
       toolCallId: "call-4",
-      output: "policy.context_missing",
+      output: "MCP tool name must be prefixed with server name: query",
       isError: true,
     });
     expect(execute).not.toHaveBeenCalled();

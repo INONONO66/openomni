@@ -69,6 +69,7 @@ export function createExecutionToolContext(
     tools: selectedTools.map((tool) => ({
       ...tool.spec,
       name: tool.spec.name.replace(/\./g, "_"),
+      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
     })),
     toolExecutor: createToolExecutor({
       tools: selectedTools,

@@ -13,6 +13,17 @@ import {
   snapshot,
 } from "./types.js";
 
+async function dispatchAcceptedDelegationFailure(
+  policy: ReturnType<typeof createDelegationPolicyRuntime>,
+  childId: string,
+  error: unknown,
+): Promise<void> {
+  await policy.dispatchPost(childId, {
+    status: "failed",
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
 function getRecords(
   records: Map<string, ChildRecord>,
   ids: readonly string[] | undefined,
@@ -122,8 +133,11 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
       let activeChildren = 0;
       for (const record of records.values()) {
         if (record.status === "running") activeChildren += 1;
-        if (activeChildren >= maxChildren)
-          throw new Error(`child agent limit reached: ${maxChildren}`);
+        if (activeChildren >= maxChildren) {
+          const error = new Error(`child agent limit reached: ${maxChildren}`);
+          await dispatchAcceptedDelegationFailure(policy, childId, error);
+          throw error;
+        }
       }
       const controller = new AbortController();
       const record: ChildRecord = {
@@ -166,6 +180,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
             tools: childTools.map((tool) => ({
               ...tool.spec,
               name: tool.spec.name.replace(/\./g, "_"),
+              ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
             })),
             ...(toolExecutor ? { toolExecutor } : {}),
           });
@@ -173,6 +188,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
       } catch (error) {
         if (!controller.signal.aborted) {
           options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
+          await dispatchAcceptedDelegationFailure(policy, childId, error);
           throw error;
         }
       }

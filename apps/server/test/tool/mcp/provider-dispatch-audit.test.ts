@@ -144,7 +144,7 @@ describe("McpToolProvider", () => {
       });
       expect(blockedEvents[2].payload).toMatchObject({
         resource: "query",
-        reason: "policy.context_missing",
+        reason: "MCP tool name must be prefixed with server name: query",
       });
       expect(execute).not.toHaveBeenCalled();
     } finally {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentResult, ChatAgentConfig } from "@openomni/agent";
-import { PolicyDecision, type Model } from "@openomni/protocol";
+import { PolicyDecision, type Model, type RuntimeResource } from "@openomni/protocol";
 import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
@@ -111,5 +111,32 @@ describe("child agent delegation pre-policy", () => {
     await runtime.await([child.id]);
 
     expect(configs[0]?.tools?.map((tool) => tool.name)).toEqual(["read"]);
+  });
+
+  test("preserves the selected parent tool descriptor in child agent config", async () => {
+    const configs: ChatAgentConfig[] = [];
+    const descriptor: RuntimeResource.Descriptor = {
+      id: "tool:mcp:server-1:remote.read",
+      kind: "tool",
+      labels: ["source.mcp", "capability.read"],
+      capabilities: ["read"],
+      effects: ["network.read"],
+      risk: 2,
+      source: { type: "mcp", serverId: "server-1", remoteName: "remote.read" },
+    };
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [{ ...makeTool("mcp.remote.read"), descriptor }],
+      createAgent: (config) => {
+        configs.push(config);
+        return { run: async () => successfulResult };
+      },
+    });
+
+    const child = await runtime.spawn({ prompt: "preserve provenance", tools: { all: true } });
+    await runtime.await([child.id]);
+
+    expect(configs[0]?.tools?.[0]?.descriptor).toBe(descriptor);
   });
 });
