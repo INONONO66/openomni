@@ -88,6 +88,7 @@ beforeEach(() => {
     id: "grant-test",
     surface: "test",
     kind: "trusted_channel",
+    defaultTier: "owner",
     createdBy: "act_owner",
   });
   IngressEngine.setCoordinator(noopCoordinator);

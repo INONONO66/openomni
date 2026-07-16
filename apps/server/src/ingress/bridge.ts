@@ -216,6 +216,7 @@ export function buildInboundEvent(
     meta: {
       ...base.meta,
       agentName: "resident",
+      correlation: buildActorMessageCorrelation(message),
       ...(pendingAsk ? { pendingAsk } : {}),
     },
     mode: "direct",
