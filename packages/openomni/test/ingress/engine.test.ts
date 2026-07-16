@@ -44,6 +44,7 @@ function installChannelGrants() {
       id: `grant-${surface}`,
       surface,
       kind: "trusted_channel",
+      ...(surface === "internal" ? {} : { defaultTier: "owner" }),
       createdBy: "act_owner",
     });
   }

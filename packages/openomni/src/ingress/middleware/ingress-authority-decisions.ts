@@ -13,7 +13,7 @@ export function abortDecision(policyId: string, reason: string): Policy.PolicyDe
   });
 }
 
-export function requireParsedEvent(state: PreRunState): Ingress.InboundEvent {
+export function requireParsedEvent(state: PreRunState): Ingress.DirectEvent {
   if (!state.parsedEvent) {
     throw new Error("ingress event must be schema-validated before authority middleware");
   }

@@ -1,10 +1,6 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import {
-  Dispatch as DispatchProtocol,
-  PolicyDecision as Decision,
-  type RuntimeResource,
-} from "@openomni/protocol";
-import { Bus, TraceContext } from "@openomni/session";
+import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
+import { Bus, type PendingInteractionStore, TraceContext } from "@openomni/session";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import {
   markRoutedPendingInteraction,
@@ -13,18 +9,12 @@ import {
 import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
 import { registerDispatchPolicy, type DispatchPolicyRegistration } from "./policy-registration.js";
 import { DispatchRegistry, type DispatchHandler, type DispatchHandlerContext } from "./registry.js";
-
-type DispatchEventPayload = {
-  readonly dispatchId: string;
-  readonly traceId?: string;
-  readonly sessionId?: string;
-  readonly runId?: string;
-  readonly actor: DispatchProtocol.ActorContext;
-  readonly action: string;
-  readonly target: DispatchProtocol.Target;
-  readonly correlation?: DispatchProtocol.Command["correlation"];
-  readonly time: number;
-};
+import {
+  eventBase,
+  normalizeHandlerOutput,
+  policyTraceContext,
+  resourceDescriptor,
+} from "./runtime-support.js";
 
 export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchHandlerContext {
   readonly policies?: readonly DispatchPolicyRegistration[];
@@ -40,39 +30,6 @@ export interface DispatchRuntimeOptions {
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 }
 
-function eventBase(command: DispatchProtocol.Command): DispatchEventPayload {
-  return {
-    dispatchId: command.dispatchId,
-    ...(command.traceId ? { traceId: command.traceId } : {}),
-    ...(command.sessionId ? { sessionId: command.sessionId } : {}),
-    ...(command.runId ? { runId: command.runId } : {}),
-    actor: command.actor,
-    action: command.action,
-    target: command.target,
-    ...(command.correlation ? { correlation: command.correlation } : {}),
-    time: Date.now(),
-  };
-}
-
-function resourceDescriptor(action: string): RuntimeResource.Descriptor {
-  return {
-    id: `dispatch:${action}`,
-    kind: "dispatch",
-    labels: ["dispatch", `dispatch.action.${action}`],
-    capabilities: ["route"],
-    effects: ["cross-session"],
-    source: { type: "runtime" },
-  };
-}
-
-function policyTraceContext(command: DispatchProtocol.Command, fallbackTraceId: string) {
-  return {
-    traceId: command.traceId ?? fallbackTraceId,
-    ...(command.sessionId ? { sessionId: command.sessionId } : {}),
-    ...(command.runId ? { runId: command.runId } : {}),
-  };
-}
-
 function collectPolicies(
   runtimePolicies: readonly DispatchPolicyRegistration[],
   submitPolicies: readonly DispatchPolicyRegistration[] | undefined,
@@ -85,11 +42,15 @@ function collectPolicies(
   ];
 }
 
-function normalizeHandlerOutput(value: Awaited<ReturnType<DispatchHandler>>): unknown {
-  if (value && typeof value === "object" && "output" in value) {
-    return (value as { output?: unknown }).output;
-  }
-  return value;
+const submitPinnedInteraction = Symbol("submitPinnedInteraction");
+
+export function submitPinnedPendingInteraction(
+  runtime: DispatchRuntime,
+  input: DispatchProtocol.Input,
+  pendingInteraction: PendingInteractionStore.Record,
+  options: DispatchSubmitOptions = {},
+): Promise<DispatchProtocol.Result> {
+  return runtime[submitPinnedInteraction](input, pendingInteraction, options);
 }
 
 export class DispatchRuntime {
@@ -113,6 +74,22 @@ export class DispatchRuntime {
     input: DispatchProtocol.Input,
     options: DispatchSubmitOptions = {},
   ): Promise<DispatchProtocol.Result> {
+    return this.submitResolved(input, options);
+  }
+
+  async [submitPinnedInteraction](
+    input: DispatchProtocol.Input,
+    pendingInteraction: PendingInteractionStore.Record,
+    options: DispatchSubmitOptions,
+  ): Promise<DispatchProtocol.Result> {
+    return this.submitResolved(input, options, pendingInteraction);
+  }
+
+  private async submitResolved(
+    input: DispatchProtocol.Input,
+    options: DispatchSubmitOptions,
+    pendingInteraction?: PendingInteractionStore.Record,
+  ): Promise<DispatchProtocol.Result> {
     const parsed = DispatchProtocol.Input.parse(input);
     const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
     const actor = deriveActorContext(options);
@@ -127,6 +104,7 @@ export class DispatchRuntime {
         ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
         submittedAt: Date.now(),
       }),
+      pendingInteraction,
     );
     const start = Date.now();
 

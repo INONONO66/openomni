@@ -10,12 +10,19 @@ import {
 } from "@openomni/protocol";
 import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
+import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
 import { resolveIngressActor } from "./actor-resolver";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
+import {
+  executePendingInteractionRoute,
+  pinRouteSession,
+  requireRoutedDecision,
+} from "./routing-execution";
+import { resolveKernelRoute } from "./routing-runtime";
 import { resolveTarget, targetKey } from "./target";
 
 export type { CoordinatorLike };
@@ -31,6 +38,7 @@ let _residentRuntime: ResidentRuntime | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 let _agentResolver: AgentResolver | undefined;
+let _dispatchRuntime: DispatchRuntime | undefined;
 
 function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   if (!Decision.isBlocking(decision)) return;
@@ -47,6 +55,7 @@ export namespace IngressEngine {
     _middlewareDecisionObserver = undefined;
     _ingressPolicies = [];
     _agentResolver = undefined;
+    _dispatchRuntime = undefined;
   }
 
   export function setCoordinator(c: CoordinatorLike): void {
@@ -73,6 +82,14 @@ export namespace IngressEngine {
     _agentResolver = undefined;
   }
 
+  export function setDispatchRuntime(runtime: DispatchRuntime): void {
+    _dispatchRuntime = runtime;
+  }
+
+  export function clearDispatchRuntime(): void {
+    _dispatchRuntime = undefined;
+  }
+
   export function setPolicyDecisionObserver(
     observer: ((decision: PolicyDecision) => void | Promise<void>) | undefined,
   ): void {
@@ -87,14 +104,26 @@ export namespace IngressEngine {
     const externalEvent = IngressNamespace.DirectEventSchema.parse(event);
     const resolvedActorEvent = resolveIngressActor(externalEvent);
     const trace = TraceContext.create();
-    const preRun = await IngressAuthorityMiddleware.runPreRun({
-      event: resolvedActorEvent,
+    const route = resolveKernelRoute(resolvedActorEvent, trace.traceId);
+    Bus.publish(IngressEvent.RoutingDecision, route.decision);
+    const decision = requireRoutedDecision(route.decision);
+    if (decision.stage === "wait_correlation") {
+      return executePendingInteractionRoute(
+        _dispatchRuntime,
+        resolvedActorEvent,
+        trace,
+        route,
+        decision,
+      );
+    }
+    const preRun = await IngressAuthorityMiddleware.runRoutedPreRun({
+      event: route.event,
       coordinator: _coordinator,
       traceContext: trace,
       onDecision: _middlewareDecisionObserver,
     });
 
-    const inboundEvent = preRun.event as Ingress.ResolvedInboundEvent;
+    const inboundEvent = pinRouteSession(preRun.event, decision);
     return ingestResolved(inboundEvent, trace, preRun.coordinator);
   }
 
@@ -106,8 +135,11 @@ export namespace IngressEngine {
     }
 
     const trace = TraceContext.create();
+    const route = resolveKernelRoute(event, trace.traceId);
+    Bus.publish(IngressEvent.RoutingDecision, route.decision);
+    const decision = requireRoutedDecision(route.decision);
     const agent = await _agentResolver.resolve(event.agentName, event);
-    const resolvedEvent: Ingress.ResolvedInboundEvent = { ...event, agent };
+    const resolvedEvent = pinRouteSession({ ...event, agent }, decision);
     return ingestResolved(resolvedEvent, trace, _coordinator);
   }
 

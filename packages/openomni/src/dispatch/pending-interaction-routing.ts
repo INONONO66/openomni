@@ -1,8 +1,7 @@
 import { Dispatch } from "@openomni/protocol";
 import { PendingInteractionStore } from "@openomni/session";
 
-function correlationQueries(correlation: Dispatch.Command["correlation"]): Dispatch.Correlation[] {
-  if (!correlation || typeof correlation === "string") return [];
+function correlationQueries(correlation: Dispatch.Correlation): Dispatch.Correlation[] {
   const base = {
     endpointId: correlation.endpointId,
     channelId: correlation.channelId,
@@ -24,10 +23,12 @@ function correlationQueries(correlation: Dispatch.Command["correlation"]): Dispa
   return queries;
 }
 
-function findPendingInteraction(command: Dispatch.Command) {
+export function findPendingInteractions(
+  correlation: Dispatch.Correlation,
+): readonly PendingInteractionStore.Record[] {
   const seen = new Set<string>();
   const matches: PendingInteractionStore.Record[] = [];
-  for (const query of correlationQueries(command.correlation)) {
+  for (const query of correlationQueries(correlation)) {
     for (const match of PendingInteractionStore.findByCorrelation(query)) {
       if (seen.has(match.id)) continue;
       seen.add(match.id);
@@ -35,7 +36,7 @@ function findPendingInteraction(command: Dispatch.Command) {
     }
     if (matches.length > 0) break;
   }
-  return matches.length === 1 ? matches[0] : undefined;
+  return matches;
 }
 
 function markMatched(record: PendingInteractionStore.Record): PendingInteractionStore.Record {
@@ -44,10 +45,9 @@ function markMatched(record: PendingInteractionStore.Record): PendingInteraction
   return record;
 }
 
-function requestedAction(
-  command: Dispatch.Command,
+export function requestedPendingInteractionAction(
+  payload: unknown,
 ): PendingInteractionStore.Record["allowedActions"][number] {
-  const payload = command.payload;
   if (payload && typeof payload === "object" && "action" in payload) {
     const action = payload.action;
     if (
@@ -62,11 +62,18 @@ function requestedAction(
   return "report_result";
 }
 
-export function routePendingInteraction(command: Dispatch.Command): Dispatch.Command {
+export function routePendingInteraction(
+  command: Dispatch.Command,
+  pinned?: PendingInteractionStore.Record,
+): Dispatch.Command {
   if (command.action !== Dispatch.Actions.ActorMessage) return command;
-  const match = findPendingInteraction(command);
+  const matches =
+    pinned === undefined && command.correlation && typeof command.correlation !== "string"
+      ? findPendingInteractions(command.correlation)
+      : [];
+  const match = pinned ?? (matches.length === 1 ? matches[0] : undefined);
   if (!match) return command;
-  const action = requestedAction(command);
+  const action = requestedPendingInteractionAction(command.payload);
   if (!match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
     return Dispatch.Command.parse({

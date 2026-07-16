@@ -20,6 +20,15 @@ export function registrations(state: PreRunState): PolicyRegistration[] {
   ];
 }
 
+export function routedRegistrations(state: PreRunState): PolicyRegistration[] {
+  return [
+    createSchemaValidation(state),
+    createCoordinatorPresence(state),
+    createAuthorityCheck(state),
+    createModeDispatch(state),
+  ];
+}
+
 function createBlacklistCheck(state: PreRunState): PolicyRegistration {
   return {
     ...IngressAuthorityDefinitions.BlacklistCheck,

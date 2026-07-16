@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Ingress } from "@openomni/protocol";
 import { ChannelGrantStore, Storage } from "@openomni/session";
 import { ZodError } from "zod";
 import {
@@ -34,6 +33,7 @@ beforeEach(() => {
       id: `grant-${surface}`,
       surface,
       kind: "trusted_channel",
+      defaultTier: "owner",
       createdBy: "act_owner",
     });
   }
@@ -138,9 +138,14 @@ describe("IngressEngine integration pipeline", () => {
         payload: "hello",
       };
 
-      await expect(
-        IngressEngine.ingest(invalidEvent as unknown as Ingress.InboundEvent),
-      ).rejects.toBeInstanceOf(ZodError);
+      let caught: unknown;
+      try {
+        await IngressEngine.ingest(invalidEvent);
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ZodError);
     });
   });
 });
