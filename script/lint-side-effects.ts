@@ -42,7 +42,8 @@ const rules: readonly SideEffectRule[] = [
   {
     ruleId: "tool-ledger-before-execute",
     filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
-    sideEffect: /tool\.execute\(dispatchedCall(?:, \{ signal: linkedAbort\.signal \})?\)/g,
+    sideEffect:
+      /tool\.execute\(dispatchedCall(?:, (?:\{ signal: linkedAbort\.signal \}|executionContext))?\)/g,
     scopeStart:
       /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
     requiredBefore: ["publishToolStarted({", "toolCallId: call.id", "toolName: originalName"],
@@ -63,7 +64,8 @@ const rules: readonly SideEffectRule[] = [
   {
     ruleId: "mcp-ledger-before-execute",
     filePath: "apps/server/src/tool/mcp/provider-execution.ts",
-    sideEffect: /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, context)?\)/g,
+    sideEffect:
+      /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, (?:context|executionContext))?\)/g,
     scopeStart:
       /export async function executeMcpTool\(input: ExecuteMcpToolInput\): Promise<Tool\.Result> \{/g,
     requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
