@@ -68,10 +68,16 @@ describe("PolicyEngine dispatchPoint selection", () => {
     }
   });
 
-  test("resolves canonical timing when policy loads after compatibility map mutation", async () => {
+  test("resolves canonical timing after rejecting compatibility map mutation", async () => {
     const script = `
       import { Policy } from "@openomni/protocol";
-      Policy.PolicyPoint.MigrationMapping[Policy.Timing.DISPATCH_AUTHORIZE] = ["run.lifecycle.pre"];
+      let mutationRejected = false;
+      try {
+        Policy.PolicyPoint.MigrationMapping[Policy.Timing.DISPATCH_AUTHORIZE] = ["run.lifecycle.pre"];
+      } catch {
+        mutationRejected = true;
+      }
+      if (!mutationRejected) process.exit(1);
       const { PolicyEngine } = await import("./src/index.ts");
       const decision = await PolicyEngine.create().dispatchPoint("dispatch.action.pre", {
         actor: { kind: "system", actorId: "system:test" },

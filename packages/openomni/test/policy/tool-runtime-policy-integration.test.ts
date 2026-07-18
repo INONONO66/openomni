@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/middleware/tool-runtime-policy";
+import { WorkspaceLock } from "../../src/execution-runtime/workspace-lock";
 
 describe("ToolRuntimePolicyMiddleware integration", () => {
   test("evaluates pre-tool for low-risk tier without workspace lock", async () => {
@@ -29,20 +30,45 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
     expect(result.handle.timeoutMs).toBe(60_000);
   });
 
-  test("evaluates post-tool releasing lock when acquired", async () => {
-    const handle: ToolRuntimePolicyMiddleware.RuntimePolicyHandle = {
-      timeoutMs: 30_000,
-      lockOwnerId: "run-3",
-      lockAcquired: false,
-    };
-
-    const verdict = ToolRuntimePolicyMiddleware.evaluatePostTool({
-      toolName: "read_file",
+  test("evaluates post-tool releasing an acquired lock", async () => {
+    const workspaceRoot = `/tmp/openomni-runtime-policy-${crypto.randomUUID()}`;
+    const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
+      toolName: "write_file",
+      toolCallId: "call-3",
       input: {},
-      handle,
+      riskTier: 1,
+      workspaceRoot,
+      lockOwnerId: "run-3",
     });
 
-    expect(verdict.verdict).toBe("allow");
+    expect(result.handle.lockAcquired).toBe(true);
+    try {
+      const blocked = await WorkspaceLock.acquire(workspaceRoot, "contender", 10).catch(
+        (error) => error,
+      );
+      expect(blocked).toBeInstanceOf(Error);
+
+      const verdict = ToolRuntimePolicyMiddleware.evaluatePostTool({
+        toolName: "write_file",
+        input: {},
+        handle: result.handle,
+      });
+
+      expect(verdict.verdict).toBe("allow");
+      expect(result.handle.lockAcquired).toBe(false);
+      await WorkspaceLock.acquire(workspaceRoot, "probe", 50);
+      WorkspaceLock.release(workspaceRoot, "probe");
+    } finally {
+      if (result.handle.lockAcquired) {
+        ToolRuntimePolicyMiddleware.evaluatePostTool({
+          toolName: "write_file",
+          input: {},
+          handle: result.handle,
+        });
+      }
+      WorkspaceLock.release(workspaceRoot, "probe");
+      WorkspaceLock.release(workspaceRoot, "contender");
+    }
   });
 
   test("enforceTimeout rejects after specified ms", async () => {

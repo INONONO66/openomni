@@ -15,7 +15,10 @@ export const DEFAULT_MAX_CHILDREN = 4;
 export const DEFAULT_AWAIT_TIMEOUT_MS = 60_000;
 export const DEFAULT_MAX_OUTPUT_CHARS = 4_000;
 
-export type DelegationPolicyPointId = "delegation.worker.pre" | "delegation.worker.post";
+export type DelegationPolicyPointId = Extract<
+  keyof typeof Policy.PolicyPoint.Registry,
+  `delegation.worker.${string}`
+>;
 
 export type ChildWorkerProfile = {
   readonly name: "child_agent";

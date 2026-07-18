@@ -35,9 +35,7 @@ export type CanonicalAuditDispatchContextGeneric<TCtx extends GenericPolicyConte
 export type DispatchPointContextGeneric<
   TCtx extends GenericPolicyContext,
   TPointId extends PolicyPointId,
-> = DispatchContextGeneric<TCtx> &
-  Partial<Policy.PolicyPointInputMap[TPointId]> &
-  Record<string, unknown>;
+> = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId] & Record<string, unknown>;
 
 export type PolicyDecision = Policy.PolicyDecision;
 

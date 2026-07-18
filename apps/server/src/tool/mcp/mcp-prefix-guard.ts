@@ -171,19 +171,24 @@ export namespace McpPrefixGuardMiddleware {
     failPolicy: "fail-closed",
   } as const satisfies Omit<CanonicalPolicyRegistrationGeneric<McpPolicyContext>, "fn">;
 
+  /** @internal Shared MCP audit identity normalizer; not re-exported by the server package. */
+  export function normalizeAuditContext(
+    traceContext?: TraceContext.Type,
+  ): Required<Pick<TraceContext.Type, "traceId" | "sessionId" | "runId">> {
+    return {
+      traceId: traceContext?.traceId ?? crypto.randomUUID(),
+      sessionId: traceContext?.sessionId ?? crypto.randomUUID(),
+      runId: traceContext?.runId ?? crypto.randomUUID(),
+    };
+  }
+
   export async function evaluatePreToolUse(ctx: PreToolUseContext): Promise<PreToolUseResult> {
     const tool = resolveTool(ctx.tools, ctx.call.tool);
     const serverName =
       tool === undefined ? resolveAttemptedServerId(ctx.call.tool) : resolveMcpServerId(tool);
 
-    const sessionId = ctx.traceContext?.sessionId ?? crypto.randomUUID();
-    const runId = ctx.traceContext?.runId ?? crypto.randomUUID();
-    const traceContext: TraceContext.Type = {
-      ...(ctx.traceContext ?? {}),
-      traceId: ctx.traceContext?.traceId ?? crypto.randomUUID(),
-      sessionId,
-      runId,
-    };
+    const traceContext = normalizeAuditContext(ctx.traceContext);
+    const { sessionId, runId } = traceContext;
     const engine = PolicyEngine.create<McpPolicyContext>({
       traceContext,
       onDecision: ctx.onDecision,
@@ -210,21 +215,23 @@ export namespace McpPrefixGuardMiddleware {
       toolInput: ctx.call.input,
       traceContext,
       resourceDescriptor: createMcpDescriptor(ctx.call.tool, tool, serverName),
-    });
+      // Unknown, unprefixed tool names intentionally cross the runtime validation boundary so
+      // the guard can translate policy.context_missing into the actionable unknown-tool reason.
+    } as unknown as Policy.PolicyPointInputMap["tool.mcp.pre"] & McpPolicyContext);
 
     let returnedVerdict = verdict;
     if (
-      tool !== undefined &&
       serverName === undefined &&
       PolicyDecision.isBlocking(verdict) &&
       verdict.reasonCodes.includes("policy.context_missing")
     ) {
+      const actionableReason =
+        tool === undefined
+          ? `Unknown tool: ${ctx.call.tool}`
+          : `MCP tool name must be prefixed with server name: ${tool.spec.name}`;
       returnedVerdict = {
         ...verdict,
-        reasonCodes: [
-          `MCP tool name must be prefixed with server name: ${tool.spec.name}`,
-          ...verdict.reasonCodes,
-        ],
+        reasonCodes: [actionableReason, ...verdict.reasonCodes],
       };
     }
 

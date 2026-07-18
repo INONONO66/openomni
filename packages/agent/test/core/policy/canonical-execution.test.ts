@@ -189,7 +189,8 @@ describe("canonical tool policy execution", () => {
       expect(typeof policyIdentities[0]?.sessionId).toBe("string");
       expect(typeof policyIdentities[0]?.runId).toBe("string");
       expect(startedEvents).toHaveLength(1);
-      expect(startedEvents[0]).not.toHaveProperty("runId");
+      expect(typeof startedEvents[0]?.sessionId).toBe("string");
+      expect(typeof startedEvents[0]?.runId).toBe("string");
       expect(warningErrors).toEqual(["observer-failure", "observer-failure"]);
     } finally {
       unsubscribeStarted();

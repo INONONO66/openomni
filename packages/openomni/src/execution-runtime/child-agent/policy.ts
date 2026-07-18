@@ -8,8 +8,14 @@ import type {
   DelegationPolicyContext,
 } from "./types.js";
 
+type ResolvedTraceContext = TraceContext.Type & {
+  readonly traceId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+};
+
 export type DelegationPolicyRuntime = {
-  readonly traceContext: TraceContext.Type;
+  readonly traceContext: ResolvedTraceContext;
   readonly dispatchPre: (workerRunId: string, workerProfile: ChildWorkerProfile) => Promise<void>;
   readonly dispatchPost: (workerRunId: string, workerResult: ChildWorkerResult) => Promise<void>;
 };
@@ -21,7 +27,7 @@ class DelegationPolicyBlockedError extends Error {
   }
 }
 
-function resolveTraceContext(traceContext: TraceContext.Type | undefined): TraceContext.Type {
+function resolveTraceContext(traceContext: TraceContext.Type | undefined): ResolvedTraceContext {
   return {
     ...traceContext,
     traceId: traceContext?.traceId ?? crypto.randomUUID(),

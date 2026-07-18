@@ -214,7 +214,7 @@ describe("createToolExecutor bus events", () => {
     expect(started).toHaveLength(1);
     const s = started[0] as { traceId: string; sessionId: string };
     expect(s.traceId.length).toBeGreaterThan(0);
-    expect(s.sessionId).toBe("");
+    expect(s.sessionId.length).toBeGreaterThan(0);
   });
 
   it("publishes actor from trace context", async () => {

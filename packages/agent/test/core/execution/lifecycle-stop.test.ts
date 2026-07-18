@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy/types";
+import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
 import type { AgentEvent } from "../../../src/core/types";
 import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
 import { handleStop } from "../../../src/core/execution/turn-outcome";
@@ -14,11 +14,21 @@ import {
 } from "./lifecycle-dispatch-fixture";
 
 describe("handleStop (turn.finish + run.finish)", () => {
-  it("dispatches turn.finish on stop and completes normally", async () => {
+  it("dispatches run.turn.post on stop and completes normally", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => allow());
+    const fn = mock((ctx: Parameters<CanonicalPolicyRegistration["fn"]>[0]) => {
+      expect(ctx.pointId).toBe("run.turn.post");
+      return allow();
+    });
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-post-turn", timing: "turn.finish", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-post-turn",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": [] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     state.lastAssistantText = "response text";
@@ -28,7 +38,8 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const events = await collectEvents(handleStop(state, config, engine, makeAgentBase(), turn));
 
     expect(fn).toHaveBeenCalledTimes(1);
-    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    const ctx = fn.mock.calls[0][0];
+    expect(ctx.pointId).toBe("run.turn.post");
     expect(ctx.timing).toBe("turn.finish");
     expect(ctx.isCompletion).toBe(true);
 

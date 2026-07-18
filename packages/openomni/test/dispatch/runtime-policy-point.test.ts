@@ -73,13 +73,13 @@ describe("DispatchRuntime canonical policy point", () => {
     }
   });
 
-  test("denies missing session and run identity before policy and handler", async () => {
+  test("runs policy and handler without optional session and run identity", async () => {
     let policyCalled = false;
     let handlerCalled = false;
     const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
     runtime.register("resident.ask", () => {
       handlerCalled = true;
-      return { output: "should not happen" };
+      return { output: "ok" };
     });
 
     const result = await runtime.submit(residentAskInput(), {
@@ -88,21 +88,21 @@ describe("DispatchRuntime canonical policy point", () => {
       policies: [
         {
           kind: "point",
-          name: "must-not-run-without-identity",
+          name: "allow-dispatch-without-run-identity",
           pointIds: ["dispatch.action.pre"],
           effectCapabilities: { "dispatch.action.pre": [] },
           priority: 0,
           fn: () => {
             policyCalled = true;
-            return PolicyDecision.allow({ policyId: "must-not-run-without-identity" });
+            return PolicyDecision.allow({ policyId: "allow-dispatch-without-run-identity" });
           },
         },
       ],
     });
 
-    expect(result.status).toBe("denied");
-    expect(result.reason).toBe("policy.context_missing");
-    expect(policyCalled).toBe(false);
-    expect(handlerCalled).toBe(false);
+    expect(result.status).toBe("completed");
+    expect(result.output).toBe("ok");
+    expect(policyCalled).toBe(true);
+    expect(handlerCalled).toBe(true);
   });
 });

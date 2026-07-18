@@ -39,10 +39,10 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
   });
 
-  test("does not route actor.message when PendingInteraction disallows result reports", async () => {
+  test("denies actor.message from unknown actors before PendingInteraction action checks", async () => {
     const runtime = new DispatchRuntime();
     let called = false;
-    runtime.register("actor.reply", () => {
+    runtime.register("actor.message", () => {
       called = true;
       return { output: "should not route" };
     });

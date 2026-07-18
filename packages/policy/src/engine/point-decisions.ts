@@ -74,8 +74,7 @@ export function normalizePointDecision(
   readonly decision: Policy.PolicyDecision;
   readonly parsed?: Policy.PolicyDecision;
 } {
-  const parsed = Policy.PolicyDecision.safeParse(decision);
-  if (!parsed.success) {
+  const invalidDecision = () => {
     const reason = "policy.invalid_decision";
     return {
       decision: PolicyDecision.deny({
@@ -86,7 +85,15 @@ export function normalizePointDecision(
         effects: enforcementEffects(pointId, reason),
       }),
     };
+  };
+
+  let parsed: ReturnType<typeof Policy.PolicyDecision.safeParse>;
+  try {
+    parsed = Policy.PolicyDecision.safeParse(decision);
+  } catch {
+    return invalidDecision();
   }
+  if (!parsed.success) return invalidDecision();
   return {
     decision: { ...parsed.data, durationMs, priority: reg.priority },
     parsed: parsed.data,

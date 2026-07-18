@@ -111,20 +111,6 @@ describe("PolicyPoint registry", () => {
     }
   });
 
-  test("resolves canonical aliases independently of mutable compatibility mappings", () => {
-    const timing = Policy.Timing.DISPATCH_AUTHORIZE;
-    const originalMapping = Policy.PolicyPoint.MigrationMapping[timing];
-
-    try {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, ["run.lifecycle.pre"]);
-
-      expect(Policy.PolicyPoint.MigrationMapping[timing]).toEqual(["run.lifecycle.pre"]);
-      expect(Policy.PolicyPoint.resolve(timing)).toEqual(["dispatch.action.pre"]);
-    } finally {
-      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, originalMapping);
-    }
-  });
-
   test("pre-boundary contracts fail closed and post-boundary contracts fail open", () => {
     expect(Policy.PolicyPoint.Registry["dispatch.action.pre"].defaultFailPolicy).toBe(
       "fail-closed",

@@ -47,7 +47,6 @@ const expectedPolicyPointStaticKeys = [
   "Registry",
   "InputSchemas",
   "MigrationMapping",
-  "resolve",
 ];
 
 const expectedRuntimeResourceKeys = [

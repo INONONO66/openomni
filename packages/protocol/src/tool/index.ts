@@ -88,8 +88,9 @@ export namespace Tool {
    * Per-call runtime context for tool execution callbacks. Cancellation is
    * cooperative: executors pass an aborted signal before returning timeout or
    * run-cancel results, and tools that start long-running work should stop their
-   * own side effects when it aborts. Correlation metadata is limited to the
-   * identifiers needed by downstream audit emitters.
+   * own side effects when it aborts. This type documents the correlation fields
+   * tools may receive; invocation owners must construct an exact runtime object
+   * because TypeScript's structural typing does not remove additional fields.
    */
   export interface ExecutionContext {
     readonly signal?: AbortSignal;

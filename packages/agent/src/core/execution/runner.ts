@@ -26,15 +26,19 @@ export async function* streamAgent(
   let lastError = "";
 
   const trace = input.traceContext ?? TraceContext.empty();
-  const sessionId = trace.sessionId ?? crypto.randomUUID();
-  const runId = trace.runId ?? crypto.randomUUID();
-  const resolvedTrace = { ...trace, sessionId, runId };
-  const agentBase = {
-    traceId: trace.traceId,
+  const traceId = nonEmptyString(trace.traceId) ?? crypto.randomUUID();
+  const sessionId = nonEmptyString(trace.sessionId) ?? crypto.randomUUID();
+  const runId = nonEmptyString(trace.runId) ?? crypto.randomUUID();
+  const agentName = nonEmptyString(trace.agentName);
+  const actorId = nonEmptyString(input.metadata?.actorId) ?? agentName ?? runId;
+  const resolvedTrace = {
+    ...trace,
+    traceId,
     sessionId,
     runId,
-    actorId: trace.agentName ?? runId,
+    agentName,
   };
+  const agentBase = { traceId, sessionId, runId, actorId };
   emitRunStarted(resolvedTrace, config.model.id);
   assertToolExecutor(config);
 
@@ -156,4 +160,8 @@ function unknownOutcomeType(value: unknown): string {
 
   const type = value.type;
   return typeof type === "string" ? type : "unknown";
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

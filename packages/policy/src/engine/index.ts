@@ -1,4 +1,5 @@
 import { createPolicyEngine } from "./dispatch";
+import { resolvePolicyPoints } from "./points";
 
 export type {
   PolicyAuditConfig,
@@ -19,5 +20,6 @@ export type {
 } from "./types";
 
 export { PolicyRegistrationError } from "./registration";
+export { resolvePolicyPoints };
 
-export const PolicyEngine = { create: createPolicyEngine };
+export const PolicyEngine = { create: createPolicyEngine, resolvePolicyPoints };

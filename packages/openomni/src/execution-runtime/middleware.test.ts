@@ -1,4 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import { PolicyEngine } from "@openomni/agent";
+import { Session } from "@openomni/session";
+import { InjectionQueue } from "./injection-queue";
 import { buildWorkerMiddleware } from "./middleware";
 import { findRegistration, invokeTool } from "./middleware-test-fixture";
 
@@ -60,5 +63,54 @@ describe("buildWorkerMiddleware backward compatibility", () => {
         }),
       },
     ]);
+  });
+});
+
+describe("buildWorkerMiddleware injection queue persistence", () => {
+  it("emits a queued response when history persistence throws a non-Error value", async () => {
+    const queue = InjectionQueue.create();
+    queue.enqueue("run-storage-failure", {
+      messageId: "message-storage-failure",
+      output: "deliver despite non-Error storage failure",
+      injectToHistory: true,
+      timestamp: 1,
+    });
+    const registration = findRegistration(
+      buildWorkerMiddleware({ injectionQueue: queue }),
+      "builtin:injection-queue-drain",
+    );
+    if (registration === undefined) throw new Error("expected injection queue registration");
+    const addMessageSpy = spyOn(Session, "addMessage").mockImplementation(() => {
+      // biome-ignore lint/style/useThrowOnlyError: exercises the defensive catch for hostile non-Error throws.
+      throw "storage unavailable";
+    });
+    const engine = PolicyEngine.create({ audit: false });
+    engine.register(registration);
+
+    try {
+      const decision = await engine.dispatchPoint("run.turn.post", {
+        sessionId: "session-storage-failure",
+        runId: "run-storage-failure",
+        turnIndex: 0,
+        turnResult: { type: "stop" },
+        steps: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        turnCount: 0,
+        isCompletion: true,
+        continuationCount: 0,
+        elapsedMs: 0,
+      });
+
+      expect(decision.effects).toEqual([
+        {
+          type: "prompt.inject_message",
+          message: "deliver despite non-Error storage failure",
+          role: "assistant",
+        },
+      ]);
+      expect(queue.hasPending("run-storage-failure")).toBe(false);
+    } finally {
+      addMessageSpy.mockRestore();
+    }
   });
 });

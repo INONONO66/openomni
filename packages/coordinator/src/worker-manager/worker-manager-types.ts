@@ -87,7 +87,8 @@ export type WorkerSlot = {
 export type ActiveRun = {
   readonly runId: string;
   readonly sessionId: string;
-  readonly traceId?: string;
+  readonly traceId: string;
+  readonly agentName?: string;
   slot?: WorkerSlot;
   cancelled?: boolean;
 };

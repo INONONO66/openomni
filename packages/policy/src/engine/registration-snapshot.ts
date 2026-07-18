@@ -39,7 +39,7 @@ function snapshotEffectCapabilityStrings(
   value: object,
   fail: SnapshotFailure,
 ): Readonly<Record<string, readonly string[]>> {
-  const capabilities: Record<string, readonly string[]> = {};
+  const capabilities: Record<string, readonly string[]> = Object.create(null);
   for (const pointId of Object.keys(value)) {
     const captured = captureFrozenArray(Reflect.get(value, pointId));
     if (!captured.success) {

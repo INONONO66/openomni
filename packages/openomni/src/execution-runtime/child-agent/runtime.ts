@@ -103,6 +103,7 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
   const maxChildren = options.maxChildren ?? DEFAULT_MAX_CHILDREN;
   const awaitTimeoutMs = options.awaitTimeoutMs ?? DEFAULT_AWAIT_TIMEOUT_MS;
   const maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
+  let admissionTail = Promise.resolve();
 
   const cancelRecord = (record: ChildRecord, reason: string): void => {
     if (record.status !== "running") return;
@@ -118,101 +119,116 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
 
   return {
     async spawn(input) {
-      if (options.parentSignal?.aborted) {
-        throw new Error("parent worker run cancelled");
-      }
-      const childId = crypto.randomUUID();
-      await policy.dispatchPre(childId, {
-        name: "child_agent",
-        model: options.model,
-        prompt: input.prompt,
+      const previousAdmission = admissionTail;
+      let releaseAdmission: () => void = () => undefined;
+      admissionTail = new Promise<void>((resolve) => {
+        releaseAdmission = resolve;
       });
-      if (options.parentSignal?.aborted) {
-        const reason = new Error("parent worker run cancelled");
-        await policy.dispatchPost(childId, { status: "cancelled", reason: reason.message });
-        throw reason;
-      }
-      let activeChildren = 0;
-      for (const record of records.values()) {
-        if (record.status === "running") activeChildren += 1;
+      await previousAdmission;
+
+      try {
+        if (options.parentSignal?.aborted) {
+          throw new Error("parent worker run cancelled");
+        }
+        const childId = crypto.randomUUID();
+        await policy.dispatchPre(childId, {
+          name: "child_agent",
+          model: options.model,
+          prompt: input.prompt,
+        });
+        if (options.parentSignal?.aborted) {
+          const reason = new Error("parent worker run cancelled");
+          await policy.dispatchPost(childId, { status: "cancelled", reason: reason.message });
+          throw reason;
+        }
+        let activeChildren = 0;
+        for (const record of records.values()) {
+          if (record.status === "running") activeChildren += 1;
+        }
         if (activeChildren >= maxChildren) {
           const error = new Error(`child agent limit reached: ${maxChildren}`);
           await dispatchAcceptedDelegationFailure(policy, childId, error);
           throw error;
         }
-      }
-      const controller = new AbortController();
-      const record: ChildRecord = {
-        id: childId,
-        prompt: input.prompt,
-        controller,
-        status: "running",
-        maxOutputChars,
-        notifyOnComplete: input.notifyOnComplete === true,
-        completion: Promise.resolve(),
-      };
-      const abortDuringConstruction = () => {
-        controller.abort(new Error("parent worker run cancelled"));
-      };
-      options.parentSignal?.addEventListener("abort", abortDuringConstruction, { once: true });
+        const controller = new AbortController();
+        const record: ChildRecord = {
+          id: childId,
+          prompt: input.prompt,
+          controller,
+          status: "running",
+          maxOutputChars,
+          notifyOnComplete: input.notifyOnComplete === true,
+          completion: Promise.resolve(),
+        };
+        const abortDuringConstruction = () => {
+          controller.abort(new Error("parent worker run cancelled"));
+        };
+        options.parentSignal?.addEventListener("abort", abortDuringConstruction, { once: true });
 
-      let agent: ReturnType<ChildAgentRuntimeOptions["createAgent"]> | undefined;
-      try {
-        const childTools = selectChildTools(options.parentTools, input.tools);
-        if (!controller.signal.aborted) {
-          const toolExecutor =
-            childTools.length > 0
-              ? createToolExecutor({
-                  tools: childTools,
-                  config: {
-                    workspaceRoot: options.workspaceRoot,
-                    runtime: childToolRuntime(policy.traceContext, childId, options.workspaceRoot),
-                  },
-                })
-              : undefined;
-          agent = options.createAgent({
-            model: options.model,
-            systemPrompt: options.systemPrompt,
-            signal: controller.signal,
-            auth: options.auth,
-            allowAuthFallback: options.allowAuthFallback,
-            ...(options.budget ? { budget: options.budget } : {}),
-            ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
-            ...(options.middleware ? { middleware: options.middleware } : {}),
-            tools: childTools.map((tool) => ({
-              ...tool.spec,
-              name: tool.spec.name.replace(/\./g, "_"),
-              ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
-            })),
-            ...(toolExecutor ? { toolExecutor } : {}),
-          });
+        let agent: ReturnType<ChildAgentRuntimeOptions["createAgent"]> | undefined;
+        try {
+          const childTools = selectChildTools(options.parentTools, input.tools);
+          if (!controller.signal.aborted) {
+            const toolExecutor =
+              childTools.length > 0
+                ? createToolExecutor({
+                    tools: childTools,
+                    config: {
+                      workspaceRoot: options.workspaceRoot,
+                      runtime: childToolRuntime(
+                        policy.traceContext,
+                        childId,
+                        options.workspaceRoot,
+                      ),
+                    },
+                  })
+                : undefined;
+            agent = options.createAgent({
+              model: options.model,
+              systemPrompt: options.systemPrompt,
+              signal: controller.signal,
+              auth: options.auth,
+              allowAuthFallback: options.allowAuthFallback,
+              ...(options.budget ? { budget: options.budget } : {}),
+              ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
+              ...(options.middleware ? { middleware: options.middleware } : {}),
+              tools: childTools.map((tool) => ({
+                ...tool.spec,
+                name: tool.spec.name.replace(/\./g, "_"),
+                ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
+              })),
+              ...(toolExecutor ? { toolExecutor } : {}),
+            });
+          }
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
+            await dispatchAcceptedDelegationFailure(policy, childId, error);
+            throw error;
+          }
         }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
-          await dispatchAcceptedDelegationFailure(policy, childId, error);
-          throw error;
-        }
-      }
 
-      publishChildAgentStarted(options, record);
-      records.set(childId, record);
-      options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
-      if (controller.signal.aborted || agent === undefined) {
-        cancelRecord(record, "parent worker run cancelled");
+        publishChildAgentStarted(options, record);
+        records.set(childId, record);
+        options.parentSignal?.removeEventListener("abort", abortDuringConstruction);
+        if (controller.signal.aborted || agent === undefined) {
+          cancelRecord(record, "parent worker run cancelled");
+          return snapshot(record);
+        }
+        const runCompletion = Promise.resolve()
+          .then(() =>
+            agent.run({
+              messages: [...options.parentMessages, { role: "user", content: input.prompt }],
+              traceContext: childTraceContext(policy.traceContext, childId),
+            }),
+          )
+          .then((result) => settleCompleted(options, policy, record, result))
+          .catch((error: unknown) => settleFailed(options, policy, record, error));
+        record.completion = runCompletion;
         return snapshot(record);
+      } finally {
+        releaseAdmission();
       }
-      const runCompletion = Promise.resolve()
-        .then(() =>
-          agent.run({
-            messages: [...options.parentMessages, { role: "user", content: input.prompt }],
-            traceContext: childTraceContext(policy.traceContext, childId),
-          }),
-        )
-        .then((result) => settleCompleted(options, policy, record, result))
-        .catch((error: unknown) => settleFailed(options, policy, record, error));
-      record.completion = runCompletion;
-      return snapshot(record);
     },
 
     inspect(ids) {

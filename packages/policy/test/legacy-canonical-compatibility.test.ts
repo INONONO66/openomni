@@ -61,24 +61,17 @@ describe("PolicyEngine legacy-to-canonical compatibility", () => {
     });
   });
 
-  test("enforces a mapped canonical contract when no registrations match", async () => {
+  test("accepts valid mapped canonical context when no registrations match", async () => {
     // Given
     const { engine, events } = createAuditedEngine("legacy-canonical-contract");
 
     // When
-    const decision = await engine.dispatch("context.prepare", {});
+    const decision = await engine.dispatch("context.prepare", promptContext);
 
     // Then
     expect(decision.verdict).toBe("allow");
-    expect(decision.reasonCodes).toContain("policy.context_missing");
-    const evaluated = PolicyEvent.Evaluated.schema.parse(
-      events.find(({ name }) => name === PolicyEvent.Evaluated.name)?.data,
-    );
-    expect(evaluated).toMatchObject({
-      policyId: "policy.point.contract",
-      pointId: "prompt.context.pre",
-      reasonCodes: ["policy.context_missing"],
-    });
+    expect(decision.reasonCodes).toEqual([]);
+    expect(events.some(({ name }) => name === PolicyEvent.Evaluated.name)).toBe(false);
   });
 
   test("enforces canonical required context before invoking middleware", async () => {

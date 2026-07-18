@@ -21,18 +21,11 @@ export interface PolicyContext extends GenericPolicyContext {
   budget?: AgentBudget;
 }
 
-export type PolicyFn = (
-  ctx: PolicyContext,
-) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+export type PolicyFn = CanonicalPolicyRegistrationGeneric<PolicyContext>["fn"];
 
 /** Agent-scoped convenience alias: registration typed to the full agent PolicyContext. */
 export type PolicyRegistration = PolicyRegistrationGeneric<PolicyContext>;
 
-export type CanonicalPolicyRegistration = Omit<
-  CanonicalPolicyRegistrationGeneric<PolicyContext>,
-  "fn"
-> & {
-  readonly fn: PolicyFn;
-};
+export type CanonicalPolicyRegistration = CanonicalPolicyRegistrationGeneric<PolicyContext>;
 
 export type PolicyEngineRegistration = PolicyEngineRegistrationGeneric<PolicyContext>;

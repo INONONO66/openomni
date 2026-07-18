@@ -13,13 +13,28 @@ function enqueueCompletion(options: ChildAgentRuntimeOptions, record: ChildRecor
   const output =
     child.status === "completed"
       ? (child.output ?? "")
-      : "Child agent finished with status failed. Await or inspect the child for details.";
+      : `Child agent finished with status ${child.status}. Await or inspect the child for details.`;
   options.injectionQueue.enqueue(parentRunId, {
     messageId: crypto.randomUUID(),
     output: `[child_agent ${record.id} ${child.status}]\n${output}`,
     injectToHistory: true,
     timestamp: Date.now(),
   });
+}
+
+async function dispatchTerminalAudit(
+  policy: DelegationPolicyRuntime,
+  record: ChildRecord,
+  result:
+    | { readonly status: "completed"; readonly result: NonNullable<ChildRecord["result"]> }
+    | { readonly status: "failed"; readonly error: string }
+    | { readonly status: "cancelled"; readonly reason: string },
+): Promise<void> {
+  try {
+    await policy.dispatchPost(record.id, result);
+  } catch {
+    // Terminal state is authoritative; an unavailable audit policy must not undo settlement.
+  }
 }
 
 export async function settleCompleted(
@@ -33,7 +48,7 @@ export async function settleCompleted(
   record.status = "completed";
   publishChildAgentCompleted(options, record);
   enqueueCompletion(options, record);
-  await policy.dispatchPost(record.id, { status: "completed", result });
+  await dispatchTerminalAudit(policy, record, { status: "completed", result });
 }
 
 export async function settleFailed(
@@ -47,7 +62,7 @@ export async function settleFailed(
   record.status = "failed";
   publishChildAgentFailed(options, record);
   enqueueCompletion(options, record);
-  await policy.dispatchPost(record.id, { status: "failed", error: record.error });
+  await dispatchTerminalAudit(policy, record, { status: "failed", error: record.error });
 }
 
 export async function settleCancelled(
@@ -60,5 +75,6 @@ export async function settleCancelled(
   record.status = "cancelled";
   record.controller.abort(reason);
   publishChildAgentCancelled(options, record);
-  await policy.dispatchPost(record.id, { status: "cancelled", reason: reason.message });
+  enqueueCompletion(options, record);
+  await dispatchTerminalAudit(policy, record, { status: "cancelled", reason: reason.message });
 }

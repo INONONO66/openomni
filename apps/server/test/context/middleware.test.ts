@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PolicyEngine, type PolicyEngineInstance } from "@openomni/agent";
+import type { PolicyContext } from "@openomni/agent";
+import { PolicyEngine, type PolicyEngineInstanceGeneric } from "@openomni/policy";
 import { createContextMiddleware } from "../../src/context/middleware";
 
 let tempRoot: string;
@@ -21,7 +22,9 @@ function makeWorkspace(name: string): string {
   return dir;
 }
 
-type ContextPolicyInput = Parameters<PolicyEngineInstance["dispatchPoint"]>[1];
+type ContextPolicyInput = Parameters<
+  PolicyEngineInstanceGeneric<PolicyContext>["dispatchPoint"]
+>[1];
 
 function contextPolicyInput(): ContextPolicyInput {
   return {

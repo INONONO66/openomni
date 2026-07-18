@@ -258,3 +258,43 @@ test("stores a frozen legacy snapshot without retaining caller-owned metadata", 
   expect(Object.isFrozen(stored.scope?.agentType)).toBe(true);
   expect(store.selectLegacy("turn.start", "resident")).toEqual([stored]);
 });
+
+test("rejects canonical point arrays with unsafe proxy lengths", () => {
+  const pointIds = new Proxy(["run.lifecycle.post"], {
+    get(target, property, receiver) {
+      if (property === "length") return Number.MAX_SAFE_INTEGER + 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  expect(
+    registrationErrorFor({
+      kind: "point",
+      name: "unsafe-point-array",
+      pointIds,
+      effectCapabilities: { "run.lifecycle.post": [] },
+      priority: 0,
+      fn: allow,
+    }).code,
+  ).toBe("invalid_canonical_registration");
+});
+
+test("rejects enumerable __proto__ effect capability keys", () => {
+  const effectCapabilities = Object.create(null) as Record<string, unknown>;
+  effectCapabilities["run.lifecycle.post"] = [];
+  Object.defineProperty(effectCapabilities, "__proto__", {
+    enumerable: true,
+    value: [],
+  });
+
+  expect(
+    registrationErrorFor({
+      kind: "point",
+      name: "proto-capability",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities,
+      priority: 0,
+      fn: allow,
+    }).code,
+  ).toBe("unknown_point_id");
+});

@@ -138,7 +138,9 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   ): Promise<Policy.PolicyDecision> {
     const timing = timingForPolicyPoint(pointId);
     const snapshot = immutablePointSnapshot(ctx, { pointId, timing });
-    const auditCtx = snapshot.success ? snapshot.value : Object.freeze({ pointId, timing });
+    const auditCtx = snapshot.success
+      ? snapshot.value
+      : invalidPointAuditContext(ctx, pointId, timing);
     const decisions: Policy.PolicyDecision[] = [];
 
     function composeAndPublish(): Policy.PolicyDecision {
@@ -233,6 +235,37 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
     dispatch,
     dispatchPoint,
   };
+}
+
+const SAFE_INVALID_CONTEXT_AUDIT_KEYS = [
+  "traceContext",
+  "sessionId",
+  "runId",
+  "resourceDescriptor",
+  "toolName",
+  "dispatchId",
+  "correlation",
+] as const;
+
+function invalidPointAuditContext(
+  ctx: object,
+  pointId: PolicyPointId,
+  timing: Policy.Timing,
+): Readonly<
+  Record<string, unknown> & { readonly pointId: PolicyPointId; readonly timing: Policy.Timing }
+> {
+  const safeFields: Record<string, unknown> = {};
+  for (const key of SAFE_INVALID_CONTEXT_AUDIT_KEYS) {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(ctx, key);
+      if (descriptor === undefined || !("value" in descriptor)) continue;
+      const captured = immutablePointSnapshot({ [key]: descriptor.value }, {});
+      if (captured.success) Object.assign(safeFields, captured.value);
+    } catch {
+      // Ignore unsafe getters/proxies while retaining independently safe correlation fields.
+    }
+  }
+  return Object.freeze({ ...safeFields, pointId, timing });
 }
 
 function validatePointContract(

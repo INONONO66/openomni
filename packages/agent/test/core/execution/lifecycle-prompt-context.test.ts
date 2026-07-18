@@ -1,19 +1,27 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy/types";
+import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
 import { appendContext, replacePrompt } from "../../helpers/policy-decision";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
 describe("buildTurn (prompt.context.pre)", () => {
-  it("dispatches context.prepare during buildTurn", async () => {
+  it("dispatches prompt.context.pre during buildTurn", async () => {
     Bus.reset();
-    const fn = mock((_ctx: PolicyContext) =>
-      appendContext("extra-context", "test.sp", "system-prompt-extend"),
-    );
+    const fn = mock((ctx: Parameters<CanonicalPolicyRegistration["fn"]>[0]) => {
+      expect(ctx.pointId).toBe("prompt.context.pre");
+      return appendContext("extra-context", "test.sp", "system-prompt-extend");
+    });
     const engine = PolicyEngine.create();
-    engine.register({ name: "test-sp", timing: "context.prepare", priority: 100, fn });
+    engine.register({
+      kind: "point",
+      name: "test-sp",
+      pointIds: ["prompt.context.pre"],
+      effectCapabilities: { "prompt.context.pre": ["prompt.append_context"] },
+      priority: 100,
+      fn,
+    });
 
     const state = makeState();
     const config = makeConfig({ systemPrompt: "base prompt" });
@@ -34,12 +42,14 @@ describe("buildTurn (prompt.context.pre)", () => {
     }
   });
 
-  it("context.prepare replace effect replaces an existing system prompt", async () => {
+  it("prompt.context.pre replace effect replaces an existing system prompt", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-replace-system",
-      timing: "context.prepare",
+      pointIds: ["prompt.context.pre"],
+      effectCapabilities: { "prompt.context.pre": ["prompt.replace"] },
       priority: 100,
       fn: () => replacePrompt("replacement prompt", "test.replace", "replace-system"),
     });
@@ -60,12 +70,14 @@ describe("buildTurn (prompt.context.pre)", () => {
     }
   });
 
-  it("context.prepare replace effect creates a system prompt when none exists", async () => {
+  it("prompt.context.pre replace effect creates a system prompt when none exists", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
     engine.register({
+      kind: "point",
       name: "test-replace-empty-system",
-      timing: "context.prepare",
+      pointIds: ["prompt.context.pre"],
+      effectCapabilities: { "prompt.context.pre": ["prompt.replace"] },
       priority: 100,
       fn: () => replacePrompt("new prompt", "test.replace", "replace-empty"),
     });

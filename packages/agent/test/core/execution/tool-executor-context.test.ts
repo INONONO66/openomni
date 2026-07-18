@@ -35,7 +35,7 @@ describe("createToolExecutor execution context", () => {
       signal: callController.signal,
       traceContext,
     });
-    expect(capturedContext?.traceContext).toBe(traceContext);
+    expect(capturedContext?.traceContext).not.toBe(traceContext);
     expect(capturedContext?.signal?.aborted).toBe(true);
   });
 
@@ -64,7 +64,7 @@ describe("createToolExecutor execution context", () => {
       signal: fallbackController.signal,
       traceContext: callTrace,
     });
-    expect(capturedContext?.traceContext).toBe(callTrace);
+    expect(capturedContext?.traceContext).not.toBe(callTrace);
     expect(capturedContext?.signal?.aborted).toBe(true);
   });
 });

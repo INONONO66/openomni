@@ -200,27 +200,8 @@ describe("Dispatch protocol schemas", () => {
     expect(point.phase).toBe("pre");
     expect(point.defaultFailPolicy).toBe("fail-closed");
     expect(point.sideEffectBoundary).toBe(true);
-    expect(point.requiredContext).toEqual([
-      "actor",
-      "dispatchId",
-      "action",
-      "target",
-      "sessionId",
-      "runId",
-    ]);
+    expect(point.requiredContext).toEqual(["actor", "dispatchId", "action", "target"]);
     expect(point.allowedEffects).toEqual(["audit.annotate", "run.abort"]);
     expect(Policy.PolicyPoint.Id.parse("dispatch.action.pre")).toBe("dispatch.action.pre");
-  });
-
-  test("legacy policy mappings still resolve", () => {
-    expect(Policy.PolicyPoint.resolve(Policy.Timing.INBOUND_RECEIVE)).toEqual([
-      "session.inbound.pre",
-    ]);
-    expect(
-      Policy.PolicyPoint.resolve(Policy.Timing.INVOKE_PREPARE, { resourceKind: "tool" }),
-    ).toEqual(["tool.native.pre", "tool.mcp.pre"]);
-    expect(Policy.PolicyPoint.resolve(Policy.Timing.WRITEBACK_COMMIT)).toEqual([
-      "session.writeback.pre",
-    ]);
   });
 });

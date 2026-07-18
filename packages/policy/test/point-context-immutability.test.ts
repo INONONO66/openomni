@@ -101,4 +101,28 @@ describe("PolicyEngine canonical point context immutability", () => {
       expect(invoked).toBe(false);
     });
   }
+  test("preserves trusted event emitters outside structured cloning", async () => {
+    const engine = PolicyEngine.create();
+    const eventEmitter = { emit: () => undefined };
+    let observedEmitter: unknown;
+    engine.register({
+      kind: "point",
+      name: "event-emitter-context-policy",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: (ctx) => {
+        observedEmitter = Reflect.get(ctx, "eventEmitter");
+        return PolicyDecision.allow({ policyId: "event-emitter-context-policy" });
+      },
+    });
+
+    const decision = await engine.dispatchPoint("dispatch.action.pre", {
+      ...dispatchContext,
+      eventEmitter,
+    });
+
+    expect(decision.verdict).toBe("allow");
+    expect(observedEmitter).toBe(eventEmitter);
+  });
 });

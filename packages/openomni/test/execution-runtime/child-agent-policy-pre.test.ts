@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentResult, ChatAgentConfig } from "@openomni/agent";
 import { PolicyDecision, type Model, type RuntimeResource } from "@openomni/protocol";
 import {
+  InjectionQueue,
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
   type NativeTool,
@@ -37,7 +38,7 @@ describe("child agent delegation pre-policy", () => {
         name: `${verdict}-child`,
         pointIds: ["delegation.worker.pre", "delegation.worker.post"],
         effectCapabilities: {
-          "delegation.worker.pre": ["run.abort"],
+          "delegation.worker.pre": ["audit.annotate"],
           "delegation.worker.post": ["audit.annotate"],
         },
         priority: 0,
@@ -54,7 +55,6 @@ describe("child agent delegation pre-policy", () => {
           const options = {
             policyId: `${verdict}-child`,
             reasonCodes: ["delegation.blocked"],
-            effects: [{ type: "run.abort" as const, reason: "delegation.blocked" }],
           };
           return verdict === "deny"
             ? PolicyDecision.deny(options)
@@ -200,5 +200,68 @@ describe("child agent delegation pre-policy", () => {
     await runtime.await([child.id]);
 
     expect(configs[0]?.tools?.[0]?.descriptor).toBe(descriptor);
+  });
+
+  test("serializes concurrent spawn admission at the child limit", async () => {
+    let createCalls = 0;
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      maxChildren: 1,
+      createAgent: () => {
+        createCalls += 1;
+        return { run: () => new Promise<AgentResult>(() => undefined) };
+      },
+    });
+
+    const results = await Promise.allSettled([
+      runtime.spawn({ prompt: "first concurrent child" }),
+      runtime.spawn({ prompt: "second concurrent child" }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(createCalls).toBe(1);
+    expect(runtime.inspect().filter((child) => child.status === "running")).toHaveLength(1);
+
+    runtime.cancelAll();
+    await runtime.await();
+  });
+
+  test("keeps cancelled settlement and injects completion when post audit fails", async () => {
+    const injectionQueue = InjectionQueue.create();
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [],
+      traceContext: { traceId: "trace-1", sessionId: "session-1", runId: "parent-run" },
+      injectionQueue,
+      delegationPolicies: [
+        {
+          kind: "point",
+          name: "broken-terminal-audit",
+          pointIds: ["delegation.worker.post"],
+          effectCapabilities: { "delegation.worker.post": ["audit.annotate"] },
+          priority: 0,
+          fn: () => {
+            throw new Error("audit unavailable");
+          },
+        },
+      ],
+      createAgent: () => ({ run: () => new Promise<AgentResult>(() => undefined) }),
+    });
+
+    const child = await runtime.spawn({ prompt: "cancel me", notifyOnComplete: true });
+    runtime.cancel([child.id]);
+    const [settled] = await runtime.await([child.id]);
+
+    expect(settled).toMatchObject({ id: child.id, status: "cancelled" });
+    expect(injectionQueue.drain("parent-run")).toEqual([
+      expect.objectContaining({
+        output: expect.stringContaining(`[child_agent ${child.id} cancelled]`),
+        injectToHistory: true,
+      }),
+    ]);
   });
 });

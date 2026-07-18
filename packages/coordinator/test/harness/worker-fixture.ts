@@ -65,37 +65,49 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
     const envName = typeof params?.envName === "string" ? params.envName : undefined;
     const relayTool = params?.relayTool === true;
     const relayRunId = typeof params?.relayRunId === "string" ? params.relayRunId : runId;
-    const toolCallId = "fixture-tool-call";
+    const toolCallId = `fixture-tool-call:${runId}`;
     activeRuns.set(runId, { sessionId, inbox: [] });
 
-    setTimeout(async () => {
-      let toolRelayResult: unknown;
-      if (relayTool) {
-        const toolCallSettled = new Promise<void>((resolve) => {
-          toolCallSettlements.set(toolCallId, resolve);
-        });
-        toolRelayResult = await server.call("worker.tool_call", {
-          runId: relayRunId,
-          sessionId: "spoofed-session",
-          callId: toolCallId,
-          tool: "fixture.tool",
-          input: {
-            traceId: "spoofed-trace",
+    setTimeout(() => {
+      void (async () => {
+        let toolRelayResult: unknown;
+        if (relayTool) {
+          const toolCallSettled = new Promise<void>((resolve) => {
+            toolCallSettlements.set(toolCallId, resolve);
+          });
+          toolRelayResult = await server.call("worker.tool_call", {
+            runId: relayRunId,
             sessionId: "spoofed-session",
-            runId: "spoofed-run",
-          },
+            callId: toolCallId,
+            tool: "fixture.tool",
+            input: {
+              traceId: "spoofed-trace",
+              sessionId: "spoofed-session",
+              runId: "spoofed-run",
+            },
+          });
+          await toolCallSettled;
+        }
+        activeRuns.delete(runId);
+        respond({
+          accepted: true,
+          workerId,
+          runId,
+          sessionId,
+          delayMs,
+          envValue: envName ? process.env[envName] : undefined,
+          toolRelayResult,
         });
-        await toolCallSettled;
-      }
-      activeRuns.delete(runId);
-      respond({
-        accepted: true,
-        workerId,
-        runId,
-        sessionId,
-        delayMs,
-        envValue: envName ? process.env[envName] : undefined,
-        toolRelayResult,
+      })().catch((error: unknown) => {
+        activeRuns.delete(runId);
+        toolCallSettlements.delete(toolCallId);
+        respond({
+          accepted: false,
+          workerId,
+          runId,
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     }, delayMs);
     return;

@@ -1,4 +1,4 @@
-import type { Policy, RuntimeResource, Tool } from "@openomni/protocol";
+import type { Policy, RuntimeResource, Tool, TraceContext } from "@openomni/protocol";
 import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
@@ -6,17 +6,25 @@ import type { PolicyContext } from "../policy/types";
 export interface ToolPolicyRunContext {
   readonly sessionId: string;
   readonly runId: string;
+  readonly traceContext: TraceContext.Type;
   readonly steps: AgentStep[];
   readonly turnCount: number;
   readonly elapsedMs: number;
   readonly usage: TokenUsage;
 }
 
-interface ToolPolicyTarget {
+interface NativeToolPolicyTarget {
   readonly descriptor: RuntimeResource.Descriptor;
-  readonly kind: "native" | "mcp";
+  readonly kind: "native";
+}
+
+interface McpToolPolicyTarget {
+  readonly descriptor: RuntimeResource.Descriptor;
+  readonly kind: "mcp";
   readonly mcpServerId?: string;
 }
+
+type ToolPolicyTarget = NativeToolPolicyTarget | McpToolPolicyTarget;
 
 function mcpServerId(labels: readonly string[] | undefined): string | undefined {
   return labels?.find((label) => label.startsWith("mcp."))?.slice("mcp.".length);
@@ -58,17 +66,21 @@ function policyTarget(
       ? (source.serverId ?? mcpServerId(labels))
       : undefined;
   const kind = source?.type === "mcp" || source?.type === "skill-mcp" ? "mcp" : "native";
-  return serverId === undefined
-    ? { descriptor, kind }
-    : { descriptor, kind, mcpServerId: serverId };
+  if (kind === "native") return { descriptor, kind };
+  return { descriptor, kind, ...(serverId === undefined ? {} : { mcpServerId: serverId }) };
 }
 
-function sharedContext(
-  context: ToolPolicyRunContext,
-): Omit<PolicyContext, "timing"> & Record<string, unknown> {
+function sharedContext(context: ToolPolicyRunContext): Omit<
+  PolicyContext,
+  "timing" | "sessionId" | "runId"
+> & {
+  readonly sessionId: string;
+  readonly runId: string;
+} {
   return {
     sessionId: context.sessionId,
     runId: context.runId,
+    traceContext: context.traceContext,
     steps: context.steps,
     turnCount: context.turnCount,
     elapsedMs: context.elapsedMs,
@@ -92,15 +104,15 @@ export async function dispatchToolPre(
     toolId: toolName,
     toolName,
     toolCallId: call.id,
-    toolLabels: labels === undefined ? undefined : [...labels],
+    toolLabels: [...(labels ?? target.descriptor.labels)],
     toolInput: call.input,
     resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
     return engine.dispatchPoint("tool.mcp.pre", {
       ...input,
-      mcpServerId: target.mcpServerId,
-    });
+      ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
+    } as unknown as Policy.PolicyPointInputMap["tool.mcp.pre"] & PolicyContext);
   }
   return engine.dispatchPoint("tool.native.pre", input);
 }
@@ -120,7 +132,7 @@ export async function dispatchToolPost(
     toolId: toolName,
     toolName,
     toolCallId: call.id,
-    toolLabels: labels === undefined ? undefined : [...labels],
+    toolLabels: [...(labels ?? target.descriptor.labels)],
     toolOutput: result.output,
     toolResult: result,
     resourceDescriptor: target.descriptor,
@@ -128,8 +140,8 @@ export async function dispatchToolPost(
   if (target.kind === "mcp") {
     return engine.dispatchPoint("tool.mcp.post", {
       ...input,
-      mcpServerId: target.mcpServerId,
-    });
+      ...(target.mcpServerId === undefined ? {} : { mcpServerId: target.mcpServerId }),
+    } as unknown as Policy.PolicyPointInputMap["tool.mcp.post"] & PolicyContext);
   }
   return engine.dispatchPoint("tool.native.post", input);
 }

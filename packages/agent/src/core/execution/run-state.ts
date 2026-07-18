@@ -14,7 +14,7 @@ export interface AgentRunBase {
   readonly traceId: string;
   readonly sessionId: string;
   readonly runId?: string;
-  readonly actorId?: string;
+  readonly actorId: string;
 }
 
 export interface RunState {
@@ -76,7 +76,7 @@ export type ErrorDecision =
   | ({ action: "throw"; errorMessage: string } & Extract<TurnDecision, { kind: "error" }>);
 
 export function createRunState(input: ChatAgentInput): RunState {
-  const sessionId = input.traceContext?.sessionId ?? "runner";
+  const sessionId = input.traceContext?.sessionId || "runner";
   return {
     sessionId,
     budgetState: createBudgetState(),

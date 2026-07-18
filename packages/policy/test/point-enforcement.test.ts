@@ -1,7 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
-import { PolicyDecision } from "@openomni/protocol";
+import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext } from "./point-test-fixtures";
+
+function assertDispatchPointRequiresPointInput(engine: ReturnType<typeof PolicyEngine.create>) {
+  // @ts-expect-error dispatch.action.pre requires every field in its PolicyPointInputMap entry.
+  void engine.dispatchPoint("dispatch.action.pre", {
+    sessionId: "session-1",
+    runId: "run-1",
+  });
+  // @ts-expect-error tool.native.pre requires toolId.
+  void engine.dispatchPoint("tool.native.pre", {
+    sessionId: "session-1",
+    runId: "run-1",
+    toolInput: {},
+  });
+}
+void assertDispatchPointRequiresPointInput;
 
 describe("PolicyEngine dispatchPoint", () => {
   test("denies missing pre-boundary context before middleware runs", async () => {
@@ -21,8 +36,8 @@ describe("PolicyEngine dispatchPoint", () => {
 
     const decision = await engine.dispatchPoint("dispatch.action.pre", {
       ...dispatchContext,
-      runId: undefined,
-    });
+      target: undefined,
+    } as unknown as Policy.PolicyPointInputMap["dispatch.action.pre"]);
 
     expect(invoked).toBe(false);
     expect(decision.verdict).toBe("deny");
@@ -45,14 +60,11 @@ describe("PolicyEngine dispatchPoint", () => {
       },
     });
 
-    const decision = await Reflect.apply(engine.dispatchPoint, engine, [
-      "run.lifecycle.post",
-      {
-        sessionId: "session-1",
-        runId: "run-1",
-        runOutcome: { type: "unexpected" },
-      },
-    ]);
+    const decision = await engine.dispatchPoint("run.lifecycle.post", {
+      sessionId: "session-1",
+      runId: "run-1",
+      runOutcome: { type: "unexpected" },
+    } as unknown as Policy.PolicyPointInputMap["run.lifecycle.post"]);
 
     expect(invoked).toBe(false);
     expect(decision.verdict).toBe("allow");
@@ -170,5 +182,30 @@ describe("PolicyEngine dispatchPoint", () => {
     expect(decision.policyId).toBe("agent.policy.composed");
     expect(decision.reasonCodes).toContain("policy.invalid_decision");
     expect(decision.effects.map((effect) => effect.type)).toEqual(["run.abort", "audit.annotate"]);
+  });
+
+  test("normalizes decision parser exceptions to invalid-decision denial", async () => {
+    const engine = PolicyEngine.create();
+    const throwingDecision = Object.defineProperty({}, "verdict", {
+      enumerable: true,
+      get() {
+        throw new Error("malicious decision getter");
+      },
+    });
+    Reflect.apply(engine.register, engine, [
+      {
+        kind: "point",
+        name: "throwing-decision-getter",
+        pointIds: ["dispatch.action.pre"],
+        effectCapabilities: { "dispatch.action.pre": [] },
+        priority: 0,
+        fn: () => throwingDecision,
+      },
+    ]);
+
+    const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
+
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toContain("policy.invalid_decision");
   });
 });

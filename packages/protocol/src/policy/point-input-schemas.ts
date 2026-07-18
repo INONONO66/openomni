@@ -101,8 +101,8 @@ export const policyPointInputSchemas = Object.freeze({
         dispatchId: id,
         action: id,
         target: dispatchTarget,
-        sessionId: id,
-        runId: id,
+        sessionId: id.optional(),
+        runId: id.optional(),
       })
       .passthrough(),
   ),

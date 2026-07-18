@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Operational, type Policy, PolicyDecision } from "@openomni/protocol";
+import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import {
   type GenericPolicyContext,
   PolicyEngine,
@@ -31,6 +31,28 @@ function createAuditedEngine() {
 }
 
 describe("PolicyEngine portability", () => {
+  it("resolves legacy mappings independently of mutable protocol contracts", () => {
+    const timing = "dispatch.authorize" as const;
+    const originalMapping = Policy.PolicyPoint.MigrationMapping[timing];
+
+    try {
+      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, ["run.lifecycle.pre"]);
+
+      expect(PolicyEngine.resolvePolicyPoints(timing)).toEqual(["dispatch.action.pre"]);
+      expect(PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "tool" })).toEqual([
+        "tool.native.pre",
+        "tool.mcp.pre",
+      ]);
+      expect(
+        PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "worker" }),
+      ).toEqual(["delegation.worker.pre"]);
+      expect(
+        PolicyEngine.resolvePolicyPoints("invoke.prepare", { resourceKind: "delegation" }),
+      ).toEqual([]);
+    } finally {
+      Reflect.set(Policy.PolicyPoint.MigrationMapping, timing, originalMapping);
+    }
+  });
   it("does not match a scoped legacy registration when agentType is empty", async () => {
     const engine = PolicyEngine.create();
     let invocationCount = 0;

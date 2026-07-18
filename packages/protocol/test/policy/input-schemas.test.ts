@@ -207,6 +207,14 @@ describe("PolicyPoint executable input schemas", () => {
     expect(typedInput).toEqual(validDispatchInput);
   });
 
+  test("accepts dispatch input without optional session and run identity", () => {
+    const { sessionId: _sessionId, runId: _runId, ...input } = validDispatchInput;
+
+    expect(Policy.PolicyPoint.InputSchemas["dispatch.action.pre"].safeParse(input).success).toBe(
+      true,
+    );
+  });
+
   test("represents max-steps only at the agent lifecycle policy boundary", () => {
     const input = { sessionId, runId, runOutcome: { type: "max-steps" } };
 

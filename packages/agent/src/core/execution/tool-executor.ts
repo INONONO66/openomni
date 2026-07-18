@@ -49,24 +49,18 @@ export function createToolExecutor(
     traceContext,
     signal,
   } = options;
-  const traceId = traceContext?.traceId ?? crypto.randomUUID();
-  const eventSessionId = traceContext?.sessionId ?? "";
-  const policySessionId = traceContext?.sessionId ?? crypto.randomUUID();
-  const policyRunId = traceContext?.runId ?? crypto.randomUUID();
-  const eventBase = {
-    traceId,
-    sessionId: eventSessionId,
-    ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
-    ...(traceContext?.agentName !== undefined && { actor: { agentName: traceContext.agentName } }),
-  };
+  const configuredTraceId = nonEmptyString(traceContext?.traceId) ?? crypto.randomUUID();
+  const configuredSessionId = nonEmptyString(traceContext?.sessionId) ?? crypto.randomUUID();
+  const configuredRunId = nonEmptyString(traceContext?.runId) ?? crypto.randomUUID();
 
   function publishDecisionObserverError(
+    activeTraceContext: TraceContext.Type,
     timing: Policy.Timing,
     decision: Policy.PolicyDecision,
     err: unknown,
   ): void {
     Bus.publish(Operational.Warn, {
-      traceId,
+      traceId: activeTraceContext.traceId,
       time: Date.now(),
       component: "agent.tool-executor",
       msg: "onDecision observer error",
@@ -74,18 +68,32 @@ export function createToolExecutor(
     });
   }
 
-  function recordDecision(timing: Policy.Timing, decision: Policy.PolicyDecision): void {
+  function recordDecision(
+    activeTraceContext: TraceContext.Type,
+    timing: Policy.Timing,
+    decision: Policy.PolicyDecision,
+  ): void {
     try {
       void Promise.resolve(onDecision?.(timing, decision)).catch((err) => {
-        publishDecisionObserverError(timing, decision, err);
+        publishDecisionObserverError(activeTraceContext, timing, decision, err);
       });
     } catch (err) {
       const error = err instanceof Error ? err : String(err);
-      publishDecisionObserverError(timing, decision, error);
+      publishDecisionObserverError(activeTraceContext, timing, decision, error);
     }
   }
 
-  function publishBlocked(call: Tool.Call, toolName: string, reason: string): void {
+  function publishBlocked(
+    eventBase: Readonly<{
+      traceId: string;
+      sessionId: string;
+      runId?: string;
+      actor?: Record<string, unknown>;
+    }>,
+    call: Tool.Call,
+    toolName: string,
+    reason: string,
+  ): void {
     Bus.publish(ToolExecution.PermissionDenied, {
       ...eventBase,
       toolCallId: call.id,
@@ -111,14 +119,31 @@ export function createToolExecutor(
   }
 
   return async (call: Tool.Call, context?: Tool.ExecutionContext): Promise<Tool.Result> => {
+    const callTraceContext = context?.traceContext;
+    const activeTraceContext = {
+      ...traceContext,
+      ...callTraceContext,
+      traceId: nonEmptyString(callTraceContext?.traceId) ?? configuredTraceId,
+      sessionId: nonEmptyString(callTraceContext?.sessionId) ?? configuredSessionId,
+      runId: nonEmptyString(callTraceContext?.runId) ?? configuredRunId,
+      agentName: nonEmptyString(traceContext?.agentName),
+    } satisfies TraceContext.Type;
+    const agentName = activeTraceContext.agentName;
+    const eventBase = {
+      traceId: activeTraceContext.traceId,
+      sessionId: activeTraceContext.sessionId,
+      runId: activeTraceContext.runId,
+      ...(agentName !== undefined && { actor: { agentName } }),
+    };
     const ctx = getContext?.();
     const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
     const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const toolLabels = getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName);
     const toolDescriptor = getToolDescriptor?.(call.tool) ?? getToolDescriptor?.(policyToolName);
     const policyContext = {
-      sessionId: policySessionId,
-      runId: policyRunId,
+      sessionId: activeTraceContext.sessionId,
+      runId: activeTraceContext.runId,
+      traceContext: activeTraceContext,
       steps: ctx?.steps ?? [],
       turnCount: ctx?.turnCount ?? 0,
       elapsedMs: ctx?.elapsedMs ?? 0,
@@ -133,11 +158,11 @@ export function createToolExecutor(
       toolDescriptor,
     );
 
-    recordDecision("invoke.prepare", preDecision);
+    recordDecision(activeTraceContext, "invoke.prepare", preDecision);
 
     if (PolicyDecision.isBlocking(preDecision)) {
       const reason = PolicyDecision.reason(preDecision, "middleware");
-      publishBlocked(call, policyToolName, reason);
+      publishBlocked(eventBase, call, policyToolName, reason);
       const retry = effectOf(preDecision, "run.retry_after");
       return blockedResult(call, `[Denied: ${reason}]`, {
         verdict: preDecision.verdict,
@@ -152,7 +177,7 @@ export function createToolExecutor(
     );
     if (matchingFilter) {
       const reason = PolicyDecision.reason(preDecision, `filtered: ${matchingFilter.toolPattern}`);
-      publishBlocked(call, policyToolName, reason);
+      publishBlocked(eventBase, call, policyToolName, reason);
       return blockedResult(call, `[Denied: ${reason}]`, {
         verdict: preDecision.verdict,
         reason,
@@ -184,10 +209,9 @@ export function createToolExecutor(
     const startMs = Date.now();
     let result: Tool.Result;
     try {
-      const executionTraceContext = context?.traceContext ?? traceContext;
       result = await toolExecutor(effectiveCall, {
         signal: context?.signal ?? signal,
-        ...(executionTraceContext !== undefined && { traceContext: executionTraceContext }),
+        traceContext: activeTraceContext,
       });
     } catch (err) {
       const durationMs = Date.now() - startMs;
@@ -224,11 +248,11 @@ export function createToolExecutor(
       toolDescriptor,
     );
 
-    recordDecision("invoke.result", postDecision);
+    recordDecision(activeTraceContext, "invoke.result", postDecision);
     const postAbort = effectOf(postDecision, "run.abort");
     if (PolicyDecision.isBlocking(postDecision) && postAbort) {
       const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");
-      publishBlocked(call, policyToolName, reason);
+      publishBlocked(eventBase, call, policyToolName, reason);
       const retry = effectOf(postDecision, "run.retry_after");
       return blockedResult(call, `[Denied: ${reason}]`, {
         verdict: postDecision.verdict,
@@ -241,4 +265,8 @@ export function createToolExecutor(
     const rewriteOutput = effectOf(postDecision, "tool.rewrite_output");
     return rewriteOutput ? { ...result, output: rewriteOutput.output } : result;
   };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

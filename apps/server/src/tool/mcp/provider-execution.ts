@@ -13,18 +13,14 @@ interface ExecuteMcpToolInput {
   readonly isServerConnected: (serverName: string) => boolean;
 }
 
-interface ExecutionAudit {
-  readonly traceId: string;
-  readonly sessionId: string;
-  readonly runId: string;
-}
+type ExecutionAudit = ReturnType<typeof McpPrefixGuardMiddleware.normalizeAuditContext>;
 
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
   const { call, context } = input;
-  const audit = resolveExecutionAudit(context);
+  const audit = McpPrefixGuardMiddleware.normalizeAuditContext(context?.traceContext);
   const executionContext: ToolExecutionContext = {
-    ...(context ?? {}),
-    traceContext: { ...(context?.traceContext ?? {}), ...audit },
+    ...(context?.signal !== undefined && { signal: context.signal }),
+    traceContext: audit,
   };
   const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
     call,
@@ -111,13 +107,4 @@ function publishBlockedResult(input: {
     reason,
   });
   return result;
-}
-
-function resolveExecutionAudit(context: ToolExecutionContext | undefined): ExecutionAudit {
-  const traceContext = context?.traceContext;
-  return {
-    traceId: traceContext?.traceId ?? crypto.randomUUID(),
-    sessionId: traceContext?.sessionId ?? crypto.randomUUID(),
-    runId: traceContext?.runId ?? crypto.randomUUID(),
-  };
 }

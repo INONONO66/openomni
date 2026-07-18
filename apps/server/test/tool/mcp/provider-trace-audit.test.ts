@@ -76,7 +76,14 @@ describe("McpToolProvider canonical policy trace", () => {
       }
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({ id: "call-mcp-execution", tool: "search.query" }),
-        executionContext,
+        {
+          signal: controller.signal,
+          traceContext: {
+            traceId: traceContext.traceId,
+            sessionId: traceContext.sessionId,
+            runId: traceContext.runId,
+          },
+        },
       );
     } finally {
       stop();

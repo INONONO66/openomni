@@ -6,7 +6,12 @@ import {
 } from "@openomni/protocol";
 import fs from "node:fs";
 import { WorkerSupervisor } from "../worker-supervision/supervisor";
-import { type ActiveRunRegistry, bindToolRelayTrace, createActiveRun } from "./worker-run-trace";
+import {
+  type ActiveRunRegistry,
+  bindToolRelayTrace,
+  createActiveRun,
+  normalizeDeliverTaskTrace,
+} from "./worker-run-trace";
 import { createPrivateSocketDir } from "./worker-socket-dir";
 import {
   DEFAULT_IDLE_SHUTDOWN_MS,
@@ -100,7 +105,8 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       });
     }
 
-    const activeRun = createActiveRun(runId, task);
+    const deliveryTask = normalizeDeliverTaskTrace(task);
+    const activeRun = createActiveRun(runId, deliveryTask);
     this.activeRuns.set(runId, activeRun);
     let slot: WorkerSlot;
     try {
@@ -143,7 +149,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
         };
       }
       this.ports.events.publish(WorkerDriver.RunDelivered, {
-        traceId: crypto.randomUUID(),
+        traceId: activeRun.traceId,
         time: Date.now(),
         workerId: slot.id,
         runId,
@@ -151,8 +157,15 @@ class WorkerPool implements WorkerManager, Execution.Driver {
       });
       const deliveredAt = Date.now();
       try {
-        const result = await supervisor.deliver(runId, task);
-        this.publishRunSettled(slot.id, runId, sessionId, "completed", deliveredAt);
+        const result = await supervisor.deliver(runId, deliveryTask);
+        this.publishRunSettled(
+          slot.id,
+          runId,
+          sessionId,
+          activeRun.traceId,
+          "completed",
+          deliveredAt,
+        );
         return result;
       } catch (error) {
         const interrupted =
@@ -161,6 +174,7 @@ class WorkerPool implements WorkerManager, Execution.Driver {
           slot.id,
           runId,
           sessionId,
+          activeRun.traceId,
           interrupted ? "interrupted" : "error",
           deliveredAt,
         );
@@ -176,11 +190,12 @@ class WorkerPool implements WorkerManager, Execution.Driver {
     workerId: number,
     runId: string,
     sessionId: string,
+    traceId: string,
     outcome: "completed" | "interrupted" | "error",
     deliveredAt: number,
   ): void {
     this.ports.events.publish(WorkerDriver.RunSettled, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       workerId,
       runId,

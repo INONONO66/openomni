@@ -1,8 +1,9 @@
-import { Policy } from "@openomni/protocol";
-import type {
-  AuditDispatchContextGeneric,
-  PolicyEngineCompatibilityGeneric,
-  PolicyPointId,
+import type { Policy } from "@openomni/protocol";
+import {
+  PolicyEngine,
+  type AuditDispatchContextGeneric,
+  type PolicyEngineCompatibilityGeneric,
+  type PolicyPointId,
 } from "@openomni/policy";
 import type { PolicyContext } from "./types";
 
@@ -26,7 +27,7 @@ function resolveLegacyPoint(
   timing: Policy.Timing,
   ctx: Readonly<AuditDispatchContextGeneric<PolicyContext>>,
 ): PolicyPointId | undefined {
-  const candidates = Policy.PolicyPoint.resolve(timing);
+  const candidates = PolicyEngine.resolvePolicyPoints(timing);
   if (candidates.length === 1) return candidates[0];
 
   const descriptor = ctx.resourceDescriptor;
