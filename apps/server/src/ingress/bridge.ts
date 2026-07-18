@@ -1,5 +1,5 @@
 import type { Adapter, Dispatch, Ingress } from "@openomni/protocol";
-import { PendingAskStore, SurfaceKey } from "@openomni/session";
+import { SurfaceKey } from "@openomni/session";
 import type { NativeTool } from "@openomni/openomni";
 import {
   buildToolCatalog,
@@ -80,7 +80,7 @@ export function buildAgentDef(agentName: string, deps: BridgeDeps): Ingress.Agen
   return buildAgentDefFromEntries(definition, deps, selectToolEntries(definition, deps));
 }
 
-export function buildResidentAgentDef(_agentName: string, deps: BridgeDeps): Ingress.AgentDef {
+export function buildResidentAgentDef(deps: BridgeDeps): Ingress.AgentDef {
   const model = deps.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   const definition: AgentDefinition = {
     name: "resident",
@@ -98,72 +98,26 @@ function rawCorrelationToken(raw: unknown): string | undefined {
   return typeof token === "string" && token.length > 0 ? token : undefined;
 }
 
-function findPendingAskForMessage(message: Adapter.InboundMessage) {
-  const token = rawCorrelationToken(message.raw);
-  const descriptor = SurfaceKey.parse(message.surfaceKey);
-  const channelId = descriptor.id;
-  const scoped = {
-    endpointId: descriptor.namespace || descriptor.surface,
-    ...(channelId ? { channelId } : {}),
-  };
-  type CorrelationQuery = Parameters<typeof PendingAskStore.findByCorrelation>[0];
-  const queries: CorrelationQuery[] = [];
-  if (token) queries.push({ tokenHash: token });
-  queries.push({ ...scoped, externalConversationId: message.surfaceKey });
-  if (message.replyToId) queries.push({ ...scoped, replyToMessageId: message.replyToId });
-  if (message.threadId) queries.push({ ...scoped, threadId: message.threadId });
-  if (message.id) queries.push({ ...scoped, externalMessageId: message.id });
-
-  const seen = new Set<string>();
-  const matches: ReturnType<typeof PendingAskStore.findByCorrelation> = [];
-  for (const query of queries) {
-    for (const ask of PendingAskStore.findByCorrelation(query)) {
-      if (seen.has(ask.id)) continue;
-      seen.add(ask.id);
-      matches.push(ask);
-    }
-  }
-
-  if (matches.length > 1) {
-    for (const ask of matches) {
-      PendingAskStore.markAmbiguous(ask.id);
-    }
-    return {
-      ids: matches.map((ask) => ask.id),
-      status: "ambiguous",
-      ambiguous: true,
-    };
-  }
-
-  const ask = matches[0];
-  if (!ask) return undefined;
-  return {
-    id: ask.id,
-    originSessionId: ask.originSessionId,
-    ...(ask.originRunId ? { originRunId: ask.originRunId } : {}),
-    originActorKind: ask.originActorKind,
-    targetKind: ask.targetKind,
-    status: matches.length > 1 ? "ambiguous" : ask.status,
-    ambiguous: matches.length > 1,
-  };
-}
-
-function scopedCorrelation(message: Adapter.InboundMessage) {
-  const descriptor = SurfaceKey.parse(message.surfaceKey);
+function scopedCorrelation(
+  message: Adapter.InboundMessage,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
+) {
   return {
     endpointId: descriptor.namespace || descriptor.surface,
     channelId: descriptor.id ?? message.surfaceKey,
   };
 }
 
-export function buildActorMessageCorrelation(
+function actorMessageCorrelation(
   message: Adapter.InboundMessage,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
+  threadId: string | undefined,
 ): Dispatch.Correlation {
   const token = rawCorrelationToken(message.raw);
   return {
-    ...scopedCorrelation(message),
+    ...scopedCorrelation(message, descriptor),
     ...(message.replyToId ? { replyToMessageId: message.replyToId } : {}),
-    ...(message.threadId ? { threadId: message.threadId } : {}),
+    ...(threadId ? { threadId } : {}),
     ...(token ? { tokenHash: token } : {}),
     externalConversationId: message.surfaceKey,
   };
@@ -171,32 +125,27 @@ export function buildActorMessageCorrelation(
 
 function createBaseEvent(
   message: Adapter.InboundMessage,
-  payload: string,
+  descriptor: ReturnType<typeof SurfaceKey.parse>,
+  threadId: string | undefined,
 ): Omit<Ingress.DirectEvent, "mode" | "agent"> {
-  const descriptor = SurfaceKey.parse(message.surfaceKey);
-
   return {
     id: message.id,
     surface: descriptor.surface,
     workspace: descriptor.namespace || undefined,
     channel: descriptor.id ?? undefined,
     userId: message.sender.id,
-    payload,
-    target: { kind: "resident" },
+    payload: message.text,
     meta: {
       actor: {
         role: "user",
         id: message.sender.id,
-      },
-      target: {
-        kind: "resident",
       },
       surfaceKey: message.surfaceKey,
       kind: descriptor.kind,
       sender: message.sender,
       media: message.media,
       replyToId: message.replyToId,
-      threadId: message.threadId ?? descriptor.threadId,
+      threadId,
       raw: message.raw,
     },
   };
@@ -204,20 +153,19 @@ function createBaseEvent(
 
 export function buildInboundEvent(
   message: Adapter.InboundMessage,
-  _agentName: string,
   deps: BridgeDeps,
 ): Ingress.DirectEvent {
-  const base = createBaseEvent(message, message.text);
-  const pendingAsk = findPendingAskForMessage(message);
-  const agent = buildResidentAgentDef("resident", deps);
+  const descriptor = SurfaceKey.parse(message.surfaceKey);
+  const threadId = message.threadId ?? descriptor.threadId;
+  const base = createBaseEvent(message, descriptor, threadId);
+  const agent = buildResidentAgentDef(deps);
 
   return {
     ...base,
     meta: {
       ...base.meta,
       agentName: "resident",
-      correlation: buildActorMessageCorrelation(message),
-      ...(pendingAsk ? { pendingAsk } : {}),
+      correlation: actorMessageCorrelation(message, descriptor, threadId),
     },
     mode: "direct",
     agent,

@@ -125,7 +125,7 @@ async function processMessage(
       if (!canReadTaskLedger(message)) return OPEN_TASKS_UNAUTHORIZED_MESSAGE;
       return listOpenTasks();
     }
-    const event = buildInboundEvent(message, "resident", deps);
+    const event = buildInboundEvent(message, deps);
     event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
     return toResponseText(await IngressEngine.ingest(event));
   } catch (error) {

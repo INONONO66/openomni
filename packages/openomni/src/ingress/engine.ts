@@ -18,12 +18,14 @@ import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
 import { IngressSessionResolver } from "./session-resolver";
 import {
-  executePendingInteractionRoute,
+  executeWaitRoute,
   pinRouteSession,
+  pinSelectedTarget,
   requireRoutedDecision,
 } from "./routing-execution";
-import { resolveKernelRoute } from "./routing-runtime";
-import { resolveTarget, targetKey } from "./target";
+import { resolveKernelRoute, type KernelRouteResolution } from "./routing-runtime";
+import { applyWaitCorrelationEffect } from "./wait-correlation";
+import { targetKey } from "./target";
 
 export type { CoordinatorLike };
 
@@ -43,6 +45,30 @@ let _dispatchRuntime: DispatchRuntime | undefined;
 function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   if (!Decision.isBlocking(decision)) return;
   throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
+}
+
+export function applySelectedWaitEffect(
+  resolution: Pick<KernelRouteResolution, "decision" | "waitEffect">,
+): void {
+  const selected =
+    resolution.decision.stage === "wait_correlation" && resolution.decision.outcome === "ambiguous";
+  if (!selected && resolution.waitEffect.kind !== "none") {
+    throw new TypeError("non-wait-ambiguous decision carried an executable wait effect");
+  }
+  if (selected) applyWaitCorrelationEffect(resolution.waitEffect);
+}
+
+function resolvePublishAndApplyWaitEffect<Event extends Ingress.InboundEvent>(
+  event: Event,
+  traceId: string,
+): KernelRouteResolution<Event> {
+  const resolution = resolveKernelRoute(event, traceId);
+  const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
+  const validated = { ...resolution, decision };
+  Bus.publish(IngressEvent.RoutingDecision, decision);
+
+  applySelectedWaitEffect(validated);
+  return validated;
 }
 
 export namespace IngressEngine {
@@ -103,52 +129,64 @@ export namespace IngressEngine {
   export async function ingest(event: unknown): Promise<Ingress.IngressResult> {
     const externalEvent = IngressNamespace.DirectEventSchema.parse(event);
     const resolvedActorEvent = resolveIngressActor(externalEvent);
+    if (resolvedActorEvent.mode !== "direct") {
+      throw new TypeError("external ingress actor resolution changed event mode");
+    }
     const trace = TraceContext.create();
-    const route = resolveKernelRoute(resolvedActorEvent, trace.traceId);
-    Bus.publish(IngressEvent.RoutingDecision, route.decision);
+    const route = resolvePublishAndApplyWaitEffect(resolvedActorEvent, trace.traceId);
     const decision = requireRoutedDecision(route.decision);
-    if (decision.stage === "wait_correlation") {
-      return executePendingInteractionRoute(
-        _dispatchRuntime,
-        resolvedActorEvent,
-        trace,
-        route,
+    const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
+    if (waitExecution.kind === "handled") return waitExecution.result;
+    if (waitExecution.authority === "wait_precedence") {
+      const inboundEvent = pinRouteSession(
+        pinSelectedTarget(waitExecution.event, route.selectedTarget),
         decision,
       );
+      return ingestResolved(inboundEvent, route.selectedTarget, trace, _coordinator);
     }
+
     const preRun = await IngressAuthorityMiddleware.runRoutedPreRun({
-      event: route.event,
+      event: waitExecution.event,
       coordinator: _coordinator,
       traceContext: trace,
       onDecision: _middlewareDecisionObserver,
     });
 
-    const inboundEvent = pinRouteSession(preRun.event, decision);
-    return ingestResolved(inboundEvent, trace, preRun.coordinator);
+    const inboundEvent = pinRouteSession(
+      pinSelectedTarget(preRun.event, route.selectedTarget),
+      decision,
+    );
+    return ingestResolved(inboundEvent, route.selectedTarget, trace, preRun.coordinator);
   }
 
   export async function ingestInternal(
     event: Ingress.InternalEvent,
   ): Promise<Ingress.IngressResult> {
+    const trace = TraceContext.create();
+    const route = resolvePublishAndApplyWaitEffect(event, trace.traceId);
+    const decision = requireRoutedDecision(route.decision);
+    const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
+    if (waitExecution.kind === "handled") return waitExecution.result;
+    if (waitExecution.event.mode !== "internal") {
+      throw new TypeError("internal ingress wait execution changed event mode");
+    }
     if (!_agentResolver) {
       throw new Error("agent resolver not configured");
     }
-
-    const trace = TraceContext.create();
-    const route = resolveKernelRoute(event, trace.traceId);
-    Bus.publish(IngressEvent.RoutingDecision, route.decision);
-    const decision = requireRoutedDecision(route.decision);
     const agent = await _agentResolver.resolve(event.agentName, event);
-    const resolvedEvent = pinRouteSession({ ...event, agent }, decision);
-    return ingestResolved(resolvedEvent, trace, _coordinator);
+    const resolvedEvent = pinRouteSession(
+      pinSelectedTarget({ ...waitExecution.event, agent }, route.selectedTarget),
+      decision,
+    );
+    return ingestResolved(resolvedEvent, route.selectedTarget, trace, _coordinator);
   }
 
   async function ingestResolved(
     inboundEvent: Ingress.ResolvedInboundEvent,
+    target: Ingress.Target,
     trace: TraceContextProtocol.Type,
     coordinator: CoordinatorLike | undefined,
   ): Promise<Ingress.IngressResult> {
-    const target = resolveTarget(inboundEvent);
     const targetLabel = targetKey(target);
 
     const payloadLength =
@@ -185,11 +223,8 @@ export namespace IngressEngine {
           source: "system",
         });
       }
-      const actor = inboundEvent.meta?.actor;
-      if (actor && typeof actor === "object" && !Array.isArray(actor)) {
-        const role = String((actor as Record<string, unknown>).role ?? "");
-        if (role) labels.push({ value: `actor.${role}`, source: "system" });
-      }
+      const role = inboundEvent.meta?.actor?.role;
+      if (role) labels.push({ value: `actor.${role}`, source: "system" });
 
       const decision = await engine.dispatch("inbound.receive", {
         steps: [],

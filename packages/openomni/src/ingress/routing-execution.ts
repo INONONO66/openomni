@@ -10,7 +10,8 @@ export type IngressRoutingErrorCode =
   | "route_ambiguous"
   | "dispatch_runtime_missing"
   | "dispatch_route_invalid"
-  | "dispatch_failed";
+  | "dispatch_failed"
+  | "dispatch_output_unsupported";
 
 export class IngressRoutingError extends Error {
   readonly code: IngressRoutingErrorCode;
@@ -69,15 +70,58 @@ export function pinRouteSession(
   };
 }
 
-function outputText(output: unknown): string {
-  return typeof output === "string" ? output : "";
+export function pinSelectedTarget<Event extends Ingress.InboundEvent>(
+  event: Event,
+  target: Ingress.Target,
+): Event {
+  return { ...event, target };
 }
 
-export async function executePendingInteractionRoute(
+function projectDispatchOutput(output: unknown, decision: RoutedDecision): string {
+  if (typeof output === "string") return output;
+  if (output === undefined || (typeof output === "object" && output !== null)) return "";
+  const outputType = output === null ? "null" : typeof output;
+  throw new IngressRoutingError(
+    "dispatch_output_unsupported",
+    `unsupported Dispatch output for channel projection: type=${outputType}, value=${String(output)}`,
+    decision,
+  );
+}
+
+function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
+  event: Event,
+  resolution: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_ask" }>,
+): Omit<Event, "target"> & { readonly target?: never } {
+  const { target: _target, ...withoutTarget } = event;
+  const { target: _metaTarget, ...meta } = event.meta ?? {};
+  const { runId: _runId, ...runtime } = event.runtime ?? {};
+  const record = resolution.record;
+  return {
+    ...withoutTarget,
+    meta: {
+      ...meta,
+      pendingAsk: {
+        id: record.id,
+        originSessionId: record.originSessionId,
+        ...(record.originRunId === undefined ? {} : { originRunId: record.originRunId }),
+        originActorKind: record.originActorKind,
+        targetKind: record.targetKind,
+        status: record.status,
+        ambiguous: false,
+      },
+    },
+    runtime: {
+      ...runtime,
+      durableSessionId: record.originSessionId,
+      ...(record.originRunId === undefined ? {} : { runId: record.originRunId }),
+    },
+  } as Omit<Event, "target"> & { readonly target?: never };
+}
+
+async function executePendingInteractionRoute<Event extends Ingress.InboundEvent>(
   runtime: DispatchRuntime | undefined,
-  event: Ingress.InboundEvent,
   trace: TraceContext.Type,
-  resolution: KernelRouteResolution,
+  resolution: KernelRouteResolution<Event>,
   decision: RoutedDecision,
 ): Promise<Ingress.IngressResult> {
   if (runtime === undefined) {
@@ -87,14 +131,15 @@ export async function executePendingInteractionRoute(
       decision,
     );
   }
-  const pendingInteraction = resolution.pendingInteraction;
-  const correlation = resolution.correlation;
-  const workspaceRoot = event.mode === "direct" ? event.agent.toolConfig?.workspaceRoot : undefined;
+  const wait = resolution.waitExecution;
   if (
+    wait.kind !== "pending_interaction" ||
     decision.stage !== "wait_correlation" ||
-    pendingInteraction === undefined ||
-    correlation === undefined ||
-    decision.sessionId === undefined
+    decision.target !== `worker-session:${wait.record.sessionId}` ||
+    decision.sessionId !== wait.record.sessionId ||
+    decision.runId !== wait.record.workerRunId ||
+    decision.pendingInteractionId !== wait.record.id ||
+    !wait.record.allowedActions.includes(wait.requestedAction)
   ) {
     throw new IngressRoutingError(
       "dispatch_route_invalid",
@@ -103,19 +148,23 @@ export async function executePendingInteractionRoute(
     );
   }
 
+  const event = resolution.event;
+  const workspaceRoot = event.mode === "direct" ? event.agent.toolConfig?.workspaceRoot : undefined;
   const result = await submitPinnedPendingInteraction(
     runtime,
     Dispatch.Input.parse({
       action: Dispatch.Actions.ActorMessage,
-      target: { kind: "surface", id: correlation.channelId },
+      target: { kind: "surface", id: wait.correlation.channelId },
       payload: event.payload,
-      correlation,
+      correlation: wait.correlation,
     }),
-    pendingInteraction,
+    wait.record,
     {
       traceId: trace.traceId,
       actorKind: "unknown",
-      actorId: correlation.endpointId,
+      actorId: wait.correlation.endpointId,
+      sessionId: wait.record.sessionId,
+      runId: wait.record.workerRunId,
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     },
   );
@@ -130,6 +179,63 @@ export async function executePendingInteractionRoute(
     mode: event.mode,
     target: { kind: "worker", sessionId: decision.sessionId },
     sessionId: decision.sessionId,
-    result: { output: outputText(result.output), finishReason: "stop" },
+    result: { output: projectDispatchOutput(result.output, decision), finishReason: "stop" },
   };
+}
+
+export type WaitRouteExecution<Event extends Ingress.InboundEvent = Ingress.InboundEvent> =
+  | Readonly<{
+      kind: "continue";
+      event: Event | (Omit<Event, "target"> & { readonly target?: never });
+      authority: "required" | "wait_precedence";
+    }>
+  | Readonly<{ kind: "handled"; result: Ingress.IngressResult }>;
+
+export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
+  runtime: DispatchRuntime | undefined,
+  trace: TraceContext.Type,
+  resolution: KernelRouteResolution<Event>,
+  decision: RoutedDecision,
+): Promise<WaitRouteExecution<Event>> {
+  const wait = resolution.waitExecution;
+  switch (wait.kind) {
+    case "none":
+      return { kind: "continue", event: resolution.event, authority: "required" };
+    case "pending_interaction":
+      if (decision.stage !== "wait_correlation") {
+        return { kind: "continue", event: resolution.event, authority: "required" };
+      }
+      return {
+        kind: "handled",
+        result: await executePendingInteractionRoute(runtime, trace, resolution, decision),
+      };
+    case "pending_ask":
+      if (
+        decision.stage !== "wait_correlation" ||
+        decision.target !== "resident" ||
+        decision.sessionId !== wait.record.originSessionId ||
+        decision.runId !== wait.record.originRunId
+      ) {
+        throw new IngressRoutingError(
+          "dispatch_route_invalid",
+          "pending ask route is incomplete",
+          decision,
+        );
+      }
+      return {
+        kind: "continue",
+        event: projectPendingAskEvent(resolution.event, wait),
+        authority: "wait_precedence",
+      };
+    case "ambiguous":
+      throw new IngressRoutingError(
+        "dispatch_route_invalid",
+        "ambiguous wait cannot accompany a routed decision",
+        decision,
+      );
+    default: {
+      const unreachable: never = wait;
+      throw new TypeError(`Unreachable wait execution: ${String(unreachable)}`);
+    }
+  }
 }

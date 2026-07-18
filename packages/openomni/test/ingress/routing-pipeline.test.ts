@@ -52,9 +52,9 @@ describe("resolveRoute", () => {
       trustTier: "owner",
       inboundTreatment: "full_access",
     });
-    expect(decision.factsUsed.join(" ")).toContain("grant-owner-dm");
-    expect(decision.factsUsed.join(" ")).toContain("actor-owner");
-    expect(decision.factsUsed.join(" ")).toContain("session-owner-dm");
+    expect(decision.factsUsed).toContain("channel:grant-owner-dm");
+    expect(decision.factsUsed).toContain("actor:actor-owner");
+    expect(decision.factsUsed).toContain("surface.default:session-owner-dm");
   });
 
   it("routes trusted first contact to a new surface session candidate", () => {
@@ -112,7 +112,9 @@ describe("resolveRoute", () => {
     const state = Object.freeze({
       wait: Object.freeze({
         kind: "match",
-        interactionId: "interaction-report",
+        backing: "pending_interaction",
+        key: "pending_interaction:interaction-report",
+        recordId: "interaction-report",
         sessionId: "session-owning-work",
         runId: "run-owning-work",
         allowed: Object.freeze(["report_result"]),
@@ -145,9 +147,48 @@ describe("resolveRoute", () => {
       actorId: "actor-external-worker",
       trustTier: "assigned_worker",
     });
-    expect(decision.sessionId).not.toBe("session-surface-decoy");
-    expect(decision.factsUsed.join(" ")).toContain("interaction-report");
-    expect(decision.factsUsed.join(" ")).toContain("report_result");
+    expect(decision.factsUsed).toContain("wait:pending_interaction:interaction-report");
+    expect(decision.factsUsed).toContain("wait.action:report_result");
+  });
+
+  it("routes a PendingAsk match to its owning Resident session and optional run", () => {
+    const inbound = Object.freeze({
+      traceId: "trace-pending-ask",
+      time: 2_500,
+      id: "inbound-pending-ask",
+      surface: "discord",
+      mode: "direct",
+      target: "resident",
+    }) satisfies RouteInbound;
+    const state = Object.freeze({
+      wait: Object.freeze({
+        kind: "match",
+        backing: "pending_ask",
+        key: "pending_ask:ask-owner",
+        recordId: "ask-owner",
+        sessionId: "session-ask-owner",
+        runId: "run-ask-owner",
+      }),
+      channel: Object.freeze({
+        id: "blocked-decoy",
+        kind: "blocked_channel",
+        inboundTreatment: "drop",
+      }),
+      surfaceSessionId: "session-surface-decoy",
+    }) satisfies RouteState;
+
+    const decision = parseDecision(inbound, state);
+
+    expect(decision).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-ask-owner",
+      runId: "run-ask-owner",
+    });
+    expect(decision.pendingInteractionId).toBeUndefined();
+    expect(decision.trustTier).toBeUndefined();
+    expect(decision.factsUsed).toContain("wait:pending_ask:ask-owner");
   });
 
   it("routes system cron through the same surface-default decision", () => {
@@ -182,7 +223,7 @@ describe("resolveRoute", () => {
       sessionId: "session-cron",
       actorId: "system:cron",
     });
-    expect(decision.factsUsed.join(" ")).toContain("system:cron");
-    expect(decision.factsUsed.join(" ")).toContain("session-cron");
+    expect(decision.factsUsed).toContain("actor.system:system:cron");
+    expect(decision.factsUsed).toContain("surface.default:session-cron");
   });
 });

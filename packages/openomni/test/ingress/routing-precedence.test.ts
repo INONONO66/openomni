@@ -14,7 +14,9 @@ const inbound = Object.freeze({
 
 const matchedWait = Object.freeze({
   kind: "match",
-  interactionId: "interaction-match",
+  backing: "pending_interaction",
+  key: "pending_interaction:interaction-match",
+  recordId: "interaction-match",
   sessionId: "session-wait",
   runId: "run-wait",
   allowed: Object.freeze(["report_result"]),
@@ -130,7 +132,10 @@ describe("resolveRoute precedence", () => {
     const state = Object.freeze({
       wait: Object.freeze({
         kind: "ambiguous",
-        candidateInteractionIds: Object.freeze(["interaction-a", "interaction-b"]),
+        candidateInteractionIds: Object.freeze([
+          "pending_ask:ask-a",
+          "pending_interaction:interaction-a",
+        ]),
       }),
       channel: trustedChannel,
       actor: registeredActor,
@@ -144,7 +149,7 @@ describe("resolveRoute precedence", () => {
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "ambiguous",
-      candidateInteractionIds: ["interaction-a", "interaction-b"],
+      candidateInteractionIds: ["pending_ask:ask-a", "pending_interaction:interaction-a"],
     });
     expect(decision.pendingInteractionId).toBeUndefined();
     expect(decision.sessionId).toBeUndefined();
@@ -205,8 +210,8 @@ describe("resolveRoute precedence", () => {
       sessionId: "session-surface",
       inboundTreatment: "evidence_only",
     });
-    expect(decision.factsUsed.join(" ")).toContain("grant-broadcast");
-    expect(decision.factsUsed.join(" ")).toContain("evidence_only");
+    expect(decision.factsUsed).toContain("channel:grant-broadcast");
+    expect(decision.factsUsed).toContain("channel.treatment:evidence_only");
     expect(decision.runId).toBeUndefined();
   });
 

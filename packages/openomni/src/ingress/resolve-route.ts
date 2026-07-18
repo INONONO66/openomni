@@ -11,19 +11,29 @@ export type RouteInbound = {
 };
 
 type RouteWait =
-  | { readonly kind: "none" }
-  | {
-      readonly kind: "match";
-      readonly interactionId: string;
-      readonly sessionId: string;
-      readonly runId: string;
-      readonly allowed: readonly string[];
-      readonly targetActorId?: string;
-    }
-  | {
-      readonly kind: "ambiguous";
-      readonly candidateInteractionIds: readonly string[];
-    };
+  | Readonly<{ kind: "none" }>
+  | Readonly<{
+      kind: "match";
+      backing: "pending_interaction";
+      key: string;
+      recordId: string;
+      sessionId: string;
+      runId: string;
+      allowed: readonly string[];
+      targetActorId?: string;
+    }>
+  | Readonly<{
+      kind: "match";
+      backing: "pending_ask";
+      key: string;
+      recordId: string;
+      sessionId: string;
+      runId?: string;
+    }>
+  | Readonly<{
+      kind: "ambiguous";
+      candidateInteractionIds: readonly string[];
+    }>;
 
 type RouteChannel =
   | {
@@ -103,37 +113,61 @@ export function resolveRoute(inbound: RouteInbound, state: RouteState): RoutingD
         stage: "wait_correlation",
         outcome: "ambiguous",
         candidateInteractionIds: [...state.wait.candidateInteractionIds],
-        reason: "Multiple pending interactions matched the inbound message",
+        reason: "Multiple pending waits matched the inbound message",
         factsUsed: state.wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
       };
     case "match": {
-      const action = inbound.requestedAction;
-      if (action !== undefined && state.wait.allowed.includes(action)) {
-        return {
-          ...common,
-          stage: "wait_correlation",
-          outcome: "route",
-          target: `worker-session:${state.wait.sessionId}`,
-          sessionId: state.wait.sessionId,
-          runId: state.wait.runId,
-          pendingInteractionId: state.wait.interactionId,
-          ...(state.wait.targetActorId === undefined ? {} : { actorId: state.wait.targetActorId }),
-          trustTier: "assigned_worker",
-          inboundTreatment: "full_access",
-          reason: "Inbound action matched a pending interaction",
-          factsUsed: [
-            `wait:${state.wait.interactionId}`,
-            `wait.action:${action}`,
-            `wait.session:${state.wait.sessionId}`,
-            `wait.run:${state.wait.runId}`,
-          ],
-        };
+      switch (state.wait.backing) {
+        case "pending_ask":
+          return {
+            ...common,
+            stage: "wait_correlation",
+            outcome: "route",
+            target: "resident",
+            sessionId: state.wait.sessionId,
+            ...(state.wait.runId === undefined ? {} : { runId: state.wait.runId }),
+            reason: "Inbound message matched a pending ask",
+            factsUsed: [
+              `wait:${state.wait.key}`,
+              `wait.session:${state.wait.sessionId}`,
+              ...(state.wait.runId === undefined ? [] : [`wait.run:${state.wait.runId}`]),
+            ],
+          };
+        case "pending_interaction": {
+          const action = inbound.requestedAction;
+          if (action !== undefined && state.wait.allowed.includes(action)) {
+            return {
+              ...common,
+              stage: "wait_correlation",
+              outcome: "route",
+              target: `worker-session:${state.wait.sessionId}`,
+              sessionId: state.wait.sessionId,
+              runId: state.wait.runId,
+              pendingInteractionId: state.wait.recordId,
+              ...(state.wait.targetActorId === undefined
+                ? {}
+                : { actorId: state.wait.targetActorId }),
+              trustTier: "assigned_worker",
+              inboundTreatment: "full_access",
+              reason: "Inbound action matched a pending interaction",
+              factsUsed: [
+                `wait:${state.wait.key}`,
+                `wait.action:${action}`,
+                `wait.session:${state.wait.sessionId}`,
+                `wait.run:${state.wait.runId}`,
+              ],
+            };
+          }
+          waitFacts.push(
+            `wait:${state.wait.key}`,
+            `wait.action:${action ?? "missing"}`,
+            "wait.action:disallowed",
+          );
+          break;
+        }
+        default:
+          return unreachable(state.wait);
       }
-      waitFacts.push(
-        `wait:${state.wait.interactionId}`,
-        `wait.action:${action ?? "missing"}`,
-        "wait.action:disallowed",
-      );
       break;
     }
     default:
