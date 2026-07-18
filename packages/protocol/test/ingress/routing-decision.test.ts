@@ -12,6 +12,7 @@ const baseDecision = {
   mode: "direct",
   reason: "terminal routing decision",
   factsUsed: ["inbound.normalized", "surface.discord"],
+  target: "resident",
 };
 
 const terminalCases = [
@@ -30,7 +31,7 @@ const terminalCases = [
   {
     stage: "wait_correlation",
     outcome: "ambiguous",
-    candidateInteractionIds: ["pi-1", "pi-2"],
+    candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2"],
   },
   { stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
   { stage: "actor_identity", outcome: "block", actorId: "actor-2", trustTier: "observer" },
@@ -109,6 +110,7 @@ describe("IngressEvent.RoutingDecision", () => {
     "outcome",
     "reason",
     "factsUsed",
+    "target",
   ]) {
     test(`requires ${requiredField}`, () => {
       // Given
@@ -145,6 +147,29 @@ describe("IngressEvent.RoutingDecision", () => {
 
     // When / Then
     expect(() => routingDecisionSchema.parse(input)).toThrow();
+  });
+
+  test("requires at least two source-qualified candidates for an ambiguous decision", () => {
+    // Given
+    const ambiguous = {
+      ...baseDecision,
+      stage: "wait_correlation",
+      outcome: "ambiguous",
+    };
+
+    // When / Then
+    expect(() =>
+      routingDecisionSchema.parse({
+        ...ambiguous,
+        candidateInteractionIds: ["pending_ask:ask-1"],
+      }),
+    ).toThrow();
+    expect(() =>
+      routingDecisionSchema.parse({
+        ...ambiguous,
+        candidateInteractionIds: ["ask-1", "pending_interaction:pi-2"],
+      }),
+    ).toThrow();
   });
 
   test("rejects the retired plan mode", () => {

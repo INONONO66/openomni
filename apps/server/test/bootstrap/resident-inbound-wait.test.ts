@@ -29,6 +29,7 @@ const serverConfig: ServerConfig = {
 };
 
 const originalUpdateStatus = WorkerRun.updateStatus;
+const originalUpdateStatusIfCurrent = WorkerRun.updateStatusIfCurrent;
 const originalPendingCreate = PendingAskStore.create;
 const originalPendingAnswer = PendingAskStore.answer;
 const originalPendingExpire = PendingAskStore.expire;
@@ -46,6 +47,13 @@ beforeEach(() => {
     statusHistory.push(args[2]);
     await originalUpdateStatus(...args);
   });
+  WorkerRun.updateStatusIfCurrent = mock(
+    async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
+      const updated = await originalUpdateStatusIfCurrent(...args);
+      if (updated) statusHistory.push(args[3]);
+      return updated;
+    },
+  );
   PendingAskStore.create = mock(originalPendingCreate);
   PendingAskStore.answer = mock(originalPendingAnswer);
   PendingAskStore.expire = mock(originalPendingExpire);
@@ -56,6 +64,7 @@ beforeEach(() => {
 
 afterEach(() => {
   WorkerRun.updateStatus = originalUpdateStatus;
+  WorkerRun.updateStatusIfCurrent = originalUpdateStatusIfCurrent;
   PendingAskStore.create = originalPendingCreate;
   PendingAskStore.answer = originalPendingAnswer;
   PendingAskStore.expire = originalPendingExpire;
@@ -184,6 +193,33 @@ describe("resident inbound wait kernel dispatch", () => {
     expect(result).toMatchObject({ accepted: false, error: "Resident unavailable" });
     expect(statusHistory).toEqual(["starting", "running", "waiting_input", "running"]);
     expect(await currentStatus(run)).toBe("running");
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not transition a starting run that is cancelled before the running transition", async () => {
+    // Given
+    const run = await createStartingRun("run-cancelled-before-running");
+    const submit = mock(
+      async (): Promise<Dispatch.Result> => ({
+        dispatchId: "resident-ask-after-cancel",
+        status: "completed",
+        output: "Already cancelled.",
+      }),
+    );
+    WorkerRun.updateStatusIfCurrent = mock(
+      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
+        await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
+        return originalUpdateStatusIfCurrent(...args);
+      },
+    );
+    const handler = createHandler(submit);
+
+    // When
+    await handler(waitParams(run));
+
+    // Then
+    expect(statusHistory).toEqual(["starting"]);
+    expect(await currentStatus(run)).toBe("cancelled");
     expect(submit).toHaveBeenCalledTimes(1);
   });
 

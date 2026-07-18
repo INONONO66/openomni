@@ -40,7 +40,15 @@ export function createResidentInboundWaitHandler(
     }
 
     if (runId && run?.status === "starting") {
-      await WorkerRun.updateStatus(sessionId, runId, "running");
+      const starting = await WorkerRun.get(sessionId, runId);
+      if (starting?.status === "starting") {
+        await WorkerRun.updateStatusIfCurrent(
+          sessionId,
+          runId,
+          { status: "starting", timeUpdated: starting.timeUpdated },
+          "running",
+        );
+      }
     }
     const running = runId ? await WorkerRun.get(sessionId, runId) : undefined;
     if (runId && running?.status === "running") {

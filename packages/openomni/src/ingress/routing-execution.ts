@@ -132,7 +132,11 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
     );
   }
   const wait = resolution.waitExecution;
+  const executableAction =
+    wait.kind === "pending_interaction" &&
+    (wait.requestedAction === "report_result" || wait.requestedAction === "ask_clarification");
   if (
+    !executableAction ||
     wait.kind !== "pending_interaction" ||
     decision.stage !== "wait_correlation" ||
     decision.target !== `worker-session:${wait.record.sessionId}` ||

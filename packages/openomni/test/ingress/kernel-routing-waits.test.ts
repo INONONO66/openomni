@@ -6,6 +6,7 @@ import {
   type Ingress,
 } from "@openomni/protocol";
 import {
+  ActorRegistry,
   BlacklistStore,
   Bus,
   PendingAskStore,
@@ -239,6 +240,47 @@ describe("IngressEngine wait routing", () => {
     });
     expect(result.sessionId).toBe(sessionId);
     expect(PendingInteractionStore.get("pi-connector-ask")?.status).toBe("resolved");
+  });
+
+  test.each([
+    "attach_artifact",
+    "decline_task",
+  ] as const)("rejects allowed but unsupported %s ingress actions before dispatch", async (action) => {
+    const suffix = action.replace("_", "-");
+    const interactionId = `pi-unsupported-${suffix}`;
+    await createPending(interactionId, `run-unsupported-${suffix}`, [action]);
+    const runtime = new DispatchRuntime();
+    let dispatchExecutions = 0;
+    runtime.register("actor.message", () => {
+      dispatchExecutions += 1;
+      return { output: "must not execute" };
+    });
+    IngressEngine.setDispatchRuntime(runtime);
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(
+        IngressEngine.ingest(replyEvent(`inbound-unsupported-${suffix}`, { action })),
+      );
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "channel_ceiling",
+      outcome: "block",
+      factsUsed: [
+        `wait:pending_interaction:${interactionId}`,
+        `wait.action:${action}`,
+        "wait.action:unsupported_ingress_command",
+      ],
+    });
+    expect(dispatchExecutions).toBe(0);
+    expect(PendingInteractionStore.get(interactionId)?.status).toBe("open");
   });
 
   test("pins a poisoned PendingInteraction event to the matched session and run", async () => {
@@ -527,6 +569,58 @@ describe("IngressEngine wait routing", () => {
     expect(dispatchExecutions).toBe(0);
   });
 
+  test("blocks the resolved actor endpoint even when correlation names another endpoint", async () => {
+    ActorRegistry.registerIdentity({
+      id: "actor-seller-resolved",
+      kind: "human",
+      trustTier: "assigned_worker",
+      relationship: "external_agent",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "endpoint-seller-resolved",
+      actorId: "actor-seller-resolved",
+      channel: "telegram",
+      externalId: "seller-1",
+    });
+    BlacklistStore.put({
+      id: "blacklist-resolved-endpoint",
+      kind: "endpoint",
+      value: "endpoint-seller-resolved",
+      createdBy: "actor-owner",
+    });
+    await createPending("pi-resolved-endpoint", "run-resolved-endpoint");
+    const runtime = new DispatchRuntime();
+    let dispatchExecutions = 0;
+    runtime.register("worker.complete", () => {
+      dispatchExecutions += 1;
+      return { output: "must not execute" };
+    });
+    IngressEngine.setDispatchRuntime(runtime);
+    const observed = routingDecisions();
+
+    let error: Error | undefined;
+    try {
+      error = await captureError(IngressEngine.ingest(replyEvent("inbound-resolved-endpoint")));
+    } finally {
+      observed.unsubscribe();
+    }
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_blocked");
+    expect(observed.decisions).toHaveLength(1);
+    expect(observed.decisions[0]).toMatchObject({
+      stage: "blacklist",
+      outcome: "drop",
+      factsUsed: [
+        "blacklist:blacklist-resolved-endpoint",
+        "blacklist.kind:endpoint",
+        "blacklist.reason:blacklist.endpoint.endpoint-seller-resolved",
+      ],
+    });
+    expect(dispatchExecutions).toBe(0);
+    expect(PendingInteractionStore.get("pi-resolved-endpoint")?.status).toBe("open");
+  });
+
   test("blacklist suppresses gathered two-Ask ambiguity effects and execution", async () => {
     createPendingAsk("ask-blacklist-a", "session-blacklist-a", {
       tokenHash: correlation.tokenHash,
@@ -615,7 +709,11 @@ describe("IngressEngine wait routing", () => {
       },
     ]);
     expect(pendingAskQueries).toEqual([
-      { tokenHash: correlation.tokenHash },
+      {
+        endpointId: correlation.endpointId,
+        channelId: correlation.channelId,
+        tokenHash: correlation.tokenHash,
+      },
       {
         endpointId: correlation.endpointId,
         channelId: correlation.channelId,

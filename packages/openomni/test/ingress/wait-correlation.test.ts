@@ -101,6 +101,68 @@ describe("resolveWaitCorrelation", () => {
     });
   });
 
+  test("preserves a PendingAsk external message ID lookup without optional correlation", () => {
+    const record = ask("ask-external-message-without-correlation");
+    const pi = spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([]);
+    const pa = spyOn(PendingAskStore, "findByCorrelation").mockImplementation((query) =>
+      query.externalMessageId === "message-without-correlation" ? [record] : [],
+    );
+
+    const resolution = resolveWaitCorrelation({
+      externalMessageId: "message-without-correlation",
+    });
+
+    expect(resolution).toEqual({
+      kind: "match",
+      candidate: {
+        kind: "pending_ask",
+        key: "pending_ask:ask-external-message-without-correlation",
+        record,
+      },
+      effect: { kind: "none" },
+    });
+    expect(pi).not.toHaveBeenCalled();
+    expect(pa).toHaveBeenCalledTimes(1);
+    expect(pa).toHaveBeenCalledWith({ externalMessageId: "message-without-correlation" });
+  });
+
+  test("scopes PendingAsk token lookup to its endpoint and channel", () => {
+    const local = ask("ask-local-token");
+    const otherSurface = {
+      ...ask("ask-other-surface-token"),
+      endpointId: "endpoint-2",
+      channelId: "channel-2",
+    };
+    spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([]);
+    const pa = spyOn(PendingAskStore, "findByCorrelation").mockImplementation((query) => {
+      if (query.tokenHash !== "shared-token") return [];
+      return query.endpointId === correlation.endpointId &&
+        query.channelId === correlation.channelId
+        ? [local]
+        : [local, otherSurface];
+    });
+
+    const resolution = resolveWaitCorrelation({
+      correlation: {
+        endpointId: correlation.endpointId,
+        channelId: correlation.channelId,
+        tokenHash: "shared-token",
+      },
+    });
+
+    expect(resolution).toEqual({
+      kind: "match",
+      candidate: { kind: "pending_ask", key: "pending_ask:ask-local-token", record: local },
+      effect: { kind: "none" },
+    });
+    expect(pa).toHaveBeenCalledTimes(1);
+    expect(pa).toHaveBeenCalledWith({
+      endpointId: correlation.endpointId,
+      channelId: correlation.channelId,
+      tokenHash: "shared-token",
+    });
+  });
+
   test("deduplicates one interaction found through every hint before cardinality", () => {
     const record = interaction("same-interaction");
     spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([record]);
@@ -202,7 +264,7 @@ describe("resolveWaitCorrelation", () => {
       },
     ]);
     expect(pa.mock.calls.map(([query]) => query)).toEqual([
-      { tokenHash: "token-1" },
+      { endpointId: "endpoint-1", channelId: "channel-1", tokenHash: "token-1" },
       {
         endpointId: "endpoint-1",
         channelId: "channel-1",

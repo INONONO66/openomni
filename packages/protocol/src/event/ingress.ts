@@ -33,11 +33,14 @@ const RoutingDecisionPayloadSchema = z.union([
   RoutingDecisionBase.extend({
     stage: z.literal("wait_correlation"),
     outcome: z.literal("route"),
+    target: z.string(),
   }).strict(),
   RoutingDecisionBase.extend({
     stage: z.literal("wait_correlation"),
     outcome: z.literal("ambiguous"),
-    candidateInteractionIds: z.array(z.string()).optional(),
+    candidateInteractionIds: z
+      .array(z.string().regex(/^(?:pending_ask|pending_interaction):.+/))
+      .min(2),
   }).strict(),
   RoutingDecisionBase.extend({
     stage: z.literal("channel_ceiling"),
@@ -50,6 +53,7 @@ const RoutingDecisionPayloadSchema = z.union([
   RoutingDecisionBase.extend({
     stage: z.literal("surface_default"),
     outcome: z.literal("route"),
+    target: z.string(),
   }).strict(),
 ]);
 

@@ -208,8 +208,8 @@ function blacklistState(
   const entry = BlacklistStore.match({
     actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
     endpointId:
-      correlation?.endpointId ??
-      (typeof actor?.endpointId === "string" ? actor.endpointId : undefined),
+      (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
+      correlation?.endpointId,
     channel: correlation?.channelId ?? event.surface,
     candidates: [
       event.surface,
@@ -223,6 +223,38 @@ function blacklistState(
     id: entry.id,
     kind: entry.kind,
     reason: entry.reason ?? `blacklist.${entry.kind}.${entry.value}`,
+  };
+}
+
+function rejectUnsupportedPendingInteractionAction(
+  decision: RoutingDecisionPayload,
+  wait: RouteState["wait"],
+  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+): RoutingDecisionPayload {
+  if (
+    decision.outcome !== "route" ||
+    decision.stage !== "wait_correlation" ||
+    wait.kind !== "match" ||
+    wait.backing !== "pending_interaction" ||
+    requestedAction === "report_result" ||
+    requestedAction === "ask_clarification"
+  ) {
+    return decision;
+  }
+  return {
+    traceId: decision.traceId,
+    time: decision.time,
+    inboundId: decision.inboundId,
+    surface: decision.surface,
+    mode: decision.mode,
+    stage: "channel_ceiling",
+    outcome: "block",
+    reason: `Pending interaction action ${requestedAction} is unsupported by ingress execution`,
+    factsUsed: [
+      `wait:${wait.key}`,
+      `wait.action:${requestedAction}`,
+      "wait.action:unsupported_ingress_command",
+    ],
   };
 }
 
@@ -251,7 +283,7 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
       : undefined;
   const channel = channelState(channelResolution);
   const actor = event.mode === "direct" ? actorState(event) : undefined;
-  const decision = resolveRoute(
+  const resolvedDecision = resolveRoute(
     {
       traceId,
       time: Date.now(),
@@ -272,6 +304,11 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
           }),
       ...(surfaceSessionId === undefined ? {} : { surfaceSessionId }),
     },
+  );
+  const decision = rejectUnsupportedPendingInteractionAction(
+    resolvedDecision,
+    wait,
+    requestedAction,
   );
   const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
   return {

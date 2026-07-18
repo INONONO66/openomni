@@ -66,18 +66,29 @@ function pendingAskQueries(
   correlation: Dispatch.Correlation | undefined,
   externalMessageId: string | undefined,
 ): Communication.PendingAsk.CorrelationQuery[] {
-  if (correlation === undefined) return [];
-  const scoped = { endpointId: correlation.endpointId, channelId: correlation.channelId };
   const queries: Communication.PendingAsk.CorrelationQuery[] = [];
-  if (correlation.tokenHash) queries.push({ tokenHash: correlation.tokenHash });
-  if (correlation.externalConversationId) {
-    queries.push({ ...scoped, externalConversationId: correlation.externalConversationId });
+  if (correlation !== undefined) {
+    const scoped = { endpointId: correlation.endpointId, channelId: correlation.channelId };
+    if (correlation.tokenHash) queries.push({ ...scoped, tokenHash: correlation.tokenHash });
+    if (correlation.externalConversationId) {
+      queries.push({ ...scoped, externalConversationId: correlation.externalConversationId });
+    }
+    if (correlation.replyToMessageId) {
+      queries.push({ ...scoped, replyToMessageId: correlation.replyToMessageId });
+    }
+    if (correlation.threadId) queries.push({ ...scoped, threadId: correlation.threadId });
   }
-  if (correlation.replyToMessageId) {
-    queries.push({ ...scoped, replyToMessageId: correlation.replyToMessageId });
+  if (externalMessageId) {
+    queries.push(
+      correlation === undefined
+        ? { externalMessageId }
+        : {
+            endpointId: correlation.endpointId,
+            channelId: correlation.channelId,
+            externalMessageId,
+          },
+    );
   }
-  if (correlation.threadId) queries.push({ ...scoped, threadId: correlation.threadId });
-  if (externalMessageId) queries.push({ ...scoped, externalMessageId });
   return queries;
 }
 
