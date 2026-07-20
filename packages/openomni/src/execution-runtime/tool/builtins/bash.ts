@@ -8,6 +8,7 @@ import { isDestructiveCommand, isReadOnlyCommand, readCommandFromMeta } from "./
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
+const PROCESS_TERMINATION_GRACE_MS = 100;
 
 const bashEnvKeys = ["PATH", "TMPDIR", "TEMP", "TMP", "BUN_INSTALL"];
 
@@ -44,6 +45,14 @@ function resolveTimeout(input: Record<string, unknown>): number {
 function terminateProcessGroup(proc: { readonly pid: number; kill(): void }): void {
   try {
     process.kill(-proc.pid, "SIGTERM");
+    const escalation = setTimeout(() => {
+      try {
+        process.kill(-proc.pid, "SIGKILL");
+      } catch {
+        // The whole group exited during the graceful termination window.
+      }
+    }, PROCESS_TERMINATION_GRACE_MS);
+    escalation.unref();
     return;
   } catch {
     // Windows and non-detached fallback.

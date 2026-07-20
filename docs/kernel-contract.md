@@ -28,7 +28,7 @@ Documentation may use "guaranteed", "cannot", or "never" only for kernel items. 
 
 ### Lanes and the effect-radius rule
 
-Work executes in exactly one Lane — built-in / action / worker / subagent (see [Core Model § Lanes](core-model.md#lanes); the original three-lane list is superseded by the four-lane table there). The lane is chosen by how much reasoning execution still requires, not by size or difficulty. Spawning a Worker for an atomic action is waste; multi-step work in the Owner's session is pollution. Felt overhead is the design signal: if a lane feels absurd for the task, the task is in the wrong lane.
+Work executes in one actor-available Lane. The Resident may use `built-in`, `action`, or `worker` and never receives `subagent`; a Worker may use sandbox-local built-ins/actions or a Worker-local `subagent` and never receives the `worker` lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty. Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
 
 What separates a plain tool from dispatch is the **radius of the effect**:
 
@@ -48,9 +48,9 @@ Subagent vs Worker are different species, not tiers of one thing:
 | Ledger | no ticket — part of the parent's work | always ticketed |
 | Verification | exempt — intermediate reasoning the parent digests | gated — an independent deliverable |
 
-Choose by one question: does the task need my context (extension) or its own footing (independence)? Needing a different domain's expertise is the strongest independence signal. Workers are always isolated processes, even for small jobs — agent tasks are dominated by LLM latency, so process spawn cost is noise, and a "lightweight in-process worker" would buy nothing and cost a third semantics. Workers may spawn their own subagents internally.
+A subagent is only a same-domain, context-sharing extension of a Worker. The Resident has no subagent, and a Worker cannot spawn another Worker. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — it either communicates with an already-existing agent through policy-gated dispatch or asks the Resident via `resident.ask`; the Resident decides whether to commission a separate Worker. Workers remain isolated processes and may use their own subagents internally.
 
-**Peek budget.** The Resident's per-turn tool-call budget makes the delegation rule structural: light perception is free, but a task that survives the peek budget without resolving is by definition beyond judgment scope, and the Resident's only remaining move is dispatch.
+**Peek budget.** The Resident's per-turn tool-call budget makes the delegation rule structural: light perception is free, but a task that survives the peek budget without resolving is beyond judgment scope, and the Resident's only remaining move is to dispatch an action or commission a Worker — never a subagent.
 
 ### Boot contract
 
@@ -99,7 +99,7 @@ An external agent claiming to act "on behalf of" someone is ignored without sign
 The profile's Grant carries two fields evaluated together (formerly two separate types, now one merged axis):
 
 - **Channel ceiling** — per-surface policy: what any actor may do through this surface. The ceiling has a kind — `trusted_channel` (full access for registered actors, default tier for unregistered), `broadcast_channel` (inbound allowed but treated as evidence-only: data, never instructions), `blocked_channel` (inbound dropped silently except PendingInteraction matches) — refined by an `inboundTreatment` override (`normal | evidence_only | owner_review | block`). **The channel is a ceiling**: even a registered owner in a public channel may be restricted from sensitive operations; personal grant beats channel default but never exceeds the ceiling.
-- **Worker egress** — what an executor may do outbound: which channels it may contact, whether it may spawn/cancel/schedule. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is fully isolated from user sessions; its memory recall is task-scoped (enforced at `memory.recall.pre`, per §5).
+- **Worker egress** — what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress never includes new Worker creation. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is fully isolated from user sessions; its memory recall is task-scoped (enforced at `memory.recall.pre`, per §5).
 
 **Blacklist is absolute** and checked before all other evaluation, inbound and outbound — a Worker cannot contact a blacklisted target; the outbound attempt fails with reason. Entries: `{ kind: actor | endpoint | channel | pattern, value, reason?, expiresAt?, createdBy }`.
 
@@ -165,7 +165,7 @@ Lifecycle: `open → resolved | follow_up | expired | cancelled`. Correlation ma
 | `human_channel` | message via channel | yes (always) |
 | `connector_endpoint` | installed application (§1) | via question bridge |
 
-For installed apps the coarse kind is recorded for retry and reporting metadata; provider identity lives in the connector installation and its endpoint. Spawning a `human_channel` or `a2a` executor does not start an agent loop — it sends a message and enters `waiting_input`. A Worker may control other Workers only with `TrustTier: manager` and an egress grant permitting worker-control actions.
+For installed apps the coarse kind is recorded for retry and reporting metadata; provider identity lives in the connector installation and its endpoint. Spawning a `human_channel` or `a2a` executor does not start an agent loop — it sends a message and enters `waiting_input`. Workers never spawn new Workers, regardless of trust tier. A Worker may communicate with an already-existing agent when its egress grant permits, ask the Resident to allocate independent work, or use a separately granted lifecycle action on existing work.
 
 ### Scenario traces
 

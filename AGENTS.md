@@ -169,7 +169,7 @@ These rules are model-independent and non-negotiable; they exist because each on
 
 Ingress supports a single execution mode: `direct`. All inbound events dispatch through `handleDirect` to the coordinator.
 
-Target direction: the user and Resident may submit new inbound work; ordinary Workers cannot create new top-level inbound work unless explicitly granted manager authority.
+Target direction: only the Resident commissions new top-level Worker work. The Owner requests delegation through the Resident and may attach directly to existing actors as root. The Resident has no subagent lane. A Worker cannot spawn another Worker under any trust tier; it may use a same-domain, context-sharing `child_agent`, message an already-existing agent through policy-gated dispatch when granted, or ask the Resident via `resident.ask` to commission independent/cross-domain work.
 
 ## PRODUCT MODEL
 
@@ -180,7 +180,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
-| Resident | Always-on user-facing assistant | Ingress target agent + future Resident policy |
+| Resident | Always-on user-facing judgment shell; no subagent lane | Ingress target agent + future Resident-selected policy plan and judgment-only tool catalog |
 | Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` attempts (formerly `WorkerRun`), `executorKind` |
 | Actor | Any external entity that interacts with the system | (Planned: `ActorIdentity` / `ActorEndpoint` in `packages/protocol/src/actor/`) |
 | System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
@@ -190,7 +190,7 @@ Target direction: the user and Resident may submit new inbound work; ordinary Wo
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
-| Controlled inbound | Only Owner / Resident / trusted managers create top-level work | `IngressAuthorityMiddleware` + future `effectiveAuthority` |
+| Controlled inbound | Owner and explicitly authorized actors may submit top-level requests; only the Resident may turn a request into a new Worker assignment | `IngressAuthorityMiddleware` + Resident-only `worker.spawn` dispatch policy |
 | Worker promotion | Ephemeral worker becomes persistent after repeated value | Future lifecycle schema |
 | PendingInteraction | Durable registry correlating outbound requests with external responses | `PendingInteractionStore`; `PendingAskStore` remains a transitional resident.ask legacy surface. Both collapse into the single `Wait { ownerRef }` primitive under #215 — see kernel-contract §2 |
 | ChannelAccessRule (legacy ChannelGrant) | Per-channel access policy and ceiling | `Actor.ChannelGrant` schema + `ChannelGrantStore`; OpenOmni access owns evaluation |

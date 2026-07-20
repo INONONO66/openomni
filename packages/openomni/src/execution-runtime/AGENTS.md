@@ -25,21 +25,21 @@ This domain may expose tools that call communication kernel APIs. It must not ma
 
 ## dispatch tool
 
-`createDispatchTool(dispatchRuntime)` returns the `dispatch` tool. It submits egress actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`). Worker-runner uses a narrower dispatch surface that only allows awaited `resident.ask`.
+`createDispatchTool(dispatchRuntime)` returns the cross-boundary `dispatch` tool. It submits actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`). The full tool is for Resident/kernel-authorized callers; Worker-runner exposes a narrower surface that currently allows only awaited `resident.ask`. Workers never receive Worker creation actions. Future Worker-to-existing-agent messaging must remain policy-gated and must not imply delegation ownership.
 
 The tool wrapper is not the authority boundary. The boundary is the OpenOmni dispatch/communication kernel. Keep validation here limited to tool input shape and runtime implicit inputs.
 
-Built-in actions:
+Built-in handlers exist for the following actions; handler existence does not grant every actor access:
 
-| Action | Behavior |
-| --- | --- |
-| `worker.spawn` | Creates a new independent WorkerRun via coordinator when explicitly granted. |
-| `worker.send` | Delivers a message to an existing Worker session when explicitly granted. |
-| `worker.resume` | Resumes a waiting Worker when explicitly granted. |
-| `worker.cancel` | Cancels a running Worker when explicitly granted. |
-| `resident.ask` | Sends an awaited Worker question to the Resident. |
-| `schedule.create` | Registers a cron job via `CronJobRegistry`; `CronAdapter` fires it as internal ingress. |
-| `schedule.cancel` | Cancels a scheduled job. |
+| Action | Behavior | Actor availability |
+| --- | --- | --- |
+| `worker.spawn` | Creates a new independent Worker attempt via coordinator | Resident-origin dispatch only |
+| `worker.send` | Delivers a message to an existing Worker session | Explicit grant supported; not exposed by the current Worker tool |
+| `worker.resume` | Resumes a waiting Worker | Explicit grant supported; not exposed by the current Worker tool |
+| `worker.cancel` | Cancels a running Worker | Explicit grant supported; not exposed by the current Worker tool |
+| `resident.ask` | Sends an awaited Worker question to the Resident | Worker narrow dispatch surface |
+| `schedule.create` | Registers a cron job via `CronJobRegistry`; `CronAdapter` fires it as internal ingress | Authorized non-Worker caller |
+| `schedule.cancel` | Cancels a scheduled job | Authorized non-Worker caller |
 
 Key parameters:
 

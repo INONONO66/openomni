@@ -26,7 +26,7 @@ describe("DispatchRuntime", () => {
     expect(called).toBe(false);
   });
 
-  test("default policy allows worker spawning only with an explicit matching grant", async () => {
+  test("default policy denies worker spawning even with an explicit matching grant", async () => {
     let called = false;
     const runtime = new DispatchRuntime();
     runtime.register("worker.spawn", () => {
@@ -53,9 +53,33 @@ describe("DispatchRuntime", () => {
       { sessionId: "worker-session", runId: "run-1", agentName: "worker" },
     );
 
-    expect(result.status).toBe("completed");
-    expect(result.output).toBe("spawned");
-    expect(called).toBe(true);
+    expect(result.status).toBe("denied");
+    expect(result.reason).toBe("dispatch.worker.spawn.denied");
+    expect(called).toBe(false);
+  });
+
+  test("default policy reserves new Worker allocation for the Resident", async () => {
+    for (const actorKind of ["system", "user"] as const) {
+      let called = false;
+      const runtime = new DispatchRuntime();
+      runtime.register("worker.spawn", () => {
+        called = true;
+        return { output: "spawned" };
+      });
+
+      const result = await runtime.submit(
+        {
+          action: "worker.spawn",
+          target: { kind: "worker", parentSessionId: "parent-session" },
+          payload: "delegated task",
+        },
+        { actorKind, actorId: `${actorKind}:test`, sessionId: "session-1" },
+      );
+
+      expect(result.status).toBe("denied");
+      expect(result.reason).toBe("dispatch.worker.spawn.resident_required");
+      expect(called).toBe(false);
+    }
   });
 
   test("default policy denies worker schedule creation", async () => {

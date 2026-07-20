@@ -3,6 +3,7 @@ import type { Dispatch, Tool } from "@openomni/protocol";
 import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
 import {
   createDispatchTool,
+  createWorkerResidentAskDispatchTool,
   type DispatchToolRuntime,
 } from "../../src/execution-runtime/tool/agent/tools/dispatch";
 
@@ -212,5 +213,52 @@ describe("dispatch tool", () => {
       expect(response.output).toContain("Unrecognized key");
       expect(called).toBe(false);
     }
+  });
+
+  test("worker dispatch exposes only awaited Resident asks", async () => {
+    let calls = 0;
+    const tool = createWorkerResidentAskDispatchTool({
+      async submit() {
+        calls += 1;
+        return { dispatchId: "dispatch-1", status: "completed", output: "answer" };
+      },
+    });
+
+    const allowed = await tool.execute(
+      call({
+        action: "resident.ask",
+        target: { kind: "resident" },
+        payload: "question",
+        wait: true,
+      }),
+    );
+    expect(allowed.isError).toBeUndefined();
+    expect(calls).toBe(1);
+
+    for (const input of [
+      {
+        action: "worker.spawn",
+        target: { kind: "worker", name: "other" },
+        payload: { text: "work", acceptanceCriteria: ["done"] },
+        wait: true,
+      },
+      {
+        action: "resident.ask",
+        target: { kind: "worker", name: "other" },
+        payload: "question",
+        wait: true,
+      },
+      {
+        action: "resident.ask",
+        target: { kind: "resident" },
+        payload: "question",
+        wait: false,
+      },
+    ]) {
+      const denied = await tool.execute(call(input));
+      expect(denied.isError).toBe(true);
+    }
+
+    expect(calls).toBe(1);
   });
 });
