@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783613944272,
+  "lastUpdate": 1784562193567,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -34223,6 +34223,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 519551,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c44527ca5f143568d1fbe1a40d8cadc2d8bece7f",
+          "message": "refactor(policy): enforce policy-point contracts (#484)\n\n* docs: reconcile foundation and p1 status\n\n* refactor(policy): enforce point registration contracts\n\n* refactor(openomni): enforce canonical policy dispatch\n\n* refactor(agent): migrate production policy points\n\n* fix(policy): enforce canonical legacy compatibility\n\n* fix(openomni): preserve delegated policy evidence\n\n* docs: sync canonical policy guidance\n\n* fix(openomni): close policy audit correlation gaps\n\n* docs: distinguish dispatch and policy gates\n\n* fix(openomni): preserve execution audit invariants\n\n* docs: clarify delegation policy interception\n\n* fix(policy): enforce mapped zero-registration contracts\n\n* fix(agent): preserve MCP client audit trace\n\n* fix(coordinator): preserve worker tool trace context\n\n* fix(openomni): settle synchronous child run failures\n\n* docs: clarify delegation settlement contracts\n\n* fix(server): preserve fallback MCP audit trace\n\n* test(server): await MCP settlement warning\n\n* refactor(coordinator): extract worker run trace relay\n\n* test(agent): move zero-registration regression\n\n* fix(conformance): track execution context calls\n\n* fix(review): address policy contract findings",
+          "timestamp": "2026-07-21T00:42:05+09:00",
+          "tree_id": "88137018c0228755dd88061e6b690ef35450b095",
+          "url": "https://github.com/INONONO66/openomni/commit/c44527ca5f143568d1fbe1a40d8cadc2d8bece7f"
+        },
+        "date": 1784562192922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5920,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2383,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15165,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7910,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 812,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1595,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2314,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10801,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 102694,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 533433,
             "unit": "ns/op"
           }
         ]
