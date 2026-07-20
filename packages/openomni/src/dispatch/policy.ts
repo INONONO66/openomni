@@ -93,9 +93,12 @@ export function createDefaultDispatchPolicy(): DispatchPolicyRegistration {
         return decide(EffectiveAuthority.missingActor());
       }
 
-      if (actor.kind === "worker" && action === "worker.spawn") {
-        const granted = evaluateWorkerGrant(actor, action, target);
-        return decide(EffectiveAuthority.workerGrant(granted, "dispatch.worker.spawn.denied"));
+      if (action === "worker.spawn" && actor.kind !== "resident") {
+        return decide(
+          actor.kind === "worker"
+            ? EffectiveAuthority.workerDenied("dispatch.worker.spawn.denied")
+            : EffectiveAuthority.actorDenied("dispatch.worker.spawn.resident_required"),
+        );
       }
 
       if (actor.kind === "worker" && action.startsWith("schedule.")) {

@@ -12,7 +12,7 @@ Everything in the system reduces to three primitives. Every other noun in the do
 
 **Actor.** Everything that appears in the system — the Owner, the Resident, AI agents, external humans, installed apps, cron — is an actor carrying exactly one authority profile. Trust tier, grants, contact budgets, and voice registers are fields of that profile, not separate concepts.
 
-**Gate.** Every action that crosses a boundary passes through one gate (dispatch). Whether to auto-answer or escalate, whether to object, whether to wait on an external reply, what voice to render in — these are policies evaluated around the gate, not separate systems.
+**Gate.** Every action that crosses a boundary passes through one gate (dispatch). Policy is the system-wide interception plane around every actor and boundary — including the Resident — not a Worker subsystem or a gate-only feature. Whether to auto-answer or escalate, whether to object, whether to wait on an external reply, and what voice to render are policy decisions applied at their contracted hook points.
 
 **Ledger.** Everything that happens is recorded in one append-only history. Sessions, the event bus, work items, completion reports, and receipts are the same history at different zoom levels. Isolation is the session's job; retrievability is the ledger's. Memory is a compressed view of the ledger, and the original always wins.
 

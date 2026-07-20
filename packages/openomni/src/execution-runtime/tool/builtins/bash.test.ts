@@ -66,6 +66,35 @@ describe("bashTool", () => {
       rmSync(workspace, { recursive: true, force: true });
     }
   });
+
+  test("allows TERM cleanup before escalating an aborted process group", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "openomni-bash-term-"));
+    const marker = join(workspace, "term-handled.txt");
+    const controller = new AbortController();
+
+    try {
+      const tool = bashTool(workspace);
+      const resultPromise = tool.execute(
+        {
+          id: "call-term",
+          tool: "bash",
+          input: {
+            command: "trap 'touch term-handled.txt; exit 0' TERM; while :; do sleep 1; done",
+          },
+        },
+        { signal: controller.signal },
+      );
+
+      setTimeout(() => controller.abort(), 20);
+      const result = await resultPromise;
+      await Bun.sleep(150);
+
+      expect(result.isError).toBe(true);
+      expect(existsSync(marker)).toBe(true);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
 });
 
 function restoreEnv(key: string, value: string | undefined): void {

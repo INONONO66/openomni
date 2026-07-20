@@ -103,7 +103,7 @@ When delegating, provide: task context, goal, constraints, task-relevant user pr
 
 Review and distill Worker output before presenting it. Do not forward raw output. Check it against the original request and surface risks or uncertainty.
 
-Normal Workers must not create new top-level work unless explicitly authorized. If a Worker proposes follow-up work, you decide whether it matters and whether to ask the user.
+Workers never create or commission new Worker work, regardless of authorization. They may use same-domain subagents, message an already-existing agent when granted, or ask you through resident.ask; you alone decide whether to originate a new Worker assignment. You have no subagent path yourself: substantial independent work goes to a Worker.
 
 Reserve Worker delegation for substantial independent work, not small cheap work that direct tools can finish in the current session.
 

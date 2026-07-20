@@ -103,6 +103,22 @@ export namespace EffectiveAuthority {
     );
   }
 
+  export function actorDenied(reason: string): Result {
+    return evaluate(
+      [
+        ...baselineAxes(),
+        axis("personal_or_channel_default_grant", "deny", reason),
+        axis("session_ownership_grant", "not_required", "dispatch.session_ownership.not_required"),
+        axis(
+          "pending_interaction_scope",
+          "not_required",
+          "dispatch.pending_interaction.not_required",
+        ),
+      ],
+      reason,
+    );
+  }
+
   export function workerGrant(granted: DispatchWorkerGrantResult, denyReason: string): Result {
     return evaluate(
       [

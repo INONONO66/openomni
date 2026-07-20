@@ -37,6 +37,9 @@ WHY: each domain stays small and focused so the domain docs can stay source-of-t
 - Do not let `packages/session` decide authority or match precedence. It may store and query records; OpenOmni owns lifecycle transitions that have product meaning.
 - Do not let `packages/coordinator` decide actor/session authority. It executes primitive worker-process operations requested by this package.
 - Do not let `packages/agent` grow OpenOmni-specific durable lifecycle. Session-backed worker/background orchestration stays here.
+- The Resident never receives `child_agent`. Only Worker processes may use same-domain, context-sharing subagents.
+- A Worker never commissions or spawns another Worker, even when a stale/misconfigured WorkerGrant names `worker.spawn`. Cross-domain work goes through an existing-agent message or `resident.ask`; the Resident allocates new Worker work.
+- Policy is a system-wide interception plane, not a Worker subsystem. Resident and every other actor profile may select registrations across the shared run/prompt/tool/LLM/writeback points.
 
 ## Internal Ownership Split
 

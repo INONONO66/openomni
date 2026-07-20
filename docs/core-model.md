@@ -30,7 +30,7 @@ All communication in the system reduces to three verbs:
 2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human, targeting a session, spawning or cancelling a Worker: the same verb with a different target.
 3. **`bus.publish`** — something is recorded. Observation only; the bus never carries commands.
 
-The single exception is the **subagent**: an in-process extension of its parent runtime (function-call communication, no ticket, dies with the parent). The production `child_agent` runtime implements this exception: every spawn attempt that reaches delegation policy while its parent is active dispatches and audits `delegation.worker.pre`. Every attempt accepted at that point is terminally audited exactly once through `delegation.worker.post` as completed, failed, or cancelled, including cancellation during construction; an optional injected delegation policy may instead return deny or pending, which creates no child and has no post settlement. A spawn rejected because its parent was already cancelled never reaches delegation policy. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one exception; policy interception has none.*
+The single exception is the **Worker-local subagent**: an in-process extension of a Worker (function-call communication, no ticket, dies with the parent). The Resident never receives a subagent lane. The production `child_agent` implementation dispatches and audits `delegation.worker.pre` before construction and `delegation.worker.post` exactly once on completed, failed, or cancelled settlement; deny or pending creates no child. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one Worker-local exception; policy interception has none.*
 
 ### Lanes
 
@@ -43,11 +43,13 @@ The gate routes each request to the cheapest sufficient lane:
 | Worker | independent execution in an isolated session with its own profile |
 | Subagent | context-inheriting parallel reasoning inside the parent |
 
+Lane availability is actor-specific. The Resident has `built-in`, `action`, and `worker` lanes, but never `subagent`. A Worker has sandbox-local built-ins/actions and may use `subagent` for context-sharing work in the same domain, but it never has the `worker` lane and cannot spawn another Worker. For independent or cross-domain work, a Worker either messages an already-existing agent through policy-gated dispatch or asks the Resident with `resident.ask`; only the Resident may commission a new Worker.
+
 Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
 
 ### Policy — the cross-cutting hook layer
 
-Policy is not a gate-internal feature: it is a system-wide interception layer (LSM-style). The protocol registers policy points, each with a contract — allowed effect types, default fail policy, required context schema. The registered points cover inbound (`session.inbound.pre`), the gate (`dispatch.action.pre`), the agent loop per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), LLM connections (`connection.llm.pre/post`), prompt and writeback (`prompt.context.pre`, `session.writeback.pre`), tools (`tool.catalog/native/mcp.*`), and delegation (`delegation.worker.pre/post`). The target model also names four planned points: `memory.recall.pre` (scope filter), `egress.render.pre` (voice contract), `work.complete.pre` (the evidence gate), and `schedule.fire.pre` (cron constraints).
+Policy is not a gate-internal or Worker-only feature: it is the system-wide interception layer (LSM-style) around every actor and boundary. Resident, Worker, Jester, Governor, ingress, dispatch, memory, scheduling, tools, LLM connections, and writeback may each carry policy registrations selected by their actor profile and context. The protocol registers policy points with contracts for allowed effects, default fail policy, and required context schema. Current points cover inbound (`session.inbound.pre`), the gate (`dispatch.action.pre`), actor loops per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), LLM connections (`connection.llm.pre/post`), prompt and writeback (`prompt.context.pre`, `session.writeback.pre`), tools (`tool.catalog/native/mcp.*`), and Worker-local subagents (`delegation.worker.pre/post`). Planned points add `memory.recall.pre`, `egress.render.pre`, `work.complete.pre`, and `schedule.fire.pre`.
 
 The rulebook:
 
@@ -84,7 +86,7 @@ Rules: **record maximally, access selectively** — noise is a viewing problem, 
 
 ### Resident — decides
 
-The default interface. It owns the relationship and global context — not exclusive access. It executes nothing: it answers, delegates, evaluates, and challenges.
+The default interface. It owns the relationship and global context — not exclusive access. It executes nothing: it answers, delegates, evaluates, and challenges. It has no subagent lane; when judgment turns into independent work, it commissions a Worker through dispatch.
 
 The challenge rules:
 
@@ -97,7 +99,7 @@ The challenge rules:
 
 Any delegated executor: internal agents, external CLI apps (Claude Code, OpenCode), external humans, the Owner. Uniform contract: isolated session, task-scoped slice of data and permission, exit through a CompletionReport whose claims carry evidence. Human executors are verification-waived but never recording-waived — a one-line chat report suffices and the Resident writes the ledger entry.
 
-Split criteria (when one Worker becomes two): split when **permission profiles differ** (web egress vs filesystem) or **verification regimes differ** (source citation vs test suite). An implementation-bound five-minute lookup is the coding Worker's subagent; an independently verifiable investigation is a separate research Worker.
+A Worker cannot spawn another Worker or commission new Worker work. It uses a subagent only for same-domain, context-sharing work that remains part of its own attempt. If a need has independent footing — especially a different permission profile, verification regime, or domain — the Worker messages an already-existing agent through policy-gated dispatch or asks the Resident to commission a separate Worker. The Resident remains the sole allocator of new Worker work.
 
 Workers start ephemeral and earn persistence through ledger evidence (usage, adoption, correction rate); they are demoted the same way.
 
