@@ -22,13 +22,13 @@ Only `direct` mode exists. Delegated or asynchronous work is handled through `di
 
 ### Controlled Inbound Authority
 
-Ingress is the authority boundary for work entering the runtime.
+Ingress controls which requests may enter; Worker allocation remains a separate Resident-origin dispatch decision.
 
-- **External inbound**: user, surface, or API submits work to the Resident or a specific Worker.
-- **Internal inbound**: the Resident or an explicitly trusted manager Worker submits new work back through ingress.
-- **Ordinary Workers**: should return results or suggestions; they should not create new top-level inbound work by default.
+- **External inbound**: the Owner or another explicitly authorized actor may submit a request to the Resident or attach to an existing Worker interaction.
+- **Internal inbound**: trusted system sources such as cron submit normalized facts through the kernel; they do not create Workers directly.
+- **Workers**: return results, message an existing agent when granted, or use `resident.ask`. No Worker trust tier may create new top-level Worker work.
 
-This authority model is target direction, not the full current implementation. When implemented, inbound authority checks should happen before work is projected into durable session history.
+Authority checks run before projection. If accepted work requires an independent Worker, only the Resident may originate `worker.spawn`.
 
 ### IngressEngine API
 

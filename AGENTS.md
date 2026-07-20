@@ -190,7 +190,7 @@ Target direction: only the Resident commissions new top-level Worker work. The O
 | Concept | Meaning | Current hooks |
 | --- | --- | --- |
 | Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
-| Controlled inbound | Only Owner / Resident / trusted managers create top-level work | `IngressAuthorityMiddleware` + future `effectiveAuthority` |
+| Controlled inbound | Owner and explicitly authorized actors may submit top-level requests; only the Resident may turn a request into a new Worker assignment | `IngressAuthorityMiddleware` + Resident-only `worker.spawn` dispatch policy |
 | Worker promotion | Ephemeral worker becomes persistent after repeated value | Future lifecycle schema |
 | PendingInteraction | Durable registry correlating outbound requests with external responses | `PendingInteractionStore`; `PendingAskStore` remains a transitional resident.ask legacy surface. Both collapse into the single `Wait { ownerRef }` primitive under #215 — see kernel-contract §2 |
 | ChannelAccessRule (legacy ChannelGrant) | Per-channel access policy and ceiling | `Actor.ChannelGrant` schema + `ChannelGrantStore`; OpenOmni access owns evaluation |
