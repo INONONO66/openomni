@@ -161,6 +161,10 @@ export namespace IngressEngine {
 
   export async function ingestInternal(
     event: Ingress.InternalEvent,
+    runtime?: Readonly<{
+      residentRuntime?: Pick<ResidentRuntime, "run">;
+      agentResolver?: AgentResolver;
+    }>,
   ): Promise<Ingress.IngressResult> {
     const trace = TraceContext.create();
     const route = resolvePublishAndApplyWaitEffect(event, trace.traceId);
@@ -170,15 +174,22 @@ export namespace IngressEngine {
     if (waitExecution.event.mode !== "internal") {
       throw new TypeError("internal ingress wait execution changed event mode");
     }
-    if (!_agentResolver) {
+    const agentResolver = runtime?.agentResolver ?? _agentResolver;
+    if (!agentResolver) {
       throw new Error("agent resolver not configured");
     }
-    const agent = await _agentResolver.resolve(event.agentName, event);
+    const agent = await agentResolver.resolve(event.agentName, event);
     const resolvedEvent = pinRouteSession(
       pinSelectedTarget({ ...waitExecution.event, agent }, route.selectedTarget),
       decision,
     );
-    return ingestResolved(resolvedEvent, route.selectedTarget, trace, _coordinator);
+    return ingestResolved(
+      resolvedEvent,
+      route.selectedTarget,
+      trace,
+      _coordinator,
+      runtime?.residentRuntime ?? _residentRuntime,
+    );
   }
 
   async function ingestResolved(
@@ -186,6 +197,7 @@ export namespace IngressEngine {
     target: Ingress.Target,
     trace: TraceContextProtocol.Type,
     coordinator: CoordinatorLike | undefined,
+    residentRuntime: Pick<ResidentRuntime, "run"> | undefined = _residentRuntime,
   ): Promise<Ingress.IngressResult> {
     const targetLabel = targetKey(target);
 
@@ -269,7 +281,7 @@ export namespace IngressEngine {
       sessionId: session.id,
       event: inboundEvent,
       coordinator,
-      residentRuntime: _residentRuntime,
+      residentRuntime,
       traceContext: activeTrace,
       policies: _ingressPolicies,
       onPolicyDecision: _middlewareDecisionObserver,

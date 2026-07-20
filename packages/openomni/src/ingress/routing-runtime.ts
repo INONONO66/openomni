@@ -271,7 +271,9 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
   const wait = routeWaitState(gatheredWait);
   const surfaceDefaultTarget = resolveTarget(event);
   const target = targetKey(surfaceDefaultTarget);
-  const surfaceSessionId = SurfaceKey.lookup(IngressSessionResolver.extractSurfaceKey(event));
+  const surfaceSessionId =
+    event.runtime?.durableSessionId ??
+    SurfaceKey.lookup(IngressSessionResolver.extractSurfaceKey(event));
   const blacklist = blacklistState(event, correlation);
   const channelResolution =
     event.mode === "direct"

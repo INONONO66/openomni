@@ -215,14 +215,70 @@ describe("resident inbound wait kernel dispatch", () => {
     const handler = createHandler(submit);
 
     // When
-    await handler(waitParams(run));
+    const result = await handler(waitParams(run));
 
     // Then
+    expect(result).toMatchObject({
+      accepted: false,
+      error: "worker.inbound_wait run is no longer active",
+    });
     expect(statusHistory).toEqual(["starting"]);
+    expect(await currentStatus(run)).toBe("cancelled");
+    expect(submit).toHaveBeenCalledTimes(0);
+  });
+
+  it("does not enter waiting_input when cancellation wins the running transition race", async () => {
+    const run = await createStartingRun("run-cancelled-entering-wait");
+    const submit = mock(
+      async (): Promise<Dispatch.Result> => ({
+        dispatchId: "resident-ask-after-entry-cancel",
+        status: "completed",
+        output: "Already cancelled.",
+      }),
+    );
+    WorkerRun.updateStatusIfCurrent = mock(
+      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
+        if (args[2].status === "running") {
+          await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
+        }
+        return originalUpdateStatusIfCurrent(...args);
+      },
+    );
+
+    const result = await createHandler(submit)(waitParams(run));
+
+    expect(result).toMatchObject({
+      accepted: false,
+      error: "worker.inbound_wait run is no longer active",
+    });
+    expect(await currentStatus(run)).toBe("cancelled");
+    expect(submit).toHaveBeenCalledTimes(0);
+  });
+
+  it("does not restore running when cancellation wins the waiting_input transition race", async () => {
+    const run = await createStartingRun("run-cancelled-restoring-wait");
+    const submit = mock(
+      async (): Promise<Dispatch.Result> => ({
+        dispatchId: "resident-ask-before-restoration-cancel",
+        status: "completed",
+        output: "Answer delivered.",
+      }),
+    );
+    WorkerRun.updateStatusIfCurrent = mock(
+      async (...args: Parameters<typeof originalUpdateStatusIfCurrent>) => {
+        if (args[2].status === "waiting_input") {
+          await originalUpdateStatus(run.workerSessionId, run.runId, "cancelled");
+        }
+        return originalUpdateStatusIfCurrent(...args);
+      },
+    );
+
+    const result = await createHandler(submit)(waitParams(run));
+
+    expect(result).toMatchObject({ accepted: true, output: "Answer delivered." });
     expect(await currentStatus(run)).toBe("cancelled");
     expect(submit).toHaveBeenCalledTimes(1);
   });
-
   it("rejects an already-aborted wait without dispatching or changing WorkerRun state", async () => {
     // Given
     const run = await createStartingRun("run-aborted");

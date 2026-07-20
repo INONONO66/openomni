@@ -127,7 +127,7 @@ describe("resolveRoute precedence", () => {
     });
   }
 
-  it("does not choose among ambiguous wait candidates", () => {
+  it("preserves fail-closed ambiguity from the winning wait-correlation level", () => {
     // Given
     const state = Object.freeze({
       wait: Object.freeze({

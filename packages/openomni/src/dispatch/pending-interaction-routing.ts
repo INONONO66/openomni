@@ -1,4 +1,4 @@
-import { Dispatch } from "@openomni/protocol";
+import { Dispatch, Execution } from "@openomni/protocol";
 import { PendingInteractionStore } from "@openomni/session";
 
 function correlationQueries(correlation: Dispatch.Correlation): Dispatch.Correlation[] {
@@ -62,6 +62,72 @@ export function requestedPendingInteractionAction(
   return "report_result";
 }
 
+type CanonicalWorkerCompletePayload = Readonly<{
+  result: Execution.Result;
+}>;
+
+function canonicalWorkerCompletePayload(
+  payload: unknown,
+  match: PendingInteractionStore.Record,
+): CanonicalWorkerCompletePayload | undefined {
+  if (typeof payload === "string") {
+    return {
+      result: {
+        runId: match.workerRunId,
+        sessionId: match.sessionId,
+        status: "succeeded",
+        output: payload,
+        finishReason: "stop",
+      },
+    };
+  }
+  if (typeof payload !== "object" || payload === null || !("action" in payload)) return undefined;
+  if (payload.action !== "report_result") return undefined;
+
+  const value =
+    "result" in payload ? payload.result : "output" in payload ? payload.output : undefined;
+  if (typeof value === "string") {
+    return {
+      result: {
+        runId: match.workerRunId,
+        sessionId: match.sessionId,
+        status: "succeeded",
+        output: value,
+        finishReason: "stop",
+      },
+    };
+  }
+
+  const result = Execution.Result.safeParse(value);
+  if (
+    !result.success ||
+    result.data.runId !== match.workerRunId ||
+    result.data.sessionId !== match.sessionId
+  ) {
+    return undefined;
+  }
+  return { result: result.data };
+}
+
+function pendingInteractionSenderMatches(
+  command: Dispatch.Command,
+  match: PendingInteractionStore.Record,
+): boolean {
+  const correlation = command.correlation;
+  if (correlation !== undefined && typeof correlation !== "string") {
+    const bearerTokenMatches =
+      match.targetActorId === undefined &&
+      match.correlation.tokenHash !== undefined &&
+      correlation.tokenHash === match.correlation.tokenHash;
+    if (bearerTokenMatches) return true;
+    if (correlation.endpointId !== match.endpointId) return false;
+  }
+  if (command.actor.kind === "unknown") {
+    return match.targetActorId === undefined && command.actor.actorId === match.endpointId;
+  }
+  return match.targetActorId === undefined || command.actor.actorId === match.targetActorId;
+}
+
 export function routePendingInteraction(
   command: Dispatch.Command,
   pinned?: PendingInteractionStore.Record,
@@ -73,6 +139,7 @@ export function routePendingInteraction(
       : [];
   const match = pinned ?? (matches.length === 1 ? matches[0] : undefined);
   if (!match) return command;
+  if (!pendingInteractionSenderMatches(command, match)) return command;
   const action = requestedPendingInteractionAction(command.payload);
   if (!match.allowedActions.includes(action)) return command;
   if (action === "ask_clarification") {
@@ -104,8 +171,11 @@ export function routePendingInteraction(
     });
   }
   if (action !== "report_result") return command;
+  const payload = canonicalWorkerCompletePayload(command.payload, match);
+  if (payload === undefined) return command;
   return Dispatch.Command.parse({
     ...command,
+    payload,
     action: Dispatch.Actions.WorkerComplete,
     target: {
       kind: "worker",

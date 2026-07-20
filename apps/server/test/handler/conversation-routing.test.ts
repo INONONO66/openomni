@@ -92,7 +92,7 @@ describe("conversation kernel routing", () => {
     expect(response).toEqual({ text: "kernel resident response" });
   });
 
-  it("returns the public no-response text when kernel ingress produces empty output", async () => {
+  it("retains the normal empty-output placeholder", async () => {
     // Given
     const ingest = mock(async () => ingressResult(""));
     IngressEngine.ingest = ingest;
@@ -103,6 +103,24 @@ describe("conversation kernel routing", () => {
 
     // Then
     expect(response).toEqual({ text: "(no response)" });
+    expect(ingest).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns no writeback only when kernel ingress explicitly drops the message", async () => {
+    const ingest = mock(
+      async (): Promise<Ingress.IngressResult> => ({
+        kind: "dropped",
+        mode: "direct",
+        target: { kind: "resident" },
+        reason: "Inbound principal matched the blacklist",
+      }),
+    );
+    IngressEngine.ingest = ingest;
+    const handler = createMessageHandler(deps);
+
+    const response = await handler(normalizeDiscordMessage());
+
+    expect(response).toBeNull();
     expect(ingest).toHaveBeenCalledTimes(1);
   });
 

@@ -63,7 +63,7 @@ function hint(query: object): string {
 afterEach(() => mock.restore());
 
 describe("resolveWaitCorrelation", () => {
-  test("returns none after the single scoped base interaction query when no hints are populated", () => {
+  test("returns none after querying both migration backings at the scoped fallback level", () => {
     const pi = spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([]);
     const pa = spyOn(PendingAskStore, "findByCorrelation").mockReturnValue([]);
 
@@ -74,7 +74,8 @@ describe("resolveWaitCorrelation", () => {
     expect(resolution).toEqual({ kind: "none", candidates: [], effect: { kind: "none" } });
     expect(pi).toHaveBeenCalledTimes(1);
     expect(pi).toHaveBeenCalledWith({ endpointId: "endpoint-1", channelId: "channel-1" });
-    expect(pa).not.toHaveBeenCalled();
+    expect(pa).toHaveBeenCalledTimes(1);
+    expect(pa).toHaveBeenCalledWith({ endpointId: "endpoint-1", channelId: "channel-1" });
   });
 
   test("matches a PendingAsk by the private external message ID", () => {
@@ -163,9 +164,9 @@ describe("resolveWaitCorrelation", () => {
     });
   });
 
-  test("deduplicates one interaction found through every hint before cardinality", () => {
+  test("deduplicates duplicate records within the winning precedence level", () => {
     const record = interaction("same-interaction");
-    spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([record]);
+    spyOn(PendingInteractionStore, "findByCorrelation").mockReturnValue([record, record]);
     spyOn(PendingAskStore, "findByCorrelation").mockReturnValue([]);
 
     const resolution = resolveWaitCorrelation({ correlation });
@@ -179,47 +180,54 @@ describe("resolveWaitCorrelation", () => {
     });
   });
 
-  test("fails closed for cross-hint PI+PI, PI+Ask, Ask+Ask, and same-ID cross-source sets", () => {
-    const cases: Array<{
-      pi: Record<string, PendingInteractionStore.Record[]>;
-      pa: Record<string, Communication.PendingAsk.Record[]>;
-      keys: string[];
-    }> = [
-      {
-        pi: { replyToMessageId: [interaction("pi-a")], threadId: [interaction("pi-b")] },
-        pa: {},
-        keys: ["pending_interaction:pi-a", "pending_interaction:pi-b"],
-      },
-      {
-        pi: { replyToMessageId: [interaction("shared")] },
-        pa: { threadId: [ask("ask-b")] },
-        keys: ["pending_ask:ask-b", "pending_interaction:shared"],
-      },
-      {
-        pi: {},
-        pa: { tokenHash: [ask("ask-a")], externalConversationId: [ask("ask-b")] },
-        keys: ["pending_ask:ask-a", "pending_ask:ask-b"],
-      },
-      {
-        pi: { replyToMessageId: [interaction("collision")] },
-        pa: { replyToMessageId: [ask("collision")] },
-        keys: ["pending_ask:collision", "pending_interaction:collision"],
-      },
-    ];
+  test("routes an exact higher-priority reply despite broader lower-priority matches", () => {
+    const exact = interaction("pi-exact");
+    const pi = spyOn(PendingInteractionStore, "findByCorrelation").mockImplementation((query) => {
+      if (query.replyToMessageId) return [exact];
+      if (query.threadId) return [interaction("pi-thread-broad")];
+      return [];
+    });
+    const pa = spyOn(PendingAskStore, "findByCorrelation").mockImplementation((query) =>
+      query.tokenHash ? [ask("ask-token-broad")] : [],
+    );
 
-    for (const testCase of cases) {
-      spyOn(PendingInteractionStore, "findByCorrelation").mockImplementation(
-        (query) => testCase.pi[hint(query)] ?? [],
-      );
-      spyOn(PendingAskStore, "findByCorrelation").mockImplementation(
-        (query) => testCase.pa[hint(query)] ?? [],
-      );
-      const resolution = resolveWaitCorrelation({ correlation });
-      expect(resolution.kind).toBe("ambiguous");
-      if (resolution.kind !== "ambiguous") throw new Error("expected ambiguity");
-      expect(resolution.candidates.map((candidate) => candidate.key)).toEqual(testCase.keys);
-      mock.restore();
-    }
+    const resolution = resolveWaitCorrelation({ correlation });
+
+    expect(resolution).toEqual({
+      kind: "match",
+      candidate: {
+        kind: "pending_interaction",
+        key: "pending_interaction:pi-exact",
+        record: exact,
+      },
+      effect: { kind: "none" },
+    });
+    expect(pi.mock.calls.map(([query]) => hint(query))).toEqual(["replyToMessageId"]);
+    expect(pa.mock.calls.map(([query]) => hint(query))).toEqual(["replyToMessageId"]);
+  });
+
+  test("fails closed for multiple source-qualified candidates at the winning level", () => {
+    const pi = spyOn(PendingInteractionStore, "findByCorrelation").mockImplementation((query) =>
+      query.replyToMessageId ? [interaction("collision")] : [interaction("lower-priority")],
+    );
+    const pa = spyOn(PendingAskStore, "findByCorrelation").mockImplementation((query) =>
+      query.replyToMessageId ? [ask("collision")] : [ask("lower-priority")],
+    );
+
+    const resolution = resolveWaitCorrelation({ correlation });
+
+    expect(resolution.kind).toBe("ambiguous");
+    if (resolution.kind !== "ambiguous") throw new Error("expected ambiguity");
+    expect(resolution.candidates.map((candidate) => candidate.key)).toEqual([
+      "pending_ask:collision",
+      "pending_interaction:collision",
+    ]);
+    expect(resolution.effect).toEqual({
+      kind: "mark_pending_asks_ambiguous",
+      pendingAskIds: ["collision"],
+    });
+    expect(pi.mock.calls.map(([query]) => hint(query))).toEqual(["replyToMessageId"]);
+    expect(pa.mock.calls.map(([query]) => hint(query))).toEqual(["replyToMessageId"]);
   });
 
   test("sorts source-qualified candidates independently of reverse store order", () => {
@@ -264,14 +272,14 @@ describe("resolveWaitCorrelation", () => {
       },
     ]);
     expect(pa.mock.calls.map(([query]) => query)).toEqual([
+      { endpointId: "endpoint-1", channelId: "channel-1", replyToMessageId: "reply-1" },
+      { endpointId: "endpoint-1", channelId: "channel-1", threadId: "thread-1" },
       { endpointId: "endpoint-1", channelId: "channel-1", tokenHash: "token-1" },
       {
         endpointId: "endpoint-1",
         channelId: "channel-1",
         externalConversationId: "conversation-1",
       },
-      { endpointId: "endpoint-1", channelId: "channel-1", replyToMessageId: "reply-1" },
-      { endpointId: "endpoint-1", channelId: "channel-1", threadId: "thread-1" },
       { endpointId: "endpoint-1", channelId: "channel-1", externalMessageId: "message-1" },
     ]);
     expect(mark).not.toHaveBeenCalled();

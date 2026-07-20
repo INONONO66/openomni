@@ -1,3 +1,4 @@
+import type { Ingress } from "@openomni/protocol";
 import { z } from "zod";
 import {
   DispatchRuntime,
@@ -17,6 +18,9 @@ export interface ServerDispatchOwnersConfig {
     readonly providerID: string;
     readonly id: string;
   };
+  readonly residentAgentResolver?: {
+    resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
+  };
 }
 
 const residentAskHandlerOutput = z
@@ -33,11 +37,13 @@ const residentAskHandlerOutput = z
 function createQuestionBridgeHandler(
   config: ServerDispatchOwnersConfig,
 ): ConnectorQuestionBridgeHandler | undefined {
-  if (config.model === undefined) return undefined;
+  const model = config.model;
+  if (model === undefined) return undefined;
 
   const handlers = createResidentDispatchHandlers({
     residentRuntime: config.residentRuntime,
-    defaultModel: { provider: config.model.providerID, id: config.model.id },
+    defaultModel: { provider: model.providerID, id: model.id },
+    ...(config.residentAgentResolver ? { agentResolver: config.residentAgentResolver } : {}),
   });
   const dispatchRuntime = new DispatchRuntime();
   dispatchRuntime.register("resident.ask", handlers["resident.ask"]);

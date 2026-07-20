@@ -8,7 +8,7 @@ export type ResidentInboundWaitConfig = {
   readonly dispatchRuntime: Pick<DispatchRuntime, "submit">;
 };
 
-// The kernel resident.ask handler returns { output, finishReason, runId }; test
+// The kernel resident.ask handler returns { output, finishReason }; test
 // doubles may return the answer as a bare string.
 function residentAskOutput(output: unknown): string {
   if (typeof output === "string") return output;
@@ -39,20 +39,33 @@ export function createResidentInboundWaitHandler(
       };
     }
 
-    if (runId && run?.status === "starting") {
-      const starting = await WorkerRun.get(sessionId, runId);
-      if (starting?.status === "starting") {
-        await WorkerRun.updateStatusIfCurrent(
-          sessionId,
-          runId,
-          { status: "starting", timeUpdated: starting.timeUpdated },
-          "running",
-        );
+    if (!runId || !run) {
+      return { requestId, accepted: false, error: "worker.inbound_wait requires runId" };
+    }
+    if (run.status === "starting") {
+      const acquiredRunning = await WorkerRun.updateStatusIfCurrent(
+        sessionId,
+        runId,
+        { status: "starting", timeUpdated: run.timeUpdated },
+        "running",
+      );
+      if (!acquiredRunning) {
+        return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
       }
     }
-    const running = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-    if (runId && running?.status === "running") {
-      await WorkerRun.updateStatus(sessionId, runId, "waiting_input");
+
+    const running = await WorkerRun.get(sessionId, runId);
+    if (running?.status !== "running") {
+      return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
+    }
+    const acquiredWait = await WorkerRun.updateStatusIfCurrent(
+      sessionId,
+      runId,
+      { status: "running", timeUpdated: running.timeUpdated },
+      "waiting_input",
+    );
+    if (!acquiredWait) {
+      return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
     }
 
     try {
@@ -93,7 +106,12 @@ export function createResidentInboundWaitHandler(
     } finally {
       const after = runId ? await WorkerRun.get(sessionId, runId) : undefined;
       if (runId && after?.status === "waiting_input") {
-        await WorkerRun.updateStatus(sessionId, runId, "running");
+        await WorkerRun.updateStatusIfCurrent(
+          sessionId,
+          runId,
+          { status: "waiting_input", timeUpdated: after.timeUpdated },
+          "running",
+        );
       }
     }
   };

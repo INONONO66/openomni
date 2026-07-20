@@ -30,15 +30,12 @@ describe("Ingress blacklist", () => {
     );
     testState.responseQueue.push("ok");
 
-    let caughtError: Error | undefined;
-    try {
-      await engine.ingest(makeEvent("user-1"));
-    } catch (err) {
-      if (!(err instanceof Error)) throw err;
-      caughtError = err;
-    }
+    const result = await engine.ingest(makeEvent("user-1"));
 
-    expect(caughtError?.message).toContain("blocked actor");
+    expect(result).toMatchObject({
+      kind: "dropped",
+      reason: "Inbound principal matched the blacklist",
+    });
     expect(inboundPolicyCalled).toBe(false);
   });
 
@@ -52,15 +49,12 @@ describe("Ingress blacklist", () => {
     const engine = getIngressEngine();
     testState.responseQueue.push("ok");
 
-    let caughtError: Error | undefined;
-    try {
-      await engine.ingest(makeEvent("unknown-user"));
-    } catch (err) {
-      if (!(err instanceof Error)) throw err;
-      caughtError = err;
-    }
+    const result = await engine.ingest(makeEvent("unknown-user"));
 
-    expect(caughtError?.message).toContain("blacklist.channel.discord:guild:dev");
+    expect(result).toMatchObject({
+      kind: "dropped",
+      reason: "Inbound principal matched the blacklist",
+    });
     expect(testState.llmInputs).toHaveLength(0);
   });
 });

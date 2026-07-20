@@ -5,6 +5,12 @@ import type { KernelRouteResolution } from "./routing-runtime.js";
 
 type RoutedDecision = Extract<RoutingDecisionPayload, { readonly outcome: "route" }>;
 
+type BlacklistDropDecision = Extract<
+  RoutingDecisionPayload,
+  { readonly stage: "blacklist"; readonly outcome: "drop" }
+>;
+type AcceptedDecision = RoutedDecision | BlacklistDropDecision;
+
 export type IngressRoutingErrorCode =
   | "route_blocked"
   | "route_ambiguous"
@@ -48,8 +54,9 @@ function terminalMessage(decision: RoutingDecisionPayload): string {
   return decision.reason;
 }
 
-export function requireRoutedDecision(decision: RoutingDecisionPayload): RoutedDecision {
+export function requireRoutedDecision(decision: RoutingDecisionPayload): AcceptedDecision {
   if (decision.outcome === "route") return decision;
+  if (decision.stage === "blacklist" && decision.outcome === "drop") return decision;
   if (decision.outcome === "ambiguous") {
     throw new IngressRoutingError("route_ambiguous", decision.reason, decision);
   }
@@ -58,7 +65,7 @@ export function requireRoutedDecision(decision: RoutingDecisionPayload): RoutedD
 
 export function pinRouteSession(
   event: Ingress.ResolvedInboundEvent,
-  decision: RoutedDecision,
+  decision: AcceptedDecision,
 ): Ingress.ResolvedInboundEvent {
   if (decision.sessionId === undefined) return event;
   return {
@@ -118,6 +125,50 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
+function hasMatchingBearerToken(
+  correlation: Dispatch.Correlation,
+  record: Extract<
+    KernelRouteResolution["waitExecution"],
+    { kind: "pending_interaction" }
+  >["record"],
+): boolean {
+  return (
+    record.targetActorId === undefined &&
+    record.correlation.tokenHash !== undefined &&
+    correlation.tokenHash === record.correlation.tokenHash
+  );
+}
+
+function senderMatchesPendingInteraction(
+  event: Ingress.InboundEvent,
+  wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>,
+): boolean {
+  if (hasMatchingBearerToken(wait.correlation, wait.record)) return true;
+  if (wait.correlation.endpointId !== wait.record.endpointId) return false;
+
+  if (wait.record.targetActorId !== undefined && typeof event.meta?.actor?.actorId !== "string") {
+    return false;
+  }
+  const actor = event.meta?.actor;
+  if (typeof actor?.actorId !== "string") {
+    if (event.mode !== "direct" || typeof event.userId !== "string") return false;
+    return (
+      event.userId === wait.record.endpointId || wait.record.endpointId.endsWith(`:${event.userId}`)
+    );
+  }
+  if (wait.record.targetActorId !== undefined && actor.actorId !== wait.record.targetActorId) {
+    return false;
+  }
+
+  const endpoint = actor.endpoint;
+  if (endpoint === undefined) return actor.endpointId === wait.record.endpointId;
+  return (
+    endpoint.id === wait.record.endpointId ||
+    endpoint.externalId === wait.record.endpointId ||
+    `${endpoint.channel}:${endpoint.externalId}` === wait.record.endpointId
+  );
+}
+
 async function executePendingInteractionRoute<Event extends Ingress.InboundEvent>(
   runtime: DispatchRuntime | undefined,
   trace: TraceContext.Type,
@@ -153,6 +204,13 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
   }
 
   const event = resolution.event;
+  if (!senderMatchesPendingInteraction(event, wait)) {
+    throw new IngressRoutingError(
+      "dispatch_route_invalid",
+      "pending interaction sender does not match the assigned actor endpoint",
+      decision,
+    );
+  }
   const workspaceRoot = event.mode === "direct" ? event.agent.toolConfig?.workspaceRoot : undefined;
   const result = await submitPinnedPendingInteraction(
     runtime,
@@ -165,8 +223,8 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
     wait.record,
     {
       traceId: trace.traceId,
-      actorKind: "unknown",
-      actorId: wait.correlation.endpointId,
+      actorKind: typeof event.meta?.actor?.actorId === "string" ? "user" : "unknown",
+      actorId: event.meta?.actor?.actorId ?? wait.correlation.endpointId,
       sessionId: wait.record.sessionId,
       runId: wait.record.workerRunId,
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
@@ -199,8 +257,22 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
   runtime: DispatchRuntime | undefined,
   trace: TraceContext.Type,
   resolution: KernelRouteResolution<Event>,
-  decision: RoutedDecision,
+  decision: AcceptedDecision,
 ): Promise<WaitRouteExecution<Event>> {
+  if (decision.stage === "blacklist" && decision.outcome === "drop") {
+    return {
+      kind: "handled",
+      result: {
+        kind: "dropped",
+        mode: resolution.event.mode,
+        target: resolution.selectedTarget,
+        reason: decision.reason,
+      },
+    };
+  }
+  if (decision.outcome !== "route") {
+    throw new TypeError("accepted terminal routing decision was not handled");
+  }
   const wait = resolution.waitExecution;
   switch (wait.kind) {
     case "none":

@@ -31,7 +31,8 @@ type OpenTask = {
   readonly status: OpenTaskStatus;
 };
 
-function toResponseText(result: Ingress.IngressResult): string {
+function toResponseText(result: Ingress.IngressResult): string | null {
+  if (result.kind === "dropped") return null;
   return result.result.output || "(no response)";
 }
 

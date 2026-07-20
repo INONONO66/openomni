@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Adapter } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
@@ -117,22 +117,8 @@ export async function main(): Promise<void> {
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
   IngressEngine.setCoordinator(coordinator);
-  const dispatchOwners = createServerDispatchOwners({
-    coordinator,
-    residentRuntime,
-    credentials: bootstrap.credentials,
-    model,
-  });
-  agentProviderRef.current = new AgentToolProvider({
-    dispatchOwners,
-  });
-  const sharedDispatchRuntime = createDefaultDispatchRuntime({
-    owners: dispatchOwners,
-  });
-  dispatchRuntimeRef.current = sharedDispatchRuntime;
-  IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
-  IngressEngine.setAgentResolver({
-    resolve: async (agentName, event) =>
+  const residentAgentResolver = {
+    resolve: async (agentName: string, event: Ingress.InternalEvent) =>
       buildAgentDef(agentName, {
         systemProvider,
         agentProvider: requireAgentProvider(),
@@ -142,7 +128,23 @@ export async function main(): Promise<void> {
         providerOptions: config.model?.providerOptions,
         workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
       }),
+  };
+  const dispatchOwners = createServerDispatchOwners({
+    coordinator,
+    residentRuntime,
+    credentials: bootstrap.credentials,
+    model,
+    residentAgentResolver,
   });
+  agentProviderRef.current = new AgentToolProvider({
+    dispatchOwners,
+  });
+  const sharedDispatchRuntime = createDefaultDispatchRuntime({
+    owners: dispatchOwners,
+  });
+  dispatchRuntimeRef.current = sharedDispatchRuntime;
+  IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
+  IngressEngine.setAgentResolver(residentAgentResolver);
 
   const routingHandler = model
     ? createRoutingHandler(

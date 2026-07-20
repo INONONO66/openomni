@@ -40,6 +40,7 @@ describe("DispatchRuntime", () => {
         target: { kind: "surface", id: "telegram:dm" },
         payload: {
           action: "report_result",
+          workItemHash: "unrelated-work-item",
           result: {
             runId: "run-pi",
             sessionId: session.id,
@@ -70,6 +71,15 @@ describe("DispatchRuntime", () => {
       kind: "worker",
       runId: "run-pi",
       sessionId: session.id,
+    });
+    expect(routedCommand?.payload).toEqual({
+      result: {
+        runId: "run-pi",
+        sessionId: session.id,
+        status: "succeeded",
+        output: "SN-A2334",
+        finishReason: "stop",
+      },
     });
     expect(routedCommand?.actor.trustTier).toBe("assigned_worker");
     expect(PendingInteractionStore.get("pi-dispatch-1")?.status).toBe("resolved");
@@ -249,8 +259,8 @@ describe("DispatchRuntime", () => {
       },
       pinned,
       {
-        actorKind: "unknown",
-        actorId: pinned.endpointId,
+        actorKind: "user",
+        actorId: "worker:original",
       },
     );
 
