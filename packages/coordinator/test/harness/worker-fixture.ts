@@ -31,10 +31,10 @@ function envNumber(name: string, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-const fixtureActiveRuns = new Map<string, { sessionId: string; inbox: string[] }>();
+const activeRuns = new Map<string, { sessionId: string; inbox: string[] }>();
+const toolCallSettlements = new Map<string, () => void>();
 
 const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
-  const activeRuns = fixtureActiveRuns;
   if (method === "coordinator.bootstrap") {
     if (params?.authToken !== ipcAuthToken) {
       respond({ ok: false, error: "unauthorized" });
@@ -63,19 +63,63 @@ const server = createIpcServer(socketPath, (method, params, respond, _notify, co
     const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "unknown";
     const delayMs = asNumber(params?.delayMs, 0);
     const envName = typeof params?.envName === "string" ? params.envName : undefined;
+    const relayTool = params?.relayTool === true;
+    const relayRunId = typeof params?.relayRunId === "string" ? params.relayRunId : runId;
+    const toolCallId = `fixture-tool-call:${runId}`;
     activeRuns.set(runId, { sessionId, inbox: [] });
 
     setTimeout(() => {
-      activeRuns.delete(runId);
-      respond({
-        accepted: true,
-        workerId,
-        runId,
-        sessionId,
-        delayMs,
-        envValue: envName ? process.env[envName] : undefined,
+      void (async () => {
+        let toolRelayResult: unknown;
+        if (relayTool) {
+          const toolCallSettled = new Promise<void>((resolve) => {
+            toolCallSettlements.set(toolCallId, resolve);
+          });
+          toolRelayResult = await server.call("worker.tool_call", {
+            runId: relayRunId,
+            sessionId: "spoofed-session",
+            callId: toolCallId,
+            tool: "fixture.tool",
+            input: {
+              traceId: "spoofed-trace",
+              sessionId: "spoofed-session",
+              runId: "spoofed-run",
+            },
+          });
+          await toolCallSettled;
+        }
+        activeRuns.delete(runId);
+        respond({
+          accepted: true,
+          workerId,
+          runId,
+          sessionId,
+          delayMs,
+          envValue: envName ? process.env[envName] : undefined,
+          toolRelayResult,
+        });
+      })().catch((error: unknown) => {
+        activeRuns.delete(runId);
+        toolCallSettlements.delete(toolCallId);
+        respond({
+          accepted: false,
+          workerId,
+          runId,
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     }, delayMs);
+    return;
+  }
+
+  if (method === "worker.tool_call_settled") {
+    const callId = typeof params?.callId === "string" ? params.callId : undefined;
+    respond({ acknowledged: true });
+    if (callId) {
+      toolCallSettlements.get(callId)?.();
+      toolCallSettlements.delete(callId);
+    }
     return;
   }
 

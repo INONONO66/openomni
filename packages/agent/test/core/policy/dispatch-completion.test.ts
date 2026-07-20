@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Tool } from "@openomni/protocol";
-import type { PolicyRegistration, PolicyContext } from "../../../src/core/policy";
+import type { PolicyContext } from "../../../src/core/policy";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tool-executor";
 import {
@@ -219,40 +219,5 @@ describe("error middleware dispatch (runner level)", () => {
     const calledCtx = onErrorFn.mock.calls[0][0] as PolicyContext;
     expect(calledCtx.timing).toBe("error");
     expect(calledCtx.toolInput?.error).toBe(error);
-  });
-});
-
-describe("idle-nudge invoke.result integration", () => {
-  it("idle-nudge fn is dispatched for invoke.result timing", async () => {
-    const { createIdleNudgePolicy } = await import("../../../src/core/policy/builtin/idle-nudge");
-
-    const idleNudge = createIdleNudgePolicy({ idleThresholdMs: -1 });
-    let postToolUseCallCount = 0;
-    const originalFn = idleNudge.fn;
-    const spiedIdleNudge: PolicyRegistration = {
-      ...idleNudge,
-      fn: (ctx: PolicyContext) => {
-        if (ctx.timing === "invoke.result") postToolUseCallCount++;
-        return originalFn(ctx);
-      },
-    };
-
-    const engine = PolicyEngine.create();
-    engine.register(spiedIdleNudge);
-
-    const executor = createToolExecutor({
-      toolExecutor: async (call) => ({
-        id: newID("result"),
-        toolCallId: call.id,
-        output: "ok",
-        isError: false,
-      }),
-      engine,
-    });
-
-    const call: Tool.Call = { id: "call-idle", tool: "bash", input: { command: "ls" } };
-    await executor(call);
-
-    expect(postToolUseCallCount).toBe(1);
   });
 });

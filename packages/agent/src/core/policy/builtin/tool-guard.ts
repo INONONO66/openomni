@@ -1,7 +1,7 @@
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import type { AgentEventEmitter } from "../../types";
-import type { PolicyRegistration } from "../types";
+import type { CanonicalPolicyRegistration } from "../types";
 import { summarizeInput } from "../../execution/shared";
 
 const TOOL_CALL_ACTION = "tool.call";
@@ -13,10 +13,17 @@ export interface ToolPermissionPolicyConfig {
   onToolBlocked?: (toolCallId: string, toolName: string, reason: string) => void;
 }
 
-export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): PolicyRegistration {
+export function createToolPermissionPolicy(
+  config: ToolPermissionPolicyConfig,
+): CanonicalPolicyRegistration {
   return {
     name: "builtin:tool-permission",
-    timing: "invoke.prepare",
+    kind: "point",
+    pointIds: ["tool.native.pre", "tool.mcp.pre"],
+    effectCapabilities: {
+      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+    },
     priority: 0,
     failPolicy: "fail-closed",
     fn: async (ctx) => {
@@ -37,12 +44,13 @@ export function createToolPermissionPolicy(config: ToolPermissionPolicyConfig): 
           input: toolInput ?? {},
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         Bus.publish(Operational.Debug, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "agent.policy.tool-permission",
           msg: "tool permission evaluation failed",
-          context: { toolName, error: String(error) },
+          context: { toolName, error: errorMessage },
         });
         return PolicyDecision.deny({
           policyId: "guardrail.permission",

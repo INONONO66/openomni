@@ -1,6 +1,14 @@
-import type { AgentProfile, Tool, Sink, Policy, Token, Model } from "@openomni/protocol";
+import type {
+  AgentProfile,
+  Model,
+  Policy,
+  RuntimeResource,
+  Sink,
+  Token,
+  Tool,
+} from "@openomni/protocol";
 import type { Provider, RunInput } from "@openomni/llm";
-import type { PolicyRegistration } from "./policy/types";
+import type { PolicyEngineRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
 
 export interface AgentEventEmitter {
@@ -11,9 +19,13 @@ export interface TokenUsage extends Token.AgentUsage {}
 
 export interface AgentBudget extends AgentProfile.AgentBudget {}
 
+type AgentToolSpec = Tool.Spec & {
+  readonly descriptor?: RuntimeResource.Descriptor;
+};
+
 export interface ChatAgentConfig {
   systemPrompt?: string;
-  tools?: Tool.Spec[];
+  tools?: AgentToolSpec[];
   model: Model.Ref;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
@@ -24,7 +36,7 @@ export interface ChatAgentConfig {
   auth?: RunInput["auth"];
   allowAuthFallback?: RunInput["allowAuthFallback"];
   toolChoice?: "auto" | "required" | "none";
-  middleware?: PolicyRegistration[];
+  middleware?: PolicyEngineRegistration[];
   context?: AgentRuntimeContext;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;

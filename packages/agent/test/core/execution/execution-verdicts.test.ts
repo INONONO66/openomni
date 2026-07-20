@@ -1,8 +1,7 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Operational, type TraceContext } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy/types";
 import type { AgentEvent, ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 import { buildTurn } from "../../../src/core/execution/turn-prepare";
 import {
@@ -11,11 +10,7 @@ import {
   type RunState,
   type TurnArtifacts,
 } from "../../../src/core/execution/run-state";
-import {
-  dispatchModelRequest,
-  dispatchModelResponse,
-  dispatchPreRun,
-} from "../../../src/core/execution/lifecycle-dispatch";
+import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { handleCompact, handleStop } from "../../../src/core/execution/turn-outcome";
 import { deny } from "../../helpers/policy-decision";
 
@@ -145,83 +140,6 @@ describe("execution helper deny verdicts", () => {
     expect(result.type).toBe("complete");
     if (result.type === "complete" && result.event.type === "complete") {
       expect(result.event.result.guardAborted).toBe(true);
-    }
-  });
-
-  it("fail-closes model.request deny before provider execution", async () => {
-    Bus.reset();
-    const fn = mock((_ctx: PolicyContext) => deny("test.deny", "provider-blocked"));
-    const engine = PolicyEngine.create();
-    engine.register({ name: "deny-model-request", timing: "model.request", priority: 100, fn });
-
-    const complete = expectComplete(await dispatchModelRequest(makeState(), engine, makeConfig()));
-
-    expect(complete.result.guardAborted).toBe(true);
-    expect(fn).toHaveBeenCalledTimes(1);
-  });
-
-  it("records a diagnostic and keeps model.response deny fail-open", async () => {
-    Bus.reset();
-    const diagnostics: unknown[] = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Info.name) diagnostics.push(payload);
-    });
-    const engine = PolicyEngine.create();
-    engine.register({
-      name: "deny-model-response",
-      timing: "model.response",
-      priority: 100,
-      fn: () => deny("test.deny", "after-provider"),
-    });
-
-    try {
-      const result = await dispatchModelResponse(
-        makeState(),
-        engine,
-        makeConfig(),
-        "stop",
-        makeAgentBase(),
-      );
-      await Promise.resolve();
-
-      expect(result).toBeNull();
-      const diagnostic = findDenyDiagnostic(diagnostics, "model.response");
-      expect(diagnostic).toBeDefined();
-      expect(diagnostic?.traceId).toBe("trace-1");
-      expect(diagnostic?.sessionId).toBe("sess-1");
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  it("omits fallback sessionId from model.response deny diagnostics", async () => {
-    Bus.reset();
-    const diagnostics: unknown[] = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Info.name) diagnostics.push(payload);
-    });
-    const engine = PolicyEngine.create();
-    engine.register({
-      name: "deny-model-response-empty-session",
-      timing: "model.response",
-      priority: 100,
-      fn: () => deny("test.deny", "after-provider"),
-    });
-
-    try {
-      const result = await dispatchModelResponse(makeState(), engine, makeConfig(), "stop", {
-        traceId: "trace-empty-session",
-        sessionId: "",
-      });
-      await Promise.resolve();
-
-      expect(result).toBeNull();
-      const diagnostic = findDenyDiagnostic(diagnostics, "model.response");
-      expect(diagnostic).toBeDefined();
-      expect(diagnostic?.traceId).toBe("trace-empty-session");
-      expect(diagnostic?.sessionId).toBeUndefined();
-    } finally {
-      unsubscribe();
     }
   });
 

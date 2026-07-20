@@ -76,6 +76,7 @@ export type {
   ChildAgentRuntimeOptions,
   ChildAgentSnapshot,
   ChildAgentSpawnInput,
+  DelegationPolicyRegistration,
   DispatchToolRuntime,
 } from "./execution-runtime";
 
@@ -84,6 +85,7 @@ export { ReadBackExecutor } from "./evidence";
 // Dispatch runtime
 export {
   DEFAULT_DISPATCH_MODEL,
+  DispatchPolicyRegistrationError,
   DispatchRuntime,
   DispatchRegistry,
   createDefaultDispatchRuntime,
@@ -105,6 +107,9 @@ export type {
   DispatchHandlerContext,
   DispatchHandlerResult,
   DispatchOwners,
+  DispatchPolicyContext,
+  DispatchPolicyRegistration,
+  DispatchPolicyRegistrationErrorCode,
   DispatchRuntimeContext,
   DispatchRuntimeOptions,
   DispatchSchedulerOwner,

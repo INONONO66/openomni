@@ -1,37 +1,17 @@
 import { z } from "zod";
-import { Actor } from "../actor/index.js";
 import { BusEvent } from "../bus/index.js";
 import { Policy } from "../policy/index.js";
+import { DispatchSchemas } from "./schemas.js";
 
 export namespace Dispatch {
-  export const ActorKind = z.enum(["worker", "resident", "system", "user", "unknown"]);
-  export type ActorKind = z.infer<typeof ActorKind>;
+  export const ActorKind = DispatchSchemas.ActorKind;
+  export type ActorKind = DispatchSchemas.ActorKind;
 
-  export const TargetKind = z.enum([
-    "worker",
-    "resident",
-    "external_actor",
-    "schedule",
-    "session",
-    "surface",
-    "system",
-  ]);
-  export type TargetKind = z.infer<typeof TargetKind>;
+  export const TargetKind = DispatchSchemas.TargetKind;
+  export type TargetKind = DispatchSchemas.TargetKind;
 
-  export const Target = z
-    .object({
-      kind: TargetKind,
-      id: z.string().min(1).optional(),
-      sessionId: z.string().min(1).optional(),
-      parentSessionId: z.string().min(1).optional(),
-      runId: z.string().min(1).optional(),
-      endpointId: z.string().min(1).optional(),
-      connectorInstallationId: z.string().min(1).optional(),
-      name: z.string().min(1).optional(),
-      labels: z.array(z.string()).optional(),
-    })
-    .strict();
-  export type Target = z.infer<typeof Target>;
+  export const Target = DispatchSchemas.Target;
+  export type Target = DispatchSchemas.Target;
 
   export const Correlation = z
     .object({
@@ -58,22 +38,8 @@ export namespace Dispatch {
     .strict();
   export type Input = z.infer<typeof Input>;
 
-  export const ActorContext = z
-    .object({
-      kind: ActorKind,
-      actorId: z.string().min(1),
-      agentName: z.string().min(1).optional(),
-      sessionId: z.string().min(1).optional(),
-      runId: z.string().min(1).optional(),
-      workerRunId: z.string().min(1).optional(),
-      workspaceRoot: z.string().min(1).optional(),
-      permissions: z.array(z.string()).optional(),
-      labels: z.array(z.string()).optional(),
-      trustTier: Actor.TrustTier.optional(),
-      reason: z.string().min(1).optional(),
-    })
-    .strict();
-  export type ActorContext = z.infer<typeof ActorContext>;
+  export const ActorContext = DispatchSchemas.ActorContext;
+  export type ActorContext = DispatchSchemas.ActorContext;
 
   export const Command = Input.extend({
     dispatchId: z.string().min(1),

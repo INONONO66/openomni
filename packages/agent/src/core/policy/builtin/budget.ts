@@ -1,12 +1,14 @@
 import { PolicyDecision } from "@openomni/protocol";
 import { checkBudget, describeBudgetRemaining, effectiveBudgetThresholds } from "../../budget";
-import type { PolicyRegistration } from "../types";
+import type { CanonicalPolicyRegistration } from "../types";
 
-export function createBudgetReassurancePolicy(): PolicyRegistration {
+export function createBudgetReassurancePolicy(): CanonicalPolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-reassurance",
-    timing: "turn.start",
+    kind: "point",
+    pointIds: ["run.turn.pre"],
+    effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
     priority: 10,
     fn: (ctx) => {
       if (issued || !ctx.budgetState)
@@ -37,11 +39,13 @@ export function createBudgetReassurancePolicy(): PolicyRegistration {
   };
 }
 
-export function createBudgetWarningPolicy(): PolicyRegistration {
+export function createBudgetWarningPolicy(): CanonicalPolicyRegistration {
   let issued = false;
   return {
     name: "builtin:budget-warning",
-    timing: "turn.start",
+    kind: "point",
+    pointIds: ["run.turn.pre"],
+    effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
     priority: 20,
     fn: (ctx) => {
       if (issued || !ctx.budgetState)

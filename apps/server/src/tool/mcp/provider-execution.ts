@@ -3,7 +3,7 @@ import { Mcp, PolicyDecision, PolicyEvent, ToolExecution } from "@openomni/proto
 import { Bus } from "@openomni/session";
 import type { NativeTool, ToolExecutionContext } from "@openomni/openomni";
 import { McpPrefixGuardMiddleware } from "./mcp-prefix-guard";
-import { MCP_TOOL_ACTION, buildActor, readSessionId } from "./provider-audit";
+import { MCP_TOOL_ACTION, buildActor } from "./provider-audit";
 import { createResultSummary } from "./provider-metadata";
 
 interface ExecuteMcpToolInput {
@@ -13,29 +13,36 @@ interface ExecuteMcpToolInput {
   readonly isServerConnected: (serverName: string) => boolean;
 }
 
+type ExecutionAudit = ReturnType<typeof McpPrefixGuardMiddleware.normalizeAuditContext>;
+
 export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.Result> {
   const { call, context } = input;
+  const audit = McpPrefixGuardMiddleware.normalizeAuditContext(context?.traceContext);
+  const executionContext: ToolExecutionContext = {
+    ...(context?.signal !== undefined && { signal: context.signal }),
+    traceContext: audit,
+  };
   const guard = await McpPrefixGuardMiddleware.evaluatePreToolUse({
     call,
     tools: input.tools,
     isServerConnected: input.isServerConnected,
+    traceContext: executionContext.traceContext,
   });
   const tool = guard.tool;
   if (PolicyDecision.isBlocking(guard.verdict) || !tool) {
-    return publishBlockedResult(
+    return publishBlockedResult({
       call,
       tool,
-      PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
-    );
+      reason: PolicyDecision.reason(guard.verdict, `Unknown tool: ${call.tool}`),
+      audit,
+    });
   }
 
-  const sessionId = readSessionId(call) ?? "";
   const actionId = crypto.randomUUID();
-  const actor = buildActor(sessionId);
+  const actor = buildActor(audit.sessionId);
 
   Bus.publish(PolicyEvent.ActionRequested, {
-    traceId: crypto.randomUUID(),
-    sessionId,
+    ...audit,
     time: Date.now(),
     actionId,
     actor,
@@ -45,14 +52,11 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   });
 
   const startTime = Date.now();
-  const result = await (context === undefined
-    ? tool.execute({ ...call, tool: tool.spec.name })
-    : tool.execute({ ...call, tool: tool.spec.name }, context));
+  const result = await tool.execute({ ...call, tool: tool.spec.name }, executionContext);
   const durationMs = Date.now() - startTime;
 
   Bus.publish(ToolExecution.Completed, {
-    traceId: crypto.randomUUID(),
-    sessionId,
+    ...audit,
     time: Date.now(),
     actor,
     toolCallId: call.id,
@@ -66,7 +70,7 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
     const serverName = tool.spec.name.split(".")[0] ?? "unknown";
 
     Bus.publish(Mcp.ToolCompleted, {
-      traceId: crypto.randomUUID(),
+      traceId: audit.traceId,
       serverName,
       toolName: tool.spec.name,
       toolCallId: call.id,
@@ -79,30 +83,28 @@ export async function executeMcpTool(input: ExecuteMcpToolInput): Promise<Tool.R
   return result;
 }
 
-function publishBlockedResult(
-  call: Tool.Call,
-  tool: NativeTool | undefined,
-  reason: string,
-): Tool.Result {
+function publishBlockedResult(input: {
+  readonly call: Tool.Call;
+  readonly tool: NativeTool | undefined;
+  readonly reason: string;
+  readonly audit: ExecutionAudit;
+}): Tool.Result {
+  const { call, tool, reason, audit } = input;
   const result = {
     id: crypto.randomUUID(),
     toolCallId: call.id,
     output: reason,
     isError: true,
   };
-  const sessionId = readSessionId(call);
-  if (sessionId) {
-    Bus.publish(PolicyEvent.ActionBlocked, {
-      traceId: crypto.randomUUID(),
-      sessionId,
-      time: Date.now(),
-      actionId: crypto.randomUUID(),
-      actor: buildActor(sessionId),
-      action: MCP_TOOL_ACTION,
-      resource: tool?.spec.name ?? call.tool,
-      verdict: "deny" as const,
-      reason,
-    });
-  }
+  Bus.publish(PolicyEvent.ActionBlocked, {
+    ...audit,
+    time: Date.now(),
+    actionId: crypto.randomUUID(),
+    actor: buildActor(audit.sessionId),
+    action: MCP_TOOL_ACTION,
+    resource: tool?.spec.name ?? call.tool,
+    verdict: "deny" as const,
+    reason,
+  });
   return result;
 }

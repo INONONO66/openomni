@@ -1,4 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, Tool } from "@openomni/protocol";
@@ -117,9 +118,9 @@ export class McpClient {
     name: string,
     args: Record<string, unknown>,
     toolCallId: string,
-    context?: { readonly signal?: AbortSignal },
+    context?: Tool.ExecutionContext,
   ): Promise<Tool.Result> {
-    const traceId = randomUUID();
+    const traceId = context?.traceContext?.traceId ?? randomUUID();
     const strippedName = name.startsWith(`${this.config.name}.`)
       ? name.slice(this.config.name.length + 1)
       : name;
@@ -170,8 +171,6 @@ export class McpClient {
   }
 }
 
-// merged from client-options.ts (#453 hygiene: sub-30-LOC single-importer)
-import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 export function requestOptions(
   config: McpServerConfig,
   context?: { readonly signal?: AbortSignal },

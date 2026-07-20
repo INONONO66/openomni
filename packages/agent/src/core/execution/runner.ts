@@ -26,16 +26,24 @@ export async function* streamAgent(
   let lastError = "";
 
   const trace = input.traceContext ?? TraceContext.empty();
-  const agentBase = {
-    traceId: trace.traceId,
-    sessionId: trace.sessionId ?? "",
-    runId: trace.runId,
+  const traceId = nonEmptyString(trace.traceId) ?? crypto.randomUUID();
+  const sessionId = nonEmptyString(trace.sessionId) ?? crypto.randomUUID();
+  const runId = nonEmptyString(trace.runId) ?? crypto.randomUUID();
+  const agentName = nonEmptyString(trace.agentName);
+  const actorId = nonEmptyString(input.metadata?.actorId) ?? agentName ?? runId;
+  const resolvedTrace = {
+    ...trace,
+    traceId,
+    sessionId,
+    runId,
+    agentName,
   };
-  emitRunStarted(trace, config.model.id);
+  const agentBase = { traceId, sessionId, runId, actorId };
+  emitRunStarted(resolvedTrace, config.model.id);
   assertToolExecutor(config);
 
   while (attempt <= retryPolicy.maxAttempts) {
-    const state = createRunState(input);
+    const state = createRunState({ ...input, traceContext: resolvedTrace });
     const engine = buildPolicyEngine(config, agentBase);
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
@@ -43,7 +51,7 @@ export async function* streamAgent(
       );
       const configuredToolChoice = resolveToolChoice(config);
 
-      const preRunEvent = await dispatchPreRun(state, engine, config);
+      const preRunEvent = await dispatchPreRun(state, engine, config, agentBase);
       if (preRunEvent) {
         yield preRunEvent;
         return;
@@ -63,7 +71,7 @@ export async function* streamAgent(
           engine,
           providerModel,
           configuredToolChoice,
-          trace,
+          resolvedTrace,
           agentBase,
           sink,
         );
@@ -75,7 +83,7 @@ export async function* streamAgent(
         if (turnResult.budgetWarningEvent) yield turnResult.budgetWarningEvent;
 
         const runLlm = config.llm?.run ?? llmRun;
-        const modelRequestEvent = await dispatchModelRequest(state, engine, config);
+        const modelRequestEvent = await dispatchModelRequest(state, engine, config, agentBase);
         if (modelRequestEvent) {
           yield modelRequestEvent;
           return;
@@ -85,7 +93,10 @@ export async function* streamAgent(
           state,
           engine,
           config,
-          outcome.type,
+          {
+            outcome,
+            responseTokens: turnResult.turn.turnUsage.outputTokens,
+          },
           agentBase,
         );
         if (modelResponseEvent) {
@@ -149,4 +160,8 @@ function unknownOutcomeType(value: unknown): string {
 
   const type = value.type;
   return typeof type === "string" ? type : "unknown";
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

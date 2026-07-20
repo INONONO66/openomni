@@ -1,4 +1,5 @@
 import { PolicyRegistry } from "@openomni/policy";
+import type { PolicyRegistryInstance } from "@openomni/policy";
 import { Policy } from "@openomni/protocol";
 import { z } from "zod";
 import type { CompactionOptions } from "../execution/compaction";
@@ -12,6 +13,7 @@ import {
 } from "./builtin";
 import type { IdleNudgeConfig } from "./builtin/idle-nudge";
 import type { ToolPermissionPolicyConfig } from "./builtin/tool-guard";
+import type { PolicyContext } from "./types";
 
 export { PolicyRegistry } from "@openomni/policy";
 export type { PolicyFactory, PolicyRegistryInstance, RuntimeContext } from "@openomni/policy";
@@ -68,8 +70,8 @@ function parseToolPermissionConfig(config: unknown): ToolPermissionPolicyConfig 
   );
 }
 
-export function defaultRegistry(): ReturnType<typeof PolicyRegistry.create> {
-  const registry = PolicyRegistry.create();
+export function defaultRegistry(): PolicyRegistryInstance<PolicyContext> {
+  const registry = PolicyRegistry.create<PolicyContext>();
 
   registry.register("builtin:budget-reassurance", () => createBudgetReassurancePolicy());
   registry.register("builtin:budget-warning", () => createBudgetWarningPolicy());

@@ -1,11 +1,63 @@
 import { Policy, type RuntimeResource } from "@openomni/protocol";
 import type { PolicyPointId } from "./types";
 
+class PolicyPointTimingError extends Error {
+  constructor(pointId: PolicyPointId) {
+    super(`No legacy timing maps to registered policy point: ${pointId}`);
+    this.name = "PolicyPointTimingError";
+  }
+}
+
+class PolicyPointResolutionError extends Error {
+  constructor(readonly timing: Policy.Timing) {
+    super(`No canonical policy points map to timing: ${timing}`);
+    this.name = "PolicyPointResolutionError";
+  }
+}
+
+const canonicalMigrationMapping: ReadonlyMap<Policy.Timing, readonly PolicyPointId[]> = new Map(
+  Object.values(Policy.Timing).map((timing) => [
+    timing,
+    Object.freeze([...Policy.PolicyPoint.MigrationMapping[timing]]),
+  ]),
+);
+
+export function resolvePolicyPoints(
+  timing: Policy.Timing,
+  context?: { readonly resourceKind?: string },
+): PolicyPointId[] {
+  const pointIds = canonicalMigrationMapping.get(timing);
+  if (pointIds === undefined) throw new PolicyPointResolutionError(timing);
+
+  const resourceKind = context?.resourceKind;
+  if (resourceKind === undefined) return [...pointIds];
+
+  return pointIds.filter((pointId) =>
+    Policy.PolicyPoint.Registry[pointId].resourceKinds.includes(resourceKind),
+  );
+}
+
+const timingByPointId: ReadonlyMap<PolicyPointId, Policy.Timing> = (() => {
+  const inverse = new Map<PolicyPointId, Policy.Timing>();
+  for (const timing of Object.values(Policy.Timing)) {
+    for (const pointId of resolvePolicyPoints(timing)) {
+      if (!inverse.has(pointId)) inverse.set(pointId, timing);
+    }
+  }
+  return inverse;
+})();
+
+export function timingForPolicyPoint(pointId: PolicyPointId): Policy.Timing {
+  const timing = timingByPointId.get(pointId);
+  if (timing !== undefined) return timing;
+  throw new PolicyPointTimingError(pointId);
+}
+
 export function policyPointIdsForDescriptor(
   timing: Policy.Timing,
   descriptor: RuntimeResource.Descriptor | undefined,
 ): PolicyPointId[] {
-  const aliases = Policy.PolicyPoint.MigrationMapping[timing];
+  const aliases = resolvePolicyPoints(timing);
   if (descriptor === undefined) return aliases;
 
   if (timing === "invoke.prepare") {
@@ -66,6 +118,12 @@ export function allowedEffectTypes(
   }
 
   return allowed;
+}
+
+export function allowedEffectTypesAtPoint(
+  pointId: PolicyPointId,
+): ReadonlySet<Policy.PolicyEffectType> {
+  return new Set(Policy.PolicyPoint.Registry[pointId].allowedEffects);
 }
 
 export function isPreBoundary(

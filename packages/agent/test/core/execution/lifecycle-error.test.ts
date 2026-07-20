@@ -1,0 +1,185 @@
+import { describe, expect, it, mock } from "bun:test";
+import { Bus } from "@openomni/session";
+import { PolicyEngine } from "../../../src/core/policy";
+import type { PolicyContext } from "../../../src/core/policy/types";
+import type { AgentEvent } from "../../../src/core/types";
+import { abortRun, allow } from "../../helpers/policy-decision";
+import { handleError } from "../../../src/core/execution/turn-outcome";
+import { collectEvents, makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+
+describe("handleError (error)", () => {
+  it("dispatches error and respects abort verdict", async () => {
+    Bus.reset();
+    const fn = mock((_ctx: PolicyContext) => abortRun("test.error-abort", "error-abort"));
+    const engine = PolicyEngine.create();
+    engine.register({ name: "test-on-error", timing: "error", priority: 100, fn });
+
+    const state = makeState();
+    const config = makeConfig();
+    const error = new Error("test-failure");
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const gen = handleError(state, engine, config, makeAgentBase(), error, 1, retryPolicy);
+    let result: IteratorResult<AgentEvent, unknown>;
+    const events: AgentEvent[] = [];
+    do {
+      result = await gen.next();
+      if (!result.done && result.value) events.push(result.value as AgentEvent);
+    } while (!result.done);
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    const ctx = fn.mock.calls[0][0] as PolicyContext;
+    expect(ctx.timing).toBe("error");
+    expect(ctx.toolInput?.error).toMatchObject({ name: "Error", message: error.message });
+
+    const decision = result.value as { action: string };
+    expect(decision.action).toBe("complete");
+    const completeEvent = events.find((e) => e.type === "complete") as
+      | Extract<AgentEvent, { type: "complete" }>
+      | undefined;
+    expect(completeEvent).toBeDefined();
+    expect(completeEvent?.result.guardAborted).toBe(true);
+  });
+
+  it("error continue verdict allows retry when retry policy permits", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-continue",
+      timing: "error",
+      priority: 100,
+      fn: () => allow(),
+    });
+
+    const state = makeState();
+    const config = makeConfig();
+    const error = new Error("timeout while waiting");
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const gen = handleError(state, engine, config, makeAgentBase(), error, 1, retryPolicy);
+    let result: IteratorResult<AgentEvent, unknown>;
+    do {
+      result = await gen.next();
+    } while (!result.done);
+
+    const decision = result.value as { action: string };
+    expect(decision.action).toBe("retry");
+  });
+
+  it("applies run.retry_after delayMs before retrying", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-retry-delay",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.retry-delay", "retry-after", [{ type: "run.retry_after", delayMs: 20 }]),
+    });
+
+    const state = makeState();
+    const config = makeConfig();
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const started = Date.now();
+    const gen = handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      1,
+      retryPolicy,
+    );
+    let result: IteratorResult<AgentEvent, unknown>;
+    do {
+      result = await gen.next();
+    } while (!result.done);
+
+    expect((result.value as { action: string }).action).toBe("retry");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(15);
+  });
+
+  it("does not sleep when retry delay is already aborted", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-aborted-retry-delay",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.aborted-retry-delay", "retry-after", [
+          { type: "run.retry_after", delayMs: 5_000 },
+        ]),
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+    const state = makeState();
+    const config = makeConfig({ signal: controller.signal });
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const started = Date.now();
+    const gen = handleError(
+      state,
+      engine,
+      config,
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      1,
+      retryPolicy,
+    );
+    await gen.next();
+
+    await expect(gen.next()).rejects.toThrow("aborted");
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
+    Bus.reset();
+    const engine = PolicyEngine.create();
+    engine.register({
+      name: "test-on-error-retry-limit",
+      timing: "error",
+      priority: 100,
+      fn: () =>
+        allow("test.retry-limit", "retry-after", [
+          { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
+        ]),
+    });
+
+    const state = makeState();
+    const config = makeConfig();
+    const retryPolicy = {
+      maxAttempts: 3,
+      backoffMs: { initial: 0, multiplier: 1, max: 0 },
+    };
+
+    const events = await collectEvents(
+      handleError(
+        state,
+        engine,
+        config,
+        makeAgentBase(),
+        new Error("timeout while waiting"),
+        2,
+        retryPolicy,
+      ),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "error", willRetry: false });
+  });
+});

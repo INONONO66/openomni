@@ -1,4 +1,4 @@
-import { Operational, type Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
+import { Operational, Policy, PolicyEvent, type TraceContext } from "@openomni/protocol";
 import { auditPoint } from "./points";
 import type {
   AuditDispatchContextGeneric,
@@ -35,6 +35,17 @@ function auditReason(decision: Policy.PolicyDecision): string {
   return decision.verdict;
 }
 
+function resolveAuditPoint(
+  timing: Policy.Timing,
+  ctx: Readonly<AuditDispatchContextGeneric<GenericPolicyContext>>,
+): ReturnType<typeof auditPoint> {
+  if (ctx.pointId === undefined) return auditPoint(timing, ctx.resourceDescriptor);
+  return {
+    pointId: ctx.pointId,
+    pointVersion: Policy.PolicyPoint.Registry[ctx.pointId].version,
+  };
+}
+
 export function publishPolicyEvent(
   options: PolicyEngineConfig,
   decision: Policy.PolicyDecision,
@@ -47,7 +58,6 @@ export function publishPolicyEvent(
   const traceId = traceContext?.traceId;
   const sessionId = options.audit?.sessionId ?? traceContext?.sessionId;
   if (!sessionId || !traceId) return;
-  const point = auditPoint(ctx.timing, ctx.resourceDescriptor);
 
   options.auditEmit?.(PolicyEvent.Evaluated, {
     traceId,
@@ -65,7 +75,7 @@ export function publishPolicyEvent(
     reasonCodes: decision.reasonCodes,
     ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
     durationMs: decision.durationMs,
-    ...point,
+    ...resolveAuditPoint(ctx.timing, ctx),
     ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
   });
 }
@@ -98,7 +108,7 @@ export function publishComposedDecision(
     ...(decision.obligations !== undefined && { obligations: decision.obligations }),
     ...(decision.factsUsed !== undefined && { factsUsed: decision.factsUsed }),
     durationMs: decision.durationMs,
-    ...auditPoint(timing, ctx.resourceDescriptor),
+    ...resolveAuditPoint(timing, ctx),
     ...(ctx.resourceDescriptor !== undefined && { resourceDescriptor: ctx.resourceDescriptor }),
   });
 }

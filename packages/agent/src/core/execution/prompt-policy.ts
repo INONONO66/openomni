@@ -4,17 +4,18 @@ import type { PolicyEngineInstance } from "../policy";
 import { buildSystemPrompt } from "../prompt-builder";
 import type { ChatAgentConfig } from "../types";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import type { RunState } from "./run-state";
+import type { AgentRunBase, RunState } from "./run-state";
 
 export async function buildTurnSystemPrompt(
   state: RunState,
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
+  agentBase: AgentRunBase,
 ): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
   let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
-  const decision = await engine.dispatch(
-    "context.prepare",
-    buildLifecyclePolicyContext(state, config),
+  const decision = await engine.dispatchPoint(
+    "prompt.context.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
   );
   if (PolicyDecision.isBlocking(decision)) return { system, blocked: decision };
 

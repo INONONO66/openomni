@@ -1,4 +1,4 @@
-import type { PolicyRegistration } from "@openomni/agent";
+import type { CanonicalPolicyRegistration } from "@openomni/agent";
 import { PolicyDecision } from "@openomni/protocol";
 import { ContextAssembler } from "./assembler";
 
@@ -7,10 +7,14 @@ export interface ContextMiddlewareConfig {
   globalConfigDir?: string;
 }
 
-export function createContextMiddleware(config: ContextMiddlewareConfig): PolicyRegistration {
+export function createContextMiddleware(
+  config: ContextMiddlewareConfig,
+): CanonicalPolicyRegistration {
   return {
     name: "server:context",
-    timing: "context.prepare",
+    kind: "point",
+    pointIds: ["prompt.context.pre"],
+    effectCapabilities: { "prompt.context.pre": ["prompt.append_context"] },
     priority: 50,
     failPolicy: "fail-open",
     fn: async (_ctx) => {
@@ -20,8 +24,11 @@ export function createContextMiddleware(config: ContextMiddlewareConfig): Policy
           workspaceRoot: config.workspaceRoot,
           globalConfigDir: config.globalConfigDir,
         });
-      } catch {
-        return PolicyDecision.allow({ policyId: "server.context" });
+      } catch (error) {
+        if (error instanceof Error) {
+          return PolicyDecision.allow({ policyId: "server.context" });
+        }
+        throw error;
       }
 
       if (!assembled) return PolicyDecision.allow({ policyId: "server.context" });

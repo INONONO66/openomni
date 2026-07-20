@@ -169,40 +169,58 @@ describe("snapshot: idle-nudge", () => {
   });
 });
 
-describe("snapshot: registration metadata", () => {
-  it("budget-reassurance: name, timing, priority", () => {
+describe("snapshot: canonical registration metadata", () => {
+  it("budget-reassurance: name, point, priority", () => {
     const mw = createBudgetReassurancePolicy();
     expect(mw.name).toBe("builtin:budget-reassurance");
-    expect(mw.timing).toBe("turn.start");
+    expect(mw.pointIds).toEqual(["run.turn.pre"]);
+    expect(mw.effectCapabilities).toEqual({
+      "run.turn.pre": ["prompt.inject_message"],
+    });
     expect(mw.priority).toBe(10);
   });
 
-  it("budget-warning: name, timing, priority", () => {
+  it("budget-warning: name, point, priority", () => {
     const mw = createBudgetWarningPolicy();
     expect(mw.name).toBe("builtin:budget-warning");
-    expect(mw.timing).toBe("turn.start");
+    expect(mw.pointIds).toEqual(["run.turn.pre"]);
+    expect(mw.effectCapabilities).toEqual({
+      "run.turn.pre": ["prompt.inject_message"],
+    });
     expect(mw.priority).toBe(20);
   });
 
-  it("tool-permission: name, timing, priority, failPolicy", () => {
+  it("tool-permission: name, points, priority, failPolicy", () => {
     const mw = createToolPermissionPolicy({ permission: { action: "tool.call" } });
     expect(mw.name).toBe("builtin:tool-permission");
-    expect(mw.timing).toBe("invoke.prepare");
+    expect(mw.pointIds).toEqual(["tool.native.pre", "tool.mcp.pre"]);
+    expect(mw.effectCapabilities).toEqual({
+      "tool.native.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+      "tool.mcp.pre": ["tool.require_approval", "run.abort", "audit.annotate"],
+    });
     expect(mw.priority).toBe(0);
     expect(mw.failPolicy).toBe("fail-closed");
   });
 
-  it("compaction: name, timing, priority", () => {
+  it("compaction: name, point, priority", () => {
     const mw = createCompactionPolicy({ contextWindowTokens: 1000 });
     expect(mw.name).toBe("builtin:compaction");
-    expect(mw.timing).toBe("completion.prepare");
+    expect(mw.pointIds).toEqual(["run.completion.pre"]);
+    expect(mw.effectCapabilities).toEqual({
+      "run.completion.pre": ["run.replace_messages"],
+    });
     expect(mw.priority).toBe(900);
   });
 
-  it("idle-nudge: name, timing (array), priority", () => {
+  it("idle-nudge: name, points, priority", () => {
     const mw = createIdleNudgePolicy();
     expect(mw.name).toBe("builtin:idle-nudge");
-    expect(mw.timing).toEqual(["turn.start", "invoke.result"]);
+    expect(mw.pointIds).toEqual(["run.turn.pre", "tool.native.post", "tool.mcp.post"]);
+    expect(mw.effectCapabilities).toEqual({
+      "run.turn.pre": ["prompt.inject_message", "run.abort"],
+      "tool.native.post": [],
+      "tool.mcp.post": [],
+    });
     expect(mw.priority).toBe(300);
   });
 });

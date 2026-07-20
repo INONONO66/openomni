@@ -4,7 +4,7 @@ import type { AgentEvent, ChatAgentConfig } from "../types";
 import { emitCompaction, publishDenyDiagnostic } from "./run-events";
 import { PolicyEffectApplier } from "./policy-effects-apply";
 import { buildLifecyclePolicyContext } from "./lifecycle-context";
-import { createGuardCompleteEvent, errorMessage } from "./run-result";
+import { createGuardCompleteEvent } from "./run-result";
 import { applyCompactionMessages, type AgentRunBase, type RunState } from "./run-state";
 
 export async function dispatchPostRunTransform(
@@ -13,10 +13,11 @@ export async function dispatchPostRunTransform(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
 ): Promise<void> {
-  const postRunDecision = await engine.dispatch(
-    "run.finish",
-    buildLifecyclePolicyContext(state, config, {
+  const postRunDecision = await engine.dispatchPoint(
+    "run.lifecycle.post",
+    buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion: true,
+      runOutcome: { type: "stop" },
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
@@ -31,10 +32,14 @@ export async function applyPostCompaction(
   agentBase: AgentRunBase,
   isCompletion: boolean,
 ): Promise<AgentEvent | null> {
-  const compactionDecision = await engine.dispatch(
-    "completion.prepare",
-    buildLifecyclePolicyContext(state, config, {
+  const compactionDecision = await engine.dispatchPoint(
+    "run.completion.pre",
+    buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion,
+      completionCandidate: {
+        isCompletion,
+        messages: state.messages,
+      },
     }),
   );
 
@@ -47,7 +52,7 @@ export async function applyPostCompaction(
   try {
     messages = PolicyEffectApplier.replacementMessages(compactionDecision);
   } catch (error) {
-    const reason = errorMessage(error);
+    const reason = error instanceof Error ? error.message : String(error);
     publishDenyDiagnostic(
       "completion.prepare",
       PolicyDecision.deny({

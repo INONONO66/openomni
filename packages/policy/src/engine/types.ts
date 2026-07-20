@@ -24,7 +24,18 @@ export type DispatchContextGeneric<TCtx extends GenericPolicyContext> = Omit<TCt
 export type AuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =
   DispatchContextGeneric<TCtx> & {
     readonly timing: Policy.Timing;
+    readonly pointId?: PolicyPointId;
   };
+
+export type CanonicalAuditDispatchContextGeneric<TCtx extends GenericPolicyContext> =
+  AuditDispatchContextGeneric<TCtx> & {
+    readonly pointId: PolicyPointId;
+  };
+
+export type DispatchPointContextGeneric<
+  TCtx extends GenericPolicyContext,
+  TPointId extends PolicyPointId,
+> = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId] & Record<string, unknown>;
 
 export type PolicyDecision = Policy.PolicyDecision;
 
@@ -46,6 +57,14 @@ export interface PolicyEngineConfig {
   readonly auditEmit?: AuditEmit;
 }
 
+export interface PolicyEngineCompatibilityGeneric<TCtx extends GenericPolicyContext> {
+  readonly includeLegacyAtPoint?: boolean;
+  readonly resolvePointForLegacyDispatch?: (
+    timing: Policy.Timing,
+    ctx: Readonly<AuditDispatchContextGeneric<TCtx>>,
+  ) => PolicyPointId | undefined;
+}
+
 export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   name: string;
   timing: Policy.Timing | Policy.Timing[];
@@ -58,10 +77,36 @@ export interface PolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
   propagate?: boolean;
 }
 
+export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyContext> {
+  readonly kind: "point";
+  readonly name: string;
+  readonly pointIds: readonly PolicyPointId[];
+  readonly effectCapabilities: Readonly<
+    Partial<Record<PolicyPointId, readonly Policy.PolicyEffectType[]>>
+  >;
+  readonly priority: number;
+  readonly scope?: Policy.Scope;
+  readonly failPolicy?: Policy.FailPolicy;
+  readonly fn: (
+    ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
+  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+  readonly propagate?: boolean;
+}
+
+export type PolicyEngineRegistrationGeneric<TCtx extends GenericPolicyContext> =
+  | PolicyRegistrationGeneric<TCtx>
+  | CanonicalPolicyRegistrationGeneric<TCtx>;
+
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
   register(reg: PolicyRegistrationGeneric<TCtx>): void;
+  register(reg: CanonicalPolicyRegistrationGeneric<TCtx>): void;
+  register(reg: PolicyEngineRegistrationGeneric<TCtx>): void;
   dispatch(
     timing: Policy.Timing,
     ctx: DispatchContextGeneric<TCtx> & Record<string, unknown>,
+  ): Promise<Policy.PolicyDecision>;
+  dispatchPoint<TPointId extends PolicyPointId>(
+    pointId: TPointId,
+    ctx: DispatchPointContextGeneric<TCtx, TPointId>,
   ): Promise<Policy.PolicyDecision>;
 }

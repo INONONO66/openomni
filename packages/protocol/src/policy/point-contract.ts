@@ -60,6 +60,13 @@ export namespace PolicyPointContractModule {
     sideEffectBoundary: z.boolean(),
   });
   export type PolicyPointContract = z.infer<typeof PolicyPointContract>;
+  export type PolicyPointContractSnapshot = Readonly<
+    Omit<PolicyPointContract, "resourceKinds" | "requiredContext" | "allowedEffects"> & {
+      readonly resourceKinds: readonly string[];
+      readonly requiredContext: readonly string[];
+      readonly allowedEffects: readonly PolicyEffectType[];
+    }
+  >;
 
   export const contract = (
     id: RegisteredPolicyPointId,
@@ -69,17 +76,18 @@ export namespace PolicyPointContractModule {
     allowedEffects: readonly PolicyEffectType[],
     defaultFailPolicy: PolicyPointContract["defaultFailPolicy"],
     sideEffectBoundary: boolean,
-  ): PolicyPointContract => ({
-    id,
-    version: 1,
-    phase,
-    resourceKinds: [...resourceKinds],
-    inputSchema: `policy.point.${id}.input.v1`,
-    requiredContext: [...requiredContext],
-    allowedEffects: [...allowedEffects],
-    defaultFailPolicy,
-    sideEffectBoundary,
-  });
+  ): PolicyPointContractSnapshot =>
+    Object.freeze({
+      id,
+      version: 1,
+      phase,
+      resourceKinds: Object.freeze([...resourceKinds]),
+      inputSchema: `policy.point.${id}.input.v1`,
+      requiredContext: Object.freeze([...requiredContext]),
+      allowedEffects: Object.freeze([...allowedEffects]),
+      defaultFailPolicy,
+      sideEffectBoundary,
+    });
 
   export const preBoundary = ["fail-closed", true] as const;
   export const postBoundary = ["fail-open", false] as const;

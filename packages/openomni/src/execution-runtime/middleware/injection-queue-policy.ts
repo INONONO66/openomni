@@ -1,7 +1,7 @@
 import type { Message, Policy } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
 import { Session } from "@openomni/session";
-import type { PolicyContext, PolicyRegistration } from "@openomni/agent";
+import type { CanonicalPolicyRegistration, PolicyContext } from "@openomni/agent";
 import type { InjectionQueue } from "../injection-queue.js";
 
 const POLICY_ID = "builtin:injection-queue-drain";
@@ -9,25 +9,26 @@ const POLICY_ID = "builtin:injection-queue-drain";
 type InjectionQueuePolicyContext = PolicyContext & {
   readonly runId?: string;
   readonly sessionId?: string;
-  readonly agentName?: string;
 };
 
 export function createInjectionQueueDrainPolicy(
   queue: InjectionQueue.Instance,
-): PolicyRegistration {
+): CanonicalPolicyRegistration {
   return {
     name: POLICY_ID,
-    timing: "turn.finish",
+    kind: "point",
+    pointIds: ["run.turn.post"],
+    effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
     priority: 150,
     fn: (ctx) => {
-      const runId = contextString(ctx, "runId") ?? ctx.traceContext?.runId;
+      const runId = contextString(ctx, "runId");
       if (runId === undefined || !queue.hasPending(runId)) {
         return PolicyDecision.allow({ policyId: POLICY_ID });
       }
 
       const pending = queue.drain(runId);
-      const sessionId = contextString(ctx, "sessionId") ?? ctx.traceContext?.sessionId;
-      const agentName = contextString(ctx, "agentName") ?? ctx.traceContext?.agentName;
+      const sessionId = contextString(ctx, "sessionId");
+      const agentName = ctx.traceContext?.agentName;
 
       for (const response of pending) {
         if (response.injectToHistory === true && sessionId !== undefined) {
@@ -56,7 +57,7 @@ export function createInjectionQueueDrainPolicy(
 
 function contextString(
   ctx: InjectionQueuePolicyContext,
-  key: "agentName" | "runId" | "sessionId",
+  key: "runId" | "sessionId",
 ): string | undefined {
   const value = ctx[key];
   return typeof value === "string" ? value : undefined;

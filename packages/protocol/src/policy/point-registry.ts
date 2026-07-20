@@ -7,9 +7,9 @@ export namespace PolicyPointRegistryModule {
   const Timing = PolicyPointContractModule.Timing;
   type Timing = PolicyPointContractModule.Timing;
   type RegisteredPolicyPointId = PolicyPointContractModule.RegisteredPolicyPointId;
-  type PolicyPointContract = PolicyPointContractModule.PolicyPointContract;
+  type PolicyPointContract = PolicyPointContractModule.PolicyPointContractSnapshot;
 
-  export const PolicyPointRegistry = {
+  export const PolicyPointRegistry = Object.freeze({
     "session.inbound.pre": contract(
       "session.inbound.pre",
       "pre",
@@ -22,7 +22,7 @@ export namespace PolicyPointRegistryModule {
       "dispatch.action.pre",
       "pre",
       ["dispatch"],
-      ["actor", "dispatchId", "action", "target", "sessionId", "runId"],
+      ["actor", "dispatchId", "action", "target"],
       ["audit.annotate", "run.abort"],
       ...preBoundary,
     ),
@@ -198,23 +198,31 @@ export namespace PolicyPointRegistryModule {
       "fail-closed",
       false,
     ),
-  } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>;
+  } satisfies Record<RegisteredPolicyPointId, PolicyPointContract>);
 
-  export const policyPointMigrationMapping = {
-    [Timing.INBOUND_RECEIVE]: ["session.inbound.pre"],
-    [Timing.DISPATCH_AUTHORIZE]: ["dispatch.action.pre"],
-    [Timing.RUN_START]: ["run.lifecycle.pre"],
-    [Timing.TURN_START]: ["run.turn.pre"],
-    [Timing.CONTEXT_PREPARE]: ["prompt.context.pre"],
-    [Timing.RESOURCES_PREPARE]: ["tool.catalog.pre"],
-    [Timing.MODEL_REQUEST]: ["connection.llm.pre"],
-    [Timing.MODEL_RESPONSE]: ["connection.llm.post"],
-    [Timing.INVOKE_PREPARE]: ["tool.native.pre", "tool.mcp.pre", "delegation.worker.pre"],
-    [Timing.INVOKE_RESULT]: ["tool.native.post", "tool.mcp.post", "delegation.worker.post"],
-    [Timing.TURN_FINISH]: ["run.turn.post"],
-    [Timing.COMPLETION_PREPARE]: ["run.completion.pre"],
-    [Timing.WRITEBACK_COMMIT]: ["session.writeback.pre"],
-    [Timing.RUN_FINISH]: ["run.lifecycle.post"],
-    [Timing.ERROR]: ["run.error.error"],
-  } satisfies Record<Timing, RegisteredPolicyPointId[]>;
+  export const policyPointMigrationMapping = Object.freeze({
+    [Timing.INBOUND_RECEIVE]: Object.freeze(["session.inbound.pre"] as const),
+    [Timing.DISPATCH_AUTHORIZE]: Object.freeze(["dispatch.action.pre"] as const),
+    [Timing.RUN_START]: Object.freeze(["run.lifecycle.pre"] as const),
+    [Timing.TURN_START]: Object.freeze(["run.turn.pre"] as const),
+    [Timing.CONTEXT_PREPARE]: Object.freeze(["prompt.context.pre"] as const),
+    [Timing.RESOURCES_PREPARE]: Object.freeze(["tool.catalog.pre"] as const),
+    [Timing.MODEL_REQUEST]: Object.freeze(["connection.llm.pre"] as const),
+    [Timing.MODEL_RESPONSE]: Object.freeze(["connection.llm.post"] as const),
+    [Timing.INVOKE_PREPARE]: Object.freeze([
+      "tool.native.pre",
+      "tool.mcp.pre",
+      "delegation.worker.pre",
+    ] as const),
+    [Timing.INVOKE_RESULT]: Object.freeze([
+      "tool.native.post",
+      "tool.mcp.post",
+      "delegation.worker.post",
+    ] as const),
+    [Timing.TURN_FINISH]: Object.freeze(["run.turn.post"] as const),
+    [Timing.COMPLETION_PREPARE]: Object.freeze(["run.completion.pre"] as const),
+    [Timing.WRITEBACK_COMMIT]: Object.freeze(["session.writeback.pre"] as const),
+    [Timing.RUN_FINISH]: Object.freeze(["run.lifecycle.post"] as const),
+    [Timing.ERROR]: Object.freeze(["run.error.error"] as const),
+  }) satisfies Readonly<Record<Timing, readonly RegisteredPolicyPointId[]>>;
 }

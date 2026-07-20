@@ -79,6 +79,14 @@ describe("PolicyPoint registry", () => {
     }
   });
 
+  test("preserves every v1 input schema identifier", () => {
+    for (const pointId of expectedPointIds) {
+      expect(Policy.PolicyPoint.Registry[pointId].inputSchema).toBe(
+        `policy.point.${pointId}.input.v1`,
+      );
+    }
+  });
+
   test("maps all policy timings to registered 3-tier point IDs", () => {
     const aliases = Policy.PolicyPoint.MigrationMapping;
 

@@ -1,5 +1,13 @@
 export { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
-export { createDefaultDispatchPolicy } from "./policy.js";
+export {
+  createDefaultDispatchPolicy,
+  type DispatchPolicyContext,
+} from "./policy.js";
+export {
+  DispatchPolicyRegistrationError,
+  type DispatchPolicyRegistration,
+  type DispatchPolicyRegistrationErrorCode,
+} from "./policy-registration.js";
 export {
   DispatchRegistry,
   type DispatchHandler,
