@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784562193567,
+  "lastUpdate": 1784562987998,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -34347,6 +34347,130 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 533433,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39a4ff97e0c7bee48551c9b81d0b81deb2816814",
+          "message": "refactor(openomni): unify inbound routing in the kernel (#485)\n\n* feat(protocol): define inbound routing decisions\n\n* feat(openomni): add pure inbound route resolver\n\n* feat(openomni): route inbound through kernel resolveRoute pipeline\n\nEvery IngressEngine ingest now resolves blacklist, wait correlation,\nchannel ceiling, actor identity, and surface default through the pure\nresolveRoute stages, publishes one RoutingDecision per inbound, and\nexecutes PendingInteraction replies via the injected shared\nDispatchRuntime (#464 stages 1-5, kernel side).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(server): converge inbound routing on kernel pipeline\n\nChannel messages now carry their normalized correlation in event meta\nand go through IngressEngine.ingest exactly once; the server-side\nPendingInteraction pre-dispatch fallback in the conversation handler is\ndeleted. resident-inbound-wait submits resident.ask through the shared\ndefault DispatchRuntime instead of registering a second local handler,\nand bootstrap injects that runtime into the IngressEngine (#464 server\nconvergence).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(openomni): finish kernel-owned inbound routing\n\n* fix(openomni): address inbound routing review\n\n* fix(openomni): close inbound routing review gaps\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-07-21T00:55:19+09:00",
+          "tree_id": "7c1a3dc8b9ce2a75598d09618c6664d2989b7f2f",
+          "url": "https://github.com/INONONO66/openomni/commit/39a4ff97e0c7bee48551c9b81d0b81deb2816814"
+        },
+        "date": 1784562987302,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9458,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2513,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8047,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 827,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1327,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 20574,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2273,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 103440,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522533,
             "unit": "ns/op"
           }
         ]
