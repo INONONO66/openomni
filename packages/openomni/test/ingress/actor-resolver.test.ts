@@ -127,7 +127,7 @@ describe("Ingress actor resolver", () => {
     await engine.ingest(event);
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "user-1" });
+    expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
   });
 
   it("resolves actor identity when endpoint workspace matches", async () => {

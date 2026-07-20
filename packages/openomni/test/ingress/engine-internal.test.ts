@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Ingress } from "@openomni/protocol";
-import { Storage } from "@openomni/session";
+import { IngressEvent, type Ingress } from "@openomni/protocol";
+import { Bus, Storage } from "@openomni/session";
 import {
   defaultRunFn,
   mockModelsGet,
@@ -53,7 +53,7 @@ async function catchError(promise: Promise<unknown>): Promise<Error | undefined>
 }
 
 describe("ingestInternal", () => {
-  it("throws when no resolver configured", async () => {
+  it("publishes a routing decision before reporting a missing resolver", async () => {
     const event: Ingress.InternalEvent = {
       id: "t1",
       surface: "cron",
@@ -61,29 +61,80 @@ describe("ingestInternal", () => {
       agentName: "dev",
       payload: "hello",
     };
+    const decisions: unknown[] = [];
+    const unsubscribe = Bus.observe((published, payload) => {
+      if (published.name === "ingress.routing.decision") decisions.push(payload);
+    });
 
-    const error = await catchError(IngressEngine.ingestInternal(event));
+    let error: Error | undefined;
+    try {
+      error = await catchError(IngressEngine.ingestInternal(event));
+    } finally {
+      unsubscribe();
+    }
 
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toContain("agent resolver not configured");
+    expect(decisions).toHaveLength(1);
+    expect(IngressEvent.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
+      inboundId: event.id,
+      stage: "surface_default",
+      outcome: "route",
+      actorId: "system:cron",
+    });
   });
 
-  it("resolves agent and dispatches via resident runtime", async () => {
+  it("publishes one schema-valid system decision before resident execution", async () => {
     IngressEngine.setAgentResolver({
       resolve: async () => mockAgentDef,
     });
-    testState.responseQueue.push("cron result");
-
-    const result = await IngressEngine.ingestInternal({
-      id: "t2",
-      surface: "cron",
-      mode: "internal",
-      agentName: "dev",
-      payload: "run cron job",
+    const order: string[] = [];
+    const decisions: unknown[] = [];
+    const unsubscribe = Bus.observe((event, payload) => {
+      if (event.name === "ingress.routing.decision") {
+        order.push("publish");
+        decisions.push(payload);
+      }
     });
+    IngressEngine.setResidentRuntime(
+      ResidentRuntime.create({
+        runAgent: async () => {
+          order.push("execute");
+          return { text: "cron result", finishReason: "stop" };
+        },
+      }),
+    );
+
+    let result: Ingress.IngressResult;
+    try {
+      result = await IngressEngine.ingestInternal({
+        id: "t2",
+        surface: "cron",
+        mode: "internal",
+        agentName: "dev",
+        payload: "run cron job",
+      });
+    } finally {
+      unsubscribe();
+    }
 
     expect(result.mode).toBe("internal");
     expect(result.sessionId).toBeTruthy();
+    expect(decisions).toHaveLength(1);
+    expect(IngressEvent.RoutingDecision.schema.parse(decisions[0])).toMatchObject({
+      inboundId: "t2",
+      mode: "internal",
+      stage: "surface_default",
+      outcome: "route",
+      actorId: "system:cron",
+      factsUsed: expect.arrayContaining([
+        "wait:none",
+        "actor.system:system:cron",
+        "surface.default:new",
+        "target:resident",
+      ]),
+    });
+    expect(order).toEqual(["publish", "execute"]);
   });
 });
 

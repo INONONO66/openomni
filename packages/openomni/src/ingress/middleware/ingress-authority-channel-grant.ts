@@ -11,14 +11,14 @@ export function channelGrantReason(
 }
 
 export function applyChannelGrantTreatment(
-  event: Ingress.InboundEvent,
+  event: Ingress.DirectEvent,
   grant: ChannelGrantStore.Grant,
   inboundTreatment: Actor.InboundTreatment,
-): Ingress.InboundEvent {
+): Ingress.DirectEvent {
   const actor = getActor(event);
   const actorWithChannelDefault =
-    actor && !actorTrustTier(actor) && grant.defaultTier
-      ? { ...actor, trustTier: grant.defaultTier }
+    !actorTrustTier(actor) && grant.defaultTier
+      ? { ...(actor ?? { role: "user" }), trustTier: grant.defaultTier }
       : actor;
 
   return {

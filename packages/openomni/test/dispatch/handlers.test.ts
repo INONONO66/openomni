@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Ingress } from "@openomni/protocol";
-import { PendingAskStore, Storage } from "@openomni/session";
+import type { ChatAgentConfig, ChatAgentInput } from "@openomni/agent";
+import { PendingAskStore, Session, Storage, SurfaceKey } from "@openomni/session";
+import { IngressEngine } from "../../src/ingress/engine";
+import { ResidentRuntime } from "../../src/resident/runtime";
 import { DispatchRegistry } from "../../src/dispatch/registry";
 import { registerBuiltInDispatchHandlers } from "../../src/dispatch/setup";
 import { extractText } from "../../src/dispatch/handlers/shared";
@@ -10,6 +12,8 @@ describe("built-in dispatch handlers", () => {
   beforeEach(() => {
     Storage.reset();
     Storage.initialize({ dbPath: ":memory:" });
+    IngressEngine.clearResidentRuntime();
+    IngressEngine.clearAgentResolver();
   });
 
   test("extractText returns empty string for nullish payloads", () => {
@@ -84,43 +88,82 @@ describe("built-in dispatch handlers", () => {
     ).toThrow("schedule.create cannot target system");
   });
 
-  test("resident.ask calls resident runtime owner", async () => {
+  test("resident.ask projects the question and runs the fully resolved Resident AgentDef", async () => {
     createSessionFixture("resident-session");
-    const calls: Ingress.ResolvedInboundEvent[] = [];
-    const registry = new DispatchRegistry();
-    registerBuiltInDispatchHandlers(registry, {
-      owners: {
-        residentRuntime: {
-          async run(ctx) {
-            calls.push(ctx.event);
-            return {
-              output: "answer",
-              finishReason: "stop",
-              runId: "resident-run",
-              activationId: "activation",
+    createSessionFixture("unrelated-dispatch-surface-session");
+    SurfaceKey.register("dispatch:/workspace/resident:", "unrelated-dispatch-surface-session");
+    let runConfig: ChatAgentConfig | undefined;
+    let runInput: ChatAgentInput | undefined;
+    let resolvedWorkspace: string | undefined;
+    let executorWorkspace: string | undefined;
+    const residentRuntime = new ResidentRuntime({
+      runAgent: async (config, input) => {
+        runConfig = config;
+        runInput = input;
+        return { text: "answer", finishReason: "stop" };
+      },
+    });
+    IngressEngine.setResidentRuntime(residentRuntime);
+    IngressEngine.setAgentResolver({
+      async resolve(_agentName, event) {
+        resolvedWorkspace = event.workspace;
+        return {
+          model: { provider: "test-provider", id: "resident-model" },
+          systemPrompt: "Resident system prompt",
+          tools: [{ name: "resident_tool", inputSchema: { type: "object" } }],
+          toolExecutorFactory: (ctx) => {
+            executorWorkspace = ctx.workspaceRoot;
+            return async () => {
+              throw new Error("tool execution was not expected");
             };
           },
-        },
+          permissions: { action: "tool.call", allowlist: ["tool:resident_tool"] },
+          policyPlan: {
+            policies: [
+              {
+                id: "builtin:tool-permission",
+                required: true,
+                config: {
+                  permission: { action: "tool.call", allowlist: ["tool:resident_tool"] },
+                },
+              },
+            ],
+            labels: ["resident"],
+          },
+          toolConfig: { workspaceRoot: "/workspace/resident" },
+          providerOptions: { temperature: 0.2 },
+        };
       },
+    });
+    const registry = new DispatchRegistry();
+    registerBuiltInDispatchHandlers(registry, {
+      owners: { residentRuntime },
     });
 
     const output = await registry.get("resident.ask")?.(
       command("resident.ask", { kind: "resident", sessionId: "resident-session" }, "question"),
+      { workspaceRoot: "/workspace/resident" },
     );
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({
-      surface: "dispatch",
-      agentName: "resident",
-      payload: "question",
-      target: { kind: "resident", sessionId: "resident-session" },
+    expect(resolvedWorkspace).toBe("/workspace/resident");
+    expect(executorWorkspace).toBe("/workspace/resident");
+    expect(runInput?.messages).toEqual([{ role: "user", content: "question" }]);
+    expect(Session.getMessages("resident-session").length).toBeGreaterThan(0);
+    expect(Session.getMessages("unrelated-dispatch-surface-session")).toHaveLength(0);
+    expect(runConfig).toMatchObject({
+      model: { provider: "test-provider", id: "resident-model" },
+      systemPrompt: "Resident system prompt",
+      tools: [{ name: "resident_tool", inputSchema: { type: "object" } }],
+      providerOptions: { temperature: 0.2 },
     });
+    expect(runConfig?.toolExecutor).toBeFunction();
+    expect(runConfig?.middleware).toBeDefined();
     expect(PendingAskStore.get("dispatch-resident.ask")).toMatchObject({
       status: "answered",
       targetKind: "resident",
     });
     expect(output).toEqual({
-      output: { output: "answer", finishReason: "stop", runId: "resident-run" },
+      output: { output: "answer", finishReason: "stop" },
     });
   });
 

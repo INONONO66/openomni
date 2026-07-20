@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Adapter } from "@openomni/protocol";
+import type { Adapter, Ingress } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
 import { initialize, Bus, BusPersistence } from "@openomni/session";
 import {
@@ -38,7 +38,6 @@ function createRoutingHandler(
   workspaceRoot: string,
   defaultModel?: { provider: string; id: string },
   customProvider?: CustomToolProvider,
-  dispatchRuntime?: Pick<DispatchRuntime, "submit">,
 ): Adapter.MessageHandler {
   return createMessageHandler({
     systemProvider,
@@ -47,7 +46,6 @@ function createRoutingHandler(
     customProvider,
     defaultModel,
     workspaceRoot,
-    dispatchRuntime,
   });
 }
 
@@ -100,37 +98,27 @@ export async function main(): Promise<void> {
     : undefined;
   if (residentProfile) registerAgent(residentProfile.factory, residentProfile.metadata);
   const toolDispatcher = buildToolDispatcher([mcpProvider, customProvider]);
+  const dispatchRuntimeRef: { current?: DispatchRuntime } = {};
+  const requireDispatchRuntime = (): DispatchRuntime => {
+    if (!dispatchRuntimeRef.current) throw new Error("dispatch runtime is not configured");
+    return dispatchRuntimeRef.current;
+  };
   const coordinator = createExecutionCoordinator({
     workerScript,
     bootstrap,
     toolDispatcher,
     askResident: createResidentInboundWaitHandler({
       serverConfig: config,
-      model,
-      residentRuntime,
-      systemProvider,
-      requireAgentProvider,
-      mcpProvider,
-      customProvider,
+      dispatchRuntime: {
+        submit: (input, options) => requireDispatchRuntime().submit(input, options),
+      },
     }),
     maxWorkers: 10,
     workerIdleTimeoutMs: Number(process.env.OPENOMNI_WORKER_IDLE_TIMEOUT_MS ?? 30_000),
   });
   IngressEngine.setCoordinator(coordinator);
-  const dispatchOwners = createServerDispatchOwners({
-    coordinator,
-    residentRuntime,
-    credentials: bootstrap.credentials,
-    model,
-  });
-  agentProviderRef.current = new AgentToolProvider({
-    dispatchOwners,
-  });
-  const channelDispatchRuntime = createDefaultDispatchRuntime({
-    owners: dispatchOwners,
-  });
-  IngressEngine.setAgentResolver({
-    resolve: async (agentName, event) =>
+  const residentAgentResolver = {
+    resolve: async (agentName: string, event: Ingress.InternalEvent) =>
       buildAgentDef(agentName, {
         systemProvider,
         agentProvider: requireAgentProvider(),
@@ -140,7 +128,23 @@ export async function main(): Promise<void> {
         providerOptions: config.model?.providerOptions,
         workspaceRoot: event.workspace ?? config.workspace?.root ?? process.cwd(),
       }),
+  };
+  const dispatchOwners = createServerDispatchOwners({
+    coordinator,
+    residentRuntime,
+    credentials: bootstrap.credentials,
+    model,
+    residentAgentResolver,
   });
+  agentProviderRef.current = new AgentToolProvider({
+    dispatchOwners,
+  });
+  const sharedDispatchRuntime = createDefaultDispatchRuntime({
+    owners: dispatchOwners,
+  });
+  dispatchRuntimeRef.current = sharedDispatchRuntime;
+  IngressEngine.setDispatchRuntime(sharedDispatchRuntime);
+  IngressEngine.setAgentResolver(residentAgentResolver);
 
   const routingHandler = model
     ? createRoutingHandler(
@@ -150,7 +154,6 @@ export async function main(): Promise<void> {
         config.workspace?.root ?? process.cwd(),
         { provider: model.providerID, id: model.id },
         customProvider,
-        channelDispatchRuntime,
       )
     : undefined;
 

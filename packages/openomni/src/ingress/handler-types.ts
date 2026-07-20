@@ -8,7 +8,7 @@ export interface HandlerContext {
   sessionId: string;
   event: Ingress.ResolvedInboundEvent;
   coordinator?: CoordinatorLike;
-  residentRuntime?: ResidentRuntime;
+  residentRuntime?: Pick<ResidentRuntime, "run">;
   traceContext?: TraceContextProtocol.Type;
   policies?: PolicyRegistration[];
   onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;

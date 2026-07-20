@@ -37,7 +37,11 @@ describe("Ingress actor resolver sanitization", () => {
     );
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "unknown-user" });
+    expect(capturedActor).toEqual({
+      role: "user",
+      id: "unknown-user",
+      trustTier: "owner",
+    });
   });
 
   it("strips spoofed canonical actor fields from unregistered endpoints", async () => {
@@ -59,7 +63,7 @@ describe("Ingress actor resolver sanitization", () => {
         actorId: "act_spoofed",
         kind: "system",
         type: "system",
-        trustTier: "owner",
+        trustTier: "observer",
         relationship: "owner",
         endpointId: "ep_spoofed",
         trusted: true,
@@ -68,7 +72,11 @@ describe("Ingress actor resolver sanitization", () => {
     );
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "unknown-user" });
+    expect(capturedActor).toEqual({
+      role: "user",
+      id: "unknown-user",
+      trustTier: "owner",
+    });
   });
 
   it("does not resolve actor identity from legacy actor id when userId is absent", async () => {
@@ -88,7 +96,7 @@ describe("Ingress actor resolver sanitization", () => {
       actorId: "act_spoofed",
       kind: "system",
       type: "system",
-      trustTier: "owner",
+      trustTier: "observer",
       trusted: true,
       isTrustedManager: true,
     });
@@ -98,7 +106,7 @@ describe("Ingress actor resolver sanitization", () => {
     await engine.ingest(withoutUserId);
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "user-1" });
+    expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
   });
 
   it("does not resolve same external id from a different surface", async () => {
@@ -117,7 +125,7 @@ describe("Ingress actor resolver sanitization", () => {
     await engine.ingest({ ...makeEvent("user-1"), surface: "telegram" });
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "user-1" });
+    expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
   });
 
   it("keeps ingest working with storage adapters that do not implement actorRegistry", async () => {
@@ -141,13 +149,13 @@ describe("Ingress actor resolver sanitization", () => {
         actorId: "act_spoofed",
         kind: "system",
         type: "system",
-        trustTier: "owner",
+        trustTier: "observer",
         trusted: true,
         isTrustedManager: true,
       }),
     );
 
     // Then
-    expect(capturedActor).toEqual({ role: "user", id: "user-1" });
+    expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
   });
 });

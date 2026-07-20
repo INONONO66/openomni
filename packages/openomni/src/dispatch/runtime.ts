@@ -1,30 +1,21 @@
 import { PolicyEngine, type PolicyDecision } from "@openomni/policy";
-import {
-  Dispatch as DispatchProtocol,
-  PolicyDecision as Decision,
-  type RuntimeResource,
-} from "@openomni/protocol";
-import { Bus, TraceContext } from "@openomni/session";
+import { Dispatch as DispatchProtocol, PolicyDecision as Decision } from "@openomni/protocol";
+import { Bus, PendingInteractionStore, TraceContext } from "@openomni/session";
 import { deriveActorContext, type DispatchRuntimeContext } from "./actor.js";
 import {
   markRoutedPendingInteraction,
+  requestedPendingInteractionAction,
   routePendingInteraction,
 } from "./pending-interaction-routing.js";
 import { createDefaultDispatchPolicy, type DispatchPolicyContext } from "./policy.js";
 import { registerDispatchPolicy, type DispatchPolicyRegistration } from "./policy-registration.js";
 import { DispatchRegistry, type DispatchHandler, type DispatchHandlerContext } from "./registry.js";
-
-type DispatchEventPayload = {
-  readonly dispatchId: string;
-  readonly traceId?: string;
-  readonly sessionId?: string;
-  readonly runId?: string;
-  readonly actor: DispatchProtocol.ActorContext;
-  readonly action: string;
-  readonly target: DispatchProtocol.Target;
-  readonly correlation?: DispatchProtocol.Command["correlation"];
-  readonly time: number;
-};
+import {
+  eventBase,
+  normalizeHandlerOutput,
+  policyTraceContext,
+  resourceDescriptor,
+} from "./runtime-support.js";
 
 export interface DispatchSubmitOptions extends DispatchRuntimeContext, DispatchHandlerContext {
   readonly policies?: readonly DispatchPolicyRegistration[];
@@ -40,39 +31,6 @@ export interface DispatchRuntimeOptions {
   readonly onPolicyDecision?: (decision: PolicyDecision) => void | Promise<void>;
 }
 
-function eventBase(command: DispatchProtocol.Command): DispatchEventPayload {
-  return {
-    dispatchId: command.dispatchId,
-    ...(command.traceId ? { traceId: command.traceId } : {}),
-    ...(command.sessionId ? { sessionId: command.sessionId } : {}),
-    ...(command.runId ? { runId: command.runId } : {}),
-    actor: command.actor,
-    action: command.action,
-    target: command.target,
-    ...(command.correlation ? { correlation: command.correlation } : {}),
-    time: Date.now(),
-  };
-}
-
-function resourceDescriptor(action: string): RuntimeResource.Descriptor {
-  return {
-    id: `dispatch:${action}`,
-    kind: "dispatch",
-    labels: ["dispatch", `dispatch.action.${action}`],
-    capabilities: ["route"],
-    effects: ["cross-session"],
-    source: { type: "runtime" },
-  };
-}
-
-function policyTraceContext(command: DispatchProtocol.Command, fallbackTraceId: string) {
-  return {
-    traceId: command.traceId ?? fallbackTraceId,
-    ...(command.sessionId ? { sessionId: command.sessionId } : {}),
-    ...(command.runId ? { runId: command.runId } : {}),
-  };
-}
-
 function collectPolicies(
   runtimePolicies: readonly DispatchPolicyRegistration[],
   submitPolicies: readonly DispatchPolicyRegistration[] | undefined,
@@ -85,11 +43,81 @@ function collectPolicies(
   ];
 }
 
-function normalizeHandlerOutput(value: Awaited<ReturnType<DispatchHandler>>): unknown {
-  if (value && typeof value === "object" && "output" in value) {
-    return (value as { output?: unknown }).output;
+type PinnedInteractionValidation =
+  | { readonly record: PendingInteractionStore.Record }
+  | { readonly reason: string };
+
+function revalidatePinnedInteraction(
+  pinned: PendingInteractionStore.Record,
+  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  resolvedSince?: number,
+  now = Date.now(),
+): PinnedInteractionValidation {
+  const current = PendingInteractionStore.get(pinned.id);
+  if (!current) return { reason: "dispatch.pending_interaction.not_found" };
+
+  const active =
+    (current.status === "open" && now <= current.expiresAt) ||
+    ((current.status === "resolved" || current.status === "follow_up") &&
+      current.resolvedAt !== undefined &&
+      (now <= current.resolvedAt + current.followUpWindow ||
+        (resolvedSince !== undefined && current.resolvedAt >= resolvedSince)));
+  if (!active) return { reason: "dispatch.pending_interaction.inactive" };
+
+  if (
+    current.createdAt !== pinned.createdAt ||
+    current.endpointId !== pinned.endpointId ||
+    current.channelId !== pinned.channelId ||
+    current.targetActorId !== pinned.targetActorId ||
+    current.correlation.replyToMessageId !== pinned.correlation.replyToMessageId ||
+    current.correlation.threadId !== pinned.correlation.threadId ||
+    current.correlation.tokenHash !== pinned.correlation.tokenHash ||
+    current.correlation.externalConversationId !== pinned.correlation.externalConversationId
+  ) {
+    return { reason: "dispatch.pending_interaction.identity_mismatch" };
   }
-  return value;
+  if (current.sessionId !== pinned.sessionId) {
+    return { reason: "dispatch.pending_interaction.session_mismatch" };
+  }
+  if (current.workerRunId !== pinned.workerRunId) {
+    return { reason: "dispatch.pending_interaction.run_mismatch" };
+  }
+  if (!current.allowedActions.includes(requestedAction)) {
+    return { reason: "dispatch.pending_interaction.action.denied" };
+  }
+  return { record: current };
+}
+
+function denyStalePinnedInteraction(
+  command: DispatchProtocol.Command,
+  start: number,
+  reason: string,
+): DispatchProtocol.Result {
+  Bus.publish(DispatchProtocol.Events.Denied, {
+    ...eventBase(command),
+    verdict: "deny",
+    reason,
+    policyId: "dispatch.pending-interaction-revalidation",
+    effects: [],
+  });
+  return DispatchProtocol.Result.parse({
+    dispatchId: command.dispatchId,
+    status: "denied",
+    reason,
+    error: reason,
+    durationMs: Date.now() - start,
+  });
+}
+
+const submitPinnedInteraction = Symbol("submitPinnedInteraction");
+
+export function submitPinnedPendingInteraction(
+  runtime: DispatchRuntime,
+  input: DispatchProtocol.Input,
+  pendingInteraction: PendingInteractionStore.Record,
+  options: DispatchSubmitOptions = {},
+): Promise<DispatchProtocol.Result> {
+  return runtime[submitPinnedInteraction](input, pendingInteraction, options);
 }
 
 export class DispatchRuntime {
@@ -113,9 +141,33 @@ export class DispatchRuntime {
     input: DispatchProtocol.Input,
     options: DispatchSubmitOptions = {},
   ): Promise<DispatchProtocol.Result> {
+    return this.submitResolved(input, options);
+  }
+
+  async [submitPinnedInteraction](
+    input: DispatchProtocol.Input,
+    pendingInteraction: PendingInteractionStore.Record,
+    options: DispatchSubmitOptions,
+  ): Promise<DispatchProtocol.Result> {
+    return this.submitResolved(input, options, pendingInteraction);
+  }
+
+  private async submitResolved(
+    input: DispatchProtocol.Input,
+    options: DispatchSubmitOptions,
+    pendingInteraction?: PendingInteractionStore.Record,
+  ): Promise<DispatchProtocol.Result> {
     const parsed = DispatchProtocol.Input.parse(input);
     const trace = options.traceId ? { traceId: options.traceId } : TraceContext.create();
     const actor = deriveActorContext(options);
+    const requestedPendingAction = requestedPendingInteractionAction(parsed.payload);
+    const initialPinnedValidation = pendingInteraction
+      ? revalidatePinnedInteraction(pendingInteraction, requestedPendingAction)
+      : undefined;
+    const activePinnedInteraction =
+      initialPinnedValidation && "record" in initialPinnedValidation
+        ? initialPinnedValidation.record
+        : undefined;
     const command = routePendingInteraction(
       DispatchProtocol.Command.parse({
         ...parsed,
@@ -127,6 +179,7 @@ export class DispatchRuntime {
         ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
         submittedAt: Date.now(),
       }),
+      activePinnedInteraction,
     );
     const start = Date.now();
 
@@ -183,6 +236,13 @@ export class DispatchRuntime {
       });
     }
 
+    if (pendingInteraction) {
+      const validation = revalidatePinnedInteraction(pendingInteraction, requestedPendingAction);
+      if ("reason" in validation) {
+        return denyStalePinnedInteraction(command, start, validation.reason);
+      }
+    }
+
     Bus.publish(DispatchProtocol.Events.Authorized, {
       ...eventBase(command),
       verdict: "allow",
@@ -207,8 +267,20 @@ export class DispatchRuntime {
       });
     }
 
+    const routingStartedAt = Date.now();
     markRoutedPendingInteraction(command);
     Bus.publish(DispatchProtocol.Events.Routed, { ...eventBase(command), handler: command.action });
+
+    if (pendingInteraction) {
+      const validation = revalidatePinnedInteraction(
+        pendingInteraction,
+        requestedPendingAction,
+        routingStartedAt,
+      );
+      if ("reason" in validation) {
+        return denyStalePinnedInteraction(command, start, validation.reason);
+      }
+    }
 
     try {
       const raw = await handler(command, {

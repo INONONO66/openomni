@@ -10,9 +10,9 @@ export type ActorRecord = Record<string, unknown>;
 export interface PreRunState {
   readonly input: unknown;
   readonly coordinator?: CoordinatorLike;
-  parsedEvent?: Ingress.InboundEvent;
+  parsedEvent?: Ingress.DirectEvent;
   schemaError?: ZodError;
-  mode?: Ingress.InboundEvent["mode"];
+  mode?: Ingress.DirectEvent["mode"];
   target?: Ingress.Target;
 }
 
@@ -24,8 +24,8 @@ export interface PreRunContext {
 }
 
 export interface PreRunResult {
-  readonly event: Ingress.InboundEvent;
+  readonly event: Ingress.DirectEvent;
   readonly coordinator?: CoordinatorLike;
-  readonly mode: Ingress.InboundEvent["mode"];
+  readonly mode: Ingress.DirectEvent["mode"];
   readonly target: Ingress.Target;
 }

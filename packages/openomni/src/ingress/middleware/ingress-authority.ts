@@ -5,7 +5,10 @@ import { resolveTarget } from "../target";
 import { targetRequiresCoordinator } from "./ingress-authority-actor";
 import { throwAbort } from "./ingress-authority-decisions";
 import { IngressAuthorityDefinitions } from "./ingress-authority-definitions";
-import { registrations as createRegistrations } from "./ingress-authority-registrations";
+import {
+  registrations as createRegistrations,
+  routedRegistrations as createRoutedRegistrations,
+} from "./ingress-authority-registrations";
 import {
   emptyUsage,
   type PreRunContext,
@@ -26,13 +29,24 @@ export namespace IngressAuthorityMiddleware {
   }
 
   export async function runPreRun(ctx: PreRunContext): Promise<PreRunResult> {
+    return run(ctx, createRegistrations);
+  }
+
+  export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {
+    return run(ctx, createRoutedRegistrations);
+  }
+
+  async function run(
+    ctx: PreRunContext,
+    create: (state: PreRunState) => PolicyRegistration[],
+  ): Promise<PreRunResult> {
     const state: PreRunState = { input: ctx.event, coordinator: ctx.coordinator };
     const engine = PolicyEngine.create({
       traceContext: ctx.traceContext,
       onDecision: ctx.onDecision,
     });
 
-    for (const registration of registrations(state)) {
+    for (const registration of create(state)) {
       engine.register(registration);
     }
 

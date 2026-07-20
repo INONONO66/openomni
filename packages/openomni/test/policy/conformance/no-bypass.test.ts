@@ -50,6 +50,7 @@ beforeEach(() => {
     id: "grant-tui",
     surface: "tui",
     kind: "trusted_channel",
+    defaultTier: "owner",
     createdBy: "act_owner",
   });
 });

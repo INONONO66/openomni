@@ -166,10 +166,20 @@ export namespace Ingress {
     finishReason: string;
   };
 
-  export type IngressResult = {
+  export type ExecutedIngressResult = {
+    kind?: "executed";
     mode: "direct" | "internal";
     target: Target;
     sessionId: string;
     result: DirectResult;
   };
+
+  export type DroppedIngressResult = {
+    kind: "dropped";
+    mode: "direct" | "internal";
+    target: Target;
+    reason: string;
+  };
+
+  export type IngressResult = ExecutedIngressResult | DroppedIngressResult;
 }

@@ -1,16 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { IngressEngine, type NativeTool, type ToolProvider } from "@openomni/openomni";
-import type { Adapter, Dispatch, Ingress, Tool } from "@openomni/protocol";
+import type { Adapter, Ingress, Tool } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
-import {
-  Bus,
-  PendingInteractionStore,
-  Session,
-  Storage,
-  WorkerRun,
-  WorkItemStore,
-} from "@openomni/session";
-import { DiscordNormalizer } from "../../src/channel/discord/normalizer";
+import { Bus, Storage, WorkItemStore } from "@openomni/session";
 import { createMessageHandler } from "../../src/handler/conversation";
 import type { BridgeDeps } from "../../src/ingress/bridge";
 
@@ -64,15 +56,6 @@ async function createWorkItem(
     goal: `handle ${name}`,
     ...extra,
   });
-}
-
-async function createPendingInteractionWorkerRun(runId: string): Promise<string> {
-  const session = Session.create({
-    title: `${runId}-session`,
-    model: { providerID: "test", modelID: "test" },
-  });
-  await WorkerRun.create(session.id, { runId, title: runId, prompt: "test" });
-  return session.id;
 }
 
 async function completeWorkItem(hash: string): Promise<WorkItem.Info | undefined> {
@@ -321,163 +304,6 @@ describe("conversation task ledger command", () => {
 
     // Then
     expect(response).toEqual({ text: "ingress response" });
-    expect(ingest).toHaveBeenCalledTimes(1);
-  });
-
-  it("wakes a PendingInteraction worker reply through dispatch before resident ingress", async () => {
-    // Given
-    const sessionId = await createPendingInteractionWorkerRun("run-pi-conversation");
-    PendingInteractionStore.create({
-      id: "pi-conversation-1",
-      workerRunId: "run-pi-conversation",
-      sessionId,
-      endpointId: "bot-1",
-      channelId: "dev",
-      correlation: { replyToMessageId: "message-out-1" },
-      allowedActions: ["report_result"],
-      expiresAt: Date.now() + 60_000,
-      followUpWindow: 60_000,
-    });
-    const normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
-    const inbound = normalizer.normalize({
-      id: "message-in-1",
-      channel_id: "dev",
-      guild_id: "guild-1",
-      author: { id: "seller-1", username: "Seller" },
-      content: "SN-A2334",
-      message_reference: { message_id: "message-out-1" },
-    });
-    if (!inbound) throw new Error("expected normalized Discord reply");
-    const ingest = mock(async (): Promise<Ingress.IngressResult> => {
-      throw new Error("resident ingress should not run for PendingInteraction replies");
-    });
-    const dispatchCalls: Dispatch.Input[] = [];
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler({
-      ...deps,
-      dispatchRuntime: {
-        submit: mock(async (input: Dispatch.Input) => {
-          dispatchCalls.push(input);
-          return {
-            dispatchId: "dispatch-pi",
-            status: "completed",
-            output: { delivered: true },
-            durationMs: 1,
-          };
-        }),
-      },
-    });
-
-    // When
-    const response = await handler(inbound);
-
-    // Then
-    expect(response).toBeNull();
-    expect(ingest).toHaveBeenCalledTimes(0);
-    expect(dispatchCalls).toEqual([
-      {
-        action: "actor.message",
-        target: { kind: "surface", id: "discord:bot-1:channel:dev" },
-        payload: "SN-A2334",
-        correlation: {
-          endpointId: "bot-1",
-          channelId: "dev",
-          replyToMessageId: "message-out-1",
-          externalConversationId: "discord:bot-1:channel:dev",
-        },
-      },
-    ]);
-  });
-
-  it("falls back to resident ingress when no PendingInteraction matches", async () => {
-    // Given
-    const ingest = mock(
-      async (): Promise<Ingress.IngressResult> => ({
-        mode: "direct",
-        result: { output: "resident response", finishReason: "stop" },
-        sessionId: "session-1",
-        target: { kind: "resident" },
-      }),
-    );
-    IngressEngine.ingest = ingest;
-    const dispatchSubmit = mock(
-      async (): Promise<Dispatch.Result> => ({
-        dispatchId: "dispatch-no-match",
-        status: "denied",
-        reason: "dispatch.actor.required",
-        error: "dispatch.actor.required",
-        durationMs: 1,
-      }),
-    );
-    const handler = createMessageHandler({
-      ...deps,
-      dispatchRuntime: { submit: dispatchSubmit },
-    });
-
-    // When
-    const response = await handler({
-      ...makeMessage("hello", "discord:guild:channel:dev"),
-      replyToId: "message-without-pi",
-    });
-
-    // Then
-    expect(response).toEqual({ text: "resident response" });
-    expect(dispatchSubmit).toHaveBeenCalledTimes(1);
-    expect(ingest).toHaveBeenCalledTimes(1);
-  });
-
-  it("falls back to resident ingress when PendingInteraction matches are ambiguous", async () => {
-    // Given
-    const firstSessionId = await createPendingInteractionWorkerRun("run-pi-ambiguous-1");
-    const secondSessionId = await createPendingInteractionWorkerRun("run-pi-ambiguous-2");
-    for (const [id, sessionId, workerRunId] of [
-      ["pi-ambiguous-1", firstSessionId, "run-pi-ambiguous-1"],
-      ["pi-ambiguous-2", secondSessionId, "run-pi-ambiguous-2"],
-    ] as const) {
-      PendingInteractionStore.create({
-        id,
-        workerRunId,
-        sessionId,
-        endpointId: "guild",
-        channelId: "dev",
-        correlation: { replyToMessageId: "message-out-ambiguous" },
-        allowedActions: ["report_result"],
-        expiresAt: Date.now() + 60_000,
-        followUpWindow: 60_000,
-      });
-    }
-    const ingest = mock(
-      async (): Promise<Ingress.IngressResult> => ({
-        mode: "direct",
-        result: { output: "resident handles ambiguity", finishReason: "stop" },
-        sessionId: "session-1",
-        target: { kind: "resident" },
-      }),
-    );
-    const dispatchSubmit = mock(async () => {
-      return {
-        dispatchId: "dispatch-ambiguous",
-        status: "denied",
-        reason: "dispatch.actor.required",
-        error: "dispatch.actor.required",
-        durationMs: 1,
-      } satisfies Dispatch.Result;
-    });
-    IngressEngine.ingest = ingest;
-    const handler = createMessageHandler({
-      ...deps,
-      dispatchRuntime: { submit: dispatchSubmit },
-    });
-
-    // When
-    const response = await handler({
-      ...makeMessage("hello", "discord:guild:channel:dev"),
-      replyToId: "message-out-ambiguous",
-    });
-
-    // Then
-    expect(response).toEqual({ text: "resident handles ambiguity" });
-    expect(dispatchSubmit).toHaveBeenCalledTimes(1);
     expect(ingest).toHaveBeenCalledTimes(1);
   });
 });

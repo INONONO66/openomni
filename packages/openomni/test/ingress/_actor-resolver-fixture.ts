@@ -40,6 +40,7 @@ export function setupIngressActorResolverTest(): void {
       workspace: "guild",
       channel: "dev",
       kind: "trusted_channel",
+      defaultTier: "owner",
       createdBy: "act_owner",
     });
     ChannelGrantStore.put({
@@ -48,6 +49,7 @@ export function setupIngressActorResolverTest(): void {
       workspace: "guild-b",
       channel: "dev",
       kind: "trusted_channel",
+      defaultTier: "owner",
       createdBy: "act_owner",
     });
     ChannelGrantStore.put({
@@ -56,6 +58,7 @@ export function setupIngressActorResolverTest(): void {
       workspace: "guild",
       channel: "dev",
       kind: "trusted_channel",
+      defaultTier: "owner",
       createdBy: "act_owner",
     });
     IngressEngine.setResidentRuntime(

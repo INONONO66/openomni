@@ -1,12 +1,13 @@
 import type { Dispatch, Ingress, Model } from "@openomni/protocol";
 import { PendingAskStore } from "@openomni/session";
 import type { ResidentRuntime } from "../../resident/runtime.js";
+import { type AgentResolver, IngressEngine } from "../../ingress/engine.js";
 import type { DispatchHandler } from "../registry.js";
-import { DEFAULT_DISPATCH_MODEL } from "../owners.js";
 
 export interface ResidentDispatchHandlerOptions {
   readonly residentRuntime?: Pick<ResidentRuntime, "run">;
   readonly defaultModel?: Model.Ref;
+  readonly agentResolver?: AgentResolver;
 }
 
 function requireResidentRuntime(
@@ -16,10 +17,15 @@ function requireResidentRuntime(
   return residentRuntime;
 }
 
+function fallbackAgentResolver(model: Model.Ref | undefined): AgentResolver | undefined {
+  if (model === undefined) return undefined;
+  return { resolve: async () => ({ model }) };
+}
+
 function eventFromCommand(
   command: Dispatch.Command,
-  model: Model.Ref,
-): Ingress.ResolvedInboundEvent {
+  context: Parameters<DispatchHandler>[1],
+): Ingress.InternalEvent {
   return {
     id: command.dispatchId,
     surface: "dispatch",
@@ -30,6 +36,13 @@ function eventFromCommand(
       ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
     },
     payload: command.payload,
+    ...(context?.workspaceRoot ? { workspace: context.workspaceRoot } : {}),
+    runtime: {
+      ...((command.target.sessionId ?? command.sessionId ?? context?.sessionId)
+        ? { durableSessionId: command.target.sessionId ?? command.sessionId ?? context?.sessionId }
+        : {}),
+      ...(context?.signal ? { signal: context.signal } : {}),
+    },
     meta: {
       actor: {
         role: command.actor.kind,
@@ -43,7 +56,6 @@ function eventFromCommand(
         ...(command.target.sessionId ? { sessionId: command.target.sessionId } : {}),
       },
     },
-    agent: { model },
   };
 }
 
@@ -70,10 +82,10 @@ function openPendingAsk(command: Dispatch.Command, fallbackSessionId: string): v
 export function createResidentDispatchHandlers(
   options: ResidentDispatchHandlerOptions = {},
 ): Record<"resident.ask", DispatchHandler> {
-  const model = options.defaultModel ?? DEFAULT_DISPATCH_MODEL;
   return {
     async "resident.ask"(command, context) {
       const residentRuntime = requireResidentRuntime(options.residentRuntime);
+      const agentResolver = options.agentResolver ?? fallbackAgentResolver(options.defaultModel);
       if (command.target.kind !== "resident") {
         throw new Error("resident.ask requires resident target");
       }
@@ -82,15 +94,19 @@ export function createResidentDispatchHandlers(
         throw new Error("resident.ask requires target.sessionId or runtime sessionId");
       openPendingAsk(command, sessionId);
       try {
-        const result = await residentRuntime.run({
-          sessionId,
-          event: eventFromCommand(command, model),
-          traceContext: command.traceId ? { traceId: command.traceId, sessionId } : undefined,
-          signal: context?.signal,
+        const result = await IngressEngine.ingestInternal(eventFromCommand(command, context), {
+          residentRuntime,
+          ...(agentResolver ? { agentResolver } : {}),
         });
+        if (result.kind === "dropped") {
+          throw new Error(`resident.ask ingress was dropped: ${result.reason}`);
+        }
         PendingAskStore.answer(command.dispatchId);
         return {
-          output: { output: result.output, finishReason: result.finishReason, runId: result.runId },
+          output: {
+            output: result.result.output,
+            finishReason: result.result.finishReason,
+          },
         };
       } catch (error) {
         PendingAskStore.expire(command.dispatchId);
