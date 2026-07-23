@@ -55,7 +55,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, IPC framing, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy |
-| `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector manifests, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
+| `apps/server` | Runtime host: config/bootstrap, channel adapters, webhook/WebSocket/gateway transport, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics |
 
 ### Messaging Kernel Rule
 
@@ -130,6 +130,7 @@ Existing `ingress/` and `dispatch/` are implementation stages of this kernel, no
 | Gate-side policy stamping | `packages/openomni/src/policy/resolver.ts` + `dispatch/handlers/worker.ts` | `worker.spawn` stamps a `policyPlan` (default: required `builtin:tool-permission` + `builtin:idle-nudge`) resolved from actor/target labels; custom rules injected at the composition root |
 | Conformance gate | `script/lint-tools.ts` + `script/conformance/` | Vocab ratchet, tool lint, naming rules, earned check, Greg Young schema snapshot; runs pre-push + CI. `--self-test` proves discrimination; `--update` regenerates the schema snapshot (the diff is the Owner sign-off surface) |
 | Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
+| Connector host seams | `apps/server/src/connector/` | Current process driver, persisted-installation resolution, question bridge, and read-back; first-party definitions/discovery/registry are absent, while discover/register/consent/smoke-verify remains planned. See `docs/implementation-status.md`. |
 | `dispatch` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` | Runtime-to-runtime/system egress command authority and audit boundary |
 | Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
 | CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
@@ -169,11 +170,11 @@ These rules are model-independent and non-negotiable; they exist because each on
 
 Ingress supports a single execution mode: `direct`. All inbound events dispatch through `handleDirect` to the coordinator.
 
-Target direction: only the Resident commissions new top-level Worker work. The Owner requests delegation through the Resident and may attach directly to existing actors as root. The Resident has no subagent lane. A Worker cannot spawn another Worker under any trust tier; it may use a same-domain, context-sharing `child_agent`, message an already-existing agent through policy-gated dispatch when granted, or ask the Resident via `resident.ask` to commission independent/cross-domain work.
+Target direction: only the Resident originates a new Worker allocation. The Owner requests delegation through the Resident and may attach directly to existing actors as root. The Resident has no subagent lane. A Worker cannot spawn another Worker under any trust tier; it may use a same-domain, context-sharing `child_agent`, message an already-existing agent through policy-gated dispatch when granted, or ask the Resident via `resident.ask` to commission independent/cross-domain work. Existing-agent messaging transfers no allocation authority; its awaited form converges on the durable `Wait` contract in [`docs/kernel-contract.md`](docs/kernel-contract.md). Policy remains system-wide across actor profiles and communication boundaries, not Worker-owned.
 
 ## PRODUCT MODEL
 
-> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — zero-authority real-time cross-check). Three-tier vocabulary in [`docs/core-model.md`](docs/core-model.md); authority-model detail in [`docs/kernel-contract.md`](docs/kernel-contract.md).
+> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — silence-first, seven-lens, and zero-authority). Three-tier vocabulary and role lanes live in [`docs/core-model.md`](docs/core-model.md); authority, Wait, Jester-host, and Governor-access detail lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). These are target contracts; [`docs/implementation-status.md`](docs/implementation-status.md) alone says what is wired.
 
 ### Subjects
 
@@ -181,9 +182,10 @@ Target direction: only the Resident commissions new top-level Worker work. The O
 | --- | --- | --- |
 | Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
 | Resident | Always-on user-facing judgment shell; no subagent lane | Ingress target agent + future Resident-selected policy plan and judgment-only tool catalog |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` attempts (formerly `WorkerRun`), `executorKind` |
-| Actor | Any external entity that interacts with the system | (Planned: `ActorIdentity` / `ActorEndpoint` in `packages/protocol/src/actor/`) |
-| System Governor | Low-privilege layer that adjusts Policy/Skill from execution evidence | Policy engine, Bus observers |
+| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` records plus the legacy `WorkerRun` store and `executorKind`; distinct `WorkItem` attempt records are a P2 target |
+| Actor | Any external entity that interacts with the system | `ActorIdentity` / `ActorEndpoint` schemas, SQLite `ActorRegistry`, ingress `ActorResolver`, and canonical `trustTier` projection are wired |
+| Jester | Silence-first, seven-lens semantic cross-check with no dispatch authority | Target lifecycle is not wired; see `docs/implementation-status.md` |
+| System Governor | Read-omniscient/write-minimal post-hoc structural improvement; raw reads stay scoped, audited, and outside user-facing sessions | Policy engine and Bus observers exist; the Governor loop is not wired |
 
 ### Lifecycle / authority
 

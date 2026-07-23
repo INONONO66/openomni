@@ -22,17 +22,17 @@ The classical OS protected memory and CPU. The agent world's scarce resources ar
 | RAM | **Context window + memory** |
 | Device access | **The principal's authority** — accounts, funds, channels, relationships, reputation |
 | Process time | **Real-world time** (human replies take days) |
-| — (not needed) | **Truth** — see below |
+| — (not needed) | **Accountability for claims** — see below |
 
-The last row is the category's genuinely new duty. **A classical OS never needed a truth layer because a CPU does not lie about its exit code.** Agents are stochastic, self-interested reporters; "done" can be false. An OS that runs programs capable of lying acquires a duty no prior OS had: **verification**.
+The last row is the category's genuinely new duty. **A classical OS could generally trust a CPU's exit status; an agent's "done" can be false.** An Agent OS therefore needs accountability: preserve what happened, require evidence, and deterministically check the specific predicates it knows how to check. It cannot mechanically turn an arbitrary claim into truth; unsupported claims remain assertions.
 
 ## 3. Definition
 
-> **An Agent OS is the privileged layer that lets agents it did not write share one principal's authority, money, channels, and memory — meterable and revocable (multiplexing); that bounds a malicious agent's blast radius by mechanism (protection); that exposes a stable command interface (ABI); that keeps commitments alive on real-world timescales (lifecycle); and that mechanically verifies the effects agents claim (truth).**
+> **An Agent OS is the privileged layer that lets agents it did not write share one principal's authority, money, channels, and memory — meterable and revocable (multiplexing); that bounds a malicious agent's blast radius by mechanism (protection); that exposes a stable command interface (ABI); that keeps commitments alive on real-world timescales (lifecycle); and that records claimed effects and deterministically checks supported predicates (accountability).**
 
 Compressed:
 
-> **The classical OS protected programs from each other. The Agent OS protects the principal from their own agents.** The protected resource moved from memory to authority; the new duty is truth.
+> **The classical OS protected programs from each other. The Agent OS protects the principal from their own agents.** The protected resource moved from memory to authority; the new duty is accountable, predicate-scoped verification rather than a promise of truth.
 
 ## 4. The five litmus tests
 
@@ -43,7 +43,7 @@ A system qualifies only by passing all five. This turns "is it an Agent OS?" fro
 | **T1** | Third-party | Can I *install* an agent I did not write and have it run under enforced limits? |
 | **T2** | Hostile program | If that agent is malicious, is the damage bounded by mechanism — not by prompt? |
 | **T3** | Power loss | Do commitments (schedules, pending replies, in-flight work) survive a reboot? |
-| **T4** | Liar | If an agent claims false completion, does the structure catch it? |
+| **T4** | Liar | Are completion claims evidence-linked, and can supported false predicates be deterministically refuted without treating unchecked claims as true? |
 | **T5** | Multiplexing | Do multiple agents share budgets, authority, and channels without trampling each other? |
 
 ## 5. The landscape, scored
@@ -51,29 +51,29 @@ A system qualifies only by passing all five. This turns "is it an Agent OS?" fro
 | System | What it actually is | Passes |
 |---|---|---|
 | LangGraph / AutoGen | **Framework** (library) — your process, your agents, no protection boundary | — |
-| Temporal / Restate | **Durable scheduler** — T3 at full marks; trusts its activities; no authority model, no truth layer, no agent abstraction | T3 |
+| Temporal / Restate | **Durable scheduler** — T3 at full marks; trusts its activities; no authority model, claim-accountability layer, or agent abstraction | T3 |
 | Claude Code | **Single-program runtime** (shell + one process) — permissions and sandbox exist, but one agent, one session | partial T2 |
 | OpenClaw | **Gateway + companion** — session-centric; ClawHub gives real one-click installs, but skills land in a full-trust context (install without enforced limits); main session = full host access | partial T1 |
 | Hermes-Agent | **Self-improving companion** — agent-curated memory; the agent grades and improves itself (self-report as the learning input) | — |
-| AIOS-style papers | **Inference scheduler** — kernel for LLM calls; no authority or truth | partial T5 |
+| AIOS-style papers | **Inference scheduler** — kernel for LLM calls; no authority or claim-accountability layer | partial T5 |
 | Karpathy "LLM OS" | A different layer entirely (model-as-CPU metaphor) | n/a |
 
-**No existing system passes all five.** The term "Agent OS" is today mostly marketing — and simultaneously a real, unoccupied category. The unoccupied duties are specifically **T4 (truth)** and the authority form of **T1/T5** (multiplexing a principal's life, not a machine's).
+**No existing system passes all five.** The term "Agent OS" is today mostly marketing — and simultaneously a real, unoccupied category. The unoccupied duties are specifically **T4 (accountability for agent claims)** and the authority form of **T1/T5** (multiplexing a principal's life, not a machine's).
 
 A note on trust direction, since it is the deepest split in the landscape: companion systems (OpenClaw, Hermes) are built on *trusting* the agent — its reports, its self-curated memory, its self-improved skills. OpenOmni is built on *not trusting* it: execution, judgment, and improvement are separated, and completion claims must survive an evidence gate. This is an axiom difference, not a feature difference, which is why it is expensive to retrofit in either direction.
 
 ## 6. OpenOmni scorecard
 
-Honest as of 2026-06-12. Component truth: [implementation-status.md](implementation-status.md).
+Honest as of 2026-07-20. Current wiring truth: [implementation-status.md](implementation-status.md).
 
-| Test | Today | Path |
+| Test | Shipped today | Target path |
 |---|---|---|
-| T1 third-party | ❌ zero installed apps | #216 — `AppConnector` definition as the public ABI; install = detect → register → consent → wire → smoke-verify |
-| T2 hostile program | ⚠️ partial — worker-spawn denial, budget hard-stop, tool-guard are mechanisms; but kernel/userland share one process and the Resident still holds direct MCP tools | #218, #221. Full T2 (process-isolation-grade) is honestly long-term; this is a single-Owner trust boundary by design |
-| T3 power loss | ⚠️ partial — durable cron jobs persist and boot starts a runner for due schedules; PendingInteraction restoration still does not exist | #215 + #217 |
-| T4 liar | ❌ false claims pass today | **#213 — the category's unoccupied duty, and this project's most original contribution** |
-| T5 multiplexing | ⚠️ token budgets only | #219, #221 |
+| T1 third-party | ❌ Not passed. The `AppConnector` ABI, installation/consent storage, endpoint dispatch, process driver, log capture, stall detection, and evidence projection exist; first-party definitions and unused discovery/registry modules were deleted, and there is no complete install lifecycle. | #216 — discover → register → consent → wire → smoke-verify, then run a third-party agent under enforced limits |
+| T2 hostile program | ⚠️ Partial. Worker-spawn denial, budget hard-stop, tool guard, blacklist, grants, and authority evaluation are mechanisms; kernel/userland still share one process and the Resident retains direct mutating tools. | #218/#221; process-isolation-grade T2 remains long-term for this single-Owner boundary |
+| T3 power loss | ⚠️ Partial. Cron jobs persist and boot starts their runner; PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | #215 + #217 + P2 C1 restart proof |
+| T4 liar | ⚠️ Partial. Completion reports require resolving evidence, and supported URL/API/citation read-back checks run before completion. There is no general truth guarantee, sandboxed verifier registry, or replay-conformance proof. | #467 — store `checkedPredicate` verdicts, type unchecked claims as asserted, and refute supported bad evidence deterministically |
+| T5 multiplexing | ⚠️ Partial. Multiple workers, budgets, blacklist, ChannelGrant, TrustTier, WorkerGrant, and effective-authority evaluation exist; broader shared-resource accounting and the target authority boundary remain incomplete. | #219/#221 and the P2/P4 boundary work |
 
-**Score: 0.5 / 5 today. Designed path: ~4 / 5.** The project may call itself an Agent OS when T1, T3, and T4 pass; until then the honest description is *"an evidence-gated personal workflow engine building toward an Agent OS."*
+**Qualification: 0 / 5 tests fully pass today; all five have target paths, with substantial partial substrate in T2–T5.** Formal qualification still requires all five tests. Passing T1, T3, and T4 is the project's narrower product-branding milestone for using “Agent OS”; it is not five-test qualification. Until that milestone, the honest description is *"an evidence-gated personal workflow engine building toward an Agent OS."*
 
 The bets this depends on — and the criteria under which we abandon the claim — live in [Bets and Kill Criteria](bets-and-kill-criteria.md).

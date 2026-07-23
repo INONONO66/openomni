@@ -2,7 +2,9 @@
 
 Durable state substrate: session lifecycle, message/part storage, event bus + hash-chained bus persistence, trace context, artifacts, audit records, surface-key records, worker-run records, actor/grant/blacklist/pending stores, and the WorkItem store used by the OpenOmni kernel. Depends only on `@openomni/protocol`.
 
-This package stores facts. It must not decide product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback policy belong in `@openomni/openomni`.
+This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback policy belong in `@openomni/openomni`.
+
+`WorkerRun`, `PendingAsk`, and `PendingInteraction` are current legacy storage surfaces. The P2 target freezes writes to those shapes and read-upcasts existing records; new attempt and `Wait` writes begin only after the P2 cutover. That migration is planned, not wired; the canonical attempt and Wait contracts live in the [kernel contract](../../docs/kernel-contract.md).
 
 ## STRUCTURE
 
@@ -29,8 +31,8 @@ src/
 ├── audit/                # Audit record store
 ├── blacklist/            # Blacklist entry store (absolute deny gate data)
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
-├── pending-ask/          # PendingAskStore (legacy resident.ask path; absorbed into Wait by #215)
-├── pending-interaction/  # PendingInteractionStore (correlation lookup, follow-up window; transitional Wait)
+├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
+├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
 ├── trace/                # TraceContext helpers
 ├── artifact/             # Artifact.store / get / list / versions with write-through caching
@@ -47,7 +49,7 @@ src/
 │   ├── outcome.ts        # Owner adoption outcome recording (adopted/corrected/redone/ignored)
 │   ├── builder.ts        # WorkItem.Info construction
 │   └── types.ts          # Internal WorkItemStore implementation types
-└── worker-run/           # WorkerRun — delegated execution records
+└── worker-run/           # WorkerRun — current legacy delegated execution records
 ```
 
 ### Circular Dependency Avoidance
@@ -89,6 +91,6 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 - **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/session` (index re-exports).
-- Do NOT persist ad-hoc delegated execution state alongside `Session`; use `WorkerRun` so delegated execution state stays in the dedicated worker-run store.
+- Do NOT persist ad-hoc delegated execution state alongside `Session`. Until the P2 cutover, current code uses `WorkerRun`; after cutover, new writes use the canonical WorkItem attempt contract rather than extending the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
 - Do NOT add communication routing or authority evaluation here. Session is the durable substrate; OpenOmni is the kernel.

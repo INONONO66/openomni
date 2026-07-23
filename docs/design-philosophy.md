@@ -4,7 +4,7 @@
 
 **OpenOmni is a single-Owner Agent OS.** The Owner talks to one shell — the Resident, a judgment partner, not a command prompt — may attach directly to any process (Worker) when useful, and the kernel isolates, observes, and verifies everything that runs.
 
-The OS framing is not a metaphor; it is the structure. Where the metaphor breaks is deliberate: a real shell never talks back. OpenOmni's shell challenges the Owner with evidence. The OS half guarantees isolation, observation, and verification; the Resident half supplies judgment and dissent.
+The OS framing is not a metaphor; it is the structure. Where the metaphor breaks is deliberate: a real shell never talks back. OpenOmni's shell challenges the Owner with evidence. The OS half targets isolation, observation, and evidence-backed verification; the Resident half supplies judgment and dissent. Current enforcement is limited to the structural guarantees listed in [Implementation Status](implementation-status.md#structural-guarantees-kernel-surface-adr-010-1).
 
 ## The Kernel — Three Primitives
 
@@ -35,9 +35,11 @@ Applying the separation law splits the work into four roles. They are not new pr
 | **Jester** | doubts | the judge must also be checked — live, cheaply |
 | **Governor** | fixes | operation split from improvement |
 
+The role boundary is authority, not hierarchy. The Resident alone originates new Worker allocations and receives no subagent lane; a Worker may extend itself with same-domain `child_agent`, contact an already-existing agent when granted, or ask the Resident, but none of those coordination paths allocates work. The Jester target is silence-first and zero-authority: at most one semantic challenge is handed to the kernel host, which alone decides whether Voice and dispatch may speak it. The Governor target is read-omniscient and write-minimal: scheduled analysis may selectively inspect raw records, while its access contract keeps raw payload outside user-facing sessions and excludes loosening or exercise of write authority. Canonical behavior and access mechanics live in [Core Model § The Roles](core-model.md#the-roles) and the [Kernel Contract](kernel-contract.md#jester-evaluation-and-authorized-egress).
+
 **The Owner is root.** Final decisions are always the Owner's. The system must challenge with evidence but can never replace the Owner's decision — and an override is recorded with the evidence that was on the table (a receipt). The Owner may bypass the Resident and work with any actor directly; bypass is an exception to the interface, never to observation. Even the Owner acting in the physical world is just a work item whose executor is the Owner: verification is waived, recording is not.
 
-One consequence worth stating plainly: **hidden work is forbidden; isolated work is required.** Context must not mix (isolation), and work must never disappear (total recall). Raw records are not just for audit — they are the fuel of the improvement loop; every unrecorded trace is training signal the system loses forever.
+One consequence worth stating plainly: **hidden work is forbidden; isolated work is required.** Context must not mix (isolation), and work must never disappear (total recall). Raw records are not just for audit — under the [Governor access contract](kernel-contract.md#access-contract), scoped analysis may read them as fuel for the improvement loop without projecting their payload into a user-facing session.
 
 ## One Sentence
 

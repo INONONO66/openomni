@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — a stateless LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` for Bus and TraceContext observability.
+`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/llm`, and `@openomni/session` for Bus and TraceContext observability.
 
 ## STRUCTURE
 
@@ -126,7 +126,7 @@ runner.ts (entry) [AsyncGenerator<AgentEvent>]
 
 Allowed here:
 
-- Stateless `ChatAgent` execution and streaming.
+- Invocation-scoped `ChatAgent` execution and streaming.
 - Agent-scoped `PolicyEngine` facade and canonical point dispatch over the generic policy primitive.
 - Generic tool invocation contracts and tool executor wrapping.
 - Generic MCP client primitives when no server/OpenOmni product behavior is embedded.
@@ -137,7 +137,7 @@ Not allowed here:
 - Choosing whether a message targets Resident, Worker, external actor, schedule, or surface.
 - Looking up `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing.
 - Encoding OpenOmni actor trust, channel grants, worker grants, or external-response lifecycle rules.
-- Persisting durable background task state; background persistence is an OpenOmni/session responsibility.
+- Persisting durable background task state or owning orchestration/scheduling; those are OpenOmni/session and host responsibilities.
 - Owning channel-specific or server-specific MCP/tool wiring.
 
 When in doubt, keep the agent package as a loop engine and put product semantics in `packages/openomni`.
@@ -148,7 +148,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## KEY PATTERNS
 
-- **Stateless core**: Every `ChatAgent.run()` is independent — no session mutation, no storage. Per-run state such as budget and memory lives on the call context.
+- **Invocation-scoped core**: Every `ChatAgent.run()` is independent — no session mutation, storage, durable orchestration, or scheduler. Per-run state such as budget and memory lives on the call context. For future replayable WorkItem attempts, the host supplies captured nondeterministic inputs; this package does not discover or persist them. The normative attempt contract lives in the [kernel contract](../../docs/kernel-contract.md).
 - **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
 - **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations exist only for legacy compatibility.
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.

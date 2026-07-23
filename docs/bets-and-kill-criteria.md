@@ -32,7 +32,7 @@ The new roles and framings from the v2 philosophy each carry their own kill swit
 | Bet | Claim | Metric | Kill criterion |
 |---|---|---|---|
 | **B4 — the challenge is real** | An evidence-citing Resident objection produces corrections the Owner actually adopts | Adopted corrections originating from Resident objections, first 8 weeks after the challenge machinery ships | **0 adopted corrections in 8 weeks** → the "cognitive layer" framing is demoted; the Resident is redefined as a router with taste |
-| **B5 — the Jester earns its seat** | Cheap real-time doubt catches real inconsistencies | Flag → adopted-correction rate (precision), scored by the Governor from the ledger | Precision below threshold after tuning, or the Owner mutes it → demote or delete the role |
+| **B5 — the Jester earns its seat** | Cheap real-time doubt catches real inconsistencies | For mature adjudicated `jester.raised` challenges, Governor precision is exactly `adopted/(adopted+dismissed)`; a zero denominator is `insufficient_data`, while `answered_with_evidence` and `conceded` are reported separately | Once at least one mature challenge is adjudicated, precision below the tuned threshold, or Owner mute as an independent kill signal → demote or delete the role |
 | **B6 — ingestion is earned per domain** | Always-on observation of a domain measurably improves judgment/challenge quality | Proactive interventions from that domain that get adopted, M weeks after promotion | **0 adopted** → domain demoted back to on-demand |
 | **B7 — the existence bet** | The kernel pays off only when stakes are real | (a) evidence gate catches actual false/overstated completion claims; (b) high-stakes delegation (money / external humans / public output) actually occurs in regular use | Neither materializes in sustained regular use → OpenOmni is "OpenClaw with extra steps"; adopt an off-the-shelf companion and retire the kernel ambition |
 | **B8 — raw beats summary for the Governor** | Raw-trace diagnosis outperforms summary-fed diagnosis (the Meta-Harness ablation, reproduced on our incidents) | Root-cause hit rate: raw-access diagnosis vs summary-only, on the same incidents | Raw shows no advantage → drop the greppable-export kernel requirement and revisit storage costs |
@@ -41,14 +41,14 @@ Guards without full bets: **bypass erosion** (if direct-to-Worker sessions excee
 
 ## 4. Checkpoint cadence
 
-- **C1 — #213 merged**: the dormant-engine pattern (engines built, consumers never wired) is broken or repeated. Highest-information single event in the roadmap.
-- **C2 — #215 + #216 shipped**: T1/T3 inspection; H1 measurement begins.
+- **C1 — `C1-restart-refute-reconcile-replay` (#455 integration gate)**: Resident appends WorkItem W before delivery; attempt A receives a unique ID/sequence, sends an awaited granted message to existing agent E with no allocation delta, and appends W's durable `Wait`. After process exit, restart folds the Wait, correlates E's reply, and resumes without replacement allocation. A's known-bad evidence is `refuted` with the checked predicate and W remains incomplete. Retry B receives a distinct ID/sequence with `retryOf=A`; A and B may share content/environment equivalence keys and both persist. B appends a generic effect intent, performs one idempotent fake effect, crashes before confirmation, then restart reconciles that same intent and proves exactly one effect before accepted evidence permits completion. JSONL/sidecars export the full identity, Wait/reply, refutation, intent/reconciliation, and completion chain. Replay from the recorded key/manifest reproduces commands and the final fold, proves legacy upcast, fails loudly on reducer drift or missing input, and performs zero live LLM, network, or device calls.
+- **C2 — #215 + #216 shipped**: preserve the pre-existing T1/T3 inspection boundary; H1 measurement begins.
 - **C3 — 8 weeks of regular use after C2**: H2/H3 verdicts; B4–B6 verdicts if the roles shipped; Verdict section appended with the numbers.
 
 ## 5. Current verdict (pre-data)
 
-- **As a design: A.** The axioms (separation of execution/judgment/improvement, work as the first-class unit, truth as a kernel duty) target the category's unoccupied duties, and the v2 pass compressed the concept count instead of growing it.
-- **As a running system: D+.** Qualification score 0.5/5; every differentiator is still designed-not-implemented. "Use OpenOmni as your Agent OS" cannot yet be honestly recommended.
+- **As a design: A.** The axioms (separation of execution/judgment/improvement, work as the first-class unit, accountability as a kernel duty) target the category's unoccupied duties, and the v2 pass compressed the concept count instead of growing it.
+- **As a running system: partial, not qualified.** Evidence-backed completion admission and read-back checks are wired, but the P2 C1 integration proof and role runtimes are not. "Use OpenOmni as your Agent OS" cannot yet be honestly recommended.
 - **Deciding variable: our own wiring conversion rate**, not competitors. The most probable failure path is the new specs becoming the next dormant engines. C1 is the test.
 
 > The honest self-description until T1+T3+T4 pass: **"an evidence-gated personal workflow engine building toward an Agent OS."** The two promises stand regardless of branding: *what you hand over gets finished; the same mistake doesn't happen twice.*
