@@ -1,6 +1,6 @@
 # Usage Model — Operating OpenOmni as the Owner
 
-Every other document describes the system from the inside. This one describes it from your seat. Architecture behind these behaviors: [Core Model](core-model.md); what actually runs today: [Implementation Status](implementation-status.md) — much of this document describes the target experience.
+Every other document describes the system from the inside. This one describes the target experience from your seat. Architecture behind these behaviors: [Core Model](core-model.md). Current wiring is tracked only in [Implementation Status](implementation-status.md): durable cron and transitional reply correlation exist, while generic existing-agent messaging, the unified `Wait`, and the Jester runtime described below are not yet shipped.
 
 ## The mental model — four things to remember
 
@@ -8,6 +8,9 @@ Every other document describes the system from the inside. This one describes it
 2. **A request doesn't end when you send it — it ends when the system finishes it.** Work survives your forgetting it, survives restarts, and wakes when the world answers.
 3. **The system may push back — once.** If your instruction contradicts a recorded decision, fact, or goal, the Resident objects *with the citation*. Override it and it executes immediately, recording a receipt (the objection, the evidence you saw, your call). No repeated nagging; the receipt is later scored — when you overrode, who turned out right? — which is how its intervention threshold calibrates itself.
 4. **Your interventions come in two kinds.** Planned approvals (normal, designed) and unplanned rescues (a defect, recorded as such, expected to decrease).
+### Allocation, coordination, and waiting
+
+Only the Resident allocates a new Worker assignment. A Worker may use a bounded same-domain `child_agent`, ask the Resident, or—when granted—message an already-existing agent; none of those existing-agent messages creates a WorkItem, Worker, executor, or budget. Fire-and-forget records delivery and returns. An awaited message creates one durable `Wait`; the waiting process releases compute, and restart, reply correlation, timeout, cancellation, late or ambiguous replies, and partial/N-of-M completion are resolved from that record. This is target behavior owned by the canonical role and Wait contracts; current gaps remain in [Implementation Status](implementation-status.md).
 
 ## What happens when you say something
 
@@ -18,14 +21,14 @@ You never classify your own request — the Resident picks the lane:
 | "What was that error about?" | Direct answer | Context + memory + session search. Seconds. |
 | "Turn off the lights." / "Reply to B with this." | Action | No worker — the kernel executes, audits, done. Sensitive actions (first contact, spending) come back as a one-tap approval. |
 | "Research competitor pricing." / "Refactor this repo." | Delegated task | A work item is created (title, acceptance criteria, executor). What returns is a **distilled report that passed the evidence gate** — never a process log. |
-| "Ask these 3 sellers for price and condition." | Waiting on the world | Messages go out in the right register; the system sleeps at zero cost; replies — even days later — wake exactly the right task. |
+| "Ask these 3 sellers for price and condition." | Waiting on the world | Messages go out in the right register; the durable `Wait` releases compute; replies — even days later — wake exactly the right task. |
 | "Brief me on trends every morning at 9." | Scheduled task | The same machinery on a timer. |
 | "Give this one to Claude Code." / "Worker A, change approach." | Direct targeting | Your authority, not a general one. Lineage keeps the Resident aware. |
 | "I'll go check the chair myself on Saturday." | You as the executor | A work item whose executor is *you*. Your one-line report afterward ("frame's scratched, talked them down 20k") is the result — verification waived, recording not. The reality evidence chain must not break at your segment. |
 
 ## A second voice in the room
 
-Occasionally a short interjection appears next to the Resident's message — the Jester: *"didn't you freeze releases last week?"* It is deliberately cheap, has zero authority, and may only ask. The Resident must answer with evidence or concede. You read both voices and judge in three seconds; that visible exchange is the cross-check. If it keeps crying wolf, its own ledger record gets it retired.
+Occasionally the Jester evaluates whether a short frame-breaking question belongs next to the Resident's message — for example, *"didn't you freeze releases last week?"* It has exactly seven lenses and returns either silence or one semantic question. It has no dispatch authority: the kernel host separately records the evaluation and decides whether authorized delivery may proceed. If raised, the Resident answers with evidence or concedes; the later adopted/dismissed outcome lets the Governor score whether the role earns its seat. This is the target experience; the runtime is not shipped yet.
 
 ## When other people message you
 

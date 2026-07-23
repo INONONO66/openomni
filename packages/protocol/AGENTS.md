@@ -90,6 +90,8 @@ The product model is documented in `docs/core-model.md`. Future schemas should l
 
 Keep these as protocol contracts only. Runtime policy and storage implementations belong in upper packages.
 
+Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they add no behavior, dispatch authority, scheduling, or durable lifecycle to this package. They must extend the canonical existing namespaces rather than introduce a new Tier-2 noun; runtime meaning remains with the kernel and its host. See the [kernel contract](../../docs/kernel-contract.md) for the normative attempt and Jester lifecycle.
+
 ## ANTI-PATTERNS
 
 - Do NOT add runtime logic here — this package is schemas/types only.

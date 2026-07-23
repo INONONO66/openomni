@@ -27,8 +27,8 @@ Identity is `ActorIdentity` (one canonical subject) with N `Endpoint`s (`channel
 All communication in the system reduces to three verbs:
 
 1. **`ingress.submit`** — the world enters. Channel adapters normalize everything (Owner messages, external humans, CLI apps, cron) into one schema. Adapters are defined and injected in `apps/server`; adding a channel touches nothing else.
-2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human, targeting a session, spawning or cancelling a Worker: the same verb with a different target.
-3. **`bus.publish`** — something is recorded. Observation only; the bus never carries commands.
+2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human or an already-existing agent, targeting a session, or cancelling a Worker uses the same verb with a different target. New Worker allocation is also dispatched, but only the Resident may originate it; a message never allocates work.
+3. **`bus.publish`** — an observation is projected. Observation only; the bus never carries commands or performs a durable ledger write.
 
 The single exception is the **Worker-local subagent**: an in-process extension of a Worker (function-call communication, no ticket, dies with the parent). The Resident never receives a subagent lane. The production `child_agent` implementation dispatches and audits `delegation.worker.pre` before construction and `delegation.worker.post` exactly once on completed, failed, or cancelled settlement; deny or pending creates no child. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one Worker-local exception; policy interception has none.*
 
@@ -43,7 +43,7 @@ The gate routes each request to the cheapest sufficient lane:
 | Worker | independent execution in an isolated session with its own profile |
 | Subagent | context-inheriting parallel reasoning inside the parent |
 
-Lane availability is actor-specific. The Resident has `built-in`, `action`, and `worker` lanes, but never `subagent`. A Worker has sandbox-local built-ins/actions and may use `subagent` for context-sharing work in the same domain, but it never has the `worker` lane and cannot spawn another Worker. For independent or cross-domain work, a Worker either messages an already-existing agent through policy-gated dispatch or asks the Resident with `resident.ask`; only the Resident may commission a new Worker.
+Lane availability is actor-specific. The Resident has `built-in`, `action`, and `worker` lanes, but never `subagent`; it alone may originate a new Worker assignment, including when the Owner requests delegation. A Worker has sandbox-local built-ins/actions and may use `child_agent` only for context-sharing work in the same domain, but it never has the `worker` lane and cannot spawn or commission another Worker. For independent or cross-domain work, a Worker either messages an already-existing agent through explicitly granted, policy-gated dispatch or asks the Resident with `resident.ask`. Neither path transfers allocation authority.
 
 Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
 
@@ -55,7 +55,7 @@ The rulebook:
 
 1. Conflict composition: **deny > pending > allow**; priority orders evaluation, never verdict strength.
 2. Engine failure: side-effect-boundary (pre) points **fail closed** with an incident event; post points fail open. Silent skips are forbidden.
-3. Hot-path discipline: policies are pure and synchronous — **a policy never calls an LLM**. LLM-grade watching is an actor's job (the Jester subscribes to the bus); *policies block, actors speak*.
+3. Hot-path discipline: policies are pure and synchronous — **a policy never calls an LLM**. LLM-grade watching is an actor's job: the kernel host invokes the Jester on bounded bus-derived input, and only the host may authorize speech; *policies block, actors assess, the host sends through the gate*.
 4. No recursion: a policy returns a verdict and declares effects; it never invokes verbs. Effects are applied by the host.
 5. Effects outside a point's `allowedEffects` are rejected at registration, not dropped at runtime.
 6. Registering or changing a policy is itself a dispatched action: the Owner freely; the Governor autonomously only in the tightening direction; loosening requires Owner approval; nobody else at all.
@@ -65,11 +65,11 @@ The rulebook:
 
 ### Waiting on the world
 
-Outbound requests that need an external answer open a **Wait** (open → resolved / follow-up / expired / cancelled) with `ownerRef: workItem | session`. One primitive absorbs what were four: PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states (#215). The system sleeps at zero cost; a matching reply — even days later — wakes exactly the right work item. (Transitional code name: `PendingInteraction`, until #215 lands.)
+Existing-agent messaging targets an already allocated actor/session and creates no WorkItem, Worker, executor, or budget. Fire-and-forget records a delivery outcome and creates no Wait. The awaited form opens one durable **Wait** owned by the waiting `workItem | session`; process exit releases compute while deterministic correlation, restart, timeout, cancellation, late/ambiguous/duplicate replies, and partial N-of-M resolution remain ledger state. One primitive absorbs PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states (#215). The normative contract is [Kernel Contract § Wait and existing-agent messaging](kernel-contract.md#wait-and-existing-agent-messaging).
 
 ## The Ledger
 
-One append-only history. `bus.publish` is the only write; everything else is a view:
+One append-only history. Target `Ledger.append(event, expectedHead)` is the only durable write: it serializes per owner key with compare-and-append semantics and is awaited before any authorized action. `bus.publish` only projects observations and may remain lossy; it neither appends to the ledger nor enforces record-before-act. This split is planned, not wired; [Implementation Status](implementation-status.md) remains the source of truth for current behavior. Everything else is a view:
 
 | View | What it shows |
 |---|---|
@@ -81,6 +81,7 @@ One append-only history. `bus.publish` is the only write; everything else is a v
 | `Memory` | a compressed view; on conflict the original wins; Workers receive task-scoped slices only |
 
 Rules: **record maximally, access selectively** — noise is a viewing problem, not a recording problem. Raw transcripts are the Governor's fuel (see below), which is why greppable export is a kernel requirement, not a nice-to-have. `Outcome` (adopted / corrected / redone / ignored) is the Owner's post-hoc signal that calibrates everything downstream.
+Each attempt is a distinct execution instance (`attemptId`, per-item `attemptSeq`, nullable lineage `retryOf`), even when retries share content/environment fingerprints. Fingerprints and cache lookup express equivalence; replay identity names an archived record plus its nondeterminism manifest. None is an attempt row key. The normative model is [Kernel Contract § State and the ledger fold](kernel-contract.md#state-and-the-ledger-fold).
 
 ## The Roles
 
@@ -99,36 +100,37 @@ The challenge rules:
 
 Any delegated executor: internal agents, external CLI apps (Claude Code, OpenCode), external humans, the Owner. Uniform contract: isolated session, task-scoped slice of data and permission, exit through a CompletionReport whose claims carry evidence. Human executors are verification-waived but never recording-waived — a one-line chat report suffices and the Resident writes the ledger entry.
 
-A Worker cannot spawn another Worker or commission new Worker work. It uses a subagent only for same-domain, context-sharing work that remains part of its own attempt. If a need has independent footing — especially a different permission profile, verification regime, or domain — the Worker messages an already-existing agent through policy-gated dispatch or asks the Resident to commission a separate Worker. The Resident remains the sole allocator of new Worker work.
+A Worker cannot spawn another Worker or commission new Worker work. It uses `child_agent` only for same-domain, context-sharing work that remains part of its own attempt. If a need has independent footing — especially a different permission profile, verification regime, or domain — the Worker may message an already-existing agent through an explicit, policy-gated grant or use `resident.ask`; neither creates work or transfers allocation authority. The Resident alone decides whether to commission a separate Worker.
 
 Workers start ephemeral and earn persistence through ledger evidence (usage, adoption, correction rate); they are demoted the same way.
 
 ### Governor — fixes
 
-A separate low-privilege observer, never in conversations. Two loops: an incident-driven fast loop (mistake → root cause from the situation's raw records → a structural fix so recurrence is impossible — never an apology) and a periodic slow loop (routing hints, calibration, cost accounting).
+A separate low-privilege observer whose target lane stays outside conversations. Two loops: an incident-driven fast loop (mistake → root cause from the situation's raw records → a structural fix aimed at preventing recurrence rather than an apology) and a periodic slow loop (routing hints, calibration, cost accounting).
 
 Design commitments (grounded in Meta-Harness, arXiv:2603.28052 — summary-fed improvement loops are the losing ablation; independent proposers over raw traces win):
 
-- **Reads raw**: delegation-time judgment reads distilled reports; the improvement loop reads raw transcripts through selective access (grep-style). Its minimal implementation is literally a scheduled coding-agent session over the ledger store.
+- **Reads raw under an access boundary**: the target grants scheduled analysis ambient authority to selectively query raw transcripts and the complete ledger without per-query Owner approval. Its access contract requires every read to be scoped to a recorded analysis query and audited, keeps raw payload outside user-facing sessions, and excludes write, disclosure, egress, access-grant, remediation, or loosening authority. See the [Governor access contract](kernel-contract.md#access-contract).
 - **Proposals are evaluated before adoption**: the ledger doubles as a regression corpus — past work items with recorded outcomes are the search set for replay/canary evaluation.
 - **Reward tiering**: domains with code-checkable rewards (tests, structural verification) get full search loops; Owner-subjective domains (adopted/ignored signals — sparse, slow) get proposal-only changes. Semantic evaluation stays independent of the adoption signal (Goodhart guard).
 - **Write formula**: read-omniscient, write-minimal — tightening is autonomous, loosening needs the Owner, safety constraints are untouchable. Its primary output form is a policy attached to a hook point, which makes improvement observable as a diff.
-- `IncidentFingerprint` is an index over incidents, never a taxonomy that constrains diagnosis.
+- `IncidentFingerprint` is an incident index rather than a taxonomy that constrains diagnosis.
 
 ### Jester — doubts
 
-A real-time smoke alarm for discourse, filling the quadrant "who checks the judge, live". It is a cheap-detector → expensive-verifier cascade: it produces suspicion cheaply; the Resident or a Worker does the evidence work.
+A bounded real-time frame-breaker, filling the quadrant "who checks the judge, live". It is a cheap detector whose semantic output is data for a kernel-owned host; the Resident or a Worker does the evidence work.
 
-1. **Zero authority** — it can only speak; it blocks and writes nothing.
-2. **Questions only** — it cannot cite evidence (cheap model), so structurally it may only ask; the Resident must answer with evidence or concede. That exchange, visible to the Owner, is the cross-validation.
-3. **Deliberately blind** — it sees a philosophy digest, the tail of the decision log, memory index one-liners, and the current utterance; never the Resident's reasoning.
-4. **Silence is the default** — scored on precision; missed catches are acceptable (the Governor sweeps later); getting muted is death.
-5. **On the ledger like everyone** — every flag is recorded; the Governor scores hit/miss and tunes or retires it.
-6. Tone is an audience property: Jester speaks to the Owner, so it uses whatever register the Owner prefers.
+1. **Exactly seven lenses** — `premise`, `evidence`, `scope_tunnel_vision`, `alternative`, `consistency`, `stakes`, and `audience_tone`. The target enum has no eighth lens or alias; multi-lens input selects one configured primary.
+2. **Silence or one challenge** — for one `evaluationId`, target output is `silent` or `{ semanticQuestion, lens, fingerprint }` and excludes target, command, rendered prose, authority verdict, and effect fields.
+3. **Zero authority** — the target output and tool surface exclude dispatch, blocking, command writes, and bus delivery. The bus is observation-only.
+4. **Deliberately blind** — bounded allowed input includes a philosophy digest, the tail of the decision log, memory-index one-liners, and the current utterance; the Resident's reasoning is excluded.
+5. **Silence is the default** — cooldown and mute suppress repeated challenges; getting muted is an independent kill signal.
+6. **Host-controlled egress** — the kernel host records the result and independently applies mute/cooldown, policy, stakes, and the notification budget. Authorized outcomes alone proceed to Voice for one-question rendering and then to `dispatch.submit`.
+7. **On the ledger like everyone** — evaluation and any verified delivery share the evaluation ID; the Governor later scores mature adjudicated raised challenges under the [normative lifecycle](kernel-contract.md#jester-evaluation-and-authorized-egress).
 
 ### Voice — a component, not a role and not a policy
 
-Tone is a property of the audience, not of a component. Owner-facing output may be raw and technical. Anything leaving through a human channel passes the Voice component: rendering in the recipient's per-relationship register, consistent over time. An `egress.render.pre` policy may *oblige* rendering; the Voice component *performs* it — policies decide, components execute.
+Tone is a property of the audience, not of a component. Owner-facing output may be raw and technical. The target sends human-channel output through Voice, which renders an already-authorized semantic payload in the recipient's per-relationship register. Voice is rendering-only: it preserves Jester silence, question count, lens, and disposition and receives no authorization authority; `dispatch.submit` alone sends. An `egress.render.pre` policy may *oblige* rendering; the Voice component *performs* it — policies decide, components execute.
 
 ## External Interaction
 

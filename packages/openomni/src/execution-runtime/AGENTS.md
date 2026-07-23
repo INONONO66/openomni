@@ -18,16 +18,16 @@ Tool system, workspace safety, injection queue, cron bridge, and worker middlewa
 ## Ownership
 
 - System tools (`bash`, read/glob/grep/write/edit) live under `tool/builtins/` and `tool/system/`.
-- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session lightweight child execution tool is `child_agent` (`tool/agent/tools/child-agent.ts`).
+- Agent delegation tools live under `tool/agent/`. The cross-session egress tool is `dispatch` (`tool/agent/tools/dispatch.ts`). The in-session lightweight `child_agent` tool (`tool/agent/tools/child-agent.ts`) is Worker-local; the Resident never receives it.
 - Server-specific MCP and custom provider wiring stays in `apps/server/src/tool/`; this package owns only reusable execution-runtime providers.
 
 This domain may expose tools that call communication kernel APIs. It must not make routing or authority decisions itself.
 
 ## dispatch tool
 
-`createDispatchTool(dispatchRuntime)` returns the cross-boundary `dispatch` tool. It submits actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`). The full tool is for Resident/kernel-authorized callers; Worker-runner exposes a narrower surface that currently allows only awaited `resident.ask`. Workers never receive Worker creation actions. Future Worker-to-existing-agent messaging must remain policy-gated and must not imply delegation ownership.
+`createDispatchTool(dispatchRuntime)` returns the cross-boundary `dispatch` tool. It submits actions through the Dispatch policy/audit gate (`src/dispatch/runtime.ts`). The full tool is for Resident/kernel-authorized callers; Worker-runner currently exposes a narrower surface that allows only awaited `resident.ask`. Granted messaging to an already-existing agent, including durable WorkItem `Wait` for the awaited form, is the #215 target rather than wired behavior. Neither form transfers allocation: only the Resident originates new Worker work, and fire-and-forget messaging creates no `Wait`. See the canonical role lanes in the [core model](../../../../docs/core-model.md) and Wait semantics in the [kernel contract](../../../../docs/kernel-contract.md).
 
-The tool wrapper is not the authority boundary. The boundary is the OpenOmni dispatch/communication kernel. Keep validation here limited to tool input shape and runtime implicit inputs.
+The tool wrapper is not the authority boundary. The boundary is the OpenOmni dispatch/communication kernel. Keep validation here limited to tool input shape and runtime implicit inputs. Policy interception is system-wide across actor profiles; tool exposure alone grants no authority.
 
 Built-in handlers exist for the following actions; handler existence does not grant every actor access:
 
@@ -58,7 +58,7 @@ Do not reintroduce the removed legacy model-facing inbound tool or compatibility
 - Workspace-mutating tools must go through `WorkspaceLock` unless they are explicitly concurrency-safe.
 - Tool denial, timeout, unknown-tool, and thrown-error paths must return error-shaped `Tool.Result` values.
 - New built-in tools require tests for permission, path containment, timeout behavior where relevant, and output shape.
-- Do not add ingress/session routing policy here. Put policy in the kernel stages (`src/ingress/` / `src/dispatch/`, converging on #464 resolveRoute) and pass execution context down.
+- Do not add ingress/session routing policy here. Put policy in the kernel stages (`src/ingress/` / `src/dispatch/`) and use the shipped #464 `resolveRoute` path; pass execution context down.
 - Do not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` from tool wrappers for routing.
 
 ## Data Egress Gate
@@ -94,8 +94,8 @@ Future enforcement option (not yet implemented): an `invoke.prepare` middleware 
 
 ### Approved Direct-Fetch Tools
 
-**`web_search` and `web_fetch` (Resident-only):**
-These make direct `fetch()` calls through `opensearch-ai-sdk` to an external search/fetch service. They live exclusively in `apps/server/src/tool/custom/CustomToolProvider` and are never included in the worker tool catalog (`worker-runner.ts` assembles only `systemTools + agentTools + proxyTools`). The Resident is the top-level authority and has intentional, audited-by-design web access. Routing them through dispatch would add no security value.
+**`web_search` and `web_fetch` — Owner-authorized, Resident-only read/perception exception:**
+These make direct `fetch()` calls through `opensearch-ai-sdk` to an external search/fetch service. They live exclusively in `apps/server/src/tool/custom/CustomToolProvider` and are never included in the Worker tool catalog (`worker-runner.ts` assembles only `systemTools + agentTools + proxyTools`). The Owner is the root authority; this narrow exception exists because the Owner explicitly authorizes these read/perception capabilities for the Resident. Its safety derives from that authorization, read-only effect classification, and Resident-only catalog boundary — never from authority inherent to the Resident.
 
-Decision: **approved as-is**. The boundary (Resident only, not workers) must be maintained; if `web_search`/`web_fetch` are ever added to a worker tool catalog, they must be reclassified and gated.
+Decision: **approved only within that boundary**. Workers remain excluded. Any mutation or other boundary-crossing effect still uses `dispatch`; if either tool becomes mutating or is added to a Worker catalog, this exception no longer applies and the capability must be reclassified and gated.
 

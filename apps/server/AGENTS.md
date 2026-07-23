@@ -118,7 +118,7 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 
 ## CONNECTORS
 
-External app connector manifests are server-owned. Claude Code, Codex, OpenCode, and future provider definitions live under `src/connector/`; `@openomni/openomni` only receives normalized dispatch driver owners and never exports provider-specific connector manifests.
+The current server connector surface hosts the process driver and provider-neutral ABI integration and resolves persisted installations from SQLite records/endpoints. First-party Claude Code, Codex, and OpenCode definitions do **not** currently live here: connector definitions and the unused discovery/registry modules were deleted in #473. Discover/register/consent/smoke-verify remains a planned installation lifecycle, not a shipped registry. `@openomni/openomni` receives normalized dispatch driver owners and exports no provider-specific connector manifests. See [`../../docs/implementation-status.md`](../../docs/implementation-status.md) for shipped-state truth and [`../../docs/architecture.md`](../../docs/architecture.md) for the target lifecycle.
 
 ## CHANNELS
 
