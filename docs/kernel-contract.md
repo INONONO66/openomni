@@ -29,8 +29,8 @@ Documentation may use "guaranteed", "cannot", or "never" only for rows marked �
 
 ### Lanes and the effect-radius rule
 
-Work executes in one actor-available Lane. The Resident may use `built-in`, `action`, or `worker` and never receives `subagent`; a Worker may use sandbox-local built-ins/actions or a Worker-local `subagent` and never receives the `worker` lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty. Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
-Only the Resident may originate a new Worker allocation. Owner delegation requests pass through Resident judgment; no Worker message, Wait, `child_agent`, `resident.ask`, or policy grant transfers that authority. The communication vocabulary is fixed: `ingress.submit` enters, `dispatch.submit` crosses a boundary, and `bus.publish` projects observations but never delivers a command or writes the durable ledger.
+Current lane availability: the Resident may use `built-in`, `action`, or `worker` and is not given `subagent`; a Worker may use sandbox-local built-ins/actions or a Worker-local `subagent` and is not given the `worker` lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty.
+The shipped Worker-spawn policy accepts only Resident-origin `worker.spawn`. The target communication contract additionally routes Owner delegation requests through Resident judgment and keeps Worker messages, Wait, `child_agent`, `resident.ask`, and policy grants from transferring allocation authority. The communication vocabulary is fixed: `ingress.submit` enters, `dispatch.submit` crosses a boundary, and `bus.publish` projects observations but is not a command-delivery or durable-ledger-write surface.
 
 What separates a plain tool from dispatch is the **radius of the effect**:
 
@@ -50,9 +50,9 @@ Subagent vs Worker are different species, not tiers of one thing:
 | Ledger | no ticket — part of the parent's work | always ticketed |
 | Verification | exempt — intermediate reasoning the parent digests | gated — an independent deliverable |
 
-A subagent is only a same-domain, context-sharing `child_agent` extension of a Worker, bounded to the parent grant. The Resident has no subagent, and a Worker cannot spawn or commission another Worker. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — it either communicates with an already-existing agent through an explicit, policy-gated grant or uses `resident.ask`; the Resident alone decides whether to commission a separate Worker. Neither coordination path allocates a WorkItem, Worker, executor, or budget.
+Target coordination contract: a subagent is a same-domain, context-sharing `child_agent` extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates a WorkItem, Worker, executor, or budget.
 
-**Peek budget.** The Resident's per-turn tool-call budget makes the delegation rule structural: light perception is free, but a task that survives the peek budget without resolving is beyond judgment scope, and the Resident's only remaining move is to dispatch an action or commission a Worker — never a subagent.
+**Target Peek budget.** A Resident per-turn tool-call budget separates light perception from execution. Work that remains unresolved after that budget moves beyond judgment scope, so the target next step is a bounded action or Resident-origin Worker commission rather than a subagent.
 
 ### Target boot contract
 
@@ -246,7 +246,7 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 
 - **Fast loop (incident-driven, the core).** An incident spawns a root-cause analysis: read the failed WorkItem, its report, the raw transcript, the ledger timeline, and the policy/prompt state *at the time* — classify the cause, prescribe a structural fix so recurrence is impossible. Never an apology: reflection that leaves nothing in the environment repeats the mistake.
 - **Slow loop (periodic).** Aggregation over the ledger: routing hints per task type, Resident evaluation-leniency calibration (accepted work the Owner keeps correcting), cost accounting.
-**Jester scoring.** The Governor computes Jester precision only over mature, adjudicated `jester.raised` challenges: `B5 = adopted / (adopted + dismissed)`. Answers with evidence and concessions are reported as separate signals, not denominator states; muted volume is an independent kill signal.
+**Jester scoring.** The Governor computes Jester precision only over mature, adjudicated `jester.raised` challenges: `B5 = adopted / (adopted + dismissed)`. When `adopted + dismissed = 0`, B5 is `insufficient_data` and no precision-based demotion decision is evaluated. Answers with evidence and concessions are reported as separate signals, not denominator states; muted volume is an independent kill signal.
 
 **Incident lanes:**
 

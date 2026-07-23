@@ -120,6 +120,7 @@ flowchart TD
 The pre-existing C2 boundary remains #215 + #216; this roadmap synchronization does not expand its fixture.
 
 ### Phase summary
+
 | Phase | Content |
 |---|---|
 | **P0 clean — complete** | ✅ Coordinator dead-module/double-ledger cleanup opened the phase in #461; the 3 bug fixes, conformance-gate exit slice, remaining dead-code sweep, deprecated-field removal, and post-sweep hygiene shipped in #471/#472/#473/#475/#476 |
