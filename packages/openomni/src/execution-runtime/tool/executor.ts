@@ -1,5 +1,12 @@
 import { PolicyDecision, type Tool } from "@openomni/protocol";
 import {
+  EffectScopeRegistry,
+  digestEffectValue,
+  resolveToolEffect,
+  type ResolvedToolEffectV1,
+} from "../effect-scope.js";
+import type { WorkspaceIdentity } from "../workspace-identity.js";
+import {
   createAbortError,
   enforceTimeoutAndAbort,
   isAbortError,
@@ -16,24 +23,77 @@ import {
   publishActionBlocked,
   publishActionRequested,
   publishPolicyEvaluated,
-  publishTimeoutSettlementWarning,
   publishToolCompleted,
   publishToolStarted,
   publishToolTimedOut,
 } from "./executor-events.js";
-import {
-  hasUnknownSettlement,
-  markUnsafeWorkspaceForUnsettledTool,
-  waitForToolSettlement,
-} from "./executor-settlement.js";
+import { hasUnknownSettlement } from "./executor-settlement.js";
 import { ToolRuntimePolicyMiddleware } from "./middleware/tool-runtime-policy.js";
-import type { NativeTool, ToolExecutionContext, ToolExecutorConfig } from "./types.js";
+import type {
+  AcceptedToolEffectContext,
+  NativeTool,
+  ToolEffectIntentV1,
+  ToolEffectSettlementStatus,
+  ToolExecutionContext,
+  ToolExecutorConfig,
+} from "./types.js";
 
-const DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS = 5_000;
+const acceptedEffectContexts = new WeakMap<
+  object,
+  { readonly operation: string; readonly workspaceId: string }
+>();
+
+/** Runtime check for the executor-minted, operation- and workspace-bound effect capability. */
+export function hasAcceptedToolEffect(
+  context: ToolExecutionContext | undefined,
+  operation: string,
+  workspace: WorkspaceIdentity,
+): context is AcceptedToolEffectContext {
+  const accepted = context === undefined ? undefined : acceptedEffectContexts.get(context);
+  return accepted?.operation === operation && accepted.workspaceId === workspace.workspaceId;
+}
 
 export interface ToolExecutorContext {
   tools: NativeTool[];
   config?: ToolExecutorConfig;
+}
+
+function canonicalEffectValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalEffectValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalEffectValue(nested)]),
+    );
+  }
+  return value;
+}
+
+function exactEffectIdentity(args: {
+  readonly call: Tool.Call;
+  readonly input: Record<string, unknown>;
+  readonly operation: string;
+  readonly effect: ResolvedToolEffectV1;
+  readonly config: ToolExecutorConfig;
+}): { readonly effectId: string; readonly sourceRef: string } {
+  const sourceRef = digestEffectValue(
+    JSON.stringify({
+      version: "tool-effect-source-v1",
+      sessionId: args.config.runtime?.sessionId ?? null,
+      runId: args.config.runtime?.runId ?? null,
+      toolCallId: args.call.id,
+      inputDigest: digestEffectValue(JSON.stringify(canonicalEffectValue(args.input))),
+      operation: args.operation,
+      operationVersion: args.effect.operationVersion,
+      scope: args.effect.scope,
+    }),
+  );
+  return { effectId: `tool-effect:${sourceRef}`, sourceRef };
+}
+
+function receiptDenial(status: string, reason?: string): Error {
+  return new Error(`effect ledger denied: ${status}${reason ? ` (${reason})` : ""}`);
 }
 
 export function createToolExecutor(
@@ -41,17 +101,15 @@ export function createToolExecutor(
 ): (call: Tool.Call, context?: ToolExecutionContext) => Promise<Tool.Result> {
   const dispatch = buildDispatchTable(ctx.tools);
   const config = ctx.config ?? {};
-  const postTimeoutSettleGraceMs =
-    config.postTimeoutSettleGraceMs ?? DEFAULT_POST_TIMEOUT_SETTLE_GRACE_MS;
+  const effects = config.effects;
+  const scopeRegistry = new EffectScopeRegistry();
   const eventBase = () => createEventBase(config.runtime);
 
   return async (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> => {
     const tool = dispatch.get(call.tool);
     if (!tool) return createErrorResult(call, `Unknown tool: ${call.tool}`);
 
-    if (context?.signal?.aborted) {
-      return createErrorResult(call, "Tool execution aborted");
-    }
+    if (context?.signal?.aborted) return createErrorResult(call, "Tool execution aborted");
 
     const originalName = tool.spec.name;
     const actionId = crypto.randomUUID();
@@ -72,14 +130,16 @@ export function createToolExecutor(
     const dispatchedCall = resolveDispatchedCall(enrichedCall, tool);
     let policy: ToolRuntimePolicyMiddleware.PreToolResult | undefined;
     let shouldEvaluatePostTool = false;
-    let postToolDeferred = false;
     let postToolOutput: string | undefined;
-    let toolExecution: Promise<Tool.Result> | undefined;
+    let intent: ToolEffectIntentV1 | undefined;
+    let intentAccepted = false;
+    let settlementAttempted = false;
+    let actStarted = false;
     const lockOwnerId = crypto.randomUUID();
+    let executionContext: ToolExecutionContext | undefined;
 
     function evaluatePostToolOnce(): void {
-      if (!policy || !shouldEvaluatePostTool || postToolDeferred) return;
-
+      if (!policy || !shouldEvaluatePostTool) return;
       shouldEvaluatePostTool = false;
       const postDecision = ToolRuntimePolicyMiddleware.evaluatePostTool({
         toolName: originalName,
@@ -96,38 +156,64 @@ export function createToolExecutor(
       });
     }
 
-    function deferPostToolUntilExecutionSettles(fallbackOutput: string): void {
-      if (!toolExecution || !policy || !shouldEvaluatePostTool || postToolDeferred) return;
-
-      const currentPolicy = policy;
-      const currentToolExecution = toolExecution;
-      postToolDeferred = true;
-      void waitForToolSettlement(currentToolExecution, postTimeoutSettleGraceMs).then((outcome) => {
-        if (outcome.settled) {
-          postToolOutput = outcome.output;
-        } else {
-          postToolOutput = fallbackOutput;
-          markUnsafeWorkspaceForUnsettledTool({
-            workspaceRoot: currentPolicy.handle.workspaceRoot,
-            lockAcquired: currentPolicy.handle.lockAcquired,
-            toolName: originalName,
-            toolCallId: call.id,
-            outcome,
-            toolExecution: currentToolExecution,
-          });
-          publishTimeoutSettlementWarning({
-            base: eventBase(),
-            toolName: originalName,
-            toolCallId: call.id,
-            graceMs: postTimeoutSettleGraceMs,
-          });
-        }
-        postToolDeferred = false;
-        evaluatePostToolOnce();
+    async function appendSettlement(status: ToolEffectSettlementStatus): Promise<void> {
+      if (!intentAccepted || !intent || settlementAttempted) return;
+      settlementAttempted = true;
+      if (!effects) throw new Error("effect ledger is not provisioned");
+      const receipt = await effects.appendSettlement({
+        version: "tool-effect-settlement-v1",
+        effectId: intent.effectId,
+        sourceRef: intent.sourceRef,
+        status,
       });
+      if (receipt.version !== "tool-effect-append-receipt-v1" || receipt.status !== "accepted") {
+        throw receiptDenial(receipt.status, receipt.reason);
+      }
     }
 
     try {
+      let readOnly = false;
+      try {
+        readOnly =
+          typeof tool.isReadOnly === "function"
+            ? tool.isReadOnly(dispatchedCall.input)
+            : tool.isReadOnly;
+      } catch {
+        readOnly = false;
+      }
+      const resolvedEffect = readOnly
+        ? null
+        : resolveToolEffect(
+            scopeRegistry,
+            originalName,
+            dispatchedCall.input,
+            config.workspaceIdentity,
+          );
+      if (resolvedEffect && !effects) {
+        throw new Error("effect ledger is not provisioned");
+      }
+      if (resolvedEffect) {
+        const identity = exactEffectIdentity({
+          call,
+          input: dispatchedCall.input,
+          operation: originalName,
+          effect: resolvedEffect,
+          config,
+        });
+        intent = Object.freeze({
+          version: "tool-effect-intent-v1",
+          ...identity,
+          toolCallId: call.id,
+          operation: originalName,
+          operationVersion: resolvedEffect.operationVersion,
+          scope: resolvedEffect.scope,
+          execution: {
+            sessionId: config.runtime?.sessionId ?? "",
+            runId: config.runtime?.runId ?? "",
+          },
+        });
+      }
+
       policy = await ToolRuntimePolicyMiddleware.evaluatePreTool({
         toolName: originalName,
         toolCallId: call.id,
@@ -135,7 +221,9 @@ export function createToolExecutor(
         riskTier: tool.riskTier,
         ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
         timeoutConfig: config.timeoutMs,
-        workspaceRoot: config.workspaceRoot,
+        ...(resolvedEffect !== null && config.workspaceIdentity !== undefined
+          ? { workspaceIdentity: config.workspaceIdentity }
+          : {}),
         lockOwnerId,
         signal: linkedAbort.signal,
       });
@@ -148,17 +236,14 @@ export function createToolExecutor(
       });
 
       if (PolicyDecision.isBlocking(policy.decision)) {
-        const result = createErrorResult(
-          call,
-          PolicyDecision.reason(policy.decision, "tool runtime policy aborted"),
-        );
+        const reason = PolicyDecision.reason(policy.decision, "tool runtime policy aborted");
         publishActionBlocked({
           base: eventBase(),
           actionId,
           actor,
           resource: originalName,
           verdict: policy.decision.verdict,
-          reason: PolicyDecision.reason(policy.decision, "tool runtime policy aborted"),
+          reason,
         });
         publishToolCompleted({
           base: eventBase(),
@@ -168,13 +253,21 @@ export function createToolExecutor(
           durationMs: 0,
           isError: true,
         });
-        return result;
+        return createErrorResult(call, reason);
       }
 
       shouldEvaluatePostTool = true;
+      if (intent) {
+        if (!effects) throw new Error("effect ledger is not provisioned");
+        const receipt = await effects.appendIntent(intent);
+        if (receipt.version !== "tool-effect-append-receipt-v1" || receipt.status !== "accepted") {
+          throw receiptDenial(receipt.status, receipt.reason);
+        }
+        intentAccepted = true;
+      }
+
       const startTime = Date.now();
       if (linkedAbort.signal.aborted) throw createAbortError();
-
       publishToolStarted({
         base: eventBase(),
         actor,
@@ -182,8 +275,15 @@ export function createToolExecutor(
         toolName: originalName,
       });
 
-      const executionContext = { ...context, signal: linkedAbort.signal };
-      toolExecution = tool.execute(dispatchedCall, executionContext);
+      executionContext = { ...context, signal: linkedAbort.signal };
+      if (intentAccepted && intent) {
+        acceptedEffectContexts.set(executionContext, {
+          operation: intent.operation,
+          workspaceId: intent.scope.workspace.workspaceId,
+        });
+      }
+      actStarted = true;
+      const toolExecution = tool.execute(dispatchedCall, executionContext);
       const result = await enforceTimeoutAndAbort(
         toolExecution,
         policy.handle.timeoutMs,
@@ -192,20 +292,9 @@ export function createToolExecutor(
       );
       const durationMs = Date.now() - startTime;
       postToolOutput = result.output;
-
-      if (hasUnknownSettlement(result)) {
-        deferPostToolUntilExecutionSettles(result.output);
-        publishToolCompleted({
-          base: eventBase(),
-          actor,
-          toolCallId: call.id,
-          toolName: originalName,
-          durationMs,
-          isError: result.isError ?? false,
-        });
-        return result;
-      }
-
+      await appendSettlement(
+        hasUnknownSettlement(result) ? "unknown" : result.isError === true ? "failed" : "confirmed",
+      );
       evaluatePostToolOnce();
 
       publishToolCompleted({
@@ -218,7 +307,7 @@ export function createToolExecutor(
       });
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      let message = error instanceof Error ? error.message : String(error);
       const isTimeout = error instanceof ToolRuntimePolicyMiddleware.TimeoutError;
       const isAbort = isAbortError(error);
       postToolOutput = message;
@@ -232,13 +321,17 @@ export function createToolExecutor(
         });
       }
 
-      if (isTimeout || isAbort) {
-        deferPostToolUntilExecutionSettles(message);
-      } else {
-        evaluatePostToolOnce();
+      if (intentAccepted && !settlementAttempted) {
+        try {
+          await appendSettlement(actStarted ? "unknown" : "failed");
+        } catch (settlementError) {
+          message =
+            settlementError instanceof Error ? settlementError.message : String(settlementError);
+          postToolOutput = message;
+        }
       }
+      evaluatePostToolOnce();
 
-      const result = createErrorResult(call, message);
       if (isTimeout || isAbort) {
         publishActionBlocked({
           base: eventBase(),
@@ -257,8 +350,9 @@ export function createToolExecutor(
         durationMs: 0,
         isError: true,
       });
-      return result;
+      return createErrorResult(call, message);
     } finally {
+      if (executionContext) acceptedEffectContexts.delete(executionContext);
       linkedAbort.cleanup();
       evaluatePostToolOnce();
     }

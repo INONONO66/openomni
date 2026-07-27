@@ -13,6 +13,9 @@
  *                        protocol event/schema types; new types and added fields
  *                        pass; `--update` regenerates the snapshot (Owner-review
  *                        moment)
+ *   8. p2-manifest       exhaustive producer, mutation, effect-scope, secret-boundary,
+ *                        schema, projection, blob, native-transition, and P3 census
+ *                        with exact source-derived dispositions
  *
  * Modes:
  *   bun run script/lint-tools.ts               run all checks
@@ -20,14 +23,27 @@
  *   bun run script/lint-tools.ts --self-test   discrimination bench: every check
  *                                              must flag its known-bad fixture
  *
- * The verifier registry (check 4) and replay conformance (check 5) are P2 — they
- * co-land with #455 (fold(L), golden logs). Do not add them here without that.
+ * The P2 manifest is checked here before production cutover. The verifier registry
+ * (check 4) and replay conformance (check 5) co-land with #455 (fold(L), golden logs).
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { posix as path } from "node:path";
+import * as ts from "typescript";
+import {
+  checkP2Manifest,
+  type ManifestIssue,
+  validateP2Manifest,
+} from "./conformance/p2-manifests.js";
 
 interface Violation {
-  readonly check: "vocab-ratchet" | "tool-lint" | "naming" | "earned-check" | "schema-snapshot";
+  readonly check:
+    | "vocab-ratchet"
+    | "tool-lint"
+    | "naming"
+    | "earned-check"
+    | "schema-snapshot"
+    | "p2-manifest";
   readonly subject: string;
   readonly message: string;
 }
@@ -177,18 +193,22 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 async function collectToolSurfaces(): Promise<ToolSurface[]> {
-  const { SystemToolProvider, AgentToolProvider, createChildAgentTool } = await import(
+  const { SystemToolProvider, createChildAgentTool, createDispatchTool } = await import(
     "../packages/openomni/src/execution-runtime/tool/index.js"
+  );
+  const { createWorkspaceIdentity } = await import(
+    "../packages/openomni/src/execution-runtime/workspace-identity.js"
   );
 
   const stubDispatchRuntime = {
     submit: () => Promise.reject(new Error("lint-only stub")),
   };
   const stubChildRuntime = {} as never;
+  const workspaceIdentity = createWorkspaceIdentity("/");
 
   const tools = [
-    ...new SystemToolProvider("/").listTools(),
-    ...new AgentToolProvider({ dispatchRuntime: stubDispatchRuntime }).listTools(),
+    ...new SystemToolProvider(workspaceIdentity).listTools(),
+    createDispatchTool(stubDispatchRuntime),
     createChildAgentTool(stubChildRuntime),
   ];
 
@@ -219,27 +239,122 @@ async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
   return violations;
 }
 
-const BANNED_NOUN_PATTERN =
-  /\b(?:export\s+(?:const|type|interface|class|enum|namespace))\s+([A-Za-z]*(?:Runtime|Task|Envelope)[A-Za-z]*|[A-Za-z]+Module)\b/g;
+const BANNED_NOUN_PATTERN = /(?:Runtime|Task|Envelope)|Module$/;
 
-export function namingOffenders(filePath: string, source: string): string[] {
-  const offenders = new Set<string>();
-  for (const match of source.matchAll(BANNED_NOUN_PATTERN)) {
-    offenders.add(`${filePath}:${match[1]}`);
+function relativeModulePath(
+  filePath: string,
+  specifier: string,
+  sources: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!specifier.startsWith(".")) return undefined;
+  const unresolved = path.normalize(path.join(path.dirname(filePath), specifier));
+  const stem = unresolved.replace(/\.(?:[cm]?js|jsx)$/, "");
+  return [`${stem}.ts`, `${stem}.tsx`, path.join(stem, "index.ts")].find((candidate) =>
+    sources.has(candidate),
+  );
+}
+
+function bannedExportNames(
+  filePath: string,
+  source: string,
+  sources: ReadonlyMap<string, string>,
+  seen: ReadonlySet<string> = new Set(),
+): Set<string> {
+  const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+  const names = new Set<string>();
+  const add = (name: ts.Identifier | undefined, originPath = filePath): void => {
+    if (name && BANNED_NOUN_PATTERN.test(name.text)) names.add(`${originPath}:${name.text}`);
+  };
+  const exported = (node: ts.Node): boolean =>
+    ts.canHaveModifiers(node) &&
+    (ts
+      .getModifiers(node)
+      ?.some(
+        (modifier) =>
+          modifier.kind === ts.SyntaxKind.ExportKeyword ||
+          modifier.kind === ts.SyntaxKind.DefaultKeyword,
+      ) ??
+      false);
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement) && statement.exportClause) {
+      if (ts.isNamedExports(statement.exportClause))
+        for (const element of statement.exportClause.elements) {
+          const sourceName = element.propertyName ?? element.name;
+          if (sourceName.text !== element.name.text) {
+            add(element.name);
+            continue;
+          }
+          const specifier =
+            statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+              ? statement.moduleSpecifier.text
+              : undefined;
+          const originPath = specifier
+            ? relativeModulePath(filePath, specifier, sources)
+            : undefined;
+          const originKey = originPath ? `${originPath}:${sourceName.text}` : undefined;
+          if (originPath && originKey && !seen.has(originKey)) {
+            const originSource = sources.get(originPath);
+            if (originSource) {
+              const resolved = bannedExportNames(
+                originPath,
+                originSource,
+                sources,
+                new Set([...seen, originKey]),
+              );
+              const matching = [...resolved].filter((name) => name.endsWith(`:${sourceName.text}`));
+              if (matching.length > 0) {
+                for (const name of matching) names.add(name);
+                continue;
+              }
+            }
+          }
+          add(element.name);
+        }
+      continue;
+    }
+    if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
+      add(statement.expression);
+      continue;
+    }
+    if (!exported(statement)) continue;
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name)) add(declaration.name);
+      }
+    } else if (
+      ts.isFunctionDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isEnumDeclaration(statement) ||
+      ts.isModuleDeclaration(statement)
+    ) {
+      add(statement.name && ts.isIdentifier(statement.name) ? statement.name : undefined);
+    }
   }
-  return Array.from(offenders);
+  return names;
+}
+
+export function namingOffenders(
+  filePath: string,
+  source: string,
+  sources: ReadonlyMap<string, string> = new Map([[filePath, source]]),
+): string[] {
+  return [...bannedExportNames(filePath, source, sources)].sort();
 }
 
 async function checkNaming(baseline: Baseline): Promise<Violation[]> {
   const grandfathered = new Set(baseline.naming.grandfathered);
   const violations: Violation[] = [];
+  const sources = new Map<string, string>();
   const glob = new Bun.Glob(`${PROTOCOL_SRC}/**/*.ts`);
   for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
-    if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) {
-      continue;
+    if (!TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) {
+      sources.set(filePath, await Bun.file(filePath).text());
     }
-    const source = await Bun.file(filePath).text();
-    for (const offender of namingOffenders(filePath, source)) {
+  }
+  for (const [filePath, source] of sources) {
+    for (const offender of namingOffenders(filePath, source, sources)) {
       if (!grandfathered.has(offender)) {
         violations.push({
           check: "naming",
@@ -290,19 +405,82 @@ function parseDispatchActions(source: string): Map<string, string> {
   return actions;
 }
 
+function isExecutableConsumer(node: ts.Node): boolean {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current.parent) ||
+    ts.isAsExpression(current.parent) ||
+    ts.isSatisfiesExpression(current.parent)
+  )
+    current = current.parent;
+  if (ts.isComputedPropertyName(current.parent)) current = current.parent;
+  const parent = current.parent;
+  return (
+    (ts.isCallExpression(parent) &&
+      (parent.expression === current || parent.arguments.includes(current as ts.Expression))) ||
+    (ts.isNewExpression(parent) && parent.arguments?.includes(current as ts.Expression) === true) ||
+    ts.isBinaryExpression(parent) ||
+    ts.isReturnStatement(parent) ||
+    ts.isCaseClause(parent) ||
+    ts.isPropertyAssignment(parent) ||
+    ts.isMethodDeclaration(parent) ||
+    ts.isGetAccessorDeclaration(parent) ||
+    ts.isSetAccessorDeclaration(parent) ||
+    ts.isArrayLiteralExpression(parent) ||
+    ts.isTaggedTemplateExpression(parent)
+  );
+}
+
 export function referenceCount(
   sources: ReadonlyMap<string, string>,
   needles: readonly string[],
   definitionPath: string,
 ): number {
+  const memberNeedles = new Set(
+    needles
+      .map((needle) => needle.match(/^Actions\.([A-Za-z_$][\w$]*)$/)?.[1])
+      .filter((value): value is string => value !== undefined),
+  );
+  const literalNeedles = new Set(
+    needles
+      .map((needle) => needle.match(/^["']([\s\S]*)["']$/)?.[1])
+      .filter((value): value is string => value !== undefined),
+  );
   let count = 0;
   for (const [filePath, source] of sources) {
-    if (filePath === definitionPath) {
-      continue;
-    }
-    if (needles.some((needle) => source.includes(needle))) {
-      count += 1;
-    }
+    if (filePath === definitionPath) continue;
+    const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "Actions" &&
+        memberNeedles.has(node.name.text) &&
+        isExecutableConsumer(node)
+      )
+        found = true;
+      else if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "Dispatch" &&
+        node.expression.name.text === "Actions" &&
+        memberNeedles.has(node.name.text) &&
+        isExecutableConsumer(node)
+      )
+        found = true;
+      else if (
+        ts.isStringLiteralLike(node) &&
+        literalNeedles.has(node.text) &&
+        isExecutableConsumer(node)
+      )
+        found = true;
+      if (!found) ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    if (found) count += 1;
   }
   return count;
 }
@@ -338,11 +516,15 @@ async function checkEarned(baseline: Baseline): Promise<Violation[]> {
   const dormantTools = new Set(baseline.earned.dormantTools);
   const toolDefinitionRoot = "packages/openomni/src/execution-runtime/tool/";
   for (const surface of surfaces) {
-    const referencingFiles = Array.from(sources.entries()).filter(
-      ([filePath, source]) =>
-        !filePath.startsWith(toolDefinitionRoot) && source.includes(`"${surface.name}"`),
+    const outsideToolPipeline = new Map(
+      [...sources].filter(([filePath]) => !filePath.startsWith(toolDefinitionRoot)),
     );
-    if (referencingFiles.length === 0 && !dormantTools.has(surface.name)) {
+    const referencingFiles = referenceCount(
+      outsideToolPipeline,
+      [`"${surface.name}"`],
+      "<tool-definition>",
+    );
+    if (referencingFiles === 0 && !dormantTools.has(surface.name)) {
       violations.push({
         check: "earned-check",
         subject: surface.name,
@@ -445,11 +627,19 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
   return diffSnapshots(previous, current);
 }
 
+export function p2ManifestViolations(entries: readonly ManifestIssue[]): Violation[] {
+  return entries.map((entry) => ({
+    check: "p2-manifest",
+    subject: `${entry.family}:${entry.subject}`,
+    message: entry.message,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // self-test — every check must flag a known-bad fixture (discrimination bench)
 // ---------------------------------------------------------------------------
 
-function selfTest(): void {
+async function selfTest(): Promise<void> {
   const failures: string[] = [];
 
   const nouns = extractTierNouns(
@@ -489,6 +679,42 @@ function selfTest(): void {
   if (namingOffenders("x.ts", "export const WaitSchema = 1;").length !== 0) {
     failures.push("naming lint flagged a clean identifier");
   }
+  const exportForms = `
+    export default class DefaultRuntime {}
+    export declare interface DeclaredEnvelope {}
+    const LocalTask = 1; export { LocalTask as AliasModule };
+    export { RemoteTask as ReexportRuntime } from "./remote.js";
+  `;
+  if (namingOffenders("x.ts", exportForms).length !== 4) {
+    failures.push("naming lint missed default/declare/alias/re-export forms");
+  }
+  const reexportSources = new Map([
+    ["src/origin.ts", "export namespace RuntimeResource {}"],
+    ["src/barrel.ts", 'export { RuntimeResource } from "./origin.js";'],
+  ]);
+  if (
+    namingOffenders(
+      "src/barrel.ts",
+      reexportSources.get("src/barrel.ts") ?? "",
+      reexportSources,
+    ).join() !== "src/origin.ts:RuntimeResource"
+  ) {
+    failures.push("naming lint did not resolve a same-name relative re-export to its origin");
+  }
+  if (
+    namingOffenders(
+      "src/alias.ts",
+      'export { Resource as AliasRuntime } from "./origin.js";',
+    ).join() !== "src/alias.ts:AliasRuntime"
+  ) {
+    failures.push("naming lint did not retain a banned alias at its declaration");
+  }
+  if (
+    namingOffenders("src/external.ts", 'export { ExternalRuntime } from "external";').join() !==
+    "src/external.ts:ExternalRuntime"
+  ) {
+    failures.push("naming lint ignored an external or unresolved re-export");
+  }
 
   const sources = new Map([["a.ts", 'registry.register("worker.spawn", handler)']]);
   if (referenceCount(sources, ['"worker.spawn"'], "def.ts") !== 1) {
@@ -496,6 +722,43 @@ function selfTest(): void {
   }
   if (referenceCount(sources, ['"worker.never"'], "def.ts") !== 0) {
     failures.push("earned-check reference counter hallucinated a consumer");
+  }
+  const deadReferences = new Map([
+    ["comment.ts", '// registry.register("worker.never", handler)'],
+    ["string.ts", 'const note = "worker.never"; "worker.never";'],
+  ]);
+  if (referenceCount(deadReferences, ['"worker.never"'], "def.ts") !== 0) {
+    failures.push("earned-check accepted comments or dead strings as consumers");
+  }
+  const executableReferences = new Map([
+    [
+      "handlers.ts",
+      `const handlers = {
+        [Dispatch.Actions.ActorMessage]: handler,
+        async "actor.reply"(command) { return command; },
+        [Actions.DeviceCommand](command) { return command; }
+      };`,
+    ],
+  ]);
+  if (referenceCount(executableReferences, ["Actions.ActorMessage"], "def.ts") !== 1) {
+    failures.push("earned-check missed a Dispatch.Actions computed handler");
+  }
+  if (referenceCount(executableReferences, ['"actor.reply"'], "def.ts") !== 1) {
+    failures.push("earned-check missed a string-literal method handler");
+  }
+  if (referenceCount(executableReferences, ["Actions.DeviceCommand"], "def.ts") !== 1) {
+    failures.push("earned-check missed an Actions computed method handler");
+  }
+  const typeOnlyReferences = new Map([
+    ["types.ts", 'type Action = typeof Dispatch.Actions.ActorMessage; type Reply = "actor.reply";'],
+  ]);
+  if (
+    referenceCount(typeOnlyReferences, ["Actions.ActorMessage", '"actor.reply"'], "def.ts") !== 0
+  ) {
+    failures.push("earned-check accepted type-only references as consumers");
+  }
+  if (referenceCount(new Map(), ["Actions.Unearned"], "def.ts") !== 0) {
+    failures.push("earned-check failed the unearned-action control");
   }
 
   const snapshotViolations = diffSnapshots(
@@ -509,6 +772,39 @@ function selfTest(): void {
     failures.push("schema-snapshot flagged an additive change");
   }
 
+  const p2Issues = await checkP2Manifest();
+  if (p2Issues.length > 0) {
+    failures.push(`P2 manifest integration rejected the checked manifest: ${p2Issues[0]?.family}`);
+  }
+  const knownBadP2 = validateP2Manifest(
+    {
+      "final-schema": [],
+      "store-disposition": [],
+      "production-mutation": [],
+      "native-transition": [],
+      "blob-exception": [],
+      projection: [],
+      "durable-surface": [],
+      "effect-scope": [],
+      "secret-boundary": [],
+      "p3-disposition": [],
+    },
+    new Map(),
+  );
+  if (knownBadP2.length === 0) {
+    failures.push("P2 manifest validator accepted the known-bad empty-catalog fixture");
+  }
+  const mappedP2 = p2ManifestViolations([
+    { family: "second-writer", subject: "rogue.ts", message: "blocked" },
+  ]);
+  if (
+    mappedP2.length !== 1 ||
+    mappedP2[0]?.check !== "p2-manifest" ||
+    mappedP2[0]?.subject !== "second-writer:rogue.ts" ||
+    mappedP2[0]?.message !== "blocked"
+  ) {
+    failures.push("P2 manifest violation mapping lost check, family, subject, or message");
+  }
   if (failures.length > 0) {
     for (const failure of failures) {
       process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
@@ -528,7 +824,7 @@ async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
 
   if (args.has("--self-test")) {
-    selfTest();
+    await selfTest();
     return;
   }
 
@@ -548,11 +844,12 @@ async function main(): Promise<void> {
     ...(await checkNaming(baseline)),
     ...(await checkEarned(baseline)),
     ...(await checkSchemaSnapshot()),
+    ...p2ManifestViolations(await checkP2Manifest()),
   ];
 
   if (violations.length === 0) {
     process.stdout.write(
-      "OK: conformance lint — vocab ratchet, tool lint, naming, earned, schema snapshot\n",
+      "OK: conformance lint — vocab ratchet, tool lint, naming, earned, schema snapshot, P2 manifest\n",
     );
     return;
   }

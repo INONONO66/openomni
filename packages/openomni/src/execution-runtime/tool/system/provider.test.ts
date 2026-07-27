@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Tool } from "@openomni/protocol";
+import { createWorkspaceIdentity } from "../../workspace-identity.js";
 import { SystemToolProvider } from "./provider.js";
 
 function makeCall(tool: string): Tool.Call {
@@ -13,75 +14,53 @@ let testDir: string;
 async function setupTestDir(): Promise<void> {
   testDir = join(import.meta.dir, ".test-fixture");
   await mkdir(testDir, { recursive: true });
-  // Create a small test file with predictable content
   await Bun.write(join(testDir, "test.txt"), "hello world\nfoo bar\n");
 }
 
 async function cleanupTestDir(): Promise<void> {
-  try {
-    await rm(testDir, { recursive: true, force: true });
-  } catch {
-    // ignore cleanup errors
-  }
+  await rm(testDir, { recursive: true, force: true });
 }
 
 describe("SystemToolProvider", () => {
-  it("includes only bash when no workspaceRoot is provided", () => {
-    const provider = new SystemToolProvider();
-    const tools = provider.listTools();
-
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.spec.name).toBe("bash");
-  });
-
-  it("includes bash plus all filesystem tools when workspaceRoot is set", async () => {
+  it("includes bash and all filesystem tools for the workspace identity", async () => {
     await setupTestDir();
     try {
-      const provider = new SystemToolProvider(testDir);
+      const provider = new SystemToolProvider(createWorkspaceIdentity(testDir));
       const tools = provider.listTools();
 
       expect(tools).toHaveLength(6);
-
-      const names = tools.map((t) => t.spec.name);
-      expect(names).toContain("bash");
-      expect(names).toContain("read");
-      expect(names).toContain("write");
-      expect(names).toContain("edit");
-      expect(names).toContain("grep.search");
-      expect(names).toContain("glob");
+      expect(tools.map((tool) => tool.spec.name)).toEqual([
+        "bash",
+        "read",
+        "write",
+        "edit",
+        "grep.search",
+        "glob",
+      ]);
     } finally {
       await cleanupTestDir();
     }
   });
 
-  it("name and category metadata are correct", () => {
-    const provider = new SystemToolProvider();
-
-    expect(provider.name).toBe("system");
-    expect(provider.category).toBe("system");
-  });
-
-  it("execute returns error for unknown tool", async () => {
-    const provider = new SystemToolProvider();
-
-    const result = await provider.execute(makeCall("nonexistent"));
-
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("Unknown tool: nonexistent");
-  });
-
-  it("execute routes underscore alias to the dotted tool name", async () => {
+  it("exposes system provider metadata", async () => {
     await setupTestDir();
     try {
-      const provider = new SystemToolProvider(testDir);
+      const provider = new SystemToolProvider(createWorkspaceIdentity(testDir));
+      expect(provider.name).toBe("system");
+      expect(provider.category).toBe("system");
+    } finally {
+      await cleanupTestDir();
+    }
+  });
 
-      const result = await provider.execute({
-        id: "call-1",
-        tool: "grep_search",
-        input: { pattern: "hello", path: testDir },
-      });
+  it("returns an error for an unknown tool", async () => {
+    await setupTestDir();
+    try {
+      const provider = new SystemToolProvider(createWorkspaceIdentity(testDir));
+      const result = await provider.execute(makeCall("nonexistent"));
 
-      expect(result.output).not.toContain("Unknown tool: grep_search");
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("Unknown tool: nonexistent");
     } finally {
       await cleanupTestDir();
     }

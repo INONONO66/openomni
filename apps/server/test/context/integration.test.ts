@@ -16,17 +16,14 @@ describe("context barrel export", () => {
   });
 });
 
-describe("worker-entry wiring", () => {
+describe("worker authenticated context wiring", () => {
   const workerRunnerSrc = readFileSync(join(serverSrc, "execution/worker-runner.ts"), "utf-8");
 
-  it("worker runner imports createContextMiddleware from context/index", () => {
-    expect(workerRunnerSrc).toContain("createContextMiddleware");
-    expect(workerRunnerSrc).toContain("../context/index");
-  });
-
-  it("worker runner uses createContextMiddleware in middleware array", () => {
-    expect(workerRunnerSrc).toContain("createContextMiddleware(");
-    expect(workerRunnerSrc).toContain("...buildWorkerMiddleware(");
+  it("uses only the authenticated runtime prompt and policy middleware", () => {
+    expect(workerRunnerSrc).not.toContain("createContextMiddleware");
+    expect(workerRunnerSrc).not.toContain("SessionBridge");
+    expect(workerRunnerSrc).toContain("buildWorkerMiddleware(");
+    expect(workerRunnerSrc).toContain("systemPrompt: agent.systemPrompt");
   });
 });
 

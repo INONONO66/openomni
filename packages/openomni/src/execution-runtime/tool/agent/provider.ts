@@ -1,5 +1,9 @@
 import type { Tool } from "@openomni/protocol";
-import { createDefaultDispatchRuntime, type DispatchOwners } from "../../../dispatch/index.js";
+import {
+  createDefaultDispatchRuntime,
+  type DefaultDispatchRuntimeOptions,
+} from "../../../dispatch/index.js";
+import { assertWorkspaceIdentity, type WorkspaceIdentity } from "../../workspace-identity.js";
 import type { NativeTool, ToolCategory, ToolExecutionContext, ToolProvider } from "../types.js";
 import {
   createDispatchTool,
@@ -7,9 +11,9 @@ import {
   type DispatchToolRuntime,
 } from "./tools/dispatch.js";
 
-export type AgentToolProviderOptions = {
+export type AgentToolProviderOptions = DefaultDispatchRuntimeOptions & {
+  readonly workspaceIdentity: WorkspaceIdentity;
   readonly dispatchRuntime?: DispatchToolRuntime;
-  readonly dispatchOwners?: DispatchOwners;
   readonly dispatchToolMode?: "default" | "worker-resident-ask";
 };
 
@@ -19,13 +23,37 @@ export class AgentToolProvider implements ToolProvider {
 
   private extraTools: NativeTool[] = [];
 
-  constructor(options?: AgentToolProviderOptions) {
+  constructor(options: AgentToolProviderOptions) {
+    const {
+      dispatchRuntime: provisionedDispatchRuntime,
+      dispatchToolMode,
+      workspaceIdentity,
+      ...runtimeOptions
+    } = options;
+    assertWorkspaceIdentity(workspaceIdentity);
     const dispatchRuntime =
-      options?.dispatchRuntime ?? createDefaultDispatchRuntime({ owners: options?.dispatchOwners });
+      provisionedDispatchRuntime ?? createDefaultDispatchRuntime(runtimeOptions);
+    const workspaceBoundRuntime: DispatchToolRuntime = {
+      submit(input, submitOptions) {
+        assertWorkspaceIdentity(workspaceIdentity);
+        if (
+          submitOptions?.workspaceRoot !== undefined &&
+          submitOptions.workspaceRoot !== workspaceIdentity.canonicalRoot
+        ) {
+          return Promise.reject(
+            new Error("dispatch workspace does not match provisioned identity"),
+          );
+        }
+        return dispatchRuntime.submit(input, {
+          ...submitOptions,
+          workspaceRoot: workspaceIdentity.canonicalRoot,
+        });
+      },
+    };
     this.register(
-      options?.dispatchToolMode === "worker-resident-ask"
-        ? createWorkerResidentAskDispatchTool(dispatchRuntime)
-        : createDispatchTool(dispatchRuntime),
+      dispatchToolMode === "worker-resident-ask"
+        ? createWorkerResidentAskDispatchTool(workspaceBoundRuntime)
+        : createDispatchTool(workspaceBoundRuntime),
     );
   }
 
@@ -38,9 +66,7 @@ export class AgentToolProvider implements ToolProvider {
   }
 
   execute(call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> {
-    const tool = this.listTools().find(
-      (entry) => entry.spec.name === call.tool || entry.spec.name === call.tool.replace(/_/g, "."),
-    );
+    const tool = this.listTools().find((entry) => entry.spec.name === call.tool);
     if (!tool) {
       return Promise.resolve({
         id: crypto.randomUUID(),

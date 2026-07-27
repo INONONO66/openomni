@@ -1,4 +1,11 @@
+import { readSync } from "node:fs";
+import { Ipc } from "@openomni/protocol";
 import { createIpcServer } from "../../src/ipc";
+import {
+  isWorkerBootstrapProof,
+  workerBootstrapProof,
+  workerGenerationToken,
+} from "../../src/worker-supervision/supervisor-process.js";
 
 function readCliArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -7,18 +14,31 @@ function readCliArg(name: string): string | undefined {
 
 const workerId = readCliArg("--worker-id") ?? "fixture";
 const socketPath = readCliArg("--socket");
-const ipcAuthToken = process.env.OPENOMNI_WORKER_IPC_TOKEN;
-delete process.env.OPENOMNI_WORKER_IPC_TOKEN;
 
 if (!socketPath) {
   console.error("worker-fixture: missing --socket argument");
   process.exit(1);
 }
 
-if (!ipcAuthToken) {
-  console.error("worker-fixture: missing IPC auth token");
-  process.exit(1);
+function readGenerationToken(): string {
+  const key = new Uint8Array(32);
+  let offset = 0;
+  try {
+    while (offset < key.byteLength) {
+      const count = readSync(0, key, offset, key.byteLength - offset, null);
+      if (count === 0) break;
+      offset += count;
+    }
+    if (offset !== key.byteLength) {
+      throw new Error("invalid private generation key");
+    }
+    return workerGenerationToken(key);
+  } finally {
+    key.fill(0);
+  }
 }
+
+const ipcAuthToken = readGenerationToken();
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -31,95 +51,173 @@ function envNumber(name: string, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+type FixturePromptControl = Readonly<{
+  delayMs?: number;
+  crash?: boolean;
+  envProbe?: string;
+  inspectSpawnFrame?: boolean;
+  toolRelay?: Readonly<{ runId?: string }>;
+  traceSpoof?: Readonly<{ traceId: string; sessionId: string; runId: string }>;
+}>;
+
+function parseFixturePrompt(prompt: unknown): FixturePromptControl {
+  if (typeof prompt !== "string") return {};
+  try {
+    const envelope: unknown = JSON.parse(prompt);
+    if (!envelope || typeof envelope !== "object") return {};
+    const fixture = (envelope as { fixture?: unknown }).fixture;
+    return fixture && typeof fixture === "object" ? (fixture as FixturePromptControl) : {};
+  } catch {
+    return {};
+  }
+}
+
 const activeRuns = new Map<string, { sessionId: string; inbox: string[] }>();
-const toolCallSettlements = new Map<string, () => void>();
+let boundRuntimeId: string | undefined;
+let boundWorkerId: string | undefined;
+let boundGeneration: number | undefined;
+let bootstrapAttempts = 0;
 
 const server = createIpcServer(socketPath, (method, params, respond, _notify, connectionId) => {
   if (method === "coordinator.bootstrap") {
-    if (params?.authToken !== ipcAuthToken) {
+    bootstrapAttempts += 1;
+    if (
+      typeof params?.authToken !== "string" ||
+      typeof params.workerId !== "string" ||
+      params.workerId !== workerId ||
+      typeof params.generation !== "number"
+    ) {
       respond({ ok: false, error: "unauthorized" });
       return;
     }
-    const delayMs = envNumber("OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS", 0);
+    const separator = params.authToken.indexOf(".");
+    const challenge = params.authToken.slice(0, separator);
+    const requestProof = params.authToken.slice(separator + 1);
+    const requestContext = {
+      runtimeId: typeof params.runtimeId === "string" ? params.runtimeId : undefined,
+      workerId: params.workerId,
+      generation: params.generation,
+    };
+    if (
+      separator < 1 ||
+      !isWorkerBootstrapProof(
+        requestProof,
+        workerBootstrapProof(ipcAuthToken, challenge, "request", requestContext),
+      )
+    ) {
+      respond({ ok: false, error: "unauthorized" });
+      return;
+    }
+    const rejectedAttempts = envNumber("OPENOMNI_WORKER_BOOTSTRAP_REJECTS", 0);
+    if (bootstrapAttempts <= rejectedAttempts) {
+      respond({ ok: false, error: "bootstrap retry fixture" });
+      return;
+    }
+    boundRuntimeId = typeof params.runtimeId === "string" ? params.runtimeId : undefined;
+    boundWorkerId = params.workerId;
+    boundGeneration = params.generation;
+    const proofContext = {
+      runtimeId: boundRuntimeId,
+      workerId: boundWorkerId,
+      generation: boundGeneration,
+    };
+    const responseDelayMs = envNumber("OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS", 0);
+    const readyDelayMs =
+      bootstrapAttempts === 1
+        ? envNumber("OPENOMNI_WORKER_FIRST_READY_DELAY_MS", responseDelayMs)
+        : responseDelayMs;
+    setTimeout(() => {
+      respond({ ok: true });
+    }, responseDelayMs);
     setTimeout(() => {
       server.useConnection(connectionId);
-      server.notify("worker.bootstrap_ready", { workerId, authToken: ipcAuthToken });
-      respond({ ok: true });
-    }, delayMs);
+      server.notify("worker.bootstrap_ready", {
+        authToken: workerBootstrapProof(ipcAuthToken, challenge, "ready", proofContext),
+        runtimeId: boundRuntimeId,
+        workerId: boundWorkerId,
+        generation: boundGeneration,
+      });
+    }, readyDelayMs);
     return;
   }
 
   if (method === "coordinator.spawn_run") {
     if (params?.authToken !== ipcAuthToken) {
-      respond({
-        runId: typeof params?.runId === "string" ? params.runId : "unknown",
-        sessionId: typeof params?.sessionId === "string" ? params.sessionId : "unknown",
-        status: "failed",
-        error: "unauthorized coordinator request",
-      });
+      respond({ runId: "unknown", sessionId: "unknown", status: "failed", error: "unauthorized" });
       return;
     }
     const runId = typeof params?.runId === "string" ? params.runId : "unknown";
     const sessionId = typeof params?.sessionId === "string" ? params.sessionId : "unknown";
-    const delayMs = asNumber(params?.delayMs, 0);
-    const envName = typeof params?.envName === "string" ? params.envName : undefined;
-    const relayTool = params?.relayTool === true;
-    const relayRunId = typeof params?.relayRunId === "string" ? params.relayRunId : runId;
+    const runtime = params?.runtime;
+    if (runtime !== undefined) {
+      const parsed = Ipc.Methods["coordinator.spawn_run"].params.safeParse({
+        authToken: ipcAuthToken,
+        runId,
+        sessionId,
+        prompt: typeof params?.prompt === "string" ? params.prompt : "",
+        runtime,
+      });
+      if (
+        !parsed.success ||
+        parsed.data.runtime.runtimeId !== boundRuntimeId ||
+        parsed.data.runtime.workerId !== boundWorkerId ||
+        parsed.data.runtime.generation !== boundGeneration
+      ) {
+        respond({ runId, sessionId, status: "failed", error: "invalid runtime definition" });
+        return;
+      }
+    }
+    const fixture = parseFixturePrompt(params?.prompt);
+    const delayMs = asNumber(fixture.delayMs, 0);
+    const relayTool = fixture.toolRelay !== undefined;
+    const relayRunId = fixture.toolRelay?.runId ?? runId;
+    const traceSpoof = fixture.traceSpoof ?? {
+      traceId: "spoofed-trace",
+      sessionId: "spoofed-session",
+      runId: "spoofed-run",
+    };
     const toolCallId = `fixture-tool-call:${runId}`;
     activeRuns.set(runId, { sessionId, inbox: [] });
+    if (fixture.crash === true) {
+      process.exit(1);
+    }
 
     setTimeout(() => {
       void (async () => {
-        let toolRelayResult: unknown;
         if (relayTool) {
-          const toolCallSettled = new Promise<void>((resolve) => {
-            toolCallSettlements.set(toolCallId, resolve);
-          });
-          toolRelayResult = await server.call("worker.tool_call", {
+          await server.call("worker.tool_call", {
+            authToken: ipcAuthToken,
+            workerId: boundWorkerId,
+            generation: boundGeneration,
             runId: relayRunId,
-            sessionId: "spoofed-session",
+            sessionId,
             callId: toolCallId,
             tool: "fixture.tool",
             input: {
-              traceId: "spoofed-trace",
-              sessionId: "spoofed-session",
-              runId: "spoofed-run",
+              traceId: traceSpoof.traceId,
+              sessionId: traceSpoof.sessionId,
+              runId: traceSpoof.runId,
             },
           });
-          await toolCallSettled;
         }
         activeRuns.delete(runId);
         respond({
-          accepted: true,
-          workerId,
           runId,
           sessionId,
-          delayMs,
-          envValue: envName ? process.env[envName] : undefined,
-          toolRelayResult,
+          status: "succeeded",
+          output: "fixture complete",
+          finishReason: "stop",
         });
       })().catch((error: unknown) => {
         activeRuns.delete(runId);
-        toolCallSettlements.delete(toolCallId);
         respond({
-          accepted: false,
-          workerId,
           runId,
           sessionId,
-          error: error instanceof Error ? error.message : String(error),
+          status: "failed",
+          error: error instanceof Error ? error.message : "fixture failed",
         });
       });
     }, delayMs);
-    return;
-  }
-
-  if (method === "worker.tool_call_settled") {
-    const callId = typeof params?.callId === "string" ? params.callId : undefined;
-    respond({ acknowledged: true });
-    if (callId) {
-      toolCallSettlements.get(callId)?.();
-      toolCallSettlements.delete(callId);
-    }
     return;
   }
 

@@ -43,14 +43,14 @@ export class TelegramPoller {
             this.callbacks.onMessage(update.message);
           }
         }
-      } catch (err) {
+      } catch {
         if (!this.running) break;
         Bus.publish(Operational.Warn, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
           msg: "telegram poll error",
-          context: { err: String(err) },
+          context: { pollFailed: true },
         });
         await sleep(5000);
       }

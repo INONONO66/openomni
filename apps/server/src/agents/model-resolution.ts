@@ -1,7 +1,7 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import { Auth, Provider } from "@openomni/llm";
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/session";
+import { Provider, type ModelCatalogService } from "@openomni/llm";
+import type { SecretHandle, SecretRegistry } from "@openomni/llm/credential-runtime";
+import { Execution } from "@openomni/protocol";
 
 const DATE_SUFFIX_RE = /-\d{8}$/;
 
@@ -14,6 +14,20 @@ const statusOrder: Record<string, number> = {
 
 type RuntimeModel = ChatAgentConfig["model"];
 type CatalogModel = Provider.Model;
+
+export interface RuntimeModelResolutionOptions {
+  readonly model: RuntimeModel;
+  readonly modelCatalog: ModelCatalogService;
+  readonly secretRegistry: SecretRegistry;
+  readonly credentialHandle: SecretHandle;
+  readonly modelEnvironment: Execution.LLMEnvironmentV1;
+}
+
+export interface ResolvedRuntimeModel {
+  readonly model: RuntimeModel;
+  readonly environment: Execution.LLMEnvironmentV1;
+  readonly credentialHandle: SecretHandle;
+}
 
 function isConcreteModelID(modelID: string): boolean {
   return DATE_SUFFIX_RE.test(modelID);
@@ -92,84 +106,57 @@ function resolveCatalogModel(
   return matchConcreteSiblings(preferredID, models)[0];
 }
 
-async function listProviderModels(providerID: string): Promise<CatalogModel[]> {
-  const auth = await Auth.get(providerID);
-  const authType = auth?.type === "proxy" ? "proxy" : "api";
-  return Provider.listModels(providerID, authType);
+function sameCredentialReference(
+  left: Execution.CredentialSourceRefV1,
+  right: Execution.CredentialSourceRefV1,
+): boolean {
+  return (
+    left.version === right.version &&
+    left.providerId === right.providerId &&
+    left.authType === right.authType &&
+    left.credentialId === right.credentialId &&
+    left.rotationId === right.rotationId &&
+    left.account === right.account &&
+    left.sourceKind === right.sourceKind &&
+    left.sourcePathDigest === right.sourcePathDigest &&
+    left.endpointRef === right.endpointRef &&
+    left.credentialDigest === right.credentialDigest
+  );
+}
+
+function assertCredentialBinding(options: RuntimeModelResolutionOptions): void {
+  const credential = options.secretRegistry.describe(options.credentialHandle);
+  const environmentCredential = options.modelEnvironment.credential;
+  if (
+    credential.providerId !== options.model.provider ||
+    !sameCredentialReference(credential, environmentCredential)
+  ) {
+    throw new Error(`Credential binding does not match model provider ${options.model.provider}`);
+  }
 }
 
 export async function resolveRuntimeModel(
-  model: RuntimeModel,
-  defaultModel?: RuntimeModel,
-): Promise<RuntimeModel> {
-  let catalogError: string | undefined;
-  try {
-    const resolved = resolveCatalogModel(model.id, await listProviderModels(model.provider));
-    if (resolved) {
-      return { provider: model.provider, id: resolved.id };
-    }
-  } catch (error) {
-    catalogError = error instanceof Error ? error.message : String(error);
+  options: RuntimeModelResolutionOptions,
+): Promise<ResolvedRuntimeModel> {
+  const environment = Execution.LLMEnvironmentV1.parse(options.modelEnvironment);
+  assertCredentialBinding({ ...options, modelEnvironment: environment });
+
+  const loadedCatalog = await options.modelCatalog.load();
+  if (loadedCatalog.environment.environmentDigest !== environment.environmentDigest) {
+    throw new Error("Model catalog environment does not match the injected LLM environment");
   }
 
-  const reason = catalogError
-    ? `catalog lookup failed (${catalogError})`
-    : "model not in provider catalog";
-
-  if (defaultModel && defaultModel.provider === model.provider) {
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "model resolution failed, falling back to default",
-      context: {
-        reason,
-        provider: model.provider,
-        id: model.id,
-        fallback: defaultModel.id,
-      },
-    });
-    return defaultModel;
+  const models = await Provider.listModels(options.modelCatalog, options.model.provider);
+  const resolved = resolveCatalogModel(options.model.id, models);
+  if (!resolved) {
+    throw new Error(
+      `Model not found in provider catalog: ${options.model.provider}/${options.model.id}`,
+    );
   }
 
-  Bus.publish(Operational.Warn, {
-    traceId: crypto.randomUUID(),
-    time: Date.now(),
-    component: "server",
-    msg: "model resolution failed, passing through unresolved",
-    context: {
-      reason,
-      provider: model.provider,
-      id: model.id,
-    },
+  return Object.freeze({
+    model: Object.freeze({ provider: options.model.provider, id: resolved.id }),
+    environment,
+    credentialHandle: options.credentialHandle,
   });
-  return model;
-}
-
-export async function resolveDefaultProviderModel(): Promise<CatalogModel | undefined> {
-  try {
-    const credentials = await Auth.all();
-    const entries = Object.entries(credentials);
-    if (entries.length === 0) return undefined;
-
-    const firstEntry = entries[0];
-    if (!firstEntry) return undefined;
-
-    const [providerID, auth] = firstEntry;
-    const authType = auth.type === "proxy" ? "proxy" : "api";
-    const models = await Provider.listModels(providerID, authType);
-    const preferred = sortModels(models)[0];
-    if (!preferred) return undefined;
-    return resolveCatalogModel(preferred.id, models) ?? preferred;
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    Bus.publish(Operational.Warn, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "failed to resolve model",
-      context: { msg },
-    });
-    return undefined;
-  }
 }

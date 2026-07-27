@@ -1,19 +1,88 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import type { ModelCatalogService } from "@openomni/llm";
+import {
+  BoundarySanitizer,
+  CredentialSource,
+  SecretRegistry,
+} from "@openomni/llm/credential-runtime";
 import { IngressEngine } from "@openomni/openomni";
-import { Operational, type Ingress } from "@openomni/protocol";
+import { type Execution, Operational, type Ingress } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
 import { DiscordNormalizer } from "../../src/channel/discord/normalizer";
-import { createMessageHandler } from "../../src/handler/conversation";
+import { type ConversationHandlerDeps, createMessageHandler } from "../../src/handler/conversation";
 
 const provider = { listTools: () => [] };
-const deps = {
-  systemProvider: provider,
-  agentProvider: provider,
-  mcpProvider: provider,
-  customProvider: provider,
-  defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-  workspaceRoot: "/workspace",
-};
+const digest = "a".repeat(64);
+let deps: ConversationHandlerDeps;
+let secretRegistry: SecretRegistry;
+
+function createDepsFixture(): ConversationHandlerDeps {
+  secretRegistry = SecretRegistry.create(BoundarySanitizer.create());
+  const { handle: credentialHandle, ref: credential } = secretRegistry.register(
+    CredentialSource.parseOwner({
+      providerId: "anthropic",
+      credentialId: "conversation-routing",
+      rotationId: "rotation-1",
+      sourceKind: "injected_runtime",
+      auth: { type: "api", key: "conversation-routing-test-key" },
+    }),
+  );
+  const modelEnvironment: Execution.LLMEnvironmentV1 = {
+    version: "llm-environment-v1",
+    catalogSchemaVersion: 1,
+    catalogSource: "bundled",
+    catalogSourceVersion: "conversation-routing-v1",
+    catalogDigest: digest,
+    modelDigest: digest,
+    endpoint: {
+      version: "llm-endpoint-ref-v1",
+      kind: "default",
+      valueRef: "anthropic-default",
+      endpointDigest: digest,
+    },
+    credential,
+    sdkPackage: "@ai-sdk/anthropic",
+    adapterVersion: "conversation-routing-v1",
+    environmentDigest: digest,
+  };
+  const catalog = {
+    anthropic: {
+      id: "anthropic",
+      name: "Anthropic",
+      env: ["ANTHROPIC_API_KEY"],
+      npm: "@ai-sdk/anthropic" as const,
+      models: {
+        "claude-3-haiku-20240307": {
+          id: "claude-3-haiku-20240307",
+          name: "Claude 3 Haiku",
+          release_date: "2024-03-07",
+        },
+      },
+    },
+  };
+  const modelCatalog: ModelCatalogService = {
+    async load() {
+      return { catalog, environment: modelEnvironment, fallbackDiagnostics: [] };
+    },
+    async get() {
+      return catalog;
+    },
+  };
+
+  return {
+    systemProvider: provider,
+    agentProvider: provider,
+    mcpProvider: provider,
+    customProvider: provider,
+    defaultModel: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    workspaceRoot: "/workspace",
+    ownerTaskQueries: { listOpenTasks: async () => [] },
+    modelCatalog,
+    secretRegistry,
+    credentialHandle,
+    modelEnvironment,
+  };
+}
 const normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
 const originalIngest = IngressEngine.ingest;
 
@@ -42,9 +111,11 @@ function normalizeDiscordMessage(replyToId?: string) {
 beforeEach(() => {
   Bus.reset();
   IngressEngine.ingest = originalIngest;
+  deps = createDepsFixture();
 });
 
 afterEach(() => {
+  secretRegistry.dispose();
   IngressEngine.ingest = originalIngest;
   Bus.reset();
 });

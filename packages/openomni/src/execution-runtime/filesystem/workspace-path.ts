@@ -1,59 +1,39 @@
-import { dirname, resolve } from "node:path";
-import { realpathSync } from "node:fs";
+import {
+  createWorkspaceIdentity,
+  resolveWorkspaceTarget,
+  revalidateWorkspaceTarget,
+  type WorkspaceIdentity,
+} from "../workspace-identity.js";
 
-export function resolveContainedPath(workspaceRoot: string, inputPath: string): string {
-  const root = resolve(workspaceRoot);
-  const resolved = resolve(root, inputPath);
-  assertInsideRoot(resolved, root);
-
-  try {
-    assertRealpathContained(resolved, root);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    assertRealpathContained(dirname(resolved), root);
-  }
-
-  return resolved;
+function identityOf(workspace: WorkspaceIdentity | string): WorkspaceIdentity {
+  return typeof workspace === "string" ? createWorkspaceIdentity(workspace) : workspace;
+}
+/** Resolve and immediately revalidate a canonical workspace target before native access. */
+export function resolveContainedPath(
+  workspace: WorkspaceIdentity | string,
+  inputPath: string,
+): string {
+  const identity = identityOf(workspace);
+  const target = resolveWorkspaceTarget(identity, inputPath);
+  return revalidateWorkspaceTarget(identity, inputPath, target).canonicalTarget;
 }
 
-export function resolveContainedPathForCreate(workspaceRoot: string, inputPath: string): string {
-  const root = resolve(workspaceRoot);
-  const resolved = resolve(root, inputPath);
-  assertInsideRoot(resolved, root);
-
-  try {
-    assertRealpathContained(resolved, root);
-    return resolved;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-  }
-
-  let parent = dirname(resolved);
-  while (parent !== root) {
-    try {
-      assertRealpathContained(parent, root);
-      return resolved;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-      const nextParent = dirname(parent);
-      if (nextParent === parent) return resolved;
-      parent = nextParent;
-    }
-  }
-
-  return resolved;
+/** Resolve and immediately revalidate a create-or-overwrite target before native access. */
+export function resolveContainedPathForCreate(
+  workspace: WorkspaceIdentity | string,
+  inputPath: string,
+): string {
+  const identity = identityOf(workspace);
+  const target = resolveWorkspaceTarget(identity, inputPath);
+  return revalidateWorkspaceTarget(identity, inputPath, target).canonicalTarget;
 }
 
-function assertInsideRoot(resolved: string, root: string): void {
-  if (resolved !== root && !resolved.startsWith(`${root}/`)) {
-    throw new Error(`Path must stay within workspace root: ${root}`);
-  }
-}
-
-function assertRealpathContained(target: string, root: string): void {
-  const realTarget = realpathSync(target);
-  const realRoot = realpathSync(root);
-  if (realTarget !== realRoot && !realTarget.startsWith(`${realRoot}/`)) {
-    throw new Error(`Path escapes workspace root via symlink: ${root}`);
-  }
+/** Resolve and revalidate an existing directory for process execution. */
+export function resolveContainedDirectory(
+  workspace: WorkspaceIdentity | string,
+  inputPath: string,
+): string {
+  const identity = identityOf(workspace);
+  const target = resolveWorkspaceTarget(identity, inputPath, "existing");
+  return revalidateWorkspaceTarget(identity, inputPath, target, "existing").canonicalTarget;
 }

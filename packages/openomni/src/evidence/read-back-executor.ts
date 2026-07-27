@@ -1,5 +1,9 @@
 import { WorkItem } from "@openomni/protocol";
-import { WorkItemStore } from "@openomni/session";
+import type {
+  WorkerLedgerBinding,
+  WorkerLedgerService,
+} from "../dispatch/handlers/worker-work-item.js";
+import { commitWorkerLedgerTransition, digest } from "../dispatch/handlers/worker-work-item.js";
 import { digestObservedBody, isCompleteSuccess, loadReadBackUrl } from "./read-back-http.js";
 import {
   ReadBackRequest,
@@ -28,12 +32,21 @@ export namespace ReadBackExecutor {
   }
 
   export async function record(
-    workItemHash: string,
+    ledger: WorkerLedgerService,
+    binding: WorkerLedgerBinding,
     input: ReadBackRequestInput,
     options: Options = {},
-  ): Promise<WorkItem.Info | undefined> {
+  ): Promise<string> {
     const check = await execute(input, options);
-    return WorkItemStore.addReadBackEvidence(workItemHash, check);
+    const evidenceRef = digest(check);
+    await commitWorkerLedgerTransition(ledger, binding, {
+      transitionId: "WI-07",
+      command: "kernel.work.record_readback.v1",
+      requestKey: `${binding.runId}:readback:${evidenceRef}`,
+      evidenceRef,
+      facts: check,
+    });
+    return evidenceRef;
   }
 }
 

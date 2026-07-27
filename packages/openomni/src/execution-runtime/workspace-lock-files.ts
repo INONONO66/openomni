@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sleepAbortable, throwIfAborted } from "./workspace-lock-abort.js";
+import type { WorkspaceIdentity } from "./workspace-identity.js";
 import {
   LOCK_ROOT,
   OWNER_FILE,
@@ -9,15 +10,15 @@ import {
   type LockOwnerMeta,
 } from "./workspace-lock-types.js";
 
-export function lockKey(workspace: string): string {
-  return createHash("sha256").update(workspace).digest("hex");
+export function lockKey(workspace: WorkspaceIdentity): string {
+  return createHash("sha256").update(workspace.workspaceId).digest("hex");
 }
 
-function lockPath(workspace: string): string {
+function lockPath(workspace: WorkspaceIdentity): string {
   return join(LOCK_ROOT, lockKey(workspace));
 }
 
-function ownerFilePath(workspace: string): string {
+function ownerFilePath(workspace: WorkspaceIdentity): string {
   return join(lockPath(workspace), OWNER_FILE);
 }
 
@@ -50,7 +51,7 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function readOwnerMeta(workspace: string): LockOwnerMeta | undefined {
+function readOwnerMeta(workspace: WorkspaceIdentity): LockOwnerMeta | undefined {
   try {
     const parsed: unknown = JSON.parse(readFileSync(ownerFilePath(workspace), "utf-8"));
     return isLockOwnerMeta(parsed) ? parsed : undefined;
@@ -59,11 +60,11 @@ function readOwnerMeta(workspace: string): LockOwnerMeta | undefined {
   }
 }
 
-function removeLockDir(workspace: string): void {
+function removeLockDir(workspace: WorkspaceIdentity): void {
   rmSync(lockPath(workspace), { recursive: true, force: true });
 }
 
-function shouldReapStaleLock(workspace: string): boolean {
+function shouldReapStaleLock(workspace: WorkspaceIdentity): boolean {
   const meta = readOwnerMeta(workspace);
   if (meta) {
     return !isProcessAlive(meta.pid);
@@ -78,7 +79,7 @@ function shouldReapStaleLock(workspace: string): boolean {
 }
 
 export async function acquireExternal(
-  workspace: string,
+  workspace: WorkspaceIdentity,
   runId: string,
   timeoutMs: number,
   signal?: AbortSignal,
@@ -115,14 +116,16 @@ export async function acquireExternal(
       }
 
       if (Date.now() - start >= timeoutMs) {
-        throw new Error(`workspace lock timeout after ${timeoutMs}ms for "${workspace}"`);
+        throw new Error(
+          `workspace lock timeout after ${timeoutMs}ms for "${workspace.workspaceId}"`,
+        );
       }
       await sleepAbortable(25, signal);
     }
   }
 }
 
-export function releaseExternal(workspace: string, runId: string): void {
+export function releaseExternal(workspace: WorkspaceIdentity, runId: string): void {
   const meta = readOwnerMeta(workspace);
   if (!meta) return;
   if (meta.pid !== process.pid || meta.runId !== runId) return;

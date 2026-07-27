@@ -5,8 +5,10 @@ import { Bus } from "@openomni/session";
 import type {
   NativeTool,
   ToolCategory,
+  ToolEffectLedgerPortV1,
   ToolExecutionContext,
   ToolProvider,
+  WorkspaceIdentity,
 } from "@openomni/openomni";
 import {
   publishLifecycleApproved,
@@ -20,10 +22,15 @@ import { refreshMcpTools } from "./provider-tool-listing";
 import type {
   McpClientLike,
   McpLifecycleAuditContext,
-  McpToolProviderOptions,
+  McpToolProviderOptions as McpClientOptions,
 } from "./provider-types";
 
-export type { McpLifecycleAuditContext, McpToolProviderOptions } from "./provider-types";
+export type { McpLifecycleAuditContext } from "./provider-types";
+
+export interface McpToolProviderOptions extends McpClientOptions {
+  readonly effects: ToolEffectLedgerPortV1;
+  readonly workspaceIdentity: WorkspaceIdentity;
+}
 
 export class McpToolProvider implements ToolProvider {
   readonly name = "mcp";
@@ -33,7 +40,7 @@ export class McpToolProvider implements ToolProvider {
   private connected = new Set<string>();
   private cachedTools: NativeTool[] | null = null;
 
-  constructor(private readonly options: McpToolProviderOptions = {}) {}
+  constructor(private readonly options: McpToolProviderOptions) {}
 
   async addServer(config: McpServerConfig, context?: McpLifecycleAuditContext): Promise<void> {
     const audit = resolveLifecycleAudit(context);
@@ -65,14 +72,14 @@ export class McpToolProvider implements ToolProvider {
           reason: "MCP server connected",
         });
       }
-    } catch (err) {
+    } catch {
       if (audit) {
         publishLifecycleBlocked({
           audit,
           actionId,
           action: "mcp.server.connect",
           resource: config.name,
-          reason: err instanceof Error ? err.message : String(err),
+          reason: "MCP server connection failed",
         });
       }
       Bus.publish(Operational.Warn, {
@@ -82,7 +89,7 @@ export class McpToolProvider implements ToolProvider {
         msg: "failed to connect to mcp server",
         context: {
           name: config.name,
-          err: err instanceof Error ? err.message : String(err),
+          connectionFailed: true,
         },
       });
     }
@@ -169,6 +176,8 @@ export class McpToolProvider implements ToolProvider {
       tools: this.listTools(),
       isServerConnected: (serverName) =>
         this.clients.has(serverName) && this.connected.has(serverName),
+      effects: this.options.effects,
+      workspaceIdentity: this.options.workspaceIdentity,
     });
   }
 

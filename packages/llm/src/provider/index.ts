@@ -1,21 +1,17 @@
+import { createHash } from "node:crypto";
+import { type Execution, Model as ProtocolModel } from "@openomni/protocol";
 import { z } from "zod";
-import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
-import { ModelsDev } from "../model";
-import { Auth } from "../auth/storage";
+import type { ModelsDev, ModelCatalogProviderInput, ModelCatalogService } from "../model";
+import { canonicalize } from "../model/catalog-cache";
 import { fromModelsDevProvider } from "./sdk";
-import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
   export const Model = z.object({
     id: z.string(),
     providerID: z.string(),
     api: z
-      .object({
-        id: z.string().optional(),
-        url: z.string().optional(),
-        npm: z.string(),
-      })
+      .object({ id: z.string().optional(), url: z.string().optional(), npm: z.string() })
       .optional(),
     name: z.string(),
     family: z.string().optional(),
@@ -46,9 +42,7 @@ export namespace Provider {
         interleaved: z
           .union([
             z.boolean(),
-            z.object({
-              field: z.enum(["reasoning_content", "reasoning_details"]),
-            }),
+            z.object({ field: z.enum(["reasoning_content", "reasoning_details"]) }),
           ])
           .optional(),
         vision: z.boolean().optional(),
@@ -60,12 +54,7 @@ export namespace Provider {
       .object({
         input: z.number().optional(),
         output: z.number().optional(),
-        cache: z
-          .object({
-            read: z.number().optional(),
-            write: z.number().optional(),
-          })
-          .optional(),
+        cache: z.object({ read: z.number().optional(), write: z.number().optional() }).optional(),
       })
       .optional(),
     limit: z
@@ -83,6 +72,20 @@ export namespace Provider {
   });
   export type Model = z.infer<typeof Model>;
 
+  /** Canonical identity digest for the complete validated runtime model. */
+  export function modelDigest(model: Model): string {
+    return createHash("sha256")
+      .update(canonicalize(Model.parse(model)))
+      .digest("hex");
+  }
+
+  /** Canonical identity digest for the complete redacted LLM environment base. */
+  export function environmentDigest(
+    environment: Omit<Execution.LLMEnvironmentV1, "environmentDigest">,
+  ): string {
+    return createHash("sha256").update(canonicalize(environment)).digest("hex");
+  }
+
   export const Info = z.object({
     id: z.string(),
     name: z.string(),
@@ -95,7 +98,13 @@ export namespace Provider {
   });
   export type Info = z.infer<typeof Info>;
 
-  export function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+  export function fromModelsDevModel(
+    provider: ModelCatalogProviderInput,
+    model: ModelsDev.Model,
+  ): Model {
+    const npm = model.provider?.npm ?? provider.npm;
+    if (!npm)
+      throw new ProviderError({ message: "Model has no SDK package", provider: provider.id });
     return {
       id: model.id,
       providerID: provider.id,
@@ -103,8 +112,8 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: provider.api,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai",
+        ...("api" in provider && typeof provider.api === "string" ? { url: provider.api } : {}),
+        npm,
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -113,10 +122,7 @@ export namespace Provider {
         ? {
             input: model.cost.input,
             output: model.cost.output,
-            cache: {
-              read: model.cost.cache_read ?? 0,
-              write: model.cost.cache_write ?? 0,
-            },
+            cache: { read: model.cost.cache_read ?? 0, write: model.cost.cache_write ?? 0 },
           }
         : undefined,
       limit: {
@@ -151,42 +157,27 @@ export namespace Provider {
   }
 
   export async function listModels(
+    catalog: ModelCatalogService,
     providerID: string,
-    authType?: "proxy" | "api",
   ): Promise<Model[]> {
-    const data = await ModelsDev.get();
-    const provider = data[providerID];
+    const provider = (await catalog.get())[providerID];
     if (!provider) {
-      throw new ProviderError({
-        message: `Unknown provider: ${providerID}`,
-        provider: providerID,
-      });
+      throw new ProviderError({ message: `Unknown provider: ${providerID}`, provider: providerID });
     }
-    const info = fromModelsDevProvider(provider);
-    if (authType === "proxy") {
-      const auth = await Auth.get(providerID);
-      if (auth?.type === "proxy") {
-        const proxyModelIds = await fetchProxyModels(auth.baseURL, auth.apiKey);
-        if (proxyModelIds.length > 0) {
-          return enrichWithCatalog(proxyModelIds, info.models, providerID);
-        }
-      }
-    }
-
-    return Object.values(info.models);
+    return Object.values(fromModelsDevProvider(provider).models);
   }
 
-  export async function listProviders(): Promise<string[]> {
-    const data = await ModelsDev.get();
-    return Object.keys(data);
+  export async function listProviders(catalog: ModelCatalogService): Promise<string[]> {
+    return Object.keys(await catalog.get());
   }
 
-  export async function getProviderInfo(providerID: string): Promise<Info | undefined> {
-    const data = await ModelsDev.get();
-    const provider = data[providerID];
-    if (!provider) return undefined;
-    return fromModelsDevProvider(provider);
+  export async function getProviderInfo(
+    catalog: ModelCatalogService,
+    providerID: string,
+  ): Promise<Info | undefined> {
+    const provider = (await catalog.get())[providerID];
+    return provider ? fromModelsDevProvider(provider) : undefined;
   }
 }
 
-export { ModelsDev } from "../model";
+export { ModelsDev, type ModelCatalogService } from "../model";

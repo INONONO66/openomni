@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createWorkspaceIdentity } from "../../src/execution-runtime/workspace-identity.js";
 import { ToolRuntimePolicyMiddleware } from "../../src/execution-runtime/tool/middleware/tool-runtime-policy";
 import { WorkspaceLock } from "../../src/execution-runtime/workspace-lock";
 
@@ -31,19 +35,20 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
   });
 
   test("evaluates post-tool releasing an acquired lock", async () => {
-    const workspaceRoot = `/tmp/openomni-runtime-policy-${crypto.randomUUID()}`;
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "openomni-runtime-policy-"));
+    const workspaceIdentity = createWorkspaceIdentity(workspaceRoot);
     const result = await ToolRuntimePolicyMiddleware.evaluatePreTool({
       toolName: "write_file",
       toolCallId: "call-3",
       input: {},
       riskTier: 1,
-      workspaceRoot,
+      workspaceIdentity,
       lockOwnerId: "run-3",
     });
 
     expect(result.handle.lockAcquired).toBe(true);
     try {
-      const blocked = await WorkspaceLock.acquire(workspaceRoot, "contender", 10).catch(
+      const blocked = await WorkspaceLock.acquire(workspaceIdentity, "contender", 10).catch(
         (error) => error,
       );
       expect(blocked).toBeInstanceOf(Error);
@@ -56,8 +61,8 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
 
       expect(verdict.verdict).toBe("allow");
       expect(result.handle.lockAcquired).toBe(false);
-      await WorkspaceLock.acquire(workspaceRoot, "probe", 50);
-      WorkspaceLock.release(workspaceRoot, "probe");
+      await WorkspaceLock.acquire(workspaceIdentity, "probe", 50);
+      WorkspaceLock.release(workspaceIdentity, "probe");
     } finally {
       if (result.handle.lockAcquired) {
         ToolRuntimePolicyMiddleware.evaluatePostTool({
@@ -66,8 +71,9 @@ describe("ToolRuntimePolicyMiddleware integration", () => {
           handle: result.handle,
         });
       }
-      WorkspaceLock.release(workspaceRoot, "probe");
-      WorkspaceLock.release(workspaceRoot, "contender");
+      WorkspaceLock.release(workspaceIdentity, "probe");
+      WorkspaceLock.release(workspaceIdentity, "contender");
+      rmSync(workspaceRoot, { recursive: true, force: true });
     }
   });
 

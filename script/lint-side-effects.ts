@@ -1,9 +1,10 @@
 type SideEffectRuleId =
-  | "tool-ledger-before-execute"
-  | "mcp-ledger-before-execute"
+  | "tool-effect-intent-before-execute"
+  | "tool-observation-before-execute"
+  | "mcp-observation-before-execute"
   | "processor-projected-sink"
-  | "ingress-ledger-before-session-write"
-  | "session-mutation-ledger-before-storage-write";
+  | "ingress-ledger-commit"
+  | "ledger-projection-in-transaction";
 
 interface SideEffectViolation {
   readonly ruleId: SideEffectRuleId;
@@ -34,23 +35,34 @@ const hotFiles = [
   "apps/server/src/tool/mcp/provider-execution.ts",
   "packages/llm/src/processor/index.ts",
   "packages/openomni/src/ingress/event-projector.ts",
-  "packages/openomni/src/ingress/session-bridge.ts",
-  "packages/session/src/session/messages.ts",
+  "packages/session/src/ledger/writer.ts",
 ];
 
 const rules: readonly SideEffectRule[] = [
   {
-    ruleId: "tool-ledger-before-execute",
+    ruleId: "tool-effect-intent-before-execute",
     filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
-    sideEffect:
-      /tool\.execute\(dispatchedCall(?:, (?:\{ signal: linkedAbort\.signal \}|executionContext))?\)/g,
+    sideEffect: /tool\.execute\(dispatchedCall, executionContext\)/g,
+    scopeStart:
+      /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
+    requiredBefore: [
+      "const receipt = await effects.appendIntent(intent);",
+      "intentAccepted = true;",
+    ],
+    requiredInScope: ["await appendSettlement("],
+    message: "effectful tool execution must commit intent before act and settle afterward",
+  },
+  {
+    ruleId: "tool-observation-before-execute",
+    filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
+    sideEffect: /tool\.execute\(dispatchedCall, executionContext\)/g,
     scopeStart:
       /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
     requiredBefore: ["publishToolStarted({", "toolCallId: call.id", "toolName: originalName"],
-    message: "tool.execute must be preceded by a before-side-effect audit publish",
+    message: "tool.execute must be preceded by a before-side-effect observation publish",
   },
   {
-    ruleId: "tool-ledger-before-execute",
+    ruleId: "tool-observation-before-execute",
     filePath: "packages/openomni/src/execution-runtime/tool/executor-events.ts",
     sideEffect: /export function publishToolStarted\(args: \{/g,
     requiredBefore: [],
@@ -59,17 +71,17 @@ const rules: readonly SideEffectRule[] = [
       "toolCallId: args.toolCallId",
       "toolName: args.toolName",
     ],
-    message: "publishToolStarted must append the tool execution started ledger event",
+    message: "publishToolStarted must emit the tool execution started observation",
   },
   {
-    ruleId: "mcp-ledger-before-execute",
+    ruleId: "mcp-observation-before-execute",
     filePath: "apps/server/src/tool/mcp/provider-execution.ts",
     sideEffect:
       /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, (?:context|executionContext))?\)/g,
     scopeStart:
       /export async function executeMcpTool\(input: ExecuteMcpToolInput\): Promise<Tool\.Result> \{/g,
     requiredBefore: ["Bus.publish(PolicyEvent.ActionRequested, {", "actionId", "tool.spec.name"],
-    message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
+    message: "MCP tool execution must be preceded by the action-requested observation",
   },
   {
     ruleId: "processor-projected-sink",
@@ -79,70 +91,31 @@ const rules: readonly SideEffectRule[] = [
     message: "processor sink side effects must flow through createProjectedSink",
   },
   {
-    ruleId: "ingress-ledger-before-session-write",
+    ruleId: "ingress-ledger-commit",
     filePath: "packages/openomni/src/ingress/event-projector.ts",
-    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
-    scopeStart: /export function project\(/g,
-    requiredBefore: ["audit.append(", '"ingress.inbound.message.write"'],
-    message:
-      "projected inbound messages must append ingress.inbound.message.write before Session.addMessage",
+    sideEffect: /let result = await service\.execute\(command\)/g,
+    scopeStart: /export async function projectResident\(/g,
+    scopeEnd: /\n {2}export async function /g,
+    requiredBefore: [],
+    requiredInScope: ["requireResidentReceipt(requireCommittedMessagingTransition(result))"],
+    message: "resident ingress must require an authoritative committed transition receipt",
   },
   {
-    ruleId: "ingress-ledger-before-session-write",
+    ruleId: "ingress-ledger-commit",
     filePath: "packages/openomni/src/ingress/event-projector.ts",
-    sideEffect: /Session\.addPart\(message\.id, part\)/g,
-    scopeStart: /export function project\(/g,
-    requiredBefore: ["audit.append(", '"ingress.inbound.part.write"'],
-    message:
-      "projected inbound parts must append ingress.inbound.part.write before Session.addPart",
+    sideEffect: /await requireMessagingLedgerService\(\)\.execute\(\{/g,
+    requiredBefore: ["requireCommittedMessagingTransition("],
+    message: "ingress transcript writes must require an authoritative committed transition receipt",
   },
   {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/session-bridge.ts",
-    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
-    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["audit.append(", '"ingress.writeback.message.write"'],
-    message:
-      "session bridge writebacks must append ingress.writeback.message.write before Session.addMessage",
-  },
-  {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/session-bridge.ts",
-    sideEffect: /Session\.addPart\(message\.id, part\)/g,
-    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["audit.append(", '"ingress.writeback.part.write"'],
-    message:
-      "session bridge writebacks must append ingress.writeback.part.write before Session.addPart",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
-    sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.message.set",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
-    sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.session.set",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/session/src/session/messages.ts",
-    sideEffect: /adapter\.part\.set\(messageID, part\)/g,
-    scopeStart: /export function addPart\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info:"],
-    message: "Session.addPart must publish Event.Updated after adapter.part.set",
+    ruleId: "ledger-projection-in-transaction",
+    filePath: "packages/session/src/ledger/writer.ts",
+    sideEffect: /INSERT INTO ledger_event/g,
+    scopeStart: /append\(input: Ledger\.AppendBatch/g,
+    scopeEnd: /\n {2}private prepareOptions/g,
+    requiredBefore: ['this.db.exec("BEGIN IMMEDIATE TRANSACTION")'],
+    requiredInScope: ["this.applyProjections(", 'this.db.exec("COMMIT")'],
+    message: "ledger events and required projections must commit in one writer transaction",
   },
 ];
 

@@ -8,15 +8,21 @@ import {
   PolicyDecision as Decision,
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
-import { Bus, Storage, SurfaceKey, TraceContext } from "@openomni/session";
+import { Bus, TraceContext } from "@openomni/session";
 import type { CoordinatorLike } from "./coordinator-like";
 import type { DispatchRuntime } from "../dispatch/runtime";
 import type { ResidentRuntime } from "../resident/runtime";
+import type { WorkerAttemptLifecycleService } from "./handler-worker-run";
 import { resolveIngressActor } from "./actor-resolver";
+import type { AuthorityProjectionQueryPort } from "./actor-resolver";
 import { IngressEventProjector } from "./event-projector";
 import { IngressHandlers } from "./handlers";
 import { IngressAuthorityMiddleware } from "./middleware/ingress-authority";
-import { IngressSessionResolver } from "./session-resolver";
+import {
+  configureMessagingLedgerService,
+  type MessagingLedgerService,
+  IngressSessionResolver,
+} from "./session-resolver";
 import {
   executeWaitRoute,
   pinRouteSession,
@@ -24,7 +30,13 @@ import {
   requireRoutedDecision,
 } from "./routing-execution";
 import { resolveKernelRoute, type KernelRouteResolution } from "./routing-runtime";
-import { applyWaitCorrelationEffect } from "./wait-correlation";
+import {
+  applyWaitCorrelationEffect,
+  createWaitKernelService,
+  type WaitKernelQueryService,
+  type WaitKernelService,
+  type WaitKernelTransitionService,
+} from "./wait-correlation";
 import { targetKey } from "./target";
 
 export type { CoordinatorLike };
@@ -35,53 +47,97 @@ export interface AgentResolver {
   resolve(agentName: string, event: Ingress.InternalEvent): Promise<Ingress.AgentDef>;
 }
 
+export interface IngressKernelPorts {
+  readonly authorityQueries: AuthorityProjectionQueryPort;
+  readonly waitQueries: WaitKernelQueryService;
+  readonly waitTransitions: WaitKernelTransitionService;
+  readonly workerAttempts: WorkerAttemptLifecycleService;
+}
+
 let _coordinator: CoordinatorLike | undefined;
 let _residentRuntime: ResidentRuntime | undefined;
 let _middlewareDecisionObserver: ((decision: PolicyDecision) => void | Promise<void>) | undefined;
 let _ingressPolicies: PolicyRegistration[] = [];
 let _agentResolver: AgentResolver | undefined;
 let _dispatchRuntime: DispatchRuntime | undefined;
+let _kernelPorts: IngressKernelPorts | undefined;
 
 function assertInboundReceiveAllowed(decision: Policy.PolicyDecision): void {
   if (!Decision.isBlocking(decision)) return;
   throw new Error(Decision.reason(decision, "inbound.receive policy denied"));
 }
 
-export function applySelectedWaitEffect(
+function requireKernelPorts(): Readonly<{
+  authorityQueries: AuthorityProjectionQueryPort;
+  waitKernel: WaitKernelService;
+  workerAttempts: WorkerAttemptLifecycleService;
+}> {
+  if (_kernelPorts === undefined) throw new Error("ingress kernel ports not configured");
+  return {
+    authorityQueries: _kernelPorts.authorityQueries,
+    waitKernel: createWaitKernelService(_kernelPorts.waitQueries, _kernelPorts.waitTransitions),
+    workerAttempts: _kernelPorts.workerAttempts,
+  };
+}
+
+export async function applySelectedWaitEffect(
   resolution: Pick<KernelRouteResolution, "decision" | "waitEffect">,
-): void {
+  waitKernel: WaitKernelService,
+  transportId: string,
+): Promise<void> {
   const selected =
     resolution.decision.stage === "wait_correlation" && resolution.decision.outcome === "ambiguous";
   if (!selected && resolution.waitEffect.kind !== "none") {
     throw new TypeError("non-wait-ambiguous decision carried an executable wait effect");
   }
-  if (selected) applyWaitCorrelationEffect(resolution.waitEffect);
+  if (selected) await applyWaitCorrelationEffect(waitKernel, resolution.waitEffect, transportId);
 }
 
-function resolvePublishAndApplyWaitEffect<Event extends Ingress.InboundEvent>(
+async function resolvePublishAndApplyWaitEffect<Event extends Ingress.InboundEvent>(
   event: Event,
   traceId: string,
-): KernelRouteResolution<Event> {
-  const resolution = resolveKernelRoute(event, traceId);
+  authorityQueries: AuthorityProjectionQueryPort,
+  waitKernel: WaitKernelService,
+): Promise<KernelRouteResolution<Event>> {
+  const resolution = await resolveKernelRoute(event, traceId, {
+    authorityQueries,
+    waits: waitKernel,
+  });
   const decision = IngressEvent.RoutingDecision.schema.parse(resolution.decision);
   const validated = { ...resolution, decision };
   Bus.publish(IngressEvent.RoutingDecision, decision);
 
-  applySelectedWaitEffect(validated);
+  await applySelectedWaitEffect(validated, waitKernel, event.id);
   return validated;
 }
 
 export namespace IngressEngine {
   export function reset(): void {
-    SurfaceKey.clear();
-    Storage.reset();
     Bus.reset();
+    configureMessagingLedgerService(undefined);
     _coordinator = undefined;
     _residentRuntime = undefined;
     _middlewareDecisionObserver = undefined;
     _ingressPolicies = [];
     _agentResolver = undefined;
     _dispatchRuntime = undefined;
+    _kernelPorts = undefined;
+  }
+
+  export function setKernelPorts(ports: IngressKernelPorts): void {
+    _kernelPorts = ports;
+  }
+
+  export function clearKernelPorts(): void {
+    _kernelPorts = undefined;
+  }
+
+  export function setMessagingLedgerService(service: MessagingLedgerService): void {
+    configureMessagingLedgerService(service);
+  }
+
+  export function clearMessagingLedgerService(): void {
+    configureMessagingLedgerService(undefined);
   }
 
   export function setCoordinator(c: CoordinatorLike): void {
@@ -127,13 +183,19 @@ export namespace IngressEngine {
   }
 
   export async function ingest(event: unknown): Promise<Ingress.IngressResult> {
+    const ports = requireKernelPorts();
     const externalEvent = IngressNamespace.DirectEventSchema.parse(event);
-    const resolvedActorEvent = resolveIngressActor(externalEvent);
+    const resolvedActorEvent = await resolveIngressActor(externalEvent, ports.authorityQueries);
     if (resolvedActorEvent.mode !== "direct") {
       throw new TypeError("external ingress actor resolution changed event mode");
     }
     const trace = TraceContext.create();
-    const route = resolvePublishAndApplyWaitEffect(resolvedActorEvent, trace.traceId);
+    const route = await resolvePublishAndApplyWaitEffect(
+      resolvedActorEvent,
+      trace.traceId,
+      ports.authorityQueries,
+      ports.waitKernel,
+    );
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
@@ -142,7 +204,7 @@ export namespace IngressEngine {
         pinSelectedTarget(waitExecution.event, route.selectedTarget),
         decision,
       );
-      return ingestResolved(inboundEvent, route.selectedTarget, trace, _coordinator);
+      return ingestResolved(inboundEvent, route.selectedTarget, trace, _coordinator, ports);
     }
 
     const preRun = await IngressAuthorityMiddleware.runRoutedPreRun({
@@ -156,7 +218,7 @@ export namespace IngressEngine {
       pinSelectedTarget(preRun.event, route.selectedTarget),
       decision,
     );
-    return ingestResolved(inboundEvent, route.selectedTarget, trace, preRun.coordinator);
+    return ingestResolved(inboundEvent, route.selectedTarget, trace, preRun.coordinator, ports);
   }
 
   export async function ingestInternal(
@@ -166,8 +228,14 @@ export namespace IngressEngine {
       agentResolver?: AgentResolver;
     }>,
   ): Promise<Ingress.IngressResult> {
+    const ports = requireKernelPorts();
     const trace = TraceContext.create();
-    const route = resolvePublishAndApplyWaitEffect(event, trace.traceId);
+    const route = await resolvePublishAndApplyWaitEffect(
+      event,
+      trace.traceId,
+      ports.authorityQueries,
+      ports.waitKernel,
+    );
     const decision = requireRoutedDecision(route.decision);
     const waitExecution = await executeWaitRoute(_dispatchRuntime, trace, route, decision);
     if (waitExecution.kind === "handled") return waitExecution.result;
@@ -188,6 +256,7 @@ export namespace IngressEngine {
       route.selectedTarget,
       trace,
       _coordinator,
+      ports,
       runtime?.residentRuntime ?? _residentRuntime,
     );
   }
@@ -197,6 +266,7 @@ export namespace IngressEngine {
     target: Ingress.Target,
     trace: TraceContextProtocol.Type,
     coordinator: CoordinatorLike | undefined,
+    ports: Readonly<{ workerAttempts: WorkerAttemptLifecycleService }>,
     residentRuntime: Pick<ResidentRuntime, "run"> | undefined = _residentRuntime,
   ): Promise<Ingress.IngressResult> {
     const targetLabel = targetKey(target);
@@ -261,23 +331,80 @@ export namespace IngressEngine {
       assertInboundReceiveAllowed(decision);
     }
 
-    const agentModel = inboundEvent.agent.model;
-    const { session } = IngressSessionResolver.resolve(
-      inboundEvent,
-      { providerID: agentModel.provider, modelID: agentModel.id },
-      trace,
-    );
+    const model = {
+      providerID: inboundEvent.agent.model.provider,
+      modelID: inboundEvent.agent.model.id,
+    };
+
+    if (target.kind === "resident") {
+      const receipt = await IngressEventProjector.projectResident(
+        inboundEvent,
+        IngressSessionResolver.extractSurfaceKey(inboundEvent),
+        model,
+        trace,
+      );
+      Bus.publish(IngressEvent.SessionResolved, {
+        traceId: trace.traceId,
+        sessionId: receipt.sessionId,
+        isNew: receipt.isNewSession,
+        target: "resident",
+        time: Date.now(),
+      });
+      if (receipt.outcome !== undefined) {
+        if (receipt.outcome.status === "confirmed") return receipt.outcome.result;
+        throw new Error(`resident effect ${receipt.outcome.status}: ${receipt.outcome.error}`);
+      }
+
+      const activeTrace = TraceContext.child(trace, { sessionId: receipt.sessionId });
+      const handlerContext = {
+        sessionId: receipt.sessionId,
+        event: inboundEvent,
+        coordinator,
+        residentRuntime,
+        traceContext: activeTrace,
+        policies: _ingressPolicies,
+        onPolicyDecision: _middlewareDecisionObserver,
+        workerAttempts: ports.workerAttempts,
+      };
+
+      if (!residentRuntime) {
+        const error = "resident runtime is required";
+        await IngressEventProjector.settleResident(receipt, inboundEvent.id, {
+          status: "definite_failed",
+          error,
+        });
+        throw new Error(error);
+      }
+
+      try {
+        const result = await IngressHandlers.handleResident(handlerContext);
+        await IngressEventProjector.settleResident(receipt, inboundEvent.id, {
+          status: "confirmed",
+          result,
+        });
+        return result;
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        await IngressEventProjector.settleResident(receipt, inboundEvent.id, {
+          status: "unknown",
+          error: detail,
+        });
+        throw error;
+      }
+    }
+
+    const { session } = await IngressSessionResolver.resolve(inboundEvent, model, trace);
+    const activeAttempts = await ports.workerAttempts.queries.active({
+      sessionId: session.id,
+      ...(inboundEvent.runtime?.runId ? { runId: inboundEvent.runtime.runId } : {}),
+    });
+    if (activeAttempts.length !== 1) {
+      throw new Error("worker ingress requires exactly one authoritative active Attempt binding");
+    }
 
     const activeTrace = TraceContext.child(trace, { sessionId: session.id });
-
-    IngressEventProjector.project(
-      inboundEvent,
-      session.id,
-      { providerID: agentModel.provider, modelID: agentModel.id },
-      activeTrace,
-    );
-
-    const handlerContext = {
+    await IngressEventProjector.project(inboundEvent, session.id, model, activeTrace);
+    return IngressHandlers.handleDirect({
       sessionId: session.id,
       event: inboundEvent,
       coordinator,
@@ -285,13 +412,8 @@ export namespace IngressEngine {
       traceContext: activeTrace,
       policies: _ingressPolicies,
       onPolicyDecision: _middlewareDecisionObserver,
-    };
-
-    if (target.kind === "resident") {
-      return IngressHandlers.handleResident(handlerContext);
-    }
-
-    return IngressHandlers.handleDirect(handlerContext);
+      workerAttempts: ports.workerAttempts,
+    });
   }
 }
 

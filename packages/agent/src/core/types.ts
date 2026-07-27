@@ -7,9 +7,11 @@ import type {
   Token,
   Tool,
 } from "@openomni/protocol";
-import type { Provider, RunInput } from "@openomni/llm";
+import type { ModelsDev, Provider, RunInput } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
 import type { AgentRuntimeContext } from "./runtime-context";
+
+export type ModelCatalogService = ReturnType<typeof ModelsDev.createService>;
 
 export interface AgentEventEmitter {
   emit(eventName: string, data: Record<string, unknown>): void;
@@ -27,20 +29,23 @@ export interface ChatAgentConfig {
   systemPrompt?: string;
   tools?: AgentToolSpec[];
   model: Model.Ref;
+  environment: RunInput["environment"];
+  modelCatalog: ModelCatalogService;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
   eventEmitter?: AgentEventEmitter;
   providerOptions?: Record<string, unknown>;
-  auth?: RunInput["auth"];
-  allowAuthFallback?: RunInput["allowAuthFallback"];
   toolChoice?: "auto" | "required" | "none";
   middleware?: PolicyEngineRegistration[];
   context?: AgentRuntimeContext;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/protocol").Run.Outcome>;
-    resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
+    resolveProviderModel?: (
+      model: Model.Ref,
+      catalog: ModelCatalogService,
+    ) => Promise<Provider.Model>;
   };
 }
 

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { AppConnector, Execution } from "@openomni/protocol";
-import { Artifact } from "@openomni/session";
+
 import { type ConnectorTemplateValues, redactConnectorCredentialValues } from "./env.js";
 import { newestConnectorGlobMatch, resolveConnectorLogPath } from "./log-path.js";
 import { aggregateConnectorLogUsage, buildConnectorLogEvent } from "./log-telemetry.js";
@@ -15,6 +15,16 @@ export interface ConnectorLogIngestion {
   readonly finalMessage?: string;
 }
 
+export interface ConnectorArtifactWriter {
+  putAndReference(input: {
+    readonly artifactId: string;
+    readonly ownerSessionId: string;
+    readonly mediaType: string;
+    readonly title: string;
+    readonly content: Uint8Array;
+  }): Promise<void>;
+}
+
 export interface ConnectorLogIngestionInput {
   readonly connector: AppConnector.Definition;
   readonly runId: string;
@@ -23,6 +33,7 @@ export interface ConnectorLogIngestionInput {
   readonly redactions: readonly string[];
   readonly stdout: string;
   readonly stderr: string;
+  readonly artifactWriter: ConnectorArtifactWriter;
 }
 
 export async function ingestConnectorLogs(
@@ -36,13 +47,16 @@ export async function ingestConnectorLogs(
   const content = redactConnectorCredentialValues(rawContent, input.redactions);
   const meta = {
     id: `art_${crypto.randomUUID()}`,
-    sessionId: input.sessionId,
     mimeType: mimeTypeForLog(logs),
     title: `${input.connector.name} ${input.runId} log`,
-    version: 1,
-    createdAt: new Date().toISOString(),
   };
-  await Artifact.store(input.sessionId, meta, content);
+  await input.artifactWriter.putAndReference({
+    artifactId: meta.id,
+    ownerSessionId: input.sessionId,
+    mediaType: meta.mimeType,
+    title: meta.title,
+    content: new TextEncoder().encode(content),
+  });
 
   const logEvents = extractLogEvents(logs, content, meta.id);
   return {

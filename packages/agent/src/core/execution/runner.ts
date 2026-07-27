@@ -48,6 +48,7 @@ export async function* streamAgent(
     try {
       const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
         config.model,
+        config.modelCatalog,
       );
       const configuredToolChoice = resolveToolChoice(config);
 

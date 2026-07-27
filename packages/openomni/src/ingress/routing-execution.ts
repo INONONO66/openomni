@@ -102,40 +102,37 @@ function projectPendingAskEvent<Event extends Ingress.InboundEvent>(
   const { target: _target, ...withoutTarget } = event;
   const { target: _metaTarget, ...meta } = event.meta ?? {};
   const { runId: _runId, ...runtime } = event.runtime ?? {};
-  const record = resolution.record;
+  const wait = resolution.wait;
   return {
     ...withoutTarget,
     meta: {
       ...meta,
       pendingAsk: {
-        id: record.id,
-        originSessionId: record.originSessionId,
-        ...(record.originRunId === undefined ? {} : { originRunId: record.originRunId }),
-        originActorKind: record.originActorKind,
-        targetKind: record.targetKind,
-        status: record.status,
+        id: wait.waitId,
+        originSessionId: wait.route.sessionId,
+        ...(wait.route.runId === undefined ? {} : { originRunId: wait.route.runId }),
+        originActorKind: wait.opened.ownerRef.kind === "workItem" ? "worker" : "resident",
+        targetKind: wait.opened.endpointId === undefined ? "resident" : "external_actor",
+        status: wait.status,
         ambiguous: false,
       },
     },
     runtime: {
       ...runtime,
-      durableSessionId: record.originSessionId,
-      ...(record.originRunId === undefined ? {} : { runId: record.originRunId }),
+      durableSessionId: wait.route.sessionId,
+      ...(wait.route.runId === undefined ? {} : { runId: wait.route.runId }),
     },
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
 function hasMatchingBearerToken(
   correlation: Dispatch.Correlation,
-  record: Extract<
-    KernelRouteResolution["waitExecution"],
-    { kind: "pending_interaction" }
-  >["record"],
+  wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>["wait"],
 ): boolean {
   return (
-    record.targetActorId === undefined &&
-    record.correlation.tokenHash !== undefined &&
-    correlation.tokenHash === record.correlation.tokenHash
+    wait.opened.targetActorId === undefined &&
+    wait.opened.correlation.tokenHash !== undefined &&
+    correlation.tokenHash === wait.opened.correlation.tokenHash
   );
 }
 
@@ -143,29 +140,36 @@ function senderMatchesPendingInteraction(
   event: Ingress.InboundEvent,
   wait: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_interaction" }>,
 ): boolean {
-  if (hasMatchingBearerToken(wait.correlation, wait.record)) return true;
-  if (wait.correlation.endpointId !== wait.record.endpointId) return false;
+  if (hasMatchingBearerToken(wait.correlation, wait.wait)) return true;
+  if (wait.correlation.endpointId !== wait.wait.opened.endpointId) return false;
 
-  if (wait.record.targetActorId !== undefined && typeof event.meta?.actor?.actorId !== "string") {
+  if (
+    wait.wait.opened.targetActorId !== undefined &&
+    typeof event.meta?.actor?.actorId !== "string"
+  ) {
     return false;
   }
   const actor = event.meta?.actor;
   if (typeof actor?.actorId !== "string") {
     if (event.mode !== "direct" || typeof event.userId !== "string") return false;
     return (
-      event.userId === wait.record.endpointId || wait.record.endpointId.endsWith(`:${event.userId}`)
+      event.userId === wait.wait.opened.endpointId ||
+      wait.wait.opened.endpointId?.endsWith(`:${event.userId}`) === true
     );
   }
-  if (wait.record.targetActorId !== undefined && actor.actorId !== wait.record.targetActorId) {
+  if (
+    wait.wait.opened.targetActorId !== undefined &&
+    actor.actorId !== wait.wait.opened.targetActorId
+  ) {
     return false;
   }
 
   const endpoint = actor.endpoint;
-  if (endpoint === undefined) return actor.endpointId === wait.record.endpointId;
+  if (endpoint === undefined) return actor.endpointId === wait.wait.opened.endpointId;
   return (
-    endpoint.id === wait.record.endpointId ||
-    endpoint.externalId === wait.record.endpointId ||
-    `${endpoint.channel}:${endpoint.externalId}` === wait.record.endpointId
+    endpoint.id === wait.wait.opened.endpointId ||
+    endpoint.externalId === wait.wait.opened.endpointId ||
+    `${endpoint.channel}:${endpoint.externalId}` === wait.wait.opened.endpointId
   );
 }
 
@@ -190,11 +194,11 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
     !executableAction ||
     wait.kind !== "pending_interaction" ||
     decision.stage !== "wait_correlation" ||
-    decision.target !== `worker-session:${wait.record.sessionId}` ||
-    decision.sessionId !== wait.record.sessionId ||
-    decision.runId !== wait.record.workerRunId ||
-    decision.pendingInteractionId !== wait.record.id ||
-    !wait.record.allowedActions.includes(wait.requestedAction)
+    decision.target !== `worker-session:${wait.wait.route.sessionId}` ||
+    decision.sessionId !== wait.wait.route.sessionId ||
+    decision.runId !== wait.wait.route.runId ||
+    decision.pendingInteractionId !== wait.wait.waitId ||
+    !wait.wait.opened.allowedActions.includes(wait.requestedAction)
   ) {
     throw new IngressRoutingError(
       "dispatch_route_invalid",
@@ -211,6 +215,17 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
       decision,
     );
   }
+  const routedAction =
+    wait.requestedAction === "report_result"
+      ? Dispatch.Actions.WorkerComplete
+      : Dispatch.Actions.ResidentAsk;
+  if (runtime.registry.get(routedAction) === undefined) {
+    throw new IngressRoutingError(
+      "dispatch_failed",
+      `No dispatch handler registered for ${routedAction}`,
+      decision,
+    );
+  }
   const workspaceRoot = event.mode === "direct" ? event.agent.toolConfig?.workspaceRoot : undefined;
   const result = await submitPinnedPendingInteraction(
     runtime,
@@ -220,13 +235,13 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
       payload: event.payload,
       correlation: wait.correlation,
     }),
-    wait.record,
+    wait.wait,
     {
       traceId: trace.traceId,
       actorKind: typeof event.meta?.actor?.actorId === "string" ? "user" : "unknown",
       actorId: event.meta?.actor?.actorId ?? wait.correlation.endpointId,
-      sessionId: wait.record.sessionId,
-      runId: wait.record.workerRunId,
+      sessionId: wait.wait.route.sessionId,
+      runId: wait.wait.route.runId,
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     },
   );
@@ -239,8 +254,8 @@ async function executePendingInteractionRoute<Event extends Ingress.InboundEvent
   }
   return {
     mode: event.mode,
-    target: { kind: "worker", sessionId: decision.sessionId },
-    sessionId: decision.sessionId,
+    target: { kind: "worker", sessionId: wait.wait.route.sessionId },
+    sessionId: wait.wait.route.sessionId,
     result: { output: projectDispatchOutput(result.output, decision), finishReason: "stop" },
   };
 }
@@ -289,8 +304,8 @@ export async function executeWaitRoute<Event extends Ingress.InboundEvent>(
       if (
         decision.stage !== "wait_correlation" ||
         decision.target !== "resident" ||
-        decision.sessionId !== wait.record.originSessionId ||
-        decision.runId !== wait.record.originRunId
+        decision.sessionId !== wait.wait.route.sessionId ||
+        decision.runId !== wait.wait.route.runId
       ) {
         throw new IngressRoutingError(
           "dispatch_route_invalid",

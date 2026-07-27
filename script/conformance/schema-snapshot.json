@@ -174,16 +174,6 @@
     "surface",
     "threadId"
   ],
-  "CronJob.Info": [
-    "agentName",
-    "createdAt",
-    "id",
-    "nextFireAt",
-    "payload",
-    "schedule",
-    "target"
-  ],
-  "CronJob.Target": ["kind", "sessionId"],
   "Dispatch.ActorContext": [
     "actorId",
     "agentName",
@@ -250,6 +240,73 @@
     "runId",
     "sessionId"
   ],
+  "Execution.AuthenticatedWorkerIdentityV1": [
+    "attemptId",
+    "generation",
+    "principalId",
+    "runId",
+    "runtimeId",
+    "sessionId",
+    "version",
+    "workerId"
+  ],
+  "Execution.ContentBlobRefV1": [
+    "byteLength",
+    "digest",
+    "mediaType",
+    "version"
+  ],
+  "Execution.CredentialSourceRefV1": [
+    "account",
+    "authType",
+    "credentialDigest",
+    "credentialId",
+    "endpointRef",
+    "providerId",
+    "rotationId",
+    "sourceKind",
+    "sourcePathDigest",
+    "version"
+  ],
+  "Execution.KernelQueryResultV1#0": ["kind", "messages", "version"],
+  "Execution.KernelQueryResultV1#1": [
+    "attempt",
+    "environment",
+    "events",
+    "kind",
+    "version"
+  ],
+  "Execution.KernelQueryResultV1#2": ["kind", "version", "wait"],
+  "Execution.KernelQueryV1#0": [
+    "afterOwnerSeq",
+    "identity",
+    "kind",
+    "sessionId",
+    "version"
+  ],
+  "Execution.KernelQueryV1#1": ["attempt", "identity", "kind", "version"],
+  "Execution.KernelQueryV1#2": ["identity", "kind", "version", "waitId"],
+  "Execution.KernelTransitionResultV1#0": ["receipt", "status", "version"],
+  "Execution.KernelTransitionResultV1#1": ["code", "status", "version"],
+  "Execution.LLMEndpointRefV1": [
+    "endpointDigest",
+    "kind",
+    "valueRef",
+    "version"
+  ],
+  "Execution.LLMEnvironmentV1": [
+    "adapterVersion",
+    "catalogDigest",
+    "catalogSchemaVersion",
+    "catalogSource",
+    "catalogSourceVersion",
+    "credential",
+    "endpoint",
+    "environmentDigest",
+    "modelDigest",
+    "sdkPackage",
+    "version"
+  ],
   "Execution.LogEvent": [
     "artifactId",
     "data",
@@ -280,6 +337,17 @@
     "traceId",
     "workspaceRoot"
   ],
+  "Execution.ResourceScopeV1#0": ["kind", "target", "version"],
+  "Execution.ResourceScopeV1#1": ["kind", "targetDigest", "version"],
+  "Execution.ResourceScopeV1#2": ["kind", "targetDigest", "version"],
+  "Execution.ResourceScopeV1#3": [
+    "definitionVersion",
+    "installationId",
+    "kind",
+    "version"
+  ],
+  "Execution.ResourceScopeV1#4": ["driver", "kind", "target", "version"],
+  "Execution.ResourceScopeV1#5": ["kind", "targetDigest", "variant", "version"],
   "Execution.Result": [
     "artifacts",
     "error",
@@ -290,6 +358,11 @@
     "sessionId",
     "status",
     "usage"
+  ],
+  "Execution.WorkspaceRefV1": [
+    "canonicalBytesDigest",
+    "canonicalizerVersion",
+    "workspaceId"
   ],
   "Extension.Contributes": [
     "agents",
@@ -421,6 +494,1030 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
+  "Ipc.WorkerRuntimeDefinitionV1": [
+    "attempt",
+    "config",
+    "generation",
+    "principalId",
+    "runtimeId",
+    "workerId"
+  ],
+  "Ledger.AttemptRefV1": ["attemptId", "attemptSeq", "version", "workItemId"],
+  "Ledger.ContentBlobRefV1": ["byteLength", "digest", "mediaType", "version"],
+  "Ledger.EffectRefV1": ["effectId", "idempotencyKey", "version"],
+  "Ledger.NativeEventPayloadV1#0": [
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "parentSessionId",
+    "sessionId",
+    "sessionSnapshotRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#1": [
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "parentSessionId",
+    "sessionId",
+    "sessionSnapshotRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#10": [
+    "eventType",
+    "messageId",
+    "messageSnapshotRef",
+    "model",
+    "occurredAtDbMs",
+    "partId",
+    "partSnapshotRef",
+    "role",
+    "sessionId",
+    "status",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#11": [
+    "eventType",
+    "messageId",
+    "messageSnapshotRef",
+    "model",
+    "occurredAtDbMs",
+    "partId",
+    "partSnapshotRef",
+    "role",
+    "sessionId",
+    "status",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#12": [
+    "eventType",
+    "messageId",
+    "messageSnapshotRef",
+    "model",
+    "occurredAtDbMs",
+    "partId",
+    "partSnapshotRef",
+    "role",
+    "sessionId",
+    "status",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#13": [
+    "destinationOwner",
+    "dispatchDecision",
+    "dispatchId",
+    "dispatchSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "routeId",
+    "settlement",
+    "sourceOwner",
+    "sourceSessionId",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#14": [
+    "destinationOwner",
+    "dispatchDecision",
+    "dispatchId",
+    "dispatchSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "routeId",
+    "settlement",
+    "sourceOwner",
+    "sourceSessionId",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#15": [
+    "destinationOwner",
+    "dispatchDecision",
+    "dispatchId",
+    "dispatchSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "routeId",
+    "settlement",
+    "sourceOwner",
+    "sourceSessionId",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#16": [
+    "destinationOwner",
+    "dispatchDecision",
+    "dispatchId",
+    "dispatchSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "routeId",
+    "settlement",
+    "sourceOwner",
+    "sourceSessionId",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#17": [
+    "destinationOwner",
+    "dispatchDecision",
+    "dispatchId",
+    "dispatchSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "routeId",
+    "settlement",
+    "sourceOwner",
+    "sourceSessionId",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#18": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#19": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#2": [
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "parentSessionId",
+    "sessionId",
+    "sessionSnapshotRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#20": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#21": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#22": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#23": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#24": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#25": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#26": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#27": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#28": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#29": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#3": [
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "parentSessionId",
+    "sessionId",
+    "sessionSnapshotRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#30": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#31": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#32": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#33": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#34": [
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId",
+    "workSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#35": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#36": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#37": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#38": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#39": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#4": [
+    "endpointId",
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "surfaceId",
+    "surfaceKind",
+    "surfaceSnapshotRef",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#40": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#41": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#42": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#43": [
+    "attemptId",
+    "attemptSeq",
+    "attemptSnapshotRef",
+    "environmentSnapshotRef",
+    "eventType",
+    "model",
+    "occurredAtDbMs",
+    "runId",
+    "sessionId",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#44": [
+    "candidateId",
+    "completionSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "runBindingRef",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#45": [
+    "candidateId",
+    "completionSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "runBindingRef",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#46": [
+    "candidateId",
+    "completionSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "runBindingRef",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#47": [
+    "candidateId",
+    "completionSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "runBindingRef",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#48": [
+    "candidateId",
+    "completionSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "runBindingRef",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#49": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#5": [
+    "endpointId",
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "surfaceId",
+    "surfaceKind",
+    "surfaceSnapshotRef",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#50": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#51": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#52": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#53": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#54": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#55": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#56": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#57": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#58": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#59": [
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "waitEventVersion",
+    "waitId",
+    "waitSnapshotRef"
+  ],
+  "Ledger.NativeEventPayloadV1#6": [
+    "endpointId",
+    "eventType",
+    "occurredAtDbMs",
+    "sessionId",
+    "subjectId",
+    "surfaceId",
+    "surfaceKind",
+    "surfaceSnapshotRef",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#60": [
+    "attemptId",
+    "eventType",
+    "granteeId",
+    "grantId",
+    "grantScopeRef",
+    "grantSnapshotRef",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#61": [
+    "attemptId",
+    "eventType",
+    "granteeId",
+    "grantId",
+    "grantScopeRef",
+    "grantSnapshotRef",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#62": [
+    "attemptId",
+    "eventType",
+    "granteeId",
+    "grantId",
+    "grantScopeRef",
+    "grantSnapshotRef",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#63": [
+    "attemptId",
+    "eventType",
+    "granteeId",
+    "grantId",
+    "grantScopeRef",
+    "grantSnapshotRef",
+    "occurredAtDbMs",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#64": [
+    "eventType",
+    "generation",
+    "nextFireRef",
+    "occurredAtDbMs",
+    "scheduleId",
+    "scheduleSnapshotRef",
+    "settlementRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#65": [
+    "eventType",
+    "generation",
+    "nextFireRef",
+    "occurredAtDbMs",
+    "scheduleId",
+    "scheduleSnapshotRef",
+    "settlementRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#66": [
+    "eventType",
+    "generation",
+    "nextFireRef",
+    "occurredAtDbMs",
+    "scheduleId",
+    "scheduleSnapshotRef",
+    "settlementRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#67": [
+    "eventType",
+    "generation",
+    "nextFireRef",
+    "occurredAtDbMs",
+    "scheduleId",
+    "scheduleSnapshotRef",
+    "settlementRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#68": [
+    "eventType",
+    "generation",
+    "nextFireRef",
+    "occurredAtDbMs",
+    "scheduleId",
+    "scheduleSnapshotRef",
+    "settlementRef",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#69": [
+    "attemptId",
+    "effectId",
+    "effectScopeRef",
+    "effectSettlementRef",
+    "eventType",
+    "idempotencyKey",
+    "occurredAtDbMs",
+    "settlement",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#7": [
+    "authoritySnapshotRef",
+    "eventType",
+    "messageId",
+    "occurredAtDbMs",
+    "routeDecision",
+    "routeId",
+    "routeSnapshotRef",
+    "sessionId",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#70": [
+    "attemptId",
+    "effectId",
+    "effectScopeRef",
+    "effectSettlementRef",
+    "eventType",
+    "idempotencyKey",
+    "occurredAtDbMs",
+    "settlement",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#71": [
+    "attemptId",
+    "effectId",
+    "effectScopeRef",
+    "effectSettlementRef",
+    "eventType",
+    "idempotencyKey",
+    "occurredAtDbMs",
+    "settlement",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#72": [
+    "attemptId",
+    "effectId",
+    "effectScopeRef",
+    "effectSettlementRef",
+    "eventType",
+    "idempotencyKey",
+    "occurredAtDbMs",
+    "settlement",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#73": [
+    "attemptId",
+    "effectId",
+    "effectScopeRef",
+    "effectSettlementRef",
+    "eventType",
+    "idempotencyKey",
+    "occurredAtDbMs",
+    "settlement",
+    "subjectId",
+    "version",
+    "workItemId"
+  ],
+  "Ledger.NativeEventPayloadV1#74": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#75": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#76": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#77": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#78": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#79": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#8": [
+    "eventType",
+    "messageId",
+    "messageSnapshotRef",
+    "model",
+    "occurredAtDbMs",
+    "partId",
+    "partSnapshotRef",
+    "role",
+    "sessionId",
+    "status",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#80": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#81": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#82": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#83": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#84": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#85": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#86": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#87": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#88": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#89": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#9": [
+    "eventType",
+    "messageId",
+    "messageSnapshotRef",
+    "model",
+    "occurredAtDbMs",
+    "partId",
+    "partSnapshotRef",
+    "role",
+    "sessionId",
+    "status",
+    "subjectId",
+    "surfaceId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#90": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#91": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#92": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#93": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#94": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#95": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventPayloadV1#96": [
+    "configurationSnapshotRef",
+    "eventType",
+    "occurredAtDbMs",
+    "subjectId",
+    "version"
+  ],
+  "Ledger.NativeEventProvenanceV1": [
+    "principalId",
+    "requestId",
+    "sourceEventId",
+    "version"
+  ],
+  "Ledger.OwnerRef": ["ownerKey", "version"],
+  "Ledger.OwnerV1": ["ownerKey", "version"],
+  "Ledger.StakesRefV1": [
+    "asOfDbMs",
+    "asOfLedgerSeq",
+    "stakesVersion",
+    "threshold",
+    "value",
+    "version"
+  ],
+  "Ledger.VerifierRefV1": [
+    "checkedPredicate",
+    "family",
+    "verdict",
+    "verifierId",
+    "verifierVersion",
+    "version"
+  ],
+  "Ledger.WorkItemRefV1": ["version", "workItemId"],
   "McpConfig.ServerConfig#0": [
     "args",
     "command",
@@ -819,77 +1916,162 @@
     "taskId",
     "traceId"
   ],
-  "WorkerBootstrap.Bootstrap": [
-    "agents",
-    "configEpoch",
-    "credentials",
-    "policyPlan",
-    "toolCatalog"
+  "Wait.AmbiguitySelectedV1": [
+    "ambiguityEventId",
+    "ownerRef",
+    "selectedAtDbMs",
+    "selectedWaitId",
+    "version",
+    "waitId"
   ],
-  "WorkerBootstrap.RuntimeAgentDefinition": [
-    "budget",
-    "description",
-    "model",
-    "name",
-    "permissions",
-    "policyPlan",
-    "systemPrompt",
-    "tools"
+  "Wait.CancelledV1": [
+    "cancelledAtDbMs",
+    "ownerRef",
+    "reason",
+    "version",
+    "waitId"
   ],
-  "WorkerBootstrap.RuntimeToolCatalogEntry": [
-    "canonicalName",
-    "category",
-    "descriptor",
-    "exposedName",
-    "mcpServer",
-    "riskTier",
-    "source",
-    "spec"
+  "Wait.ExpiredV1": [
+    "expiredAtDbMs",
+    "ownerRef",
+    "partial",
+    "responseEventIds",
+    "version",
+    "waitId"
   ],
-  "WorkerRun.Info": [
-    "assignedStepId",
-    "endedAt",
-    "executorKind",
-    "lastMessageId",
-    "parentRunId",
-    "prompt",
-    "resumeCount",
-    "runId",
-    "sessionId",
-    "startedAt",
-    "status",
-    "title"
+  "Wait.FollowUpRecordedV1": [
+    "ownerRef",
+    "payloadRef",
+    "recordedAtDbMs",
+    "responder",
+    "responseHash",
+    "transportId",
+    "version",
+    "waitId"
   ],
-  "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
+  "Wait.FollowUpWindowClosedV1": [
+    "closedAtDbMs",
+    "followUpEventIds",
+    "ownerRef",
+    "version",
+    "waitId"
+  ],
+  "Wait.LateRejectedV1": [
+    "ownerRef",
+    "rejectedAtDbMs",
+    "responseHash",
+    "terminalEventId",
+    "transportId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#1": [
+    "action",
+    "ownerRef",
+    "payloadRef",
+    "recordedAtDbMs",
+    "responder",
+    "responseHash",
+    "transportId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#11": [
+    "closedAtDbMs",
+    "followUpEventIds",
+    "ownerRef",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#13": [
+    "ownerRef",
+    "rejectedAtDbMs",
+    "responseHash",
+    "terminalEventId",
+    "transportId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#2": [
+    "ownerRef",
+    "responseEventId",
+    "selectedAtDbMs",
+    "selectedByPrincipalId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#4": [
+    "expiredAtDbMs",
+    "ownerRef",
+    "partial",
+    "responseEventIds",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#5": [
+    "cancelledAtDbMs",
+    "ownerRef",
+    "reason",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#7": [
+    "ambiguityEventId",
+    "ownerRef",
+    "selectedAtDbMs",
+    "selectedWaitId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#8": [
+    "ownerRef",
+    "payloadRef",
+    "recordedAtDbMs",
+    "responder",
+    "responseHash",
+    "transportId",
+    "version",
+    "waitId"
+  ],
+  "Wait.LifecycleEventV1#9": [
+    "ownerRef",
+    "reminderOrdinal",
+    "requestedAtDbMs",
+    "responder",
+    "version",
+    "waitId"
+  ],
+  "Wait.OwnerRefV1#0": ["id", "kind", "version"],
+  "Wait.OwnerRefV1#1": ["id", "kind", "version"],
+  "Wait.ReminderRequestedV1": [
+    "ownerRef",
+    "reminderOrdinal",
+    "requestedAtDbMs",
+    "responder",
+    "version",
+    "waitId"
+  ],
+  "Wait.ResponderRefV1": ["actorId", "endpointId", "version"],
+  "Wait.ResponseRecordedV1": [
+    "action",
+    "ownerRef",
+    "payloadRef",
+    "recordedAtDbMs",
+    "responder",
+    "responseHash",
+    "transportId",
+    "version",
+    "waitId"
+  ],
+  "Wait.ResponseSelectedV1": [
+    "ownerRef",
+    "responseEventId",
+    "selectedAtDbMs",
+    "selectedByPrincipalId",
+    "version",
+    "waitId"
+  ],
   "WorkItem.CompletionReport": ["caveats", "claims", "followUps", "summary"],
-  "WorkItem.Info": [
-    "acceptanceCriteria",
-    "assigneeId",
-    "attempt",
-    "blockers",
-    "changedFiles",
-    "completionReport",
-    "constraints",
-    "context",
-    "evidence",
-    "executorKind",
-    "failureReason",
-    "goal",
-    "hash",
-    "intent",
-    "maxAttempts",
-    "name",
-    "originSessionId",
-    "outcome",
-    "relations",
-    "sessionId",
-    "sourceChannel",
-    "sourceMessageId",
-    "timestamps",
-    "verificationGate",
-    "workerRunId",
-    "workSessionId"
-  ],
   "WorkItem.ReadBackRequest#0": ["kind", "maxBodyBytes", "target", "timeoutMs"],
   "WorkItem.ReadBackRequest#1": [
     "kind",
@@ -905,6 +2087,5 @@
     "target",
     "timeoutMs"
   ],
-  "WorkItem.ReadBackRequestEnvelope": ["claimIndex", "request"],
-  "WorkItem.VerificationGate": ["acceptance", "automated", "review"]
+  "WorkItem.ReadBackRequestEnvelope": ["claimIndex", "request"]
 }

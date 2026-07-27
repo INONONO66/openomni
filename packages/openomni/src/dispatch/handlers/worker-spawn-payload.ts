@@ -1,5 +1,4 @@
 import type { Dispatch, Model, Policy } from "@openomni/protocol";
-import { Session } from "@openomni/session";
 import { z } from "zod";
 
 const AcceptanceCriterion = z.string().trim().min(1);
@@ -26,18 +25,12 @@ const WorkerSpawnPayload = z
 type WorkerSpawnPayloadInput = z.input<typeof WorkerSpawnPayload>;
 export type ParsedWorkerSpawnPayload = z.infer<typeof WorkerSpawnPayload>;
 
-function resolveSessionId(command: Dispatch.Command, model: Model.Ref): string {
-  if (command.target.sessionId) return command.target.sessionId;
-  const title = `Dispatch worker ${command.action}`;
-  const modelInfo = { providerID: model.provider, modelID: model.id };
-  const session = command.target.parentSessionId
-    ? Session.createChild({
-        parentSessionId: command.target.parentSessionId,
-        title,
-        model: modelInfo,
-      })
-    : Session.create({ title, model: modelInfo });
-  return session.id;
+export interface AllocatedWorkerAttempt {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly workItemId: string;
+  readonly attemptId: string;
+  readonly attemptSeq: number;
 }
 
 function resolveWorkerAgentName(target: Dispatch.Target): string | undefined {
@@ -80,12 +73,12 @@ export function buildWorkerSpawnRequest(
   command: Dispatch.Command,
   model: Model.Ref,
   payload: ParsedWorkerSpawnPayload,
+  allocation: AllocatedWorkerAttempt,
   policyPlan?: Policy.PolicyPlan,
 ) {
-  const sessionId = resolveSessionId(command, model);
   return {
-    runId: crypto.randomUUID(),
-    sessionId,
+    runId: allocation.runId,
+    sessionId: allocation.sessionId,
     mode: "direct" as const,
     prompt: payload.prompt,
     model,

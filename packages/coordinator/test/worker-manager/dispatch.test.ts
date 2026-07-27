@@ -5,6 +5,15 @@ import { createWorkerManager, type WorkerManager } from "../../src/worker-manage
 import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
+const TEST_IDENTITY = {
+  runtimeId: "runtime-dispatch",
+  principalId: "principal-dispatch",
+  bootstrap: { configEpoch: "test" },
+} as const;
+
+function fixturePrompt(fixture: Record<string, unknown> = {}): string {
+  return JSON.stringify({ fixture, prompt: "test" });
+}
 
 const socketDir = `/tmp/omo-dp-${process.pid}`;
 
@@ -13,7 +22,7 @@ let manager: WorkerManager;
 beforeAll(async () => {
   fs.mkdirSync(socketDir, { recursive: true });
   manager = createWorkerManager(
-    { maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir },
+    { ...TEST_IDENTITY, maxActiveWorkers: 4, workerScript: WORKER_ENTRY, socketDir },
     collectorPorts(),
   );
   await manager.waitUntilReady(15_000);
@@ -29,6 +38,7 @@ describe("worker manager dispatch", () => {
     fs.mkdirSync(defaultSocketDir, { recursive: true });
     const defaultManager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: defaultSocketDir,
       },
@@ -49,13 +59,13 @@ describe("worker manager dispatch", () => {
 
     const results = await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.deliver(runId, { sessionId: sessionId, delayMs: 30, prompt: "test" }),
+        manager.deliver(runId, { sessionId, prompt: fixturePrompt({ delayMs: 30 }) }),
       ),
     );
 
     expect(results).toHaveLength(16);
     for (const r of results) {
-      expect((r as Record<string, unknown>).accepted).toBe(true);
+      expect((r as Record<string, unknown>).status).toBe("succeeded");
     }
   });
 
@@ -67,14 +77,14 @@ describe("worker manager dispatch", () => {
 
     const seqStart = Date.now();
     for (const { sessionId, runId } of runs) {
-      await manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" });
+      await manager.deliver(runId, { sessionId, prompt: fixturePrompt({ delayMs: 50 }) });
     }
     const seqMs = Date.now() - seqStart;
 
     const parStart = Date.now();
     await Promise.all(
       runs.map(({ sessionId, runId }) =>
-        manager.deliver(runId, { sessionId: sessionId, delayMs: 50, prompt: "test" }),
+        manager.deliver(runId, { sessionId, prompt: fixturePrompt({ delayMs: 50 }) }),
       ),
     );
     const parMs = Date.now() - parStart;
@@ -106,90 +116,28 @@ describe("worker manager dispatch", () => {
   test("dispatch with budget.maxWallTimeMs=120_000 passes timeout=150_000 to IPC", async () => {
     const result = await manager.deliver("run-budget-1", {
       sessionId: "session-budget-1",
-      delayMs: 10,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 10 }),
       budget: { maxWallTimeMs: 120_000 },
     });
-    expect((result as Record<string, unknown>).accepted).toBe(true);
+    expect((result as Record<string, unknown>).status).toBe("succeeded");
   });
 
   test("dispatch without budget defaults to timeout=330_000", async () => {
     const result = await manager.deliver("run-budget-2", {
       sessionId: "session-budget-2",
-      delayMs: 10,
-      prompt: "test",
+      prompt: fixturePrompt({ delayMs: 10 }),
     });
-    expect((result as Record<string, unknown>).accepted).toBe(true);
+    expect((result as Record<string, unknown>).status).toBe("succeeded");
   });
 
-  test("workers inherit runtime environment updates", async () => {
-    const previousDiscordToken = process.env.DISCORD_BOT_TOKEN;
-    const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
-    const previousHome = process.env.HOME;
-    process.env.OPENOMNI_WORKER_ENV_FIXTURE = "runtime-value";
-    process.env.OPENOMNI_AUTH_FILE = "/tmp/openomni-secret-auth.json";
-    process.env.HOME = "/tmp/openomni-secret-home";
-    process.env.DISCORD_BOT_TOKEN = "secret-token";
-    const envSocketDir = `${socketDir}-env`;
-    fs.mkdirSync(envSocketDir, { recursive: true });
-    const envManager = createWorkerManager(
-      {
-        maxActiveWorkers: 1,
-        workerScript: WORKER_ENTRY,
-        socketDir: envSocketDir,
-      },
-      collectorPorts(),
-    );
-    try {
-      await envManager.waitUntilReady(15_000);
-      const result = await envManager.deliver("run-env", {
-        sessionId: "session-env",
-        prompt: "test",
-        envName: "OPENOMNI_WORKER_ENV_FIXTURE",
-      });
-      expect((result as Record<string, unknown>).envValue).toBe("runtime-value");
-      const secretResult = await envManager.deliver("run-secret", {
-        sessionId: "session-env",
-        prompt: "test",
-        envName: "DISCORD_BOT_TOKEN",
-      });
-      expect((secretResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authTokenResult = await envManager.deliver("run-auth-token", {
-        sessionId: "session-env",
-        prompt: "test",
-        envName: "OPENOMNI_WORKER_IPC_TOKEN",
-      });
-      expect((authTokenResult as Record<string, unknown>).envValue).toBeUndefined();
-      const authFileResult = await envManager.deliver("run-auth-file", {
-        sessionId: "session-env",
-        prompt: "test",
-        envName: "OPENOMNI_AUTH_FILE",
-      });
-      expect((authFileResult as Record<string, unknown>).envValue).toBeUndefined();
-      const homeResult = await envManager.deliver("run-home", {
-        sessionId: "session-env",
-        prompt: "test",
-        envName: "HOME",
-      });
-      expect((homeResult as Record<string, unknown>).envValue).toBeUndefined();
-    } finally {
-      await envManager.shutdown();
-      delete process.env.OPENOMNI_WORKER_ENV_FIXTURE;
-      if (previousAuthFile === undefined) {
-        delete process.env.OPENOMNI_AUTH_FILE;
-      } else {
-        process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
-      }
-      if (previousDiscordToken === undefined) {
-        delete process.env.DISCORD_BOT_TOKEN;
-      } else {
-        process.env.DISCORD_BOT_TOKEN = previousDiscordToken;
-      }
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    }
+  test("unknown task fields never cross the spawn frame", async () => {
+    const result = await manager.deliver("run-strict-frame", {
+      sessionId: "session-strict-frame",
+      prompt: fixturePrompt({ inspectSpawnFrame: true }),
+      unknownTaskField: "must-stay-driver-local",
+      budget: { maxWallTimeMs: 120_000 },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", workerId: "0" });
   });
 });

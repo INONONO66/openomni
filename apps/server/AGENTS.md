@@ -2,7 +2,7 @@
 
 Hono/Bun runtime host that exposes OpenOmni through external channels (Discord / Telegram / GitHub / WebSocket), connector processes, MCP/custom tools, and worker entrypoints. The server owns transport and bootstrap, not product messaging/access semantics.
 
-Inbound messages should flow as: raw channel payload -> channel adapter transport/auth/dedupe -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback policy.
+Inbound messages flow as raw channel payload → channel transport/auth/dedupe → normalized facts → OpenOmni messaging kernel → channel response. Server code must not decide Wait routing, session target, principal trust, delegation grants, durable transitions, or writeback policy.
 
 Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/session`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
 
@@ -14,14 +14,16 @@ src/
 ├── config.ts             # loadConfig() — reads env / config files into ServerConfig
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
-│   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), channels, server, recovery, shutdown
+│   ├── index.ts          # main() — starts the injected P2 runtime, host services, channels, recovery, and shutdown
+│   ├── kernel-services.ts # Thin composition: binds host dependencies to OpenOmni production semantic services
+│   ├── p2-runtime.ts     # Production strict-baseline runtime open/close and validated credential/model environment
 │   ├── channels.ts       # createChannelAdapters() — Discord / Telegram / GitHub / WebSocket setup + triggers
-│   ├── dispatch-owners.ts # wires dispatch handler owners (connector driver, outbound, device)
-│   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge for worker resident.ask
-│   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (configEpoch, agents, tool catalog, credentials); per-run policyPlan travels on Execution.Request, not here
-│   ├── mcp.ts            # connectMcpServers() — fires up each configured MCP server
-│   ├── recovery.ts       # runRecovery() — resumes incomplete sessions on startup
-│   └── shutdown.ts       # installShutdownHandlers() — graceful stop for server / channels / MCP
+│   ├── dispatch-owners.ts # wires host-owned connector/outbound/device drivers
+│   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge
+│   ├── worker-bootstrap.ts # public non-secret Worker bootstrap metadata
+│   ├── mcp.ts            # connects configured MCP servers
+│   ├── recovery.ts       # ledger-backed startup reconciliation before producers start
+│   └── shutdown.ts       # graceful close for channels, workers, MCP, and the ledger runtime
 ├── channel/
 │   ├── index.ts          # Re-exports adapters + WebSocketHandler
 │   ├── types.ts          # Shared channel config helpers
@@ -29,7 +31,7 @@ src/
 │   ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 │   ├── telegram/         # Telegram polling surface
 │   └── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
-├── connector/            # Server-owned connector process driver, log ingestion/telemetry, question bridge, read-back builder, env (definitions/discovery/registry were deleted in #473 — installations resolve from SQLite records)
+├── connector/            # Server-owned provider-neutral process driver, credential transport, log telemetry, question bridge, and read-back builder
 ├── context/
 │   ├── index.ts          # Barrel re-exports
 │   ├── assembler.ts      # ContextAssembler.assemble() — builds system prompt context from workspace
@@ -43,8 +45,9 @@ src/
 │   ├── recovery.ts       # recoverInterruptedRuns() — marks non-terminal runs interrupted at boot (moved from coordinator, #477)
 │   ├── worker-entry.ts   # Worker process entry — IPC server, ChatAgent execution
 │   ├── worker-runner*.ts # Worker-side run loop, IPC handlers, events, types
-│   ├── worker-bootstrap-handler.ts # Validates and stores WorkerBootstrap, resolves credentials, signals readiness; permissions/policyPlan are applied per run in worker-runner.ts via buildWorkerMiddleware
-│   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
+│   ├── worker-bootstrap-handler.ts # Validates public bootstrap metadata and readiness
+│   ├── p2-worker-provisioning.ts # Private provider-scoped credential transfer, binding, scrubbing, and receipt validation
+│   └── worker-runtime.ts # Creates execution context only from the provisioned model environment
 ├── handler/
 │   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls OpenOmni kernel/IngressEngine
 ├── ingress/
@@ -64,28 +67,28 @@ src/
 │   └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
 └── shared/               # Cross-module helpers (chunk-text, dedupe, fetch-retry, sleep, trigger)
 ```
+## P2-04 PRODUCTION COMPOSITION
+
+- `src/index.ts` creates `createProductionComposition(loadConfig())`; there is no alternate production bootstrap path.
+- `bootstrap/p2-runtime.ts` opens the strict `p2-clean-v1` runtime, loads Owner credentials into the LLM-owned secret registry, validates the explicit model environment/catalog binding, and closes the one lifetime writer after producers stop.
+- `bootstrap/kernel-services.ts` is thin composition only. It binds session structural ports, OpenOmni production semantic services under `packages/openomni/src/ledger/production/`, host drivers, observation, credentials, and recovery. Product transition and lifecycle meaning must not be added here.
+- Workers receive public bootstrap metadata separately from private, minimal, provider-scoped credential material. The private local transfer is authenticated and run-bound; the Worker scrubs transfer buffers and must send the post-provisioning acknowledgement before execution starts.
+- Server owns host/transport/process/credential wiring only. OpenOmni owns native transition meaning, session owns the sole structural writer/query/projection runtime, coordinator owns process supervision, and LLM owns credential custody/provider behavior/cache.
+- **P2-05–P2-07, C1, P3, and P4 remain unshipped.** P3 still owns moving `resident/` and `agents/` into this host.
 
 ## BOOT SEQUENCE (`bootstrap/index.ts`)
 
-OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=local` is disabled and fails during bootstrap.
+1. `loadConfig()` and `createProductionComposition()` validate the explicit Owner model and workspace identity.
+2. Open the exclusive `p2-clean-v1` ledger runtime; synchronously rebuild the closed projection set.
+3. Load Owner credentials into the LLM-owned registry and validate the frozen model environment plus derived catalog cache.
+4. Compose OpenOmni production semantic services through the thin `bootstrap/kernel-services.ts` binding.
+5. Create tool/MCP providers, the coordinator, authenticated Worker transition/query/provisioning ports, and host-owned connector/outbound/device drivers.
+6. Run ledger-backed recovery before any channel producer starts.
+7. Create the message handler and Discord / Telegram / GitHub / WebSocket adapters, then start HTTP/WebSocket and channels.
+8. Start `CronJobRunner` over the injected ledger-backed schedule service.
+9. On shutdown, stop producers and workers before closing the sole ledger runtime.
 
-**Coordinator mode**:
-1. `loadConfig()` — read env + config files.
-2. `initialize({ dbPath })` — bootstrap `@openomni/session` SQLite storage.
-3. Create tool providers: `SystemToolProvider`, `AgentToolProvider`, `McpToolProvider`, `CustomToolProvider`.
-4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
-5. `resolveModel()` (in `bootstrap/index.ts`) — pick a default model from stored credentials (if any); kernel-side fallback is `DEFAULT_DISPATCH_MODEL` from `@openomni/openomni` (#471).
-6. `createExecutionCoordinator(...)` — wraps `createWorkerManager(config, ports)`; the server is the composition root that binds the event sink (`Bus.publish`), tool relay, and inbound-wait ports (#477). MCP tools are covered by the tool relay.
-7. Configure OpenOmni kernel/ingress with coordinator, dispatch owners, agent resolver, and runtime providers.
-8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, defaultModel, workspaceRoot })`.
-9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
-10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
-11. Start each channel (`channel.start()` in parallel).
-12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
-13. `CronJobRunner.start({ fire: CronAdapter.fire })` — reload persisted schedules and fire due cron jobs through internal ingress.
-14. `installShutdownHandlers({ channels, server, mcpProvider, coordinator, cronRunner })` — graceful stop on SIGINT / SIGTERM.
-
-**Local mode** (`OPENOMNI_MODE=local`): disabled. Do not add in-process `ChatAgent` execution paths.
+`OPENOMNI_MODE=local` remains disabled. Resident conversation may execute in-process, but Worker execution always crosses the coordinator boundary.
 
 ## MESSAGE FLOW
 
@@ -118,7 +121,7 @@ Tool providers are assembled in `bootstrap/index.ts` and passed through to the r
 
 ## CONNECTORS
 
-The current server connector surface hosts the process driver and provider-neutral ABI integration and resolves persisted installations from SQLite records/endpoints. First-party Claude Code, Codex, and OpenCode definitions do **not** currently live here: connector definitions and the unused discovery/registry modules were deleted in #473. Discover/register/consent/smoke-verify remains a planned installation lifecycle, not a shipped registry. `@openomni/openomni` receives normalized dispatch driver owners and exports no provider-specific connector manifests. See [`../../docs/implementation-status.md`](../../docs/implementation-status.md) for shipped-state truth and [`../../docs/architecture.md`](../../docs/architecture.md) for the target lifecycle.
+The server connector surface hosts provider-neutral process, private credential transport, log/question-bridge, and read-back plumbing. Installation discovery/register/consent UX and full smoke verification remain unshipped under #216. OpenOmni receives normalized host-driver owners and retains all connector lifecycle meaning. See [`../../docs/implementation-status.md`](../../docs/implementation-status.md).
 
 ## CHANNELS
 
@@ -143,8 +146,7 @@ Channel adapters may:
 
 Channel adapters must not:
 
-- query `PendingAskStore` or `PendingInteractionStore`;
-- query `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing;
+- inspect durable Wait, surface, grant, or blocklist projections for routing;
 - decide Resident vs Worker vs external actor target;
 - choose writeback/projection behavior;
 - implement OpenOmni access policy.
@@ -153,7 +155,7 @@ Channel adapters must not:
 
 - `apps/server/src/agents/registry.ts` is the **server-local** agent registry (keyed by name); the former `AgentRegistry` in `@openomni/agent` was removed in the P0 dead-code sweep (#453).
 - Each entry is an `AgentDefinition` with `model`, `systemPrompt`, `tools`, optional `budget`, optional `permissions`, and trigger metadata (slash command / channel list).
-- `getAgentDefinition(name)` returns `undefined` when the agent is unknown, in which case `ingress/bridge.ts` falls back to a generic definition plus the configured default model.
+- Unknown agent names fail with typed sanitized errors. Resident and Worker construction require the explicitly configured, environment-bound model; no ambient or substitute model is selected.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
 
 This registry is transitional runtime configuration. Product routing should move toward OpenOmni-owned agent/runtime resolution rather than server-side per-message routing.
@@ -176,7 +178,7 @@ This registry is transitional runtime configuration. Product routing should move
 - **Bypassing `createMessageHandler`**: all message handling should flow through the per-surface FIFO queue so one surface cannot interleave runs.
 - **Channel logic outside server**: all channel work lives here. Do not add channel adapters to scripts or tooling packages.
 - **Ad-hoc tool permission logic**: if a new policy is needed, extend `Policy.Permission` and enforce it inside `createToolExecutor` (from `@openomni/openomni`), not inside individual tools.
-- **Server-side product routing**: do not add PendingInteraction/PendingAsk matching, SurfaceKey session routing, worker grant checks, channel grant checks, or actor trust decisions here. Move that to `packages/openomni`.
+- **Server-side product lifecycle**: do not add Wait matching, session routing, grant checks, actor trust, Work/Attempt transitions, schedule/effect meaning, or completion admission here. Add that to OpenOmni production services.
 
 ## KNOWN TECH DEBT
 
