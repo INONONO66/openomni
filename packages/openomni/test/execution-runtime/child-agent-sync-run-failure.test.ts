@@ -5,8 +5,10 @@ import {
   createChildAgentRuntime,
   type DelegationPolicyRegistration,
 } from "../../src/execution-runtime";
+import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
+const { environment, modelCatalog } = createTestLlmEnvironment();
 const successfulResult: AgentResult = {
   text: "child done",
   steps: [],
@@ -30,6 +32,7 @@ describe("child agent synchronous run failure", () => {
     };
     let runCalls = 0;
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       maxChildren: 1,
       parentMessages: [],

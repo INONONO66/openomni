@@ -1,271 +1,110 @@
-import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
+import { Model } from "@openomni/protocol";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Model } from "@openomni/protocol";
 import { ModelsDev } from "../../src/model";
 
+const environment = {
+  modelDigest: "b".repeat(64),
+  endpoint: {
+    version: "llm-endpoint-ref-v1" as const,
+    kind: "default" as const,
+    valueRef: "provider-default",
+    endpointDigest: "c".repeat(64),
+  },
+  credential: {
+    version: "credential-source-ref-v1" as const,
+    providerId: "openai",
+    authType: "api" as const,
+    credentialId: "owner-default",
+    rotationId: "rotation-1",
+    sourceKind: "default_file" as const,
+    sourcePathDigest: "d".repeat(64),
+    credentialDigest: "e".repeat(64),
+  },
+  sdkPackage: "@ai-sdk/openai",
+  adapterVersion: "1",
+};
+
+const catalog = {
+  openai: {
+    id: "openai",
+    name: "OpenAI",
+    env: ["OPENAI_API_KEY"],
+    npm: "@ai-sdk/openai",
+    models: { "gpt-test": { id: "gpt-test", name: "GPT Test" } },
+  },
+};
+
 describe("ModelsDev", () => {
-  const originalEnv = { ...process.env };
+  let directory: string;
 
-  beforeEach(() => {
-    ModelsDev.Data.reset();
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "openomni-models-service-"));
   });
 
-  afterEach(() => {
-    process.env = { ...originalEnv };
-  });
-
-  describe("public API", () => {
-    it("should expose only the supported catalog operations", () => {
-      expect("init" in ModelsDev).toBe(false);
-    });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
   });
 
   describe("schemas", () => {
-    it("should validate a well-formed Model", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "claude-sonnet-4",
-        name: "Claude Sonnet 4",
-        cost: { input: 3, output: 15 },
-        limit: { context: 200000, output: 8192 },
-        modalities: { input: ["text", "image"], output: ["text"] },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate a minimal Model (only id and name required)", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test-model",
-        name: "Test",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject a Model missing id", () => {
-      const result = ModelsDev.Model.safeParse({ name: "Test" });
-      expect(result.success).toBe(false);
-    });
-
-    it("should validate a well-formed Provider", () => {
-      const result = ModelsDev.Provider.safeParse({
-        id: "anthropic",
-        name: "Anthropic",
-        env: ["ANTHROPIC_API_KEY"],
-        npm: "@ai-sdk/anthropic",
-        models: {
-          "claude-sonnet-4": { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
-        },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject a Provider missing required fields", () => {
-      const result = ModelsDev.Provider.safeParse({ id: "test" });
-      expect(result.success).toBe(false);
-    });
-
-    it("should validate Model with family and release_date", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "claude-sonnet-4",
-        name: "Claude Sonnet 4",
-        family: "claude",
-        release_date: "2025-05-22",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with interleaved as true", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        interleaved: true,
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with interleaved as object", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        interleaved: { field: "reasoning_content" },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with status field", () => {
-      for (const status of ["alpha", "beta", "deprecated", "active"] as const) {
-        const result = ModelsDev.Model.safeParse({
-          id: "test",
-          name: "Test",
-          status,
-        });
-        expect(result.success).toBe(true);
-      }
-    });
-
-    it("should reuse the same model status schema for provider models", () => {
-      const result = ModelsDev.ModelStatus.safeParse("active");
-      expect(result.success).toBe(true);
+    it("validates model and provider catalog records", () => {
+      expect(
+        ModelsDev.Model.safeParse({
+          id: "claude-sonnet-4",
+          name: "Claude Sonnet 4",
+          cost: { input: 3, output: 15 },
+          limit: { context: 200000, output: 8192 },
+          modalities: { input: ["text", "image"], output: ["text"] },
+          status: "active",
+          interleaved: { field: "reasoning_content" },
+        }).success,
+      ).toBe(true);
+      expect(ModelsDev.Model.safeParse({ name: "missing id" }).success).toBe(false);
+      expect(ModelsDev.Provider.safeParse(catalog.openai).success).toBe(true);
       expect(ModelsDev.ModelStatus).toBe(Model.Status);
     });
-
-    it("should validate Model with variants", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test",
-        name: "Test",
-        variants: {
-          "test:thinking": { reasoning: true },
-        },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Provider with api field", () => {
-      const result = ModelsDev.Provider.safeParse({
-        id: "anthropic",
-        name: "Anthropic",
-        api: "https://api.anthropic.com",
-        env: ["ANTHROPIC_API_KEY"],
-        models: {},
-      });
-      expect(result.success).toBe(true);
-    });
   });
 
-  describe("get", () => {
-    it("should be an async function", () => {
-      expect(typeof ModelsDev.get).toBe("function");
+  it("creates an explicit catalog service from caller-owned options", async () => {
+    const fetchRemote = mock(async ({ timeoutMs }: { timeoutMs: 10_000 }) => {
+      expect(timeoutMs).toBe(10_000);
+      return { catalog, version: "test-catalog-v1" };
+    });
+    const service = ModelsDev.createService({
+      cachePath: join(directory, "models.json"),
+      environment,
+      remoteURL: "https://models.test/catalog.json",
+      dependencies: { fetchRemote },
     });
 
-    it("should return an object with provider keys", async () => {
-      const data = await ModelsDev.get();
-      expect(typeof data).toBe("object");
-      expect(data).not.toBeNull();
-    });
+    const loaded = await service.load();
 
-    it("should return cached result on second call", async () => {
-      const first = await ModelsDev.get();
-      const second = await ModelsDev.get();
-      expect(first).toBe(second);
+    expect(loaded.catalog.openai?.models["gpt-test"]).toEqual({
+      id: "gpt-test",
+      name: "GPT Test",
     });
+    expect(loaded.environment.catalogSource).toBe("remote");
+    expect(loaded.environment.catalogSourceVersion).toBe("test-catalog-v1");
+    expect(fetchRemote).toHaveBeenCalledTimes(1);
   });
 
-  describe("Data", () => {
-    it("should be callable like get()", async () => {
-      const data = await ModelsDev.Data();
-      expect(typeof data).toBe("object");
+  it("coalesces concurrent reads within one explicit service without a global data cache", async () => {
+    const fetchRemote = mock(async () => ({ catalog, version: "test-catalog-v1" }));
+    const service = ModelsDev.createService({
+      cachePath: join(directory, "models.json"),
+      environment,
+      remoteURL: "https://models.test/catalog.json",
+      dependencies: { fetchRemote },
     });
 
-    it("should have a reset method", () => {
-      expect(typeof ModelsDev.Data.reset).toBe("function");
-    });
+    const [first, second] = await Promise.all([service.get(), service.get()]);
 
-    it("should clear cache on reset", async () => {
-      await ModelsDev.get();
-      ModelsDev.Data.reset();
-      const fresh = await ModelsDev.get();
-      expect(typeof fresh).toBe("object");
-    });
-  });
-
-  describe("refresh", () => {
-    it("should be an async function", () => {
-      expect(typeof ModelsDev.refresh).toBe("function");
-    });
-  });
-
-  describe("env flags", () => {
-    it("should use OPENOMNI_MODELS_PATH for cache location", async () => {
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-        expect(data).not.toBeNull();
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-      }
-    });
-
-    it("should skip fetch when OPENOMNI_DISABLE_MODELS_FETCH is set", async () => {
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
-
-      const fetchSpy = Object.assign(
-        mock(() => Promise.resolve(new Response("ok"))),
-        {
-          preconnect: globalThis.fetch.preconnect,
-        },
-      );
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = fetchSpy;
-
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      }
-    });
-  });
-
-  describe("snapshot fallback", () => {
-    it("should return data from snapshot when fetch and cache fail", async () => {
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      ModelsDev.Data.reset();
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-        expect(data).not.toBeNull();
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-      }
-    });
-
-    it("should return empty object as final fallback when snapshot unavailable", async () => {
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = Object.assign(
-        mock(() => Promise.reject(new Error("offline"))),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
-      ModelsDev.Data.reset();
-      try {
-        const data = await ModelsDev.get();
-        expect(typeof data).toBe("object");
-      } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.OPENOMNI_MODELS_PATH;
-        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      }
-    });
+    expect(first).toEqual(second);
+    expect(fetchRemote).toHaveBeenCalledTimes(1);
+    expect("Data" in ModelsDev).toBe(false);
+    expect("get" in ModelsDev).toBe(false);
+    expect("refresh" in ModelsDev).toBe(false);
   });
 });

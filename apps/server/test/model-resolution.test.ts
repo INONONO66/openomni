@@ -1,125 +1,239 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Auth, Provider } from "@openomni/llm";
-import { resolveDefaultProviderModel, resolveRuntimeModel } from "../src/agents/model-resolution";
+import type { ModelCatalogService } from "@openomni/llm";
+import {
+  BoundarySanitizer,
+  CredentialSource,
+  SecretRegistry,
+} from "@openomni/llm/credential-runtime";
+import { Execution } from "@openomni/protocol";
+import { resolveRuntimeModel } from "../src/agents/model-resolution";
 
-function makeModel(
-  id: string,
-  name: string,
-  releaseDate: string,
-  family = "claude-sonnet",
-): Provider.Model {
-  return {
-    id,
-    providerID: "anthropic",
-    name,
-    family,
-    release_date: releaseDate,
-    status: "active",
-  };
-}
+const CATALOG_DIGEST = "a".repeat(64);
+const MODEL_DIGEST = "b".repeat(64);
+const ENDPOINT_DIGEST = "c".repeat(64);
+const ENVIRONMENT_DIGEST = "d".repeat(64);
 
-const originalAuthAll = Auth.all;
-const originalAuthGet = Auth.get;
-const originalListModels = Provider.listModels;
+const catalog = Object.freeze({
+  anthropic: Object.freeze({
+    id: "anthropic",
+    name: "Anthropic",
+    env: ["ANTHROPIC_API_KEY"],
+    npm: "@ai-sdk/anthropic" as const,
+    models: Object.freeze({
+      "claude-sonnet-4-5": Object.freeze({
+        id: "claude-sonnet-4-5",
+        name: "Claude Sonnet 4.5 (latest)",
+        family: "claude-sonnet",
+        release_date: "2025-09-29",
+      }),
+      "claude-sonnet-4-5-20250929": Object.freeze({
+        id: "claude-sonnet-4-5-20250929",
+        name: "Claude Sonnet 4.5",
+        family: "claude-sonnet",
+        release_date: "2025-09-29",
+      }),
+      "claude-opus-4-20250514": Object.freeze({
+        id: "claude-opus-4-20250514",
+        name: "Claude Opus 4",
+        family: "claude-opus",
+        release_date: "2025-05-14",
+      }),
+    }),
+  }),
+  openai: Object.freeze({
+    id: "openai",
+    name: "OpenAI",
+    env: ["OPENAI_API_KEY"],
+    npm: "@ai-sdk/openai" as const,
+    models: Object.freeze({
+      "claude-sonnet-4-5-20250929": Object.freeze({
+        id: "claude-sonnet-4-5-20250929",
+        name: "Provider-local collision",
+      }),
+    }),
+  }),
+});
+
+const registries: SecretRegistry[] = [];
 
 afterEach(() => {
-  Auth.all = originalAuthAll;
-  Auth.get = originalAuthGet;
-  Provider.listModels = originalListModels;
+  for (const registry of registries) registry.dispose();
+  registries.length = 0;
 });
+
+function registerCredential(providerId = "anthropic", credentialId = `${providerId}-owner`) {
+  const registry = SecretRegistry.create(BoundarySanitizer.create());
+  registries.push(registry);
+  const registered = registry.register(
+    CredentialSource.parseOwner({
+      providerId,
+      credentialId,
+      rotationId: "rotation-1",
+      sourceKind: "injected_runtime",
+      auth: { type: "api", key: "test-api-key" },
+    }),
+  );
+  return { registry, ...registered };
+}
+
+function makeEnvironment(
+  credential: Execution.CredentialSourceRefV1,
+  environmentDigest = ENVIRONMENT_DIGEST,
+): Execution.LLMEnvironmentV1 {
+  return Execution.LLMEnvironmentV1.parse({
+    version: "llm-environment-v1",
+    catalogSchemaVersion: 1,
+    catalogSource: "bundled",
+    catalogSourceVersion: "test-catalog",
+    catalogDigest: CATALOG_DIGEST,
+    modelDigest: MODEL_DIGEST,
+    endpoint: {
+      version: "llm-endpoint-ref-v1",
+      kind: "default",
+      valueRef: "anthropic-default",
+      endpointDigest: ENDPOINT_DIGEST,
+    },
+    credential,
+    sdkPackage: "@ai-sdk/anthropic",
+    adapterVersion: "test-adapter",
+    environmentDigest,
+  });
+}
+
+function makeCatalog(
+  environment: Execution.LLMEnvironmentV1,
+  loadedEnvironment = environment,
+  catalogValue: Awaited<ReturnType<ModelCatalogService["get"]>> = catalog,
+): ModelCatalogService {
+  return Object.freeze({
+    load: async () =>
+      Object.freeze({
+        catalog: catalogValue,
+        environment: loadedEnvironment,
+        fallbackDiagnostics: Object.freeze([]),
+      }),
+    get: async () => catalogValue,
+  });
+}
+
+async function resolve(model: { readonly provider: string; readonly id: string }) {
+  const registered = registerCredential();
+  const environment = makeEnvironment(registered.ref);
+  return resolveRuntimeModel({
+    model,
+    modelCatalog: makeCatalog(environment),
+    secretRegistry: registered.registry,
+    credentialHandle: registered.handle,
+    modelEnvironment: environment,
+  });
+}
 
 describe("resolveRuntimeModel", () => {
-  it("maps exact latest aliases to concrete dated model IDs", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => [
-      makeModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (latest)", "2025-09-29"),
-      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
-    ];
+  it("resolves the exact provider and concrete model with injected provenance", async () => {
+    const registered = registerCredential();
+    const environment = makeEnvironment(registered.ref);
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-5" });
-    expect(resolved).toEqual({
+    const resolved = await resolveRuntimeModel({
+      model: { provider: "anthropic", id: "claude-sonnet-4-5-20250929" },
+      modelCatalog: makeCatalog(environment),
+      secretRegistry: registered.registry,
+      credentialHandle: registered.handle,
+      modelEnvironment: environment,
+    });
+
+    expect(resolved.model).toEqual({
+      provider: "anthropic",
+      id: "claude-sonnet-4-5-20250929",
+    });
+    expect(resolved.environment).toEqual(environment);
+    expect(resolved.credentialHandle).toBe(registered.handle);
+  });
+
+  it("resolves an alias only within the explicitly requested provider", async () => {
+    const resolved = await resolve({ provider: "anthropic", id: "claude-sonnet-4-5" });
+
+    expect(resolved.model).toEqual({
       provider: "anthropic",
       id: "claude-sonnet-4-5-20250929",
     });
   });
 
-  it("resolves version aliases by concrete prefix match when the alias entry is absent", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => [
-      makeModel("claude-opus-4-5-20251101", "Claude Opus 4.5", "2025-11-01", "claude-opus"),
-    ];
+  it("keeps an exact configured model when the production catalog pins that entry", async () => {
+    const registered = registerCredential();
+    const environment = makeEnvironment(registered.ref);
+    const configuredModel = catalog.anthropic.models["claude-sonnet-4-5"];
+    const pinnedCatalog = Object.freeze({
+      anthropic: Object.freeze({
+        ...catalog.anthropic,
+        models: Object.freeze({ "claude-sonnet-4-5": configuredModel }),
+      }),
+    });
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-opus-4-5" });
-    expect(resolved).toEqual({
-      provider: "anthropic",
-      id: "claude-opus-4-5-20251101",
+    await expect(
+      resolveRuntimeModel({
+        model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+        modelCatalog: makeCatalog(environment, environment, pinnedCatalog),
+        secretRegistry: registered.registry,
+        credentialHandle: registered.handle,
+        modelEnvironment: environment,
+      }),
+    ).resolves.toMatchObject({
+      model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+      environment,
     });
   });
 
-  it("passes the requested model through when the requested model has no exact or prefix match", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => [
-      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
-      makeModel("claude-sonnet-4-20250514", "Claude Sonnet 4", "2025-05-22"),
-    ];
-
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
-    expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
-  });
-
-  it("falls back to the server default model for the same provider when lookup misses", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => [];
-
-    const resolved = await resolveRuntimeModel(
-      { provider: "anthropic", id: "claude-sonnet-4-6" },
-      { provider: "anthropic", id: "claude-opus-4-20250514" },
+  it("fails when the requested model is missing instead of selecting another catalog model", async () => {
+    await expect(resolve({ provider: "anthropic", id: "claude-sonnet-4-6" })).rejects.toThrow(
+      "Model not found in provider catalog: anthropic/claude-sonnet-4-6",
     );
-    expect(resolved).toEqual({
-      provider: "anthropic",
-      id: "claude-opus-4-20250514",
-    });
   });
 
-  it("passes the requested model through when the catalog misses and no default is provided", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => [];
+  it("fails when the credential handle is absent from the injected registry", async () => {
+    const owner = registerCredential();
+    const other = registerCredential();
+    const environment = makeEnvironment(owner.ref);
 
-    const resolved = await resolveRuntimeModel({ provider: "anthropic", id: "claude-sonnet-4-6" });
-    expect(resolved).toEqual({ provider: "anthropic", id: "claude-sonnet-4-6" });
+    await expect(
+      resolveRuntimeModel({
+        model: { provider: "anthropic", id: "claude-sonnet-4-5-20250929" },
+        modelCatalog: makeCatalog(environment),
+        secretRegistry: other.registry,
+        credentialHandle: owner.handle,
+        modelEnvironment: environment,
+      }),
+    ).rejects.toThrow("unknown SecretRegistry handle");
   });
 
-  it("warns with the underlying catalog error and falls back to the default model when listModels throws", async () => {
-    Auth.get = async () => ({ type: "api", key: "test-key" });
-    Provider.listModels = async () => {
-      throw new Error("network down");
-    };
+  it("rejects a credential whose provenance does not match the LLM environment", async () => {
+    const selected = registerCredential("anthropic", "selected-credential");
+    const environmentCredential = registerCredential("anthropic", "environment-credential");
+    const environment = makeEnvironment(environmentCredential.ref);
 
-    const resolved = await resolveRuntimeModel(
-      { provider: "anthropic", id: "claude-sonnet-4-6" },
-      { provider: "anthropic", id: "claude-opus-4-20250514" },
-    );
-    expect(resolved).toEqual({
-      provider: "anthropic",
-      id: "claude-opus-4-20250514",
-    });
+    await expect(
+      resolveRuntimeModel({
+        model: { provider: "anthropic", id: "claude-sonnet-4-5-20250929" },
+        modelCatalog: makeCatalog(environment),
+        secretRegistry: selected.registry,
+        credentialHandle: selected.handle,
+        modelEnvironment: environment,
+      }),
+    ).rejects.toThrow("Credential binding does not match model provider anthropic");
   });
-});
 
-describe("resolveDefaultProviderModel", () => {
-  it("converts the bootstrap default model to a concrete dated ID", async () => {
-    Auth.all = async () => ({
-      anthropic: { type: "api", key: "test-key" },
-    });
-    Provider.listModels = async () => [
-      makeModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (latest)", "2025-09-29"),
-      makeModel("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "2025-09-29"),
-    ];
+  it("rejects a catalog whose provenance does not match the LLM environment", async () => {
+    const registered = registerCredential();
+    const environment = makeEnvironment(registered.ref);
+    const catalogEnvironment = makeEnvironment(registered.ref, "e".repeat(64));
 
-    const resolved = await resolveDefaultProviderModel();
-    expect(resolved).toMatchObject({
-      providerID: "anthropic",
-      id: "claude-sonnet-4-5-20250929",
-    });
+    await expect(
+      resolveRuntimeModel({
+        model: { provider: "anthropic", id: "claude-sonnet-4-5-20250929" },
+        modelCatalog: makeCatalog(environment, catalogEnvironment),
+        secretRegistry: registered.registry,
+        credentialHandle: registered.handle,
+        modelEnvironment: environment,
+      }),
+    ).rejects.toThrow("Model catalog environment does not match the injected LLM environment");
   });
 });

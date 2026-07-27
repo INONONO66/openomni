@@ -1,14 +1,15 @@
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/session";
-import { main } from "./bootstrap";
+import { createProductionComposition, main } from "./bootstrap";
+import { loadConfig } from "./config";
 
-main().catch((error) => {
+main(createProductionComposition(loadConfig())).catch(() => {
   Bus.publish(Operational.Error, {
     traceId: crypto.randomUUID(),
     time: Date.now(),
     component: "server",
     msg: "fatal error",
-    context: { err: error instanceof Error ? error.message : String(error) },
+    context: { fatal: true },
   });
   process.exit(1);
 });

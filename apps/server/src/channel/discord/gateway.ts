@@ -109,25 +109,25 @@ export class DiscordGateway {
           });
           await sleep(backoffMs);
           if (this.running)
-            this.reconnect().catch((err) =>
+            this.reconnect().catch(() =>
               Bus.publish(Operational.Error, {
                 traceId: crypto.randomUUID(),
                 time: Date.now(),
                 component: "server",
                 msg: "discord reconnect failed",
-                context: { err: String(err) },
+                context: { reconnectFailed: true },
               }),
             );
         }
       });
 
-      ws.addEventListener("error", (err) =>
+      ws.addEventListener("error", () =>
         Bus.publish(Operational.Error, {
           traceId: crypto.randomUUID(),
           time: Date.now(),
           component: "server",
           msg: "discord websocket error",
-          context: { err: String(err) },
+          context: { websocketFailed: true },
         }),
       );
     });

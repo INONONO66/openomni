@@ -1,11 +1,90 @@
 import type { InboundWaitParams, InboundWaitResult } from "@openomni/coordinator";
-import type { DispatchRuntime } from "@openomni/openomni";
-import { WorkerRun } from "@openomni/session";
-import type { ServerConfig } from "../config";
+import type { DispatchRuntime, WorkspaceIdentity } from "@openomni/openomni";
+import type { Dispatch, Execution, Ledger } from "@openomni/protocol";
+
+export type ResidentInboundWaitReference = Readonly<{
+  waitId: string;
+  correlation: Dispatch.Correlation;
+}>;
+
+export interface ResidentInboundWaitLedgerService {
+  readonly queries: {
+    attemptByExecution(input: { readonly sessionId: string; readonly runId: string }): Promise<
+      | {
+          readonly workItemId: string;
+          readonly attemptId: string;
+          readonly attemptSeq: number;
+          readonly parentSessionId?: string;
+          readonly status: string;
+        }
+      | undefined
+    >;
+  };
+  readonly commands: {
+    openResidentAsk(input: {
+      readonly requestId: string;
+      readonly sourceSessionId: string;
+      readonly sourceRunId: string;
+      readonly targetSessionId: string;
+      readonly workItemId: string;
+      readonly attemptId: string;
+      readonly attemptSeq: number;
+      readonly payload: string;
+    }): Promise<ResidentInboundWaitReference>;
+    resumeAfterResolvedWait(waitId: string): Promise<
+      | Readonly<{
+          disposition: "act";
+          delivery: Readonly<{
+            effect: Ledger.EffectRefV1;
+            effectScope: Execution.EffectScopeV1;
+          }>;
+        }>
+      | Readonly<{
+          disposition: "reconcile";
+          delivery: Readonly<{
+            effect: Ledger.EffectRefV1;
+            effectScope: Execution.EffectScopeV1;
+          }>;
+          outcome: "pending" | "unknown";
+        }>
+      | Readonly<{
+          disposition: "terminal";
+          delivery: Readonly<{
+            effect: Ledger.EffectRefV1;
+            effectScope: Execution.EffectScopeV1;
+          }>;
+          outcome: "confirmed" | "definite_failed";
+        }>
+    >;
+    cancel(waitId: string, reason: string): Promise<void>;
+  };
+}
+
+export interface ResidentInboundWaitSettlementService {
+  readonly commands: {
+    settleDelivery(input: {
+      readonly attempt: {
+        readonly workItemId: string;
+        readonly attemptId: string;
+        readonly attemptSeq: number;
+        readonly sessionId: string;
+        readonly runId: string;
+        readonly status: "waiting";
+      };
+      readonly delivery: Readonly<{
+        effect: Ledger.EffectRefV1;
+        effectScope: Execution.EffectScopeV1;
+      }>;
+      readonly accepted: boolean;
+    }): Promise<void>;
+  };
+}
 
 export type ResidentInboundWaitConfig = {
-  readonly serverConfig: ServerConfig;
+  readonly workspaceIdentity: WorkspaceIdentity;
   readonly dispatchRuntime: Pick<DispatchRuntime, "submit">;
+  readonly lifecycle: ResidentInboundWaitLedgerService;
+  readonly settlements: ResidentInboundWaitSettlementService;
 };
 
 // The kernel resident.ask handler returns { output, finishReason }; test
@@ -22,51 +101,44 @@ function residentAskOutput(output: unknown): string {
 export function createResidentInboundWaitHandler(
   config: ResidentInboundWaitConfig,
 ): (params: InboundWaitParams) => Promise<InboundWaitResult> {
-  return async ({ workerId, sessionId, runId, payload, workspaceRoot, signal }) => {
-    const requestId = crypto.randomUUID();
-    const resolvedWorkspace = workspaceRoot ?? config.serverConfig.workspace?.root ?? process.cwd();
+  return async ({ workerId, sessionId, callId, runId, payload, workspaceRoot, signal }) => {
+    const requestId = callId ?? crypto.randomUUID();
+    const resolvedWorkspace = config.workspaceIdentity.canonicalRoot;
+    if (workspaceRoot !== undefined && workspaceRoot !== resolvedWorkspace) {
+      return { requestId, accepted: false, error: "worker.inbound_wait workspace mismatch" };
+    }
     if (signal?.aborted) {
       return { requestId, accepted: false, error: "worker.inbound_wait aborted" };
     }
 
-    const run = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-    const mainSessionId = run?.parentSessionId;
-    if (!mainSessionId) {
+    if (!runId) {
+      return { requestId, accepted: false, error: "worker.inbound_wait requires runId" };
+    }
+    const attempt = await config.lifecycle.queries.attemptByExecution({ sessionId, runId });
+    const mainSessionId = attempt?.parentSessionId;
+    if (!attempt || !mainSessionId) {
       return {
         requestId,
         accepted: false,
-        error: `worker.inbound_wait requires a worker run with parent Resident session: ${runId ?? "unknown"}`,
+        error: `worker.inbound_wait requires an active Ledger attempt with parent Resident session: ${runId}`,
       };
     }
-
-    if (!runId || !run) {
-      return { requestId, accepted: false, error: "worker.inbound_wait requires runId" };
-    }
-    if (run.status === "starting") {
-      const acquiredRunning = await WorkerRun.updateStatusIfCurrent(
-        sessionId,
-        runId,
-        { status: "starting", timeUpdated: run.timeUpdated },
-        "running",
-      );
-      if (!acquiredRunning) {
-        return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
-      }
+    const wait = await config.lifecycle.commands.openResidentAsk({
+      requestId,
+      sourceSessionId: sessionId,
+      sourceRunId: runId,
+      targetSessionId: mainSessionId,
+      workItemId: attempt.workItemId,
+      attemptId: attempt.attemptId,
+      attemptSeq: attempt.attemptSeq,
+      payload,
+    });
+    if (!wait.waitId || !wait.correlation.endpointId || !wait.correlation.channelId) {
+      throw new Error("worker.inbound_wait kernel returned an invalid Wait reference");
     }
 
-    const running = await WorkerRun.get(sessionId, runId);
-    if (running?.status !== "running") {
-      return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
-    }
-    const acquiredWait = await WorkerRun.updateStatusIfCurrent(
-      sessionId,
-      runId,
-      { status: "running", timeUpdated: running.timeUpdated },
-      "waiting_input",
-    );
-    if (!acquiredWait) {
-      return { requestId, accepted: false, error: "worker.inbound_wait run is no longer active" };
-    }
+    let waitResolved = false;
+    let failureReason = "worker.inbound_wait did not resolve";
 
     try {
       const dispatchResult = await config.dispatchRuntime.submit(
@@ -75,11 +147,17 @@ export function createResidentInboundWaitHandler(
           target: { kind: "resident", sessionId: mainSessionId },
           payload: `Worker ${workerId}${runId ? ` run ${runId}` : ""} asks Resident:\n\n${payload}`,
           wait: true,
-          correlation: requestId,
+          correlation: wait.correlation,
+          idempotencyKey: wait.waitId,
         },
         {
           sessionId,
           ...(runId ? { runId } : {}),
+          attempt: {
+            workItemId: attempt.workItemId,
+            attemptId: attempt.attemptId,
+            attemptSeq: attempt.attemptSeq,
+          },
           actorKind: "worker",
           actorId: `${sessionId}:${runId ?? workerId}`,
           agentName: "worker",
@@ -89,30 +167,60 @@ export function createResidentInboundWaitHandler(
         },
       );
       if (dispatchResult.status !== "completed") {
+        failureReason =
+          dispatchResult.error ??
+          dispatchResult.reason ??
+          `worker.inbound_wait dispatch ${dispatchResult.status}`;
         return {
-          requestId,
+          requestId: wait.waitId,
           accepted: false,
-          error:
-            dispatchResult.error ??
-            dispatchResult.reason ??
-            `worker.inbound_wait dispatch ${dispatchResult.status}`,
+          error: failureReason,
         };
       }
+      waitResolved = true;
+      const disposition = await config.lifecycle.commands.resumeAfterResolvedWait(wait.waitId);
+      if (disposition.disposition !== "act") {
+        return {
+          requestId: wait.waitId,
+          accepted: false,
+          error:
+            disposition.disposition === "reconcile"
+              ? `worker.inbound_wait delivery requires reconciliation: ${disposition.outcome}`
+              : `worker.inbound_wait delivery already reached terminal outcome: ${disposition.outcome}`,
+        };
+      }
+      const delivery = disposition.delivery;
+      let deliverySettlement: "pending" | "settling" | "settled" = "pending";
+      const settle = async (accepted: boolean) => {
+        if (deliverySettlement !== "pending") {
+          throw new Error("resident.ask delivery settlement was invoked more than once");
+        }
+        deliverySettlement = "settling";
+        await config.settlements.commands.settleDelivery({
+          attempt: {
+            workItemId: attempt.workItemId,
+            attemptId: attempt.attemptId,
+            attemptSeq: attempt.attemptSeq,
+            sessionId,
+            runId,
+            status: "waiting",
+          },
+          delivery,
+          accepted,
+        });
+        deliverySettlement = "settled";
+      };
       return {
-        requestId,
+        requestId: wait.waitId,
         accepted: true,
         output: residentAskOutput(dispatchResult.output),
+        deliverySettlement: {
+          confirmed: () => settle(true),
+          failed: () => settle(false),
+        },
       };
     } finally {
-      const after = runId ? await WorkerRun.get(sessionId, runId) : undefined;
-      if (runId && after?.status === "waiting_input") {
-        await WorkerRun.updateStatusIfCurrent(
-          sessionId,
-          runId,
-          { status: "waiting_input", timeUpdated: after.timeUpdated },
-          "running",
-        );
-      }
+      if (!waitResolved) await config.lifecycle.commands.cancel(wait.waitId, failureReason);
     }
   };
 }

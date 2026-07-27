@@ -75,7 +75,7 @@ export function publishChildAgentFailed(
   if (!payload || !record.error) return;
   Bus.publish(ChildAgentEvents.Failed, {
     ...payload,
-    error: record.error,
+    error: "child agent failed",
   });
 }
 

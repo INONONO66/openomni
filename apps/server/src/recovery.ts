@@ -1,151 +1,83 @@
-import type { Message } from "@openomni/protocol";
 import { Operational } from "@openomni/protocol";
-import { Bus, Session, Storage, SurfaceKey } from "@openomni/session";
+import { Bus } from "@openomni/session";
 
-export interface RecoveryItem {
-  sessionId: string;
-  messageId: string;
-  surfaceKey: string;
-  text: string;
-  resumeExisting: true;
+export interface InterruptedMessageProjection {
+  readonly sessionId: string;
+  readonly messageId: string;
+}
+
+export interface MessageRecoveryService {
+  readonly queries: {
+    interruptedMessages(): Promise<readonly InterruptedMessageProjection[]>;
+  };
+  readonly commands: {
+    reconcileInterruptedMessage(input: {
+      readonly sessionId: string;
+      readonly messageId: string;
+      readonly requestId: string;
+    }): Promise<"recovered" | "unchanged">;
+  };
+}
+
+export interface MessageRecoveryResult {
+  readonly recovered: number;
+  readonly examined: number;
 }
 
 /** Never throws — server boot must not fail due to recovery errors. */
-export async function recoverInterruptedMessages(): Promise<RecoveryItem[]> {
-  const retryQueue: RecoveryItem[] = [];
-
+export async function recoverInterruptedMessages(
+  service: MessageRecoveryService,
+): Promise<MessageRecoveryResult> {
+  const traceId = crypto.randomUUID();
   Bus.publish(Operational.Info, {
-    traceId: crypto.randomUUID(),
+    traceId,
     time: Date.now(),
     component: "server",
     msg: "checking for interrupted messages",
   });
 
   try {
-    const adapter = Storage.get();
-    const processing = adapter.message.findByStatus?.("processing") ?? [];
-    const received = adapter.message.findByStatus?.("received") ?? [];
-    const interrupted = [...processing, ...received];
-
-    if (interrupted.length === 0) {
-      Bus.publish(Operational.Info, {
-        traceId: crypto.randomUUID(),
-        time: Date.now(),
-        component: "server",
-        msg: "no interrupted messages found",
-      });
-      return retryQueue;
-    }
-
-    Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
-      time: Date.now(),
-      component: "server",
-      msg: "found interrupted messages",
-      context: {
-        total: interrupted.length,
-        processing: processing.length,
-        received: received.length,
-      },
-    });
-
+    const interrupted = await service.queries.interruptedMessages();
     let recovered = 0;
 
-    for (const { id: messageId, sessionId } of interrupted) {
+    for (const item of interrupted) {
       try {
-        const messages = Session.getMessages(sessionId);
-        const msgIndex = messages.findIndex((m) => m.id === messageId);
-
-        const hasAssistantAfter =
-          msgIndex >= 0 && messages.slice(msgIndex + 1).some((m) => m.role === "assistant");
-
-        if (hasAssistantAfter) {
-          Session.updateMessageStatus(messageId, "completed");
-          recovered++;
-          Bus.publish(Operational.Info, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            component: "server",
-            msg: "marked message as completed",
-            context: { messageId },
-          });
-          continue;
-        }
-
-        const session = Session.get(sessionId);
-        if (!session) {
-          Bus.publish(Operational.Warn, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            component: "server",
-            msg: "session not found, skipping message",
-            context: { sessionId, messageId },
-          });
-          Session.updateMessageStatus(messageId, "received");
-          continue;
-        }
-
-        const parts = Session.getParts(messageId);
-        const textPart = parts.find((p): p is Message.TextPart => p.type === "text");
-
-        if (!textPart?.text) {
-          Bus.publish(Operational.Warn, {
-            traceId: crypto.randomUUID(),
-            time: Date.now(),
-            component: "server",
-            msg: "no text found for message, skipping retry",
-            context: { messageId },
-          });
-          Session.updateMessageStatus(messageId, "received");
-          continue;
-        }
-
-        // Prefer the registered surfaceKey mapping (in-memory). Fall back to
-        // session.title which conversation.ts always sets to the surfaceKey.
-        const registeredKeys = SurfaceKey.listBySession(sessionId);
-        const surfaceKey = registeredKeys[0] ?? session.title;
-
-        retryQueue.push({
-          sessionId,
-          messageId,
-          surfaceKey,
-          text: textPart.text,
-          resumeExisting: true,
+        const outcome = await service.commands.reconcileInterruptedMessage({
+          sessionId: item.sessionId,
+          messageId: item.messageId,
+          requestId: `message-recovery:${item.messageId}`,
         });
-        Bus.publish(Operational.Info, {
-          traceId: crypto.randomUUID(),
-          time: Date.now(),
-          component: "server",
-          msg: "queued message for retry",
-          context: { messageId },
-        });
-      } catch (err) {
+        if (outcome === "recovered") recovered += 1;
+      } catch {
         Bus.publish(Operational.Error, {
-          traceId: crypto.randomUUID(),
+          traceId,
           time: Date.now(),
           component: "server",
-          msg: "error processing message",
-          context: { messageId, err: String(err) },
+          msg: "message reconciliation failed",
+          context: {
+            messageId: item.messageId,
+            reconciliationFailed: true,
+          },
         });
       }
     }
 
     Bus.publish(Operational.Info, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
-      msg: "recovery done",
-      context: { recovered, queued: retryQueue.length, total: processing.length },
+      msg: "message recovery done",
+      context: { recovered, examined: interrupted.length },
     });
-  } catch (err) {
+    return { recovered, examined: interrupted.length };
+  } catch {
     Bus.publish(Operational.Error, {
-      traceId: crypto.randomUUID(),
+      traceId,
       time: Date.now(),
       component: "server",
-      msg: "recovery failed",
-      context: { err: String(err) },
+      msg: "message recovery query failed",
+      context: { recoveryQueryFailed: true },
     });
+    return { recovered: 0, examined: 0 };
   }
-
-  return retryQueue;
 }

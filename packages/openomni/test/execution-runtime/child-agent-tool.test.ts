@@ -3,8 +3,10 @@ import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "@openomni/age
 import type { Model, Tool } from "@openomni/protocol";
 import { createChildAgentTool, createChildAgentRuntime } from "../../src/execution-runtime";
 import type { NativeTool } from "../../src/execution-runtime";
+import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
+const { environment, modelCatalog } = createTestLlmEnvironment();
 
 const successfulResult: AgentResult = {
   text: "child done",
@@ -38,6 +40,8 @@ describe("child_agent tool", () => {
     const runs: Array<{ config: ChatAgentConfig; input: ChatAgentInput }> = [];
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       systemPrompt: "parent system",
       parentMessages: [{ role: "user", content: "parent task" }],
       parentTools: [makeTool("read"), makeTool("dispatch"), makeTool("bash")],
@@ -93,6 +97,8 @@ describe("child_agent tool", () => {
   test("returns an error-shaped result when awaiting an unknown child id", async () => {
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       createAgent: () => ({ run: async () => successfulResult }),
@@ -114,6 +120,8 @@ describe("child_agent tool", () => {
     let started = false;
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       parentSignal: controller.signal,
@@ -139,6 +147,8 @@ describe("child_agent tool", () => {
   test("advertises action-specific required fields in the public input schema", () => {
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       createAgent: () => ({ run: async () => successfulResult }),
@@ -165,6 +175,8 @@ describe("child_agent tool", () => {
     let childSignal: AbortSignal | undefined;
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       createAgent: (config) => ({
@@ -190,6 +202,8 @@ describe("child_agent tool", () => {
   test("enforces a bounded number of running children", async () => {
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       maxChildren: 1,
@@ -215,6 +229,8 @@ describe("child_agent tool", () => {
   test("bounds await time for running children", async () => {
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       awaitTimeoutMs: 1,
@@ -240,6 +256,8 @@ describe("child_agent tool", () => {
   test("truncates retained child output in snapshots", async () => {
     const runtime = createChildAgentRuntime({
       model,
+      environment,
+      modelCatalog,
       parentMessages: [],
       parentTools: [],
       maxOutputChars: 5,

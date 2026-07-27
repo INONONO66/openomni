@@ -7,8 +7,10 @@ import {
   type DelegationPolicyRegistration,
   type NativeTool,
 } from "../../src/execution-runtime";
+import { createTestLlmEnvironment } from "../helpers/llm-environment.ts";
 
 const model: Model.Ref = { provider: "test", id: "fixture" };
+const { environment, modelCatalog } = createTestLlmEnvironment();
 const successfulResult: AgentResult = {
   text: "done",
   steps: [],
@@ -62,6 +64,7 @@ describe("child agent delegation pre-policy", () => {
         },
       };
       const runtime = createChildAgentRuntime({
+        ...{ environment, modelCatalog },
         model,
         parentMessages: [],
         parentTools: [],
@@ -83,6 +86,7 @@ describe("child agent delegation pre-policy", () => {
   test("fails closed when delegation.worker.pre policy throws", async () => {
     let created = false;
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -113,6 +117,7 @@ describe("child agent delegation pre-policy", () => {
     const parentController = new AbortController();
     let created = false;
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -160,6 +165,7 @@ describe("child agent delegation pre-policy", () => {
   test("preserves parent tool bounds and prevents nested delegation", async () => {
     const configs: ChatAgentConfig[] = [];
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [makeTool("read"), makeTool("dispatch"), makeTool("child_agent")],
@@ -187,6 +193,7 @@ describe("child agent delegation pre-policy", () => {
       source: { type: "mcp", serverId: "server-1", remoteName: "remote.read" },
     };
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [{ ...makeTool("mcp.remote.read"), descriptor }],
@@ -205,6 +212,7 @@ describe("child agent delegation pre-policy", () => {
   test("serializes concurrent spawn admission at the child limit", async () => {
     let createCalls = 0;
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],
@@ -232,6 +240,7 @@ describe("child agent delegation pre-policy", () => {
   test("keeps cancelled settlement and injects completion when post audit fails", async () => {
     const injectionQueue = InjectionQueue.create();
     const runtime = createChildAgentRuntime({
+      ...{ environment, modelCatalog },
       model,
       parentMessages: [],
       parentTools: [],

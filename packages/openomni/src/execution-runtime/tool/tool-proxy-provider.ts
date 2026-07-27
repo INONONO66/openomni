@@ -1,12 +1,9 @@
 import type { Tool } from "@openomni/protocol";
-import type { WorkerBootstrap } from "@openomni/protocol";
 import type { NativeTool, ToolExecutionContext } from "./types.js";
-
-type RuntimeToolCatalogEntry = WorkerBootstrap.RuntimeToolCatalogEntry;
 
 export namespace ToolProxyProvider {
   export function create(
-    entries: RuntimeToolCatalogEntry[],
+    entries: readonly Tool.Spec[],
     callTool: (
       toolName: string,
       args: Record<string, unknown>,
@@ -14,18 +11,16 @@ export namespace ToolProxyProvider {
     ) => Promise<Tool.Result>,
   ): { listTools(): NativeTool[] } {
     const tools: NativeTool[] = entries.map((entry) => ({
-      spec: entry.spec,
-      riskTier: entry.riskTier,
-      isReadOnly: false,
+      spec: entry,
+      riskTier: entry.safe === true ? 0 : 2,
+      isReadOnly: entry.safe === true,
       isDestructive: false,
       isConcurrencySafe: false,
-      labels: entry.spec.labels,
-      ...(entry.descriptor !== undefined && { descriptor: entry.descriptor }),
-      source: entry.source,
+      labels: entry.labels,
       execute: (call: Tool.Call, context?: ToolExecutionContext): Promise<Tool.Result> =>
         context === undefined
-          ? callTool(entry.canonicalName, call.input as Record<string, unknown>)
-          : callTool(entry.canonicalName, call.input as Record<string, unknown>, context),
+          ? callTool(entry.name, call.input as Record<string, unknown>)
+          : callTool(entry.name, call.input as Record<string, unknown>, context),
     }));
 
     return {

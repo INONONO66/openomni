@@ -1,9 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import type { Message, Run, Sink, Tool } from "@openomni/protocol";
-import { Auth } from "../src/auth";
+import { BoundarySanitizer, CredentialSource, SecretRegistry } from "../src/auth";
+import { canonicalize } from "../src/model/catalog-cache";
 import type { Provider } from "../src/provider";
 
 let run: typeof import("../src/run").run;
@@ -38,12 +37,48 @@ function mockAiModule() {
 
 mockAiModule();
 
-const testAuth = { type: "api", key: "test-key-run" } as const;
 const testModel: Provider.Model = {
   id: "claude-3-haiku",
   providerID: "__test_run__",
   name: "Claude 3 Haiku Test",
-  api: { npm: "@ai-sdk/anthropic" },
+  api: { id: "claude-3-haiku", npm: "@ai-sdk/anthropic" },
+};
+const sanitizer = BoundarySanitizer.create();
+const secrets = SecretRegistry.create(sanitizer);
+const { handle: credential, ref } = secrets.register(
+  CredentialSource.parseOwner({
+    providerId: testModel.providerID,
+    credentialId: "run-test",
+    rotationId: "rotation-1",
+    sourceKind: "injected_runtime",
+    auth: { type: "api", key: "test-key-run" },
+  }),
+);
+const environmentBase = {
+  version: "llm-environment-v1" as const,
+  catalogSchemaVersion: 1,
+  catalogSource: "bundled" as const,
+  catalogSourceVersion: "run-test-v1",
+  catalogDigest: "a".repeat(64),
+  modelDigest: createHash("sha256").update(canonicalize(testModel)).digest("hex"),
+  endpoint: {
+    version: "llm-endpoint-ref-v1" as const,
+    kind: "default" as const,
+    valueRef: `${testModel.providerID}-default`,
+    endpointDigest: "b".repeat(64),
+  },
+  credential: ref,
+  sdkPackage: "@ai-sdk/anthropic",
+  adapterVersion: "test-v1",
+};
+const environment: import("../src/run").RunInput["environment"] = {
+  reference: {
+    ...environmentBase,
+    environmentDigest: createHash("sha256").update(canonicalize(environmentBase)).digest("hex"),
+  },
+  credential,
+  secrets,
+  sanitizer,
 };
 
 describe("run", () => {
@@ -91,6 +126,7 @@ describe("run", () => {
       messages: [],
       tools: [],
       model: testModel,
+      environment,
     };
 
     expect(input.messages).toEqual([]);
@@ -105,7 +141,7 @@ describe("run", () => {
       messages: [],
       tools: [],
       model: testModel,
-      auth: testAuth,
+      environment,
       system: "test system prompt",
       signal: abortController.signal,
       toolChoice: "required",
@@ -124,12 +160,75 @@ describe("run", () => {
     expect(input.toolExecutor).toBeFunction();
   });
 
+  test("rejects a proxy credential bound to a non-proxy environment endpoint", async () => {
+    const proxySanitizer = BoundarySanitizer.create();
+    const proxySecrets = SecretRegistry.create(proxySanitizer);
+    const proxyModel: Provider.Model = {
+      id: "gpt-4o",
+      providerID: "openai",
+      name: "GPT-4o",
+      api: { id: "gpt-4o", npm: "@ai-sdk/openai" },
+    };
+    const registered = proxySecrets.register(
+      CredentialSource.parseOwner({
+        providerId: proxyModel.providerID,
+        credentialId: "run-proxy-test",
+        rotationId: "rotation-1",
+        sourceKind: "injected_runtime",
+        auth: { type: "proxy", baseURL: "https://proxy.invalid/v1" },
+      }),
+    );
+    const proxyEnvironmentBase = {
+      version: "llm-environment-v1" as const,
+      catalogSchemaVersion: 1,
+      catalogSource: "bundled" as const,
+      catalogSourceVersion: "run-test-v1",
+      catalogDigest: "a".repeat(64),
+      modelDigest: createHash("sha256").update(canonicalize(proxyModel)).digest("hex"),
+      endpoint: {
+        version: "llm-endpoint-ref-v1" as const,
+        kind: "default" as const,
+        valueRef: "openai:default",
+        endpointDigest: "b".repeat(64),
+      },
+      credential: registered.ref,
+      sdkPackage: "@ai-sdk/openai",
+      adapterVersion: "test-v1",
+    };
+    const proxyEnvironment: import("../src/run").RunInput["environment"] = {
+      reference: {
+        ...proxyEnvironmentBase,
+        environmentDigest: createHash("sha256")
+          .update(canonicalize(proxyEnvironmentBase))
+          .digest("hex"),
+      },
+      credential: registered.handle,
+      secrets: proxySecrets,
+      sanitizer: proxySanitizer,
+    };
+
+    try {
+      await expect(
+        run(
+          {
+            messages: [],
+            tools: [],
+            model: proxyModel,
+            environment: proxyEnvironment,
+          },
+          mockSink,
+        ),
+      ).rejects.toThrow("LLM environment endpoint does not match the proxy credential");
+    } finally {
+      proxySecrets.dispose();
+    }
+  });
   test("returns RunOutcome with stop type", async () => {
     const input: import("../src/run").RunInput = {
       messages: [],
       tools: [],
       model: testModel,
-      auth: testAuth,
+      environment,
     };
 
     const outcome = await run(input, mockSink);
@@ -144,7 +243,7 @@ describe("run", () => {
       messages: [],
       tools: [],
       model: testModel,
-      auth: testAuth,
+      environment,
       signal: abortController.signal,
     };
 
@@ -156,57 +255,6 @@ describe("run", () => {
     expect(capturedToolCalls.length).toBe(0);
   });
 
-  test("returns error outcome when auth is not configured", async () => {
-    const input: import("../src/run").RunInput = {
-      messages: [],
-      tools: [],
-      model: {
-        id: "claude-3-haiku",
-        providerID: "no-auth-provider-xyz",
-        name: "Test Model",
-        api: { npm: "@ai-sdk/anthropic" },
-      },
-    };
-
-    const outcome = await run(input, mockSink);
-
-    expect(outcome.type).toBe("error");
-    if (outcome.type === "error") {
-      expect(outcome.error.message).toContain("no-auth-provider-xyz");
-    }
-    expect(capturedToolCalls.length).toBe(0);
-  });
-
-  test("does not read stored auth when fallback is disabled", async () => {
-    const authFile = join(tmpdir(), `openomni-run-auth-${crypto.randomUUID()}.json`);
-
-    try {
-      await Auth.withFile(authFile, async () => {
-        await Auth.set("stored-auth-provider", testAuth);
-
-        const outcome = await run(
-          {
-            messages: [],
-            tools: [],
-            allowAuthFallback: false,
-            model: {
-              id: "claude-3-haiku",
-              providerID: "stored-auth-provider",
-              name: "Test Model",
-              api: { npm: "@ai-sdk/anthropic" },
-            },
-          },
-          mockSink,
-        );
-
-        expect(outcome.type).toBe("error");
-        expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
-      });
-    } finally {
-      rmSync(authFile, { force: true });
-    }
-  });
-
   test("returns aborted outcome when signal is aborted before run", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -215,7 +263,7 @@ describe("run", () => {
       messages: [],
       tools: [],
       model: testModel,
-      auth: testAuth,
+      environment,
       signal: controller.signal,
     };
 
@@ -231,7 +279,7 @@ describe("run", () => {
       messages: [],
       tools: [],
       model: testModel,
-      auth: testAuth,
+      environment,
     };
 
     await run(input, mockSink);
@@ -255,10 +303,7 @@ describe("run", () => {
     ];
     mockAiModule();
 
-    const outcome = await run(
-      { messages: [], tools: [], model: testModel, auth: testAuth },
-      mockSink,
-    );
+    const outcome = await run({ messages: [], tools: [], model: testModel, environment }, mockSink);
 
     expect(outcome.type).toBe("stop");
     const lastMessage = capturedMessages.at(-1);
@@ -267,6 +312,27 @@ describe("run", () => {
     expect(textParts.length).toBe(1);
     expect(textParts[0]?.text).toBe("hello world");
     expect(textParts.some((part) => part.text === "")).toBe(false);
+  });
+
+  test("resolves a sanitized error outcome without leaking the materialized credential", async () => {
+    const rawSecret = "test-key-run";
+    mockStreamChunks = [
+      {
+        type: "error",
+        error: new Error(`provider rejected credential ${rawSecret}`),
+      },
+    ];
+    mockAiModule();
+
+    const outcome = await run({ messages: [], tools: [], model: testModel, environment }, mockSink);
+
+    expect(outcome.type).toBe("error");
+    if (outcome.type !== "error") throw new Error("expected error outcome");
+    expect(outcome.error.name).toBe("Error");
+    expect(outcome.error.message).toBe("provider rejected credential [REDACTED]");
+    const serialized = JSON.stringify(outcome);
+    expect(serialized).not.toContain(rawSecret);
+    expect(serialized).not.toContain(Buffer.from(rawSecret).toString("base64"));
   });
 
   test("returns RunOutcome with correct type mapping for processor results", () => {

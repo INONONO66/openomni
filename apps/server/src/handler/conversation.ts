@@ -1,21 +1,14 @@
 // server → openomni → agent → llm (direct agent imports forbidden)
 import { IngressEngine } from "@openomni/openomni";
+import type { ModelCatalogService } from "@openomni/llm";
+import type { SecretHandle, SecretRegistry } from "@openomni/llm/credential-runtime";
 import type { Adapter, Ingress } from "@openomni/protocol";
-import { Operational, WorkItem } from "@openomni/protocol";
-import { Bus, hasRetryExhaustionBlocker, SurfaceKey, WorkItemStore } from "@openomni/session";
+import { type Execution, Operational } from "@openomni/protocol";
+import { Bus } from "@openomni/session";
 import { resolveRuntimeModel } from "../agents/model-resolution";
 import { buildInboundEvent, type BridgeDeps } from "../ingress/bridge";
 
-const OPEN_TASK_STATUSES = [
-  "pending",
-  "running",
-  "blocked",
-  "failed",
-] as const satisfies readonly WorkItem.Status[];
-type OpenTaskStatus = (typeof OPEN_TASK_STATUSES)[number];
-
-const OPEN_TASK_STATUS_SET: ReadonlySet<WorkItem.Status> = new Set(OPEN_TASK_STATUSES);
-const OPEN_TASK_STATUS_ORDER: Record<OpenTaskStatus, number> = {
+const OPEN_TASK_STATUS_ORDER: Record<RedactedOpenTaskProjection["status"], number> = {
   failed: 0,
   blocked: 1,
   pending: 2,
@@ -26,10 +19,28 @@ const MAX_DISPLAY_FIELD_CHARS = 80;
 const OPEN_TASKS_UNAUTHORIZED_MESSAGE =
   "Open task ledger requires authenticated local WebSocket access";
 
-type OpenTask = {
-  readonly item: WorkItem.Info;
-  readonly status: OpenTaskStatus;
+export type RedactedOpenTaskProjection = {
+  readonly id: string;
+  readonly name: string;
+  readonly status: "pending" | "running" | "blocked" | "failed";
+  readonly activeBlockerCount?: number;
+  readonly attempt?: number;
+  readonly maxAttempts?: number;
+  readonly assigneeLabel?: string;
+  readonly sessionLabel?: string;
 };
+
+export interface OwnerTaskProjectionQuery {
+  listOpenTasks(): Promise<readonly RedactedOpenTaskProjection[]>;
+}
+
+export interface ConversationHandlerDeps extends BridgeDeps {
+  readonly ownerTaskQueries: OwnerTaskProjectionQuery;
+  readonly modelCatalog: ModelCatalogService;
+  readonly secretRegistry: SecretRegistry;
+  readonly credentialHandle: SecretHandle;
+  readonly modelEnvironment: Execution.LLMEnvironmentV1;
+}
 
 function toResponseText(result: Ingress.IngressResult): string | null {
   if (result.kind === "dropped") return null;
@@ -41,18 +52,9 @@ function normalizeCommand(text: string): string {
 }
 
 function canReadTaskLedger(message: Adapter.InboundMessage): boolean {
-  const surface = SurfaceKey.parse(message.surfaceKey).surface;
-  if (surface !== "ws") return false;
+  if (message.surfaceKey.split(":", 1)[0] !== "ws") return false;
   if (!isWebSocketRaw(message.raw)) return false;
   return message.raw.websocket.authenticated === true;
-}
-
-function isOpenTaskStatus(status: WorkItem.Status): status is OpenTaskStatus {
-  return OPEN_TASK_STATUS_SET.has(status);
-}
-
-function isLedgerVisibleTask(item: WorkItem.Info, status: OpenTaskStatus): boolean {
-  return status !== "failed" || hasRetryExhaustionBlocker(item);
 }
 
 function isWebSocketRaw(raw: unknown): raw is { websocket: { authenticated: boolean } } {
@@ -67,17 +69,15 @@ function isWebSocketRaw(raw: unknown): raw is { websocket: { authenticated: bool
   );
 }
 
-function formatOpenTask(task: OpenTask): string {
-  const { item, status } = task;
-  const activeBlockers = item.blockers.filter((blocker) => blocker.resolvedAt === undefined).length;
-  const details = [`hash: ${item.hash}`];
-  if (status === "blocked" || status === "failed") details.push(`blockers: ${activeBlockers}`);
-  if (status === "failed" && item.maxAttempts !== undefined) {
+function formatOpenTask(item: RedactedOpenTaskProjection): string {
+  const details = [`id: ${formatDisplayField(item.id)}`];
+  if (item.activeBlockerCount !== undefined) details.push(`blockers: ${item.activeBlockerCount}`);
+  if (item.attempt !== undefined && item.maxAttempts !== undefined) {
     details.push(`attempts: ${item.attempt}/${item.maxAttempts}`);
   }
-  if (item.assigneeId) details.push(`assignee: ${formatDisplayField(item.assigneeId)}`);
-  if (item.sessionId) details.push(`session: ${formatDisplayField(item.sessionId)}`);
-  return `- [${status}] ${formatDisplayField(item.name)} (${details.join(", ")})`;
+  if (item.assigneeLabel) details.push(`assignee: ${formatDisplayField(item.assigneeLabel)}`);
+  if (item.sessionLabel) details.push(`session: ${formatDisplayField(item.sessionLabel)}`);
+  return `- [${item.status}] ${formatDisplayField(item.name)} (${details.join(", ")})`;
 }
 
 function formatDisplayField(value: string): string {
@@ -92,21 +92,14 @@ function compareStable(a: string, b: string): number {
   return 0;
 }
 
-function listOpenTasks(): string {
-  const tasks = WorkItemStore.list({ status: [...OPEN_TASK_STATUSES] })
-    .flatMap((item): OpenTask[] => {
-      const status = WorkItem.deriveStatus(item);
-      return isOpenTaskStatus(status) && isLedgerVisibleTask(item, status)
-        ? [{ item, status }]
-        : [];
-    })
-    .sort((a, b) => {
-      const statusDelta = OPEN_TASK_STATUS_ORDER[a.status] - OPEN_TASK_STATUS_ORDER[b.status];
-      if (statusDelta !== 0) return statusDelta;
-      const nameDelta = compareStable(a.item.name, b.item.name);
-      if (nameDelta !== 0) return nameDelta;
-      return compareStable(a.item.hash, b.item.hash);
-    });
+async function listOpenTasks(queries: OwnerTaskProjectionQuery): Promise<string> {
+  const tasks = [...(await queries.listOpenTasks())].sort((a, b) => {
+    const statusDelta = OPEN_TASK_STATUS_ORDER[a.status] - OPEN_TASK_STATUS_ORDER[b.status];
+    if (statusDelta !== 0) return statusDelta;
+    const nameDelta = compareStable(a.name, b.name);
+    if (nameDelta !== 0) return nameDelta;
+    return compareStable(a.id, b.id);
+  });
   if (tasks.length === 0) return "Open tasks: none";
   const visibleTasks = tasks.slice(0, MAX_OPEN_TASKS);
   const remaining = tasks.length - visibleTasks.length;
@@ -119,15 +112,25 @@ function listOpenTasks(): string {
 
 async function processMessage(
   message: Adapter.InboundMessage,
-  deps: BridgeDeps,
+  deps: ConversationHandlerDeps,
 ): Promise<string | null> {
   try {
     if (normalizeCommand(message.text) === "show open tasks") {
       if (!canReadTaskLedger(message)) return OPEN_TASKS_UNAUTHORIZED_MESSAGE;
-      return listOpenTasks();
+      return listOpenTasks(deps.ownerTaskQueries);
     }
     const event = buildInboundEvent(message, deps);
-    event.agent.model = await resolveRuntimeModel(event.agent.model, deps.defaultModel);
+    const resolvedModel = await resolveRuntimeModel({
+      model: event.agent.model,
+      modelCatalog: deps.modelCatalog,
+      secretRegistry: deps.secretRegistry,
+      credentialHandle: deps.credentialHandle,
+      modelEnvironment: deps.modelEnvironment,
+    });
+    event.agent.model = {
+      provider: resolvedModel.model.provider,
+      id: resolvedModel.model.id,
+    };
     return toResponseText(await IngressEngine.ingest(event));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -142,7 +145,7 @@ async function processMessage(
   }
 }
 
-export function createMessageHandler(deps: BridgeDeps): Adapter.MessageHandler {
+export function createMessageHandler(deps: ConversationHandlerDeps): Adapter.MessageHandler {
   const queues = new Map<string, Promise<void>>();
   return async (message) => {
     const key = message.surfaceKey;

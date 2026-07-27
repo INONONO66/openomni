@@ -6,6 +6,15 @@ import { createWorkerManager, type WorkerManager } from "../../src/worker-manage
 import { collectorPorts } from "../harness/ports";
 
 const WORKER_ENTRY = fileURLToPath(new URL("../harness/worker-fixture.ts", import.meta.url));
+const TEST_IDENTITY = {
+  runtimeId: "runtime-lifecycle-events",
+  principalId: "principal-lifecycle-events",
+  bootstrap: { configEpoch: "test" },
+} as const;
+
+function fixturePrompt(fixture: Record<string, unknown> = {}): string {
+  return JSON.stringify({ fixture, prompt: "test" });
+}
 
 let manager: WorkerManager | undefined;
 
@@ -51,11 +60,19 @@ describe("worker driver lifecycle events (#462 §4)", () => {
   test("a delivered run leaves spawned → ready → delivered → settled on the sink", async () => {
     const ports = collectorPorts();
     manager = createWorkerManager(
-      { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("happy"), maxActiveWorkers: 1 },
+      {
+        ...TEST_IDENTITY,
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("happy"),
+        maxActiveWorkers: 1,
+      },
       ports,
     );
 
-    await manager.deliver("run-le-1", { sessionId: "session-le-1", delayMs: 40, prompt: "t" });
+    await manager.deliver("run-le-1", {
+      sessionId: "session-le-1",
+      prompt: fixturePrompt({ delayMs: 40 }),
+    });
 
     const names = ports.collected.map((entry) => entry.event.name);
     const spawnedIndex = names.indexOf(WorkerDriver.Spawned.name);
@@ -85,14 +102,19 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     process.env.OPENOMNI_DELIVER_MARGIN_MS = "300";
     const ports = collectorPorts();
     manager = createWorkerManager(
-      { workerScript: WORKER_ENTRY, socketDir: makeSocketDir("wall"), maxActiveWorkers: 1 },
+      {
+        ...TEST_IDENTITY,
+        workerScript: WORKER_ENTRY,
+        socketDir: makeSocketDir("wall"),
+        maxActiveWorkers: 1,
+      },
       ports,
     );
 
     await expectDeliveryError(
       manager.deliver("run-le-wall", {
         sessionId: "session-le-wall",
-        delayMs: 30_000,
+        prompt: fixturePrompt({ delayMs: 30_000 }),
         budget: { maxWallTimeMs: 200 },
       }),
       "wall_time_exceeded",
@@ -121,6 +143,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     const ports = collectorPorts();
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("queue"),
         maxActiveWorkers: 1,
@@ -131,8 +154,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
 
     const occupying = manager.deliver("run-le-q1", {
       sessionId: "session-le-q1",
-      delayMs: 400,
-      prompt: "t",
+      prompt: fixturePrompt({ delayMs: 400 }),
     });
     // Wait until the first run holds the only slot so the second one queues.
     await waitFor(() => manager?.stats().activeRuns === 1);
@@ -153,6 +175,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
     const ports = collectorPorts();
     manager = createWorkerManager(
       {
+        ...TEST_IDENTITY,
         workerScript: WORKER_ENTRY,
         socketDir: makeSocketDir("stop"),
         maxActiveWorkers: 1,
@@ -163,8 +186,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
 
     const occupying = manager.deliver("run-le-s1", {
       sessionId: "session-le-s1",
-      delayMs: 500,
-      prompt: "t",
+      prompt: fixturePrompt({ delayMs: 500 }),
     });
     await waitFor(() => manager?.stats().activeRuns === 1);
     const queued = manager.deliver("run-le-s2", { sessionId: "session-le-s2", prompt: "t" });

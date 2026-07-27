@@ -527,8 +527,8 @@ describe("McpClient connection cleanup", () => {
     expect(transport.closeCalls()).toBe(1);
     expect(observedErrors).toHaveLength(1);
     expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: connect failed");
-    expect(observedErrors[0]?.context?.cleanupError).toBe("Error: cleanup failed");
+    expect(observedErrors[0]?.error).toBe("MCP connection failed");
+    expect(observedErrors[0]?.context?.cleanupFailed).toBe(true);
   });
 
   test("reports transport factory failures through operational errors", async () => {
@@ -576,9 +576,9 @@ describe("McpClient connection cleanup", () => {
 
     expect(observedErrors).toHaveLength(1);
     expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: transport factory failed");
+    expect(observedErrors[0]?.error).toBe("MCP connection failed");
     expect(observedErrors[0]?.context?.serverName).toBe(serverName);
-    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
+    expect(observedErrors[0]?.context?.cleanupFailed).toBeUndefined();
   });
 
   test("preserves the explicit error for unknown runtime transports", async () => {
@@ -617,9 +617,9 @@ describe("McpClient connection cleanup", () => {
 
     expect(observedErrors).toHaveLength(1);
     expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: Unknown transport");
+    expect(observedErrors[0]?.error).toBe("MCP connection failed");
     expect(observedErrors[0]?.context?.serverName).toBe(serverName);
-    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
+    expect(observedErrors[0]?.context?.cleanupFailed).toBeUndefined();
   });
 
   test("does not double-close when the client closes a transport that omits onclose", async () => {

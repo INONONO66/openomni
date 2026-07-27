@@ -1,25 +1,29 @@
 import {
   Actor,
   Dispatch,
-  type Communication,
   type Ingress,
   type RoutingDecisionPayload,
+  Wait,
 } from "@openomni/protocol";
-import {
-  BlacklistStore,
-  ChannelGrantStore,
-  type PendingInteractionStore,
-  SurfaceKey,
-} from "@openomni/session";
 import { requestedPendingInteractionAction } from "../dispatch/pending-interaction-routing.js";
-import { applyChannelGrantTreatment } from "./middleware/ingress-authority-channel-grant.js";
+import {
+  applyChannelGrantTreatment,
+  resolveInboundTreatment,
+} from "./middleware/ingress-authority-channel-grant.js";
+import {
+  authoritySourceFacts,
+  authoritySourceRefs,
+  type AuthorityProjectionQueryPort,
+  type AuthoritySourceRefs,
+} from "./actor-resolver.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
-import { IngressSessionResolver } from "./session-resolver.js";
 import { resolveTarget, targetKey } from "./target.js";
 import {
   resolveWaitCorrelation,
+  type DurableWaitV1,
   type WaitCorrelationEffect,
   type WaitCorrelationResolution,
+  type WaitKernelService,
 } from "./wait-correlation.js";
 
 export type KernelWaitExecution =
@@ -27,14 +31,19 @@ export type KernelWaitExecution =
   | Readonly<{
       kind: "pending_interaction";
       correlation: Dispatch.Correlation;
-      requestedAction: PendingInteractionStore.Record["allowedActions"][number];
-      record: PendingInteractionStore.Record;
+      requestedAction: Wait.AllowedActionV1;
+      wait: DurableWaitV1 & Readonly<{ route: { kind: "worker" } }>;
     }>
   | Readonly<{
       kind: "pending_ask";
-      record: Communication.PendingAsk.Record;
+      wait: DurableWaitV1 & Readonly<{ route: { kind: "resident" } }>;
     }>
   | Readonly<{ kind: "ambiguous" }>;
+
+export interface RoutingKernelPorts {
+  readonly authorityQueries: AuthorityProjectionQueryPort;
+  readonly waits: WaitKernelService;
+}
 
 export type KernelRouteResolution<Event extends Ingress.InboundEvent = Ingress.InboundEvent> =
   Readonly<{
@@ -50,6 +59,31 @@ function parseCorrelation(event: Ingress.InboundEvent): Dispatch.Correlation | u
   return value === undefined ? undefined : Dispatch.Correlation.parse(value);
 }
 
+function nativeWaitCorrelation(correlation: Dispatch.Correlation | undefined): Readonly<{
+  endpointId?: string;
+  channelId?: string;
+  correlation?: Wait.CorrelationV1;
+}> {
+  if (correlation === undefined) return {};
+  const nativeCorrelation = {
+    version: "wait-correlation-v1" as const,
+    ...(correlation.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
+    ...(correlation.threadId === undefined ? {} : { threadId: correlation.threadId }),
+    ...(correlation.replyToMessageId === undefined
+      ? {}
+      : { replyToMessageId: correlation.replyToMessageId }),
+    ...(correlation.externalConversationId === undefined
+      ? {}
+      : { externalConversationId: correlation.externalConversationId }),
+  };
+  const parsed = Wait.CorrelationV1.safeParse(nativeCorrelation);
+  return {
+    endpointId: correlation.endpointId,
+    channelId: correlation.channelId,
+    ...(parsed.success ? { correlation: parsed.data } : {}),
+  };
+}
+
 function routeWaitState(resolution: WaitCorrelationResolution): RouteState["wait"] {
   switch (resolution.kind) {
     case "none":
@@ -59,40 +93,48 @@ function routeWaitState(resolution: WaitCorrelationResolution): RouteState["wait
         kind: "ambiguous",
         candidateInteractionIds: resolution.candidates.map((candidate) => candidate.key),
       };
-    case "match":
-      switch (resolution.candidate.kind) {
-        case "pending_interaction": {
-          const record = resolution.candidate.record;
+    case "match": {
+      const { key, wait } = resolution.candidate;
+      switch (wait.route.kind) {
+        case "worker":
           return {
             kind: "match",
             backing: "pending_interaction",
-            key: resolution.candidate.key,
-            recordId: record.id,
-            sessionId: record.sessionId,
-            runId: record.workerRunId,
-            allowed: record.allowedActions,
-            ...(record.targetActorId === undefined ? {} : { targetActorId: record.targetActorId }),
+            key,
+            recordId: wait.waitId,
+            sessionId: wait.route.sessionId,
+            runId: wait.route.runId,
+            allowed: wait.opened.allowedActions,
+            ...(wait.opened.targetActorId === undefined
+              ? {}
+              : { targetActorId: wait.opened.targetActorId }),
           };
-        }
-        case "pending_ask": {
-          const record = resolution.candidate.record;
+        case "resident":
           return {
             kind: "match",
             backing: "pending_ask",
-            key: resolution.candidate.key,
-            recordId: record.id,
-            sessionId: record.originSessionId,
-            ...(record.originRunId === undefined ? {} : { runId: record.originRunId }),
+            key,
+            recordId: wait.waitId,
+            sessionId: wait.route.sessionId,
+            ...(wait.route.runId === undefined ? {} : { runId: wait.route.runId }),
           };
+        default: {
+          const unreachable: never = wait.route;
+          throw new TypeError(`Unreachable Wait route: ${String(unreachable)}`);
         }
       }
+    }
+    default: {
+      const unreachable: never = resolution;
+      throw new TypeError(`Unreachable Wait correlation resolution: ${String(unreachable)}`);
+    }
   }
 }
 
 function kernelWaitExecution(
   resolution: WaitCorrelationResolution,
   correlation: Dispatch.Correlation | undefined,
-  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  requestedAction: Wait.AllowedActionV1,
 ): KernelWaitExecution {
   switch (resolution.kind) {
     case "none":
@@ -100,29 +142,44 @@ function kernelWaitExecution(
     case "ambiguous":
       return { kind: "ambiguous" };
     case "match":
-      switch (resolution.candidate.kind) {
-        case "pending_ask":
-          return { kind: "pending_ask", record: resolution.candidate.record };
-        case "pending_interaction":
+      switch (resolution.candidate.wait.route.kind) {
+        case "resident":
+          return {
+            kind: "pending_ask",
+            wait: resolution.candidate.wait as DurableWaitV1 &
+              Readonly<{ route: { kind: "resident" } }>,
+          };
+        case "worker":
           if (correlation === undefined) {
-            throw new TypeError("pending interaction match requires correlation");
+            throw new TypeError("worker Wait match requires correlation");
           }
           return {
             kind: "pending_interaction",
             correlation,
             requestedAction,
-            record: resolution.candidate.record,
+            wait: resolution.candidate.wait as DurableWaitV1 &
+              Readonly<{ route: { kind: "worker" } }>,
           };
+        default: {
+          const unreachable: never = resolution.candidate.wait.route;
+          throw new TypeError(`Unreachable Wait route: ${String(unreachable)}`);
+        }
       }
+    default: {
+      const unreachable: never = resolution;
+      throw new TypeError(`Unreachable Wait correlation resolution: ${String(unreachable)}`);
+    }
   }
 }
 
 function selectWaitEffect(
   decision: RoutingDecisionPayload,
-  gathered: WaitCorrelationEffect,
+  gathered: WaitCorrelationResolution,
 ): WaitCorrelationEffect {
-  return decision.stage === "wait_correlation" && decision.outcome === "ambiguous"
-    ? gathered
+  return decision.stage === "wait_correlation" &&
+    decision.outcome === "ambiguous" &&
+    gathered.kind === "ambiguous"
+    ? { kind: "stage_ambiguity", candidates: gathered.candidates }
     : { kind: "none" };
 }
 
@@ -136,14 +193,18 @@ function selectedRouteTarget(
   }
   if (waitExecution.kind === "pending_ask") return { kind: "resident" };
   if (waitExecution.kind === "pending_interaction") {
-    return { kind: "worker", sessionId: waitExecution.record.sessionId };
+    return { kind: "worker", sessionId: waitExecution.wait.route.sessionId };
   }
   throw new TypeError("wait-correlation route has no executable wait target");
 }
 
-type ChannelResolution = ReturnType<typeof ChannelGrantStore.resolve>;
+type ChannelResolution = Readonly<{
+  grant: Actor.ChannelGrant;
+  inboundTreatment: Actor.InboundTreatment;
+  evidence: AuthoritySourceRefs;
+}>;
 
-function channelState(resolution: ChannelResolution): RouteState["channel"] {
+function channelState(resolution: ChannelResolution | undefined): RouteState["channel"] {
   if (resolution === undefined) return undefined;
   if (resolution.inboundTreatment === "drop" || resolution.grant.kind === "blocked_channel") {
     return {
@@ -185,7 +246,7 @@ function actorState(event: Ingress.InboundEvent): RouteState["actor"] {
 
 function routedEvent<Event extends Ingress.InboundEvent>(
   event: Event,
-  resolution: ChannelResolution,
+  resolution: ChannelResolution | undefined,
   channel: RouteState["channel"],
 ): Event {
   if (
@@ -200,16 +261,19 @@ function routedEvent<Event extends Ingress.InboundEvent>(
   return { ...event, ...treated };
 }
 
-function blacklistState(
+async function blacklistState(
   event: Ingress.InboundEvent,
   correlation: Dispatch.Correlation | undefined,
-): RouteState["blacklist"] {
+  queries: AuthorityProjectionQueryPort,
+): Promise<Readonly<{ state: RouteState["blacklist"]; evidence: AuthoritySourceRefs }>> {
   const actor = event.meta?.actor;
-  const entry = BlacklistStore.match({
-    actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
-    endpointId:
-      (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
-      correlation?.endpointId,
+  const endpointId =
+    (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
+    correlation?.endpointId;
+  const result = await queries.query({
+    kind: "authority.blacklist_match",
+    ...(typeof actor?.actorId === "string" ? { actorId: actor.actorId } : {}),
+    ...(endpointId === undefined ? {} : { endpointId }),
     channel: correlation?.channelId ?? event.surface,
     candidates: [
       event.surface,
@@ -218,29 +282,79 @@ function blacklistState(
       `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
     ],
   });
-  if (entry === undefined) return undefined;
+  if (result.kind !== "authority.blacklist_match") {
+    throw new TypeError("authority blacklist query returned the wrong projection kind");
+  }
   return {
-    id: entry.id,
-    kind: entry.kind,
-    reason: entry.reason ?? `blacklist.${entry.kind}.${entry.value}`,
+    state:
+      result.entry === null
+        ? undefined
+        : {
+            id: result.entry.id,
+            kind: result.entry.kind,
+            reason: result.entry.reason ?? `blacklist.${result.entry.kind}.${result.entry.value}`,
+          },
+    evidence: result,
+  };
+}
+
+async function channelResolution(
+  event: Ingress.InboundEvent,
+  queries: AuthorityProjectionQueryPort,
+): Promise<Readonly<{ resolution?: ChannelResolution; evidence: AuthoritySourceRefs }>> {
+  const result = await queries.query({
+    kind: "authority.channel_grant",
+    surface: event.surface,
+    ...(event.workspace === undefined ? {} : { workspace: event.workspace }),
+    ...(event.channel === undefined ? {} : { channel: event.channel }),
+  });
+  if (result.kind !== "authority.channel_grant") {
+    throw new TypeError("authority channel query returned the wrong projection kind");
+  }
+  return {
+    ...(result.grant === null
+      ? {}
+      : {
+          resolution: {
+            grant: result.grant,
+            inboundTreatment:
+              result.grant.kind === "broadcast_channel"
+                ? "evidence_only"
+                : result.grant.kind === "blocked_channel"
+                  ? "drop"
+                  : resolveInboundTreatment(result.grant),
+            evidence: result,
+          },
+        }),
+    evidence: result,
+  };
+}
+
+function withAuthorityEvidence(
+  decision: RoutingDecisionPayload,
+  refs: readonly AuthoritySourceRefs[],
+): RoutingDecisionPayload {
+  return {
+    ...decision,
+    factsUsed: [...decision.factsUsed, ...refs.flatMap((source) => authoritySourceFacts(source))],
   };
 }
 
 function rejectUnsupportedPendingInteractionAction(
   decision: RoutingDecisionPayload,
   wait: RouteState["wait"],
-  requestedAction: PendingInteractionStore.Record["allowedActions"][number],
+  requestedAction: Wait.AllowedActionV1,
 ): RoutingDecisionPayload {
-  if (
-    decision.outcome !== "route" ||
-    decision.stage !== "wait_correlation" ||
-    wait.kind !== "match" ||
-    wait.backing !== "pending_interaction" ||
-    requestedAction === "report_result" ||
-    requestedAction === "ask_clarification"
-  ) {
-    return decision;
-  }
+  if (wait.kind !== "match" || wait.backing !== "pending_interaction") return decision;
+  const supported = requestedAction === "report_result" || requestedAction === "ask_clarification";
+  const matchedRoute = decision.outcome === "route" && decision.stage === "wait_correlation";
+  if (supported && matchedRoute) return decision;
+  const reason = supported
+    ? `Pending interaction action ${requestedAction} is not allowed by the matched Wait`
+    : `Pending interaction action ${requestedAction} is unsupported by ingress execution`;
+  const reasonFact = supported
+    ? "wait.action:disallowed"
+    : "wait.action:unsupported_ingress_command";
   return {
     traceId: decision.traceId,
     time: decision.time,
@@ -249,42 +363,32 @@ function rejectUnsupportedPendingInteractionAction(
     mode: decision.mode,
     stage: "channel_ceiling",
     outcome: "block",
-    reason: `Pending interaction action ${requestedAction} is unsupported by ingress execution`,
-    factsUsed: [
-      `wait:${wait.key}`,
-      `wait.action:${requestedAction}`,
-      "wait.action:unsupported_ingress_command",
-    ],
+    reason,
+    factsUsed: [`wait:${wait.key}`, `wait.action:${requestedAction}`, reasonFact],
   };
 }
 
-export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
+export async function resolveKernelRoute<Event extends Ingress.InboundEvent>(
   event: Event,
   traceId: string,
-): KernelRouteResolution<Event> {
+  ports: RoutingKernelPorts,
+): Promise<KernelRouteResolution<Event>> {
   const correlation = parseCorrelation(event);
   const requestedAction = requestedPendingInteractionAction(event.payload);
-  const gatheredWait = resolveWaitCorrelation({
-    ...(correlation === undefined ? {} : { correlation }),
-    externalMessageId: event.id,
-  });
+  const gatheredWait = await resolveWaitCorrelation(
+    ports.waits,
+    nativeWaitCorrelation(correlation),
+  );
   const wait = routeWaitState(gatheredWait);
   const surfaceDefaultTarget = resolveTarget(event);
   const target = targetKey(surfaceDefaultTarget);
-  const surfaceSessionId =
-    event.runtime?.durableSessionId ??
-    SurfaceKey.lookup(IngressSessionResolver.extractSurfaceKey(event));
-  const blacklist = blacklistState(event, correlation);
-  const channelResolution =
-    event.mode === "direct"
-      ? ChannelGrantStore.resolve({
-          surface: event.surface,
-          workspace: event.workspace,
-          channel: event.channel,
-        })
-      : undefined;
-  const channel = channelState(channelResolution);
+  const surfaceSessionId = event.runtime?.durableSessionId;
+  const blacklistResult = await blacklistState(event, correlation, ports.authorityQueries);
+  const channelResult =
+    event.mode === "direct" ? await channelResolution(event, ports.authorityQueries) : undefined;
+  const channel = channelState(channelResult?.resolution);
   const actor = event.mode === "direct" ? actorState(event) : undefined;
+  const actorEvidence = authoritySourceRefs(event.meta?.authorityEvidence);
   const resolvedDecision = resolveRoute(
     {
       traceId,
@@ -297,7 +401,7 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
     },
     {
       wait,
-      ...(blacklist === undefined ? {} : { blacklist }),
+      ...(blacklistResult.state === undefined ? {} : { blacklist: blacklistResult.state }),
       ...(event.mode === "internal"
         ? { systemActorId: `system:${event.surface}` }
         : {
@@ -307,17 +411,20 @@ export function resolveKernelRoute<Event extends Ingress.InboundEvent>(
       ...(surfaceSessionId === undefined ? {} : { surfaceSessionId }),
     },
   );
-  const decision = rejectUnsupportedPendingInteractionAction(
-    resolvedDecision,
-    wait,
-    requestedAction,
+  const decision = withAuthorityEvidence(
+    rejectUnsupportedPendingInteractionAction(resolvedDecision, wait, requestedAction),
+    [
+      blacklistResult.evidence,
+      ...(channelResult === undefined ? [] : [channelResult.evidence]),
+      ...(actorEvidence === undefined ? [] : [actorEvidence]),
+    ],
   );
   const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
   return {
     decision,
-    event: routedEvent(event, channelResolution, channel),
+    event: routedEvent(event, channelResult?.resolution, channel),
     waitExecution,
     selectedTarget: selectedRouteTarget(decision, waitExecution, surfaceDefaultTarget),
-    waitEffect: selectWaitEffect(decision, gatheredWait.effect),
+    waitEffect: selectWaitEffect(decision, gatheredWait),
   };
 }

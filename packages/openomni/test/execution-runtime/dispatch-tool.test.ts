@@ -1,11 +1,67 @@
 import { describe, expect, test } from "bun:test";
 import type { Dispatch, Tool } from "@openomni/protocol";
-import { AgentToolProvider } from "../../src/execution-runtime/tool/agent/provider";
+import {
+  AgentToolProvider,
+  type AgentToolProviderOptions,
+} from "../../src/execution-runtime/tool/agent/provider";
 import {
   createDispatchTool,
   createWorkerResidentAskDispatchTool,
   type DispatchToolRuntime,
 } from "../../src/execution-runtime/tool/agent/tools/dispatch";
+import { createWorkspaceIdentity } from "../../src/execution-runtime/workspace-identity";
+
+const unavailable = (): Promise<never> =>
+  Promise.reject(new Error("unused AgentToolProvider test dependency"));
+
+const providerOptions: AgentToolProviderOptions = {
+  workspaceIdentity: createWorkspaceIdentity(process.cwd()),
+  dispatchRuntime: {
+    async submit() {
+      return { dispatchId: "dispatch-provider-test", status: "completed" };
+    },
+  },
+  waitKernel: {
+    open: unavailable,
+    correlate: unavailable,
+    revalidatePinned: unavailable,
+    acceptResponse: unavailable,
+    settle: unavailable,
+    cancel: unavailable,
+    stageAmbiguity: unavailable,
+    markRouted: unavailable,
+  },
+  effects: {
+    appendIntent: unavailable,
+    appendSettlement: unavailable,
+  },
+  scheduleService: {
+    create: unavailable,
+    cancel: unavailable,
+  },
+  workerAttempts: {
+    commands: {
+      create: unavailable,
+      requestStart: unavailable,
+      finish: unavailable,
+      requestDelivery: unavailable,
+      settleDelivery: unavailable,
+      requestCancel: unavailable,
+      settleCancel: unavailable,
+    },
+    queries: {
+      byExecution: unavailable,
+      active: unavailable,
+    },
+  },
+  workerLedger: {
+    transition: unavailable,
+    resolveWorkByRunId: unavailable,
+    resolveAttemptByRunId: unavailable,
+  },
+  authorityQueries: { query: unavailable },
+  owners: {},
+};
 
 function call(input: Record<string, unknown>): Tool.Call {
   return { id: "call-1", tool: "dispatch", input };
@@ -13,12 +69,12 @@ function call(input: Record<string, unknown>): Tool.Call {
 
 describe("dispatch tool", () => {
   test("AgentToolProvider exposes dispatch", () => {
-    const provider = new AgentToolProvider();
+    const provider = new AgentToolProvider(providerOptions);
     expect(provider.listTools().some((tool) => tool.spec.name === "dispatch")).toBe(true);
   });
 
   test("public schema omits runtime actor/context fields", () => {
-    const provider = new AgentToolProvider();
+    const provider = new AgentToolProvider(providerOptions);
     const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
     expect(tool).toBeDefined();
     const properties =
@@ -39,7 +95,7 @@ describe("dispatch tool", () => {
   });
 
   test("public schema documents worker spawn acceptance criteria payload", () => {
-    const provider = new AgentToolProvider();
+    const provider = new AgentToolProvider(providerOptions);
     const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
     const schema = JSON.stringify(tool?.spec.inputSchema);
 
@@ -48,7 +104,7 @@ describe("dispatch tool", () => {
   });
 
   test("public schema exposes connector endpoint selectors", () => {
-    const provider = new AgentToolProvider();
+    const provider = new AgentToolProvider(providerOptions);
     const tool = provider.listTools().find((entry) => entry.spec.name === "dispatch");
     const schema = JSON.stringify(tool?.spec.inputSchema);
 

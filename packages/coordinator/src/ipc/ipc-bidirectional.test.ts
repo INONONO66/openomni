@@ -8,6 +8,21 @@ function tmpSocketPath(label: string): string {
   return path.join(os.tmpdir(), `omo-ipc-bidir-${label}-${process.pid}.sock`);
 }
 
+const bootstrapParams = {
+  authToken: "token",
+  runtimeId: "runtime-1",
+  workerId: "worker-1",
+  generation: 1,
+  configEpoch: "epoch-1",
+};
+
+async function activateConnection(
+  client: Awaited<ReturnType<typeof connectIpcClient>>,
+): Promise<void> {
+  await client.call("coordinator.bootstrap", bootstrapParams);
+  await Bun.sleep(1);
+}
+
 describe("IPC bidirectional", () => {
   const servers: ReturnType<typeof createIpcServer>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
@@ -18,9 +33,16 @@ describe("IPC bidirectional", () => {
     await Bun.sleep(10);
   });
 
-  test("client receives incoming Request → onRequest fires → response sent back", async () => {
+  test("client receives a closed Request and returns its strict result", async () => {
     const socketPath = tmpSocketPath("req");
-    const srv = createIpcServer(socketPath, () => undefined);
+    let activeServer: ReturnType<typeof createIpcServer> | undefined;
+    const srv = createIpcServer(socketPath, (method, _params, respond, _notify, connectionId) => {
+      if (method !== "coordinator.bootstrap") return;
+      if (!activeServer) throw new Error("IPC server was not initialized");
+      activeServer.useConnection(connectionId);
+      respond({ ok: true });
+    });
+    activeServer = srv;
     servers.push(srv);
 
     const received = { method: "", params: undefined as Record<string, unknown> | undefined };
@@ -28,71 +50,110 @@ describe("IPC bidirectional", () => {
       onRequest(method, params, respond) {
         received.method = method;
         received.params = params;
-        respond({ echo: params?.msg });
+        respond(null);
       },
     });
     clients.push(client);
+    await activateConnection(client);
+    const params = {
+      authToken: "token",
+      workerId: "worker-1",
+      generation: 1,
+      sessionId: "session-1",
+      runId: "run-1",
+      observation: { name: "fixture", data: { ok: true } },
+    };
 
-    const result = await srv.call("ping", { msg: "hello" });
+    const result = await srv.call("worker.observation", params);
 
-    expect(received.method).toBe("ping");
-    expect(received.params).toEqual({ msg: "hello" });
-    expect(result).toEqual({ echo: "hello" });
+    expect(received.method).toBe("worker.observation");
+    expect(received.params).toEqual(params);
+    expect(result).toBeNull();
   });
 
-  test("client receives Notification → onNotification fires", async () => {
+  test("client receives a closed Notification", async () => {
     const socketPath = tmpSocketPath("notif");
-    const srv = createIpcServer(socketPath, () => undefined);
-    servers.push(srv);
-
-    let notifMethod = "";
-    let notifParams: Record<string, unknown> | undefined;
-
-    const notifReceived = new Promise<void>((resolve) => {
-      connectIpcClient(socketPath, {
-        onNotification(method, params) {
-          notifMethod = method;
-          notifParams = params;
-          resolve();
-        },
-      }).then((c) => clients.push(c));
+    let activeServer: ReturnType<typeof createIpcServer> | undefined;
+    const srv = createIpcServer(socketPath, (method, _params, respond, _notify, connectionId) => {
+      if (method !== "coordinator.bootstrap") return;
+      if (!activeServer) throw new Error("IPC server was not initialized");
+      activeServer.useConnection(connectionId);
+      respond({ ok: true });
     });
-
-    await Bun.sleep(20);
-    srv.notify("event.fired", { key: "value" });
-    await notifReceived;
-
-    expect(notifMethod).toBe("event.fired");
-    expect(notifParams).toEqual({ key: "value" });
-  });
-
-  test("server.call() → client receives → responds → server gets result", async () => {
-    const socketPath = tmpSocketPath("srvCall");
-    const srv = createIpcServer(socketPath, () => undefined);
+    activeServer = srv;
     servers.push(srv);
-
+    let notification: { method: string; params?: Record<string, unknown> } | undefined;
+    let resolveNotification: (() => void) | undefined;
+    const received = new Promise<void>((resolve) => {
+      resolveNotification = resolve;
+    });
     const client = await connectIpcClient(socketPath, {
-      onRequest(_method, params, respond) {
-        respond({ doubled: ((params?.n as number) ?? 0) * 2 });
+      onNotification(method, params) {
+        notification = { method, params };
+        if (!resolveNotification) {
+          throw new Error("notification resolver was not initialized");
+        }
+        resolveNotification();
       },
     });
     clients.push(client);
-
-    const result = await srv.call("compute", { n: 21 });
-    expect(result).toEqual({ doubled: 42 });
+    await Bun.sleep(20);
+    await activateConnection(client);
+    const params = {
+      authToken: "proof",
+      runtimeId: "runtime-1",
+      workerId: "worker-1",
+      generation: 1,
+    };
+    srv.notify("worker.bootstrap_ready", params);
+    await received;
+    expect(notification).toEqual({ method: "worker.bootstrap_ready", params });
   });
 
-  test("existing client.call() flow unchanged", async () => {
+  test("server.call validates the client result", async () => {
+    const socketPath = tmpSocketPath("srvCall");
+    let activeServer: ReturnType<typeof createIpcServer> | undefined;
+    const srv = createIpcServer(socketPath, (method, _params, respond, _notify, connectionId) => {
+      if (method !== "coordinator.bootstrap") return;
+      if (!activeServer) throw new Error("IPC server was not initialized");
+      activeServer.useConnection(connectionId);
+      respond({ ok: true });
+    });
+    activeServer = srv;
+    servers.push(srv);
+    const client = await connectIpcClient(socketPath, {
+      onRequest(_method, _params, respond) {
+        respond(null);
+      },
+    });
+    clients.push(client);
+    await activateConnection(client);
+    await expect(
+      srv.call("worker.observation", {
+        authToken: "token",
+        workerId: "worker-1",
+        generation: 1,
+        sessionId: "session-1",
+        runId: "run-1",
+        observation: { name: "fixture", data: null },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  test("client.call validates the server result", async () => {
     const socketPath = tmpSocketPath("clientCall");
-    const srv = createIpcServer(socketPath, (method, params, respond) => {
-      if (method === "echo") respond({ got: params?.v });
+    const srv = createIpcServer(socketPath, (method, _params, respond) => {
+      if (method === "coordinator.cancel_run") respond({ cancelled: true });
     });
     servers.push(srv);
-
     const client = await connectIpcClient(socketPath);
     clients.push(client);
-
-    const result = await client.call("echo", { v: "unchanged" });
-    expect(result).toEqual({ got: "unchanged" });
+    await expect(
+      client.call("coordinator.cancel_run", {
+        authToken: "token",
+        runId: "run-1",
+        sessionId: "session-1",
+      }),
+    ).resolves.toEqual({ cancelled: true });
   });
 });
